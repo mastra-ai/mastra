@@ -14,7 +14,7 @@ The `chunk` function splits documents into smaller segments using various strate
         "The chunking strategy to use. If not specified, defaults based on document type.",
     },
     {
-      name: "options",
+      name: "chunkOptions",
       type: "ChunkOptions",
       isOptional: true,
       description: "Configuration options for the chunking strategy",
@@ -35,14 +35,14 @@ Options vary by strategy, but common parameters include:
 <PropertiesTable
   content={[
     {
-      name: "chunkSize",
+      name: "size",
       type: "number",
       isOptional: true,
       defaultValue: "512",
       description: "Maximum size of each chunk",
     },
     {
-      name: "chunkOverlap",
+      name: "overlap",
       type: "number",
       isOptional: true,
       defaultValue: "50",
@@ -146,12 +146,12 @@ Options vary by strategy, but common parameters include:
 <PropertiesTable
   content={[
     {
-      name: "maxChunkSize",
+      name: "maxSize",
       type: "number",
       description: "Maximum size of each chunk",
     },
     {
-      name: "minChunkSize",
+      name: "minSize",
       type: "number",
       isOptional: true,
       description: "Minimum size of each chunk",

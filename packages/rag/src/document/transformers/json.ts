@@ -1,12 +1,12 @@
 import { Document } from 'llamaindex';
 
 export class RecursiveJsonTransformer {
-  private maxChunkSize: number;
-  private minChunkSize: number;
+  private maxSize: number;
+  private minSize: number;
 
-  constructor({ maxChunkSize = 2000, minChunkSize }: { maxChunkSize: number; minChunkSize?: number }) {
-    this.maxChunkSize = maxChunkSize;
-    this.minChunkSize = minChunkSize ?? Math.max(maxChunkSize - 200, 50);
+  constructor({ maxSize = 2000, minSize }: { maxSize: number; minSize?: number }) {
+    this.maxSize = maxSize;
+    this.minSize = minSize ?? Math.max(maxSize - 200, 50);
   }
 
   private static jsonSize(data: Record<string, any>): number {
@@ -124,13 +124,13 @@ export class RecursiveJsonTransformer {
         const newPath = [...currentPath, key];
         const chunkSize = RecursiveJsonTransformer.jsonSize(chunks[chunks.length - 1] || {});
         const size = RecursiveJsonTransformer.jsonSize({ [key]: value });
-        const remaining = this.maxChunkSize - chunkSize;
+        const remaining = this.maxSize - chunkSize;
 
         if (size < remaining) {
           // Add item to current chunk
           RecursiveJsonTransformer.setNestedDict(chunks[chunks.length - 1] || {}, newPath, value);
         } else {
-          if (chunkSize >= this.minChunkSize) {
+          if (chunkSize >= this.minSize) {
             // Chunk is big enough, start a new chunk
             chunks.push({});
           }

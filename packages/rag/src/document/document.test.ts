@@ -35,13 +35,11 @@ describe('MDocument', () => {
       const doc = MDocument.fromMarkdown(sampleMarkdown);
 
       chunks = await doc.chunk({
+        size: 1500,
+        overlap: 0,
+        separator: `\n`,
         extract: {
           keywords: true,
-        },
-        options: {
-          chunkSize: 1500,
-          chunkOverlap: 0,
-          separator: `\n`,
         },
       });
 
@@ -69,12 +67,10 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'character',
-        options: {
-          separator: '\n\n',
-          isSeparatorRegex: false,
-          chunkSize: 50,
-          chunkOverlap: 5,
-        },
+        separator: '\n\n',
+        isSeparatorRegex: false,
+        size: 50,
+        overlap: 5,
       });
 
       const chunks = doc.getDocs();
@@ -92,12 +88,10 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'character',
-        options: {
-          separator: '\\s+',
-          isSeparatorRegex: true,
-          chunkSize: 50,
-          chunkOverlap: 5,
-        },
+        separator: '\\s+',
+        isSeparatorRegex: true,
+        size: 50,
+        overlap: 5,
       });
 
       expect(doc.getText().join(' ')).toBe('Hello world How are you');
@@ -110,13 +104,11 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'character',
-        options: {
-          separator: '\n\n',
-          isSeparatorRegex: false,
-          chunkSize: 50,
-          chunkOverlap: 5,
-          keepSeparator: 'end',
-        },
+        separator: '\n\n',
+        isSeparatorRegex: false,
+        size: 50,
+        overlap: 5,
+        keepSeparator: 'end',
       });
       const chunks = doc.getText();
 
@@ -132,13 +124,11 @@ describe('MDocument', () => {
 
         await doc.chunk({
           strategy: 'character',
-          options: {
-            separator: '\n\n',
-            isSeparatorRegex: false,
-            chunkSize: 50,
-            chunkOverlap: 5,
-            keepSeparator: 'end',
-          },
+          separator: '\n\n',
+          isSeparatorRegex: false,
+          size: 50,
+          overlap: 5,
+          keepSeparator: 'end',
         });
 
         const chunks = doc.getText();
@@ -155,13 +145,11 @@ describe('MDocument', () => {
 
         await doc.chunk({
           strategy: 'character',
-          options: {
-            separator: '\n\n',
-            isSeparatorRegex: false,
-            chunkSize: 50,
-            chunkOverlap: 5,
-            keepSeparator: 'start',
-          },
+          separator: '\n\n',
+          isSeparatorRegex: false,
+          size: 50,
+          overlap: 5,
+          keepSeparator: 'start',
         });
 
         const chunks = doc.getText();
@@ -179,13 +167,11 @@ describe('MDocument', () => {
 
         await doc.chunk({
           strategy: 'character',
-          options: {
-            separator: '\n\n',
-            isSeparatorRegex: false,
-            chunkSize: 50,
-            chunkOverlap: 5,
-            keepSeparator: 'end',
-          },
+          separator: '\n\n',
+          isSeparatorRegex: false,
+          size: 50,
+          overlap: 5,
+          keepSeparator: 'end',
         });
 
         const chunks = doc.getText();
@@ -201,13 +187,11 @@ describe('MDocument', () => {
 
         await doc.chunk({
           strategy: 'character',
-          options: {
-            separator: '\n\n',
-            isSeparatorRegex: false,
-            chunkSize: 50,
-            chunkOverlap: 5,
-            keepSeparator: 'end',
-          },
+          separator: '\n\n',
+          isSeparatorRegex: false,
+          size: 50,
+          overlap: 5,
+          keepSeparator: 'end',
         });
 
         const chunks = doc.getText();
@@ -223,13 +207,11 @@ describe('MDocument', () => {
 
         await doc.chunk({
           strategy: 'character',
-          options: {
-            separator: '\n\n',
-            isSeparatorRegex: false,
-            chunkSize: 50,
-            chunkOverlap: 5,
-            keepSeparator: 'start',
-          },
+          separator: '\n\n',
+          isSeparatorRegex: false,
+          size: 50,
+          overlap: 5,
+          keepSeparator: 'start',
         });
 
         const chunks = doc.getText();
@@ -249,12 +231,10 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'recursive',
-        options: {
-          separators: ['\n\n', '\n', ' ', ''],
-          isSeparatorRegex: false,
-          chunkSize: 50,
-          chunkOverlap: 5,
-        },
+        separators: ['\n\n', '\n', ' ', ''],
+        isSeparatorRegex: false,
+        size: 50,
+        overlap: 5,
       });
 
       expect(doc.getDocs()?.length).toBeGreaterThan(1);
@@ -279,11 +259,9 @@ describe('MDocument', () => {
       const doc = MDocument.fromText(tsCode, { meta: 'data' });
 
       await doc.chunk({
-        options: {
-          chunkSize: 50,
-          chunkOverlap: 5,
-          language: Language.TS,
-        },
+        size: 50,
+        overlap: 5,
+        language: Language.TS,
       });
 
       expect(doc.getDocs().length).toBeGreaterThan(1);
@@ -296,11 +274,9 @@ describe('MDocument', () => {
 
       await expect(
         doc.chunk({
-          options: {
-            chunkSize: 50,
-            chunkOverlap: 5,
-            language: 'invalid-language' as any,
-          },
+          size: 50,
+          overlap: 5,
+          language: 'invalid-language' as any,
         }),
       ).rejects.toThrow();
     });
@@ -341,13 +317,11 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'html',
-        options: {
-          headers: [
-            ['h1', 'Header 1'],
-            ['h2', 'Header 2'],
-            ['h3', 'Header 3'],
-          ],
-        },
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+          ['h3', 'Header 3'],
+        ],
       });
 
       const docs = doc.getDocs();
@@ -375,13 +349,11 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'html',
-        options: {
-          headers: [
-            ['h1', 'Header 1'],
-            ['h2', 'Header 2'],
-            ['h3', 'Header 3'],
-          ],
-        },
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+          ['h3', 'Header 3'],
+        ],
       });
 
       const docs = doc.getDocs();
@@ -408,14 +380,13 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'html',
-        options: {
-          returnEachLine: true,
-          headers: [
-            ['h1', 'Header 1'],
-            ['h2', 'Header 2'],
-            ['h3', 'Header 3'],
-          ],
-        },
+
+        returnEachLine: true,
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+          ['h3', 'Header 3'],
+        ],
       });
 
       const docs = doc.getDocs();
@@ -444,12 +415,10 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'html',
-        options: {
-          sections: [
-            ['h1', 'Header 1'],
-            ['h2', 'Header 2'],
-          ],
-        },
+        sections: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+        ],
       });
       const docs = doc.getDocs();
 
@@ -481,12 +450,10 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'html',
-        options: {
-          sections: [
-            ['h1', 'Header 1'],
-            ['h2', 'Header 2'],
-          ],
-        },
+        sections: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+        ],
       });
 
       doc.getDocs().forEach(doc => {
@@ -508,11 +475,9 @@ describe('MDocument', () => {
 
         await doc.chunk({
           strategy: 'json',
-          options: {
-            maxChunkSize: 50,
-            minChunkSize: 50,
-            ensureAscii: true,
-          },
+          maxSize: 50,
+          minSize: 50,
+          ensureAscii: true,
         });
 
         expect(doc.getText().some(chunk => chunk.includes('\\u'))).toBe(true);
@@ -549,10 +514,8 @@ describe('MDocument', () => {
 
         await doc.chunk({
           strategy: 'json',
-          options: {
-            maxChunkSize: 50,
-            ensureAscii: false,
-          },
+          maxSize: 50,
+          ensureAscii: false,
         });
 
         expect(doc.getText().some(chunk => chunk.includes('你好'))).toBe(true);
@@ -575,11 +538,9 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'token',
-        options: {
-          encodingName: 'cl100k_base',
-          chunkSize: 10,
-          chunkOverlap: 2,
-        },
+        encodingName: 'cl100k_base',
+        size: 10,
+        overlap: 2,
       });
 
       const chunks = doc.getText();
@@ -595,13 +556,11 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'token',
-        options: {
-          encodingName: 'gpt2',
-          chunkSize: 10,
-          disallowedSpecial: new Set(),
-          allowedSpecial: new Set(['<|endoftext|>']),
-          chunkOverlap: 2,
-        },
+        encodingName: 'gpt2',
+        size: 10,
+        disallowedSpecial: new Set(),
+        allowedSpecial: new Set(['<|endoftext|>']),
+        overlap: 2,
       });
 
       const chunks = doc.getText();
@@ -616,13 +575,11 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'token',
-        options: {
-          encodingName: 'gpt2',
-          chunkSize: 10,
-          disallowedSpecial: new Set(),
-          allowedSpecial: new Set(['<|endoftext|>']),
-          chunkOverlap: 2,
-        },
+        encodingName: 'gpt2',
+        size: 10,
+        disallowedSpecial: new Set(),
+        allowedSpecial: new Set(['<|endoftext|>']),
+        overlap: 2,
       });
 
       const chunks = doc.getText();
@@ -640,10 +597,8 @@ describe('MDocument', () => {
         await expect(
           doc.chunk({
             strategy: 'token',
-            options: {
-              chunkSize: 100,
-              chunkOverlap: 150, // overlap larger than chunk size
-            },
+            size: 100,
+            overlap: 150, // overlap larger than chunk size
           }),
         ).rejects.toThrow();
       });
@@ -655,11 +610,9 @@ describe('MDocument', () => {
         await expect(
           doc.chunk({
             strategy: 'token',
-            options: {
-              encodingName: 'invalid-encoding' as any,
-              chunkSize: 100,
-              chunkOverlap: 150, // overlap larger than chunk size
-            },
+            encodingName: 'invalid-encoding' as any,
+            size: 100,
+            overlap: 150, // overlap larger than chunk size
           }),
         ).rejects.toThrow();
       });
@@ -685,10 +638,8 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'markdown',
-        options: {
-          chunkSize: 100,
-          chunkOverlap: 10,
-        },
+        size: 100,
+        overlap: 10,
       });
 
       const chunks = doc.getText();
@@ -711,10 +662,8 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'markdown',
-        options: {
-          chunkSize: 100,
-          chunkOverlap: 10,
-        },
+        size: 100,
+        overlap: 10,
       });
 
       const chunks = doc.getText();
@@ -744,13 +693,11 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'markdown',
-        options: {
-          headers: [
-            ['#', 'Header 1'],
-            ['##', 'Header 2'],
-            ['###', 'Header 3'],
-          ],
-        },
+        headers: [
+          ['#', 'Header 1'],
+          ['##', 'Header 2'],
+          ['###', 'Header 3'],
+        ],
       });
 
       const docs = doc.getDocs();
@@ -779,13 +726,11 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'markdown',
-        options: {
-          headers: [
-            ['#', 'Header 1'],
-            ['##', 'Header 2'],
-            ['###', 'Header 3'],
-          ],
-        },
+        headers: [
+          ['#', 'Header 1'],
+          ['##', 'Header 2'],
+          ['###', 'Header 3'],
+        ],
       });
 
       const subsectionDoc = doc.getDocs().find(doc => doc?.metadata?.['Header 3'] === 'Subsection A1');
@@ -808,13 +753,11 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'markdown',
-        options: {
-          headers: [
-            ['#', 'Header 1'],
-            ['##', 'Header 2'],
-            ['###', 'Header 3'],
-          ],
-        },
+        headers: [
+          ['#', 'Header 1'],
+          ['##', 'Header 2'],
+          ['###', 'Header 3'],
+        ],
       });
 
       const codeDoc = doc.getDocs().find(doc => doc?.text?.includes('```python'));
@@ -832,10 +775,8 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'markdown',
-        options: {
-          headers: [['#', 'Header 1']],
-          returnEachLine: true,
-        },
+        headers: [['#', 'Header 1']],
+        returnEachLine: true,
       });
 
       expect(doc.getDocs().length).toBe(4); // Title + 3 lines
@@ -856,11 +797,9 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'markdown',
-        options: {
-          headers: [['#', 'Header 1']],
-          returnEachLine: false,
-          stripHeaders: false,
-        },
+        headers: [['#', 'Header 1']],
+        returnEachLine: false,
+        stripHeaders: false,
       });
 
       const docs = doc.getDocs();
