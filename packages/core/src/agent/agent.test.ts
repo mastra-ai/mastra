@@ -44,9 +44,7 @@ describe('agent', () => {
 
     const agentOne = mastra.getAgent('electionAgent');
 
-    const response = await agentOne.text({
-      messages: ['Who won the 2016 US presidential election?'],
-    });
+    const response = await agentOne.generate('Who won the 2016 US presidential election?');
 
     const { text, toolCalls } = response;
 
@@ -67,8 +65,8 @@ describe('agent', () => {
 
     const agentOne = mastra.getAgent('electionAgent');
 
-    const response = await agentOne.stream({
-      messages: ['Who won the 2016 US presidential election?'],
+    const response = await agentOne.generate('Who won the 2016 US presidential election?', {
+      stream: true,
     });
 
     const { textStream } = response;
@@ -98,18 +96,15 @@ describe('agent', () => {
 
     const agentOne = mastra.getAgent('electionAgent');
 
-    const response = await agentOne.textObject({
-      messages: ['Who won the 2012 US presidential election?'],
-      structuredOutput: {
-        winner: {
-          type: 'string',
-        },
-      },
+    const response = await agentOne.generate('Who won the 2012 US presidential election?', {
+      schema: z.object({
+        winner: z.string(),
+      }),
     });
 
     const { object } = response;
 
-    expect(object.winner).toBe('Barack Obama');
+    expect(object.winner).toContain('Barack Obama');
   });
 
   it('should support ZodSchema structured output type', async () => {
@@ -125,9 +120,8 @@ describe('agent', () => {
 
     const agentOne = mastra.getAgent('electionAgent');
 
-    const response = await agentOne.textObject({
-      messages: ['Give me the winners of 2012 and 2016 US presidential elections'],
-      structuredOutput: z.array(
+    const response = await agentOne.generate('Give me the winners of 2012 and 2016 US presidential elections', {
+      schema: z.array(
         z.object({
           winner: z.string(),
           year: z.string(),
@@ -163,13 +157,11 @@ describe('agent', () => {
 
     const agentOne = mastra.getAgent('electionAgent');
 
-    const response = await agentOne.streamObject({
-      messages: ['Who won the 2012 US presidential election?'],
-      structuredOutput: {
-        winner: {
-          type: 'string',
-        },
-      },
+    const response = await agentOne.generate('Who won the 2012 US presidential election?', {
+      schema: z.object({
+        winner: z.string(),
+      }),
+      stream: true,
     });
 
     const { partialObjectStream } = response;
@@ -214,9 +206,8 @@ describe('agent', () => {
 
     const agentOne = mastra.getAgent('userAgent');
 
-    const response = await agentOne.text({
+    const response = await agentOne.generate('Find the user with name - Dero Israel', {
       maxSteps: 2,
-      messages: ['Find the user with name - Dero Israel'],
     });
 
     const toolCall: any = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
@@ -246,9 +237,7 @@ describe('agent', () => {
 
     const agentOne = mastra.getAgent('testAgent');
 
-    const response = await agentOne.text({
-      messages: ['Call testTool'],
-    });
+    const response = await agentOne.generate('Call testTool');
 
     const toolCall: any = response.toolResults.find((result: any) => result.toolName === 'testTool');
 

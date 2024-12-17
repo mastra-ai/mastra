@@ -25,7 +25,7 @@ export const siteCrawlSync = createSync({
   }),
   description:
     "Crawl a website and extract the markdown content and sync it to the database",
-  execute: async ({ context, engine, runId }) => {
+  execute: async ({ context, mastra, runId }) => {
     const toolResult = await tools.siteCrawlTool.execute({
       context,
       runId,
@@ -63,7 +63,7 @@ export const siteCrawlSync = createSync({
       })
     );
 
-    await engine?.syncRecords({
+    await mastra?.engine?.syncRecords({
       connectionId: "SYSTEM",
       records: recordsToPersist.flatMap((r) => r),
       name: entityType,

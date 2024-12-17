@@ -1,10 +1,17 @@
 import { execSync } from 'child_process';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Skip postinstall in CI and production environments
-if (process.env.WORKSPACE || process.env.CI || process.env.NODE_ENV === 'production') {
-  console.log('Skipping postinstall in CI/production environment');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const packageRoot = path.resolve(__dirname, '..', '..');
+const workspaceRoot = path.resolve(packageRoot, '..', '..');
+
+// Check if we're in a workspace by looking for pnpm-workspace.yaml
+const isWorkspace = fs.existsSync(path.join(workspaceRoot, 'pnpm-workspace.yaml'));
+
+if (isWorkspace || process.env.CI || process.env.NODE_ENV === 'production') {
+  console.log('Skipping postinstall in mastra workspace/CI/production environment');
   process.exit(0);
 }
 
@@ -13,9 +20,6 @@ if (process.env.PREVENT_POSTINSTALL_RECURSION) {
   console.log('Skipping recursive postinstall');
   process.exit(0);
 }
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const packageRoot = path.resolve(__dirname, '..', '..');
 
 function detectPackageManager() {
   const userAgent = process.env.npm_config_user_agent || '';

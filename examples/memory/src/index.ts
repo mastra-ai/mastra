@@ -4,15 +4,14 @@ import { bubble } from './bubble';
 import { mastra } from './mastra';
 
 async function main() {
-  const agent = mastra.getAgent('Chef Agent');
+  const agent = mastra.getAgent('chefAgent');
   const threadId = randomUUID();
   const resourceid = 'SOME_USER_ID';
 
   const query1 =
     'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?';
 
-  await agent.text({
-    messages: [query1],
+  await agent.generate(query1, {
     threadId,
     resourceid,
   });
@@ -34,8 +33,7 @@ async function main() {
 
   const query2 =
     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
-  await agent.text({
-    messages: [query2],
+  await agent.generate(query2, {
     threadId,
     resourceid,
   });
@@ -59,10 +57,7 @@ async function main() {
     format: 'core_message',
   });
 
-  const res = await agent.text({
-    messages: ['What did we cook before I went to my friends house?'],
-    context: m,
-  });
+  const res = await agent.generate('What did we cook before I went to my friends house?', { context: m });
 
   console.log(res.text);
 }

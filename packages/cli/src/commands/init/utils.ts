@@ -297,7 +297,7 @@ export const initializeMinimal = async () => {
   s.start('Creating project');
 
   await exec(`npm init -y`);
-  await exec(`npm i zod@3.23.7 typescript tsx @types/node --save-dev >> output.txt`);
+  await exec(`npm i zod typescript tsx @types/node --save-dev`);
 
   s.message('Installing dependencies');
 

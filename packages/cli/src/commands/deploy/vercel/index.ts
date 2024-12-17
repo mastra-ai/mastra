@@ -42,7 +42,10 @@ export class VercelDeployer extends Deployer {
           license: 'ISC',
           dependencies: {
             express: '^4.21.1',
-            '@mastra/core': '0.1.27-alpha.18',
+            '@mastra/core': '0.1.27-alpha.35',
+            'express-jsdoc-swagger': '^1.8.0',
+            'serverless-http': '^3.2.0',
+            zod: '3.24.0',
           },
         },
         null,
@@ -179,7 +182,11 @@ export class VercelDeployer extends Deployer {
     console.log('Deployment started on Vercel. You can wait for it to finish or exit this command.');
     await p2;
 
-    // Sync environment variables for future deployments
-    await this.syncEnv({ scope });
+    if (envVars.length > 0) {
+      // Sync environment variables for future deployments
+      await this.syncEnv({ scope });
+    } else {
+      console.log('\nAdd your ENV vars to .env or your vercel dashboard.\n');
+    }
   }
 }

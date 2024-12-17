@@ -10,9 +10,7 @@ async function text() {
     'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?';
   console.log(`Query 1: ${query1}`);
 
-  const pastaResponse = await agent.text({
-    messages: [query1],
-  });
+  const pastaResponse = await agent.generate(query1);
   console.log('\n👨‍🍳 Chef Michel:', pastaResponse.text);
   console.log('\n-------------------\n');
 }

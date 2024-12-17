@@ -1,7 +1,11 @@
 import express, { Request, Response } from 'express';
 import expressJSDocSwagger, { Options } from 'express-jsdoc-swagger';
-import { join } from 'path';
+import path, { join } from 'path';
 import serverless from 'serverless-http';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const { mastra } = await import(join(process.cwd(), 'mastra.mjs'));
 
@@ -178,7 +182,7 @@ app.post('/api/agents/:agentId/text', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await agent.text({ messages });
+    const result = await agent.generate(messages);
     res.json(result);
   } catch (error) {
     const apiError = error as ApiError;
@@ -217,8 +221,8 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
       return;
     }
 
-    const streamResult = await agent.stream({
-      messages,
+    const streamResult = await agent.generate(messages, {
+      stream: true,
     });
 
     streamResult.pipeDataStreamToResponse(res);
@@ -235,7 +239,7 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
  * @summary Get structured output from agent
  * @tags Agent
  * @param {string} agentId.path.required - Agent identifier
- * @param {TextObjectRequest} request.body.required - Request with messages and structured output spec
+ * @param {TextObjectRequest} request.body.required - Request with messages and schema spec
  * @return {object} 200 - Structured output response
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
@@ -245,11 +249,11 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
     const messages = req.body.messages;
-    const structuredOutput = req.body.structuredOutput;
+    const schema = req.body.schema;
 
     const { ok, errorResponse } = await validateBody({
       messages,
-      structuredOutput,
+      schema,
     });
 
     if (!ok) {
@@ -262,7 +266,7 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
       return;
     }
 
-    const result = await agent.textObject({ messages, structuredOutput });
+    const result = await agent.generate(messages, { schema });
     res.json(result);
   } catch (error) {
     const apiError = error as ApiError;
@@ -279,7 +283,7 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
  * @summary Stream structured output from agent
  * @tags Agent
  * @param {string} agentId.path.required - Agent identifier
- * @param {TextObjectRequest} request.body.required - Request with messages and structured output spec
+ * @param {TextObjectRequest} request.body.required - Request with messages and schema spec
  * @return {stream} 200 - Structured output stream
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
@@ -289,11 +293,11 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
     const messages = req.body.messages;
-    const structuredOutput = req.body.structuredOutput;
+    const schema = req.body.schema;
 
     const { ok, errorResponse } = await validateBody({
       messages,
-      structuredOutput,
+      schema,
     });
 
     if (!ok) {
@@ -306,10 +310,7 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
       return;
     }
 
-    const streamResult = await agent.streamObject({
-      messages,
-      structuredOutput,
-    });
+    const streamResult = await agent.generate(messages, { schema, stream: true });
 
     streamResult.pipeTextStreamToResponse(res);
   } catch (error) {
@@ -778,3 +779,5 @@ app.listen(process.env.PORT || 4111, () => {
   console.log(`🦄Server running on port ${process.env.PORT || 4111}`);
   console.log(`📚 Open API documentation available at http://localhost:${process.env.PORT || 4111}/openapi.json`);
 });
+
+export default handler;

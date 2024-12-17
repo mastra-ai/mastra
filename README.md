@@ -71,9 +71,7 @@ async function main() {
     tools: {},
   });
 
-  const result = await agent.text({
-    messages: ['Write a short story about a robot learning to paint.'],
-  });
+  const result = await agent.generate('Write a short story about a robot learning to paint.');
 
   console.log('Agent response:', result.text);
 }

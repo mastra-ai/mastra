@@ -4,10 +4,9 @@ import { assign, createActor, fromPromise, setup, Snapshot } from 'xstate';
 import { z } from 'zod';
 
 import { IAction } from '../action';
-import { Agent } from '../agent';
-import { FilterOperators, MastraEngine } from '../engine';
+import { FilterOperators } from '../engine';
 import { Logger, LogLevel, RegisteredLogger } from '../logger';
-import { Telemetry } from '../telemetry';
+import { Mastra } from '../mastra';
 
 import { Step } from './step';
 import {
@@ -43,17 +42,14 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #actor: ReturnType<typeof createActor<ReturnType<typeof this.initializeMachine>>> | null = null;
   #runId: string;
   #retryConfig?: RetryConfig;
-  #engine?: MastraEngine;
   #connectionId = `WORKFLOWS`;
   #entityName = `__workflows__`;
-  #telemetry?: Telemetry;
-  #agents?: Record<string, Agent<any>>;
+  #mastra?: Mastra;
   // registers stepIds on `after` calls
   #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
   #stepGraph: StepGraph = { initial: [] };
   #stepSubscriberGraph: Record<string, StepGraph> = {};
-  // #delimiter = '-([-]::[-])-';
   #steps: Record<string, IAction<any, any, any, any>> = {};
 
   /**
@@ -64,25 +60,22 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   constructor({
     name,
     logger,
-    engine,
     triggerSchema,
     retryConfig,
-    telemetry,
+    mastra,
   }: {
     name: string;
     logger?: Logger<WorkflowLogMessage>;
-    engine?: MastraEngine;
     triggerSchema?: TTriggerSchema;
     retryConfig?: RetryConfig;
-    telemetry?: Telemetry;
+    mastra?: Mastra;
   }) {
     this.name = name;
     this.#logger = logger;
     this.#retryConfig = retryConfig || { attempts: 3, delay: 1000 };
     this.#triggerSchema = triggerSchema;
     this.#runId = crypto.randomUUID();
-    this.#telemetry = telemetry;
-    this.#engine = engine;
+    this.#mastra = mastra;
     this.initializeMachine();
   }
 
@@ -618,10 +611,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #getInjectables() {
     return {
       runId: this.#runId,
-      engine: this.#engine,
-      logger: this.#logger,
-      agents: this.#agents,
-      telemetry: this.#telemetry,
+      mastra: this.#mastra,
     };
   }
 
@@ -742,13 +732,17 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
    * Persists the workflow state to the database
    */
   async #persistWorkflowSnapshot() {
-    if (!this.#engine) return;
+    if (!this.#mastra) return;
+
+    const engine = this.#mastra.engine;
+
+    if (!engine) return;
 
     const snapshot = this.#actor?.getPersistedSnapshot();
 
     if (!snapshot) return;
 
-    await this.#engine.syncRecords({
+    await engine.syncRecords({
       name: this.#entityName,
       connectionId: this.#connectionId,
       records: [
@@ -763,9 +757,13 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   }
 
   async #loadWorkflowSnapshot(runId: string) {
-    if (!this.#engine) return;
+    if (!this.#mastra) return;
 
-    const state = await this.#engine.getRecords({
+    const engine = this.#mastra.engine;
+
+    if (!engine) return;
+
+    const state = await engine.getRecords({
       entityName: this.#entityName,
       connectionId: this.#connectionId,
       options: {
@@ -877,22 +875,24 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
     stepId: TStepId,
   ): StepDef<TStepId, TSteps, any, any>[TStepId] {
+    const telemetry = this.#mastra?.getTelemetry();
+
     const handler = async ({ context, ...rest }: ActionContext<TSteps[number]['inputSchema']>) => {
       const targetStep = this.#steps[stepId];
       if (!targetStep) throw new Error(`Step not found`);
 
-      const { payload, execute } = targetStep;
+      const { payload = {}, execute } = targetStep;
 
       // Merge static payload with dynamically resolved variables
       // Variables take precedence over payload values
       const mergedData = {
-        ...payload,
+        ...(payload as {}),
         ...context,
       };
 
       // Only trace if telemetry is available and action exists
-      const finalAction = this.#telemetry
-        ? this.#telemetry.traceMethod(execute, {
+      const finalAction = telemetry
+        ? telemetry.traceMethod(execute, {
             spanName: `workflow.${this.name}.action.${stepId}`,
           })
         : execute;
@@ -901,8 +901,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     };
 
     // Only trace handler if telemetry is available
-    const finalHandler = this.#telemetry
-      ? this.#telemetry.traceMethod(handler, {
+    const finalHandler = telemetry
+      ? telemetry.traceMethod(handler, {
           spanName: `workflow.${this.name}.step.${stepId}`,
         })
       : handler;
@@ -937,20 +937,9 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     }
   }
 
-  __registerEngine(engine?: MastraEngine) {
-    this.#engine = engine;
-  }
-
-  __registerAgents(agents?: Record<string, Agent<any>>) {
-    this.#agents = agents;
-  }
-
-  __registerLogger(logger?: Logger<WorkflowLogMessage>) {
-    this.#logger = logger;
-  }
-
-  __registerTelemetry(telemetry?: Telemetry) {
-    this.#telemetry = telemetry;
+  __registerMastra(mastra?: Mastra) {
+    this.#logger = mastra?.getLogger();
+    this.#mastra = mastra;
   }
 
   get stepGraph() {
