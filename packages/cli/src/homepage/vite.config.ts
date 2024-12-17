@@ -15,6 +15,7 @@ export default defineConfig({
   },
   build: {
     cssCodeSplit: false,
+    assetsDir: 'homepage-assets',
   },
   server: {
     fs: {

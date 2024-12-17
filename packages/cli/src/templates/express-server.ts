@@ -1,11 +1,11 @@
 import express, { Request, Response } from 'express';
 import expressJSDocSwagger, { Options } from 'express-jsdoc-swagger';
-import path, { join } from 'path';
+import _path, { join } from 'path';
 import serverless from 'serverless-http';
-import { fileURLToPath } from 'url';
+import { fileURLToPath as _fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const ___filename = _fileURLToPath(import.meta.url);
+const ___dirname = _path.dirname(___filename);
 
 const { mastra } = await import(join(process.cwd(), 'mastra.mjs'));
 
@@ -32,7 +32,7 @@ const options: Options = {
       description: 'Local server',
     },
   ],
-  baseDir: __dirname,
+  baseDir: ___dirname,
   filesPattern: './**/*.mjs',
   exposeSwaggerUI: false,
   exposeApiDocs: true,
@@ -69,8 +69,8 @@ const validateBody = async (body: Record<string, unknown>): Promise<ValidationRe
 
 // Serve static files from the Vite build first
 app.use(
-  '/assets',
-  express.static(join(__dirname, 'homepage/assets'), {
+  '/homepage-assets',
+  express.static(join(___dirname, 'homepage/assets'), {
     setHeaders: (res: Response, path: string) => {
       // Set correct MIME types
       if (path.endsWith('.js')) {
@@ -83,7 +83,7 @@ app.use(
 );
 
 // Serve other static files
-app.use(express.static(join(__dirname, 'homepage')));
+app.use(express.static(join(___dirname, 'homepage')));
 
 /**
  * GET /
@@ -102,13 +102,13 @@ app.get('/', (_req: Request, res: Response) => {
  * @return  {html} 200 - Agent list interface
  */
 app.get('/agents', (_req: Request, res: Response) => {
-  res.sendFile(join(__dirname, 'homepage/index.html'));
+  res.sendFile(join(___dirname, 'homepage/index.html'));
 });
 
 // Serve static files from the Vite build first
 app.use(
-  '/assets',
-  express.static(join(__dirname, 'agent-chat/assets'), {
+  '/agent-chat-assets',
+  express.static(join(___dirname, 'agent-chat/assets'), {
     setHeaders: (res: Response, path: string) => {
       // Set correct MIME types
       if (path.endsWith('.js')) {
@@ -121,7 +121,7 @@ app.use(
 );
 
 // Serve other static files
-app.use(express.static(join(__dirname, 'agent-chat')));
+app.use(express.static(join(___dirname, 'agent-chat')));
 
 /**
  * GET /agents/{agentId}
@@ -131,7 +131,7 @@ app.use(express.static(join(__dirname, 'agent-chat')));
  * @return {html} 200 - Agent chat interface
  */
 app.get('/agents/:agentId', (_req: Request, res: Response) => {
-  res.sendFile(join(__dirname, 'agent-chat/index.html'));
+  res.sendFile(join(___dirname, 'agent-chat/index.html'));
 });
 
 /**
@@ -149,6 +149,28 @@ app.get('/api/agents', async (_req: Request, res: Response) => {
     const apiError = error as ApiError;
     console.error('Error getting agents', apiError);
     res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting agents' });
+    return;
+  }
+});
+
+/**
+ * GET /api/agents/{agentId}
+ * @summary Get agent by ID
+ * @tags Agent
+ * @param {string} agentId.path.required - Agent identifier
+ * @return {object} 200 - Agent response
+ * @return {Error} 500 - Server error
+ */
+app.get('/api/agents/:agentId', async (req: Request, res: Response) => {
+  try {
+    const agentId = req.params.agentId;
+    const agent = mastra.getAgent(agentId);
+    const tools = agent.getTools();
+    res.json({ ...agent, tools });
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting agent', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting agent' });
     return;
   }
 });
