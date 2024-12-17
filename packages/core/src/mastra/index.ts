@@ -115,23 +115,15 @@ export class Mastra<
           throw new Error(`Agent with name ID:${key} already exists`);
         }
 
-        agent.__setLogger(this.getLogger());
-
-        if (this.telemetry) {
-          agent.__setTelemetry(this.telemetry);
-        }
-
-        if (config.memory) {
-          agent.__setMemory(config.memory);
-        }
-
-        if (config.engine) {
-          agent.__setEngine(config.engine);
-        }
-
-        if (config.syncs) {
-          agent.__setSyncs(config.syncs);
-        }
+        agent.__registerPrimitives({
+          logger: this.getLogger(),
+          telemetry: this.telemetry,
+          engine: this.engine,
+          memory: this.memory,
+          syncs: this.syncs,
+          agents: agents,
+          vectors: this.vectors,
+        });
 
         agents[key] = agent;
       });

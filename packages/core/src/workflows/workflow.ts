@@ -919,11 +919,15 @@ export class Workflow<
   }
 
   __registerPrimitives(p: MastraPrimitives) {
-    this.#mastra = p;
-
-    if (this.#mastra?.logger) {
-      this.logger = this.#mastra.logger;
+    if (p.telemetry) {
+      this.__setTelemetry(p.telemetry);
     }
+
+    if (p.logger) {
+      this.__setLogger(p.logger);
+    }
+
+    this.#mastra = p;
   }
 
   get stepGraph() {
