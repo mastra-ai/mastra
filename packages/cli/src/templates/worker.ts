@@ -72,11 +72,11 @@ router.get('/api/agents/:agentId', ({ params }: IRequest) => {
   try {
     const agentId = decodeURIComponent(params.agentId);
     const agent = mastra.getAgent(agentId);
-
+    const tools = agent.getTools();
     return new Response(
       JSON.stringify({
-        agentId: agent.name,
-        enabledTools: agent.enabledTools,
+        ...agent,
+        tools,
       }),
       {
         headers: {

@@ -16,3 +16,7 @@ export interface Agent {
   modelName: string;
   instructions: string;
 }
+
+export interface AgentWithTools extends Agent {
+  tools: string[];
+}

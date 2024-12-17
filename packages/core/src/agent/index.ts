@@ -86,6 +86,10 @@ export class Agent<
     this.log(LogLevel.DEBUG, `Tools set for agent ${this.name}`);
   }
 
+  getTools() {
+    return this.#tools;
+  }
+
   async generateTitleFromUserMessage({ message }: { message: CoreUserMessage }) {
     const { object } = await this.llm.__textObject({
       messages: [
