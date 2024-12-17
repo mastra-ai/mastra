@@ -1,6 +1,6 @@
 # Logger Instance
 
-A Logger instance is created by `createLogger()` or `createMultiLogger()` and provides methods to record events at various severity levels. Depending on the logger type, messages may be written to the console, file, or an external service.
+A Logger instance is created by `createLogger()` or `combineLoggers()` and provides methods to record events at various severity levels. Depending on the logger type, messages may be written to the console, file, or an external service.
 
 ### Example
 
@@ -14,6 +14,37 @@ logger.error('An error occurred'); // Logged as ERROR
 ```
 
 ### Methods
-<PropertiesTable content={[ { name: 'debug', type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>', description: 'Write a DEBUG-level log. Only recorded if level ≤ DEBUG.', }, { name: 'info', type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>', description: 'Write an INFO-level log. Only recorded if level ≤ INFO.', }, { name: 'warn', type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>', description: 'Write a WARN-level log. Only recorded if level ≤ WARN.', }, { name: 'error', type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>', description: 'Write an ERROR-level log. Only recorded if level ≤ ERROR.', }, { name: 'cleanup', type: '() => Promise<void>', isOptional: true, description: 'Cleanup resources held by the logger (e.g., network connections for Upstash). Not all loggers implement this.', }, ]} />
+
+<PropertiesTable
+  content={[
+    {
+      name: 'debug',
+      type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>',
+      description: 'Write a DEBUG-level log. Only recorded if level ≤ DEBUG.',
+    },
+    {
+      name: 'info',
+      type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>',
+      description: 'Write an INFO-level log. Only recorded if level ≤ INFO.',
+    },
+    {
+      name: 'warn',
+      type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>',
+      description: 'Write a WARN-level log. Only recorded if level ≤ WARN.',
+    },
+    {
+      name: 'error',
+      type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>',
+      description: 'Write an ERROR-level log. Only recorded if level ≤ ERROR.',
+    },
+    {
+      name: 'cleanup',
+      type: '() => Promise<void>',
+      isOptional: true,
+      description:
+        'Cleanup resources held by the logger (e.g., network connections for Upstash). Not all loggers implement this.',
+    },
+  ]}
+/>
 
 **Note:** Some loggers require a `BaseLogMessage` object (with `message`, `destinationPath`, `type` fields). For instance, the `File` and `Upstash` loggers need structured messages.

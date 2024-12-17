@@ -8,8 +8,8 @@ import { fileURLToPath } from 'url';
 import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
 
+import { FileService } from '../services/service.file.js';
 import { bundle, bundleServer } from '../utils/bundle.js';
-import { getFirstExistingFile } from '../utils/get-first-existing-file.js';
 
 import { EXPRESS_SERVER } from './deploy/server.js';
 
@@ -36,7 +36,8 @@ export async function dev({ port, env, dir }: { dir?: string; port: number; env:
   });
 
   try {
-    const envFile = getFirstExistingFile(['.env.development', '.env']);
+    const fileService = new FileService();
+    const envFile = fileService.getFirstExistingFile(['.env.development', '.env']);
     config({ path: envFile });
   } catch (err) {
     //create .env file

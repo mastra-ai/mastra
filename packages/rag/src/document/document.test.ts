@@ -1,4 +1,4 @@
-import { MastraDocument } from './document';
+import { MDocument } from './document';
 import { Language } from './types';
 
 const sampleMarkdown = `
@@ -12,25 +12,25 @@ Welcome to our comprehensive guide on modern web development. This resource cove
 - Senior developers seeking a refresher on current best practices
 `;
 
-describe('MastraDocument', () => {
+describe('MDocument', () => {
   describe('basics', () => {
-    let chunks: MastraDocument['chunks'];
-    let doc: MastraDocument;
+    let chunks: MDocument['chunks'];
+    let doc: MDocument;
     it('initialization', () => {
-      const doc = new MastraDocument({ docs: [{ text: 'test' }], type: 'text' });
+      const doc = new MDocument({ docs: [{ text: 'test' }], type: 'text' });
       expect(doc.getDocs()).toHaveLength(1);
       expect(doc.getText()?.[0]).toBe('test');
     });
 
     it('initialization with array', () => {
-      doc = new MastraDocument({ docs: [{ text: 'test' }, { text: 'test2' }], type: 'text' });
+      doc = new MDocument({ docs: [{ text: 'test' }, { text: 'test2' }], type: 'text' });
       expect(doc.getDocs()).toHaveLength(2);
       expect(doc.getDocs()[0]?.text).toBe('test');
       expect(doc.getDocs()[1]?.text).toBe('test2');
     });
 
     it('chunk - metadata title', async () => {
-      const doc = MastraDocument.fromMarkdown(sampleMarkdown);
+      const doc = MDocument.fromMarkdown(sampleMarkdown);
 
       chunks = await doc.chunk({
         extract: {
@@ -64,7 +64,7 @@ describe('MastraDocument', () => {
     it('should split text on simple separator', async () => {
       const text = 'Hello world\n\nHow are you\n\nI am fine';
 
-      const doc = MastraDocument.fromText(text, { meta: 'data' });
+      const doc = MDocument.fromText(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'character',
@@ -87,7 +87,7 @@ describe('MastraDocument', () => {
     it('should handle regex separator', async () => {
       const text = 'Hello   world\n\nHow    are    you';
 
-      const doc = MastraDocument.fromText(text, { meta: 'data' });
+      const doc = MDocument.fromText(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'character',
@@ -105,7 +105,7 @@ describe('MastraDocument', () => {
     it('should keep separator when specified', async () => {
       const text = 'Hello\n\nWorld';
 
-      const doc = MastraDocument.fromText(text, { meta: 'data' });
+      const doc = MDocument.fromText(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'character',
@@ -127,7 +127,7 @@ describe('MastraDocument', () => {
       it('should keep separator at end when specified', async () => {
         const text = 'Hello\n\nWorld';
 
-        const doc = MastraDocument.fromText(text, { meta: 'data' });
+        const doc = MDocument.fromText(text, { meta: 'data' });
 
         await doc.chunk({
           strategy: 'character',
@@ -150,7 +150,7 @@ describe('MastraDocument', () => {
       it('should keep separator at start when specified', async () => {
         const text = 'Hello\n\nWorld\n\nTest';
 
-        const doc = MastraDocument.fromText(text, { meta: 'data' });
+        const doc = MDocument.fromText(text, { meta: 'data' });
 
         await doc.chunk({
           strategy: 'character',
@@ -174,7 +174,7 @@ describe('MastraDocument', () => {
       it('should handle multiple consecutive separators', async () => {
         const text = 'Hello\n\n\n\nWorld';
 
-        const doc = MastraDocument.fromText(text, { meta: 'data' });
+        const doc = MDocument.fromText(text, { meta: 'data' });
 
         await doc.chunk({
           strategy: 'character',
@@ -196,7 +196,7 @@ describe('MastraDocument', () => {
       it('should handle text ending with separator', async () => {
         const text = 'Hello\n\nWorld\n\n';
 
-        const doc = MastraDocument.fromText(text, { meta: 'data' });
+        const doc = MDocument.fromText(text, { meta: 'data' });
 
         await doc.chunk({
           strategy: 'character',
@@ -218,7 +218,7 @@ describe('MastraDocument', () => {
       it('should handle text starting with separator', async () => {
         const text = '\n\nHello\n\nWorld';
 
-        const doc = MastraDocument.fromText(text, { meta: 'data' });
+        const doc = MDocument.fromText(text, { meta: 'data' });
 
         await doc.chunk({
           strategy: 'character',
@@ -244,7 +244,7 @@ describe('MastraDocument', () => {
       const text =
         'Hello world.\n\nThis is a test of the recursive splitting system.\nIt should handle multiple lines and different separators appropriately.';
 
-      const doc = MastraDocument.fromText(text, { meta: 'data' });
+      const doc = MDocument.fromText(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'recursive',
@@ -275,7 +275,7 @@ describe('MastraDocument', () => {
               }
             `;
 
-      const doc = MastraDocument.fromText(tsCode, { meta: 'data' });
+      const doc = MDocument.fromText(tsCode, { meta: 'data' });
 
       await doc.chunk({
         options: {
@@ -291,7 +291,7 @@ describe('MastraDocument', () => {
     });
 
     it('should throw error for unsupported language', async () => {
-      const doc = MastraDocument.fromText('tsCode', { meta: 'data' });
+      const doc = MDocument.fromText('tsCode', { meta: 'data' });
 
       await expect(
         doc.chunk({
@@ -306,7 +306,7 @@ describe('MastraDocument', () => {
 
     it('should maintain context with overlap', async () => {
       const text = 'This is a test.\nIt has multiple lines.\nEach line should be handled properly.';
-      const doc = MastraDocument.fromText(text, { meta: 'data' });
+      const doc = MDocument.fromText(text, { meta: 'data' });
 
       await doc.chunk();
 
@@ -336,7 +336,7 @@ describe('MastraDocument', () => {
               </html>
             `;
 
-      const doc = MastraDocument.fromHTML(html, { meta: 'data' });
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'html',
@@ -370,7 +370,7 @@ describe('MastraDocument', () => {
               </html>
             `;
 
-      const doc = MastraDocument.fromHTML(html, { meta: 'data' });
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'html',
@@ -403,7 +403,7 @@ describe('MastraDocument', () => {
       </html>
     `;
 
-      const doc = MastraDocument.fromHTML(html, { meta: 'data' });
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'html',
@@ -439,7 +439,7 @@ describe('MastraDocument', () => {
               </html>
             `;
 
-      const doc = MastraDocument.fromHTML(html, { meta: 'data' });
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'html',
@@ -458,7 +458,7 @@ describe('MastraDocument', () => {
     });
 
     it('should properly merge metadata', async () => {
-      const doc = new MastraDocument({
+      const doc = new MDocument({
         docs: [
           {
             text: `
@@ -503,7 +503,7 @@ describe('MastraDocument', () => {
           key2: '世界',
         };
 
-        const doc = MastraDocument.fromJSON(JSON.stringify(input), { meta: 'data' });
+        const doc = MDocument.fromJSON(JSON.stringify(input), { meta: 'data' });
 
         await doc.chunk({
           strategy: 'json',
@@ -544,7 +544,7 @@ describe('MastraDocument', () => {
           key2: '世界',
         };
 
-        const doc = MastraDocument.fromJSON(JSON.stringify(input), { meta: 'data' });
+        const doc = MDocument.fromJSON(JSON.stringify(input), { meta: 'data' });
 
         await doc.chunk({
           strategy: 'json',
@@ -570,7 +570,7 @@ describe('MastraDocument', () => {
   describe('chunkToken', () => {
     it('should handle different encodings', async () => {
       const text = 'This is a test text for different encodings.';
-      const doc = MastraDocument.fromText(text, { meta: 'data' });
+      const doc = MDocument.fromText(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'token',
@@ -590,7 +590,7 @@ describe('MastraDocument', () => {
     it('should handle special tokens correctly', async () => {
       const text = 'Test text <|endoftext|> more text';
 
-      const doc = MastraDocument.fromText(text, { meta: 'data' });
+      const doc = MDocument.fromText(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'token',
@@ -611,7 +611,7 @@ describe('MastraDocument', () => {
     it('should strip whitespace when configured', async () => {
       const text = '  This has whitespace   ';
 
-      const doc = MastraDocument.fromText(text, { meta: 'data' });
+      const doc = MDocument.fromText(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'token',
@@ -634,7 +634,7 @@ describe('MastraDocument', () => {
     describe('Error cases', () => {
       it('should throw error for invalid chunk size and overlap', async () => {
         const text = '  This has whitespace   ';
-        const doc = MastraDocument.fromText(text, { meta: 'data' });
+        const doc = MDocument.fromText(text, { meta: 'data' });
 
         await expect(
           doc.chunk({
@@ -649,7 +649,7 @@ describe('MastraDocument', () => {
 
       it('should handle invalid encoding name', async () => {
         const text = '  This has whitespace   ';
-        const doc = MastraDocument.fromText(text, { meta: 'data' });
+        const doc = MDocument.fromText(text, { meta: 'data' });
 
         await expect(
           doc.chunk({
@@ -680,7 +680,7 @@ describe('MastraDocument', () => {
         - List item 1
         - List item 2`;
 
-      const doc = MastraDocument.fromMarkdown(text, { meta: 'data' });
+      const doc = MDocument.fromMarkdown(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'markdown',
@@ -706,7 +706,7 @@ describe('MastraDocument', () => {
 
         Regular text after code block.`;
 
-      const doc = MastraDocument.fromMarkdown(text, { meta: 'data' });
+      const doc = MDocument.fromMarkdown(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'markdown',
@@ -739,7 +739,7 @@ describe('MastraDocument', () => {
 
         Final content.`;
 
-      const doc = MastraDocument.fromMarkdown(text);
+      const doc = MDocument.fromMarkdown(text);
 
       await doc.chunk({
         strategy: 'markdown',
@@ -774,7 +774,7 @@ describe('MastraDocument', () => {
         ## Section B
         Content B`;
 
-      const doc = MastraDocument.fromMarkdown(text, { meta: 'data' });
+      const doc = MDocument.fromMarkdown(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'markdown',
@@ -803,7 +803,7 @@ describe('MastraDocument', () => {
 
         ## Next Section`;
 
-      const doc = MastraDocument.fromMarkdown(text, { meta: 'data' });
+      const doc = MDocument.fromMarkdown(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'markdown',
@@ -827,7 +827,7 @@ describe('MastraDocument', () => {
         Line 2
         Line 3`;
 
-      const doc = MastraDocument.fromMarkdown(text, { meta: 'data' });
+      const doc = MDocument.fromMarkdown(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'markdown',
@@ -851,7 +851,7 @@ describe('MastraDocument', () => {
 
         Content`;
 
-      const doc = MastraDocument.fromMarkdown(text, { meta: 'data' });
+      const doc = MDocument.fromMarkdown(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'markdown',

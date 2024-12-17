@@ -9,19 +9,20 @@ import { listAgents } from './commands/agents/list-agent.js';
 import { updateAgentIndexFile } from './commands/agents/update-agent-file.js';
 import { cloudflareDeploy, netlifyDeploy, vercelDeploy } from './commands/deploy/index.js';
 import { dev } from './commands/dev.js';
-import { generate } from './commands/generate.js';
+import { add } from './commands/engine/add.js';
+import { down } from './commands/engine/down.js';
+import { generate } from './commands/engine/generate.js';
+import { migrate } from './commands/engine/migrate.js';
+import { up } from './commands/engine/up.js';
 import { init } from './commands/init/init.js';
-import { checkPkgJsonAndCreateStarter, interactivePrompt } from './commands/init/utils.js';
-import { installEngineDeps } from './commands/install-engine-deps.js';
-import { migrate } from './commands/migrate.js';
-import { provision } from './commands/provision.js';
+import { checkAndInstallCoreDeps, checkPkgJsonAndCreateStarter, interactivePrompt } from './commands/init/utils.js';
+import { DepsService } from './services/service.deps.js';
 import { findApiKeys } from './utils/find-api-keys.js';
 import { getEnv } from './utils/get-env.js';
-import { getPackageVersion } from './utils/get-package-version.js';
 import { logger } from './utils/logger.js';
-import { setupEnvFile } from './utils/setup-env-file.js';
 
-const version = await getPackageVersion();
+const depsService = new DepsService();
+const version = await depsService.getPackageVersion();
 
 const analytics = new PosthogAnalytics({
   apiKey: 'phc_yfAcSuemwdkkLzl6F6q4uyRGeUkHSHMHq9W2ZaRicZw',
@@ -58,6 +59,7 @@ program
       args,
       execution: async () => {
         await checkPkgJsonAndCreateStarter();
+        await checkAndInstallCoreDeps();
 
         if (!Object.keys(args).length) return interactivePrompt();
 
@@ -108,9 +110,7 @@ engine
       command: 'engine add',
       args: {},
       execution: async () => {
-        await installEngineDeps();
-        const { dbUrl } = await provision();
-        await setupEnvFile({ dbUrl });
+        await add();
       },
     });
   });
@@ -136,8 +136,20 @@ engine
       command: 'engine up',
       args: {},
       execution: async () => {
-        const { dbUrl } = await provision();
-        await setupEnvFile({ dbUrl });
+        await up();
+      },
+    });
+  });
+
+engine
+  .command('down')
+  .description('Runs docker-compose down to shut down docker containers')
+  .action(async () => {
+    await analytics.trackCommandExecution({
+      command: 'engine down',
+      args: {},
+      execution: async () => {
+        await down();
       },
     });
   });
@@ -155,7 +167,9 @@ engine
           await migrate(dbUrl);
         } else {
           logger.log('Please add DB_URL to your .env.development file');
-          logger.log(`Run ${color.blueBright('mastra engine up')} to get started with a pg db`);
+          logger.log(
+            `Run ${color.blueBright('mastra engine add')} to get started with a Postgres DB in a docker container`,
+          );
         }
       },
     });

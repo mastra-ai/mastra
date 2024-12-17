@@ -1,5 +1,5 @@
 import { createSync } from "@mastra/core";
-import { MastraDocument } from "@mastra/rag";
+import { MDocument } from "@mastra/rag";
 import { z } from "zod";
 import * as tools from "../tools";
 
@@ -43,7 +43,7 @@ export const siteCrawlSync = createSync({
 
     const recordsToPersist = await Promise.all(
       crawlData?.flatMap(async ({ markdown, metadata }) => {
-        const doc = MastraDocument.fromMarkdown(markdown, metadata);
+        const doc = MDocument.fromMarkdown(markdown, metadata);
 
         await doc.chunk({
           strategy: "markdown",
