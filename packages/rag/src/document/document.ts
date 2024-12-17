@@ -270,20 +270,6 @@ export class MDocument {
     return this.chunks;
   }
 
-  async embed(chunk: Chunk | string | string[] | Chunk[], options: Omit<EmbeddingOptions, 'value'>) {
-    let value: string | string[];
-
-    if (Array.isArray(chunk)) {
-      value = chunk.map(chunk => (typeof chunk === 'string' ? chunk : chunk.getText()));
-    } else if (chunk instanceof Chunk) {
-      value = chunk.getText();
-    } else {
-      value = chunk;
-    }
-
-    return embed({ ...options, value });
-  }
-
   getDocs(): Chunk[] {
     return this.chunks;
   }
