@@ -69,44 +69,6 @@ const validateBody = async (body: Record<string, unknown>): Promise<ValidationRe
   return { ok: true };
 };
 
-// serve static files for playground
-app.use(
-  '/playground-assets',
-  express.static(join(__dirname, 'playground/playground-assets'), {
-    setHeaders: (res: Response, path: string) => {
-      // Set correct MIME types
-      if (path.endsWith('.js')) {
-        res.set('Content-Type', 'application/javascript');
-      } else if (path.endsWith('.css')) {
-        res.set('Content-Type', 'text/css');
-      }
-    },
-  }),
-);
-
-// Serve other static files
-app.use(express.static(join(__dirname, 'playground')));
-
-/**
- * GET /playground
- * @summary Serve playground page
- * @tags System
- * @return  {html} 200 - Playground page
- */
-app.get('/playground', (_req: Request, res: Response) => {
-  res.sendFile(join(__dirname, 'playground/index.html'));
-});
-
-/**
- * GET /playground routes
- * @summary Sereve all playground routes
- * @tags System
- * @return  {html} 200 - Playground
- */
-app.get('/playground/*', (_req: Request, res: Response) => {
-  res.sendFile(join(__dirname, 'playground/index.html'));
-});
-
 // Serve static files for homepage
 app.use(
   '/homepage-assets',
@@ -172,6 +134,44 @@ app.use(express.static(join(___dirname, 'agent-chat')));
  */
 app.get('/agents/:agentId', (_req: Request, res: Response) => {
   res.sendFile(join(___dirname, 'agent-chat/index.html'));
+});
+
+// serve static files for playground
+app.use(
+  '/playground-assets',
+  express.static(join(__dirname, 'playground/playground-assets'), {
+    setHeaders: (res: Response, path: string) => {
+      // Set correct MIME types
+      if (path.endsWith('.js')) {
+        res.set('Content-Type', 'application/javascript');
+      } else if (path.endsWith('.css')) {
+        res.set('Content-Type', 'text/css');
+      }
+    },
+  }),
+);
+
+// Serve other static files
+app.use(express.static(join(__dirname, 'playground')));
+
+/**
+ * GET /playground
+ * @summary Serve playground page
+ * @tags System
+ * @return  {html} 200 - Playground page
+ */
+app.get('/playground', (_req: Request, res: Response) => {
+  res.sendFile(join(__dirname, 'playground/index.html'));
+});
+
+/**
+ * GET /playground routes
+ * @summary Sereve all playground routes
+ * @tags System
+ * @return  {html} 200 - Playground
+ */
+app.get('/playground/*', (_req: Request, res: Response) => {
+  res.sendFile(join(__dirname, 'playground/index.html'));
 });
 
 /**
@@ -892,6 +892,45 @@ app.post('/api/syncs/:syncId/execute', async (req: Request, res: Response) => {
     const apiError = error as ApiError;
     console.error('Error executing sync', apiError);
     res.status(apiError.status || 500).json({ error: apiError.message || 'Error executing sync' });
+    return;
+  }
+});
+
+/**
+ * GET /api/logs
+ * @summary Get logs
+ * @tags Logs
+ * @return {string[]} 200 - Array of logs
+ * @return {Error} 500 - Server error
+ */
+app.get('/api/logs', async (_req: Request, res: Response) => {
+  try {
+    const logs = await mastra.getLogs();
+    res.json(logs);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting logs', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting logs' });
+    return;
+  }
+});
+
+/**
+ * GET /api/logs/{runId}
+ * @summary Get logs
+ * @tags Logs
+ * @return {string[]} 200 - Array of logs
+ * @return {Error} 500 - Server error
+ */
+app.get('/api/logs/:runId', async (req: Request, res: Response) => {
+  try {
+    const runId = req.params.runId;
+    const logs = await mastra.getLogsByRunId(runId);
+    res.json(logs);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting logs', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting logs' });
     return;
   }
 });

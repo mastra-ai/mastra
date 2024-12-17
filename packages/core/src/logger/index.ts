@@ -112,17 +112,45 @@ export abstract class BaseLogger<T extends BaseLogMessage = BaseLogMessage> impl
     console.warn(`getLogsByRunId ${runId} not implemented for ${this.constructor.name}`);
     return [];
   }
+
+  async getLogs(): Promise<string[]> {
+    console.warn(`getLogs not implemented for ${this.constructor.name}`);
+    return [];
+  }
 }
 
 // Console Logger Implementation
 export class ConsoleLogger<T extends BaseLogMessage = BaseLogMessage> extends BaseLogger<T> {
+  private logs: { timestamp: string; level: string; message: string; runId?: string }[] = [];
+  // private originalConsoleLog: typeof console.log;
+
   constructor(level?: LogLevel) {
     super(level ?? LogLevel.INFO);
+    // Store original console.log and bind it
+    // this.originalConsoleLog = console.log.bind(console);
   }
 
   log(level: LogLevel, message: T | string, ...args: any[]): void {
+    let runId: string | undefined;
+    if (typeof message !== 'string') {
+      runId = message.runId;
+    }
+
     const logEntry = this.formatLogEntry(level, message);
-    console.log(`[${logEntry.timestamp}] [${logEntry.level}] ${logEntry.message}`, ...args);
+    const logMessage = `[${logEntry.timestamp}] [${logEntry.level}] ${logEntry.message}`;
+
+    // Store the log message
+    this.logs.push({ ...logEntry, runId });
+
+    console.log(logMessage, ...args);
+  }
+
+  async getLogs(): Promise<string[]> {
+    return this.logs?.map(log => `[${log.timestamp}] [${log.level}] ${log.message}`) || [];
+  }
+
+  async getLogsByRunId(runId: string): Promise<T[]> {
+    return (this.logs?.filter(log => log.runId === runId) as unknown as T[]) || [];
   }
 }
 
