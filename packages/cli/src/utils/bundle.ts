@@ -4,8 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import { upsertMastraDir } from '../commands/deploy/utils.js';
+import { FileService } from '../services/service.file.js';
 
-import { getFirstExistingFile } from './get-first-existing-file.js';
 import { logger } from './logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -103,7 +103,8 @@ export async function bundle(dirPath: string) {
     // Ensure .mastra directory exists
     upsertMastraDir();
 
-    const entryPoint = getFirstExistingFile([join(dirPath, 'index.ts')]);
+    const fileService = new FileService();
+    const entryPoint = fileService.getFirstExistingFile([join(dirPath, 'index.ts')]);
     const outfile = join(process.cwd(), '.mastra', 'mastra.mjs');
 
     const result = await esbuild.build({

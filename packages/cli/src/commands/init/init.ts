@@ -1,7 +1,6 @@
 import { logger } from '../../utils/logger.js';
 
 import {
-  checkDependencies,
   Components,
   createComponentsDir,
   createMastraDir,
@@ -24,13 +23,6 @@ export const init = async ({
   addExample: boolean;
   showSpinner?: boolean;
 }) => {
-  const depCheck = await checkDependencies();
-
-  if (depCheck !== 'ok') {
-    logger.error(depCheck);
-    return { success: false };
-  }
-
   try {
     const result = await createMastraDir(directory);
 
