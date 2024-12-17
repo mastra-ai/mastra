@@ -210,11 +210,14 @@ export class Mastra<
 
     return await syncFn({
       context: params,
+      mastra: {
+        engine: this.engine,
+        memory: this.memory,
+        agents: this.agents,
+        vectors: this.vectors,
+        llm: this.LLM,
+      },
       runId,
-      engine: this.engine,
-      agents: this.agents,
-      vectors: this.vectors,
-      llm: this.LLM,
     });
   }
 
