@@ -62,7 +62,7 @@ jobs:
       - name: Force latest tag for all published packages
         run: |
           echo "${{ steps.publish.outputs.OUTPUT }}" | grep -E "New tag:" | while read -r line ; do
-            if [[ $line =~ New[[:space:]]+tag:[[:space:]]+([^@]+)@([^[:space:]]+) ]]; then
+            if [[ $line =~ New[[:space:]]+tag:[[:space:]]{2}([^@]+)@([^[:space:]]+) ]]; then
               PKG_NAME="${BASH_REMATCH[1]}"
               PKG_VERSION="${BASH_REMATCH[2]}"
               echo "Setting latest tag for $PKG_NAME@$PKG_VERSION"
