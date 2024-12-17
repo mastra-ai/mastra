@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.1-alpha.2
+
+### Patch Changes
+
+- b5393f1: New example: Dane and many fixes to make it work
+
 ## 0.1.1-alpha.1
 
 ### Patch Changes

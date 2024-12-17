@@ -1,5 +1,17 @@
 # mastra
 
+## 0.1.57-alpha.45
+
+### Patch Changes
+
+- f6da688: update agents/:agentId page in dev to show agent details and endpoints, add getTools to agent
+- b5393f1: New example: Dane and many fixes to make it work
+- d1e3623: Refactor CLI and improve engine commands
+- Updated dependencies [c872875]
+- Updated dependencies [f6da688]
+- Updated dependencies [b5393f1]
+  - @mastra/core@0.1.27-alpha.37
+
 ## 0.1.57-alpha.44
 
 ### Patch Changes

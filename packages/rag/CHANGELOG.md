@@ -1,5 +1,15 @@
 # @mastra/rag
 
+## 0.0.2-alpha.21
+
+### Patch Changes
+
+- 45fd5b8: rename MastraDocument to MDocument
+- Updated dependencies [c872875]
+- Updated dependencies [f6da688]
+- Updated dependencies [b5393f1]
+  - @mastra/core@0.1.27-alpha.37
+
 ## 0.0.2-alpha.20
 
 ### Patch Changes

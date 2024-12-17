@@ -1,5 +1,15 @@
 # bird-checker-with-nextjs
 
+## 0.1.1-alpha.16
+
+### Patch Changes
+
+- b5393f1: New example: Dane and many fixes to make it work
+- Updated dependencies [c872875]
+- Updated dependencies [f6da688]
+- Updated dependencies [b5393f1]
+  - @mastra/core@0.1.27-alpha.37
+
 ## 0.1.1-alpha.15
 
 ### Patch Changes
