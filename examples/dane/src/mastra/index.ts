@@ -4,8 +4,7 @@ import { UpstashKVMemory } from '@mastra/memory';
 
 import { dane, daneIssueLabeler } from './agents';
 import { firecrawl } from './integrations';
-import { messageWorkflow } from './workflows';
-import { githubIssueLabeler } from './workflows/issue-labeler';
+import { messageWorkflow, githubIssueLabeler } from './workflows';
 
 const engine = new PostgresEngine({
   url: 'postgres://postgres:postgres@localhost:5433/mastra',
