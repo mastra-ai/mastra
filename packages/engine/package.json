@@ -1,6 +1,6 @@
 {
   "name": "@mastra/engine",
-  "version": "0.0.5-alpha.29",
+  "version": "0.0.5-alpha.30",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/engine.esm.js",
