@@ -8,19 +8,27 @@ const meta = {
     title: "LLM Models",
     collapsed: false,
   },
-  "creating-agents": {
-    title: "Creating Agents",
+  agents: {
+    title: "Agents",
     collapsed: false,
   },
-  "building-workflows": {
-    title: "Building Workflows",
+  workflows: {
+    title: "Workflows",
     collapsed: false,
   },
-  "04-knowledge-sources": "Knowledge Sources",
-  "05-logging-and-telemetry": "Logging and Telemetry",
-  "06-adding-integrations": "Adding Integrations",
-  "07-deployment": "Deployment",
-  "08-running-evals": "Running Evals",
+  rag: {
+    title: "RAG",
+    collapsed: false,
+  },
+  engine: {
+    title: "Engine",
+    collapsed: false,
+  },
+  deployment: {
+    title: "Deploying to Prod",
+    collapsed: false,
+  },
+  "08-running-evals": "Evals",
   reference: "Reference",
 };
 

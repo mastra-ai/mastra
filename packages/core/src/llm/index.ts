@@ -486,7 +486,7 @@ export class LLM extends MastraBase {
     maxSteps?: number;
   } & Run) {
     const model = this.#model;
-    this.log(LogLevel.DEBUG, `Generating text with ${messages.length} messages`, runId);
+    this.log(LogLevel.DEBUG, `Generating text with ${messages.length} messages`, { runId });
     let modelToPass;
 
     if ('name' in model) {
@@ -551,7 +551,7 @@ export class LLM extends MastraBase {
     maxSteps?: number;
   } & Run) {
     const model = this.#model;
-    this.log(LogLevel.DEBUG, `Generating text with ${messages.length} messages`, runId);
+    this.log(LogLevel.DEBUG, `Generating text with ${messages.length} messages`, { runId });
     let modelToPass;
 
     if ('name' in model) {
@@ -631,7 +631,7 @@ export class LLM extends MastraBase {
     maxSteps?: number;
   } & Run) {
     const model = this.#model;
-    this.log(LogLevel.DEBUG, `Streaming text with ${messages.length} messages`, runId);
+    this.log(LogLevel.DEBUG, `Streaming text with ${messages.length} messages`, { runId });
     let modelToPass;
     if ('name' in model) {
       modelToPass = {
@@ -700,7 +700,7 @@ export class LLM extends MastraBase {
     maxSteps?: number;
   } & Run) {
     const model = this.#model;
-    this.log(LogLevel.DEBUG, `Streaming text with ${messages.length} messages`, runId);
+    this.log(LogLevel.DEBUG, `Streaming text with ${messages.length} messages`, { runId });
     let modelToPass;
     if ('name' in model) {
       modelToPass = {

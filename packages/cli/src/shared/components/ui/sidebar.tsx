@@ -50,20 +50,20 @@ export const Sidebar = () => {
                 <a
                   href={link.url}
                   className={cn(
-                    'flex cursor-pointer w-full px-2 items-center focus-visible:outline-none transition-colors focus-visible:ring-1 focus-visible:ring-zinc-900 gap-3 rounded-sm group text-small hover:bg-zinc-900',
-                    isActive ? 'bg-zinc-900' : '',
+                    'flex cursor-pointer w-full px-2 items-center focus-visible:outline-none transition-colors focus-visible:ring-1 focus-visible:ring-mastra-border-4 gap-3 rounded-xs group text-small hover:bg-mastra-el-6/5',
+                    isActive ? 'bg-mastra-el-6/5' : '',
                   )}
                 >
                   <link.icon
                     className={cn(
-                      'w-[0.875rem] h-[0.875rem] text-gray-300 group-hover:text-gray-100',
-                      isActive ? 'text-gray-100' : '',
+                      'w-[0.875rem] h-[0.875rem] text-mastra-el-3 group-hover:text-mastra-el-6',
+                      isActive ? 'text-mastra-el-6' : '',
                     )}
                   />
                   <p
                     className={cn(
-                      'py-[0.38rem] text-gray-300/60 group-hover:text-gray-100 text-sm transition-all  capitalize ',
-                      isActive ? 'text-gray-100' : '',
+                      'py-[0.38rem] text-mastra-el-6/60 group-hover:text-mastra-el-6 transition-all  capitalize ',
+                      isActive ? 'text-mastra-el-6' : '',
                     )}
                   >
                     {link.name}

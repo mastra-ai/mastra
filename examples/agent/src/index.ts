@@ -10,9 +10,7 @@ async function text() {
     'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?';
   console.log(`Query 1: ${query1}`);
 
-  const pastaResponse = await agent.text({
-    messages: [query1],
-  });
+  const pastaResponse = await agent.generate(query1);
   console.log('\n👨‍🍳 Chef Michel:', pastaResponse.text);
   console.log('\n-------------------\n');
 }
@@ -36,9 +34,7 @@ async function textStream() {
     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
   console.log(`Query 2: ${query2}`);
 
-  const curryResponse = await agent.stream({
-    messages: [query2],
-  });
+  const curryResponse = await agent.generate(query2, { stream: true });
 
   console.log('\n👨‍🍳 Chef Michel: ');
 
@@ -75,9 +71,8 @@ async function textObject() {
   const query3 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
   console.log(`Query 3: ${query3}`);
 
-  const lasagnaResponse = await agent.textObject({
-    messages: [query3],
-    structuredOutput: z.object({
+  const lasagnaResponse = await agent.generate(query3, {
+    schema: z.object({
       ingredients: z.array(
         z.object({
           name: z.string(),
@@ -116,9 +111,8 @@ async function streamObject() {
   const query4 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
   console.log(`Query 4: ${query4}`);
 
-  const lasagnaStreamResponse = await agent.streamObject({
-    messages: [query4],
-    structuredOutput: z.object({
+  const lasagnaStreamResponse = await agent.generate(query4, {
+    schema: z.object({
       ingredients: z.array(
         z.object({
           name: z.string(),
@@ -127,6 +121,7 @@ async function streamObject() {
       ),
       steps: z.array(z.string()),
     }),
+    stream: true,
   });
 
   console.log('\n👨‍🍳 Chef Michel: ');

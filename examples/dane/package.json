@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "main": "index.js",
   "scripts": {
+    "issue-labeler": "npx bun src/issue-labeler.ts",
     "start": "npx bun src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -17,6 +18,7 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:*",
+    "@mastra/github": "workspace:*",
     "@mastra/rag": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/firecrawl": "workspace:*",

@@ -4,32 +4,45 @@ import { Agent } from '../agent';
 import { MastraEngine } from '../engine';
 import { LLM } from '../llm';
 import { ModelConfig } from '../llm/types';
+import { Logger } from '../logger';
 import { MastraMemory } from '../memory';
 import { SyncAction } from '../sync';
+import { Telemetry } from '../telemetry';
 import { MastraVector } from '../vector';
+import { WorkflowContext } from '../workflows';
 
-export interface IExecutionContext<TPayload, TContext> {
-  context: TPayload & { machineContext?: TContext };
-  runId?: string;
+export type MastraPrimitives = {
+  logger?: Logger;
+  telemetry?: Telemetry;
   engine?: MastraEngine;
   agents?: Record<string, Agent>;
   vectors?: Record<string, MastraVector>;
   memory?: MastraMemory;
   syncs?: Record<string, SyncAction<any, any, any, any>>;
   llm?: (model: ModelConfig) => LLM;
+};
+export interface IExecutionContext<
+  TSchemaIn extends z.ZodSchema | undefined = undefined,
+  TContext extends WorkflowContext = WorkflowContext,
+> {
+  context: TSchemaIn extends z.ZodSchema
+    ? z.infer<TSchemaIn> & { machineContext?: TContext }
+    : { machineContext?: TContext };
+  runId?: string;
+  mastra?: MastraPrimitives;
 }
-
 export interface IAction<
   TId extends string,
-  TSchemaIn extends z.ZodSchema,
-  TSchemaOut extends z.ZodSchema,
-  TContext extends IExecutionContext<z.infer<TSchemaIn>, any>,
+  TSchemaIn extends z.ZodSchema | undefined,
+  TSchemaOut extends z.ZodSchema | undefined,
+  TContext extends IExecutionContext<TSchemaIn>,
 > {
   id: TId;
   description?: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
-  payload?: Partial<z.infer<TSchemaIn>>;
-  execute: (context: TContext) => Promise<z.infer<TSchemaOut>>;
+  mastra?: MastraPrimitives;
+  payload?: TSchemaIn extends z.ZodSchema ? Partial<z.infer<TSchemaIn>> : unknown;
+  execute: (context: TContext) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
   [key: string]: any;
 }

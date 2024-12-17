@@ -4,7 +4,7 @@ import { Agent } from '../agent';
 import { MastraEngine } from '../engine';
 import { LLM } from '../llm';
 import { ModelConfig } from '../llm/types';
-import { BaseLogger, createLogger } from '../logger';
+import { BaseLogger, createLogger, noopLogger } from '../logger';
 import { MastraMemory } from '../memory';
 import { Run } from '../run/types';
 import { SyncAction } from '../sync';
@@ -19,7 +19,7 @@ import { StripUndefined } from './types';
   excludeMethods: ['getLogger', 'getTelemetry'],
 })
 export class Mastra<
-  TSyncs extends Record<string, SyncAction<any, any, any, any>>,
+  TSyncs extends Record<string, SyncAction<any, any, any, any>> = Record<string, SyncAction<any, any, any, any>>,
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
   TLogger extends BaseLogger = BaseLogger,
@@ -39,18 +39,23 @@ export class Mastra<
     agents?: TAgents;
     engine?: MastraEngine;
     vectors?: Record<string, MastraVector>;
-    logger?: TLogger;
+    logger?: TLogger | false;
     workflows?: TWorkflows;
     telemetry?: OtelConfig;
   }) {
     /*
     Logger
     */
-    let logger = createLogger({ type: 'CONSOLE' }) as TLogger;
-    if (config?.logger) {
-      logger = config.logger;
+
+    if (config?.logger === false) {
+      this.logger = noopLogger as unknown as TLogger;
+    } else {
+      let logger = createLogger({ type: 'CONSOLE', level: 'WARN' }) as TLogger;
+      if (config?.logger) {
+        logger = config.logger;
+      }
+      this.logger = logger;
     }
-    this.logger = logger;
 
     /*
     Telemetry
@@ -157,11 +162,17 @@ export class Mastra<
 
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
-        workflow.__registerEngine(this.engine);
-        workflow.__registerMemory(this.memory);
-        workflow.__registerAgents(this.agents);
-        workflow.__registerLogger(this.getLogger());
-        workflow.__registerTelemetry(this.telemetry);
+        workflow.__registerPrimitives({
+          logger: this.getLogger(),
+          telemetry: this.telemetry,
+          engine: this.engine,
+          memory: this.memory,
+          syncs: this.syncs,
+          agents: this.agents,
+          vectors: this.vectors,
+          llm: this.LLM,
+        });
+
         // @ts-ignore
         this.workflows[key] = workflow;
       });
@@ -221,6 +232,17 @@ export class Mastra<
       throw new Error(`Agent with name ${String(name)} not found`);
     }
     return this.agents[name];
+  }
+
+  public getAgents() {
+    return this.agents
+      ? Object.entries(this.agents).map(([name, agent]) => ({
+          name,
+          instructions: agent.instructions,
+          modelProvider: agent.model.provider,
+          modelName: (agent.model as { name: string }).name,
+        }))
+      : [];
   }
 
   public getWorkflow<TWorkflowId extends keyof TWorkflows>(id: TWorkflowId): TWorkflows[TWorkflowId] {

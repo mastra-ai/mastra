@@ -50,13 +50,13 @@ export async function POST(request: Request) {
   const streamingData = new StreamData();
 
   try {
-    const streamResult = await cryptoAgent.stream({
+    const streamResult = await cryptoAgent.generate(userMessages, {
       resourceid: session.user.id,
       threadId: id,
-      messages: userMessages,
       onFinish: () => {
         streamingData.close();
       },
+      stream: true,
     });
 
     return streamResult.toDataStreamResponse({

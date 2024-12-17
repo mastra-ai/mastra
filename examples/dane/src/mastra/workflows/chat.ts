@@ -38,15 +38,22 @@ const messageOutputStep = new Step({
     message: z.string(),
   }),
   // SHOULD BE ABLE TO ACCESS ALL MASTRA PRIMS FROM EXECTUE
-  execute: async ({ context, memory, agents }) => {
+  execute: async ({ context, mastra }) => {
     // WISH THIS WAS TYPED
     const threadId = context?.machineContext?.triggerData?.threadId;
     const resourceid = context?.machineContext?.triggerData?.resourceid;
 
+    const messageInputStatus = context?.machineContext?.stepResults?.['message-input']?.status;
+
+    if (messageInputStatus !== 'success') {
+      return { message: 'Failure in workflow' };
+    }
+
     // is there someway to know what steps are flowing into this one and type their props
-    const message = context?.machineContext.stepResults?.['message-input']?.payload?.message;
+    const message = context?.machineContext?.stepResults?.['message-input']?.payload?.message;
+
     try {
-      let messages = await memory?.getContextWindow({
+      let messages = await mastra?.memory?.getContextWindow({
         threadId,
         format: 'core_message',
       });
@@ -55,7 +62,7 @@ const messageOutputStep = new Step({
         messages = [];
       }
 
-      const res = await dane.generate(message, {
+      const res = await mastra?.agents?.['dane'].generate(message, {
         stream: true,
         maxSteps: 5,
         resourceid,
@@ -63,15 +70,17 @@ const messageOutputStep = new Step({
         context: [],
       });
 
-      console.log(chalk.green(`\nDane: \n`));
+      if (res) {
+        console.log(chalk.green(`\nDane: \n`));
 
-      for await (const chunk of res.textStream) {
-        process.stdout.write(chalk.green(chunk));
+        for await (const chunk of res.textStream) {
+          process.stdout.write(chalk.green(chunk));
+        }
+
+        console.log(chalk.green(`\n`));
+
+        return { message: 'success' };
       }
-
-      console.log(chalk.green(`\n`));
-
-      return { message: 'success' };
     } catch (e) {
       console.log(chalk.red(`\n`));
       console.log(chalk.red(`\n`));

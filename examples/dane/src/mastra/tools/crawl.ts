@@ -13,10 +13,10 @@ export const crawl = createTool({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async ({ context, syncs, engine }) => {
-    await syncs?.['FIRECRAWL:CRAWL_AND_SYNC'].execute({
+  execute: async ({ context, mastra }) => {
+    await mastra?.syncs?.['FIRECRAWL:CRAWL_AND_SYNC'].execute({
       context,
-      engine,
+      mastra,
     });
 
     return {

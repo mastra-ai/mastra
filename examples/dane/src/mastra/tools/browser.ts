@@ -4,8 +4,6 @@ import chalk from 'chalk';
 import { chromium } from 'playwright-core';
 import { z } from 'zod';
 
-// import { browserBreakdown } from '../workflows/browser'
-
 export const browserTool = createTool({
   id: 'browserTool',
   name: 'Browser Tool',
@@ -120,33 +118,6 @@ export const googleSearch = createTool({
     } catch (e) {
       console.log(`\n${chalk.red(e.message)}`);
       return { message: `Error: ${e.message}` };
-    }
-  },
-});
-
-export const browserAgentRelay = createTool({
-  id: 'browserAgentRelay',
-  name: 'Browser Agent Relay',
-  description: 'Browser Agent Relay',
-  inputSchema: z.object({
-    url: z.string(),
-  }),
-  outputSchema: z.object({
-    message: z.string(),
-  }),
-  execute: async ({ context: { url } }) => {
-    try {
-      console.log(url);
-      // const res = await browserBreakdown.execute({
-      //     triggerData: {
-      //         url,
-      //     }
-      // });
-      // console.log(res)
-      return { message: 'success' };
-    } catch (e) {
-      console.log(`\n${chalk.red(e.message)}`);
-      return { message: 'Error' };
     }
   },
 });

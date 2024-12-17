@@ -4,7 +4,7 @@ import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import { BaseLogMessage, createLogger, createMultiLogger, Logger, LogLevel, RegisteredLogger } from './';
+import { BaseLogMessage, createLogger, createMultiLogger, Logger, LogLevel, noopLogger, RegisteredLogger } from './';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -308,6 +308,17 @@ describe('Logger Utilities', () => {
       expect(consoleSpy.mock.calls[0]![0]).toMatch(/\[INFO\]/);
 
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe('noopLogger', () => {
+    it('should not log any message', () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      noopLogger.warn();
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+      expect(consoleSpy).not.toHaveBeenCalledTimes(1);
     });
   });
 });

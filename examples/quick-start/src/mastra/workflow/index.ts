@@ -16,17 +16,19 @@ const logCatName = new Step({
 });
 
 export const logCatWorkflow = new Workflow({
-  name: 'hello-workflow',
+  name: 'log-cat-workflow',
   triggerSchema: z.object({
     name: z.string(),
   }),
 });
 
-logCatWorkflow.step(logCatName, {
-  variables: {
-    name: {
-      step: 'trigger',
-      path: '', // passes in entire payload
+logCatWorkflow
+  .step(logCatName, {
+    variables: {
+      name: {
+        step: 'trigger',
+        path: '', // passes in entire payload
+      },
     },
-  },
-});
+  })
+  .commit();

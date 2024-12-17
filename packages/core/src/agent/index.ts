@@ -14,10 +14,9 @@ import { ZodSchema } from 'zod';
 import { MastraBase } from '../base';
 import { MastraEngine } from '../engine';
 import { LLM } from '../llm';
-import { GenerateReturn, ModelConfig, StructuredOutput } from '../llm/types';
+import { GenerateReturn, ModelConfig } from '../llm/types';
 import { LogLevel, RegisteredLogger } from '../logger';
 import { MastraMemory, ThreadType } from '../memory';
-import { Run } from '../run/types';
 import { SyncAction } from '../sync';
 import { InstrumentClass } from '../telemetry';
 import { CoreTool, ToolAction } from '../tools/types';
@@ -401,7 +400,7 @@ export class Agent<
       ...converted,
     };
 
-    this.log(LogLevel.DEBUG, `Converted tools for Agent ${this.name}`, runId);
+    this.log(LogLevel.DEBUG, `Converted tools for Agent ${this.name}`, { runId });
 
     const toolsFromToolsets = Object.values(toolsets || {});
 
@@ -454,7 +453,7 @@ export class Agent<
   }) {
     let coreMessages: CoreMessage[] = [];
     let threadIdToUse = threadId;
-    this.log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, runId);
+    this.log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, { runId });
     const saveMessageResponse = await this.saveMemory({
       threadId,
       resourceid,
@@ -483,7 +482,7 @@ export class Agent<
   }) {
     return {
       before: async () => {
-        this.log(LogLevel.INFO, `Starting generation for agent ${this.name}`, runId);
+        this.log(LogLevel.INFO, `Starting generation for agent ${this.name}`, { runId });
 
         const systemMessage: CoreMessage = {
           role: 'system',
@@ -533,7 +532,7 @@ export class Agent<
       after: async ({ result, threadId }: { result: Record<string, any>; threadId: string }) => {
         if (this.memory && resourceid) {
           try {
-            this.log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
+            this.log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, { runId });
             await this.saveResponse({
               result,
               threadId,
@@ -665,197 +664,5 @@ export class Agent<
     await after({ result, threadId });
 
     return result as unknown as GenerateReturn<S, Z>;
-  }
-
-  async text({
-    messages,
-    context,
-    onStepFinish,
-    maxSteps = 5,
-    threadId: threadIdInFn,
-    resourceid,
-    runId,
-    toolsets,
-  }: {
-    toolsets?: ToolsetsInput;
-    resourceid?: string;
-    threadId?: string;
-    context?: CoreMessage[];
-    messages: UserContent[];
-    onStepFinish?: (step: string) => void;
-    maxSteps?: number;
-  } & Run) {
-    const { before, after } = this.__primitive({
-      messages,
-      context,
-      threadId: threadIdInFn,
-      resourceid,
-      runId,
-      toolsets,
-    });
-
-    const { threadId, messageObjects, convertedTools } = await before();
-
-    const result = await this.llm.__text({
-      messages: messageObjects,
-      convertedTools,
-      tools: this.#tools,
-      onStepFinish,
-      maxSteps,
-      runId,
-    });
-
-    await after({ result, threadId });
-
-    return result;
-  }
-
-  async textObject({
-    messages,
-    context,
-    structuredOutput,
-    onStepFinish,
-    maxSteps = 5,
-    threadId: threadIdInFn,
-    resourceid,
-    runId,
-    toolsets,
-  }: {
-    toolsets?: ToolsetsInput;
-    context?: CoreMessage[];
-    resourceid?: string;
-    threadId?: string;
-    messages: UserContent[];
-    structuredOutput: StructuredOutput | ZodSchema;
-    onStepFinish?: (step: string) => void;
-    maxSteps?: number;
-  } & Run) {
-    const { before, after } = this.__primitive({
-      messages,
-      context,
-      threadId: threadIdInFn,
-      resourceid,
-      runId,
-      toolsets,
-    });
-
-    const { threadId, messageObjects, convertedTools } = await before();
-
-    const result = await this.llm.__textObject({
-      messages: messageObjects,
-      structuredOutput,
-      tools: this.#tools,
-      convertedTools,
-      onStepFinish,
-      maxSteps,
-      runId,
-    });
-
-    await after({ result, threadId });
-
-    return result;
-  }
-
-  async stream({
-    messages,
-    context,
-    onStepFinish,
-    onFinish,
-    maxSteps = 5,
-    threadId: threadIdInFn,
-    resourceid,
-    runId,
-    toolsets,
-  }: {
-    toolsets?: ToolsetsInput;
-    resourceid?: string;
-    threadId?: string;
-    messages: UserContent[];
-    context?: CoreMessage[];
-    onStepFinish?: (step: string) => void;
-    onFinish?: (result: string) => Promise<void> | void;
-    maxSteps?: number;
-  } & Run) {
-    const { before, after } = this.__primitive({
-      messages,
-      context,
-      threadId: threadIdInFn,
-      resourceid,
-      runId,
-      toolsets,
-    });
-
-    const { threadId, messageObjects, convertedTools } = await before();
-
-    return this.llm.__stream({
-      messages: messageObjects,
-      tools: this.#tools,
-      convertedTools,
-      onStepFinish,
-      onFinish: async result => {
-        try {
-          const res = JSON.parse(result) || {};
-          await after({ result: res, threadId });
-        } catch (e) {
-          console.error('Error saving memory on finish', e);
-        }
-        onFinish?.(result);
-      },
-      maxSteps,
-      runId,
-    });
-  }
-
-  async streamObject({
-    messages,
-    context,
-    structuredOutput,
-    onStepFinish,
-    onFinish,
-    maxSteps = 5,
-    threadId: threadIdInFn,
-    resourceid,
-    runId,
-    toolsets,
-  }: {
-    toolsets?: ToolsetsInput;
-    resourceid?: string;
-    threadId?: string;
-    messages: UserContent[];
-    context?: CoreMessage[];
-    structuredOutput: StructuredOutput | ZodSchema;
-    onStepFinish?: (step: string) => void;
-    onFinish?: (result: string) => Promise<void> | void;
-    maxSteps?: number;
-  } & Run) {
-    const { before, after } = this.__primitive({
-      messages,
-      context,
-      threadId: threadIdInFn,
-      resourceid,
-      runId,
-      toolsets,
-    });
-
-    const { threadId, messageObjects, convertedTools } = await before();
-
-    return this.llm.__streamObject({
-      messages: messageObjects,
-      structuredOutput,
-      tools: this.#tools,
-      convertedTools,
-      onStepFinish,
-      onFinish: async result => {
-        try {
-          const res = JSON.parse(result) || {};
-          await after({ result: res, threadId });
-        } catch (e) {
-          console.error('Error saving memory on finish', e);
-        }
-        onFinish?.(result);
-      },
-      maxSteps,
-      runId,
-    });
   }
 }

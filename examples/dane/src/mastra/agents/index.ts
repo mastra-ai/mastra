@@ -7,6 +7,19 @@ import { execaTool } from '../tools/execa';
 import { fsTool } from '../tools/fs';
 import { readPDF } from '../tools/pdf';
 
+export const daneIssueLabeler = new Agent({
+  name: 'DaneIssueLabeler',
+  instructions: `
+    You are Dane, the ultimate GitHub operator. 
+    You help engineers label their issues.
+    `,
+  model: {
+    provider: 'ANTHROPIC',
+    toolChoice: 'auto',
+    name: 'claude-3-5-sonnet-20241022',
+  },
+});
+
 export const dane = new Agent({
   name: 'Dane',
   instructions: `

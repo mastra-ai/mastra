@@ -3,12 +3,10 @@ import sift from 'sift';
 import { assign, createActor, fromPromise, setup, Snapshot } from 'xstate';
 import { z } from 'zod';
 
-import { IAction } from '../action';
-import { Agent } from '../agent';
-import { FilterOperators, MastraEngine } from '../engine';
-import { Logger, LogLevel, RegisteredLogger } from '../logger';
-import { MastraMemory } from '../memory';
-import { Telemetry } from '../telemetry';
+import { IAction, MastraPrimitives } from '../action';
+import { MastraBase } from '../base';
+import { FilterOperators } from '../engine';
+import { LogLevel } from '../logger';
 
 import { Step } from './step';
 import {
@@ -21,7 +19,6 @@ import {
   StepConfig,
   StepDef,
   StepGraph,
-  StepId,
   StepNode,
   StepResult,
   WorkflowActionParams,
@@ -29,14 +26,15 @@ import {
   WorkflowActors,
   WorkflowContext,
   WorkflowEvent,
-  WorkflowLogMessage,
   WorkflowState,
 } from './types';
 import { getStepResult, isErrorEvent, isTransitionEvent, isVariableReference } from './utils';
 
-export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema extends z.ZodType<any> = any> {
+export class Workflow<
+  TSteps extends Step<any, any, any>[] = any,
+  TTriggerSchema extends z.ZodType<any> = any,
+> extends MastraBase {
   name: string;
-  #logger?: Logger<WorkflowLogMessage>;
   #triggerSchema?: TTriggerSchema;
   /** XState machine instance that orchestrates the workflow execution */
   #machine!: ReturnType<typeof this.initializeMachine>;
@@ -44,18 +42,16 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #actor: ReturnType<typeof createActor<ReturnType<typeof this.initializeMachine>>> | null = null;
   #runId: string;
   #retryConfig?: RetryConfig;
-  #memory?: MastraMemory;
-  #engine?: MastraEngine;
+  #mastra?: MastraPrimitives;
+
   #connectionId = `WORKFLOWS`;
   #entityName = `__workflows__`;
-  #telemetry?: Telemetry;
-  #agents?: Record<string, Agent<any>>;
+
   // registers stepIds on `after` calls
   #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
   #stepGraph: StepGraph = { initial: [] };
   #stepSubscriberGraph: Record<string, StepGraph> = {};
-  // #delimiter = '-([-]::[-])-';
   #steps: Record<string, IAction<any, any, any, any>> = {};
 
   /**
@@ -65,29 +61,26 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
    */
   constructor({
     name,
-    logger,
-    engine,
-    memory,
     triggerSchema,
     retryConfig,
-    telemetry,
+    mastra,
   }: {
     name: string;
-    logger?: Logger<WorkflowLogMessage>;
-    engine?: MastraEngine;
-    memory?: MastraMemory;
     triggerSchema?: TTriggerSchema;
     retryConfig?: RetryConfig;
-    telemetry?: Telemetry;
+    mastra?: MastraPrimitives;
   }) {
+    super({ component: 'WORKFLOW', name });
+
     this.name = name;
-    this.#logger = logger;
     this.#retryConfig = retryConfig || { attempts: 3, delay: 1000 };
     this.#triggerSchema = triggerSchema;
     this.#runId = crypto.randomUUID();
-    this.#telemetry = telemetry;
-    this.#engine = engine;
-    this.#memory = memory;
+    this.#mastra = mastra;
+    if (mastra?.logger) {
+      this.logger = mastra?.logger;
+    }
+
     this.initializeMachine();
   }
 
@@ -261,14 +254,14 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       snapshot = JSON.parse(snapshot as unknown as string);
     }
 
-    this.#log(LogLevel.INFO, 'Executing workflow', { triggerData });
+    this.log(LogLevel.INFO, 'Executing workflow', { triggerData });
 
     if (this.#triggerSchema) {
       try {
         this.#triggerSchema.parse(triggerData);
-        this.#log(LogLevel.DEBUG, 'Trigger schema validation passed');
+        this.log(LogLevel.DEBUG, 'Trigger schema validation passed');
       } catch (error) {
-        this.#log(LogLevel.ERROR, 'Trigger schema validation failed', {
+        this.log(LogLevel.ERROR, 'Trigger schema validation failed', {
           error,
         });
         throw error;
@@ -313,7 +306,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           }
 
           if (hasFailures) {
-            this.#log(LogLevel.ERROR, 'Workflow failed', {
+            this.log(LogLevel.ERROR, 'Workflow failed', {
               results: state.context.stepResults,
             });
             this.#cleanup();
@@ -323,7 +316,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
               runId: this.#runId,
             });
           } else {
-            this.#log(LogLevel.INFO, 'Workflow completed', {
+            this.log(LogLevel.INFO, 'Workflow completed', {
               results: state.context.stepResults,
             });
             this.#cleanup();
@@ -413,7 +406,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
                   stepResults: ({ context, event }) => {
                     if (event.output.type !== 'TIMED_OUT') return context.stepResults;
 
-                    this.#log(LogLevel.ERROR, `Step:${stepNode.step.id} timed out`, {
+                    this.log(LogLevel.ERROR, `Step:${stepNode.step.id} timed out`, {
                       error: event.output.error,
                     });
 
@@ -436,7 +429,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
                   stepResults: ({ context, event }) => {
                     if (event.output.type !== 'CONDITION_FAILED') return context.stepResults;
 
-                    this.#log(LogLevel.ERROR, `workflow condition check failed`, {
+                    this.log(LogLevel.ERROR, `workflow condition check failed`, {
                       error: event.output.error,
                       stepId: stepNode.step.id,
                     });
@@ -456,10 +449,10 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         },
         waiting: {
           entry: () => {
-            this.#log(LogLevel.INFO, `Step ${stepNode.step.id} waiting ${new Date().toISOString()}`);
+            this.log(LogLevel.INFO, `Step ${stepNode.step.id} waiting ${new Date().toISOString()}`);
           },
           exit: () => {
-            this.#log(LogLevel.INFO, `Step ${stepNode.step.id} finished waiting ${new Date().toISOString()}`);
+            this.log(LogLevel.INFO, `Step ${stepNode.step.id} finished waiting ${new Date().toISOString()}`);
           },
           after: {
             [stepNode.step.id]: {
@@ -469,10 +462,10 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         },
         executing: {
           entry: () => {
-            this.#log(LogLevel.INFO, `Step ${stepNode.step.id} executing`);
+            this.log(LogLevel.INFO, `Step ${stepNode.step.id} executing`);
           },
           exit: () => {
-            this.#log(LogLevel.INFO, `Step ${stepNode.step.id} finished executing`);
+            this.log(LogLevel.INFO, `Step ${stepNode.step.id} finished executing`);
           },
           invoke: {
             src: 'resolverFunction',
@@ -495,10 +488,10 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         },
         runningSubscribers: {
           entry: () => {
-            this.#log(LogLevel.INFO, `Step ${stepNode.step.id} running subscribers`);
+            this.log(LogLevel.INFO, `Step ${stepNode.step.id} running subscribers`);
           },
           exit: () => {
-            this.#log(LogLevel.INFO, `Step ${stepNode.step.id} finished running subscribers`);
+            this.log(LogLevel.INFO, `Step ${stepNode.step.id} finished running subscribers`);
           },
           invoke: {
             src: 'spawnSubscriberFunction',
@@ -515,13 +508,13 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
                     ...event.output.stepResults,
                   }),
                 }),
-                () => this.#log(LogLevel.DEBUG, `Subscriber execution completed`, { stepId: stepNode.step.id }),
+                () => this.log(LogLevel.DEBUG, `Subscriber execution completed`, { stepId: stepNode.step.id }),
               ],
             },
             onError: {
               target: nextStep ? nextStep.step.id : 'completed',
               actions: ({ event }: { context: WorkflowContext; event: any }) => {
-                this.#log(LogLevel.ERROR, `Subscriber execution failed`, {
+                this.log(LogLevel.ERROR, `Subscriber execution failed`, {
                   error: event.error,
                   stepId: stepNode.step.id,
                 });
@@ -604,7 +597,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       }),
       notifyStepCompletion: (_: any, params: WorkflowActionParams) => {
         const { stepId } = params;
-        this.#log(LogLevel.INFO, `Step ${stepId} completed`);
+        this.log(LogLevel.INFO, `Step ${stepId} completed`);
       },
       decrementAttemptCount: assign({
         attempts: ({ context, event }, params: WorkflowActionParams) => {
@@ -624,11 +617,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #getInjectables() {
     return {
       runId: this.#runId,
-      engine: this.#engine,
-      memory: this.#memory,
-      logger: this.#logger,
-      agents: this.#agents,
-      telemetry: this.#telemetry,
+      mastra: this.#mastra,
     };
   }
 
@@ -749,13 +738,17 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
    * Persists the workflow state to the database
    */
   async #persistWorkflowSnapshot() {
-    if (!this.#engine) return;
+    if (!this.#mastra) return;
+
+    const engine = this.#mastra.engine;
+
+    if (!engine) return;
 
     const snapshot = this.#actor?.getPersistedSnapshot();
 
     if (!snapshot) return;
 
-    await this.#engine.syncRecords({
+    await engine.syncRecords({
       name: this.#entityName,
       connectionId: this.#connectionId,
       records: [
@@ -770,9 +763,13 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   }
 
   async #loadWorkflowSnapshot(runId: string) {
-    if (!this.#engine) return;
+    if (!this.#mastra) return;
 
-    const state = await this.#engine.getRecords({
+    const engine = this.#mastra.engine;
+
+    if (!engine) return;
+
+    const state = await engine.getRecords({
       entityName: this.#entityName,
       connectionId: this.#connectionId,
       options: {
@@ -856,50 +853,27 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return finalResult;
   }
 
-  /**
-   * Internal logging helper that formats and sends logs to the configured logger
-   * @param level - Severity level of the log
-   * @param message - Main log message
-   * @param data - Optional data to include in the log
-   * @param stepId - Optional ID of the step that generated the log
-   */
-  #log(level: LogLevel, message: string, data?: any, stepId?: StepId) {
-    if (!this.#logger) return;
-
-    const logMessage: WorkflowLogMessage = {
-      type: RegisteredLogger.WORKFLOW,
-      message,
-      workflowName: this.name,
-      destinationPath: `workflows/${this.name}`,
-      stepId,
-      data,
-      runId: this.#runId,
-    };
-
-    const logMethod = level.toLowerCase() as keyof Logger<WorkflowLogMessage>;
-
-    this.#logger[logMethod]?.(logMessage);
-  }
-
   #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
     stepId: TStepId,
   ): StepDef<TStepId, TSteps, any, any>[TStepId] {
+    const telemetry = this.#mastra?.telemetry;
+
     const handler = async ({ context, ...rest }: ActionContext<TSteps[number]['inputSchema']>) => {
       const targetStep = this.#steps[stepId];
       if (!targetStep) throw new Error(`Step not found`);
 
-      const { payload, execute } = targetStep;
+      const { payload = {}, execute } = targetStep;
 
       // Merge static payload with dynamically resolved variables
       // Variables take precedence over payload values
       const mergedData = {
-        ...payload,
+        ...(payload as {}),
         ...context,
       };
 
       // Only trace if telemetry is available and action exists
-      const finalAction = this.#telemetry
-        ? this.#telemetry.traceMethod(execute, {
+      const finalAction = telemetry
+        ? telemetry.traceMethod(execute, {
             spanName: `workflow.${this.name}.action.${stepId}`,
           })
         : execute;
@@ -908,8 +882,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     };
 
     // Only trace handler if telemetry is available
-    const finalHandler = this.#telemetry
-      ? this.#telemetry.traceMethod(handler, {
+    const finalHandler = telemetry
+      ? telemetry.traceMethod(handler, {
           spanName: `workflow.${this.name}.step.${stepId}`,
         })
       : handler;
@@ -944,23 +918,12 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     }
   }
 
-  __registerEngine(engine?: MastraEngine) {
-    this.#engine = engine;
-  }
-  __registerMemory(memory?: MastraMemory) {
-    this.#memory = memory;
-  }
+  __registerPrimitives(p: MastraPrimitives) {
+    this.#mastra = p;
 
-  __registerAgents(agents?: Record<string, Agent<any>>) {
-    this.#agents = agents;
-  }
-
-  __registerLogger(logger?: Logger<WorkflowLogMessage>) {
-    this.#logger = logger;
-  }
-
-  __registerTelemetry(telemetry?: Telemetry) {
-    this.#telemetry = telemetry;
+    if (this.#mastra?.logger) {
+      this.logger = this.#mastra.logger;
+    }
   }
 
   get stepGraph() {
