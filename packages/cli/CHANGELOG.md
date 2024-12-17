@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.47
+
+### Patch Changes
+
+- a61be33: update readme
+
 ## 0.1.57-alpha.46
 
 ### Patch Changes
