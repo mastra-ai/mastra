@@ -41,7 +41,7 @@ const Home = () => {
   return (
     <div className="flex flex-col h-full w-full ">
       <Header title={`Playground`} />
-      <div className="w-full h-full grid grid-rows-2 py-6 px-4">
+      <div className="w-full h-full  py-6 px-4">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <div className="px-2 py-2 rounded-md bg-mastra-bg-13 mb-2">
@@ -68,7 +68,7 @@ const Home = () => {
               {Object.entries(tools).map(([name, tool], index) => (
                 <div
                   onClick={() => {
-                    navigate(`/tools/${name}`);
+                    navigate(`/tools/${tool.id}`);
                   }}
                   key={index}
                   className=" hover:bg-mastra-bg-4/80 transition-colors flex flex-col  gap-[0.62rem] bg-mastra-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] cursor-pointer border-[0.5px] border-mastra-border-1"
@@ -77,32 +77,6 @@ const Home = () => {
                   <p className="text-small text-mastra-el-2">{tool.description}</p>
                 </div>
               ))}
-            </div>
-          </div>
-        </div>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <div className="px-2 py-2 rounded-md bg-mastra-bg-13 mb-2">
-              <div className="flex gap-2 items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  className="size-3"
-                >
-                  <rect width="8" height="8" x="3" y="3" rx="2" />
-                  <path d="M7 11v4a2 2 0 0 0 2 2h4" />
-                  <rect width="8" height="8" x="13" y="13" rx="2" />
-                </svg>
-
-                <h3 className="text-small text-mastra-el-6">Workflows</h3>
-              </div>
             </div>
           </div>
         </div>

@@ -2,7 +2,9 @@ import express, { Request, Response } from 'express';
 import expressJSDocSwagger, { Options } from 'express-jsdoc-swagger';
 import _path, { join } from 'path';
 import serverless from 'serverless-http';
+import { stringify } from 'superjson';
 import { fileURLToPath as _fileURLToPath } from 'url';
+import zodToJsonSchema from 'zod-to-json-schema';
 
 const ___filename = _fileURLToPath(import.meta.url);
 const ___dirname = _path.dirname(___filename);
@@ -184,7 +186,19 @@ app.get('/api/agents/:agentId', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    res.json(agent);
+    const serializedAgentTools = Object.entries(agent?.tools || {}).reduce<any>((acc, [key, tool]) => {
+      const _tool = tool as any;
+      acc[key] = {
+        ..._tool,
+        inputSchema: _tool.inputSchema ? stringify(zodToJsonSchema(_tool.inputSchema)) : undefined,
+        outputSchema: _tool.outputSchema ? stringify(zodToJsonSchema(_tool.outputSchema)) : undefined,
+      };
+      return acc;
+    }, {});
+    res.json({
+      ...agent,
+      tools: serializedAgentTools,
+    });
   } catch (error) {
     const apiError = error as ApiError;
     console.error('Error getting agent', apiError);
@@ -203,7 +217,25 @@ app.get('/api/agents/:agentId', async (req: Request, res: Response) => {
 app.get('/api/agents', async (_req: Request, res: Response) => {
   try {
     const agents = mastra.getAgents();
-    res.json(agents);
+
+    const serializedAgents = Object.entries(agents).reduce<any>((acc, [_id, _agent]) => {
+      const agent = _agent as any;
+      const serializedAgentTools = Object.entries(agent?.tools || {}).reduce<any>((acc, [key, tool]) => {
+        const _tool = tool as any;
+        acc[key] = {
+          ..._tool,
+          inputSchema: _tool.inputSchema ? stringify(zodToJsonSchema(_tool.inputSchema)) : undefined,
+          outputSchema: _tool.outputSchema ? stringify(zodToJsonSchema(_tool.outputSchema)) : undefined,
+        };
+        return acc;
+      }, {});
+      acc[_id] = {
+        ...agent,
+        tools: serializedAgentTools,
+      };
+      return acc;
+    }, {});
+    res.json(serializedAgents);
   } catch (error) {
     const apiError = error as ApiError;
     console.error('Error getting agents', apiError);
@@ -397,7 +429,7 @@ app.post('/api/agents/:agentId/tools/:toolId/execute', async (req: Request, res:
     const agentId = req.params.agentId;
     const toolId = req.params.toolId;
     const agent = mastra.getAgent(agentId);
-    const tool = agent.tools[toolId];
+    const tool = Object.values(agent?.tools || {}).find((tool: any) => tool.id === toolId) as any;
     const result = await tool.execute({
       context: {
         ...req.body,

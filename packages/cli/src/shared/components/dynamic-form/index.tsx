@@ -1,6 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Loader2 } from 'lucide-react';
 import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -15,9 +16,15 @@ interface DynamicFormProps<T extends z.ZodSchema> {
   schema: T;
   onSubmit: (values: z.infer<T>) => void | Promise<void>;
   onChange?: (values: Partial<z.infer<T>>) => void;
+  isSubmitLoading?: boolean;
 }
 
-export function DynamicForm<T extends z.ZodSchema>({ schema, onSubmit, onChange }: DynamicFormProps<T>) {
+export function DynamicForm<T extends z.ZodSchema>({
+  schema,
+  onSubmit,
+  onChange,
+  isSubmitLoading,
+}: DynamicFormProps<T>) {
   const schemaTypeName = (schema as any)?._def?.typeName;
   const discriminatedUnionSchemaOptions = (schema as any)?._def?.options;
   const discriminatedUnionSchemaDiscriminator = (schema as any)?._def?.discriminator;
@@ -68,7 +75,9 @@ export function DynamicForm<T extends z.ZodSchema>({ schema, onSubmit, onChange 
           errors: form.formState.errors,
           handleFieldChange,
         })}
-        <Button type="submit">Submit</Button>
+        <Button disabled={isSubmitLoading} type="submit">
+          {isSubmitLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Submit'}
+        </Button>
       </form>
     </ScrollArea>
   );
