@@ -1,5 +1,5 @@
 import { createSync, Integration } from '@mastra/core';
-import { MastraDocument } from '@mastra/rag'
+import { MDocument } from '@mastra/rag'
 import * as integrationClient from './client/sdk.gen';
 // @ts-ignore
 // import FirecrawlLogo from './assets/firecrawl.png';
@@ -101,7 +101,7 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
 
           const recordsToPersist = await Promise.all(
             crawlData?.flatMap(async ({ markdown, metadata }) => {
-              const doc = MastraDocument.fromMarkdown(markdown, metadata);
+              const doc = MDocument.fromMarkdown(markdown, metadata);
 
               await doc.chunk({
                 strategy: "markdown",

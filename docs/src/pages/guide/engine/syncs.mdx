@@ -7,12 +7,12 @@ Syncs in Mastra are async functions that handle data synchronization and backgro
 Create a sync using the `createSync` function:
 
 ```typescript
-import { createSync } from '@mastra/core';
-import { z } from 'zod';
+import { createSync } from "@mastra/core";
+import { z } from "zod";
 
 export const mySync = createSync({
-  id: 'my-sync',
-  description: 'Synchronize user data',
+  id: "my-sync",
+  description: "Synchronize user data",
   inputSchema: z.object({
     userId: z.string(),
     data: z.record(z.any()),
@@ -24,17 +24,19 @@ export const mySync = createSync({
   execute: async ({ context, engine }) => {
     try {
       await engine.syncRecords({
-        connectionId: 'users',
-        name: 'user_data',
-        records: [{
-          externalId: context.userId,
-          data: context.data,
-        }],
+        connectionId: "users",
+        name: "user_data",
+        records: [
+          {
+            externalId: context.userId,
+            data: context.data,
+          },
+        ],
       });
-      
+
       return {
         success: true,
-        message: 'Data synchronized successfully',
+        message: "Data synchronized successfully",
       };
     } catch (error) {
       return {
@@ -51,8 +53,8 @@ export const mySync = createSync({
 Register syncs when initializing Mastra:
 
 ```typescript
-import { Mastra } from '@mastra/core';
-import { PostgresEngine } from '@mastra/engine';
+import { Mastra } from "@mastra/core";
+import { PostgresEngine } from "@mastra/engine";
 
 export const mastra = new Mastra({
   engine: new PostgresEngine({
@@ -70,11 +72,11 @@ export const mastra = new Mastra({
 Execute a sync using the `sync` method:
 
 ```typescript
-const result = await mastra.sync('mySync', {
-  userId: '123',
+const result = await mastra.sync("mySync", {
+  userId: "123",
   data: {
-    name: 'John Doe',
-    email: 'john@example.com',
+    name: "John Doe",
+    email: "john@example.com",
   },
 });
 ```
@@ -82,6 +84,7 @@ const result = await mastra.sync('mySync', {
 ## Sync Context
 
 Syncs receive a context object with:
+
 - `context`: The input parameters (validated by `inputSchema`)
 - `engine`: The Mastra engine instance
 - `agents`: Available Mastra agents
@@ -94,12 +97,12 @@ Syncs receive a context object with:
 For production environments, it's recommended to wrap Mastra syncs in a proper job system. For example:
 
 ```typescript
-import { Queue } from 'your-job-system';
+import { Queue } from "your-job-system";
 
-const queue = new Queue('data-sync');
+const queue = new Queue("data-sync");
 
-queue.process('sync-user-data', async (job) => {
-  const result = await mastra.sync('mySync', job.data);
+queue.process("sync-user-data", async (job) => {
+  const result = await mastra.sync("mySync", job.data);
   return result;
 });
 ```
@@ -110,8 +113,8 @@ queue.process('sync-user-data', async (job) => {
 
 ```typescript filename="examples/vnext/src/mastra/syncs/index.ts"
 export const mySync = createSync({
-  label: 'My Sync',
-  description: 'This is a test sync',
+  label: "My Sync",
+  description: "This is a test sync",
   schema: z.object({
     name: z.string(),
     connectionId: z.string(),
@@ -133,12 +136,11 @@ export const mySync = createSync({
     });
 
     return {
-      message: 'Hello',
+      message: "Hello",
     };
   },
 });
 ```
-
 
 2. Web Crawling:
 
@@ -183,7 +185,7 @@ export const siteCrawlSync = createSync({
 
     const recordsToPersist = await Promise.all(
       crawlData?.flatMap(async ({ markdown, metadata }) => {
-        const doc = MastraDocument.fromMarkdown(markdown, metadata);
+        const doc = MDocument.fromMarkdown(markdown, metadata);
 
         await doc.chunk({
           strategy: "markdown",
@@ -217,15 +219,14 @@ export const siteCrawlSync = createSync({
   },
 ```
 
-
 ## Testing Syncs
 
 You can test syncs using the mock engine:
 
 ```typescript filename="packages/core/src/sync/sync.test.ts"
 const testSync = createSync({
-  id: 'test',
-  description: 'test',
+  id: "test",
+  description: "test",
   inputSchema: z.object({
     name: z.string(),
   }),

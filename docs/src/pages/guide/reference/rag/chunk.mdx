@@ -10,7 +10,8 @@ The `chunk` function splits documents into smaller segments using various strate
       name: "strategy",
       type: "'recursive' | 'character' | 'token' | 'markdown' | 'html' | 'json' | 'latex'",
       isOptional: true,
-      description: "The chunking strategy to use. If not specified, defaults based on document type.",
+      description:
+        "The chunking strategy to use. If not specified, defaults based on document type.",
     },
     {
       name: "options",
@@ -23,7 +24,7 @@ The `chunk` function splits documents into smaller segments using various strate
       type: "ExtractParams",
       isOptional: true,
       description: "Metadata extraction options (requires OpenAI API key)",
-    }
+    },
   ]}
 />
 
@@ -64,36 +65,41 @@ Options vary by strategy, but common parameters include:
       name: "keepSeparator",
       type: "'start' | 'end'",
       isOptional: true,
-      description: "Whether to keep the separator at the start or end of chunks",
-    }
+      description:
+        "Whether to keep the separator at the start or end of chunks",
+    },
   ]}
 />
 
 ## Strategy-Specific Options
 
 ### HTML
+
 <PropertiesTable
   content={[
     {
       name: "headers",
       type: "Array<[string, string]>",
-      description: "Array of [selector, metadata key] pairs for header-based splitting",
+      description:
+        "Array of [selector, metadata key] pairs for header-based splitting",
     },
     {
       name: "sections",
       type: "Array<[string, string]>",
-      description: "Array of [selector, metadata key] pairs for section-based splitting",
+      description:
+        "Array of [selector, metadata key] pairs for section-based splitting",
     },
     {
       name: "returnEachLine",
       type: "boolean",
       isOptional: true,
       description: "Whether to return each line as a separate chunk",
-    }
+    },
   ]}
 />
 
 ### Markdown
+
 <PropertiesTable
   content={[
     {
@@ -112,11 +118,12 @@ Options vary by strategy, but common parameters include:
       type: "boolean",
       isOptional: true,
       description: "Whether to return each line as a separate chunk",
-    }
+    },
   ]}
 />
 
 ### Token
+
 <PropertiesTable
   content={[
     {
@@ -130,11 +137,12 @@ Options vary by strategy, but common parameters include:
       type: "string",
       isOptional: true,
       description: "Name of the model for tokenization",
-    }
+    },
   ]}
 />
 
 ### JSON
+
 <PropertiesTable
   content={[
     {
@@ -159,13 +167,13 @@ Options vary by strategy, but common parameters include:
       type: "boolean",
       isOptional: true,
       description: "Whether to convert lists in the JSON",
-    }
+    },
   ]}
 />
 
 ## Return Value
 
-Returns a `MastraDocument` instance containing the chunked documents. Each chunk includes:
+Returns a `MDocument` instance containing the chunked documents. Each chunk includes:
 
 ```typescript
 interface DocumentNode {

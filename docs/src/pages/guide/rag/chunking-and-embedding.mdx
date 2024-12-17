@@ -1,18 +1,18 @@
 ## Chunking and Embedding Documents
 
-Before processing, create a `MastraDocument` instance from your content. You can initialize it from text, HTML, Markdown, or JSON:
+Before processing, create a `MDocument` instance from your content. You can initialize it from text, HTML, Markdown, or JSON:
 
 ```ts
-const docFromText = MastraDocument.fromText('Your plain text content...');
+const docFromText = MDocument.fromText("Your plain text content...");
 
-const docFromHTML = MastraDocument.fromHTML('<html>Your HTML content...</html>');
+const docFromHTML = MDocument.fromHTML("<html>Your HTML content...</html>");
 
-const docFromMarkdown = MastraDocument.fromMarkdown('# Your Markdown content...');
+const docFromMarkdown = MDocument.fromMarkdown("# Your Markdown content...");
 
-const docFromJSON = MastraDocument.fromJSON(`{ "key": "value" }`);
+const docFromJSON = MDocument.fromJSON(`{ "key": "value" }`);
 ```
 
-Each method returns a `MastraDocument` ready for processing.
+Each method returns a `MDocument` ready for processing.
 
 ## Step 1: Document Processing
 
@@ -23,14 +23,14 @@ You can also enable metadata extraction, which uses LLM calls behind the scenes 
 **Example:**
 
 ```ts showLineNumbers copy
-import { MastraDocument } from "@mastra/rag";
-const doc = MastraDocument.fromText("Your plain text content...");
+import { MDocument } from "@mastra/rag";
+const doc = MDocument.fromText("Your plain text content...");
 const chunks = doc.chunk({
-  strategy: 'recursive',
+  strategy: "recursive",
   options: {
     chunkSize: 512,
     chunkOverlap: 50,
-    separator: '\n',
+    separator: "\n",
   },
   extract: {
     title: true,
@@ -51,12 +51,14 @@ Transform chunks into embeddings using an embedding model:
 
 ```ts showLineNumbers copy
 const { embedding } = await embed(chunks, {
-  provider: 'openai',
-  model: 'text-embedding-ada-002',
+  provider: "openai",
+  model: "text-embedding-ada-002",
 });
 
 // Embed a single chunk if needed:
-const singleEmbedding = await chunks[0].embed({ model: 'text-embedding-ada-002' });
+const singleEmbedding = await chunks[0].embed({
+  model: "text-embedding-ada-002",
+});
 ```
 
 Embeddings are arrays of numbers representing the semantic meaning of the text. They enable similarity searches in a vector database.

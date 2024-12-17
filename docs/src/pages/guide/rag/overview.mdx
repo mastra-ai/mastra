@@ -5,6 +5,7 @@ You'll often want to enhance Large Language Model (LLM) outputs by supplying the
 Before the LLM responds, it “looks up” helpful passages from your documents, improving accuracy and grounding responses in real data.
 
 **RAG typically involves:**
+
 1. **Document Chunking and Embedding:** Split your documents into manageable chunks, and optionally enrich them with metadata (titles, summaries, keywords, Q&A hints). Then, transform these chunks into high-dimensional vector representations (embeddings) using a model like `text-embedding-ada-002`.
 2. **Vector Storage:** Store these embeddings in a vector database (e.g., PostgreSQL with pgvector, Pinecone, Qdrant) so that you can efficiently find the chunks most similar to any given query.
 3. **Querying:** At runtime, embed the user’s query, retrieve similar chunks from your vector database, and feed those chunks as context to an LLM.
@@ -15,7 +16,7 @@ Mastra’s utilities help you orchestrate these steps with minimal friction.
 
 With Mastra's RAG utilities, you can:
 
-- **Initialize Documents**: Create `MastraDocument` instances from various formats.
+- **Initialize Documents**: Create `MDocument` instances from various formats.
 - **Process Documents**: Use `chunk` to split documents and extract metadata.
 - **Generate Embeddings**: Use `embed` functions to generate embeddings for documents or chunks.
 - **Store and Query**: Utilize vector stores like PgVector, Pinecone, and Qdrant to persist and retrieve embeddings.
