@@ -8,7 +8,7 @@ import { MessageList } from './ui/message-list';
 import { PromptSuggestions } from './ui/prompt-suggestions';
 import { ScrollArea } from './ui/scroll-area';
 
-export function Chat({ agentId, initialMessages = [] }: ChatProps) {
+export function Chat({ agentId, initialMessages = [], agentName }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -115,7 +115,7 @@ export function Chat({ agentId, initialMessages = [] }: ChatProps) {
       <div className="flex flex-col h-full py-4">
         {isEmpty ? (
           <div className="mx-auto max-w-2xl">
-            <PromptSuggestions label={`Chat with ${agentId}`} append={append} suggestions={suggestions} />
+            <PromptSuggestions label={`Chat with ${agentName}`} append={append} suggestions={suggestions} />
           </div>
         ) : (
           <ScrollArea className=" h-[calc(100vh-15rem)] px-4">

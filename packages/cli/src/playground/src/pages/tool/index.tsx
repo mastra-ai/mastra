@@ -1,18 +1,18 @@
-import { zodResolver } from '@hookform/resolvers/zod';
-import { createTool } from '@mastra/core';
 import { DynamicForm } from '@shared/components/dynamic-form';
 import { CodeBlockDemo } from '@shared/components/ui/code-block';
 import { CopyButton } from '@shared/components/ui/copy-button';
 import { Header } from '@shared/components/ui/header';
 import { Text } from '@shared/components/ui/text';
 import { useAgentTools } from '@shared/hooks/use-agent-tools';
+import { useAgents } from '@shared/hooks/use-agents';
 import { useState } from 'react';
 import { useParams } from 'react-router';
 import { z } from 'zod';
 
 const Tool = () => {
   const { toolId } = useParams();
-  const { tools } = useAgentTools();
+  const { agents, isLoading: isAgentsLoading } = useAgents();
+  const { tools, executeTool, isExecutingTool } = useAgentTools();
   const [result, setResult] = useState<any>(null);
 
   const testSchema = z.object({
@@ -34,11 +34,23 @@ const Tool = () => {
 
   console.log('tool', tool);
 
-  const { execute } = tool;
+  const handleExecuteTool = async (data: any) => {
+    if (isAgentsLoading) return;
 
-  const executeTool = async (data: any) => {
-    console.log('data', data);
-    const result = await execute(data);
+    const agent = Object.entries(agents)
+      .map(([key, agent]) => ({
+        ...agent,
+        id: key,
+      }))
+      .find(agent => agent.tools[tool.id]);
+
+    if (!agent) return;
+
+    const result = await executeTool({
+      agentId: agent.id,
+      toolId: tool.id,
+      input: data,
+    });
     setResult(result);
   };
 
@@ -53,7 +65,7 @@ const Tool = () => {
           <DynamicForm
             schema={testSchema}
             onSubmit={data => {
-              executeTool(data);
+              handleExecuteTool(data);
             }}
           />
         </div>

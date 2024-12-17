@@ -7,5 +7,6 @@ export interface Message {
 
 export interface ChatProps {
   agentId: string;
+  agentName?: string;
   initialMessages?: Message[];
 }

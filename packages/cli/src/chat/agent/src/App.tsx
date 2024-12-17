@@ -1,12 +1,14 @@
 import { Chat } from '@shared/components/Chat';
 import { Layout } from '@shared/components/layout';
 import { Header } from '@shared/components/ui/header';
+import { useAgent } from '@shared/hooks/use-agents';
 import { useEffect, useState } from 'react';
 
 import { AgentInformation } from './components/agent-information';
 
 function App() {
   const [agentId, setAgentId] = useState<string>('');
+  const { agent } = useAgent(agentId);
 
   useEffect(() => {
     // Extract agentId from URL path /agent/:agentId
@@ -20,9 +22,9 @@ function App() {
   return (
     <Layout>
       <div className="flex flex-col h-full overflow-hidden">
-        <Header title={`Chat with ${agentId}`} />
+        <Header title={`Chat with ${agent?.name}`} />
         <main className="flex-1 relative grid grid-cols-[1fr_400px] divide-x">
-          <Chat agentId={agentId} />
+          <Chat agentId={agentId} agentName={agent?.name} />
           <div className="flex flex-col">
             <AgentInformation agentId={agentId} />
           </div>

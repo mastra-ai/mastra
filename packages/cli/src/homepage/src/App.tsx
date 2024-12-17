@@ -43,11 +43,8 @@ function App() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  Object.values(agents).map(agent => (
-                    <TableRow
-                      key={agent.name}
-                      className="border-b-gray-6 cursor-pointer border-b-[0.1px] text-[0.8125rem]"
-                    >
+                  Object.entries(agents).map(([key, agent]) => (
+                    <TableRow key={key} className="border-b-gray-6 cursor-pointer border-b-[0.1px] text-[0.8125rem]">
                       <TableCell className="flex items-center justify-center">
                         <Bot className="h-4 w-4 text-mastra-el-5" />
                       </TableCell>
@@ -57,7 +54,7 @@ function App() {
                       </TableCell>
                       <TableCell className="text-mastra-el-5 text-sm">{agent.model.provider}</TableCell>
                       <TableCell className="text-mastra-el-5 text-sm">
-                        <a href={`/agents/${agent.name}`} className="hover:no-underline">
+                        <a href={`/agents/${key}`} className="hover:no-underline">
                           <Button size="sm" variant="outline">
                             <BotMessageSquare className="h-4 w-4 text-inherit" />
                             Chat with agent

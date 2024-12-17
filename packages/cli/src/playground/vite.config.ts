@@ -15,6 +15,7 @@ export default defineConfig({
   },
   build: {
     cssCodeSplit: false,
+    assetsDir: 'playground-assets',
   },
   server: {
     fs: {

@@ -69,8 +69,8 @@ const validateBody = async (body: Record<string, unknown>): Promise<ValidationRe
 
 // serve static files for playground
 app.use(
-  '/assets',
-  express.static(join(__dirname, 'playground/assets'), {
+  '/playground-assets',
+  express.static(join(__dirname, 'playground/playground-assets'), {
     setHeaders: (res: Response, path: string) => {
       // Set correct MIME types
       if (path.endsWith('.js')) {
@@ -90,6 +90,16 @@ app.use(express.static(join(__dirname, 'playground')));
  * @summary Serve playground page
  * @tags System
  * @return  {html} 200 - Playground page
+ */
+app.get('/playground', (_req: Request, res: Response) => {
+  res.sendFile(join(__dirname, 'playground/index.html'));
+});
+
+/**
+ * GET /playground routes
+ * @summary Sereve all playground routes
+ * @tags System
+ * @return  {html} 200 - Playground
  */
 app.get('/playground/*', (_req: Request, res: Response) => {
   res.sendFile(join(__dirname, 'playground/index.html'));
@@ -192,9 +202,13 @@ app.get('/api/agents', async (_req: Request, res: Response) => {
 app.get('/api/agents/:agentId', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
+    console.log({
+      mastra,
+      agents: mastra.agents,
+      getAgents: mastra.getAgents(),
+    });
     const agent = mastra.getAgent(agentId);
-    const tools = agent.getTools();
-    res.json({ ...agent, tools });
+    res.json(agent);
   } catch (error) {
     const apiError = error as ApiError;
     console.error('Error getting agent', apiError);
@@ -369,6 +383,38 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
     res
       .status(apiError.status || 500)
       .json({ error: apiError.message || 'Error streaming structured output from agent' });
+    return;
+  }
+});
+
+/**
+ * POST /api/agents/{agentId}/tools/{toolId}/execute
+ * @summary Execute an Agent tool
+ * @tags Agent
+ * @param {string} agentId.path.required - Agent identifier
+ * @param {string} toolId.path.required - Tool identifier
+ * @param {object} request.body.required - Tool input data
+ * @return {object} 200 - Tool execution result
+ * @return {Error} 500 - Server error
+ */
+app.post('/api/agents/:agentId/tools/:toolId/execute', async (req: Request, res: Response) => {
+  try {
+    const agentId = req.params.agentId;
+    const toolId = req.params.toolId;
+    const agent = mastra.getAgent(agentId);
+    const tool = agent.tools[toolId];
+    const result = await tool.execute({
+      context: {
+        ...req.body,
+      },
+      mastra,
+      runId: agentId,
+    });
+    res.json(result);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error executing tool', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error executing tool' });
     return;
   }
 });
