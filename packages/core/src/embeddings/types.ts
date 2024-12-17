@@ -1,5 +1,5 @@
 interface EmbeddingModelConfigBase {
-  name: string;
+  model: string;
 }
 
 type OpenAIEmbeddingModelNames =
@@ -10,7 +10,7 @@ type OpenAIEmbeddingModelNames =
 
 type OpenAIEmbeddingConfig = EmbeddingModelConfigBase & {
   provider: 'OPEN_AI';
-  name: OpenAIEmbeddingModelNames;
+  model: OpenAIEmbeddingModelNames;
 };
 
 type CohereEmbeddingModelNames =
@@ -25,7 +25,7 @@ type CohereEmbeddingModelNames =
 
 export type CohereEmbeddingConfig = EmbeddingModelConfigBase & {
   provider: 'COHERE';
-  name: CohereEmbeddingModelNames;
+  model: CohereEmbeddingModelNames;
 };
 
 export type AmazonBedrockEmbeddingModelNames =
@@ -35,20 +35,20 @@ export type AmazonBedrockEmbeddingModelNames =
 
 type AmazonBedrockEmbeddingConfig = EmbeddingModelConfigBase & {
   provider: 'AMAZON';
-  name: AmazonBedrockEmbeddingModelNames;
+  model: AmazonBedrockEmbeddingModelNames;
 };
 
 type GoogleEmbeddingModelNames = 'text-embedding-004' | (string & {});
 type GoogleEmbeddingConfig = EmbeddingModelConfigBase & {
   provider: 'GOOGLE';
-  name: GoogleEmbeddingModelNames;
+  model: GoogleEmbeddingModelNames;
 };
 
 type MistralEmbeddingModelNames = 'mistral-embed' | (string & {});
 
 type MistralEmbeddingConfig = EmbeddingModelConfigBase & {
   provider: 'MISTRAL';
-  name: MistralEmbeddingModelNames;
+  model: MistralEmbeddingModelNames;
 };
 
 export type VoyageEmbeddingModelNames =
@@ -63,7 +63,7 @@ export type VoyageEmbeddingModelNames =
 
 type VoyageEmbeddingConfig = EmbeddingModelConfigBase & {
   provider: 'VOYAGE';
-  name: VoyageEmbeddingModelNames;
+  model: VoyageEmbeddingModelNames;
 };
 
 type EmbeddingConfig =
@@ -74,10 +74,7 @@ type EmbeddingConfig =
   | MistralEmbeddingConfig
   | VoyageEmbeddingConfig;
 
-export type EmbeddingModelConfig = EmbeddingConfig & { apiKey?: string };
-
 export type EmbeddingOptions = {
-  model: EmbeddingModelConfig;
-  value: string[] | string;
+  apiKey?: string;
   maxRetries: number;
-};
+} & EmbeddingConfig;
