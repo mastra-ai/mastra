@@ -1,5 +1,13 @@
 # @mastra/engine
 
+## 0.0.5-alpha.31
+
+### Patch Changes
+
+- b5393f1: New example: Dane and many fixes to make it work
+- Updated dependencies [b5393f1]
+  - @mastra/core@0.1.27-alpha.37
+
 ## 0.0.5-alpha.30
 
 ### Patch Changes

@@ -36,7 +36,8 @@
     "mastra-examples-integrations": "1.0.1-alpha.0",
     "mastra-examples-llm": "1.0.1-alpha.11",
     "examples-vnext-playground": "1.0.1-alpha.9",
-    "@mastra/composio": "0.0.0"
+    "@mastra/composio": "0.0.0",
+    "dane": "0.0.1"
   },
   "changesets": [
     "big-goats-try",
@@ -85,6 +86,7 @@
     "spicy-turtles-occur",
     "thick-poets-beam",
     "thirty-humans-clean",
+    "tricky-carrots-glow",
     "tricky-llamas-suffer",
     "twelve-dryers-love",
     "twelve-roses-stare",

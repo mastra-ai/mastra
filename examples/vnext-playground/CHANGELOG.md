@@ -1,5 +1,14 @@
 # examples-vnext-playground
 
+## 1.0.1-alpha.13
+
+### Patch Changes
+
+- b5393f1: New example: Dane and many fixes to make it work
+- Updated dependencies [b5393f1]
+  - @mastra/engine@0.0.5-alpha.31
+  - @mastra/core@0.1.27-alpha.37
+
 ## 1.0.1-alpha.12
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.37
+
+### Patch Changes
+
+- b5393f1: New example: Dane and many fixes to make it work
+
 ## 0.1.27-alpha.36
 
 ### Patch Changes
