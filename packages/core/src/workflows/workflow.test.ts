@@ -584,7 +584,7 @@ describe('Workflow', () => {
       const step3 = new Step({ id: 'step3', execute: step3Action });
       const step4 = new Step({ id: 'step4', execute: step4Action });
       const step5 = new Step({ id: 'step5', execute: step5Action });
-      const workflow = new Workflow({ name: 'test-workflow', logger: createLogger({ type: 'CONSOLE' }) });
+      const workflow = new Workflow({ name: 'test-workflow' });
       workflow.step(step1).then(step2).then(step5).after(step1).step(step3).then(step4).then(step5).commit();
 
       const result = await workflow.execute();
@@ -613,7 +613,7 @@ describe('Workflow', () => {
       const step3 = new Step({ id: 'step3', execute: step3Action });
       const step4 = new Step({ id: 'step4', execute: step4Action });
       const step5 = new Step({ id: 'step5', execute: step5Action });
-      const workflow = new Workflow({ name: 'test-workflow', logger: createLogger({ type: 'CONSOLE' }) });
+      const workflow = new Workflow({ name: 'test-workflow' });
       workflow
         .step(step1)
         .then(step2)
@@ -649,7 +649,7 @@ describe('Workflow', () => {
       const step1 = new Step({ id: 'step1', execute: step1Action });
       const step3 = new Step({ id: 'step3', execute: step3Action });
 
-      const workflow = new Workflow({ name: 'test-workflow', logger: createLogger({ type: 'CONSOLE' }) });
+      const workflow = new Workflow({ name: 'test-workflow' });
       workflow.step(step1).step(step3).after(step1).step(step3).after(step3).step(step1).commit();
 
       const result = await workflow.execute();
@@ -685,7 +685,7 @@ describe('Workflow', () => {
         outputSchema: z.object({ age: z.number() }),
       });
 
-      const workflow = new Workflow({ name: 'test-workflow', logger: createLogger({ type: 'CONSOLE' }) });
+      const workflow = new Workflow({ name: 'test-workflow' });
       workflow
         .step(randomSync)
         .then(step1, {
