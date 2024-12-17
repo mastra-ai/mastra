@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.3
+
+### Patch Changes
+
+- 2c4c1bb: Fixes publish
+
 ## 0.0.2-alpha.2
 
 ### Patch Changes
