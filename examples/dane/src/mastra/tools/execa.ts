@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 // Create transform stream that applies chalk
 const colorTransform = new Transform({
-  transform(chunk, encoding, callback) {
+  transform(chunk, _encoding, callback) {
     // Convert chunk to string and apply chalk
     const colored = chalk.blue(chunk.toString());
     this.push(colored);

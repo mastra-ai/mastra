@@ -1,9 +1,8 @@
-// import inquirer from 'inquirer';
 import chalk from 'chalk';
 
-import { mastra } from './mastra';
+import { mastra } from '../mastra/index.js';
 
-async function main() {
+export async function issueLabelerCommand() {
   console.log(chalk.green("Hi! I'm Dane!"));
   console.log(chalk.green('Let me label this for you..\n'));
   const result = await mastra.getWorkflow('githubIssueLabeler').execute({
@@ -25,8 +24,3 @@ async function main() {
     ),
   );
 }
-
-main().catch(e => {
-  console.error(e);
-  process.exit(1);
-});

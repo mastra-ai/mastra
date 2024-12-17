@@ -1,7 +1,7 @@
 import { Step, Workflow } from '@mastra/core';
 import { z } from 'zod';
 
-import { github } from '../integrations';
+import { github } from '../integrations/index.js';
 
 export const githubIssueLabeler = new Workflow({
   name: 'github-issue-labeler',

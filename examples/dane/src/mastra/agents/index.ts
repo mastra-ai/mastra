@@ -1,11 +1,11 @@
 import { Agent } from '@mastra/core';
 
-import { browserTool, googleSearch } from '../tools/browser';
-import { listEvents } from '../tools/calendar';
-import { crawl } from '../tools/crawl';
-import { execaTool } from '../tools/execa';
-import { fsTool } from '../tools/fs';
-import { readPDF } from '../tools/pdf';
+import { browserTool, googleSearch } from '../tools/browser.js';
+import { listEvents } from '../tools/calendar.js';
+import { crawl } from '../tools/crawl.js';
+import { execaTool } from '../tools/execa.js';
+import { fsTool } from '../tools/fs.js';
+import { readPDF } from '../tools/pdf.js';
 
 export const daneIssueLabeler = new Agent({
   name: 'DaneIssueLabeler',
