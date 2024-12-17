@@ -50,13 +50,16 @@ This splits the document into chunks and extracts metadata. There are a variety 
 Transform chunks into embeddings using an embedding model:
 
 ```ts showLineNumbers copy
-const { embedding } = await embed(chunks, {
-  provider: "openai",
+import { embed } from "@mastra/rag";
+
+const embeddings = await embed(chunks, {
+  provider: "OPEN_AI",
   model: "text-embedding-ada-002",
 });
 
 // Embed a single chunk if needed:
-const singleEmbedding = await chunks[0].embed({
+const singleEmbedding = await embed(chunks[0], {
+  provider: "OPEN_AI",
   model: "text-embedding-ada-002",
 });
 ```
