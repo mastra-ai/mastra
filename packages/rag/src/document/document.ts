@@ -13,7 +13,7 @@ import { RecursiveJsonTransformer } from './transformers/json';
 import { LatexTransformer } from './transformers/latex';
 import { MarkdownHeaderTransformer, MarkdownTransformer } from './transformers/markdown';
 import { TokenTransformer } from './transformers/token';
-import { ChunkOptions, ChunkStrategy, ExtractParams } from './types';
+import { ChunkOptions, ChunkParams, ChunkStrategy, ExtractParams } from './types';
 
 export class MDocument {
   private chunks: Chunk[];
@@ -250,23 +250,20 @@ export class MDocument {
     this.chunks = textSplit;
   }
 
-  async chunk(params?: {
-    strategy?: ChunkStrategy;
-    options?: ChunkOptions;
-    extract?: ExtractParams;
-  }): Promise<MDocument['chunks']> {
+  async chunk(params?: ChunkParams): Promise<MDocument['chunks']> {
+    const { strategy: passedStrategy, ...chunkOptions } = params || {};
     // Determine the default strategy based on type if not specified
-    const strategy = params?.strategy || this.defaultStrategy();
+    const strategy = passedStrategy || this.defaultStrategy();
 
     // Apply the appropriate chunking strategy
-    await this.chunkBy(strategy, params?.options);
-
-    // Perform metadata extraction if specified
-    if (params?.extract) {
-      await this.extract(params.extract);
-    }
+    await this.chunkBy(strategy, chunkOptions);
 
     return this.chunks;
+  }
+
+  async extractMetadata(params: ExtractParams): Promise<MDocument> {
+    await this.extract(params);
+    return this;
   }
 
   getDocs(): Chunk[] {
