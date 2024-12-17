@@ -1,5 +1,17 @@
 # @mastra/firecrawl
 
+## 1.0.4-alpha.21
+
+### Patch Changes
+
+- b5393f1: New example: Dane and many fixes to make it work
+- Updated dependencies [45fd5b8]
+- Updated dependencies [c872875]
+- Updated dependencies [f6da688]
+- Updated dependencies [b5393f1]
+  - @mastra/rag@0.0.2-alpha.21
+  - @mastra/core@0.1.27-alpha.37
+
 ## 1.0.4-alpha.20
 
 ### Patch Changes

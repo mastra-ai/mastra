@@ -36,7 +36,8 @@
     "mastra-examples-integrations": "1.0.1-alpha.0",
     "mastra-examples-llm": "1.0.1-alpha.11",
     "examples-vnext-playground": "1.0.1-alpha.9",
-    "@mastra/composio": "0.0.0"
+    "@mastra/composio": "0.0.0",
+    "@mastra/dane": "0.0.1"
   },
   "changesets": [
     "big-goats-try",
@@ -63,6 +64,7 @@
     "healthy-timers-promise",
     "hip-squids-tie",
     "late-ties-sniff",
+    "lazy-suits-run",
     "lemon-seals-do",
     "loud-ads-nail",
     "mean-gorillas-look",
@@ -75,6 +77,7 @@
     "rare-students-cough",
     "real-pianos-wonder",
     "red-chicken-approve",
+    "serious-bananas-rush",
     "seven-mayflies-impress",
     "silver-seahorses-march",
     "silver-stingrays-learn",
@@ -83,14 +86,19 @@
     "sour-carpets-marry",
     "spicy-spiders-teach",
     "spicy-turtles-occur",
+    "stupid-cows-exist",
     "thick-poets-beam",
+    "thick-sloths-leave",
     "thirty-humans-clean",
+    "tricky-carrots-glow",
     "tricky-llamas-suffer",
     "twelve-dryers-love",
     "twelve-roses-stare",
     "twenty-needles-serve",
     "two-islands-doubt",
+    "violet-plants-breathe",
     "warm-bulldogs-roll",
+    "wild-dragons-switch",
     "wise-taxis-wink",
     "yellow-roses-run"
   ]

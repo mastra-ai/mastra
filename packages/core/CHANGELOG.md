@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.1.27-alpha.37
+
+### Patch Changes
+
+- c872875: update createMultiLogger to combineLogger
+- f6da688: update agents/:agentId page in dev to show agent details and endpoints, add getTools to agent
+- b5393f1: New example: Dane and many fixes to make it work
+
 ## 0.1.27-alpha.36
 
 ### Patch Changes
