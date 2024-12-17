@@ -37,8 +37,13 @@ jobs:
         run: pnpm build
         working-directory: ./integrations/github
 
+      - name: Install dependencies in Dane
+        run: pnpm install
+        working-directory: ./examples/dane
+
       - name: Label Issue
         run: pnpm issue-labeler
+        working-directory: ./examples/dane
         env:
           GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}

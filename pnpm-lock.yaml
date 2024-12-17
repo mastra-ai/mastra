@@ -535,6 +535,9 @@ importers:
       cli-table3:
         specifier: ^0.6.5
         version: 0.6.5
+      commander:
+        specifier: ^12.1.0
+        version: 12.1.0
       execa:
         specifier: ^9.3.1
         version: 9.5.2
@@ -569,12 +572,12 @@ importers:
       '@types/node':
         specifier: ^22.10.2
         version: 22.10.2
+      '@types/pdf-parse':
+        specifier: ^1.1.4
+        version: 1.1.4
       tsx:
         specifier: ^4.19.2
         version: 4.19.2
-      typescript:
-        specifier: ^5.7.2
-        version: 5.7.2
 
   examples/integrations:
     dependencies:
