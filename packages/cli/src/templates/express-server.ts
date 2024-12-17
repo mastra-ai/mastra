@@ -70,7 +70,7 @@ const validateBody = async (body: Record<string, unknown>): Promise<ValidationRe
 // Serve static files from the Vite build first
 app.use(
   '/homepage-assets',
-  express.static(join(___dirname, 'homepage/assets'), {
+  express.static(join(___dirname, 'homepage/homepage-assets'), {
     setHeaders: (res: Response, path: string) => {
       // Set correct MIME types
       if (path.endsWith('.js')) {
@@ -108,7 +108,7 @@ app.get('/agents', (_req: Request, res: Response) => {
 // Serve static files from the Vite build first
 app.use(
   '/agent-chat-assets',
-  express.static(join(___dirname, 'agent-chat/assets'), {
+  express.static(join(___dirname, 'agent-chat/agent-chat-assets'), {
     setHeaders: (res: Response, path: string) => {
       // Set correct MIME types
       if (path.endsWith('.js')) {
