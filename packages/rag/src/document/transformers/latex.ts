@@ -5,8 +5,8 @@ import { RecursiveCharacterTransformer } from './character';
 export class LatexTransformer extends RecursiveCharacterTransformer {
   constructor(
     options: {
-      chunkSize?: number;
-      chunkOverlap?: number;
+      size?: number;
+      overlap?: number;
       lengthFunction?: (text: string) => number;
       keepSeparator?: boolean | 'start' | 'end';
       addStartIndex?: boolean;
