@@ -21,7 +21,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: '20'
 
       - name: Install dependencies
         run: pnpm install
@@ -37,13 +37,11 @@ jobs:
         run: pnpm build
         working-directory: ./integrations/github
 
-      - name: Install dependencies in Dane
-        run: pnpm install
-        working-directory: ./examples/dane
+      - name: Install dane cli
+        run: pnpm install -g @mastra/dane
 
       - name: Label Issue
-        run: pnpm issue-labeler
-        working-directory: ./examples/dane
+        run: dane issue-labeler
         env:
           GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
