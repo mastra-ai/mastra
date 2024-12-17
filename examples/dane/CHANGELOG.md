@@ -1,5 +1,13 @@
 # @mastra/dane
 
+## 0.0.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [61b5c4e]
+  - @mastra/firecrawl@1.0.4-alpha.23
+  - @mastra/github@1.0.3-alpha.22
+
 ## 0.0.2-alpha.3
 
 ### Patch Changes
