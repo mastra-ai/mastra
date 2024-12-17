@@ -1,5 +1,11 @@
 # @mastra/github
 
+## 1.0.3-alpha.22
+
+### Patch Changes
+
+- 61b5c4e: n/a
+
 ## 1.0.3-alpha.21
 
 ### Patch Changes
