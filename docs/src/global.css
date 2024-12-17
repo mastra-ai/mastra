@@ -86,3 +86,7 @@ button._transition + div._transform-gpu ul button:not(:has(.active)):is(html[cla
 button._flex._transition:has(+ div._transform-gpu li.active):is(html[class~='dark'] *) {
   color: white !important;
 }
+
+._font-semibold {
+  font-weight: 500 !important;
+}
