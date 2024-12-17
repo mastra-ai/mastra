@@ -7,7 +7,7 @@
     "dane": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "npx tsc",
     "issue-labeler": "npx bun src/issue-labeler.ts",
     "start": "npx bun src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -41,6 +41,7 @@
     "playwright": "^1.49.1",
     "playwright-core": "^1.49.1",
     "sqlite3": "^5.1.7",
+    "typescript": "^5.5.4",
     "zod": "^3.24.0"
   }
 }
