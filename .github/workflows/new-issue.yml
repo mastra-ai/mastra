@@ -38,7 +38,7 @@ jobs:
         working-directory: ./integrations/github
 
       - name: Install dane cli
-        run: pnpm install -g @mastra/dane@latest
+        run: pnpm install -g @mastra/dane@alpha
 
       - name: Label Issue
         run: dane issue-labeler
