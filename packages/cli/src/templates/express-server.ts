@@ -342,6 +342,50 @@ app.post('/api/agents/:agentId/tools/:toolId/execute', async (req: Request, res:
 });
 
 /**
+ * GET /api/workflows
+ * @summary Get all workflows
+ * @tags Workflow
+ * @return {object} 200 - Workflows response
+ * @return {Error} 500 - Server error
+ */
+app.get('/api/workflows', async (_req: Request, res: Response) => {
+  try {
+    const workflows = mastra.getWorkflows();
+    res.json(workflows);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting workflows', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting workflows' });
+    return;
+  }
+});
+
+/**
+ * GET /api/workflows/{workflowId}
+ * @summary Get a workflow
+ * @tags Workflow
+ * @param {string} workflowId.path.required - Workflow identifier
+ * @return {object} 200 - Workflow response
+ * @return {Error} 500 - Server error
+ */
+app.get('/api/workflows/:workflowId', async (req: Request, res: Response) => {
+  try {
+    const workflowId = req.params.workflowId;
+    const workflow = mastra.getWorkflow(workflowId);
+    const triggerSchema = workflow.triggerSchema;
+    res.json({
+      ...workflow,
+      triggerSchema: triggerSchema ? stringify(zodToJsonSchema(triggerSchema)) : undefined,
+    });
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting workflow', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting workflow' });
+    return;
+  }
+});
+
+/**
  * POST /api/workflows/{workflowId}/execute
  * @summary Execute a workflow
  * @tags Workflow
@@ -353,7 +397,7 @@ app.post('/api/agents/:agentId/tools/:toolId/execute', async (req: Request, res:
 app.post('/api/workflows/:workflowId/execute', async (req: Request, res: Response) => {
   try {
     const workflowId = req.params.workflowId;
-    const workflow = mastra.workflows.get(workflowId);
+    const workflow = mastra.getWorkflow(workflowId);
     const result = await workflow.execute(req.body);
     res.json(result);
   } catch (error) {

@@ -1,4 +1,4 @@
-import { Bot, BotMessageSquare } from 'lucide-react';
+import { Workflow } from 'lucide-react';
 import { useNavigate } from 'react-router';
 
 import { Button } from '@/components/ui/button';
@@ -7,24 +7,22 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 
-import { useAgents } from '@/hooks/use-agents';
+import { useWorkflows } from '@/hooks/use-workflows';
 
-function Agents() {
-  const { agents, isLoading } = useAgents();
+function Workflows() {
+  const { workflows, isLoading } = useWorkflows();
   const navigate = useNavigate();
 
   return (
     <div className="flex flex-col h-full relative overflow-hidden">
-      <Header title="Agents" />
+      <Header title="Workflows" />
       <main className="flex-1 relative overflow-hidden">
         <ScrollArea className="rounded-lg h-full">
           <Table>
             <TableHeader className="bg-[#171717] sticky top-0 z-10">
               <TableRow className="border-gray-6 border-b-[0.1px] text-[0.8125rem]">
                 <TableHead className="w-[50px]"></TableHead>
-                <TableHead className="text-mastra-el-3">Name</TableHead>
-                <TableHead className="text-mastra-el-3 w-1/2">Instruction</TableHead>
-                <TableHead className="text-mastra-el-3">Model</TableHead>
+                <TableHead className="text-mastra-el-3 w-1/2">Name</TableHead>
                 <TableHead className="text-mastra-el-3">Action</TableHead>
               </TableRow>
             </TableHeader>
@@ -40,33 +38,28 @@ function Agents() {
                   <TableCell>
                     <Skeleton className="h-8 w-full" />
                   </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-8 w-full" />
-                  </TableCell>
                 </TableRow>
               ) : (
-                Object.entries(agents).map(([key, agent]) => (
+                Object.entries(workflows).map(([key, workflow]) => (
                   <TableRow key={key} className="border-b-gray-6 cursor-pointer border-b-[0.1px] text-[0.8125rem]">
                     <TableCell>
                       <div className="h-8 w-full flex items-center justify-center">
-                        <Bot className="h-4 w-4 text-mastra-el-5" />
+                        <Workflow className="h-4 w-4 text-mastra-el-5" />
                       </div>
                     </TableCell>
-                    <TableCell className="font-medium text-mastra-el-5">{agent.name}</TableCell>
-                    <TableCell className="truncate w-1/2 max-w-[500px] text-mastra-el-5">
-                      {agent.instructions}
+                    <TableCell className="font-medium truncate max-w-[500px] text-mastra-el-5">
+                      {workflow.name}
                     </TableCell>
-                    <TableCell className="text-mastra-el-5 text-sm">{agent?.model?.provider}</TableCell>
                     <TableCell className="text-mastra-el-5 text-sm">
                       <span
                         onClick={() => {
-                          navigate(`/agents/${key}`);
+                          navigate(`/workflows/${key}`);
                         }}
                         className="hover:no-underline"
                       >
                         <Button size="sm" variant="outline">
-                          <BotMessageSquare className="h-4 w-4 text-inherit" />
-                          Chat with agent
+                          <Workflow className="h-4 w-4 text-inherit" />
+                          View Workflow
                         </Button>
                       </span>
                     </TableCell>
@@ -81,4 +74,4 @@ function Agents() {
   );
 }
 
-export default Agents;
+export default Workflows;

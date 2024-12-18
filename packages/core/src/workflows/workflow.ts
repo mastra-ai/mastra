@@ -35,7 +35,7 @@ export class Workflow<
   TTriggerSchema extends z.ZodType<any> = any,
 > extends MastraBase {
   name: string;
-  #triggerSchema?: TTriggerSchema;
+  triggerSchema?: TTriggerSchema;
   /** XState machine instance that orchestrates the workflow execution */
   #machine!: ReturnType<typeof this.initializeMachine>;
   /** XState actor instance that manages the workflow execution */
@@ -74,7 +74,7 @@ export class Workflow<
 
     this.name = name;
     this.#retryConfig = retryConfig || { attempts: 3, delay: 1000 };
-    this.#triggerSchema = triggerSchema;
+    this.triggerSchema = triggerSchema;
     this.#runId = crypto.randomUUID();
     this.#mastra = mastra;
     if (mastra?.logger) {
@@ -254,15 +254,16 @@ export class Workflow<
       snapshot = JSON.parse(snapshot as unknown as string);
     }
 
-    this.log(LogLevel.INFO, 'Executing workflow', { triggerData });
+    this.log(LogLevel.INFO, 'Executing workflow', { triggerData, runId: this.#runId });
 
-    if (this.#triggerSchema) {
+    if (this.triggerSchema) {
       try {
-        this.#triggerSchema.parse(triggerData);
-        this.log(LogLevel.DEBUG, 'Trigger schema validation passed');
+        this.triggerSchema.parse(triggerData);
+        this.log(LogLevel.DEBUG, 'Trigger schema validation passed', { runId: this.#runId });
       } catch (error) {
         this.log(LogLevel.ERROR, 'Trigger schema validation failed', {
           error,
+          runId: this.#runId,
         });
         throw error;
       }
@@ -308,6 +309,7 @@ export class Workflow<
           if (hasFailures) {
             this.log(LogLevel.ERROR, 'Workflow failed', {
               results: state.context.stepResults,
+              runId: this.#runId,
             });
             this.#cleanup();
             resolve({
@@ -318,6 +320,7 @@ export class Workflow<
           } else {
             this.log(LogLevel.INFO, 'Workflow completed', {
               results: state.context.stepResults,
+              runId: this.#runId,
             });
             this.#cleanup();
             resolve({

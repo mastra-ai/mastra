@@ -16,7 +16,7 @@
     "node_modules"
   ],
   "scripts": {
-    "build": "npm-run-all build:tsc copy-starter-files  build:playground",
+    "build": "npm-run-all build:tsc copy-starter-files build:playground",
     "build:tsc": "tsc",
     "build:dev": "npx tsc --watch",
     "copy-starter-files": "cp -r src/starter-files dist/",

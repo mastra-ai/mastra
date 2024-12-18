@@ -1,6 +1,8 @@
 import express, { Request, Response } from 'express';
 import { join } from 'path';
 import serverless from 'serverless-http';
+import { stringify } from 'superjson';
+import zodToJsonSchema from 'zod-to-json-schema';
 
 const { mastra } = await import(join(process.cwd(), 'mastra.mjs'));
 
@@ -186,6 +188,35 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
     res
       .status(apiError.status || 500)
       .json({ error: apiError.message || 'Error streaming structured output from agent' });
+    return;
+  }
+});
+
+app.get('/api/workflows', async (_req: Request, res: Response) => {
+  try {
+    const workflows = mastra.getWorkflows();
+    res.json(workflows);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting workflows', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting workflows' });
+    return;
+  }
+});
+
+app.get('/api/workflows/:workflowId', async (req: Request, res: Response) => {
+  try {
+    const workflowId = req.params.workflowId;
+    const workflow = mastra.getWorkflow(workflowId);
+    const triggerSchema = workflow.triggerSchema;
+    res.json({
+      ...workflow,
+      triggerSchema: triggerSchema ? stringify(zodToJsonSchema(triggerSchema)) : undefined,
+    });
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting workflow', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting workflow' });
     return;
   }
 });

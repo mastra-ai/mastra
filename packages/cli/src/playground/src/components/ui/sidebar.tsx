@@ -1,4 +1,4 @@
-import { Bot, DraftingCompass } from 'lucide-react';
+import { Bot, DraftingCompass, Workflow } from 'lucide-react';
 import { useLocation, Link } from 'react-router';
 
 import { cn } from '../../lib/utils';
@@ -11,15 +11,15 @@ const links = [
     url: '/agents',
     icon: Bot,
   },
-  // {
-  //   name: 'Workflows',
-  //   url: '/workflows',
-  //   icon: Workflow, //import from lucide-react
-  // },
   {
     name: 'Tools',
     url: '/tools',
     icon: DraftingCompass,
+  },
+  {
+    name: 'Workflows',
+    url: '/workflows',
+    icon: Workflow,
   },
 ];
 
@@ -39,13 +39,10 @@ export const Sidebar = () => {
         <div>
           <div className="flex flex-col gap-0.5">
             {links.map(link => {
-              const [pagePath] = path.split('/');
+              const [_, pagePath] = path.split('/');
+              console.log({ pagePath, link, path });
               const lowercasedPagePath = link.name.toLowerCase();
-              const isActive =
-                link.url === path ||
-                link.name === path ||
-                pagePath === lowercasedPagePath ||
-                (link.name === 'Agents' && path === '');
+              const isActive = link.url === path || link.name === path || pagePath === lowercasedPagePath;
               return (
                 <Link
                   to={link.url}

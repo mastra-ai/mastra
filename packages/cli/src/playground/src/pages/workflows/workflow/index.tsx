@@ -1,17 +1,16 @@
 import { useParams } from 'react-router';
 
-import { Chat } from '@/components/Chat';
 import { Header } from '@/components/ui/header';
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { AgentInformation } from '@/domains/agents/agent-information';
-import { useAgent } from '@/hooks/use-agents';
+import { WorkflowInformation } from '@/domains/workflows/workflow-information';
+import { useWorkflow } from '@/hooks/use-workflows';
 
-function Agent() {
-  const { agentId } = useParams();
-  const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
+function Workflow() {
+  const { workflowId } = useParams();
+  const { workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId!);
 
-  if (isAgentLoading) {
+  if (isWorkflowLoading) {
     return (
       <div className="flex flex-col h-full overflow-hidden">
         <Header title={<Skeleton className="h-6 w-[200px]" />} />
@@ -20,7 +19,7 @@ function Agent() {
             <Skeleton className="h-[600px]" />
           </div>
           <div className="flex flex-col">
-            <AgentInformation agentId={agentId!} />
+            <WorkflowInformation workflowId={workflowId!} />
           </div>
         </main>
       </div>
@@ -29,15 +28,15 @@ function Agent() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <Header title={`Chat with ${agent?.name}`} />
+      <Header title={`Workflow: ${workflow?.name}`} />
       <main className="flex-1 relative grid grid-cols-[1fr_400px] divide-x">
-        <Chat agentId={agentId!} agentName={agent?.name} />
+        <div className="p-4">{/* TODO: Add workflow canvas here */}</div>
         <div className="flex flex-col">
-          <AgentInformation agentId={agentId!} />
+          <WorkflowInformation workflowId={workflowId!} />
         </div>
       </main>
     </div>
   );
 }
 
-export default Agent;
+export default Workflow;
