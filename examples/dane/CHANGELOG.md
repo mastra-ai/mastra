@@ -1,5 +1,18 @@
 # @mastra/dane
 
+## 0.0.2-alpha.8
+
+### Patch Changes
+
+- 944e523: Fix pdf-parse breaking dane cli
+- Updated dependencies [5cdfb88]
+  - @mastra/core@0.1.27-alpha.41
+  - @mastra/firecrawl@1.0.4-alpha.26
+  - @mastra/github@1.0.3-alpha.25
+  - @mastra/engine@0.0.5-alpha.35
+  - @mastra/memory@0.0.2-alpha.20
+  - @mastra/rag@0.0.2-alpha.25
+
 ## 0.0.2-alpha.7
 
 ### Patch Changes
