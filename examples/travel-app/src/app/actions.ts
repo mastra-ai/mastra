@@ -72,7 +72,6 @@ function processFormData(formData: FormData) {
 }
 
 export async function runWorkflow({ userId, formData }: { userId: string; formData: FormData }) {
-  console.log('========== from run workflow');
   const formObject = processFormData(formData);
 
   const result = await workflow.execute({
@@ -82,7 +81,7 @@ export async function runWorkflow({ userId, formData }: { userId: string; formDa
       travelForm: {
         departureLocation: formObject.departureLocation,
         arrivalLocation: formObject.arrivalLocation,
-        tripGoals: formObject.tripGoaxls,
+        tripGoals: formObject.tripGoals,
         preferredFlightTimes: formObject.preferredFlightTimes,
         flightPriority: formObject.flightPriority,
         accommodationType: formObject.accommodationType,
@@ -101,7 +100,6 @@ export async function runWorkflow({ userId, formData }: { userId: string; formDa
 }
 
 export async function runAgent(formData: FormData) {
-  console.log('======= from runAgenttt');
   const formObject = processFormData(formData);
   console.log(formObject);
 
@@ -115,9 +113,9 @@ export async function runAgent(formData: FormData) {
     - Find the best accommodation option for the customer (use arrivalCityId from formObject)
     - Find three activities and attractions for the customer based on their interests (use arrivalAttractionId from formObject)
 
-    Other Notes: 
-    
-    - flightPriority is a value between 0 and 100 where 0 means the prioritize price the most and 100 means 
+    Other Notes:
+
+    - flightPriority is a value between 0 and 100 where 0 means the prioritize price the most and 100 means
     prioritize convenience the most (shortest trip and matching time).
     - ALWAYS pass entire date timestamps back for departureTime and arrivalTime.
 
