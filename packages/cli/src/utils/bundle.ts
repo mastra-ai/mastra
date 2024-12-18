@@ -89,7 +89,7 @@ export async function bundleServer(entryPoint: string) {
   } catch (error) {
     if (error instanceof Error) {
       if (error.message.includes('Missing required file,')) {
-        logger.info('Cannot find mastra: add your directory with --dir <dir>');
+        logger.info(`Cannot find ${entryPoint} file`);
       }
     } else {
       console.error('Server build failed:', error);
@@ -98,14 +98,14 @@ export async function bundleServer(entryPoint: string) {
   }
 }
 
-export async function bundle(dirPath: string) {
+export async function bundle(dirPath: string, options?: { outfile?: string }) {
   try {
     // Ensure .mastra directory exists
     upsertMastraDir();
 
     const fileService = new FileService();
     const entryPoint = fileService.getFirstExistingFile([join(dirPath, 'index.ts')]);
-    const outfile = join(process.cwd(), '.mastra', 'mastra.mjs');
+    const outfile = options?.outfile || join(process.cwd(), '.mastra', 'mastra.mjs');
 
     const result = await esbuild.build({
       entryPoints: [entryPoint],
@@ -115,8 +115,8 @@ export async function bundle(dirPath: string) {
       outfile,
       target: 'node20',
       sourcemap: true,
-      minify: false, // Set to true if you want minification
-      metafile: true, // Generates build metadata
+      minify: true,
+      metafile: true,
       logLevel: 'error',
       mainFields: ['module', 'main'],
       conditions: ['import', 'node'],
@@ -186,7 +186,7 @@ export async function bundle(dirPath: string) {
   } catch (error) {
     if (error instanceof Error) {
       if (error.message.includes('Missing required file,')) {
-        logger.info('Cannot find mastra: add your directory with --dir <dir>');
+        logger.info(`Cannot find ${dirPath} directory`);
       }
     } else {
       console.error('Build failed:', error);

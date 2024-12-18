@@ -10,6 +10,8 @@ const ___filename = _fileURLToPath(import.meta.url);
 const ___dirname = _path.dirname(___filename);
 
 const { mastra } = await import(join(process.cwd(), 'mastra.mjs'));
+const devTools = await import(join(process.cwd(), 'devTools.mjs'));
+const isDevToolsEnabled = process.env.MASTRA_DEV_TOOLS === 'true';
 
 const app = express();
 
@@ -870,6 +872,93 @@ app.get('/api/logs/:runId', async (req: Request, res: Response) => {
     const apiError = error as ApiError;
     console.error('Error getting logs', apiError);
     res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting logs' });
+    return;
+  }
+});
+
+/**
+ * GET /api/dev-tools
+ * @summary Get dev tools
+ * @tags Dev Tools
+ * @return {object} 200 - Dev tools with schemas
+ * @return {Error} 404 - Dev tools not found
+ */
+app.get('/api/dev-tools', async (_req: Request, res: Response) => {
+  if (!isDevToolsEnabled) {
+    res.status(200).json({});
+    return;
+  }
+  if (devTools) {
+    const serializedTools = Object.entries(devTools).reduce(
+      (acc, [id, _tool]) => {
+        const tool = _tool as any;
+        acc[id] = {
+          ...tool,
+          inputSchema: stringify(zodToJsonSchema(tool.inputSchema)),
+          outputSchema: stringify(zodToJsonSchema(tool.outputSchema)),
+        };
+        return acc;
+      },
+      {} as Record<string, any>,
+    );
+    res.json(serializedTools);
+  } else {
+    res.status(404).json({ error: 'Dev tools not found' });
+  }
+});
+
+/**
+ * GET /api/dev-tools/{toolId}
+ * @summary Get dev tool
+ * @tags Dev Tools
+ * @param {string} toolId.path.required - Tool identifier
+ * @return {object} 200 - Dev tool with schemas
+ * @return {Error} 404 - Dev tool not found
+ */
+app.get('/api/dev-tools/:toolId', async (req: Request, res: Response) => {
+  const toolId = req.params.toolId;
+  const tool = Object.values(devTools || {}).find((tool: any) => tool.id === toolId) as any;
+  if (tool) {
+    const serializedTool = {
+      ...tool,
+      inputSchema: stringify(zodToJsonSchema(tool.inputSchema)),
+      outputSchema: stringify(zodToJsonSchema(tool.outputSchema)),
+    };
+    res.json(serializedTool);
+  } else {
+    res.status(404).json({ error: 'Dev tool not found' });
+  }
+});
+
+/**
+ * POST /api/dev-tools/{toolId}/execute
+ * @summary Execute a dev tool
+ * @tags Dev Tools
+ * @param {string} toolId.path.required - Tool identifier
+ * @return {object} 200 - Dev tool execution result
+ * @return {Error} 404 - Dev tool not found
+ */
+app.post('/api/dev-tools/:toolId/execute', async (req: Request, res: Response) => {
+  try {
+    const toolId = req.params.toolId;
+    const tool = Object.values(devTools || {}).find((tool: any) => tool.id === toolId) as any;
+    if (!tool) {
+      res.status(404).json({ error: 'Dev tool not found' });
+      return;
+    }
+    const { input } = req.body;
+    const result = await tool.execute({
+      context: {
+        ...input,
+      },
+      mastra,
+      runId: mastra.runId,
+    });
+    res.json(result);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error executing dev tool', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error executing dev tool' });
     return;
   }
 });
