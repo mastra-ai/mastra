@@ -1,4 +1,8 @@
 #! /usr/bin/env node
+import dotenv from 'dotenv';
+
+dotenv.config();
+
 process.env.NODE_NO_WARNINGS = '1';
 
 import { Command } from 'commander';
