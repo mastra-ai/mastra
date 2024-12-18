@@ -61,7 +61,7 @@ export function AgentDetails({ agentId }: { agentId: string }) {
           <p className="text-mastra-el-3">Tools</p>
           <div className="flex flex-col gap-2 text-mastra-el-5">
             {Object.entries(agent?.tools ?? {}).map(([toolKey, tool]) => (
-              <a key={toolKey} href={`/playground/tools/${tool.id}`} className="no-underline">
+              <a key={toolKey} href={`/playground/${agentId}/tools/${tool.id}`} className="no-underline">
                 {tool.id}
               </a>
             ))}
