@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -125,114 +125,118 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
       {showResults && travelData ? (
         <TravelResults travelData={travelData} />
       ) : showForm ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl">Plan Your Trip</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-8">
-              {/* Travel Info Section */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Travel Info</h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="startDate">Start Date</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            'w-full justify-start text-left font-normal',
-                            !startDate && 'text-muted-foreground',
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {startDate ? format(startDate, 'PPP') : 'Select date'}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="endDate">End Date</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            'w-full justify-start text-left font-normal',
-                            !endDate && 'text-muted-foreground',
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {endDate ? format(endDate, 'PPP') : 'Select date'}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="departureLocation">Departure Location</Label>
-                    <Select name="departureLocation">
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select airport" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PLACES.map(airport => (
-                          <SelectItem key={airport.value} value={airport.value}>
-                            {airport.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="arrivalLocation">Arrival Location</Label>
-                    <Select name="arrivalLocation">
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select airport" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PLACES.map(airport => (
-                          <SelectItem key={airport.value} value={airport.value}>
-                            {airport.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Trip Goals Section */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Trip Goals</h3>
+        <div className="max-w-2xl mx-auto">
+          <form onSubmit={handleSubmit} className="space-y-8">
+            {/* Travel Info Section */}
+            <Card className="max-w-2xl mx-auto">
+              <CardHeader>
+                <CardTitle className="text-xl font-semibold">Travel Info</CardTitle>
+                <CardDescription>Select your travel dates and locations</CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="tripGoals">What are your goals for this trip?</Label>
-                  <Textarea
-                    id="tripGoals"
-                    name="tripGoals"
-                    placeholder="Tell us about your trip goals..."
-                    className="min-h-[100px]"
-                  />
+                  <Label htmlFor="startDate">Start Date</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          'w-full justify-start text-left font-normal',
+                          !startDate && 'text-muted-foreground',
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {startDate ? format(startDate, 'PPP') : 'Select date'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus />
+                    </PopoverContent>
+                  </Popover>
                 </div>
-              </div>
 
-              {/* Flight Preferences Section */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Flight Preferences</h3>
+                <div className="space-y-2">
+                  <Label htmlFor="endDate">End Date</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          'w-full justify-start text-left font-normal',
+                          !endDate && 'text-muted-foreground',
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {endDate ? format(endDate, 'PPP') : 'Select date'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus />
+                    </PopoverContent>
+                  </Popover>
+                </div>
 
+                <div className="space-y-2">
+                  <Label htmlFor="departureLocation">Departure Location</Label>
+                  <Select name="departureLocation">
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select airport" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PLACES.map(airport => (
+                        <SelectItem key={airport.value} value={airport.value}>
+                          {airport.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="arrivalLocation">Arrival Location</Label>
+                  <Select name="arrivalLocation">
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select airport" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PLACES.map(airport => (
+                        <SelectItem key={airport.value} value={airport.value}>
+                          {airport.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Trip Goals Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-xl font-semibold">Trip Goals</CardTitle>
+                <CardDescription>What are your goals for this trip?</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Textarea
+                  id="tripGoals"
+                  name="tripGoals"
+                  placeholder="Tell us about your trip goals..."
+                  className="min-h-[100px]"
+                />
+              </CardContent>
+            </Card>
+
+            {/* Flight Preferences Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-xl font-medium">Flight Preferences</CardTitle>
+                <CardDescription>Choose your preferred flight options</CardDescription>
+              </CardHeader>
+
+              <CardContent className="space-y-6">
                 <div className="space-y-2">
                   <Label>Preferred Flight Times</Label>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:flex gap-4">
                     {FLIGHT_TIMES.map(time => (
                       <div key={time.value} className="flex items-center space-x-2">
                         <Checkbox id={time.value} name="preferredFlightTimes" value={time.value} />
@@ -242,9 +246,9 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                   </div>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-2">
                   <Label>Price vs. Flight Time Priority</Label>
-                  <div className="px-2">
+                  <div>
                     <Slider
                       name="flightPriority"
                       value={flightPriority}
@@ -258,105 +262,109 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                     </div>
                   </div>
                 </div>
-              </div>
+              </CardContent>
+            </Card>
 
-              {/* Accommodation Preferences Section */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Accommodation Preferences</h3>
+            {/* Accommodation Preferences Section */}
+            <Card>
+              <CardHeader className="text-xl font-medium">
+                <CardTitle>Accommodation Preferences</CardTitle>
+              </CardHeader>
 
-                <div className="space-y-4">
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Accommodation Type</Label>
+                  <RadioGroup
+                    name="accommodationType"
+                    value={accommodationType}
+                    onValueChange={value => setAccommodationType(value as 'hotel' | 'airbnb')}
+                    className="flex items-center gap-4"
+                  >
+                    <div className="flex items-center gap-1">
+                      <RadioGroupItem value="hotel" id="hotel" />
+                      <Label htmlFor="hotel">Hotel</Label>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <RadioGroupItem value="airbnb" id="airbnb" />
+                      <Label htmlFor="airbnb">AirBnB</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="priceRange">Price Range</Label>
+                  <Select name={`${accommodationType}PriceRange`}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select price range" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {HOTEL_PRICE_RANGES.map(range => (
+                        <SelectItem key={range.value} value={range.value}>
+                          {range.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {accommodationType === 'airbnb' && (
                   <div className="space-y-2">
-                    <Label>Accommodation Type</Label>
-                    <RadioGroup
-                      name="accommodationType"
-                      value={accommodationType}
-                      onValueChange={value => setAccommodationType(value as 'hotel' | 'airbnb')}
-                      className="flex flex-col space-y-1"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <RadioGroupItem value="hotel" id="hotel" />
-                        <Label htmlFor="hotel">Hotel</Label>
+                    <Label>Property Type</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox id="entirePlace" name="propertyType" value="entirePlace" />
+                        <Label htmlFor="entirePlace">Entire Place</Label>
                       </div>
-                      <div className="flex items-center space-x-3">
-                        <RadioGroupItem value="airbnb" id="airbnb" />
-                        <Label htmlFor="airbnb">AirBnB</Label>
-                      </div>
-                    </RadioGroup>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="priceRange">Price Range</Label>
-                    <Select name={`${accommodationType}PriceRange`}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select price range" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {HOTEL_PRICE_RANGES.map(range => (
-                          <SelectItem key={range.value} value={range.value}>
-                            {range.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {accommodationType === 'airbnb' && (
-                    <div className="space-y-2">
-                      <Label>Property Type</Label>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="flex items-center space-x-2">
-                          <Checkbox id="entirePlace" name="propertyType" value="entirePlace" />
-                          <Label htmlFor="entirePlace">Entire Place</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Checkbox id="privateRoom" name="propertyType" value="privateRoom" />
-                          <Label htmlFor="privateRoom">Private Room</Label>
-                        </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox id="privateRoom" name="propertyType" value="privateRoom" />
+                        <Label htmlFor="privateRoom">Private Room</Label>
                       </div>
                     </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Attraction Preferences Section */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Attraction Preferences</h3>
-                <div className="space-y-2">
-                  <Label>Interests</Label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {INTERESTS.map(interest => (
-                      <div key={interest.value} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={interest.value}
-                          name="interests"
-                          value={interest.value}
-                          checked={selectedInterests.includes(interest.value)}
-                          onCheckedChange={checked => {
-                            setSelectedInterests(
-                              checked
-                                ? [...selectedInterests, interest.value]
-                                : selectedInterests.filter(i => i !== interest.value),
-                            );
-                          }}
-                        />
-                        <Label htmlFor={interest.value}>{interest.label}</Label>
-                      </div>
-                    ))}
                   </div>
-                </div>
-              </div>
+                )}
+              </CardContent>
+            </Card>
 
-              <Button type="submit" className="w-full" disabled={submitting}>
-                {submitting ? 'Submitting...' : 'Plan My Trip'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+            {/* Attraction Preferences Section */}
+            <Card>
+              <CardHeader className="text-xl font-medium">
+                <CardTitle>Attraction Preferences</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Label>Interests</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {INTERESTS.map(interest => (
+                    <div key={interest.value} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={interest.value}
+                        name="interests"
+                        value={interest.value}
+                        checked={selectedInterests.includes(interest.value)}
+                        onCheckedChange={checked => {
+                          setSelectedInterests(
+                            checked
+                              ? [...selectedInterests, interest.value]
+                              : selectedInterests.filter(i => i !== interest.value),
+                          );
+                        }}
+                      />
+                      <Label htmlFor={interest.value}>{interest.label}</Label>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Button type="submit" className="w-full py-5" disabled={submitting}>
+              {submitting ? 'Submitting...' : 'Plan My Trip'}
+            </Button>
+          </form>
+        </div>
       ) : (
-        <Card className="min-h-[400px]">
+        <Card className="min-h-[400px] max-w-2xl mx-auto grid place-items-center">
           <CardContent className="flex flex-col items-center justify-center h-full">
-            <div className="flex flex-col items-center space-y-2 mt-12">
-              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            <div className="flex items-center gap-2 mt-12">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
               <p className="text-lg text-muted-foreground animate-fade-in">{loadingMessage}</p>
             </div>
           </CardContent>

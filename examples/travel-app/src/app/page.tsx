@@ -137,11 +137,12 @@ export const travelAgent = new Agent({
         <div className="flex flex-1">
           <main className="flex-1 bg-gray-50">
             <div className="container mx-auto px-4 py-8">
-              <h1 className="text-4xl font-bold text-center">Travel Planner</h1>
-              <h2 className="text-xl font-bold text-center mb-4">Agent example</h2>
+              <h1 className="text-4xl font-semibold text-center">TravelAI</h1>
+              <p className="text-sm rounded-full px-2.5 mx-auto bg-gray-100 p-1 w-fit text-center mb-4">
+                Agent example
+              </p>
               <p className="text-gray-600 text-center max-w-2xl mx-auto mb-8">
-                This example uses a simple Mastra agent to help plan a trip. It provides tools (API calls) for the agent
-                to use to help plan the trip and allows the agent to decide what tool calls to use.
+                Let our AI help you plan the perfect trip, with agents
               </p>
               <TravelForm executor="agent" sidebarContent={sidebarContent} />
             </div>
