@@ -5,7 +5,7 @@ import { CopyButton } from '@shared/components/ui/copy-button';
 import { Header } from '@shared/components/ui/header';
 import { Skeleton } from '@shared/components/ui/skeleton';
 import { Text } from '@shared/components/ui/text';
-import { useAgent, useAgents } from '@shared/hooks/use-agents';
+import { useAgent } from '@shared/hooks/use-agents';
 import { useExecuteTool } from '@shared/hooks/use-execute-tools';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { useState } from 'react';
@@ -14,47 +14,24 @@ import { parse } from 'superjson';
 
 const Tool = () => {
   const { toolId, agentId } = useParams();
-  const { agents, isLoading: isAgentsLoading } = useAgents();
+
   const { executeTool, isExecutingTool } = useExecuteTool();
   const [result, setResult] = useState<any>(null);
 
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
-  const tool = agent?.tools[toolId as keyof typeof agent.tools];
 
-  if (!agent) {
-    console.log(`Agent ${agentId} not found`);
-    return null;
-  }
-
-  if (!tool) {
-    console.log(`Tool ${toolId} not found`);
-    return null;
-  }
+  const tool = Object.values(agent?.tools ?? {}).find(tool => tool.id === toolId);
 
   const handleExecuteTool = async (data: any) => {
-    if (isAgentsLoading) return;
-
-    const agent = Object.entries(agents)
-      .map(([key, agent]) => ({
-        ...agent,
-        key,
-      }))
-      .find(agent => Object.values(agent.tools).find(tool => tool.id === tool.id));
-
-    if (!agent) {
-      console.log(`Agent for tool ${tool.id} not found`);
-      return;
-    }
+    if (!agent || !tool) return;
 
     const result = await executeTool({
-      agentId: agent.key,
+      agentId: agentId!,
       toolId: tool.id,
       input: data,
     });
     setResult(result);
   };
-
-  const zodInputSchema = resolveSerializedZodOutput(jsonSchemaToZod(parse(tool.inputSchema)));
 
   if (isAgentLoading) {
     return (
@@ -77,6 +54,12 @@ const Tool = () => {
       </div>
     );
   }
+
+  if (!agent || !tool) {
+    return null;
+  }
+
+  const zodInputSchema = resolveSerializedZodOutput(jsonSchemaToZod(parse(tool.inputSchema)));
 
   return (
     <div className="flex flex-col h-full w-full bg-mastra-bg-1">
