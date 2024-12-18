@@ -4,7 +4,9 @@
   "main": "dist/index.js",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "test",
+    "test-files"
   ],
   "bin": {
     "dane": "./dist/index.js"
