@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.7
+
+### Patch Changes
+
+- c67d62b: Add required files to bundle
+
 ## 0.0.2-alpha.6
 
 ### Patch Changes

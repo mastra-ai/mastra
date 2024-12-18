@@ -1,5 +1,12 @@
 # mastra
 
+## 0.1.57-alpha.50
+
+### Patch Changes
+
+- ba2437d: one central cli dev playground app
+- 8890cac: group mastra dev playground tools
+
 ## 0.1.57-alpha.49
 
 ### Patch Changes
