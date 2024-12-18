@@ -69,111 +69,6 @@ const validateBody = async (body: Record<string, unknown>): Promise<ValidationRe
   return { ok: true };
 };
 
-// Serve static files for homepage
-app.use(
-  '/homepage-assets',
-  express.static(join(___dirname, 'homepage/homepage-assets'), {
-    setHeaders: (res: Response, path: string) => {
-      // Set correct MIME types
-      if (path.endsWith('.js')) {
-        res.set('Content-Type', 'application/javascript');
-      } else if (path.endsWith('.css')) {
-        res.set('Content-Type', 'text/css');
-      }
-    },
-  }),
-);
-
-// Serve other static files
-app.use(express.static(join(___dirname, 'homepage')));
-
-/**
- * GET /
- * @summary Redirect to agents list interface
- * @tags System
- * @return {void} 302 - Redirect to agents page
- */
-app.get('/', (_req: Request, res: Response) => {
-  res.redirect('/agents');
-});
-
-/**
- * GET /agents
- * @summary Serve homepage with agents list interface
- * @tags System
- * @return  {html} 200 - Agent list interface
- */
-app.get('/agents', (_req: Request, res: Response) => {
-  res.sendFile(join(___dirname, 'homepage/index.html'));
-});
-
-// Serve static files for agent page
-app.use(
-  '/agent-chat-assets',
-  express.static(join(___dirname, 'agent-chat/agent-chat-assets'), {
-    setHeaders: (res: Response, path: string) => {
-      // Set correct MIME types
-      if (path.endsWith('.js')) {
-        res.set('Content-Type', 'application/javascript');
-      } else if (path.endsWith('.css')) {
-        res.set('Content-Type', 'text/css');
-      }
-    },
-  }),
-);
-
-// Serve other static files
-app.use(express.static(join(___dirname, 'agent-chat')));
-
-/**
- * GET /agents/{agentId}
- * @summary Serve agent chat interface
- * @tags Agent
- * @param {string} agentId.path.required - Agent identifier
- * @return {html} 200 - Agent chat interface
- */
-app.get('/agents/:agentId', (_req: Request, res: Response) => {
-  res.sendFile(join(___dirname, 'agent-chat/index.html'));
-});
-
-// serve static files for playground
-app.use(
-  '/playground-assets',
-  express.static(join(__dirname, 'playground/playground-assets'), {
-    setHeaders: (res: Response, path: string) => {
-      // Set correct MIME types
-      if (path.endsWith('.js')) {
-        res.set('Content-Type', 'application/javascript');
-      } else if (path.endsWith('.css')) {
-        res.set('Content-Type', 'text/css');
-      }
-    },
-  }),
-);
-
-// Serve other static files
-app.use(express.static(join(__dirname, 'playground')));
-
-/**
- * GET /playground
- * @summary Serve playground page
- * @tags System
- * @return  {html} 200 - Playground page
- */
-app.get('/playground', (_req: Request, res: Response) => {
-  res.sendFile(join(__dirname, 'playground/index.html'));
-});
-
-/**
- * GET /playground routes
- * @summary Sereve all playground routes
- * @tags System
- * @return  {html} 200 - Playground
- */
-app.get('/playground/*', (_req: Request, res: Response) => {
-  res.sendFile(join(__dirname, 'playground/index.html'));
-});
-
 /**
  * GET /api/agents/{agentId}
  * @summary Get agent by ID
@@ -933,6 +828,34 @@ app.get('/api/logs/:runId', async (req: Request, res: Response) => {
     res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting logs' });
     return;
   }
+});
+
+// serve static files for playground
+app.use(
+  '/assets',
+  express.static(join(__dirname, 'playground/assets'), {
+    setHeaders: (res: Response, path: string) => {
+      // Set correct MIME types
+      if (path.endsWith('.js')) {
+        res.set('Content-Type', 'application/javascript');
+      } else if (path.endsWith('.css')) {
+        res.set('Content-Type', 'text/css');
+      }
+    },
+  }),
+);
+
+// Serve other static files
+app.use(express.static(join(__dirname, 'playground')));
+
+/**
+ * GET /playground
+ * @summary Serve playground
+ * @tags System
+ * @return  {html} 200 - Playground
+ */
+app.get('*', (_req: Request, res: Response) => {
+  res.sendFile(join(__dirname, 'playground/index.html'));
 });
 
 export const handler = serverless(app);

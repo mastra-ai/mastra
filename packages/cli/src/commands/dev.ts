@@ -18,23 +18,9 @@ const __dirname = path.dirname(__filename);
 
 export async function dev({ port, env, dir }: { dir?: string; port: number; env: Record<string, any> }) {
   const dotMastraPath = join(process.cwd(), '.mastra');
-  const agentChatServePath = join(dotMastraPath, 'agent-chat');
-  const homepageServePath = join(dotMastraPath, 'homepage');
   const playgroundServePath = join(dotMastraPath, 'playground');
   const key = env[0]?.name;
   const value = env[0]?.value;
-
-  // Ensure agent-chat directory exists
-  await fsExtra.ensureDir(agentChatServePath);
-  await fsExtra.ensureDir(homepageServePath);
-  // Copy agent-chat dist files
-  await fsExtra.copy(join(path.dirname(path.dirname(__dirname)), 'src/chat/agent/dist'), agentChatServePath, {
-    overwrite: true,
-  });
-  // Copy homepage dist files
-  await fsExtra.copy(join(path.dirname(path.dirname(__dirname)), 'src/homepage/dist'), homepageServePath, {
-    overwrite: true,
-  });
 
   // Copy playground dist files
   await fsExtra.copy(join(path.dirname(path.dirname(__dirname)), 'src/playground/dist'), playgroundServePath, {

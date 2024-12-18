@@ -1,4 +1,5 @@
-import { Bot, Play } from 'lucide-react';
+import { Bot, DraftingCompass } from 'lucide-react';
+import { useLocation, Link } from 'react-router';
 
 import { cn } from '../../lib/utils';
 
@@ -16,15 +17,14 @@ const links = [
   //   icon: Workflow, //import from lucide-react
   // },
   {
-    name: 'Playground',
-    url: '/playground',
-    icon: Play,
+    name: 'Tools',
+    url: '/tools',
+    icon: DraftingCompass,
   },
 ];
 
 export const Sidebar = () => {
-  const pathname = window.location.pathname;
-  const path = pathname.split('/')[1];
+  const { pathname: path } = useLocation();
 
   return (
     <div className="relative z-20 h-full text-mastra-el-6">
@@ -32,7 +32,7 @@ export const Sidebar = () => {
         <div className="flex items-center justify-between">
           <div className="flex gap-2 px-2 items-center">
             <Mastra />
-            <p className="text-medium text-sm  gradient py-[0.38rem] font-tasa">Mastra</p>
+            <p className="text-medium text-sm  gradient py-[0.38rem] font-tasa">Mastra Playground</p>
           </div>
         </div>
 
@@ -47,8 +47,8 @@ export const Sidebar = () => {
                 pagePath === lowercasedPagePath ||
                 (link.name === 'Agents' && path === '');
               return (
-                <a
-                  href={link.url}
+                <Link
+                  to={link.url}
                   className={cn(
                     'flex cursor-pointer w-full px-2 items-center focus-visible:outline-none transition-colors focus-visible:ring-1 focus-visible:ring-mastra-border-4 gap-3 rounded-xs group text-small hover:bg-mastra-el-6/5',
                     isActive ? 'bg-mastra-el-6/5' : '',
@@ -68,7 +68,7 @@ export const Sidebar = () => {
                   >
                     {link.name}
                   </p>
-                </a>
+                </Link>
               );
             })}
           </div>

@@ -1,4 +1,4 @@
-import { ScrollArea } from '@shared/components/ui/scroll-area';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export function AgentEndpoints({ agentId }: { agentId: string }) {
   return (
