@@ -1,5 +1,13 @@
 # mastra
 
+## 0.1.57-alpha.51
+
+### Patch Changes
+
+- 5cdfb88: add getWorkflows method to core, add runId to workflow logs, update workflow starter file, add workflows page with table and workflow page with info, endpoints and logs
+- Updated dependencies [5cdfb88]
+  - @mastra/core@0.1.27-alpha.41
+
 ## 0.1.57-alpha.50
 
 ### Patch Changes
