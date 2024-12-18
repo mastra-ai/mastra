@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.40
+
+### Patch Changes
+
+- 9029796: add more logs to agent for debugging
+
 ## 0.1.27-alpha.39
 
 ### Patch Changes
