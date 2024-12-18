@@ -1,10 +1,7 @@
 'use client';
 
-import { MapPin, Star, Wifi, Car, Coffee, Phone } from 'lucide-react';
+import { Car, Coffee, MapPin, Phone, Star, Wifi } from 'lucide-react';
 
-import Image from 'next/image';
-
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 
 interface HotelCardProps {
