@@ -60,7 +60,7 @@ const Tool = () => {
 
   return (
     <div className="flex flex-col h-full w-full bg-mastra-bg-1">
-      <Header title={`Dev Tool - ${toolId}`} />
+      <Header title={`Tool - ${toolId}`} />
       <div className="w-full h-full grid grid-cols-[1fr_2fr] p-2 gap-2">
         <div className="flex flex-col gap-4 border-[0.5px] border-mastra-border-1 rounded-[0.25rem] bg-mastra-bg-2 p-4 py-6">
           <Text variant="secondary" className="text-mastra-el-3 px-4" size="xs">
