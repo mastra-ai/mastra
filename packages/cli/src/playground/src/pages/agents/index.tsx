@@ -47,8 +47,10 @@ function Agents() {
               ) : (
                 Object.entries(agents).map(([key, agent]) => (
                   <TableRow key={key} className="border-b-gray-6 cursor-pointer border-b-[0.1px] text-[0.8125rem]">
-                    <TableCell className="flex items-center justify-center">
-                      <Bot className="h-4 w-4 text-mastra-el-5" />
+                    <TableCell>
+                      <div className="h-8 w-full flex items-center justify-center">
+                        <Bot className="h-4 w-4 text-mastra-el-5" />
+                      </div>
                     </TableCell>
                     <TableCell className="font-medium text-mastra-el-5">{agent.name}</TableCell>
                     <TableCell className="truncate w-1/2 max-w-[500px] text-mastra-el-5">

@@ -28,7 +28,7 @@ function Workflow() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <Header title={`Mastra Workflow: ${workflow?.name}`} />
+      <Header title={`Workflow: ${workflow?.name}`} />
       <main className="flex-1 relative grid grid-cols-[1fr_400px] divide-x">
         <div className="p-4">{/* TODO: Add workflow canvas here */}</div>
         <div className="flex flex-col">

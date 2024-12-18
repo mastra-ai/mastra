@@ -190,6 +190,31 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
   }
 });
 
+app.get('/api/workflows', async (_req: Request, res: Response) => {
+  try {
+    const workflows = mastra.getWorkflows();
+    res.json(workflows);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting workflows', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting workflows' });
+    return;
+  }
+});
+
+app.get('/api/workflows/:workflowId', async (req: Request, res: Response) => {
+  try {
+    const workflowId = req.params.workflowId;
+    const workflow = mastra.getWorkflow(workflowId);
+    res.json(workflow);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting workflow', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting workflow' });
+    return;
+  }
+});
+
 app.post('/api/workflows/:workflowId/execute', async (req: Request, res: Response) => {
   try {
     const workflowId = req.params.workflowId;

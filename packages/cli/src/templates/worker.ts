@@ -288,6 +288,47 @@ router.post('/api/agents/:agentId/stream-object', async ({ params, json }: IRequ
   }
 });
 
+router.get('/api/workflows', async () => {
+  try {
+    const workflows = mastra.getWorkflows();
+    return new Response(JSON.stringify(workflows), {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting workflows', apiError);
+    return new Response(JSON.stringify({ error: apiError.message || 'Error getting workflows' }), {
+      status: apiError.status || 500,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  }
+});
+
+router.get('/api/workflows/:workflowId', async ({ params }: IRequest) => {
+  try {
+    const workflowId = decodeURIComponent(params.workflowId);
+    const workflow = mastra.getWorkflow(workflowId);
+    return new Response(JSON.stringify(workflow), {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting workflow', apiError);
+    return new Response(JSON.stringify({ error: apiError.message || 'Error getting workflow' }), {
+      status: apiError.status || 500,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  }
+});
+
 router.post('/workflows/:workflowId/execute', async ({ params, json }: IRequest) => {
   try {
     const workflowId = decodeURIComponent(params.workflowId);
