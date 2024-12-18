@@ -19,6 +19,14 @@ interface HotelCardProps {
   phoneNumber: string;
 }
 
+const renderStars = (rating: number) => {
+  return Array(5)
+    .fill(0)
+    .map((_, index) => (
+      <Star key={index} className={`h-4 w-4 ${index < rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />
+    ));
+};
+
 export function HotelCard({
   name,
   location,
@@ -30,17 +38,7 @@ export function HotelCard({
   amenities,
   phoneNumber,
 }: HotelCardProps) {
-  const renderStars = (rating: number) => {
-    return Array(5)
-      .fill(0)
-      .map((_, index) => (
-        <Star
-          key={index}
-          className={`h-4 w-4 ${index < rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`}
-        />
-      ));
-  };
-
+  console.log(rating);
   const renderAmenityIcon = (amenity: string) => {
     const amenityIcons: { [key: string]: JSX.Element } = {
       wifi: <Wifi className="h-4 w-4" />,
@@ -79,7 +77,7 @@ export function HotelCard({
         {/* Amenities */}
         <div className="flex flex-wrap gap-4">
           {amenities.map(amenity => (
-            <div key={amenity} className="flex items-center space-x-1">
+            <div key={amenity} className="flex items-center gap-1 px-3 rounded-full p-1.5 bg-gray-100">
               {renderAmenityIcon(amenity)}
               <span className="text-sm">{amenity}</span>
             </div>
@@ -89,7 +87,7 @@ export function HotelCard({
         {/* Contact */}
         <div className="flex items-center space-x-2 text-sm">
           <Phone className="h-4 w-4" />
-          <span>{phoneNumber}</span>
+          <span>{phoneNumber !== '<UNKNOWN>' ? phoneNumber : 'N/A'}</span>
         </div>
 
         {/* Price only - remove Book Now button */}
