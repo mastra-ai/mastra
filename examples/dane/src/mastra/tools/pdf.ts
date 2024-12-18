@@ -38,14 +38,12 @@ export const readPDF = createTool({
         throw new Error('Error parsing PDF');
       }
 
-      console.log({data})
-
       console.log(chalk.blue('\n'));
       console.log(chalk.blue('PDF Information:'));
       console.log(chalk.blue('-----------------'));
       console.log(chalk.blue(`Number of pages: ${data.numpages}`));
 
-      return { content: data.text || '' };
+      return { content: data.text };
     } catch (e) {
       return { content: 'Error scanning PDF' };
     }
