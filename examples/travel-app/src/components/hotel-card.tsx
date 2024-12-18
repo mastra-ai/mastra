@@ -39,6 +39,7 @@ export function HotelCard({
   phoneNumber,
 }: HotelCardProps) {
   console.log(rating);
+
   const renderAmenityIcon = (amenity: string) => {
     const amenityIcons: { [key: string]: JSX.Element } = {
       wifi: <Wifi className="h-4 w-4" />,
