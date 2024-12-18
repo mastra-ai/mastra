@@ -11,7 +11,7 @@ function App() {
       <BrowserRouter basename="/playground">
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/tools/:toolId" element={<Tool />} />
+          <Route path="/:agentId/tools/:toolId" element={<Tool />} />
         </Routes>
       </BrowserRouter>
     </Layout>

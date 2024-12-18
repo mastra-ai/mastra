@@ -3,49 +3,61 @@ import { resolveSerializedZodOutput } from '@shared/components/dynamic-form/util
 import { CodeBlockDemo } from '@shared/components/ui/code-block';
 import { CopyButton } from '@shared/components/ui/copy-button';
 import { Header } from '@shared/components/ui/header';
+import { Skeleton } from '@shared/components/ui/skeleton';
 import { Text } from '@shared/components/ui/text';
-import { useAgentTools } from '@shared/hooks/use-agent-tools';
-import { useAgents } from '@shared/hooks/use-agents';
+import { useAgent } from '@shared/hooks/use-agents';
+import { useExecuteTool } from '@shared/hooks/use-execute-tools';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { useState } from 'react';
 import { useParams } from 'react-router';
 import { parse } from 'superjson';
 
 const Tool = () => {
-  const { toolId } = useParams();
-  const { agents, isLoading: isAgentsLoading } = useAgents();
-  const { tools, executeTool, isExecutingTool } = useAgentTools();
+  const { toolId, agentId } = useParams();
+
+  const { executeTool, isExecutingTool } = useExecuteTool();
   const [result, setResult] = useState<any>(null);
 
-  const tool = Object.values(tools).find(tool => tool.id === toolId);
+  const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
 
-  if (!tool) {
-    console.log(`Tool ${toolId} not found`);
-    return null;
-  }
+  const tool = Object.values(agent?.tools ?? {}).find(tool => tool.id === toolId);
 
   const handleExecuteTool = async (data: any) => {
-    if (isAgentsLoading) return;
-
-    const agent = Object.entries(agents)
-      .map(([key, agent]) => ({
-        ...agent,
-        key,
-      }))
-      .find(agent => Object.values(agent.tools).find(tool => tool.id === tool.id));
-
-    if (!agent) {
-      console.log(`Agent for tool ${tool.id} not found`);
-      return;
-    }
+    if (!agent || !tool) return;
 
     const result = await executeTool({
-      agentId: agent.key,
+      agentId: agentId!,
       toolId: tool.id,
       input: data,
     });
     setResult(result);
   };
+
+  if (isAgentLoading) {
+    return (
+      <div className="flex flex-col h-full w-full bg-mastra-bg-1">
+        <Header title="Loading..." />
+        <div className="w-full h-full grid grid-cols-[1fr_2fr] p-2 gap-2">
+          <div className="flex flex-col gap-4 border-[0.5px] border-mastra-border-1 rounded-[0.25rem] bg-mastra-bg-2 p-4 py-6">
+            <Text variant="secondary" className="text-mastra-el-3 px-4" size="xs">
+              Input
+            </Text>
+            <Skeleton className="h-[200px] w-full" />
+          </div>
+          <div className="flex flex-col gap-4 border-[0.5px] border-mastra-border-1 rounded-[0.25rem] bg-mastra-bg-2 p-4 py-6">
+            <Text variant="secondary" className="text-mastra-el-3 px-4" size="xs">
+              Output
+            </Text>
+            <Skeleton className="h-[200px] w-full" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!agent || !tool) {
+    return null;
+  }
 
   const zodInputSchema = resolveSerializedZodOutput(jsonSchemaToZod(parse(tool.inputSchema)));
 
