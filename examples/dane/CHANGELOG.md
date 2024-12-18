@@ -1,5 +1,19 @@
 # @mastra/dane
 
+## 0.0.2-alpha.5
+
+### Patch Changes
+
+- 6101f2d: Fix module incompatibility, and dane cli build
+- Updated dependencies [2b01511]
+- Updated dependencies [6101f2d]
+  - @mastra/core@0.1.27-alpha.39
+  - @mastra/github@1.0.3-alpha.23
+  - @mastra/rag@0.0.2-alpha.23
+  - @mastra/firecrawl@1.0.4-alpha.24
+  - @mastra/engine@0.0.5-alpha.33
+  - @mastra/memory@0.0.2-alpha.18
+
 ## 0.0.2-alpha.4
 
 ### Patch Changes

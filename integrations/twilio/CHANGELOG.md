@@ -1,5 +1,12 @@
 # @mastra/twilio
 
+## 1.0.1-alpha.18
+
+### Patch Changes
+
+- Updated dependencies [2b01511]
+  - @mastra/core@0.1.27-alpha.39
+
 ## 1.0.1-alpha.17
 
 ### Patch Changes
