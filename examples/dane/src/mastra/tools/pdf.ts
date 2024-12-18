@@ -2,8 +2,10 @@ import { createTool } from '@mastra/core';
 import chalk from 'chalk';
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
-import pdf from 'pdf-parse';
+import { DataEntry, PdfReader } from "pdfreader";
 import { z } from 'zod';
+
+const pdfReader = new PdfReader();
 
 export const readPDF = createTool({
   id: 'readPDF',
@@ -31,14 +33,23 @@ export const readPDF = createTool({
       const dataBuffer = readFileSync(pdfPath);
 
       // Parse PDF content
-      const data = await pdf(dataBuffer);
+      const data: DataEntry = await new Promise((resolve, reject) => {
+        pdfReader.parseBuffer(dataBuffer, (err, item) => {
+          if (err) reject(err);
+          else resolve(item);
+        });
+      });
+
+      if (!data) {
+        throw new Error('Error parsing PDF');
+      }
 
       console.log(chalk.blue('\n'));
       console.log(chalk.blue('PDF Information:'));
       console.log(chalk.blue('-----------------'));
-      console.log(chalk.blue(`Number of pages: ${data.numpages}`));
+      console.log(chalk.blue(`Number of pages: ${data.page}`));
 
-      return { content: data.text };
+      return { content: data.text || '' };
     } catch (e) {
       return { content: 'Error scanning PDF' };
     }

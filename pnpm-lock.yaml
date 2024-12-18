@@ -541,6 +541,9 @@ importers:
       commander:
         specifier: ^12.1.0
         version: 12.1.0
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
       execa:
         specifier: ^9.3.1
         version: 9.5.2
@@ -559,6 +562,9 @@ importers:
       pdf-parse:
         specifier: ^1.1.1
         version: 1.1.1
+      pdfreader:
+        specifier: ^3.0.6
+        version: 3.0.6
       playwright:
         specifier: ^1.49.1
         version: 1.49.1
@@ -12692,6 +12698,17 @@ packages:
   pdf-parse@1.1.1:
     resolution: {integrity: sha512-v6ZJ/efsBpGrGGknjtq9J/oC8tZWq0KWL5vQrk2GlzLEQPUDB1ex+13Rmidl1neNN358Jn9EHZw5y07FFtaC7A==}
     engines: {node: '>=6.8.1'}
+
+  pdf2json@3.1.4:
+    resolution: {integrity: sha512-rS+VapXpXZr+5lUpHmRh3ugXdFXp24p1RyG24yP1DMpqP4t0mrYNGpLtpSbWD42PnQ59GIXofxF+yWb7M+3THg==}
+    engines: {node: '>=18.12.1', npm: '>=8.19.2'}
+    hasBin: true
+    bundledDependencies:
+      - '@xmldom/xmldom'
+
+  pdfreader@3.0.6:
+    resolution: {integrity: sha512-l1HqEYtoFTiVumYCMR9YO6EST/w4gfenfnKG7n7ENJNc1GOTzI8hjodvziWPHeoL6jsDli4QiS1v3ITtmNiadw==}
+    engines: {node: '>=14'}
 
   peberminta@0.9.0:
     resolution: {integrity: sha512-XIxfHpEuSJbITd1H3EeQwpcZbTLHc+VVr8ANI9t5sit565tsI4/xK3KWTUFE2e6QiangUkh3B0jihzmGnNrRsQ==}
@@ -29032,6 +29049,12 @@ snapshots:
       node-ensure: 0.0.0
     transitivePeerDependencies:
       - supports-color
+
+  pdf2json@3.1.4: {}
+
+  pdfreader@3.0.6:
+    dependencies:
+      pdf2json: 3.1.4
 
   peberminta@0.9.0: {}
 
