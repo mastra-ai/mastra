@@ -1,16 +1,18 @@
-import { DynamicForm } from '@shared/components/dynamic-form';
-import { resolveSerializedZodOutput } from '@shared/components/dynamic-form/utils';
-import { CodeBlockDemo } from '@shared/components/ui/code-block';
-import { CopyButton } from '@shared/components/ui/copy-button';
-import { Header } from '@shared/components/ui/header';
-import { Skeleton } from '@shared/components/ui/skeleton';
-import { Text } from '@shared/components/ui/text';
-import { useAgent } from '@shared/hooks/use-agents';
-import { useExecuteTool } from '@shared/hooks/use-execute-tools';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { useState } from 'react';
 import { useParams } from 'react-router';
 import { parse } from 'superjson';
+
+import { DynamicForm } from '@/components/dynamic-form';
+import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
+import { CodeBlockDemo } from '@/components/ui/code-block';
+import { CopyButton } from '@/components/ui/copy-button';
+import { Header } from '@/components/ui/header';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Text } from '@/components/ui/text';
+
+import { useAgent } from '@/hooks/use-agents';
+import { useExecuteTool } from '@/hooks/use-execute-tools';
 
 const Tool = () => {
   const { toolId, agentId } = useParams();
@@ -37,7 +39,7 @@ const Tool = () => {
     return (
       <div className="flex flex-col h-full w-full bg-mastra-bg-1">
         <Header title="Loading..." />
-        <div className="w-full h-full grid grid-cols-[1fr_2fr] p-2 gap-2">
+        <div className="w-full h-full grid grid-cols-[300px_1fr] p-2 gap-2">
           <div className="flex flex-col gap-4 border-[0.5px] border-mastra-border-1 rounded-[0.25rem] bg-mastra-bg-2 p-4 py-6">
             <Text variant="secondary" className="text-mastra-el-3 px-4" size="xs">
               Input

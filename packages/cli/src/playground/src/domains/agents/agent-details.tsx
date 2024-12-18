@@ -1,9 +1,13 @@
-import { ScrollArea } from '@shared/components/ui/scroll-area';
-import { Skeleton } from '@shared/components/ui/skeleton';
-import { useAgent } from '@shared/hooks/use-agents';
+import { useNavigate } from 'react-router';
+
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
+
+import { useAgent } from '@/hooks/use-agents';
 
 export function AgentDetails({ agentId }: { agentId: string }) {
   const { isLoading, agent } = useAgent(agentId);
+  const navigate = useNavigate();
 
   if (isLoading) {
     return (
@@ -61,9 +65,15 @@ export function AgentDetails({ agentId }: { agentId: string }) {
           <p className="text-mastra-el-3">Tools</p>
           <div className="flex flex-col gap-2 text-mastra-el-5">
             {Object.entries(agent?.tools ?? {}).map(([toolKey, tool]) => (
-              <a key={toolKey} href={`/playground/${agentId}/tools/${tool.id}`} className="no-underline">
+              <span
+                key={toolKey}
+                onClick={() => {
+                  navigate(`/tools/${agentId}/${tool.id}`);
+                }}
+                className="no-underline"
+              >
                 {tool.id}
-              </a>
+              </span>
             ))}
           </div>
         </div>

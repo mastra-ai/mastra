@@ -1,11 +1,14 @@
-import { Header } from '@shared/components/ui/header';
-import { Skeleton } from '@shared/components/ui/skeleton';
-import { useAgent, useAgents } from '@shared/hooks/use-agents';
-import { cn } from '@shared/lib/utils';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 
-const Home = () => {
+import { Header } from '@/components/ui/header';
+import { Skeleton } from '@/components/ui/skeleton';
+
+import { cn } from '@/lib/utils';
+
+import { useAgent, useAgents } from '@/hooks/use-agents';
+
+const Tools = () => {
   const { agents, isLoading: isLoadingAgents } = useAgents();
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [isDevTools, setIsDevTools] = useState(false);
@@ -22,7 +25,7 @@ const Home = () => {
   if (isLoadingAgents) {
     return (
       <div className="flex flex-col h-full w-full">
-        <Header title="Playground" />
+        <Header title="Tools" />
         <div className="w-full h-full grid grid-cols-[300px_1fr] py-6 px-4">
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
@@ -62,7 +65,7 @@ const Home = () => {
 
   return (
     <div className="flex flex-col h-full w-full ">
-      <Header title={`Playground`} />
+      <Header title={`Tools`} />
       <div className="w-full h-full grid grid-cols-[300px_1fr]  ">
         <div className="w-full h-full border-r-[0.5px] border-mastra-border-1 py-6 px-4">
           <ul className=" flex flex-col gap-4">
@@ -146,7 +149,7 @@ const Home = () => {
               Object.entries(agent?.tools ?? {}).map(([name, tool], index) => (
                 <div
                   onClick={() => {
-                    navigate(`/${selectedAgentId}/tools/${tool.id}`);
+                    navigate(`/tools/${selectedAgentId}/${tool.id}`);
                   }}
                   key={index}
                   className=" hover:bg-mastra-bg-4/80 transition-colors flex flex-col  gap-[0.62rem] bg-mastra-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] cursor-pointer border-[0.5px] border-mastra-border-1"
@@ -163,4 +166,4 @@ const Home = () => {
   );
 };
 
-export default Home;
+export default Tools;
