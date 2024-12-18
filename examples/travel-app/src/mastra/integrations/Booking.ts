@@ -75,6 +75,7 @@ export class Booking {
                     pricePerNight: hotel.property.priceBreakdown.grossPrice.value / numberOfNights,
                     imageUrl: hotel.property.photoUrls[0],
                     description: hotel.accessibilityLabel,
+                    reviewScore: hotel.property.reviewScore,
                     amenities: [],
                     phoneNumber: '',
                 }),
