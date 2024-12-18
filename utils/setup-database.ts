@@ -1,6 +1,6 @@
 import { config } from 'dotenv';
 
-import { runMigrations } from '../packages/engine/dist/postgres/migrate';
+import { migrate } from '../packages/cli/src/commands/engine/migrate';
 
 config();
 
@@ -10,7 +10,7 @@ async function setupDatabase() {
     console.log('dbUrl', dbUrl);
 
     console.log('Running migrations...');
-    await runMigrations(dbUrl);
+    await migrate(dbUrl);
     console.log('Migrations completed successfully');
 
     console.log('Database setup completed successfully');
