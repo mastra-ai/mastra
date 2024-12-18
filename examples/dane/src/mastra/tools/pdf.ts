@@ -34,10 +34,6 @@ export const readPDF = createTool({
       // Parse PDF content
       const data = await pdfParse(dataBuffer);
 
-      if (!data) {
-        throw new Error('Error parsing PDF');
-      }
-
       console.log(chalk.blue('\n'));
       console.log(chalk.blue('PDF Information:'));
       console.log(chalk.blue('-----------------'));
