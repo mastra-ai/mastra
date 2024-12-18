@@ -9,46 +9,14 @@ import { HotelCard } from '@/components/hotel-card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
+import { TravelSchemaProps } from './utils';
+
 interface TravelResultsProps {
-  travelData: {
-    flight: {
-      airline: string;
-      flightNumber: string;
-      departureTime: string;
-      arrivalTime: string;
-      duration: string;
-      price: number;
-      stops: number;
-      departureAirport: string;
-      arrivalAirport: string;
-      departureCity: string;
-      arrivalCity: string;
-    };
-    hotel: {
-      name: string;
-      rating: number;
-      pricePerNight: number;
-      location: string;
-      address: string;
-      description: string;
-      amenities: string[];
-      imageUrl: string;
-      phoneNumber: string;
-    };
-    attractions: Array<{
-      name: string;
-      description: string;
-      rating: number;
-      price: number;
-      imageUrl: string;
-      location: string;
-    }>;
-  };
+  travelData: TravelSchemaProps;
 }
 
 export function TravelResults({ travelData }: TravelResultsProps) {
   const [showDialog, setShowDialog] = useState(false);
-
   return (
     <div className="space-y-8">
       <div className="space-y-4">
@@ -57,8 +25,14 @@ export function TravelResults({ travelData }: TravelResultsProps) {
         <div className="space-y-4">
           <h3 className="text-xl font-semibold">Flights</h3>
           <div className="grid gap-4">
-            <FlightCard {...travelData.flight} />
-            {/* Assuming return flight details are part of the structured output */}
+            <div>
+              <div className="mb-2 text-sm font-medium text-muted-foreground">Outbound Flight</div>
+              <FlightCard {...travelData.flights.outbound} />
+            </div>
+            <div>
+              <div className="mb-2 text-sm font-medium text-muted-foreground">Return Flight</div>
+              <FlightCard {...travelData.flights.return} />
+            </div>
           </div>
         </div>
 

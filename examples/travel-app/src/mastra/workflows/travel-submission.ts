@@ -32,10 +32,10 @@ function createArrangementStep({
   choiceCount,
 }: {
   choiceCount: string;
-  originId: 'departureLocation' | 'departureCityId';
-  destinationId: 'arrivalLocation' | 'arrivalCityId';
+  originId: 'departureLocation' | 'departureCityId' | 'arrivalLocation' | 'arrivalCityId';
+  destinationId: 'arrivalLocation' | 'arrivalCityId' | 'departureLocation' | 'departureCityId';
   method: 'getFlights' | 'getHotels' | 'getAttractions';
-  type: 'flight' | 'hotel' | 'attraction';
+  type: 'outboundFlight' | 'returnFlight' | 'hotel' | 'attraction';
 }) {
   return new Step({
     id: type,
@@ -73,13 +73,14 @@ function createArrangementStep({
                 Available ${type}s: ${JSON.stringify(items)}
 
                 Here is the information about the customer's trip requirements: ${JSON.stringify(travelForm)}.
-                
+
                 Only make a unique ${choiceCount} selection for ${type}.
 
-                Other Notes: 
-                    - flightPriority is a value between 0 and 100 where 0 means the prioritize price the most and 100 means 
+                Other Notes:
+                    - flightPriority is a value between 0 and 100 where 0 means the prioritize price the most and 100 means
                     prioritize convenience the most (shortest trip and matching time).
                     - ALWAYS pass entire date timestamps back for departureTime and arrivalTime.
+
                 `,
       ];
 
@@ -118,11 +119,19 @@ function createArrangementStep({
   });
 }
 
-const arrangeFlights = createArrangementStep({
-  type: 'flight',
+const outboundFlight = createArrangementStep({
+  type: 'outboundFlight',
   method: 'getFlights',
   originId: 'departureLocation',
   destinationId: 'arrivalLocation',
+  choiceCount: '1',
+});
+
+const returnFlight = createArrangementStep({
+  type: 'returnFlight',
+  method: 'getFlights',
+  originId: 'arrivalLocation',
+  destinationId: 'departureLocation',
   choiceCount: '1',
 });
 
@@ -152,7 +161,23 @@ export const workflow = new Workflow({
 });
 
 workflow
-  .step(arrangeFlights, {
+  .step(outboundFlight, {
+    variables: {
+      sessionId: {
+        step: 'trigger',
+        path: 'sessionId',
+      },
+      userId: {
+        step: 'trigger',
+        path: 'userId',
+      },
+      travelForm: {
+        step: 'trigger',
+        path: 'travelForm',
+      },
+    },
+  })
+  .step(returnFlight, {
     variables: {
       sessionId: {
         step: 'trigger',

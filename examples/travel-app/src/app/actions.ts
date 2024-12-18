@@ -1,55 +1,13 @@
 'use server';
 
 import { randomUUID } from 'crypto';
-import { z } from 'zod';
 
 import { PLACES } from '@/lib/types';
 
 import { mastra } from '@/mastra';
 import { workflow } from '@/mastra/workflows/travel-submission';
 
-const flightSchema = z.object({
-  airline: z.string(),
-  flightNumber: z.string(),
-  departureTime: z.string(),
-  arrivalTime: z.string(),
-  duration: z.string(),
-  price: z.number(),
-  stops: z.number(),
-  departureAirport: z.string(),
-  arrivalAirport: z.string(),
-  departureCity: z.string(),
-  arrivalCity: z.string(),
-});
-
-const hotelSchema = z.object({
-  name: z.string(),
-  rating: z.number(),
-  pricePerNight: z.number(),
-  location: z.string(),
-  address: z.string(),
-  description: z.string(),
-  amenities: z.array(z.string()),
-  imageUrl: z.string(),
-  phoneNumber: z.string(),
-});
-
-const attractionsSchema = z.array(
-  z.object({
-    name: z.string(),
-    description: z.string(),
-    rating: z.number(),
-    price: z.number(),
-    imageUrl: z.string(),
-    location: z.string(),
-  }),
-);
-
-const travelSchema = z.object({
-  flight: flightSchema,
-  hotel: hotelSchema,
-  attractions: attractionsSchema,
-});
+import { travelSchema, TravelSchemaProps } from './utils';
 
 function processFormData(formData: FormData) {
   // Convert FormData to a regular object for logging
@@ -112,12 +70,14 @@ export async function runAgent(formData: FormData) {
     - Find the best flight option for the customer (use departureLocation and arrivalLocation from formObject)
     - Find the best accommodation option for the customer (use arrivalCityId from formObject)
     - Find three activities and attractions for the customer based on their interests (use arrivalAttractionId from formObject)
+    - Find the best flight option for the customer to return home (use departureLocation and arrivalLocation from formObject)
 
     Other Notes:
 
     - flightPriority is a value between 0 and 100 where 0 means the prioritize price the most and 100 means
     prioritize convenience the most (shortest trip and matching time).
     - ALWAYS pass entire date timestamps back for departureTime and arrivalTime.
+    - ALWAYS pass the entire flight object back for the outbound and return flights.
 
     Here is the information about the customer's trip requirements:
     ${JSON.stringify(formObject)}
