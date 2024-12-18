@@ -14,7 +14,7 @@ type MenuItem = {
 const MENU_ITEMS: MenuItem[] = [
   { title: 'Agent Example', href: '/' },
   { title: 'Workflow Example', href: '/workflow' },
-  { title: 'Agent with Memory Example', href: '/agent-memory' },
+  // { title: 'Agent with Memory Example', href: '/agent-memory' }, // TODO: add this back in when we have a memory example
 ];
 
 export default function ExamplesDropdown() {
