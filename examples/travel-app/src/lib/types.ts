@@ -130,6 +130,8 @@ export interface Hotel {
   description: string;
   amenities: string[];
   phoneNumber: string;
+
+  reviewScore: number;
 }
 
 export interface Attraction {
