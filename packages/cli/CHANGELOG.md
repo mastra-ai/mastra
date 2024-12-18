@@ -1,5 +1,13 @@
 # mastra
 
+## 0.1.57-alpha.48
+
+### Patch Changes
+
+- 2b01511: Update CONSOLE logger to store logs and return logs, add logs to dev agent page
+- Updated dependencies [2b01511]
+  - @mastra/core@0.1.27-alpha.39
+
 ## 0.1.57-alpha.47
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # quick-start
 
+## 1.0.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [2b01511]
+  - @mastra/core@0.1.27-alpha.39
+
 ## 1.0.1-alpha.4
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # @mastra/rag
 
+## 0.0.2-alpha.23
+
+### Patch Changes
+
+- 6101f2d: Fix module incompatibility, and dane cli build
+- Updated dependencies [2b01511]
+  - @mastra/core@0.1.27-alpha.39
+
 ## 0.0.2-alpha.22
 
 ### Patch Changes
