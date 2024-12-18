@@ -1,4 +1,4 @@
-import { createLogger, Step, Workflow } from '@mastra/core';
+import { Step, Workflow } from '@mastra/core';
 import { z } from 'zod';
 
 import { Booking } from '../integrations/Booking';
@@ -146,60 +146,53 @@ export const workflow = new Workflow({
     sessionId: z.string(),
     travelForm: triggerSchema,
   }),
-  steps: [arrangeFlights, arrangeAttractions, arrangeHotels],
-  logger: createLogger({
-    type: 'CONSOLE',
-  }),
-});
+}).commit();
 
 workflow
-  .config('flight', {
-    dependsOn: [],
+  .step(arrangeFlights, {
     variables: {
       sessionId: {
-        stepId: 'trigger',
+        step: 'trigger',
         path: 'sessionId',
       },
       userId: {
-        stepId: 'trigger',
+        step: 'trigger',
         path: 'userId',
       },
       travelForm: {
-        stepId: 'trigger',
+        step: 'trigger',
         path: 'travelForm',
       },
     },
   })
-  .config('hotel', {
-    dependsOn: [],
+  .step(arrangeHotels, {
     variables: {
       sessionId: {
-        stepId: 'trigger',
+        step: 'trigger',
         path: 'sessionId',
       },
       userId: {
-        stepId: 'trigger',
+        step: 'trigger',
         path: 'userId',
       },
       travelForm: {
-        stepId: 'trigger',
+        step: 'trigger',
         path: 'travelForm',
       },
     },
   })
-  .config('attraction', {
-    dependsOn: [],
+  .step(arrangeAttractions, {
     variables: {
       sessionId: {
-        stepId: 'trigger',
+        step: 'trigger',
         path: 'sessionId',
       },
       userId: {
-        stepId: 'trigger',
+        step: 'trigger',
         path: 'userId',
       },
       travelForm: {
-        stepId: 'trigger',
+        step: 'trigger',
         path: 'travelForm',
       },
     },
