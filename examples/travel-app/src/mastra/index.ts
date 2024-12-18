@@ -4,7 +4,6 @@ import { PgMemory } from '@mastra/memory';
 
 import { travelAgent, travelAnalyzer } from './agents';
 import { syncCsvData } from './syncs/attractions';
-import * as tools from './tools';
 
 const url = 'postgresql://postgres:postgres@localhost:5433/mastra';
 
@@ -18,12 +17,11 @@ const memory = new PgMemory({
 });
 
 export const mastra = new Mastra({
-  tools,
   syncs: { syncCsvData },
   engine,
   memory,
   //agents: [travelAgent, travelAgent2, travelAnalyzer],
-  agents: [travelAgent, travelAnalyzer],
+  agents: { travelAgent, travelAnalyzer },
   logger: createLogger({
     type: 'CONSOLE',
     level: 'INFO',

@@ -1,9 +1,8 @@
 import { Step, Workflow } from '@mastra/core';
 import { z } from 'zod';
 
+import { mastra } from '../index';
 import { Booking } from '../integrations/Booking';
-
-import { mastra } from '..';
 
 const booking = new Booking({
   token: process.env.RAPID_API_KEY || '',
@@ -40,13 +39,18 @@ function createArrangementStep({
 }) {
   return new Step({
     id: type,
+    inputSchema: z.object({
+      userId: z.string(),
+      sessionId: z.string(),
+      travelForm: triggerSchema,
+    }),
     outputSchema: z.object({
       [`${type}Selection`]: z.object({
         ids: z.array(z.string()),
         reasoning: z.string(),
       }),
     }),
-    action: async ({ data: { travelForm, userId, sessionId }, runId }) => {
+    execute: async ({ context: { travelForm, userId, sessionId }, runId }) => {
       const items = await booking[method]({
         startDate: travelForm.startDate,
         endDate: travelForm.endDate,
@@ -63,7 +67,7 @@ function createArrangementStep({
         };
       }
 
-      const agent = mastra.getAgent('travel-analyzer');
+      const agent = mastra.getAgent('travelAnalyzer');
       const messages = [
         `
                 Available ${type}s: ${JSON.stringify(items)}
@@ -80,12 +84,11 @@ function createArrangementStep({
       ];
 
       try {
-        const result = await agent.textObject({
-          messages,
+        const result = await agent.generate(messages, {
           runId,
           threadId: sessionId,
           resourceid: `travel-workflow-${userId}`,
-          structuredOutput: z.object({
+          schema: z.object({
             ids: z.array(z.string()),
             reasoning: z.string(),
           }),
@@ -146,7 +149,7 @@ export const workflow = new Workflow({
     sessionId: z.string(),
     travelForm: triggerSchema,
   }),
-}).commit();
+});
 
 workflow
   .step(arrangeFlights, {
@@ -196,4 +199,5 @@ workflow
         path: 'travelForm',
       },
     },
-  });
+  })
+  .commit();

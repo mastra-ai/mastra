@@ -8,6 +8,49 @@ import { PLACES } from '@/lib/types';
 import { mastra } from '@/mastra';
 import { workflow } from '@/mastra/workflows/travel-submission';
 
+const flightSchema = z.object({
+  airline: z.string(),
+  flightNumber: z.string(),
+  departureTime: z.string(),
+  arrivalTime: z.string(),
+  duration: z.string(),
+  price: z.number(),
+  stops: z.number(),
+  departureAirport: z.string(),
+  arrivalAirport: z.string(),
+  departureCity: z.string(),
+  arrivalCity: z.string(),
+});
+
+const hotelSchema = z.object({
+  name: z.string(),
+  rating: z.number(),
+  pricePerNight: z.number(),
+  location: z.string(),
+  address: z.string(),
+  description: z.string(),
+  amenities: z.array(z.string()),
+  imageUrl: z.string(),
+  phoneNumber: z.string(),
+});
+
+const attractionsSchema = z.array(
+  z.object({
+    name: z.string(),
+    description: z.string(),
+    rating: z.number(),
+    price: z.number(),
+    imageUrl: z.string(),
+    location: z.string(),
+  }),
+);
+
+const travelSchema = z.object({
+  flight: flightSchema,
+  hotel: hotelSchema,
+  attractions: attractionsSchema,
+});
+
 function processFormData(formData: FormData) {
   // Convert FormData to a regular object for logging
   const formObject: Record<string, any> = {};
@@ -29,40 +72,28 @@ function processFormData(formData: FormData) {
 }
 
 export async function runWorkflow({ userId, formData }: { userId: string; formData: FormData }) {
+  console.log('========== from run workflow');
   const formObject = processFormData(formData);
-  // const formObject = {
-  //   departureLocation: 'LAX.AIRPORT',
-  //   arrivalLocation: 'JFK.AIRPORT',
-  //   tripGoals: 'Have fun!',
-  //   preferredFlightTimes: 'morning',
-  //   flightPriority: '100',
-  //   accommodationType: 'hotel',
-  //   hotelPriceRange: 'luxury',
-  //   interests: 'food',
-  //   startDate: '2024-12-07',
-  //   endDate: '2024-12-20',
-  //   departureCityId: '20033173',
-  //   arrivalCityId: '20088325',
-  //   arrivalAttractionId: 'eyJ1ZmkiOjIwMDg4MzI1fQ=='
-  // }
 
   const result = await workflow.execute({
-    userId,
-    sessionId: randomUUID(),
-    travelForm: {
-      departureLocation: formObject.departureLocation,
-      arrivalLocation: formObject.arrivalLocation,
-      tripGoals: formObject.tripGoals,
-      preferredFlightTimes: formObject.preferredFlightTimes,
-      flightPriority: formObject.flightPriority,
-      accommodationType: formObject.accommodationType,
-      hotelPriceRange: formObject.hotelPriceRange,
-      interests: formObject.interests,
-      startDate: formObject.startDate,
-      endDate: formObject.endDate,
-      departureCityId: formObject.departureCityId,
-      arrivalCityId: formObject.arrivalCityId,
-      arrivalAttractionId: formObject.arrivalAttractionId,
+    triggerData: {
+      userId,
+      sessionId: randomUUID(),
+      travelForm: {
+        departureLocation: formObject.departureLocation,
+        arrivalLocation: formObject.arrivalLocation,
+        tripGoals: formObject.tripGoaxls,
+        preferredFlightTimes: formObject.preferredFlightTimes,
+        flightPriority: formObject.flightPriority,
+        accommodationType: formObject.accommodationType,
+        hotelPriceRange: formObject.hotelPriceRange,
+        interests: formObject.interests,
+        startDate: formObject.startDate,
+        endDate: formObject.endDate,
+        departureCityId: formObject.departureCityId,
+        arrivalCityId: formObject.arrivalCityId,
+        arrivalAttractionId: formObject.arrivalAttractionId,
+      },
     },
   });
 
@@ -70,10 +101,11 @@ export async function runWorkflow({ userId, formData }: { userId: string; formDa
 }
 
 export async function runAgent(formData: FormData) {
+  console.log('======= from runAgenttt');
   const formObject = processFormData(formData);
   console.log(formObject);
 
-  const agent = mastra.getAgent('travel-agent');
+  const agent = mastra.getAgent('travelAgent');
 
   const toolsPrompt = `
     You are a travel agent and have been given the following information about a customer's trip requirements.
@@ -93,9 +125,7 @@ export async function runAgent(formData: FormData) {
     ${JSON.stringify(formObject)}
   `;
 
-  const toolResult = await agent.text({
-    messages: [toolsPrompt],
-  });
+  const toolResult = await agent.generate(toolsPrompt);
 
   console.log('Tool Result:', toolResult);
 
@@ -107,54 +137,8 @@ export async function runAgent(formData: FormData) {
     ${JSON.stringify(toolResult)}
   `;
 
-  const result = await agent.textObject({
-    messages: [prompt],
-    structuredOutput: {
-      flight: {
-        type: 'object',
-        items: {
-          airline: { type: 'string' },
-          flightNumber: { type: 'string' },
-          departureTime: { type: 'string' },
-          arrivalTime: { type: 'string' },
-          duration: { type: 'string' },
-          price: { type: 'number' },
-          stops: { type: 'number' },
-          departureAirport: { type: 'string' },
-          arrivalAirport: { type: 'string' },
-          departureCity: { type: 'string' },
-          arrivalCity: { type: 'string' },
-        },
-      },
-      hotel: {
-        type: 'object',
-        items: {
-          name: { type: 'string' },
-          rating: { type: 'number' },
-          pricePerNight: { type: 'number' },
-          location: { type: 'string' },
-          address: { type: 'string' },
-          description: { type: 'string' },
-          amenities: { type: 'array', items: { type: 'string' } },
-          imageUrl: { type: 'string' },
-          phoneNumber: { type: 'string' },
-        },
-      },
-      attractions: {
-        type: 'array',
-        items: {
-          type: 'object',
-          items: {
-            name: { type: 'string' },
-            description: { type: 'string' },
-            rating: { type: 'number' },
-            price: { type: 'number' },
-            imageUrl: { type: 'string' },
-            location: { type: 'string' },
-          },
-        },
-      },
-    },
+  const result = await agent.generate(prompt, {
+    schema: travelSchema,
   });
 
   console.log('Travel Agent Result:', result);

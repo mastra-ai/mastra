@@ -2,7 +2,6 @@ import { createSync } from '@mastra/core';
 import csvParser from 'csv-parser';
 import fs from 'fs';
 import path from 'path';
-import { z } from 'zod';
 
 // Update the interface to match the new CSV column names
 interface CityData {
@@ -18,10 +17,9 @@ interface CityData {
 }
 
 export const syncCsvData = createSync({
-  label: 'Sync CSV Data',
+  id: 'Sync CSV Data',
   description: 'Sync data from City CSV',
-  schema: z.object({}),
-  executor: async ({ engine }) => {
+  execute: async ({ mastra }) => {
     const csvFilePath = process.env.CSV_FILE_PATH || path.join(process.cwd(), 'src/data/city-data.csv');
     console.log('Resolved CSV file path:', csvFilePath);
     const records: { data: CityData; externalId: string }[] = [];
@@ -39,7 +37,9 @@ export const syncCsvData = createSync({
         .on('error', reject);
     });
 
-    await engine.syncRecords({
+    if (!mastra?.engine) throw new Error('Mastra is not defined');
+
+    await mastra.engine.syncRecords({
       connectionId: `SYSTEM`,
       name: 'City',
       records,

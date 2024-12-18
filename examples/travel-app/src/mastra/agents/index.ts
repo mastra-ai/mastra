@@ -1,5 +1,7 @@
 import { Agent } from '@mastra/core';
 
+import { searchAttractions, searchFlights, searchHotels } from '../tools';
+
 export const travelAgent = new Agent({
   name: 'travel-agent',
   instructions:
@@ -9,10 +11,10 @@ export const travelAgent = new Agent({
     name: 'claude-3-5-sonnet-20240620',
     toolChoice: 'auto',
   },
-  enabledTools: {
-    searchFlights: true,
-    searchHotels: true,
-    searchAttractions: true,
+  tools: {
+    searchFlights,
+    searchHotels,
+    searchAttractions,
   },
 });
 
