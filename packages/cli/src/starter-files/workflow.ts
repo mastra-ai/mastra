@@ -30,3 +30,5 @@ logCatWorkflow.step(logCatName, {
     },
   },
 });
+
+logCatWorkflow.commit();
