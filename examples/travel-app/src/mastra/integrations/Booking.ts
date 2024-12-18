@@ -56,8 +56,6 @@ export class Booking {
             },
         };
 
-        console.log('Fetching hotels', { destination, url });
-
         try {
             const response = await fetch(url, options);
             const result = await response.json();
@@ -65,6 +63,7 @@ export class Booking {
             const start = new Date(startDate);
             const end = new Date(endDate);
             const numberOfNights = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+
 
             return result?.data?.hotels.map(
                 (hotel: HotelApiResponse): Hotel => ({

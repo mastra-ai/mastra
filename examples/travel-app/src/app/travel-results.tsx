@@ -19,7 +19,7 @@ export function TravelResults({ travelData }: TravelResultsProps) {
   const [showDialog, setShowDialog] = useState(false);
   return (
     <div className="space-y-8">
-      <div className="space-y-4">
+      <div className="space-y-4 max-w-2xl mx-auto">
         <h2 className="text-2xl font-bold">Your Travel Itinerary</h2>
 
         <div className="space-y-4">
