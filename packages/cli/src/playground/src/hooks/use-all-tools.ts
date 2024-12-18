@@ -2,40 +2,40 @@ import { Tool } from '@mastra/core';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-export const useDevTools = () => {
-  const [devTools, setDevTools] = useState<Record<string, Tool<any, any, any, any>>>({});
+export const useTools = () => {
+  const [tools, setTools] = useState<Record<string, Tool<any, any, any, any>>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchDevTools = async () => {
+    const fetchTools = async () => {
       setIsLoading(true);
       try {
-        const res = await fetch('/api/dev-tools');
+        const res = await fetch('/api/tools');
         if (!res.ok) {
           const error = await res.json();
-          setDevTools({});
-          console.error('Error fetching dev tools', error);
-          toast.error(error?.error || 'Error fetching dev tools');
+          setTools({});
+          console.error('Error fetching tools', error);
+          toast.error(error?.error || 'Error fetching tools');
           return;
         }
         const tools = await res.json();
-        setDevTools(tools);
+        setTools(tools);
       } catch (error) {
-        setDevTools({});
-        console.error('Error fetching dev tools', error);
-        toast.error('Error fetching dev tools');
+        setTools({});
+        console.error('Error fetching tools', error);
+        toast.error('Error fetching tools');
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchDevTools();
+    fetchTools();
   }, []);
 
-  return { devTools, isLoading };
+  return { tools, isLoading };
 };
 
-export const useDevTool = (toolId: string) => {
+export const useTool = (toolId: string) => {
   const [tool, setTool] = useState<Tool<any, any, any, any> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -48,20 +48,20 @@ export const useDevTool = (toolId: string) => {
           setIsLoading(false);
           return;
         }
-        const res = await fetch(`/api/dev-tools/${toolId}`);
+        const res = await fetch(`/api/tools/${toolId}`);
         if (!res.ok) {
           const error = await res.json();
           setTool(null);
-          console.error('Error fetching dev tool', error);
-          toast.error(error?.error || 'Error fetching dev tool');
+          console.error('Error fetching tool', error);
+          toast.error(error?.error || 'Error fetching tool');
           return;
         }
         const tool = await res.json();
         setTool(tool);
       } catch (error) {
         setTool(null);
-        console.error('Error fetching dev tool', error);
-        toast.error('Error fetching dev tool');
+        console.error('Error fetching tool', error);
+        toast.error('Error fetching tool');
       } finally {
         setIsLoading(false);
       }

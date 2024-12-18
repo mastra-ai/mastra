@@ -20,12 +20,12 @@ export async function dev({
   port,
   env,
   dir,
-  devTools,
+  toolsDir,
 }: {
   dir?: string;
   port: number;
   env: Record<string, any>;
-  devTools?: string;
+  toolsDir?: string;
 }) {
   const dotMastraPath = join(process.cwd(), '.mastra');
   const playgroundServePath = join(dotMastraPath, 'playground');
@@ -50,13 +50,12 @@ export async function dev({
   const dirPath = dir || path.join(process.cwd(), 'src/mastra');
   await bundle(dirPath);
 
-  // Bundle devTools if path is provided
-  if (devTools) {
-    const devToolsPath = path.isAbsolute(devTools) ? devTools : path.join(process.cwd(), devTools);
-    await bundle(devToolsPath, {
-      outfile: join(dotMastraPath, 'devTools.mjs'),
-    });
-  }
+  const defaultToolsPath = path.join(dirPath, 'tools');
+  const toolsPath = toolsDir || defaultToolsPath;
+
+  await bundle(toolsPath, {
+    outfile: join(dotMastraPath, 'tools.mjs'),
+  });
 
   writeFileSync(join(dotMastraPath, 'index.mjs'), EXPRESS_SERVER);
 
@@ -66,8 +65,8 @@ export async function dev({
     cwd: dotMastraPath,
     env: {
       port: `${port} || 4111`,
-      MASTRA_DEV_TOOLS: devTools ? 'true' : 'false',
-      MASTRA_DEV_TOOLS_PATH: devTools ? join(dotMastraPath, 'devTools.mjs') : '',
+      MASTRA_TOOLS: toolsDir ? 'true' : 'false',
+      MASTRA_TOOLS_PATH: toolsDir ? join(dotMastraPath, 'tools.mjs') : '',
     },
   });
 

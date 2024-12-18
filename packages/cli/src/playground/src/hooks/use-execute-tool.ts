@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 
-export const useExecuteDevTool = () => {
+export const useExecuteTool = () => {
   const [isExecuting, setIsExecuting] = useState(false);
 
-  const executeDevTool = async ({ toolId, input }: { toolId: string; input: any }) => {
+  const executeTool = async ({ toolId, input }: { toolId: string; input: any }) => {
     try {
       setIsExecuting(true);
-      const response = await fetch(`/api/dev-tools/${toolId}/execute`, {
+      const response = await fetch(`/api/tools/${toolId}/execute`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -30,5 +30,5 @@ export const useExecuteDevTool = () => {
     }
   };
 
-  return { executeDevTool, isExecuting };
+  return { executeTool, isExecuting };
 };

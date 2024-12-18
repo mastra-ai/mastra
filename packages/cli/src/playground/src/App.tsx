@@ -6,7 +6,7 @@ import Tools from '@/pages/tools';
 
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
-import DevTool from './pages/tools/dev-tool';
+import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
 import Workflows from './pages/workflows';
 import Workflow from './pages/workflows/workflow';
@@ -26,8 +26,8 @@ function App() {
           <Route path="/agents" element={<Agents />} />
           <Route path="/agents/:agentId" element={<Agent />} />
           <Route path="/tools" element={<Tools />} />
-          <Route path="/tools/:agentId/:toolId" element={<Tool />} />
-          <Route path="/tools/dev-tools/:toolId" element={<DevTool />} />
+          <Route path="/tools/:agentId/:toolId" element={<AgentTool />} />
+          <Route path="/tools/all/:toolId" element={<Tool />} />
           <Route path="/workflows" element={<Workflows />} />
           <Route path="/workflows/:workflowId" element={<Workflow />} />
         </Route>
