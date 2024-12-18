@@ -3,6 +3,7 @@
 import { format } from 'date-fns';
 import { CalendarIcon, Loader2 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 
 import { useRouter } from 'next/navigation';
 
@@ -45,8 +46,8 @@ const LOADING_MESSAGES = [
 
 export default function TravelForm({ executor, sidebarContent }: TravelFormProps) {
   const router = useRouter();
-  const [startDate, setStartDate] = useState<Date>();
-  const [endDate, setEndDate] = useState<Date>();
+  const [startDate, setStartDate] = useState<Date>(new Date('5/12/24'));
+  const [endDate, setEndDate] = useState<Date>(new Date('12/12/24'));
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [flightPriority, setFlightPriority] = useState([50]);
   const [submitting, setSubmitting] = useState(false);
@@ -92,6 +93,7 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
       if (executor === 'agent') {
         const result = await runAgent(formData);
         console.log(result.message);
+        console.log(result.message);
         setTravelData(result.message);
       } else {
         const { results } = await runWorkflow({ userId: 'SYSTEM', formData });
@@ -113,6 +115,7 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
       setContent(sidebarContent.submitted);
       router.refresh();
     } catch (error) {
+      toast.error("An error occured, I can't plan trip");
       console.error('Error submitting form:', error);
     } finally {
       setSubmitting(false);
@@ -154,7 +157,12 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0">
-                      <Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus />
+                      <Calendar
+                        mode="single"
+                        selected={startDate}
+                        onSelect={date => setStartDate(date as Date)}
+                        initialFocus
+                      />
                     </PopoverContent>
                   </Popover>
                 </div>
@@ -175,7 +183,12 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0">
-                      <Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus />
+                      <Calendar
+                        mode="single"
+                        selected={endDate}
+                        onSelect={date => setEndDate(date as Date)}
+                        initialFocus
+                      />
                     </PopoverContent>
                   </Popover>
                 </div>
