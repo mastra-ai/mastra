@@ -25,5 +25,5 @@
     },
     "types": ["node", "vite/client"]
   },
-  "include": ["src", "tailwind.config.ts", "postcss.config.js"]
+  "include": ["src/**/*", "tailwind.config.ts", "postcss.config.js"]
 }

@@ -92,12 +92,13 @@ program
   .description('Start mastra server')
   .option('-d, --dir <dir>', 'Path to your mastra folder')
   .option('-e, --env <env>', 'Environment File to use (defaults to .env.development)')
+  .option('--tools <toolsDir>', 'Path to your development tools')
   .action(args => {
     analytics.trackCommand({
       command: 'dev',
     });
     const apiKeys = findApiKeys();
-    dev({ port: 4111, env: apiKeys, dir: args?.dir });
+    dev({ port: 4111, env: apiKeys, dir: args?.dir, toolsDir: args?.toolsDir });
   });
 
 const engine = program.command('engine').description('Manage the mastra engine');

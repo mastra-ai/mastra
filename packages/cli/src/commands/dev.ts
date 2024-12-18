@@ -16,7 +16,17 @@ import { EXPRESS_SERVER } from './deploy/server.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export async function dev({ port, env, dir }: { dir?: string; port: number; env: Record<string, any> }) {
+export async function dev({
+  port,
+  env,
+  dir,
+  toolsDir,
+}: {
+  dir?: string;
+  port: number;
+  env: Record<string, any>;
+  toolsDir?: string;
+}) {
   const dotMastraPath = join(process.cwd(), '.mastra');
   const playgroundServePath = join(dotMastraPath, 'playground');
   const key = env[0]?.name;
@@ -40,6 +50,13 @@ export async function dev({ port, env, dir }: { dir?: string; port: number; env:
   const dirPath = dir || path.join(process.cwd(), 'src/mastra');
   await bundle(dirPath);
 
+  const defaultToolsPath = path.join(dirPath, 'tools');
+  const toolsPath = toolsDir || defaultToolsPath;
+
+  await bundle(toolsPath, {
+    outfile: join(dotMastraPath, 'tools.mjs'),
+  });
+
   writeFileSync(join(dotMastraPath, 'index.mjs'), EXPRESS_SERVER);
 
   await bundleServer(join(dotMastraPath, 'index.mjs'));
@@ -48,6 +65,8 @@ export async function dev({ port, env, dir }: { dir?: string; port: number; env:
     cwd: dotMastraPath,
     env: {
       port: `${port} || 4111`,
+      MASTRA_TOOLS: toolsDir ? 'true' : 'false',
+      MASTRA_TOOLS_PATH: toolsDir ? join(dotMastraPath, 'tools.mjs') : '',
     },
   });
 

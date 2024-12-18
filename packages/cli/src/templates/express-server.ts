@@ -10,6 +10,7 @@ const ___filename = _fileURLToPath(import.meta.url);
 const ___dirname = _path.dirname(___filename);
 
 const { mastra } = await import(join(process.cwd(), 'mastra.mjs'));
+const tools = await import(join(process.cwd(), 'tools.mjs'));
 
 const app = express();
 
@@ -870,6 +871,89 @@ app.get('/api/logs/:runId', async (req: Request, res: Response) => {
     const apiError = error as ApiError;
     console.error('Error getting logs', apiError);
     res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting logs' });
+    return;
+  }
+});
+
+/**
+ * GET /api/tools
+ * @summary Get tools
+ * @tags Tools
+ * @return {object} 200 - Tools with schemas
+ * @return {Error} 404 - Tools not found
+ */
+app.get('/api/tools', async (_req: Request, res: Response) => {
+  if (tools) {
+    const serializedTools = Object.entries(tools).reduce(
+      (acc, [id, _tool]) => {
+        const tool = _tool as any;
+        acc[id] = {
+          ...tool,
+          inputSchema: stringify(zodToJsonSchema(tool.inputSchema)),
+          outputSchema: stringify(zodToJsonSchema(tool.outputSchema)),
+        };
+        return acc;
+      },
+      {} as Record<string, any>,
+    );
+    res.json(serializedTools);
+  } else {
+    res.status(200).json({});
+  }
+});
+
+/**
+ * GET /api/tools/{toolId}
+ * @summary Get tool
+ * @tags Tools
+ * @param {string} toolId.path.required - Tool identifier
+ * @return {object} 200 - Tool with schemas
+ * @return {Error} 404 - Tool not found
+ */
+app.get('/api/tools/:toolId', async (req: Request, res: Response) => {
+  const toolId = req.params.toolId;
+  const tool = Object.values(tools || {}).find((tool: any) => tool.id === toolId) as any;
+  if (tool) {
+    const serializedTool = {
+      ...tool,
+      inputSchema: stringify(zodToJsonSchema(tool.inputSchema)),
+      outputSchema: stringify(zodToJsonSchema(tool.outputSchema)),
+    };
+    res.json(serializedTool);
+  } else {
+    res.status(404).json({ error: 'Tool not found' });
+  }
+});
+
+/**
+ * POST /api/tools/{toolId}/execute
+ * @summary Execute a tool
+ * @tags Tools
+ * @param {string} toolId.path.required - Tool identifier
+ * @return {object} 200 - Tool execution result
+ * @return {Error} 404 - Tool not found
+ */
+app.post('/api/tools/:toolId/execute', async (req: Request, res: Response) => {
+  try {
+    const toolId = req.params.toolId;
+    const tool = Object.values(tools || {}).find((tool: any) => tool.id === toolId) as any;
+    if (!tool) {
+      res.status(404).json({ error: 'Tool not found' });
+      return;
+    }
+    const { input } = req.body;
+    const result = await tool.execute({
+      context: {
+        ...input,
+      },
+      mastra,
+      runId: mastra.runId,
+    });
+    res.json(result);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error executing tool', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error executing tool' });
     return;
   }
 });
