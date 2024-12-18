@@ -25,7 +25,6 @@ function processFormData(formData: FormData) {
   formObject.arrivalCityId = arrivalPlace?.cityId;
   formObject.arrivalAttractionId = arrivalPlace?.attractionId;
 
-  console.log('Travel Form Submission:', formObject);
   return formObject;
 }
 
@@ -91,8 +90,18 @@ export async function runAgent(formData: FormData) {
 
     Use this information to format the response in the correct output schema so it can be used by your travel planner application.
 
-    - For the rating, you should get the data from the description or accessiblity label, what you need is in the format 'number out of number stars", you NEED to return that first number which is a rating less than or equal to five
-    
+     IMPORTANT: For hotel ratings:
+    - IGNORE the reviewScore property
+    - Instead, find and extract the numeric rating from the description or accessibilityLabel field
+    - The rating will be in the format "X.X out of 5 stars" or "X out of 5 stars"
+    - Extract ONLY the first number (before "out of")
+    - The extracted rating must be less than or equal to 5
+
+    Example:
+    If description contains "4.5 out of 5 stars" → return rating: 4.5
+    If description contains "3 out of 5 stars" → return rating: 3
+
+
     ${JSON.stringify(toolResult)}
   `;
 

@@ -24,6 +24,7 @@ const hotelSchema = z.object({
   amenities: z.array(z.string()),
   imageUrl: z.string(),
   phoneNumber: z.string(),
+  reviewScore: z.number(),
 });
 
 const attractionsSchema = z.array(

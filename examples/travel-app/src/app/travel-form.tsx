@@ -162,6 +162,11 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                         selected={startDate}
                         onSelect={date => setStartDate(date as Date)}
                         initialFocus
+                        disabled={date => {
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          return date < today;
+                        }}
                       />
                     </PopoverContent>
                   </Popover>
@@ -186,7 +191,24 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                       <Calendar
                         mode="single"
                         selected={endDate}
-                        onSelect={date => setEndDate(date as Date)}
+                        onSelect={date => {
+                          if (date) {
+                            const maxDate = new Date(startDate);
+                            maxDate.setDate(startDate.getDate() + 90);
+
+                            if (date > maxDate) {
+                              toast.error('End date cannot be more than 90 days from start date');
+                              return;
+                            }
+
+                            if (date < startDate) {
+                              toast.error('End date cannot be before start date');
+                              return;
+                            }
+
+                            setEndDate(date);
+                          }
+                        }}
                         initialFocus
                       />
                     </PopoverContent>
