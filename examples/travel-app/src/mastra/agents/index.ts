@@ -3,7 +3,7 @@ import { Agent } from '@mastra/core';
 import { searchAttractions, searchFlights, searchHotels } from '../tools';
 
 export const travelAgent = new Agent({
-  name: 'travel-agent',
+  name: 'travelAgent',
   instructions:
     'You are an expert travel agent responsible for finding a flight, hotel, and three attractions for a user. You will be given a set of user preferences along with some tools and you will need to find the best options for them.',
   model: {
