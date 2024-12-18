@@ -12,14 +12,14 @@ const links = [
     icon: Bot,
   },
   {
-    name: 'Workflows',
-    url: '/workflows',
-    icon: Workflow,
-  },
-  {
     name: 'Tools',
     url: '/tools',
     icon: DraftingCompass,
+  },
+  {
+    name: 'Workflows',
+    url: '/workflows',
+    icon: Workflow,
   },
 ];
 
