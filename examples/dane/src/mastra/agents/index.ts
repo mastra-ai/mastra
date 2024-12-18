@@ -6,6 +6,7 @@ import { crawl } from '../tools/crawl.js';
 import { execaTool } from '../tools/execa.js';
 import { fsTool } from '../tools/fs.js';
 import { readPDF } from '../tools/pdf.js';
+import { imageTool } from '../tools/image.js';
 
 export const daneIssueLabeler = new Agent({
   name: 'DaneIssueLabeler',
@@ -54,6 +55,9 @@ export const dane = new Agent({
     Use this when the user asks you to crawl. CRAWL is the signal to use this tool.
     Makes you a powerful agent capable of crawling a site and extracting markdown metadata. 
     The data will be stored in a database. Confirm that it is sucessful.
+
+    ## imageTool
+    Makes you a powerful agent capable of generating images and saving them to disk. Pass the directory and an image prompt. 
     
     # Rules
     * DO NOT ATTEMPT TO USE GENERAL KNOWLEDGE. Use the 'googleSearch' tool to find the answer.
@@ -73,6 +77,7 @@ export const dane = new Agent({
     readPDF,
     listEvents,
     crawl,
+    imageTool
     // TODO I SHOULD BE ABLE TO PASS A WORKFLOW EXECUTE HERE
     // browserAgentRelay,
   },
