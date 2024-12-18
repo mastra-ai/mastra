@@ -7,7 +7,7 @@ import { PLACES } from '@/lib/types';
 import { mastra } from '@/mastra';
 import { workflow } from '@/mastra/workflows/travel-submission';
 
-import { travelSchema, TravelSchemaProps } from './utils';
+import { travelSchema } from './utils';
 
 function processFormData(formData: FormData) {
   // Convert FormData to a regular object for logging
@@ -59,7 +59,6 @@ export async function runWorkflow({ userId, formData }: { userId: string; formDa
 
 export async function runAgent(formData: FormData) {
   const formObject = processFormData(formData);
-  console.log(formObject);
 
   const agent = mastra.getAgent('travelAgent');
 
@@ -78,20 +77,22 @@ export async function runAgent(formData: FormData) {
     prioritize convenience the most (shortest trip and matching time).
     - ALWAYS pass entire date timestamps back for departureTime and arrivalTime.
     - ALWAYS pass the entire flight object back for the outbound and return flights.
-
+  
     Here is the information about the customer's trip requirements:
     ${JSON.stringify(formObject)}
   `;
 
   const toolResult = await agent.generate(toolsPrompt);
 
-  console.log('Tool Result:', toolResult);
+  console.log('tool resulttt=======', toolResult);
 
   const prompt = `
     You are a travel agent and after doing your research you have found the following information for the customer's trip.
 
     Use this information to format the response in the correct output schema so it can be used by your travel planner application.
 
+    - For the rating, you should get the data from the description or accessiblity label, what you need is in the format 'number out of number stars", you NEED to return that first number which is a rating less than or equal to five
+    
     ${JSON.stringify(toolResult)}
   `;
 
