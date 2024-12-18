@@ -2,22 +2,13 @@
 
 import { format } from 'date-fns';
 import { Plane, Clock, Calendar } from 'lucide-react';
+import { z } from 'zod';
 
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 
-interface FlightCardProps {
-  airline: string;
-  flightNumber: string;
-  departureAirport: string;
-  departureCity: string;
-  departureTime: Date;
-  arrivalAirport: string;
-  arrivalCity: string;
-  arrivalTime: Date;
-  duration: string;
-  price: number;
-}
+import { flightSchema } from '@/app/utils';
+
+type FlightCardProps = z.infer<typeof flightSchema>;
 
 export function FlightCard({
   airline,
