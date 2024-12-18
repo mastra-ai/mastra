@@ -46,8 +46,8 @@ const LOADING_MESSAGES = [
 
 export default function TravelForm({ executor, sidebarContent }: TravelFormProps) {
   const router = useRouter();
-  const [startDate, setStartDate] = useState<Date>(new Date('5/12/24'));
-  const [endDate, setEndDate] = useState<Date>(new Date('12/12/24'));
+  const [startDate, setStartDate] = useState<Date>(new Date('5/12/25'));
+  const [endDate, setEndDate] = useState<Date>(new Date('5/16/25'));
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [flightPriority, setFlightPriority] = useState([50]);
   const [submitting, setSubmitting] = useState(false);
