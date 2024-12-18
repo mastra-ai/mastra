@@ -372,7 +372,11 @@ app.get('/api/workflows/:workflowId', async (req: Request, res: Response) => {
   try {
     const workflowId = req.params.workflowId;
     const workflow = mastra.getWorkflow(workflowId);
-    res.json(workflow);
+    const triggerSchema = workflow.triggerSchema;
+    res.json({
+      ...workflow,
+      triggerSchema: triggerSchema ? stringify(zodToJsonSchema(triggerSchema)) : undefined,
+    });
   } catch (error) {
     const apiError = error as ApiError;
     console.error('Error getting workflow', apiError);
@@ -393,7 +397,7 @@ app.get('/api/workflows/:workflowId', async (req: Request, res: Response) => {
 app.post('/api/workflows/:workflowId/execute', async (req: Request, res: Response) => {
   try {
     const workflowId = req.params.workflowId;
-    const workflow = mastra.workflows.get(workflowId);
+    const workflow = mastra.getWorkflow(workflowId);
     const result = await workflow.execute(req.body);
     res.json(result);
   } catch (error) {

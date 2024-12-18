@@ -854,6 +854,25 @@ importers:
         specifier: ^3.24.0
         version: 3.24.1
 
+  examples/workflow:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.10.2
+      tsx:
+        specifier: ^4.19.2
+        version: 4.19.2
+      typescript:
+        specifier: ^5.7.2
+        version: 5.7.2
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
   integrations/apollo:
     dependencies:
       '@hey-api/client-fetch':

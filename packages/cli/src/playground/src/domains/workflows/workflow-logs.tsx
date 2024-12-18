@@ -5,13 +5,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { useLogsByRunId } from '@/hooks/use-logs';
 
-export function WorkflowLogs({ workflowId }: { workflowId: string }) {
-  const { logs, isLoading, refetchLogs } = useLogsByRunId(workflowId);
+export function WorkflowLogs({ runId }: { runId: string }) {
+  const { logs, isLoading, refetchLogs } = useLogsByRunId(runId);
 
   return (
     <ScrollArea className="h-[calc(100vh-126px)] px-4 pb-4 text-xs w-[400px]">
       <div className="flex justify-end sticky top-0 bg-mastra-bg-2 py-2">
-        <Button variant="outline" onClick={() => refetchLogs()}>
+        <Button variant="outline" onClick={() => refetchLogs(runId)}>
           {isLoading ? <RefreshCcwIcon className="w-4 h-4 animate-spin" /> : <RefreshCcwIcon className="w-4 h-4" />}
         </Button>
       </div>

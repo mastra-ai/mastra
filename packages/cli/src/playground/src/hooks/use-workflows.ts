@@ -72,3 +72,35 @@ export const useWorkflow = (workflowId: string) => {
 
   return { workflow, isLoading };
 };
+
+export const useExecuteWorkflow = () => {
+  const [isExecutingWorkflow, setIsExecutingWorkflow] = useState(false);
+
+  const executeWorkflow = async ({ workflowId, input }: { workflowId: string; input: any }) => {
+    try {
+      setIsExecutingWorkflow(true);
+      const response = await fetch(`/api/workflows/${workflowId}/execute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ triggerData: input }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        toast.error(error?.error || 'Error executing workflow');
+        return;
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error executing workflow:', error);
+      throw error;
+    } finally {
+      setIsExecutingWorkflow(false);
+    }
+  };
+
+  return { executeWorkflow, isExecutingWorkflow };
+};

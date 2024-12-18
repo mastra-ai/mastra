@@ -7,10 +7,12 @@ function CodeBlockDemo({
   code = '',
   language = 'ts',
   filename,
+  className,
 }: {
   code?: string;
   language: 'ts' | 'json';
   filename?: string;
+  className?: string;
 }) {
   return (
     <CodeBlock code={code} language={language} theme={themes.oneDark}>
@@ -20,7 +22,7 @@ function CodeBlockDemo({
         </div>
       ) : null}
 
-      <CodeBlock.Code className={cn('bg-transparent h-full p-6 rounded-xl', filename ? 'pt-10' : '')}>
+      <CodeBlock.Code className={cn('bg-transparent h-full p-6 rounded-xl', filename ? 'pt-10' : '', className)}>
         <div className="table-row">
           <div className="flex items-center">
             <CodeBlock.LineNumber className="table-cell pr-4 text-sm text-gray-500/50 text-right select-none" />
