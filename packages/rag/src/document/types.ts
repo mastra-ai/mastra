@@ -51,10 +51,10 @@ export type ChunkOptions = {
   separator?: string;
   separators?: string[];
   isSeparatorRegex?: boolean;
-  chunkSize?: number;
-  maxChunkSize?: number;
-  minChunkSize?: number;
-  chunkOverlap?: number;
+  size?: number;
+  maxSize?: number;
+  minSize?: number;
+  overlap?: number;
   lengthFunction?: (text: string) => number;
   keepSeparator?: boolean | 'start' | 'end';
   addStartIndex?: boolean;
@@ -96,3 +96,8 @@ export type KeywordExtractArgs = {
 };
 
 export type ChunkStrategy = 'recursive' | 'character' | 'token' | 'markdown' | 'html' | 'json' | 'latex';
+
+export interface ChunkParams extends ChunkOptions {
+  strategy?: ChunkStrategy;
+  extract?: ExtractParams;
+}

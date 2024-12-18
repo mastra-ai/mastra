@@ -47,9 +47,7 @@ export const siteCrawlSync = createSync({
 
         await doc.chunk({
           strategy: "markdown",
-          options: {
-            maxChunkSize: 8190,
-          },
+          maxSize: 8190,
         });
 
         const chunks = doc.getDocs();

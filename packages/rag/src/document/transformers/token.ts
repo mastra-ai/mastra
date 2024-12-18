@@ -3,7 +3,7 @@ import { encodingForModel, getEncoding, Tiktoken, TiktokenModel, TiktokenEncodin
 import { TextTransformer } from './text';
 
 interface Tokenizer {
-  chunkOverlap: number;
+  overlap: number;
   tokensPerChunk: number;
   decode: (tokens: number[]) => string;
   encode: (text: string) => number[];
@@ -21,7 +21,7 @@ export function splitTextOnTokens({ text, tokenizer }: { text: string; tokenizer
     if (curIdx === inputIds.length) {
       break;
     }
-    startIdx += tokenizer.tokensPerChunk - tokenizer.chunkOverlap;
+    startIdx += tokenizer.tokensPerChunk - tokenizer.overlap;
     curIdx = Math.min(startIdx + tokenizer.tokensPerChunk, inputIds.length);
     chunkIds = inputIds.slice(startIdx, curIdx);
   }
@@ -46,8 +46,8 @@ export class TokenTransformer extends TextTransformer {
     allowedSpecial?: Set<string> | 'all';
     disallowedSpecial?: Set<string> | 'all';
     options: {
-      chunkSize?: number;
-      chunkOverlap?: number;
+      size?: number;
+      overlap?: number;
       lengthFunction?: (text: string) => number;
       keepSeparator?: boolean | 'start' | 'end';
       addStartIndex?: boolean;
@@ -83,8 +83,8 @@ export class TokenTransformer extends TextTransformer {
     };
 
     const tokenizer: Tokenizer = {
-      chunkOverlap: this.chunkOverlap,
-      tokensPerChunk: this.chunkSize,
+      overlap: this.overlap,
+      tokensPerChunk: this.size,
       decode,
       encode,
     };
@@ -100,8 +100,8 @@ export class TokenTransformer extends TextTransformer {
     encodingName?: TiktokenEncoding;
     modelName?: TiktokenModel;
     options?: {
-      chunkSize?: number;
-      chunkOverlap?: number;
+      size?: number;
+      overlap?: number;
       allowedSpecial?: Set<string> | 'all';
       disallowedSpecial?: Set<string> | 'all';
     };
@@ -138,8 +138,8 @@ export class TokenTransformer extends TextTransformer {
       allowedSpecial: options.allowedSpecial,
       disallowedSpecial: options.disallowedSpecial,
       options: {
-        chunkSize: options.chunkSize,
-        chunkOverlap: options.chunkOverlap,
+        size: options.size,
+        overlap: options.overlap,
         lengthFunction: tikTokenEncoder,
       },
     });

@@ -1,10 +1,9 @@
+import { Agent } from '@mastra/core';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import { Agent, AgentWithTools } from '../types';
-
 export const useAgents = () => {
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const [agents, setAgents] = useState<Record<string, Agent>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -14,7 +13,7 @@ export const useAgents = () => {
         const res = await fetch('/api/agents');
         if (!res.ok) {
           const error = await res.json();
-          setAgents([]);
+          setAgents({});
           console.error('Error fetching agents', error);
           toast.error(error?.error || 'Error fetching agents');
           return;
@@ -22,7 +21,7 @@ export const useAgents = () => {
         const data = await res.json();
         setAgents(data);
       } catch (error) {
-        setAgents([]);
+        setAgents({});
         console.error('Error fetching agents', error);
         toast.error('Error fetching agents');
       } finally {
@@ -37,13 +36,18 @@ export const useAgents = () => {
 };
 
 export const useAgent = (agentId: string) => {
-  const [agent, setAgent] = useState<AgentWithTools | null>(null);
+  const [agent, setAgent] = useState<Agent | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchAgent = async () => {
       setIsLoading(true);
       try {
+        if (!agentId) {
+          setAgent(null);
+          setIsLoading(false);
+          return;
+        }
         const res = await fetch(`/api/agents/${agentId}`);
         if (!res.ok) {
           const error = await res.json();
@@ -52,14 +56,8 @@ export const useAgent = (agentId: string) => {
           toast.error(error?.error || 'Error fetching agent');
           return;
         }
-        const { name, instructions, model, tools } = await res.json();
-        setAgent({
-          name,
-          instructions,
-          modelProvider: model.provider,
-          modelName: model.name,
-          tools: Object.keys(tools),
-        });
+        const agent = await res.json();
+        setAgent(agent);
       } catch (error) {
         setAgent(null);
         console.error('Error fetching agent', error);
@@ -70,7 +68,7 @@ export const useAgent = (agentId: string) => {
     };
 
     fetchAgent();
-  }, []);
+  }, [agentId]);
 
   return { agent, isLoading };
 };

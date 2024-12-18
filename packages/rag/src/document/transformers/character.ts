@@ -59,8 +59,8 @@ export class CharacterTransformer extends TextTransformer {
     separator?: string;
     isSeparatorRegex?: boolean;
     options?: {
-      chunkSize?: number;
-      chunkOverlap?: number;
+      size?: number;
+      overlap?: number;
       lengthFunction?: (text: string) => number;
       keepSeparator?: boolean | 'start' | 'end';
       addStartIndex?: boolean;
@@ -81,7 +81,7 @@ export class CharacterTransformer extends TextTransformer {
     // If length of any split is greater than chunk size, perform additional splitting
     const chunks: string[] = [];
     for (const split of initialSplits) {
-      if (this.lengthFunction(split) <= this.chunkSize) {
+      if (this.lengthFunction(split) <= this.size) {
         chunks.push(split);
       } else {
         // If a single split is too large, split it further
@@ -101,7 +101,7 @@ export class CharacterTransformer extends TextTransformer {
     const chars = text.split('');
 
     for (const char of chars) {
-      if (this.lengthFunction(currentChunk + char) <= this.chunkSize) {
+      if (this.lengthFunction(currentChunk + char) <= this.size) {
         currentChunk += char;
       } else {
         if (currentChunk) {
@@ -167,7 +167,7 @@ export class RecursiveCharacterTransformer extends TextTransformer {
     const mergeSeparator = this.keepSeparator ? '' : separator;
 
     for (const s of splits) {
-      if (this.lengthFunction(s) < this.chunkSize) {
+      if (this.lengthFunction(s) < this.size) {
         goodSplits.push(s);
       } else {
         if (goodSplits.length > 0) {
@@ -199,7 +199,7 @@ export class RecursiveCharacterTransformer extends TextTransformer {
   static fromLanguage(
     language: Language,
     options: {
-      chunkSize?: number;
+      size?: number;
       chunkOverlap?: number;
       lengthFunction?: (text: string) => number;
       keepSeparator?: boolean | 'start' | 'end';

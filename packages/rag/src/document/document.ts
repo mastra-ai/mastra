@@ -13,7 +13,7 @@ import { RecursiveJsonTransformer } from './transformers/json';
 import { LatexTransformer } from './transformers/latex';
 import { MarkdownHeaderTransformer, MarkdownTransformer } from './transformers/markdown';
 import { TokenTransformer } from './transformers/token';
-import { ChunkOptions, ChunkStrategy, ExtractParams } from './types';
+import { ChunkOptions, ChunkParams, ChunkStrategy, ExtractParams } from './types';
 
 export class MDocument {
   private chunks: Chunk[];
@@ -26,7 +26,7 @@ export class MDocument {
     this.type = type;
   }
 
-  private async extract({ title, summary, questions, keywords }: ExtractParams): Promise<void> {
+  async extractMetadata({ title, summary, questions, keywords }: ExtractParams): Promise<MDocument> {
     const transformations = [];
 
     if (typeof summary !== 'undefined') {
@@ -62,6 +62,8 @@ export class MDocument {
         },
       });
     });
+
+    return this;
   }
 
   static fromText(text: string, metadata?: Record<string, any>): MDocument {
@@ -203,13 +205,13 @@ export class MDocument {
   }
 
   async chunkJSON(options?: ChunkOptions): Promise<void> {
-    if (!options?.maxChunkSize) {
-      throw new Error('JSON chunking requires maxChunkSize to be specified');
+    if (!options?.maxSize) {
+      throw new Error('JSON chunking requires maxSize to be specified');
     }
 
     const rt = new RecursiveJsonTransformer({
-      maxChunkSize: options?.maxChunkSize,
-      minChunkSize: options?.minChunkSize,
+      maxSize: options?.maxSize,
+      minSize: options?.minSize,
     });
 
     const textSplit = rt.transformDocuments({
@@ -250,20 +252,16 @@ export class MDocument {
     this.chunks = textSplit;
   }
 
-  async chunk(params?: {
-    strategy?: ChunkStrategy;
-    options?: ChunkOptions;
-    extract?: ExtractParams;
-  }): Promise<MDocument['chunks']> {
+  async chunk(params?: ChunkParams): Promise<MDocument['chunks']> {
+    const { strategy: passedStrategy, extract, ...chunkOptions } = params || {};
     // Determine the default strategy based on type if not specified
-    const strategy = params?.strategy || this.defaultStrategy();
+    const strategy = passedStrategy || this.defaultStrategy();
 
     // Apply the appropriate chunking strategy
-    await this.chunkBy(strategy, params?.options);
+    await this.chunkBy(strategy, chunkOptions);
 
-    // Perform metadata extraction if specified
-    if (params?.extract) {
-      await this.extract(params.extract);
+    if (extract) {
+      await this.extractMetadata(extract);
     }
 
     return this.chunks;

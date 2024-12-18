@@ -50,7 +50,7 @@ export class Mastra<
     if (config?.logger === false) {
       this.logger = noopLogger as unknown as TLogger;
     } else {
-      let logger = createLogger({ type: 'CONSOLE', level: 'WARN' }) as TLogger;
+      let logger = createLogger({ type: 'CONSOLE', level: 'WARN' }) as unknown as TLogger;
       if (config?.logger) {
         logger = config.logger;
       }
@@ -230,14 +230,7 @@ export class Mastra<
   }
 
   public getAgents() {
-    return this.agents
-      ? Object.entries(this.agents).map(([name, agent]) => ({
-          name,
-          instructions: agent.instructions,
-          modelProvider: agent.model.provider,
-          modelName: (agent.model as { name: string }).name,
-        }))
-      : [];
+    return this.agents;
   }
 
   public getWorkflow<TWorkflowId extends keyof TWorkflows>(id: TWorkflowId): TWorkflows[TWorkflowId] {
@@ -262,5 +255,9 @@ export class Mastra<
 
   public async getLogsByRunId(runId: string) {
     return await this.logger.getLogsByRunId(runId);
+  }
+
+  public async getLogs() {
+    return await this.logger.getLogs();
   }
 }

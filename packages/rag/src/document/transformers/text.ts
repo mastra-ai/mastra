@@ -5,28 +5,26 @@ import { ChunkOptions } from '../types';
 import { Transformer } from './transformer';
 
 export abstract class TextTransformer implements Transformer {
-  protected chunkSize: number;
-  protected chunkOverlap: number;
+  protected size: number;
+  protected overlap: number;
   protected lengthFunction: (text: string) => number;
   protected keepSeparator: boolean | 'start' | 'end';
   protected addStartIndex: boolean;
   protected stripWhitespace: boolean;
 
   constructor({
-    chunkSize = 4000,
-    chunkOverlap = 200,
+    size = 4000,
+    overlap = 200,
     lengthFunction = (text: string) => text.length,
     keepSeparator = false,
     addStartIndex = false,
     stripWhitespace = true,
   }: ChunkOptions) {
-    if (chunkOverlap > chunkSize) {
-      throw new Error(
-        `Got a larger chunk overlap (${chunkOverlap}) than chunk size ` + `(${chunkSize}), should be smaller.`,
-      );
+    if (overlap > size) {
+      throw new Error(`Got a larger chunk overlap (${overlap}) than chunk size ` + `(${size}), should be smaller.`);
     }
-    this.chunkSize = chunkSize;
-    this.chunkOverlap = chunkOverlap;
+    this.size = size;
+    this.overlap = overlap;
     this.lengthFunction = lengthFunction;
     this.keepSeparator = keepSeparator;
     this.addStartIndex = addStartIndex;
@@ -50,7 +48,7 @@ export abstract class TextTransformer implements Transformer {
       this.splitText({ text }).forEach(chunk => {
         const metadata = { ..._metadatas[i] };
         if (this.addStartIndex) {
-          const offset = index + previousChunkLen - this.chunkOverlap;
+          const offset = index + previousChunkLen - this.overlap;
           index = text.indexOf(chunk, Math.max(0, offset));
           metadata.startIndex = index;
           previousChunkLen = chunk.length;
@@ -105,9 +103,9 @@ export abstract class TextTransformer implements Transformer {
 
     splits.forEach(d => {
       const len = this.lengthFunction(d);
-      if (total + len + (currentDoc.length > 0 ? separatorLen : 0) > this.chunkSize) {
-        if (total > this.chunkSize) {
-          console.warn(`Created a chunk of size ${total}, ` + `which is longer than the specified ${this.chunkSize}`);
+      if (total + len + (currentDoc.length > 0 ? separatorLen : 0) > this.size) {
+        if (total > this.size) {
+          console.warn(`Created a chunk of size ${total}, ` + `which is longer than the specified ${this.size}`);
         }
         if (currentDoc.length > 0) {
           const doc = this.joinDocs(currentDoc, separator);
@@ -115,8 +113,8 @@ export abstract class TextTransformer implements Transformer {
             docs.push(doc);
           }
           while (
-            total > this.chunkOverlap ||
-            (total + len + (currentDoc.length > 0 ? separatorLen : 0) > this.chunkSize && total > 0)
+            total > this.overlap ||
+            (total + len + (currentDoc.length > 0 ? separatorLen : 0) > this.size && total > 0)
           ) {
             total -= this.lengthFunction(currentDoc?.[0]!) + (currentDoc.length > 1 ? separatorLen : 0);
             currentDoc = currentDoc.slice(1);

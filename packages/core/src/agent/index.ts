@@ -34,7 +34,7 @@ export class Agent<
   readonly instructions: string;
   readonly model: ModelConfig;
   #mastra?: MastraPrimitives;
-  #tools: TTools;
+  tools: TTools;
 
   constructor(config: {
     name: string;
@@ -52,12 +52,12 @@ export class Agent<
 
     this.model = config.model;
 
-    this.log(LogLevel.DEBUG, `Agent ${this.name} initialized with model ${this.model.provider}`);
+    this.log(LogLevel.DEBUG, `Agent ${this.name} initialized with model ${this.model.provider}`, { runId: this.name });
 
-    this.#tools = {} as TTools;
+    this.tools = {} as TTools;
 
     if (config.tools) {
-      this.#tools = config.tools;
+      this.tools = config.tools;
     }
 
     if (config.mastra) {
@@ -82,12 +82,8 @@ export class Agent<
    * @param tools
    */
   __setTools(tools: TTools) {
-    this.#tools = tools;
-    this.log(LogLevel.DEBUG, `Tools set for agent ${this.name}`);
-  }
-
-  getTools() {
-    return this.#tools;
+    this.tools = tools;
+    this.log(LogLevel.DEBUG, `Tools set for agent ${this.name}`, { runId: this.name });
   }
 
   async generateTitleFromUserMessage({ message }: { message: CoreUserMessage }) {
@@ -214,7 +210,12 @@ export class Agent<
           },
         });
 
-        this.logger.debug('Text Object result', JSON.stringify(context.object, null, 2));
+        // this.logger.debug('Text Object result', JSON.stringify(context.object, null, 2));
+
+        this.log(LogLevel.DEBUG, 'Text Object result', {
+          contextObject: JSON.stringify(context.object, null, 2),
+          runId: this.name,
+        });
 
         let memoryMessages: CoreMessage[];
 
@@ -258,7 +259,7 @@ export class Agent<
         const responseMessagesWithoutIncompleteToolCalls = this.sanitizeResponseMessages(ms);
 
         if (this.#mastra?.memory) {
-          this.logger.debug('Saving response to memory', { threadId });
+          this.log(LogLevel.DEBUG, 'Saving response to memory', { threadId, runId: this.name });
 
           await this.#mastra.memory.saveMessages({
             messages: responseMessagesWithoutIncompleteToolCalls.map((message: CoreMessage | CoreAssistantMessage) => {
@@ -365,10 +366,10 @@ export class Agent<
     threadId?: string;
     runId?: string;
   }): Record<string, CoreTool> {
-    const converted = Object.entries(this.#tools || {}).reduce(
+    const converted = Object.entries(this.tools || {}).reduce(
       (memo, value) => {
         const k = value[0];
-        const tool = this.#tools[k];
+        const tool = this.tools[k];
 
         if (tool) {
           memo[k] = {
@@ -382,14 +383,16 @@ export class Agent<
                   toolName: k as string,
                 });
                 if (cachedResult) {
-                  this.logger.debug(
-                    `Cached Result ${k as string} runId: ${runId}`,
-                    JSON.stringify(cachedResult, null, 2),
-                  );
+                  this.log(LogLevel.DEBUG, `Cached Result ${k as string} runId: ${runId}`, {
+                    cachedResult: JSON.stringify(cachedResult, null, 2),
+                    runId,
+                  });
                   return cachedResult;
                 }
               }
-              this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
+              this.log(LogLevel.DEBUG, `Cache not found or not enabled, executing tool runId: ${runId}`, {
+                runId,
+              });
               return tool.execute({
                 context: args,
                 mastra: this.#mastra,
@@ -426,14 +429,16 @@ export class Agent<
                   toolName,
                 });
                 if (cachedResult) {
-                  this.logger.debug(
-                    `Cached Result ${toolName as string} runId: ${runId}`,
-                    JSON.stringify(cachedResult, null, 2),
-                  );
+                  this.log(LogLevel.DEBUG, `Cached Result ${toolName as string} runId: ${runId}`, {
+                    cachedResult: JSON.stringify(cachedResult, null, 2),
+                    runId,
+                  });
                   return cachedResult;
                 }
               }
-              this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
+              this.log(LogLevel.DEBUG, `Cache not found or not enabled, executing tool runId: ${runId}`, {
+                runId,
+              });
               return toolObj.execute!({
                 context: args,
               });
@@ -544,7 +549,10 @@ export class Agent<
               threadId,
             });
           } catch (e) {
-            this.logger.error('Error saving response', e);
+            this.log(LogLevel.ERROR, 'Error saving response', {
+              error: e,
+              runId,
+            });
           }
         }
       },
@@ -595,7 +603,7 @@ export class Agent<
       context,
       threadId: threadIdInFn,
       resourceid,
-      runId,
+      runId: runId || this.name,
       toolsets,
     });
 
@@ -604,7 +612,7 @@ export class Agent<
     if (stream && schema) {
       return this.llm.__streamObject({
         messages: messageObjects,
-        tools: this.#tools,
+        tools: this.tools,
         structuredOutput: schema,
         convertedTools,
         onStepFinish,
@@ -625,7 +633,7 @@ export class Agent<
     if (stream) {
       return this.llm.__stream({
         messages: messageObjects,
-        tools: this.#tools,
+        tools: this.tools,
         convertedTools,
         onStepFinish,
         onFinish: async result => {
@@ -645,7 +653,7 @@ export class Agent<
     if (schema) {
       const result = await this.llm.__textObject({
         messages: messageObjects,
-        tools: this.#tools,
+        tools: this.tools,
         structuredOutput: schema,
         convertedTools,
         onStepFinish,
@@ -660,7 +668,7 @@ export class Agent<
 
     const result = await this.llm.__text({
       messages: messageObjects,
-      tools: this.#tools,
+      tools: this.tools,
       convertedTools,
       onStepFinish,
       maxSteps,

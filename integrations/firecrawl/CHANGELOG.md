@@ -1,5 +1,11 @@
 # @mastra/firecrawl
 
+## 1.0.4-alpha.23
+
+### Patch Changes
+
+- 61b5c4e: n/a
+
 ## 1.0.4-alpha.22
 
 ### Patch Changes
