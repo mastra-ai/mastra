@@ -1,13 +1,13 @@
 import { IndexStats, QueryResult, MastraVector } from '@mastra/core';
-import { Pool } from 'pg';
+import pg from 'pg';
 
 export class PgVector extends MastraVector {
-  private pool: Pool;
+  private pool: pg.Pool;
 
   constructor(connectionString: string) {
     super();
 
-    const basePool = new Pool({
+    const basePool = new pg.Pool({
       connectionString,
       max: 20, // Maximum number of clients in the pool
       idleTimeoutMillis: 30000, // Close idle connections after 30 seconds

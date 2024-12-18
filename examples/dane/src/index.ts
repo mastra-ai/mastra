@@ -1,4 +1,4 @@
-#! /usr/bin/env node
+#! /usr/bin/env NODE_NO_WARNINGS=1 node
 import { Command } from 'commander';
 
 import { issueLabelerCommand } from './commands/issue-labeler.js';

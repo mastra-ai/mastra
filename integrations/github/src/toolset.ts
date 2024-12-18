@@ -1,7 +1,7 @@
 import { OpenAPIToolset, ToolAction } from '@mastra/core';
 
 // @ts-ignore
-import GithubLogo from './assets/github.png';
+// import GithubLogo from './assets/github.png';
 import { comments } from './client/service-comments';
 import * as integrationClient from './client/services.gen';
 import * as zodSchema from './client/zodSchema';
@@ -9,7 +9,7 @@ import { GithubConfig } from './types';
 
 export class GithubToolset extends OpenAPIToolset {
     readonly name = 'GITHUB';
-    readonly logoUrl = GithubLogo;
+    readonly logoUrl = "";
     config: GithubConfig;
     readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
     categories = ['dev-tools'];
@@ -45,7 +45,7 @@ export class GithubToolset extends OpenAPIToolset {
 
         const baseClient = this.baseClient;
 
-        baseClient.client.interceptors.request.use((request, options) => {
+        baseClient.client.interceptors.request.use((request) => {
             request.headers.set('Authorization', `Bearer ${value?.['PERSONAL_ACCESS_TOKEN']}`);
             return request;
         });

@@ -1,6 +1,6 @@
 import { config } from 'dotenv';
 
-import { migrate } from '../packages/cli/src/commands/migrate';
+import { migrate } from '../packages/cli/src/commands/engine/migrate';
 
 config();
 
