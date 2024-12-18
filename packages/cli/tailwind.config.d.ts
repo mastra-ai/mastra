@@ -142,3 +142,4 @@ declare const _default: {
   plugins: any[];
 };
 export default _default;
+//# sourceMappingURL=tailwind.config.d.ts.map

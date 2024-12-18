@@ -1,4 +1,4 @@
-import { Bot, DraftingCompass } from 'lucide-react';
+import { Bot, DraftingCompass, Workflow } from 'lucide-react';
 import { useLocation, Link } from 'react-router';
 
 import { cn } from '../../lib/utils';
@@ -11,11 +11,11 @@ const links = [
     url: '/agents',
     icon: Bot,
   },
-  // {
-  //   name: 'Workflows',
-  //   url: '/workflows',
-  //   icon: Workflow, //import from lucide-react
-  // },
+  {
+    name: 'Workflows',
+    url: '/workflows',
+    icon: Workflow,
+  },
   {
     name: 'Tools',
     url: '/tools',
