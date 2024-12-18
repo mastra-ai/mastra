@@ -10,5 +10,5 @@ const kvMemory = new UpstashKVMemory({
 
 export const mastra = new Mastra({
   memory: kvMemory,
-  agents: [chefAgent],
+  agents: { chefAgent },
 });

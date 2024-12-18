@@ -1,31 +1,29 @@
+import { z } from 'zod';
+
 import { mastra } from './mastra';
-import { logCatWorkflow } from './mastra/workflow';
+
+const specieSchema = z.object({
+  species: z.string(),
+});
 
 const main = async () => {
-  const agentCat = mastra.getAgent('cat-one');
+  const agentCat = mastra.getAgent('catOne');
 
   try {
-    const result = await agentCat.textObject({
-      messages: ['What is the most popular cat species?'],
-      structuredOutput: {
-        catSpecies: {
-          type: 'object',
-          items: {
-            species: {
-              type: 'string',
-            },
-          },
-        },
-      },
+    const result = await agentCat.generate('What is the most popular cat species?', {
+      schema: specieSchema,
     });
-    const {
-      catSpecies: { species },
-    } = (await result.toJsonResponse().json()) as { catSpecies: { species: string } };
-    console.log(species);
-    //replace clg with workflow
-    await logCatWorkflow.execute({ name: species });
+
+    const res = specieSchema.parse(result?.object);
+
+    console.log(res.species);
+
+    const workflow = mastra.getWorkflow('logCatWorkflow');
+
+    await workflow.execute({ triggerData: { name: res.species } });
   } catch (err) {
     console.error(err);
   }
 };
+
 main();

@@ -1,5 +1,199 @@
 # mastra
 
+## 0.1.57-alpha.47
+
+### Patch Changes
+
+- a61be33: update readme
+
+## 0.1.57-alpha.46
+
+### Patch Changes
+
+- Updated dependencies [f031a1f]
+  - @mastra/core@0.1.27-alpha.38
+
+## 0.1.57-alpha.45
+
+### Patch Changes
+
+- f6da688: update agents/:agentId page in dev to show agent details and endpoints, add getTools to agent
+- b5393f1: New example: Dane and many fixes to make it work
+- d1e3623: Refactor CLI and improve engine commands
+- Updated dependencies [c872875]
+- Updated dependencies [f6da688]
+- Updated dependencies [b5393f1]
+  - @mastra/core@0.1.27-alpha.37
+
+## 0.1.57-alpha.44
+
+### Patch Changes
+
+- f187221: bring back cli post install
+- 75bf3f0: remove context bug in agent tool execution, update style for mastra dev rendered pages
+- b748d2a: fix error when installing zod in starter
+- Updated dependencies [f537e33]
+- Updated dependencies [bc40916]
+- Updated dependencies [f7d1131]
+- Updated dependencies [75bf3f0]
+- Updated dependencies [3c4488b]
+- Updated dependencies [d38f7a6]
+  - @mastra/core@0.1.27-alpha.36
+
+## 0.1.57-alpha.43
+
+### Patch Changes
+
+- 033eda6: More fixes for refactor
+- Updated dependencies [033eda6]
+  - @mastra/core@0.1.27-alpha.35
+
+## 0.1.57-alpha.42
+
+### Patch Changes
+
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- Updated dependencies [837a288]
+- Updated dependencies [5811de6]
+  - @mastra/core@0.1.27-alpha.34
+
+## 0.1.57-alpha.41
+
+### Patch Changes
+
+- Updated dependencies [e1dd94a]
+  - @mastra/core@0.1.27-alpha.33
+
+## 0.1.57-alpha.40
+
+### Patch Changes
+
+- 678ffb4: Add layout with sidebar, update dev endpoints to have /api prefix
+
+## 0.1.57-alpha.39
+
+### Patch Changes
+
+- ba821de: publish cli homepage
+
+## 0.1.57-alpha.38
+
+### Patch Changes
+
+- 3af5866: publish cli post install script
+
+## 0.1.57-alpha.37
+
+### Patch Changes
+
+- 43667fa: postinstall mastra package deps
+- 2712098: add getAgents method to core and route to cli dev, add homepage interface to cli
+- 5d2f4b0: cli shared ui
+- Updated dependencies [2712098]
+  - @mastra/core@0.1.27-alpha.32
+
+## 0.1.57-alpha.36
+
+### Patch Changes
+
+- fd15221: cli publishing fix
+
+## 0.1.57-alpha.35
+
+### Patch Changes
+
+- a828155: Add prepare script to include node_modules in published package
+- Updated dependencies [c2dd6b5]
+  - @mastra/core@0.1.27-alpha.31
+
+## 0.1.57-alpha.34
+
+### Patch Changes
+
+- 46e9b7a: bundle mastra dev deps with publish
+
+## 0.1.57-alpha.33
+
+### Patch Changes
+
+- 59f592a: mastra dev open api spec, mastra server templates as code
+
+## 0.1.57-alpha.32
+
+### Patch Changes
+
+- 95e15a9: render agent chat errors
+
+## 0.1.57-alpha.31
+
+### Patch Changes
+
+- f1cb298: rename serve command to dev
+- 732a971: create api for sync
+
+## 0.1.57-alpha.30
+
+### Patch Changes
+
+- 43ac982: serve agent chat ui on mastra serve
+
+## 0.1.57-alpha.29
+
+### Patch Changes
+
+- 019d771: throw proper errors in serve
+
+## 0.1.57-alpha.28
+
+### Patch Changes
+
+- 4123324: Fix cli server build
+- 5fd3569: Update CLOUDFLARE and NETLIFY servers
+
+## 0.1.57-alpha.27
+
+### Patch Changes
+
+- Updated dependencies [963c15a]
+  - @mastra/core@0.1.27-alpha.30
+
+## 0.1.57-alpha.26
+
+### Patch Changes
+
+- Updated dependencies [7d87a15]
+  - @mastra/core@0.1.27-alpha.29
+
+## 0.1.57-alpha.25
+
+### Patch Changes
+
+- Updated dependencies [1ebd071]
+  - @mastra/core@0.1.27-alpha.28
+
+## 0.1.57-alpha.24
+
+### Patch Changes
+
+- b9f7d2f: Expose memory APIs in mastra serve
+- Updated dependencies [cd02c56]
+  - @mastra/core@0.1.27-alpha.27
+
+## 0.1.57-alpha.23
+
+### Patch Changes
+
+- 9df6d6e: Fix serve
+
+## 0.1.57-alpha.22
+
+### Patch Changes
+
+- 31ca9fe: fix bugs with init
+- 3c2d317: add textObject and streamObject to serve api
+- Updated dependencies [d5e12de]
+  - @mastra/core@0.1.27-alpha.26
+
 ## 0.1.57-alpha.21
 
 ### Patch Changes

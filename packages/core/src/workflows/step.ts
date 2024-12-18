@@ -1,39 +1,49 @@
 import { z } from 'zod';
 
-import { RetryConfig } from './types';
+import { MastraPrimitives } from '../action';
+
+import { StepAction, RetryConfig, StepExecutionContext } from './types';
 
 export class Step<
   TStepId extends string = any,
-  TSchemaIn extends z.ZodSchema = any,
-  TSchemaOut extends z.ZodSchema = any,
-> {
+  TSchemaIn extends z.ZodSchema | undefined = undefined,
+  TSchemaOut extends z.ZodSchema | undefined = undefined,
+  TContext extends StepExecutionContext<TSchemaIn> = StepExecutionContext<TSchemaIn>,
+> implements StepAction<TStepId, TSchemaIn, TSchemaOut, TContext>
+{
   id: TStepId;
+  description?: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
-  payload?: Partial<z.infer<TSchemaIn>>;
-  action?: ({ data, runId }: { data: z.infer<TSchemaIn>; runId: string }) => Promise<z.infer<TSchemaOut>>;
+  payload?: TSchemaIn extends z.ZodSchema ? Partial<z.infer<TSchemaIn>> : unknown;
+  execute: (context: TContext) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
   retryConfig?: RetryConfig;
+  mastra?: MastraPrimitives;
 
   constructor({
     id,
-    action,
+    description,
+    execute,
     payload,
     outputSchema,
     inputSchema,
     retryConfig,
-  }: {
-    id: TStepId;
-    inputSchema?: TSchemaIn;
-    outputSchema?: TSchemaOut;
-    retryConfig?: RetryConfig;
-    payload?: Partial<z.infer<TSchemaIn>>;
-    action?: ({ data, runId }: { data: z.infer<TSchemaIn>; runId: string }) => Promise<z.infer<TSchemaOut>>;
-  }) {
+  }: StepAction<TStepId, TSchemaIn, TSchemaOut, TContext>) {
     this.id = id;
+    this.description = description ?? '';
     this.inputSchema = inputSchema;
     this.payload = payload;
     this.outputSchema = outputSchema;
-    this.action = action;
+    this.execute = execute;
     this.retryConfig = retryConfig;
   }
+}
+
+export function createStep<
+  TId extends string,
+  TSchemaIn extends z.ZodSchema | undefined,
+  TSchemaOut extends z.ZodSchema | undefined,
+  TContext extends StepExecutionContext<TSchemaIn>,
+>(opts: StepAction<TId, TSchemaIn, TSchemaOut, TContext>) {
+  return new Step(opts);
 }

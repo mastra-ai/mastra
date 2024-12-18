@@ -1,9 +1,9 @@
-import { Tiktoken, encoding_for_model, get_encoding, TiktokenModel, TiktokenEncoding } from '@dqbd/tiktoken';
+import { encodingForModel, getEncoding, Tiktoken, TiktokenModel, TiktokenEncoding } from 'js-tiktoken';
 
 import { TextTransformer } from './text';
 
 interface Tokenizer {
-  chunkOverlap: number;
+  overlap: number;
   tokensPerChunk: number;
   decode: (tokens: number[]) => string;
   encode: (text: string) => number[];
@@ -21,7 +21,7 @@ export function splitTextOnTokens({ text, tokenizer }: { text: string; tokenizer
     if (curIdx === inputIds.length) {
       break;
     }
-    startIdx += tokenizer.tokensPerChunk - tokenizer.chunkOverlap;
+    startIdx += tokenizer.tokensPerChunk - tokenizer.overlap;
     curIdx = Math.min(startIdx + tokenizer.tokensPerChunk, inputIds.length);
     chunkIds = inputIds.slice(startIdx, curIdx);
   }
@@ -33,7 +33,6 @@ export class TokenTransformer extends TextTransformer {
   private tokenizer: Tiktoken;
   private allowedSpecial: Set<string> | 'all';
   private disallowedSpecial: Set<string> | 'all';
-  private textDecoder: TextDecoder;
 
   constructor({
     encodingName = 'cl100k_base',
@@ -47,8 +46,8 @@ export class TokenTransformer extends TextTransformer {
     allowedSpecial?: Set<string> | 'all';
     disallowedSpecial?: Set<string> | 'all';
     options: {
-      chunkSize?: number;
-      chunkOverlap?: number;
+      size?: number;
+      overlap?: number;
       lengthFunction?: (text: string) => number;
       keepSeparator?: boolean | 'start' | 'end';
       addStartIndex?: boolean;
@@ -58,10 +57,9 @@ export class TokenTransformer extends TextTransformer {
     super(options);
 
     try {
-      this.tokenizer = modelName ? encoding_for_model(modelName) : get_encoding(encodingName);
-      this.textDecoder = new TextDecoder();
+      this.tokenizer = modelName ? encodingForModel(modelName) : getEncoding(encodingName);
     } catch (error) {
-      throw new Error('Could not load tiktoken encoding. ' + 'Please install it with `npm install @dqbd/tiktoken`.');
+      throw new Error('Could not load tiktoken encoding. ' + 'Please install it with `npm install js-tiktoken`.');
     }
 
     this.allowedSpecial = allowedSpecial;
@@ -80,27 +78,18 @@ export class TokenTransformer extends TextTransformer {
     };
 
     const decode = (tokens: number[]): string => {
-      const uint32Tokens = new Uint32Array(tokens);
-      const bytes = this.tokenizer.decode(uint32Tokens);
-      const text = this.textDecoder.decode(bytes);
-      // Apply whitespace stripping to decoded text if enabled
+      const text = this.tokenizer.decode(tokens);
       return this.stripWhitespace ? text.trim() : text;
     };
 
     const tokenizer: Tokenizer = {
-      chunkOverlap: this.chunkOverlap,
-      tokensPerChunk: this.chunkSize,
+      overlap: this.overlap,
+      tokensPerChunk: this.size,
       decode,
       encode,
     };
 
     return splitTextOnTokens({ text, tokenizer });
-  }
-
-  dispose(): void {
-    if (this.tokenizer) {
-      this.tokenizer.free();
-    }
   }
 
   static fromTikToken({
@@ -111,8 +100,8 @@ export class TokenTransformer extends TextTransformer {
     encodingName?: TiktokenEncoding;
     modelName?: TiktokenModel;
     options?: {
-      chunkSize?: number;
-      chunkOverlap?: number;
+      size?: number;
+      overlap?: number;
       allowedSpecial?: Set<string> | 'all';
       disallowedSpecial?: Set<string> | 'all';
     };
@@ -121,12 +110,12 @@ export class TokenTransformer extends TextTransformer {
 
     try {
       if (modelName) {
-        tokenizer = encoding_for_model(modelName);
+        tokenizer = encodingForModel(modelName);
       } else {
-        tokenizer = get_encoding(encodingName);
+        tokenizer = getEncoding(encodingName);
       }
     } catch (error) {
-      throw new Error('Could not load tiktoken encoding. ' + 'Please install it with `npm install @dqbd/tiktoken`.');
+      throw new Error('Could not load tiktoken encoding. ' + 'Please install it with `npm install js-tiktoken`.');
     }
 
     const tikTokenEncoder = (text: string): number => {
@@ -149,8 +138,8 @@ export class TokenTransformer extends TextTransformer {
       allowedSpecial: options.allowedSpecial,
       disallowedSpecial: options.disallowedSpecial,
       options: {
-        chunkSize: options.chunkSize,
-        chunkOverlap: options.chunkOverlap,
+        size: options.size,
+        overlap: options.overlap,
         lengthFunction: tikTokenEncoder,
       },
     });

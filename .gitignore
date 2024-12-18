@@ -16,3 +16,5 @@ dist/
 .turbo
 
 openapi-ts-error*
+
+.mastra

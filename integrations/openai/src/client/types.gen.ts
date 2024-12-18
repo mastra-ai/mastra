@@ -1335,30 +1335,30 @@ export type CreateAssistantRequest = {
    *
    */
   model:
-    | string
-    | 'gpt-4o'
-    | 'gpt-4o-2024-08-06'
-    | 'gpt-4o-2024-05-13'
-    | 'gpt-4o-mini'
-    | 'gpt-4o-mini-2024-07-18'
-    | 'gpt-4-turbo'
-    | 'gpt-4-turbo-2024-04-09'
-    | 'gpt-4-0125-preview'
-    | 'gpt-4-turbo-preview'
-    | 'gpt-4-1106-preview'
-    | 'gpt-4-vision-preview'
-    | 'gpt-4'
-    | 'gpt-4-0314'
-    | 'gpt-4-0613'
-    | 'gpt-4-32k'
-    | 'gpt-4-32k-0314'
-    | 'gpt-4-32k-0613'
-    | 'gpt-3.5-turbo'
-    | 'gpt-3.5-turbo-16k'
-    | 'gpt-3.5-turbo-0613'
-    | 'gpt-3.5-turbo-1106'
-    | 'gpt-3.5-turbo-0125'
-    | 'gpt-3.5-turbo-16k-0613';
+  | string
+  | 'gpt-4o'
+  | 'gpt-4o-2024-08-06'
+  | 'gpt-4o-2024-05-13'
+  | 'gpt-4o-mini'
+  | 'gpt-4o-mini-2024-07-18'
+  | 'gpt-4-turbo'
+  | 'gpt-4-turbo-2024-04-09'
+  | 'gpt-4-0125-preview'
+  | 'gpt-4-turbo-preview'
+  | 'gpt-4-1106-preview'
+  | 'gpt-4-vision-preview'
+  | 'gpt-4'
+  | 'gpt-4-0314'
+  | 'gpt-4-0613'
+  | 'gpt-4-32k'
+  | 'gpt-4-32k-0314'
+  | 'gpt-4-32k-0613'
+  | 'gpt-3.5-turbo'
+  | 'gpt-3.5-turbo-16k'
+  | 'gpt-3.5-turbo-0613'
+  | 'gpt-3.5-turbo-1106'
+  | 'gpt-3.5-turbo-0125'
+  | 'gpt-3.5-turbo-16k-0613';
   /**
    * The name of the assistant. The maximum length is 256 characters.
    *
@@ -1411,31 +1411,31 @@ export type CreateAssistantRequest = {
          * The chunking strategy used to chunk the file(s). If not set, will use the `auto` strategy.
          */
         chunking_strategy?:
-          | {
-              /**
-               * Always `auto`.
-               */
-              type: 'auto';
-            }
-          | {
-              /**
-               * Always `static`.
-               */
-              type: 'static';
-              static: {
-                /**
-                 * The maximum number of tokens in each chunk. The default value is `800`. The minimum value is `100` and the maximum value is `4096`.
-                 */
-                max_chunk_size_tokens: number;
-                /**
-                 * The number of tokens that overlap between chunks. The default value is `400`.
-                 *
-                 * Note that the overlap must not exceed half of `max_chunk_size_tokens`.
-                 *
-                 */
-                chunk_overlap_tokens: number;
-              };
-            };
+        | {
+          /**
+           * Always `auto`.
+           */
+          type: 'auto';
+        }
+        | {
+          /**
+           * Always `static`.
+           */
+          type: 'static';
+          static: {
+            /**
+             * The maximum number of tokens in each chunk. The default value is `800`. The minimum value is `100` and the maximum value is `4096`.
+             */
+            max_chunk_size_tokens: number;
+            /**
+             * The number of tokens that overlap between chunks. The default value is `400`.
+             *
+             * Note that the overlap must not exceed half of `max_chunk_size_tokens`.
+             *
+             */
+            chunk_overlap_tokens: number;
+          };
+        };
         /**
          * Set of 16 key-value pairs that can be attached to a vector store. This can be useful for storing additional information about the vector store in a structured format. Keys can be a maximum of 64 characters long and values can be a maxium of 512 characters long.
          *
@@ -1530,31 +1530,31 @@ export type CreateChatCompletionRequest = {
    * ID of the model to use. See the [model endpoint compatibility](/docs/models/model-endpoint-compatibility) table for details on which models work with the Chat API.
    */
   model:
-    | string
-    | 'gpt-4o'
-    | 'gpt-4o-2024-08-06'
-    | 'gpt-4o-2024-05-13'
-    | 'gpt-4o-mini'
-    | 'gpt-4o-mini-2024-07-18'
-    | 'gpt-4-turbo'
-    | 'gpt-4-turbo-2024-04-09'
-    | 'gpt-4-0125-preview'
-    | 'gpt-4-turbo-preview'
-    | 'gpt-4-1106-preview'
-    | 'gpt-4-vision-preview'
-    | 'gpt-4'
-    | 'gpt-4-0314'
-    | 'gpt-4-0613'
-    | 'gpt-4-32k'
-    | 'gpt-4-32k-0314'
-    | 'gpt-4-32k-0613'
-    | 'gpt-3.5-turbo'
-    | 'gpt-3.5-turbo-16k'
-    | 'gpt-3.5-turbo-0301'
-    | 'gpt-3.5-turbo-0613'
-    | 'gpt-3.5-turbo-1106'
-    | 'gpt-3.5-turbo-0125'
-    | 'gpt-3.5-turbo-16k-0613';
+  | string
+  | 'gpt-4o'
+  | 'gpt-4o-2024-08-06'
+  | 'gpt-4o-2024-05-13'
+  | 'gpt-4o-mini'
+  | 'gpt-4o-mini-2024-07-18'
+  | 'gpt-4-turbo'
+  | 'gpt-4-turbo-2024-04-09'
+  | 'gpt-4-0125-preview'
+  | 'gpt-4-turbo-preview'
+  | 'gpt-4-1106-preview'
+  | 'gpt-4-vision-preview'
+  | 'gpt-4'
+  | 'gpt-4-0314'
+  | 'gpt-4-0613'
+  | 'gpt-4-32k'
+  | 'gpt-4-32k-0314'
+  | 'gpt-4-32k-0613'
+  | 'gpt-3.5-turbo'
+  | 'gpt-3.5-turbo-16k'
+  | 'gpt-3.5-turbo-0301'
+  | 'gpt-3.5-turbo-0613'
+  | 'gpt-3.5-turbo-1106'
+  | 'gpt-3.5-turbo-0125'
+  | 'gpt-3.5-turbo-16k-0613';
   /**
    * Number between -2.0 and 2.0. Positive values penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.
    *
@@ -2366,8 +2366,8 @@ export type CreateMessageRequest = {
    */
   role: 'user' | 'assistant';
   content:
-    | string
-    | Array<MessageContentImageFileObject | MessageContentImageUrlObject | MessageRequestContentTextObject>;
+  | string
+  | Array<MessageContentImageFileObject | MessageContentImageUrlObject | MessageRequestContentTextObject>;
   /**
    * A list of files attached to the message, and the tools they should be added to.
    */
@@ -2542,33 +2542,33 @@ export type CreateRunRequest = {
    * The ID of the [Model](/docs/api-reference/models) to be used to execute this run. If a value is provided here, it will override the model associated with the assistant. If not, the model associated with the assistant will be used.
    */
   model?:
-    | (
-        | string
-        | 'gpt-4o'
-        | 'gpt-4o-2024-08-06'
-        | 'gpt-4o-2024-05-13'
-        | 'gpt-4o-mini'
-        | 'gpt-4o-mini-2024-07-18'
-        | 'gpt-4-turbo'
-        | 'gpt-4-turbo-2024-04-09'
-        | 'gpt-4-0125-preview'
-        | 'gpt-4-turbo-preview'
-        | 'gpt-4-1106-preview'
-        | 'gpt-4-vision-preview'
-        | 'gpt-4'
-        | 'gpt-4-0314'
-        | 'gpt-4-0613'
-        | 'gpt-4-32k'
-        | 'gpt-4-32k-0314'
-        | 'gpt-4-32k-0613'
-        | 'gpt-3.5-turbo'
-        | 'gpt-3.5-turbo-16k'
-        | 'gpt-3.5-turbo-0613'
-        | 'gpt-3.5-turbo-1106'
-        | 'gpt-3.5-turbo-0125'
-        | 'gpt-3.5-turbo-16k-0613'
-      )
-    | null;
+  | (
+    | string
+    | 'gpt-4o'
+    | 'gpt-4o-2024-08-06'
+    | 'gpt-4o-2024-05-13'
+    | 'gpt-4o-mini'
+    | 'gpt-4o-mini-2024-07-18'
+    | 'gpt-4-turbo'
+    | 'gpt-4-turbo-2024-04-09'
+    | 'gpt-4-0125-preview'
+    | 'gpt-4-turbo-preview'
+    | 'gpt-4-1106-preview'
+    | 'gpt-4-vision-preview'
+    | 'gpt-4'
+    | 'gpt-4-0314'
+    | 'gpt-4-0613'
+    | 'gpt-4-32k'
+    | 'gpt-4-32k-0314'
+    | 'gpt-4-32k-0613'
+    | 'gpt-3.5-turbo'
+    | 'gpt-3.5-turbo-16k'
+    | 'gpt-3.5-turbo-0613'
+    | 'gpt-3.5-turbo-1106'
+    | 'gpt-3.5-turbo-0125'
+    | 'gpt-3.5-turbo-16k-0613'
+  )
+  | null;
   /**
    * Overrides the [instructions](/docs/api-reference/assistants/createAssistant) of the assistant. This is useful for modifying the behavior on a per-run basis.
    */
@@ -2665,33 +2665,33 @@ export type CreateThreadAndRunRequest = {
    * The ID of the [Model](/docs/api-reference/models) to be used to execute this run. If a value is provided here, it will override the model associated with the assistant. If not, the model associated with the assistant will be used.
    */
   model?:
-    | (
-        | string
-        | 'gpt-4o'
-        | 'gpt-4o-2024-08-06'
-        | 'gpt-4o-2024-05-13'
-        | 'gpt-4o-mini'
-        | 'gpt-4o-mini-2024-07-18'
-        | 'gpt-4-turbo'
-        | 'gpt-4-turbo-2024-04-09'
-        | 'gpt-4-0125-preview'
-        | 'gpt-4-turbo-preview'
-        | 'gpt-4-1106-preview'
-        | 'gpt-4-vision-preview'
-        | 'gpt-4'
-        | 'gpt-4-0314'
-        | 'gpt-4-0613'
-        | 'gpt-4-32k'
-        | 'gpt-4-32k-0314'
-        | 'gpt-4-32k-0613'
-        | 'gpt-3.5-turbo'
-        | 'gpt-3.5-turbo-16k'
-        | 'gpt-3.5-turbo-0613'
-        | 'gpt-3.5-turbo-1106'
-        | 'gpt-3.5-turbo-0125'
-        | 'gpt-3.5-turbo-16k-0613'
-      )
-    | null;
+  | (
+    | string
+    | 'gpt-4o'
+    | 'gpt-4o-2024-08-06'
+    | 'gpt-4o-2024-05-13'
+    | 'gpt-4o-mini'
+    | 'gpt-4o-mini-2024-07-18'
+    | 'gpt-4-turbo'
+    | 'gpt-4-turbo-2024-04-09'
+    | 'gpt-4-0125-preview'
+    | 'gpt-4-turbo-preview'
+    | 'gpt-4-1106-preview'
+    | 'gpt-4-vision-preview'
+    | 'gpt-4'
+    | 'gpt-4-0314'
+    | 'gpt-4-0613'
+    | 'gpt-4-32k'
+    | 'gpt-4-32k-0314'
+    | 'gpt-4-32k-0613'
+    | 'gpt-3.5-turbo'
+    | 'gpt-3.5-turbo-16k'
+    | 'gpt-3.5-turbo-0613'
+    | 'gpt-3.5-turbo-1106'
+    | 'gpt-3.5-turbo-0125'
+    | 'gpt-3.5-turbo-16k-0613'
+  )
+  | null;
   /**
    * Override the default system message of the assistant. This is useful for modifying the behavior on a per-run basis.
    */
@@ -2793,31 +2793,31 @@ export type CreateThreadRequest = {
          * The chunking strategy used to chunk the file(s). If not set, will use the `auto` strategy.
          */
         chunking_strategy?:
-          | {
-              /**
-               * Always `auto`.
-               */
-              type: 'auto';
-            }
-          | {
-              /**
-               * Always `static`.
-               */
-              type: 'static';
-              static: {
-                /**
-                 * The maximum number of tokens in each chunk. The default value is `800`. The minimum value is `100` and the maximum value is `4096`.
-                 */
-                max_chunk_size_tokens: number;
-                /**
-                 * The number of tokens that overlap between chunks. The default value is `400`.
-                 *
-                 * Note that the overlap must not exceed half of `max_chunk_size_tokens`.
-                 *
-                 */
-                chunk_overlap_tokens: number;
-              };
-            };
+        | {
+          /**
+           * Always `auto`.
+           */
+          type: 'auto';
+        }
+        | {
+          /**
+           * Always `static`.
+           */
+          type: 'static';
+          static: {
+            /**
+             * The maximum number of tokens in each chunk. The default value is `800`. The minimum value is `100` and the maximum value is `4096`.
+             */
+            max_chunk_size_tokens: number;
+            /**
+             * The number of tokens that overlap between chunks. The default value is `400`.
+             *
+             * Note that the overlap must not exceed half of `max_chunk_size_tokens`.
+             *
+             */
+            chunk_overlap_tokens: number;
+          };
+        };
         /**
          * Set of 16 key-value pairs that can be attached to a vector store. This can be useful for storing additional information about the vector store in a structured format. Keys can be a maximum of 64 characters long and values can be a maxium of 512 characters long.
          *
@@ -4078,25 +4078,25 @@ export type MessageRequestContentTextObject = {
 
 export type MessageStreamEvent =
   | {
-      event: 'thread.message.created';
-      data: MessageObject;
-    }
+    event: 'thread.message.created';
+    data: MessageObject;
+  }
   | {
-      event: 'thread.message.in_progress';
-      data: MessageObject;
-    }
+    event: 'thread.message.in_progress';
+    data: MessageObject;
+  }
   | {
-      event: 'thread.message.delta';
-      data: MessageDeltaObject;
-    }
+    event: 'thread.message.delta';
+    data: MessageDeltaObject;
+  }
   | {
-      event: 'thread.message.completed';
-      data: MessageObject;
-    }
+    event: 'thread.message.completed';
+    data: MessageObject;
+  }
   | {
-      event: 'thread.message.incomplete';
-      data: MessageObject;
-    };
+    event: 'thread.message.incomplete';
+    data: MessageObject;
+  };
 
 export type event3 = 'thread.message.created';
 
@@ -4639,7 +4639,7 @@ export type type17 = 'json_schema';
 /**
  * The schema for the response format, described as a JSON Schema object.
  */
-export type ResponseFormatJsonSchemaSchema = {
+type ResponseFormatJsonSchemaSchema = {
   [key: string]: unknown;
 };
 
@@ -4696,15 +4696,15 @@ export type RunObject = {
    * The status of the run, which can be either `queued`, `in_progress`, `requires_action`, `cancelling`, `cancelled`, `failed`, `completed`, `incomplete`, or `expired`.
    */
   status:
-    | 'queued'
-    | 'in_progress'
-    | 'requires_action'
-    | 'cancelling'
-    | 'cancelled'
-    | 'failed'
-    | 'completed'
-    | 'incomplete'
-    | 'expired';
+  | 'queued'
+  | 'in_progress'
+  | 'requires_action'
+  | 'cancelling'
+  | 'cancelled'
+  | 'failed'
+  | 'completed'
+  | 'incomplete'
+  | 'expired';
   /**
    * Details on the action required to continue the run. Will be `null` if no action is required.
    */
@@ -5300,77 +5300,77 @@ export type code2 = 'server_error' | 'rate_limit_exceeded';
 
 export type RunStepStreamEvent =
   | {
-      event: 'thread.run.step.created';
-      data: RunStepObject;
-    }
+    event: 'thread.run.step.created';
+    data: RunStepObject;
+  }
   | {
-      event: 'thread.run.step.in_progress';
-      data: RunStepObject;
-    }
+    event: 'thread.run.step.in_progress';
+    data: RunStepObject;
+  }
   | {
-      event: 'thread.run.step.delta';
-      data: RunStepDeltaObject;
-    }
+    event: 'thread.run.step.delta';
+    data: RunStepDeltaObject;
+  }
   | {
-      event: 'thread.run.step.completed';
-      data: RunStepObject;
-    }
+    event: 'thread.run.step.completed';
+    data: RunStepObject;
+  }
   | {
-      event: 'thread.run.step.failed';
-      data: RunStepObject;
-    }
+    event: 'thread.run.step.failed';
+    data: RunStepObject;
+  }
   | {
-      event: 'thread.run.step.cancelled';
-      data: RunStepObject;
-    }
+    event: 'thread.run.step.cancelled';
+    data: RunStepObject;
+  }
   | {
-      event: 'thread.run.step.expired';
-      data: RunStepObject;
-    };
+    event: 'thread.run.step.expired';
+    data: RunStepObject;
+  };
 
 export type event4 = 'thread.run.step.created';
 
 export type RunStreamEvent =
   | {
-      event: 'thread.run.created';
-      data: RunObject;
-    }
+    event: 'thread.run.created';
+    data: RunObject;
+  }
   | {
-      event: 'thread.run.queued';
-      data: RunObject;
-    }
+    event: 'thread.run.queued';
+    data: RunObject;
+  }
   | {
-      event: 'thread.run.in_progress';
-      data: RunObject;
-    }
+    event: 'thread.run.in_progress';
+    data: RunObject;
+  }
   | {
-      event: 'thread.run.requires_action';
-      data: RunObject;
-    }
+    event: 'thread.run.requires_action';
+    data: RunObject;
+  }
   | {
-      event: 'thread.run.completed';
-      data: RunObject;
-    }
+    event: 'thread.run.completed';
+    data: RunObject;
+  }
   | {
-      event: 'thread.run.incomplete';
-      data: RunObject;
-    }
+    event: 'thread.run.incomplete';
+    data: RunObject;
+  }
   | {
-      event: 'thread.run.failed';
-      data: RunObject;
-    }
+    event: 'thread.run.failed';
+    data: RunObject;
+  }
   | {
-      event: 'thread.run.cancelling';
-      data: RunObject;
-    }
+    event: 'thread.run.cancelling';
+    data: RunObject;
+  }
   | {
-      event: 'thread.run.cancelled';
-      data: RunObject;
-    }
+    event: 'thread.run.cancelled';
+    data: RunObject;
+  }
   | {
-      event: 'thread.run.expired';
-      data: RunObject;
-    };
+    event: 'thread.run.expired';
+    data: RunObject;
+  };
 
 export type event5 = 'thread.run.created';
 

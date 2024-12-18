@@ -18,6 +18,7 @@ export const LogLevel = {
   INFO: 'INFO',
   WARN: 'WARN',
   ERROR: 'ERROR',
+  NONE: 'NONE',
 } as const;
 
 export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
@@ -66,25 +67,28 @@ export abstract class BaseLogger<T extends BaseLogMessage = BaseLogMessage> impl
   abstract log(level: LogLevel, message: T | string, ...args: any[]): void | Promise<void>;
 
   debug(message: T | string, ...args: any[]): void | Promise<void> {
-    if (this.level <= LogLevel.DEBUG) {
+    if (this.level === LogLevel.DEBUG) {
       return this.log(LogLevel.DEBUG, message, ...args);
     }
   }
 
   info(message: T | string, ...args: any[]): void | Promise<void> {
-    if (this.level <= LogLevel.INFO) {
+    if ([LogLevel.INFO, LogLevel.DEBUG, LogLevel.ERROR].includes(this.level as any) && this.level !== LogLevel.NONE) {
       return this.log(LogLevel.INFO, message, ...args);
     }
   }
 
   warn(message: T | string, ...args: any[]): void | Promise<void> {
-    if (this.level <= LogLevel.WARN) {
+    if ([LogLevel.WARN, LogLevel.ERROR, LogLevel.DEBUG].includes(this.level as any) && this.level !== LogLevel.NONE) {
       return this.log(LogLevel.WARN, message, ...args);
     }
   }
 
   error(message: T | string, ...args: any[]): void | Promise<void> {
-    if (this.level <= LogLevel.ERROR) {
+    if (
+      [LogLevel.ERROR, LogLevel.INFO, LogLevel.WARN, LogLevel.DEBUG].includes(this.level as any) &&
+      this.level !== LogLevel.NONE
+    ) {
       return this.log(LogLevel.ERROR, message, ...args);
     }
   }
@@ -108,17 +112,45 @@ export abstract class BaseLogger<T extends BaseLogMessage = BaseLogMessage> impl
     console.warn(`getLogsByRunId ${runId} not implemented for ${this.constructor.name}`);
     return [];
   }
+
+  async getLogs(): Promise<string[]> {
+    console.warn(`getLogs not implemented for ${this.constructor.name}`);
+    return [];
+  }
 }
 
 // Console Logger Implementation
 export class ConsoleLogger<T extends BaseLogMessage = BaseLogMessage> extends BaseLogger<T> {
+  private logs: { timestamp: string; level: string; message: string; runId?: string }[] = [];
+  // private originalConsoleLog: typeof console.log;
+
   constructor(level?: LogLevel) {
     super(level ?? LogLevel.INFO);
+    // Store original console.log and bind it
+    // this.originalConsoleLog = console.log.bind(console);
   }
 
   log(level: LogLevel, message: T | string, ...args: any[]): void {
+    let runId: string | undefined;
+    if (typeof message !== 'string') {
+      runId = message.runId;
+    }
+
     const logEntry = this.formatLogEntry(level, message);
-    console.log(`[${logEntry.timestamp}] [${logEntry.level}] ${logEntry.message}`, ...args);
+    const logMessage = `[${logEntry.timestamp}] [${logEntry.level}] ${logEntry.message}`;
+
+    // Store the log message
+    this.logs.push({ ...logEntry, runId });
+
+    console.log(logMessage, ...args);
+  }
+
+  async getLogs(): Promise<string[]> {
+    return this.logs?.map(log => `[${log.timestamp}] [${log.level}] ${log.message}`) || [];
+  }
+
+  async getLogsByRunId(runId: string): Promise<T[]> {
+    return (this.logs?.filter(log => log.runId === runId) as unknown as T[]) || [];
   }
 }
 
@@ -202,6 +234,10 @@ export class UpstashRedisLogger<T extends BaseLogMessage = BaseLogMessage> exten
 
   async getLogs(): Promise<string[]> {
     return this.#redis.lrange(this.#key, 0, -1);
+  }
+
+  async deleteLogsByKey(key: string): Promise<void> {
+    await this.#redis.del(key);
   }
 
   async getLogsByRunId(runId: string): Promise<T[]> {
@@ -299,6 +335,14 @@ export const createLogger = <Type extends LoggerConfig['type'], T extends BaseLo
   }
 };
 
-export function createMultiLogger<T extends BaseLogMessage = BaseLogMessage>(loggers: Logger<T>[]): Logger<T> {
+export function combineLoggers<T extends BaseLogMessage = BaseLogMessage>(loggers: Logger<T>[]): Logger<T> {
   return new MultiLogger<T>(loggers);
 }
+
+export const noopLogger = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  cleanup: () => {},
+};

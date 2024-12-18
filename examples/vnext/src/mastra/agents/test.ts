@@ -1,26 +1,28 @@
 import { Agent } from '@mastra/core';
 
+import { github } from '../integrations';
 // import { createPortkey } from '@portkey-ai/vercel-provider';
-import { integrations } from '../integrations';
 import * as tools from '../tools';
 
-export const agentOne = new Agent<typeof tools, typeof integrations>({
-  name: 'Agent One',
+const githubTools = github.getStaticTools();
+
+export const agentOne = new Agent({
+  name: 'agentOne',
   instructions: 'You know about basketball, specifically the NBA. You are a sports analyst.',
   model: {
     provider: 'ANTHROPIC',
     name: 'claude-3-haiku-20240307',
     toolChoice: 'auto',
   },
-  enabledTools: {
-    issuesList: true,
-    reposListForUser: true,
-    testTool: true,
+  tools: {
+    issuesList: githubTools.issuesList,
+    reposListForUser: githubTools.reposListForUser,
+    testTool: tools.testTool,
   },
 });
 
-export const agentTwo = new Agent<typeof tools, typeof integrations>({
-  name: 'Agent Two',
+export const agentTwo = new Agent({
+  name: 'agentTwo',
   instructions: 'Do this',
   model: {
     provider: 'GROQ',
@@ -55,27 +57,25 @@ export const agentTwo = new Agent<typeof tools, typeof integrations>({
 //   },
 // });
 
-// export const agenThree = new Agent<typeof tools, typeof integrations>({
-//   name: 'Lasanga agent',
-//   instructions: 'You know how to cook lasagna, and can come up with recipes',
-//   model: {
-//     provider: 'ANTHROPIC',
-//     name: 'claude-3-haiku-20240307',
-//     toolChoice: 'auto',
-//   },
-// });
+export const lasagnaAgent = new Agent({
+  name: 'lasagnaAgent',
+  instructions: 'You know how to cook lasagna, and can come up with recipes',
+  model: {
+    provider: 'ANTHROPIC',
+    name: 'claude-3-haiku-20240307',
+    toolChoice: 'auto',
+  },
+});
 
-export const agentFive = new Agent<typeof tools, typeof integrations>({
-  name: 'Github agent',
+export const agentFive = new Agent({
+  name: 'githubAgent',
   instructions: 'You can get all my github repos and issues',
   model: {
     provider: 'ANTHROPIC',
     name: 'claude-3-5-haiku-20241022',
     toolChoice: 'auto',
   },
-  enabledTools: {
-    GithubReposTool: true,
+  tools: {
+    GithubReposTool: tools.GithubReposTool,
   },
 });
-
-export const agents = [agentOne, agentTwo, agentFive];

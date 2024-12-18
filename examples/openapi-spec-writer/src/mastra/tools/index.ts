@@ -1,11 +1,12 @@
 import { createTool } from "@mastra/core";
 import { z } from "zod";
-import { integrations } from "../integrations";
+import { firecrawl, github } from "../integrations";
 import { randomUUID } from "crypto";
 
-export const siteCrawl = createTool({
+export const siteCrawlTool = createTool({
+  id: "site-crawl",
   label: "Site Crawl",
-  schema: z.object({
+  inputSchema: z.object({
     url: z.string(),
     pathRegex: z.string(),
     limit: z.number(),
@@ -23,26 +24,16 @@ export const siteCrawl = createTool({
     ),
     entityType: z.string(),
   }),
-  executor: async ({
-    data,
-    runId,
-    integrationsRegistry,
-    agents,
-    engine,
-    llm,
-  }) => {
-    const fireCrawlIntegration =
-      integrationsRegistry<typeof integrations>().get("FIRECRAWL");
+  execute: async ({ context }) => {
+    const client = await firecrawl.getApiClient();
 
-    const client = await fireCrawlIntegration.getApiClient();
-
-    console.log("Starting crawl", data.url);
+    console.log("Starting crawl", context.url);
 
     const res = await client.crawlUrls({
       body: {
-        url: data.url,
-        limit: data?.limit || 3,
-        includePaths: [data.pathRegex],
+        url: context.url,
+        limit: context.limit || 3,
+        includePaths: [context.pathRegex],
         scrapeOptions: {
           formats: ["markdown"],
           includeTags: ["main"],
@@ -59,10 +50,8 @@ export const siteCrawl = createTool({
       },
     });
 
-    console.log("Crawl response", res);
-
     if (res.error) {
-      console.error(JSON.stringify(res.error, null, 2));
+      console.error({ error: JSON.stringify(res.error, null, 2) });
       throw new Error(res.error.error);
     }
 
@@ -82,11 +71,9 @@ export const siteCrawl = createTool({
           id: crawlId!,
         },
       });
-
-      console.log(crawl.data);
     }
 
-    const entityType = `CRAWL_${data.url}`;
+    const entityType = `CRAWL_${context.url}`;
 
     return {
       success: true,
@@ -102,9 +89,10 @@ export const siteCrawl = createTool({
   },
 });
 
-export const generateSpec = createTool({
+export const generateSpecTool = createTool({
+  id: "generate-spec",
   label: "Generate Spec",
-  schema: z.object({
+  inputSchema: z.object({
     mastra_entity_type: z.string(),
   }),
   outputSchema: z.object({
@@ -112,13 +100,9 @@ export const generateSpec = createTool({
     mergedSpec: z.string(),
   }),
   description: "Generate a spec from a website",
-  executor: async ({ data, runId, agents, engine }) => {
-    console.log({
-      mastra_entity_type: data.mastra_entity_type,
-    });
-
-    const crawledData = await engine?.getRecordsByEntityName({
-      name: data.mastra_entity_type,
+  execute: async ({ context, runId, mastra }) => {
+    const crawledData = await mastra?.engine?.getRecordsByEntityName({
+      name: context.mastra_entity_type,
       connectionId: "SYSTEM",
     });
 
@@ -126,7 +110,7 @@ export const generateSpec = createTool({
       throw new Error("No crawled data found");
     }
 
-    const agent = agents?.get("openapi-spec-gen-agent");
+    const agent = mastra?.agents?.["openapi-spec-gen-agent"];
 
     if (!agent) {
       throw new Error("Agent not found");
@@ -138,12 +122,10 @@ export const generateSpec = createTool({
     console.log("Crawled data", crawledData);
 
     for (const d of crawledData) {
-      const data = await agent.text({
-        messages: [
-          `I wrote another page of docs, turn this into an Open API spec: ${d.data.markdown}`,
-        ],
-        runId,
-      });
+      const data = await agent.generate(
+        `I wrote another page of docs, turn this into an Open API spec: ${d.data.markdown}`,
+        { runId }
+      );
 
       console.log("spec", { data });
 
@@ -155,15 +137,13 @@ export const generateSpec = createTool({
     );
     console.log({ openapiResponses, agent, typeof: typeof agent });
 
-    const mergedSpec = await agent?.text({
-      messages: [
-        `I have generated the following Open API specs: ${openapiResponses
-          .map((r: any) => r)
-          .join("\n\n")} - merge them into a single spec,
+    const mergedSpec = await agent?.generate(
+      `I have generated the following Open API specs: ${openapiResponses
+        .map((r) => r)
+        .join("\n\n")} - merge them into a single spec,
           `,
-      ],
-      runId,
-    });
+      { runId }
+    );
 
     mergedSpecAnswer = mergedSpec.text
       .replace(/```yaml/g, "")
@@ -180,34 +160,34 @@ export const generateSpec = createTool({
   },
 });
 
-export const addToGitHub = createTool({
+export const addToGitHubTool = createTool({
+  id: "add-to-github",
   label: "Add to Git",
-  schema: z.object({
+  inputSchema: z.object({
     yaml: z.string(),
     integration_name: z.string(),
     owner: z.string(),
     repo: z.string(),
     site_url: z.string(),
   }),
+  outputSchema: z.object({
+    success: z.boolean(),
+    pr_url: z.string().optional(),
+  }),
   description: "Commit the spec to GitHub",
-  executor: async ({ data, runId, integrationsRegistry, agents, engine }) => {
-    const githubIntegration =
-      integrationsRegistry<typeof integrations>().get("GITHUB");
+  execute: async ({ context, runId, mastra }) => {
+    const client = await github.getApiClient();
 
-    const client = await githubIntegration.getApiClient();
+    const content = context.yaml;
+    const integrationName = context.integration_name.toLowerCase();
 
-    const content = data.yaml;
-    const integrationName = data.integration_name.toLowerCase();
+    console.log("Writing to Github for", context.integration_name);
+    const agent = mastra?.agents?.["openapi-spec-gen-agent"];
 
-    console.log("Writing to Github for", data.integration_name);
-    const agent = agents?.get("openapi-spec-gen-agent");
-
-    const d = await agent?.text({
-      messages: [
-        `Can you take this text blob and format it into proper YAML? ${content}`,
-      ],
-      runId,
-    });
+    const d = await agent?.generate(
+      `Can you take this text blob and format it into proper YAML? ${content}`,
+      { runId }
+    );
 
     if (!d) {
       console.error("Agent failed to process the text blob");
@@ -230,12 +210,12 @@ export const addToGitHub = createTool({
       const mainRef = await client.gitGetRef({
         path: {
           ref: "heads/main",
-          owner: data.owner,
-          repo: data.repo,
+          owner: context.owner,
+          repo: context.repo,
         },
       });
 
-      console.log({ data, mainRef });
+      console.log({ context, mainRef });
 
       const mainSha = mainRef.data?.object?.sha;
 
@@ -252,8 +232,8 @@ export const addToGitHub = createTool({
             sha: mainSha,
           },
           path: {
-            owner: data.owner,
-            repo: data.repo,
+            owner: context.owner,
+            repo: context.repo,
           },
         });
 
@@ -261,13 +241,13 @@ export const addToGitHub = createTool({
           console.log({ path, content });
           await client.reposCreateOrUpdateFileContents({
             body: {
-              message: `Add open api spec from ${data.site_url}`,
+              message: `Add open api spec from ${context.site_url}`,
               content,
               branch: branchName,
             },
             path: {
-              owner: data.owner,
-              repo: data.repo,
+              owner: context.owner,
+              repo: context.repo,
               path,
             },
           });
@@ -275,13 +255,13 @@ export const addToGitHub = createTool({
 
         const pullData = await client.pullsCreate({
           body: {
-            title: `Add open api spec from ${data.site_url} for ${integrationName}`,
+            title: `Add open api spec from ${context.site_url} for ${integrationName}`,
             head: branchName,
             base: "main",
           },
           path: {
-            owner: data.owner,
-            repo: data.repo,
+            owner: context.owner,
+            repo: context.repo,
           },
         });
 

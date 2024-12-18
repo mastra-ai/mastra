@@ -1,4 +1,6 @@
-import { MastraDocument } from './document';
+import { embed } from '../embeddings';
+
+import { MDocument } from './document';
 import { Language } from './types';
 
 const sampleMarkdown = `
@@ -10,220 +12,65 @@ Welcome to our comprehensive guide on modern web development. This resource cove
 - Beginning developers looking to establish a solid foundation
 - Intermediate developers wanting to modernize their skillset
 - Senior developers seeking a refresher on current best practices
-
-## Core Concepts
-
-### 1. Frontend Development
-Modern frontend development has evolved significantly. Here are the key areas to focus on:
-
-#### HTML5 Semantic Elements
-Using semantic HTML improves:
-- Accessibility
-- SEO performance
-- Code readability
-- Maintenance
-
-\`\`\`html
-<header>
-    <nav>
-        <ul>
-            <li><a href="#home">Home</a></li>
-            <li><a href="#about">About</a></li>
-        </ul>
-    </nav>
-</header>
-\`\`\`
-
-#### CSS Best Practices
-1. Use CSS Custom Properties
-2. Implement responsive design
-3. Follow BEM methodology
-4. Optimize performance
-
-### 2. JavaScript Fundamentals
-
-JavaScript is the backbone of web development. Here's what you need to know:
-
-\`\`\`javascript
-// Modern JS features
-const exampleFunction = async () => {
-    try {
-        const response = await fetch('https://api.example.com/data');
-        const data = await response.json();
-        return data;
-    } catch (error) {
-        console.error('Error fetching data:', error);
-    }
-};
-\`\`\`
-
-#### Key Concepts:
-- Promises and async/await
-- ES6+ features
-- TypeScript integration
-- Module systems
-
-### 3. Backend Development
-
-Backend development requires understanding:
-
-1. **Server Architecture**
-   - RESTful APIs
-   - GraphQL
-   - Microservices
-
-2. **Database Management**
-   - SQL vs NoSQL
-   - Query optimization
-   - Data modeling
-
-3. **Security Considerations**
-   - Authentication
-   - Authorization
-   - Data encryption
-
-## Tools and Technologies
-
-### Essential Developer Tools
-
-| Category | Tools |
-|----------|-------|
-| Version Control | Git, GitHub |
-| Package Managers | npm, yarn |
-| Bundlers | webpack, Vite |
-| Testing | Jest, Cypress |
-
-### Framework Selection
-
-#### Frontend Frameworks
-1. React
-   - Component-based architecture
-   - Virtual DOM
-   - Large ecosystem
-
-2. Vue
-   - Progressive framework
-   - Easy learning curve
-   - Great documentation
-
-3. Angular
-   - Full-featured framework
-   - TypeScript integration
-   - Enterprise-ready
-
-#### Backend Frameworks
-- Node.js/Express
-- Django
-- Ruby on Rails
-- Spring Boot
-
-## Best Practices
-
-### Code Quality
-- Write clean, maintainable code
-- Follow SOLID principles
-- Implement proper error handling
-- Use consistent formatting
-
-### Performance Optimization
-1. Minimize HTTP requests
-2. Optimize images
-3. Implement caching
-4. Use lazy loading
-
-### Security Measures
-- Implement HTTPS
-- Sanitize user input
-- Use secure dependencies
-- Regular security audits
-
-## Deployment and DevOps
-
-### Continuous Integration/Continuous Deployment (CI/CD)
-1. Automated testing
-2. Build automation
-3. Deployment automation
-4. Monitoring and logging
-
-### Cloud Services
-- AWS
-- Google Cloud Platform
-- Azure
-- Heroku
-
-## Conclusion
-
-Remember that web development is an ever-evolving field. Stay current with:
-- Industry trends
-- New tools and frameworks
-- Security best practices
-- Performance optimization techniques
-
-### Additional Resources
-
-* [MDN Web Docs](https://developer.mozilla.org)
-* [Web.dev](https://web.dev)
-* [CSS-Tricks](https://css-tricks.com)
-* [JavaScript.info](https://javascript.info)
-
----
-
-> "Any application that can be written in JavaScript, will eventually be written in JavaScript." - Jeff Atwood
-
----
-
-**Note**: This guide is regularly updated to reflect current web development practices and standards.
 `;
 
-describe('MastraDocument', () => {
+describe('MDocument', () => {
   describe('basics', () => {
+    let chunks: MDocument['chunks'];
+    let doc: MDocument;
     it('initialization', () => {
-      const doc = new MastraDocument({ docs: [{ text: 'test' }], type: 'text' });
+      const doc = new MDocument({ docs: [{ text: 'test' }], type: 'text' });
       expect(doc.getDocs()).toHaveLength(1);
       expect(doc.getText()?.[0]).toBe('test');
     });
 
     it('initialization with array', () => {
-      const doc = new MastraDocument({ docs: [{ text: 'test' }, { text: 'test2' }], type: 'text' });
+      doc = new MDocument({ docs: [{ text: 'test' }, { text: 'test2' }], type: 'text' });
       expect(doc.getDocs()).toHaveLength(2);
       expect(doc.getDocs()[0]?.text).toBe('test');
       expect(doc.getDocs()[1]?.text).toBe('test2');
     });
 
     it('chunk - metadata title', async () => {
-      const doc = MastraDocument.fromMarkdown(sampleMarkdown);
+      const doc = MDocument.fromMarkdown(sampleMarkdown);
 
-      await doc.chunk({
+      chunks = await doc.chunk({
+        size: 1500,
+        overlap: 0,
+        separator: `\n`,
         extract: {
-          summary: true,
-          title: true,
-        },
-        options: {
-          chunkSize: 100,
-          chunkOverlap: 0,
-          separator: `\n`,
+          keywords: true,
         },
       });
 
-      expect(doc.getDocs()?.[0]?.text).toBe(`Complete Guide to Modern Web Development`);
-      expect(doc.getDocs().length).toBe(56);
-    }, 500000);
+      expect(doc.getMetadata()?.[0]).toBeTruthy();
+      expect(chunks).toBeInstanceOf(Array);
+    }, 15000);
+
+    it('embed - create embedding from chunk', async () => {
+      const embeddings = await embed(chunks, {
+        provider: 'OPEN_AI',
+        model: 'text-embedding-3-small',
+        maxRetries: 3,
+      });
+
+      console.log(embeddings);
+      expect(embeddings).toBeDefined();
+    });
   });
 
   describe('chunkCharacter', () => {
     it('should split text on simple separator', async () => {
       const text = 'Hello world\n\nHow are you\n\nI am fine';
 
-      const doc = MastraDocument.fromText(text, { meta: 'data' });
+      const doc = MDocument.fromText(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'character',
-        options: {
-          separator: '\n\n',
-          isSeparatorRegex: false,
-          chunkSize: 50,
-          chunkOverlap: 5,
-        },
+        separator: '\n\n',
+        isSeparatorRegex: false,
+        size: 50,
+        overlap: 5,
       });
 
       const chunks = doc.getDocs();
@@ -237,16 +84,14 @@ describe('MastraDocument', () => {
     it('should handle regex separator', async () => {
       const text = 'Hello   world\n\nHow    are    you';
 
-      const doc = MastraDocument.fromText(text, { meta: 'data' });
+      const doc = MDocument.fromText(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'character',
-        options: {
-          separator: '\\s+',
-          isSeparatorRegex: true,
-          chunkSize: 50,
-          chunkOverlap: 5,
-        },
+        separator: '\\s+',
+        isSeparatorRegex: true,
+        size: 50,
+        overlap: 5,
       });
 
       expect(doc.getText().join(' ')).toBe('Hello world How are you');
@@ -255,17 +100,15 @@ describe('MastraDocument', () => {
     it('should keep separator when specified', async () => {
       const text = 'Hello\n\nWorld';
 
-      const doc = MastraDocument.fromText(text, { meta: 'data' });
+      const doc = MDocument.fromText(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'character',
-        options: {
-          separator: '\n\n',
-          isSeparatorRegex: false,
-          chunkSize: 50,
-          chunkOverlap: 5,
-          keepSeparator: 'end',
-        },
+        separator: '\n\n',
+        isSeparatorRegex: false,
+        size: 50,
+        overlap: 5,
+        keepSeparator: 'end',
       });
       const chunks = doc.getText();
 
@@ -277,17 +120,15 @@ describe('MastraDocument', () => {
       it('should keep separator at end when specified', async () => {
         const text = 'Hello\n\nWorld';
 
-        const doc = MastraDocument.fromText(text, { meta: 'data' });
+        const doc = MDocument.fromText(text, { meta: 'data' });
 
         await doc.chunk({
           strategy: 'character',
-          options: {
-            separator: '\n\n',
-            isSeparatorRegex: false,
-            chunkSize: 50,
-            chunkOverlap: 5,
-            keepSeparator: 'end',
-          },
+          separator: '\n\n',
+          isSeparatorRegex: false,
+          size: 50,
+          overlap: 5,
+          keepSeparator: 'end',
         });
 
         const chunks = doc.getText();
@@ -300,17 +141,15 @@ describe('MastraDocument', () => {
       it('should keep separator at start when specified', async () => {
         const text = 'Hello\n\nWorld\n\nTest';
 
-        const doc = MastraDocument.fromText(text, { meta: 'data' });
+        const doc = MDocument.fromText(text, { meta: 'data' });
 
         await doc.chunk({
           strategy: 'character',
-          options: {
-            separator: '\n\n',
-            isSeparatorRegex: false,
-            chunkSize: 50,
-            chunkOverlap: 5,
-            keepSeparator: 'start',
-          },
+          separator: '\n\n',
+          isSeparatorRegex: false,
+          size: 50,
+          overlap: 5,
+          keepSeparator: 'start',
         });
 
         const chunks = doc.getText();
@@ -324,17 +163,15 @@ describe('MastraDocument', () => {
       it('should handle multiple consecutive separators', async () => {
         const text = 'Hello\n\n\n\nWorld';
 
-        const doc = MastraDocument.fromText(text, { meta: 'data' });
+        const doc = MDocument.fromText(text, { meta: 'data' });
 
         await doc.chunk({
           strategy: 'character',
-          options: {
-            separator: '\n\n',
-            isSeparatorRegex: false,
-            chunkSize: 50,
-            chunkOverlap: 5,
-            keepSeparator: 'end',
-          },
+          separator: '\n\n',
+          isSeparatorRegex: false,
+          size: 50,
+          overlap: 5,
+          keepSeparator: 'end',
         });
 
         const chunks = doc.getText();
@@ -346,17 +183,15 @@ describe('MastraDocument', () => {
       it('should handle text ending with separator', async () => {
         const text = 'Hello\n\nWorld\n\n';
 
-        const doc = MastraDocument.fromText(text, { meta: 'data' });
+        const doc = MDocument.fromText(text, { meta: 'data' });
 
         await doc.chunk({
           strategy: 'character',
-          options: {
-            separator: '\n\n',
-            isSeparatorRegex: false,
-            chunkSize: 50,
-            chunkOverlap: 5,
-            keepSeparator: 'end',
-          },
+          separator: '\n\n',
+          isSeparatorRegex: false,
+          size: 50,
+          overlap: 5,
+          keepSeparator: 'end',
         });
 
         const chunks = doc.getText();
@@ -368,17 +203,15 @@ describe('MastraDocument', () => {
       it('should handle text starting with separator', async () => {
         const text = '\n\nHello\n\nWorld';
 
-        const doc = MastraDocument.fromText(text, { meta: 'data' });
+        const doc = MDocument.fromText(text, { meta: 'data' });
 
         await doc.chunk({
           strategy: 'character',
-          options: {
-            separator: '\n\n',
-            isSeparatorRegex: false,
-            chunkSize: 50,
-            chunkOverlap: 5,
-            keepSeparator: 'start',
-          },
+          separator: '\n\n',
+          isSeparatorRegex: false,
+          size: 50,
+          overlap: 5,
+          keepSeparator: 'start',
         });
 
         const chunks = doc.getText();
@@ -394,16 +227,14 @@ describe('MastraDocument', () => {
       const text =
         'Hello world.\n\nThis is a test of the recursive splitting system.\nIt should handle multiple lines and different separators appropriately.';
 
-      const doc = MastraDocument.fromText(text, { meta: 'data' });
+      const doc = MDocument.fromText(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'recursive',
-        options: {
-          separators: ['\n\n', '\n', ' ', ''],
-          isSeparatorRegex: false,
-          chunkSize: 50,
-          chunkOverlap: 5,
-        },
+        separators: ['\n\n', '\n', ' ', ''],
+        isSeparatorRegex: false,
+        size: 50,
+        overlap: 5,
       });
 
       expect(doc.getDocs()?.length).toBeGreaterThan(1);
@@ -419,20 +250,18 @@ describe('MastraDocument', () => {
                 name: string;
                 age: number;
               }
-        
+
               function greet(user: User) {
                 console.log(\`Hello \${user.name}\`);
               }
             `;
 
-      const doc = MastraDocument.fromText(tsCode, { meta: 'data' });
+      const doc = MDocument.fromText(tsCode, { meta: 'data' });
 
       await doc.chunk({
-        options: {
-          chunkSize: 50,
-          chunkOverlap: 5,
-          language: Language.TS,
-        },
+        size: 50,
+        overlap: 5,
+        language: Language.TS,
       });
 
       expect(doc.getDocs().length).toBeGreaterThan(1);
@@ -441,22 +270,20 @@ describe('MastraDocument', () => {
     });
 
     it('should throw error for unsupported language', async () => {
-      const doc = MastraDocument.fromText('tsCode', { meta: 'data' });
+      const doc = MDocument.fromText('tsCode', { meta: 'data' });
 
       await expect(
         doc.chunk({
-          options: {
-            chunkSize: 50,
-            chunkOverlap: 5,
-            language: 'invalid-language' as any,
-          },
+          size: 50,
+          overlap: 5,
+          language: 'invalid-language' as any,
         }),
       ).rejects.toThrow();
     });
 
     it('should maintain context with overlap', async () => {
       const text = 'This is a test.\nIt has multiple lines.\nEach line should be handled properly.';
-      const doc = MastraDocument.fromText(text, { meta: 'data' });
+      const doc = MDocument.fromText(text, { meta: 'data' });
 
       await doc.chunk();
 
@@ -486,17 +313,15 @@ describe('MastraDocument', () => {
               </html>
             `;
 
-      const doc = MastraDocument.fromHTML(html, { meta: 'data' });
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'html',
-        options: {
-          headers: [
-            ['h1', 'Header 1'],
-            ['h2', 'Header 2'],
-            ['h3', 'Header 3'],
-          ],
-        },
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+          ['h3', 'Header 3'],
+        ],
       });
 
       const docs = doc.getDocs();
@@ -520,17 +345,15 @@ describe('MastraDocument', () => {
               </html>
             `;
 
-      const doc = MastraDocument.fromHTML(html, { meta: 'data' });
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'html',
-        options: {
-          headers: [
-            ['h1', 'Header 1'],
-            ['h2', 'Header 2'],
-            ['h3', 'Header 3'],
-          ],
-        },
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+          ['h3', 'Header 3'],
+        ],
       });
 
       const docs = doc.getDocs();
@@ -553,18 +376,17 @@ describe('MastraDocument', () => {
       </html>
     `;
 
-      const doc = MastraDocument.fromHTML(html, { meta: 'data' });
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'html',
-        options: {
-          returnEachLine: true,
-          headers: [
-            ['h1', 'Header 1'],
-            ['h2', 'Header 2'],
-            ['h3', 'Header 3'],
-          ],
-        },
+
+        returnEachLine: true,
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+          ['h3', 'Header 3'],
+        ],
       });
 
       const docs = doc.getDocs();
@@ -589,16 +411,14 @@ describe('MastraDocument', () => {
               </html>
             `;
 
-      const doc = MastraDocument.fromHTML(html, { meta: 'data' });
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'html',
-        options: {
-          sections: [
-            ['h1', 'Header 1'],
-            ['h2', 'Header 2'],
-          ],
-        },
+        sections: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+        ],
       });
       const docs = doc.getDocs();
 
@@ -608,7 +428,7 @@ describe('MastraDocument', () => {
     });
 
     it('should properly merge metadata', async () => {
-      const doc = new MastraDocument({
+      const doc = new MDocument({
         docs: [
           {
             text: `
@@ -630,12 +450,10 @@ describe('MastraDocument', () => {
 
       await doc.chunk({
         strategy: 'html',
-        options: {
-          sections: [
-            ['h1', 'Header 1'],
-            ['h2', 'Header 2'],
-          ],
-        },
+        sections: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+        ],
       });
 
       doc.getDocs().forEach(doc => {
@@ -653,15 +471,13 @@ describe('MastraDocument', () => {
           key2: '世界',
         };
 
-        const doc = MastraDocument.fromJSON(JSON.stringify(input), { meta: 'data' });
+        const doc = MDocument.fromJSON(JSON.stringify(input), { meta: 'data' });
 
         await doc.chunk({
           strategy: 'json',
-          options: {
-            maxChunkSize: 50,
-            minChunkSize: 50,
-            ensureAscii: true,
-          },
+          maxSize: 50,
+          minSize: 50,
+          ensureAscii: true,
         });
 
         expect(doc.getText().some(chunk => chunk.includes('\\u'))).toBe(true);
@@ -672,7 +488,6 @@ describe('MastraDocument', () => {
             const c = JSON.parse(chunk);
             const retVal: Record<string, string> = {};
             Object.entries(c).forEach(([key, value]) => {
-              console.log(key, value);
               retVal[key] = JSON.parse(`"${value as string}"`);
             });
 
@@ -695,14 +510,12 @@ describe('MastraDocument', () => {
           key2: '世界',
         };
 
-        const doc = MastraDocument.fromJSON(JSON.stringify(input), { meta: 'data' });
+        const doc = MDocument.fromJSON(JSON.stringify(input), { meta: 'data' });
 
         await doc.chunk({
           strategy: 'json',
-          options: {
-            maxChunkSize: 50,
-            ensureAscii: false,
-          },
+          maxSize: 50,
+          ensureAscii: false,
         });
 
         expect(doc.getText().some(chunk => chunk.includes('你好'))).toBe(true);
@@ -721,15 +534,13 @@ describe('MastraDocument', () => {
   describe('chunkToken', () => {
     it('should handle different encodings', async () => {
       const text = 'This is a test text for different encodings.';
-      const doc = MastraDocument.fromText(text, { meta: 'data' });
+      const doc = MDocument.fromText(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'token',
-        options: {
-          encodingName: 'cl100k_base',
-          chunkSize: 10,
-          chunkOverlap: 2,
-        },
+        encodingName: 'cl100k_base',
+        size: 10,
+        overlap: 2,
       });
 
       const chunks = doc.getText();
@@ -741,17 +552,15 @@ describe('MastraDocument', () => {
     it('should handle special tokens correctly', async () => {
       const text = 'Test text <|endoftext|> more text';
 
-      const doc = MastraDocument.fromText(text, { meta: 'data' });
+      const doc = MDocument.fromText(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'token',
-        options: {
-          encodingName: 'gpt2',
-          chunkSize: 10,
-          disallowedSpecial: new Set(),
-          allowedSpecial: new Set(['<|endoftext|>']),
-          chunkOverlap: 2,
-        },
+        encodingName: 'gpt2',
+        size: 10,
+        disallowedSpecial: new Set(),
+        allowedSpecial: new Set(['<|endoftext|>']),
+        overlap: 2,
       });
 
       const chunks = doc.getText();
@@ -762,17 +571,15 @@ describe('MastraDocument', () => {
     it('should strip whitespace when configured', async () => {
       const text = '  This has whitespace   ';
 
-      const doc = MastraDocument.fromText(text, { meta: 'data' });
+      const doc = MDocument.fromText(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'token',
-        options: {
-          encodingName: 'gpt2',
-          chunkSize: 10,
-          disallowedSpecial: new Set(),
-          allowedSpecial: new Set(['<|endoftext|>']),
-          chunkOverlap: 2,
-        },
+        encodingName: 'gpt2',
+        size: 10,
+        disallowedSpecial: new Set(),
+        allowedSpecial: new Set(['<|endoftext|>']),
+        overlap: 2,
       });
 
       const chunks = doc.getText();
@@ -785,31 +592,27 @@ describe('MastraDocument', () => {
     describe('Error cases', () => {
       it('should throw error for invalid chunk size and overlap', async () => {
         const text = '  This has whitespace   ';
-        const doc = MastraDocument.fromText(text, { meta: 'data' });
+        const doc = MDocument.fromText(text, { meta: 'data' });
 
         await expect(
           doc.chunk({
             strategy: 'token',
-            options: {
-              chunkSize: 100,
-              chunkOverlap: 150, // overlap larger than chunk size
-            },
+            size: 100,
+            overlap: 150, // overlap larger than chunk size
           }),
         ).rejects.toThrow();
       });
 
       it('should handle invalid encoding name', async () => {
         const text = '  This has whitespace   ';
-        const doc = MastraDocument.fromText(text, { meta: 'data' });
+        const doc = MDocument.fromText(text, { meta: 'data' });
 
         await expect(
           doc.chunk({
             strategy: 'token',
-            options: {
-              encodingName: 'invalid-encoding' as any,
-              chunkSize: 100,
-              chunkOverlap: 150, // overlap larger than chunk size
-            },
+            encodingName: 'invalid-encoding' as any,
+            size: 100,
+            overlap: 150, // overlap larger than chunk size
           }),
         ).rejects.toThrow();
       });
@@ -819,26 +622,24 @@ describe('MastraDocument', () => {
   describe('chunkMarkdown', () => {
     it('should split markdown text correctly', async () => {
       const text = `# Header 1
-            
+
         This is some text under header 1.
-        
+
         ## Header 2
-        
+
         This is some text under header 2.
-        
+
         ### Header 3
-        
+
         - List item 1
         - List item 2`;
 
-      const doc = MastraDocument.fromMarkdown(text, { meta: 'data' });
+      const doc = MDocument.fromMarkdown(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'markdown',
-        options: {
-          chunkSize: 100,
-          chunkOverlap: 10,
-        },
+        size: 100,
+        overlap: 10,
       });
 
       const chunks = doc.getText();
@@ -848,23 +649,21 @@ describe('MastraDocument', () => {
 
     it('should handle code blocks', async () => {
       const text = `# Code Example
-        
+
         \`\`\`javascript
         function hello() {
           console.log('Hello, World!');
         }
         \`\`\`
-        
+
         Regular text after code block.`;
 
-      const doc = MastraDocument.fromMarkdown(text, { meta: 'data' });
+      const doc = MDocument.fromMarkdown(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'markdown',
-        options: {
-          chunkSize: 100,
-          chunkOverlap: 10,
-        },
+        size: 100,
+        overlap: 10,
       });
 
       const chunks = doc.getText();
@@ -875,32 +674,30 @@ describe('MastraDocument', () => {
   describe('MarkdownHeader', () => {
     it('should split on headers and preserve metadata', async () => {
       const text = `# Main Title
-        
+
         Some content here.
-        
+
         ## Section 1
-        
+
         Section 1 content.
-        
+
         ### Subsection 1.1
-        
+
         Subsection content.
-        
+
         ## Section 2
-        
+
         Final content.`;
 
-      const doc = MastraDocument.fromMarkdown(text);
+      const doc = MDocument.fromMarkdown(text);
 
       await doc.chunk({
         strategy: 'markdown',
-        options: {
-          headers: [
-            ['#', 'Header 1'],
-            ['##', 'Header 2'],
-            ['###', 'Header 3'],
-          ],
-        },
+        headers: [
+          ['#', 'Header 1'],
+          ['##', 'Header 2'],
+          ['###', 'Header 3'],
+        ],
       });
 
       const docs = doc.getDocs();
@@ -915,27 +712,25 @@ describe('MastraDocument', () => {
 
     it('should handle nested headers correctly', async () => {
       const text = `# Top Level
-        
+
         ## Section A
         Content A
-        
+
         ### Subsection A1
         Content A1
-        
+
         ## Section B
         Content B`;
 
-      const doc = MastraDocument.fromMarkdown(text, { meta: 'data' });
+      const doc = MDocument.fromMarkdown(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'markdown',
-        options: {
-          headers: [
-            ['#', 'Header 1'],
-            ['##', 'Header 2'],
-            ['###', 'Header 3'],
-          ],
-        },
+        headers: [
+          ['#', 'Header 1'],
+          ['##', 'Header 2'],
+          ['###', 'Header 3'],
+        ],
       });
 
       const subsectionDoc = doc.getDocs().find(doc => doc?.metadata?.['Header 3'] === 'Subsection A1');
@@ -946,25 +741,23 @@ describe('MastraDocument', () => {
 
     it('should handle code blocks without splitting them', async () => {
       const text = `# Code Section
-        
+
         \`\`\`python
         def hello():
             print("Hello World")
         \`\`\`
-        
+
         ## Next Section`;
 
-      const doc = MastraDocument.fromMarkdown(text, { meta: 'data' });
+      const doc = MDocument.fromMarkdown(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'markdown',
-        options: {
-          headers: [
-            ['#', 'Header 1'],
-            ['##', 'Header 2'],
-            ['###', 'Header 3'],
-          ],
-        },
+        headers: [
+          ['#', 'Header 1'],
+          ['##', 'Header 2'],
+          ['###', 'Header 3'],
+        ],
       });
 
       const codeDoc = doc.getDocs().find(doc => doc?.text?.includes('```python'));
@@ -973,19 +766,17 @@ describe('MastraDocument', () => {
 
     it('should respect returnEachLine option', async () => {
       const text = `# Title
-        
+
         Line 1
         Line 2
         Line 3`;
 
-      const doc = MastraDocument.fromMarkdown(text, { meta: 'data' });
+      const doc = MDocument.fromMarkdown(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'markdown',
-        options: {
-          headers: [['#', 'Header 1']],
-          returnEachLine: true,
-        },
+        headers: [['#', 'Header 1']],
+        returnEachLine: true,
       });
 
       expect(doc.getDocs().length).toBe(4); // Title + 3 lines
@@ -999,18 +790,16 @@ describe('MastraDocument', () => {
 
     it('should handle stripHeaders option', async () => {
       const text = `# Title
-        
+
         Content`;
 
-      const doc = MastraDocument.fromMarkdown(text, { meta: 'data' });
+      const doc = MDocument.fromMarkdown(text, { meta: 'data' });
 
       await doc.chunk({
         strategy: 'markdown',
-        options: {
-          headers: [['#', 'Header 1']],
-          returnEachLine: false,
-          stripHeaders: false,
-        },
+        headers: [['#', 'Header 1']],
+        returnEachLine: false,
+        stripHeaders: false,
       });
 
       const docs = doc.getDocs();

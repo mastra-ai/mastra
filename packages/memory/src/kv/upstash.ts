@@ -135,6 +135,7 @@ export class UpstashKVMemory extends MastraMemory {
     threadId,
     startDate,
     endDate,
+    // @ts-ignore
     format = 'raw' as T,
   }: {
     format?: T;
@@ -145,7 +146,7 @@ export class UpstashKVMemory extends MastraMemory {
     const messagesKey = this.getMessagesKey(threadId);
     const messages = await this.kv.lrange<MessageType>(messagesKey, 0, -1);
 
-    let filteredMessages = messages.filter(msg => msg.type === 'text');
+    let filteredMessages = messages.filter(msg => msg.type === 'text' || msg.type === 'tool-result');
 
     if (startDate) {
       filteredMessages = filteredMessages.filter(msg => new Date(msg.createdAt) >= startDate);
@@ -182,7 +183,6 @@ export class UpstashKVMemory extends MastraMemory {
         });
       }
 
-      console.log('Format:', format);
       // Return messages in chronological order
       return this.parseMessages(messagesWithinTokenLimit) as MessageResponse<T>;
     }

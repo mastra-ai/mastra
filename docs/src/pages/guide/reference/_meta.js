@@ -2,9 +2,9 @@ const meta = {
   "local-dev": "Local Dev",
   llm: "LLM",
   agents: "Agents",
-  tools: "Tools",
   workflows: "Workflows",
-  rag: "RAG",
+  rag: "Knowledge",
+  observability: "Observability",
 };
 
 export default meta;

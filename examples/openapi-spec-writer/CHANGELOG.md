@@ -1,5 +1,164 @@
 # openapi-spec-writer
 
+## 0.1.1-alpha.20
+
+### Patch Changes
+
+- Updated dependencies [61b5c4e]
+  - @mastra/firecrawl@1.0.4-alpha.23
+  - @mastra/github@1.0.3-alpha.22
+
+## 0.1.1-alpha.19
+
+### Patch Changes
+
+- Updated dependencies [f031a1f]
+  - @mastra/core@0.1.27-alpha.38
+  - @mastra/rag@0.0.2-alpha.22
+  - @mastra/firecrawl@1.0.4-alpha.22
+  - @mastra/github@1.0.3-alpha.21
+  - @mastra/engine@0.0.5-alpha.32
+
+## 0.1.1-alpha.18
+
+### Patch Changes
+
+- b5393f1: New example: Dane and many fixes to make it work
+- Updated dependencies [45fd5b8]
+- Updated dependencies [c872875]
+- Updated dependencies [f6da688]
+- Updated dependencies [1cc6cc0]
+- Updated dependencies [b5393f1]
+  - @mastra/rag@0.0.2-alpha.21
+  - @mastra/core@0.1.27-alpha.37
+  - @mastra/engine@0.0.5-alpha.31
+  - @mastra/firecrawl@1.0.4-alpha.21
+  - @mastra/github@1.0.3-alpha.20
+
+## 0.1.1-alpha.17
+
+### Patch Changes
+
+- f187221: bring back cli post install
+- bc40916: Pass mastra instance directly into actions allowing access to all registered primitives
+- Updated dependencies [f537e33]
+- Updated dependencies [bc40916]
+- Updated dependencies [f7d1131]
+- Updated dependencies [75bf3f0]
+- Updated dependencies [3c4488b]
+- Updated dependencies [d38f7a6]
+  - @mastra/core@0.1.27-alpha.36
+  - @mastra/firecrawl@1.0.4-alpha.20
+  - @mastra/github@1.0.3-alpha.19
+  - @mastra/engine@0.0.5-alpha.30
+  - @mastra/rag@0.0.2-alpha.20
+
+## 0.1.1-alpha.16
+
+### Patch Changes
+
+- 033eda6: More fixes for refactor
+- Updated dependencies [033eda6]
+  - @mastra/firecrawl@1.0.4-alpha.19
+  - @mastra/github@1.0.3-alpha.18
+  - @mastra/core@0.1.27-alpha.35
+  - @mastra/engine@0.0.5-alpha.29
+  - @mastra/rag@0.0.2-alpha.19
+
+## 0.1.1-alpha.15
+
+### Patch Changes
+
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- 5811de6: Updates spec-writer example to use new workflows constructs. Small improvements to workflow internals. Switch transformer tokenizer for js compatible one.
+- Updated dependencies [837a288]
+- Updated dependencies [5811de6]
+  - @mastra/firecrawl@1.0.4-alpha.18
+  - @mastra/github@1.0.3-alpha.17
+  - @mastra/engine@0.0.5-alpha.28
+  - @mastra/core@0.1.27-alpha.34
+  - @mastra/rag@0.0.2-alpha.18
+
+## 0.1.1-alpha.14
+
+### Patch Changes
+
+- Updated dependencies [e1dd94a]
+  - @mastra/core@0.1.27-alpha.33
+  - @mastra/firecrawl@1.0.4-alpha.17
+  - @mastra/github@1.0.3-alpha.16
+  - @mastra/engine@0.0.5-alpha.27
+
+## 0.1.1-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [2712098]
+  - @mastra/core@0.1.27-alpha.32
+  - @mastra/firecrawl@1.0.4-alpha.16
+  - @mastra/github@1.0.3-alpha.15
+  - @mastra/engine@0.0.5-alpha.26
+
+## 0.1.1-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [c2dd6b5]
+  - @mastra/core@0.1.27-alpha.31
+  - @mastra/firecrawl@1.0.4-alpha.15
+  - @mastra/github@1.0.3-alpha.14
+  - @mastra/engine@0.0.5-alpha.25
+
+## 0.1.1-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [963c15a]
+  - @mastra/core@0.1.27-alpha.30
+  - @mastra/firecrawl@1.0.4-alpha.14
+  - @mastra/github@1.0.3-alpha.13
+  - @mastra/engine@0.0.5-alpha.24
+
+## 0.1.1-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [7d87a15]
+  - @mastra/core@0.1.27-alpha.29
+  - @mastra/firecrawl@1.0.4-alpha.13
+  - @mastra/github@1.0.3-alpha.12
+  - @mastra/engine@0.0.5-alpha.23
+
+## 0.1.1-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [1ebd071]
+  - @mastra/core@0.1.27-alpha.28
+  - @mastra/firecrawl@1.0.4-alpha.12
+  - @mastra/github@1.0.3-alpha.11
+  - @mastra/engine@0.0.5-alpha.22
+
+## 0.1.1-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [cd02c56]
+  - @mastra/core@0.1.27-alpha.27
+  - @mastra/firecrawl@1.0.4-alpha.11
+  - @mastra/github@1.0.3-alpha.10
+  - @mastra/engine@0.0.5-alpha.21
+
+## 0.1.1-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [d5e12de]
+  - @mastra/core@0.1.27-alpha.26
+  - @mastra/firecrawl@1.0.4-alpha.10
+  - @mastra/github@1.0.3-alpha.9
+  - @mastra/engine@0.0.5-alpha.20
+
 ## 0.1.1-alpha.6
 
 ### Patch Changes

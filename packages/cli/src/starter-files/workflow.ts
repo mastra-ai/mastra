@@ -9,9 +9,9 @@ const logCatName = new Step({
   outputSchema: z.object({
     rawText: z.string(),
   }),
-  action: ({ name }) => {
-    console.log(`Hello, ${name} 🐈`);
-    return { rawText: `Hello ${name}` };
+  execute: async ({ context }) => {
+    console.log(`Hello, ${context.name} 🐈`);
+    return { rawText: `Hello ${context.name}` };
   },
 });
 
@@ -20,13 +20,12 @@ export const logCatWorkflow = new Workflow({
   triggerSchema: z.object({
     name: z.string(),
   }),
-  steps: [logCatName],
 });
 
-logCatWorkflow.step('logCatName', {
+logCatWorkflow.step(logCatName, {
   variables: {
     name: {
-      stepId: 'trigger',
+      step: 'trigger',
       path: '', // passes in entire payload
     },
   },

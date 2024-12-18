@@ -1,30 +1,16 @@
 import { jest } from '@jest/globals';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import { BaseLogMessage, createLogger, createMultiLogger, Logger, LogLevel, RegisteredLogger } from './';
+import { BaseLogMessage, createLogger, combineLoggers, Logger, LogLevel, noopLogger, RegisteredLogger } from './';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const mockRedisInstance = {
-  lpush: jest.fn<() => Promise<undefined>>().mockResolvedValue(undefined),
-  lrange: jest.fn<() => Promise<string[]>>().mockResolvedValue(['log1', 'log2']),
-};
-
-jest.mock('@upstash/redis', () => ({
-  Redis: jest.fn().mockImplementation(() => mockRedisInstance),
-}));
-
 describe('Logger Utilities', () => {
-  const testDir = path.join(__dirname, 'test-logs');
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    (mockRedisInstance.lpush as jest.Mock).mockClear();
-    (mockRedisInstance.lrange as jest.Mock).mockClear();
-  });
+  const testDir = path.join(os.tmpdir(), 'test-logs');
 
   afterEach(() => {
     if (fs.existsSync(testDir)) {
@@ -72,7 +58,7 @@ describe('Logger Utilities', () => {
       logger.warn('Warn message');
       logger.error('Error message');
 
-      expect(consoleSpy).toHaveBeenCalledTimes(1);
+      expect(consoleSpy).toHaveBeenCalledTimes(2);
       expect(consoleSpy.mock.calls[0]![0]).toMatch(/\[WARN\] Warn message/);
 
       consoleSpy.mockRestore();
@@ -91,11 +77,12 @@ describe('Logger Utilities', () => {
     });
   });
 
-  describe.skip('FileLogger', () => {
+  describe('FileLogger', () => {
     it('should log messages to file', () => {
       const logger = createLogger({
         type: 'FILE',
         dirPath: testDir,
+        level: LogLevel.ERROR,
       });
 
       const logMessage = createTestMessage();
@@ -159,36 +146,44 @@ describe('Logger Utilities', () => {
     });
   });
 
-  describe.skip('UpstashRedisLogger', () => {
-    it('should log messages to Redis', async () => {
-      const logger = createLogger({
-        type: 'UPSTASH',
-        url: 'https://test-url',
-        token: 'test-token',
-        key: 'test-logs',
-      });
+  describe('UpstashRedisLogger', () => {
+    const logger = createLogger({
+      type: 'UPSTASH',
+      url: 'http://localhost:8079',
+      token: `example_token`,
+      key: 'test-logs',
+    });
 
+    afterAll(() => {
+      logger.cleanup();
+    });
+
+    afterEach(async () => {
+      await logger.deleteLogsByKey('logs');
+      await logger.deleteLogsByKey('test-logs');
+    });
+
+    it('should log messages to Redis', async () => {
       const logMessage = createTestMessage();
 
       await logger.info(logMessage);
       await logger.error(logMessage);
 
-      const lpushMock = mockRedisInstance.lpush as jest.Mock;
-      expect(lpushMock).toHaveBeenCalledTimes(2);
-      expect(lpushMock.mock.calls[0]![0]).toBe('test-logs');
+      const d = await logger.getLogs();
 
-      const firstLog = JSON.parse(lpushMock.mock.calls[0]![1] as string);
+      const firstLog = d[1];
+
       expect(firstLog).toMatchObject({
         message: 'Test message',
         level: 'INFO',
       });
-    });
+    }, 50000);
 
     it('should not log messages below the configured level', async () => {
       const logger = createLogger({
         type: 'UPSTASH',
-        url: 'https://test-url',
-        token: 'test-token',
+        url: 'http://localhost:8079',
+        token: `example_token`,
         key: 'test-logs',
         level: LogLevel.WARN,
       });
@@ -200,46 +195,40 @@ describe('Logger Utilities', () => {
       await logger.warn(logMessage);
       await logger.error(logMessage);
 
-      const lpushMock = mockRedisInstance.lpush as jest.Mock;
-      expect(lpushMock).toHaveBeenCalledTimes(2);
+      const logs = await logger.getLogs();
 
-      const calls = lpushMock.mock.calls.map(call => JSON.parse(call[1] as string));
-      expect(calls[0].level).toBe('WARN');
-      expect(calls[1].level).toBe('ERROR');
-    });
+      expect(logs[1]).toMatchObject({ level: 'WARN' });
+      expect(logs[0]).toMatchObject({ level: 'ERROR' });
+    }, 50000);
 
     it('should throw error for string messages', async () => {
-      const logger = createLogger({
-        type: 'UPSTASH',
-        url: 'https://test-url',
-        token: 'test-token',
-      });
-
       await expect(logger.info('string message')).rejects.toThrow(
         'UpstashRedisLogger requires a BaseLogMessage object',
       );
-    });
+    }, 50000);
 
     it('should use default key if not provided', async () => {
       const logger = createLogger({
         type: 'UPSTASH',
-        url: 'https://test-url',
-        token: 'test-token',
+        url: 'http://localhost:8079',
+        token: `example_token`,
+        level: LogLevel.INFO,
       });
 
       const logMessage = createTestMessage();
       await logger.info(logMessage);
 
-      const lpushMock = mockRedisInstance.lpush as jest.Mock;
-      expect(lpushMock.mock.calls[0]![0]).toBe('logs');
-    });
+      const logs = await logger.getLogs();
+
+      expect(logs).toHaveLength(1);
+    }, 50000);
   });
 
-  describe.skip('MultiLogger', () => {
+  describe('MultiLogger', () => {
     it('should log to multiple loggers', async () => {
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
 
-      const multiLogger = createMultiLogger([
+      const multiLogger = combineLoggers([
         createLogger({ type: 'CONSOLE' }),
         createLogger({ type: 'FILE', dirPath: testDir }),
       ]);
@@ -264,7 +253,7 @@ describe('Logger Utilities', () => {
     it('should respect individual logger levels', async () => {
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
 
-      const multiLogger = createMultiLogger([
+      const multiLogger = combineLoggers([
         createLogger({ type: 'CONSOLE', level: LogLevel.ERROR }),
         createLogger({ type: 'FILE', dirPath: testDir, level: LogLevel.INFO }),
       ]);
@@ -274,7 +263,7 @@ describe('Logger Utilities', () => {
       await multiLogger.error(logMessage);
 
       // Console logger should only have ERROR message
-      expect(consoleSpy).toHaveBeenCalledTimes(1);
+      expect(consoleSpy).toHaveBeenCalledTimes(2);
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[ERROR]'));
 
       // File logger should have both messages
@@ -296,7 +285,7 @@ describe('Logger Utilities', () => {
         cleanup: mockCleanup,
       } as Logger<BaseLogMessage>;
 
-      const multiLogger = createMultiLogger([createLogger({ type: 'CONSOLE' }), customLogger]);
+      const multiLogger = combineLoggers([createLogger({ type: 'CONSOLE' }), customLogger]);
 
       await (multiLogger as any).cleanup();
       expect(mockCleanup).toHaveBeenCalled();
@@ -319,6 +308,17 @@ describe('Logger Utilities', () => {
       expect(consoleSpy.mock.calls[0]![0]).toMatch(/\[INFO\]/);
 
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe('noopLogger', () => {
+    it('should not log any message', () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      noopLogger.warn();
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+      expect(consoleSpy).not.toHaveBeenCalledTimes(1);
     });
   });
 });

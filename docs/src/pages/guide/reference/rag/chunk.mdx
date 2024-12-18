@@ -1,0 +1,184 @@
+# Chunk Function Reference
+
+The `chunk` function splits documents into smaller segments using various strategies and options.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "strategy",
+      type: "'recursive' | 'character' | 'token' | 'markdown' | 'html' | 'json' | 'latex'",
+      isOptional: true,
+      description:
+        "The chunking strategy to use. If not specified, defaults based on document type.",
+    },
+    {
+      name: "chunkOptions",
+      type: "ChunkOptions",
+      isOptional: true,
+      description: "Configuration options for the chunking strategy",
+    },
+    {
+      name: "extract",
+      type: "ExtractParams",
+      isOptional: true,
+      description: "Metadata extraction options (requires OpenAI API key)",
+    },
+  ]}
+/>
+
+## Chunking Options
+
+Options vary by strategy, but common parameters include:
+
+<PropertiesTable
+  content={[
+    {
+      name: "size",
+      type: "number",
+      isOptional: true,
+      defaultValue: "512",
+      description: "Maximum size of each chunk",
+    },
+    {
+      name: "overlap",
+      type: "number",
+      isOptional: true,
+      defaultValue: "50",
+      description: "Number of characters/tokens that overlap between chunks",
+    },
+    {
+      name: "separator",
+      type: "string",
+      isOptional: true,
+      description: "Character(s) to split on",
+    },
+    {
+      name: "isSeparatorRegex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether the separator is a regex pattern",
+    },
+    {
+      name: "keepSeparator",
+      type: "'start' | 'end'",
+      isOptional: true,
+      description:
+        "Whether to keep the separator at the start or end of chunks",
+    },
+  ]}
+/>
+
+## Strategy-Specific Options
+
+### HTML
+
+<PropertiesTable
+  content={[
+    {
+      name: "headers",
+      type: "Array<[string, string]>",
+      description:
+        "Array of [selector, metadata key] pairs for header-based splitting",
+    },
+    {
+      name: "sections",
+      type: "Array<[string, string]>",
+      description:
+        "Array of [selector, metadata key] pairs for section-based splitting",
+    },
+    {
+      name: "returnEachLine",
+      type: "boolean",
+      isOptional: true,
+      description: "Whether to return each line as a separate chunk",
+    },
+  ]}
+/>
+
+### Markdown
+
+<PropertiesTable
+  content={[
+    {
+      name: "headers",
+      type: "Array<[string, string]>",
+      description: "Array of [header level, metadata key] pairs",
+    },
+    {
+      name: "stripHeaders",
+      type: "boolean",
+      isOptional: true,
+      description: "Whether to remove headers from the output",
+    },
+    {
+      name: "returnEachLine",
+      type: "boolean",
+      isOptional: true,
+      description: "Whether to return each line as a separate chunk",
+    },
+  ]}
+/>
+
+### Token
+
+<PropertiesTable
+  content={[
+    {
+      name: "encodingName",
+      type: "string",
+      isOptional: true,
+      description: "Name of the token encoding to use",
+    },
+    {
+      name: "modelName",
+      type: "string",
+      isOptional: true,
+      description: "Name of the model for tokenization",
+    },
+  ]}
+/>
+
+### JSON
+
+<PropertiesTable
+  content={[
+    {
+      name: "maxSize",
+      type: "number",
+      description: "Maximum size of each chunk",
+    },
+    {
+      name: "minSize",
+      type: "number",
+      isOptional: true,
+      description: "Minimum size of each chunk",
+    },
+    {
+      name: "ensureAscii",
+      type: "boolean",
+      isOptional: true,
+      description: "Whether to ensure ASCII encoding",
+    },
+    {
+      name: "convertLists",
+      type: "boolean",
+      isOptional: true,
+      description: "Whether to convert lists in the JSON",
+    },
+  ]}
+/>
+
+## Return Value
+
+Returns a `MDocument` instance containing the chunked documents. Each chunk includes:
+
+```typescript
+interface DocumentNode {
+  text: string;
+  metadata: Record<string, any>;
+  embedding?: number[];
+}
+```

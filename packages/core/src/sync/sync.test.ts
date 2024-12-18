@@ -1,9 +1,7 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { z } from 'zod';
 
-import { PropertyType } from '../engine';
 import { MockMastraEngine } from '../engine/engine.mock';
-import { LLM } from '../llm';
 import { Mastra } from '../mastra';
 
 import { createSync } from '.';
@@ -13,33 +11,33 @@ const mockEngine = new MockMastraEngine({
 });
 
 const testSync = createSync({
-  label: 'test',
+  id: 'test',
   description: 'test',
-  schema: z.object({
+  inputSchema: z.object({
     name: z.string(),
   }),
-  outputShema: z.object({
+  outputSchema: z.object({
     message: z.string(),
   }),
-  executor: async ({ data }) => {
+  execute: async ({ context }) => {
     return {
-      message: `Hello, ${data.name}`,
+      message: `Hello, ${context.name}`,
     };
   },
 });
 
 const testSync2 = createSync({
-  label: 'test2',
+  id: 'test2',
   description: 'test2',
-  schema: z.object({
+  inputSchema: z.object({
     venue: z.string(),
   }),
-  outputShema: z.object({
+  outputSchema: z.object({
     message: z.string(),
   }),
-  executor: async ({ data }) => {
+  execute: async ({ context }) => {
     return {
-      message: `Welcome to ${data.venue}`,
+      message: `Welcome to ${context.venue}`,
     };
   },
 });
@@ -49,36 +47,37 @@ const executorSpy = jest.fn<any>().mockResolvedValue({
 });
 
 const testSyncWithSpy = createSync({
-  label: 'spyTest',
+  id: 'spyTest',
   description: 'test parameters',
-  schema: z.object({
+  inputSchema: z.object({
     name: z.string(),
   }),
-  outputShema: z.object({
+  outputSchema: z.object({
     message: z.string(),
   }),
-  executor: executorSpy,
+  execute: executorSpy,
 });
 
 const syncDataSpy = jest.spyOn(mockEngine, 'syncRecords');
 
 const syncWithData = createSync({
-  label: 'syncDataTest',
+  id: 'syncDataTest',
   description: 'test sync data',
-  schema: z.object({
+  inputSchema: z.object({
     name: z.string(),
     age: z.number(),
   }),
-  outputShema: z.object({
+  outputSchema: z.object({
     success: z.boolean(),
   }),
-  executor: async ({ data, engine }) => {
-    await engine.syncRecords({
-      connectionId: 'test-connection',
-      name: 'user',
-      records: [{ data: { name: data.name, age: data.age }, externalId: '1' }],
-    });
-
+  execute: async ({ context, mastra }) => {
+    if (mastra?.engine) {
+      await mastra.engine.syncRecords({
+        connectionId: 'test-connection',
+        name: 'user',
+        records: [{ data: { name: context.name, age: context.age }, externalId: '1' }],
+      });
+    }
     return { success: true };
   },
 });
@@ -102,17 +101,17 @@ describe('Mastra Sync', () => {
     const executorParams = executorSpy.mock.calls?.[0]?.[0] as any;
 
     expect(executorParams).toMatchObject({
-      data: { name: 'John' },
-      agents: new Map(),
-      engine: expect.any(MockMastraEngine),
-      integrationsRegistry: expect.any(Function),
-      llm: expect.any(Function),
-      toolsRegistry: expect.any(Function),
-      vectors: undefined,
+      context: { name: 'John' },
+      mastra: {
+        agents: new Map(),
+        engine: expect.any(MockMastraEngine),
+        llm: expect.any(Function),
+        vectors: undefined,
+      },
     });
 
-    expect(executorParams.engine).toBeInstanceOf(MockMastraEngine);
-    expect(executorParams.data).toEqual({ name: 'John' });
+    expect(executorParams.mastra.engine).toBeInstanceOf(MockMastraEngine);
+    expect(executorParams.context).toEqual({ name: 'John' });
   });
 
   it('Should execute sync function', async () => {

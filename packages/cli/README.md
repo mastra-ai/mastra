@@ -1,6 +1,6 @@
 # The Mastra CLI
 
-![Mastra Cli](./mastra-cli.png)
+![Mastra Cli](https://github.com/mastra-ai/mastra/blob/main/packages/cli/mastra-cli.png)
 
 The Mastra CLI enables you to get up and running with mastra quickly. It is not required to use mastra, but helpful for getting started and more advanced use cases.
 
@@ -72,9 +72,9 @@ It is useful for cases where you don't have a dockerized `postgres` db setup.
 
 #### Rest Endpoints
 
-`mastra serve`
+`mastra dev`
 
-This spins up `REST` endpoints for all agents and workflows
+This spins up `REST` endpoints for all agents, all workflows, and memory.
 
 ## Local development
 

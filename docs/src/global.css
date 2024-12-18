@@ -2,10 +2,91 @@
 @tailwind components;
 @tailwind utilities;
 
-.dark\:_bg-black:is(html[class~="dark"] *) {
+.dark\:_bg-black:is(html[class~='dark'] *) {
   background-color: #141415 !important;
 }
 
-div._flex {
+/* div._flex {
   max-width: 1232px;
+} */
+
+div._transform-gpu > div > ul {
+  gap: 0.15rem;
+}
+
+ul li a {
+  padding-block: 0.175rem !important;
+}
+
+ul._inline-block {
+  padding-inline-end: 4rem;
+}
+
+aside.nextra-sidebar-container {
+  padding-inline-start: 1rem;
+}
+aside.nextra-sidebar-container,
+nav.nextra-toc {
+  width: 18rem;
+}
+
+article:has(main) {
+  justify-content: start !important;
+}
+
+main._max-w-6xl {
+  max-width: 50rem;
+  margin-inline-start: 0;
+}
+a {
+  background: transparent !important;
+}
+
+button._transition:not([title='Copy code']):is(html[class~='dark'] *),
+li:is(html[class~='dark'] *) {
+  font-weight: 400;
+  color: #fff !important;
+}
+
+button._transition:not([title='Copy code']),
+a[href='/docs/guide'],
+a[href='/docs/guide/08-running-evals'] {
+  padding-inline: 0.375rem !important;
+  color: #000 !important;
+}
+
+a[href='/docs/guide']:is(html[class~='dark'] *),
+a[href='/docs/guide/08-running-evals']:is(html[class~='dark'] *) {
+  color: #fff !important;
+  font-weight: 400;
+  padding-inline: 0.375rem !important;
+}
+
+div._overflow-y-auto {
+  padding-inline-start: 0;
+}
+
+ul._flex {
+  padding-inline-start: 0.375rem !important;
+  margin-inline-start: 0 !important;
+  &::before {
+    content: '';
+    background: transparent !important;
+  }
+}
+
+ul._flex > li a {
+  padding-inline-start: 0.375rem !important;
+}
+
+button._transition + div._transform-gpu ul button:not(:has(.active)):is(html[class~='dark'] *) {
+  color: #a3a3a3 !important;
+}
+
+button._flex._transition:has(+ div._transform-gpu li.active):is(html[class~='dark'] *) {
+  color: white !important;
+}
+
+._font-semibold {
+  font-weight: 500 !important;
 }

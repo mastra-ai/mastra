@@ -5,11 +5,13 @@ import util from 'node:util';
 import path from 'path';
 import color from 'picocolors';
 import prettier from 'prettier';
+import yoctoSpinner from 'yocto-spinner';
 
 import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
 
-import { copyStarterFile } from '../../utils/copy-starter-file.js';
+import { DepsService } from '../../services/service.deps.js';
+import { FileService } from '../../services/service.file.js';
 import { logger } from '../../utils/logger.js';
 
 import { init } from './init.js';
@@ -46,11 +48,13 @@ export const catOne = new Agent({
 }
 
 export async function writeWorkflowSample(destPath: string) {
-  await copyStarterFile('workflow.ts', destPath);
+  const fileService = new FileService();
+  await fileService.copyStarterFile('workflow.ts', destPath);
 }
 
 export async function writeToolSample(destPath: string) {
-  await copyStarterFile('tools.ts', destPath);
+  const fileService = new FileService();
+  await fileService.copyStarterFile('tools.ts', destPath);
 }
 
 export async function writeCodeSampleForComponents(llmprovider: LLMProvider, component: Components, destPath: string) {
@@ -97,7 +101,7 @@ import { Mastra, createLogger } from '@mastra/core';
 import { catOne } from './agents/index';
 
 export const mastra = new Mastra({
-  agents: [catOne],
+  agents: { catOne },
   logger: createLogger({
     type: 'CONSOLE',
     level: 'INFO',
@@ -119,27 +123,43 @@ export const checkInitialization = async (dirPath: string) => {
   }
 };
 
-export const checkDependencies = async () => {
-  try {
-    const packageJsonPath = path.join(process.cwd(), 'package.json');
+export const checkAndInstallCoreDeps = async () => {
+  const depsService = new DepsService();
+  const depCheck = await depsService.checkDependencies(['@mastra/core']);
 
-    try {
-      await fs.access(packageJsonPath);
-    } catch {
-      return 'No package.json file found in the current directory';
-    }
-
-    const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
-    if (!packageJson.dependencies || !packageJson.dependencies['@mastra/core']) {
-      return 'Please install @mastra/core before running this command (npm install @mastra/core)';
-    }
-
-    return 'ok';
-  } catch (err) {
-    console.error(err);
-    return 'Could not check dependencies';
+  if (depCheck !== 'ok') {
+    await installCoreDeps();
   }
 };
+
+const spinner = yoctoSpinner({ text: 'Installing Mastra core dependencies\n' });
+export async function installCoreDeps() {
+  try {
+    const confirm = await p.confirm({
+      message: 'You do not have the @mastra/core package installed. Would you like to install it?',
+      initialValue: false,
+    });
+
+    if (p.isCancel(confirm)) {
+      p.cancel('Installation Cancelled');
+      process.exit(0);
+    }
+
+    if (!confirm) {
+      p.cancel('Installation Cancelled');
+      process.exit(0);
+    }
+
+    spinner.start();
+
+    const depsService = new DepsService();
+
+    await depsService.installPackages(['@mastra/core']);
+    spinner.success('@mastra/core installed successfully');
+  } catch (err) {
+    console.error(err);
+  }
+}
 
 export const writeAPIKey = async (provider: LLMProvider) => {
   let key = 'OPENAI_API_KEY';
@@ -240,7 +260,12 @@ export const interactivePrompt = async () => {
   const mastraComponents = shouldAddTools ? [...components, 'tools'] : components;
   try {
     const result = { ...rest, components: mastraComponents };
-    await init(result);
+
+    const { success } = await init(result);
+
+    if (!success) {
+      return;
+    }
 
     s.stop('Mastra initialized successfully');
     p.note('You are all set!');
@@ -272,7 +297,7 @@ export const initializeMinimal = async () => {
   s.start('Creating project');
 
   await exec(`npm init -y`);
-  await exec(`npm i zod@3.23.7 typescript tsx @types/node --save-dev >> output.txt`);
+  await exec(`npm i zod typescript tsx @types/node --save-dev`);
 
   s.message('Installing dependencies');
 

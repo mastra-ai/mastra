@@ -1,58 +1,156 @@
-import { Integration, ToolApi } from '@mastra/core';
-
+import { createSync, Integration } from '@mastra/core';
+import { MDocument } from '@mastra/rag'
+import * as integrationClient from './client/sdk.gen';
 // @ts-ignore
 // import FirecrawlLogo from './assets/firecrawl.png';
-import * as integrationClient from './client/sdk.gen';
-import { comments } from './client/service-comments';
-import * as zodSchema from './client/zodSchema';
-
-type FirecrawlConfig = {
-  API_KEY: string;
-  [key: string]: any;
-};
-
-export class FirecrawlIntegration extends Integration {
+import { FirecrawlToolset } from './toolset';
+import { FirecrawlConfig } from './types';
+import { z } from 'zod';
+export class FirecrawlIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'FIRECRAWL';
   readonly logoUrl = '';
   config: FirecrawlConfig;
-  readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
   categories = ['dev-tools', 'ai', 'automation'];
   description = 'Firecrawl is a web scraping platform';
 
+  openapi: FirecrawlToolset;
+
   constructor({ config }: { config: FirecrawlConfig }) {
     super();
-
     this.config = config;
-    this.tools = this._generateIntegrationTools<typeof this.tools>();
+
+    this.openapi = new FirecrawlToolset({
+      config: this.config,
+    })
+
+    this.registerSync(createSync({
+      id: 'FIRECRAWL:CRAWL_AND_SYNC',
+      name: 'Crawl and Sync',
+      description: 'Crawl and Sync',
+      inputSchema: z.object({
+        url: z.string(),
+        limit: z.number().default(3),
+        pathRegex: z.string().nullable(),
+      }),
+      execute: async ({ context: { url, pathRegex, limit }, engine }) => {
+        console.log("Starting crawl", url);
+        try {
+          const client = await this.openapi.getApiClient();
+
+          const res = await client.crawlUrls({
+            body: {
+              url: url,
+              limit: limit || 3,
+              includePaths: pathRegex ? [pathRegex] : [],
+              scrapeOptions: {
+                formats: ["markdown"],
+                includeTags: ["main", "body"],
+                excludeTags: [
+                  "img",
+                  "footer",
+                  "nav",
+                  "header",
+                  "#navbar",
+                  ".table-of-contents-content",
+                ],
+                onlyMainContent: true,
+              },
+            },
+          });
+
+          if (res.error) {
+            console.error({ error: JSON.stringify(res.error, null, 2) });
+            throw new Error(res.error.error);
+          }
+
+          const crawlId = res.data?.id;
+
+          let crawl = await client.getCrawlStatus({
+            path: {
+              id: crawlId!,
+            },
+          });
+
+          while (crawl.data?.status === "scraping") {
+            await new Promise((resolve) => setTimeout(resolve, 5000));
+
+            crawl = await client.getCrawlStatus({
+              path: {
+                id: crawlId!,
+              },
+            });
+          }
+
+          const entityType = `CRAWL_${url}`;
+
+          const crawlData = (crawl?.data?.data || []).map((item) => ({
+            markdown: item.markdown || "",
+            metadata: {
+              sourceURL: item?.metadata?.sourceURL || "",
+              ...item.metadata,
+            },
+          }))
+
+          if (!crawlData) {
+            return {
+              success: false,
+              crawlData: [],
+              entityType: "",
+            };
+          }
+
+          const recordsToPersist = await Promise.all(
+            crawlData?.flatMap(async ({ markdown, metadata }) => {
+              const doc = MDocument.fromMarkdown(markdown, metadata);
+
+              await doc.chunk({
+                strategy: "markdown",
+                maxSize: 8190,
+              });
+
+              const chunks = doc.getDocs();
+
+              return chunks.map((c, i) => {
+                return {
+                  externalId: `${c.metadata?.sourceURL}_chunk_${i}`,
+                  data: { markdown: c.text },
+                };
+              });
+            })
+          );
+
+          await engine?.syncRecords({
+            connectionId: "SYSTEM",
+            records: recordsToPersist.flatMap((r) => r),
+            name: entityType,
+          });
+
+          return {
+            success: true,
+            crawlData,
+            entityType,
+          };
+        } catch (error) {
+          console.error({ error });
+          return {
+            success: false,
+            crawlData: [],
+            entityType: "",
+          };
+        }
+      }
+    }))
   }
 
-  protected get toolSchemas() {
-    return zodSchema;
+
+  getStaticTools() {
+    return {
+      ...this.openapi.tools
+    };
   }
 
-  protected get toolDocumentations() {
-    return comments;
+  async getApiClient() {
+    return this.openapi.getApiClient();
   }
-
-  protected get baseClient() {
-    integrationClient.client.setConfig({
-      baseUrl: `https://api.firecrawl.dev/v1`,
-    });
-    return integrationClient;
-  }
-
-  getApiClient = async () => {
-    const value = {
-      API_KEY: this.config?.['API_KEY'],
-    } as Record<string, any>;
-
-    const baseClient = this.baseClient;
-
-    baseClient.client.interceptors.request.use(request => {
-      request.headers.set('Authorization', `Bearer ${value?.['API_KEY']}`);
-      return request;
-    });
-
-    return integrationClient;
-  };
 }
+

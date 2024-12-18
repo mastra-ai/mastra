@@ -2,7 +2,7 @@ import { execa } from 'execa';
 import { writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
 
-import getPackageManager from '../../../utils/get-package-manager.js';
+import { DepsService } from '../../../services/service.deps.js';
 import { Deployer } from '../deployer.js';
 import { EXPRESS_SERVER } from '../server.js';
 
@@ -22,9 +22,8 @@ export class VercelDeployer extends Deployer {
   name = 'Vercel';
   async installCli() {
     console.log('Installing Vercel CLI...');
-    const p = execa(getPackageManager(), ['install', 'vercel', '-g']);
-    p.stdout.pipe(process.stdout);
-    await p;
+    const depsService = new DepsService();
+    await depsService.installPackages(['vercel -g']);
   }
 
   async writePkgJson() {
@@ -43,7 +42,10 @@ export class VercelDeployer extends Deployer {
           license: 'ISC',
           dependencies: {
             express: '^4.21.1',
-            '@mastra/core': '0.1.27-alpha.18',
+            '@mastra/core': '0.1.27-alpha.35',
+            'express-jsdoc-swagger': '^1.8.0',
+            'serverless-http': '^3.2.0',
+            zod: '3.24.0',
           },
         },
         null,
@@ -180,7 +182,11 @@ export class VercelDeployer extends Deployer {
     console.log('Deployment started on Vercel. You can wait for it to finish or exit this command.');
     await p2;
 
-    // Sync environment variables for future deployments
-    await this.syncEnv({ scope });
+    if (envVars.length > 0) {
+      // Sync environment variables for future deployments
+      await this.syncEnv({ scope });
+    } else {
+      console.log('\nAdd your ENV vars to .env or your vercel dashboard.\n');
+    }
   }
 }

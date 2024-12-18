@@ -1,6 +1,6 @@
 {
   "name": "@mastra/firecrawl",
-  "version": "1.0.4-alpha.9",
+  "version": "1.0.4-alpha.23",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -29,7 +29,7 @@
     "lint": "dts lint",
     "size": "size-limit",
     "start": "dts watch",
-    "test": "jest",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "clean": "rm -rf dist && rm -rf node_modules",
     "gen:zod:schema": "pnpx ts-to-zod  src/client/types.gen.ts src/client/zodSchema.ts"
   },
@@ -73,7 +73,8 @@
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.3",
     "@mastra/core": "workspace:*",
-    "zod": "3.23.7",
+    "@mastra/rag": "workspace:*",
+    "zod": "^3.24.0",
     "ts-to-zod": "^3.13.0"
   }
 }

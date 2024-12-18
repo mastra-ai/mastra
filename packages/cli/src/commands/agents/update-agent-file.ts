@@ -43,12 +43,14 @@ export async function updateAgentIndexFile({ newAgentName, dir }: { newAgentName
         .filter(a => a);
       if (!currentAgents?.includes(newAgentName)) {
         currentAgents?.push(newAgentName);
-        const newAgentsArray = `agents: [${currentAgents?.join(', ')}]`;
+        const newAgentsArray = `agents: { ${currentAgents?.join(', ')} }`;
         updatedContent = updatedContent.replace(/agents:\s*\[[^\]]+\]/, newAgentsArray);
       }
     } else {
       const classConfig = classMatch[1]?.trim();
-      const newClassConfig = classConfig ? `${classConfig}, agents: [${newAgentName}]` : `agents: [${newAgentName}]`;
+      const newClassConfig = classConfig
+        ? `${classConfig}, agents: { ${newAgentName} }`
+        : `agents: { ${newAgentName} }`;
       updatedContent = updatedContent.replace(
         /new\s+Mastra\s*\(\s*{([^}]*)}\s*\)/s,
         `new Mastra({\n  ${newClassConfig}\n})`,
