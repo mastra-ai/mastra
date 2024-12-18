@@ -3,7 +3,8 @@
   "compilerOptions": {
     "outDir": "dist",
     "noEmit": false,
-    "declaration": false // Don't generate .d.ts files since dts already did
+    "declaration": false, // Don't generate .d.ts files since dts already did
+    "declarationMap": false
   },
   "include": ["src/postgres/db/schema.ts", "src/postgres/migrate.ts"]
 }
