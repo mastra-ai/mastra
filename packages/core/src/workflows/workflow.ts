@@ -541,7 +541,7 @@ export class Workflow<
   }
 
   #makeStepKey(step: Step<any, any, any>) {
-    // return `${step.id}${this.#delimiter}${Object.keys(this.#steps2).length}`;
+    // return `${step.id}${this.#delimiter}${Object.keys(this.steps2).length}`;
     return `${step.id}`;
   }
 
@@ -933,5 +933,13 @@ export class Workflow<
 
   get stepGraph() {
     return this.#stepGraph;
+  }
+
+  get stepSubscriberGraph() {
+    return this.#stepSubscriberGraph;
+  }
+
+  get steps() {
+    return this.#steps;
   }
 }

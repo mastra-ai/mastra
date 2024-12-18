@@ -3,6 +3,7 @@ import { useParams } from 'react-router';
 import { Header } from '@/components/ui/header';
 import { Skeleton } from '@/components/ui/skeleton';
 
+import WorkflowGraph from '@/domains/workflows/workflow-graph';
 import { WorkflowInformation } from '@/domains/workflows/workflow-information';
 import { useWorkflow } from '@/hooks/use-workflows';
 
@@ -30,7 +31,7 @@ function Workflow() {
     <div className="flex flex-col h-full overflow-hidden">
       <Header title={`Workflow: ${workflow?.name}`} />
       <main className="flex-1 relative grid grid-cols-[1fr_400px] divide-x">
-        <div className="p-4">{/* TODO: Add workflow canvas here */}</div>
+        <WorkflowGraph />
         <div className="flex flex-col">
           <WorkflowInformation workflowId={workflowId!} />
         </div>

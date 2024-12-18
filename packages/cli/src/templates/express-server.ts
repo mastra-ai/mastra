@@ -386,9 +386,23 @@ app.get('/api/workflows/:workflowId', async (req: Request, res: Response) => {
     const workflowId = req.params.workflowId;
     const workflow = mastra.getWorkflow(workflowId);
     const triggerSchema = workflow.triggerSchema;
+    const stepGraph = workflow.stepGraph;
+    const stepSubscriberGraph = workflow.stepSubscriberGraph;
+    const serializedSteps = Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
+      const _step = step as any;
+      acc[key] = {
+        ..._step,
+        inputSchema: _step.inputSchema ? stringify(zodToJsonSchema(_step.inputSchema)) : undefined,
+        outputSchema: _step.outputSchema ? stringify(zodToJsonSchema(_step.outputSchema)) : undefined,
+      };
+      return acc;
+    }, {});
     res.json({
       ...workflow,
       triggerSchema: triggerSchema ? stringify(zodToJsonSchema(triggerSchema)) : undefined,
+      steps: serializedSteps,
+      stepGraph,
+      stepSubscriberGraph,
     });
   } catch (error) {
     const apiError = error as ApiError;

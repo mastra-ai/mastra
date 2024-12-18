@@ -254,3 +254,7 @@ html {
 .input-container {
   @apply sticky bottom-0 left-0 bg-white z-10 right-0 p-4 border-t;
 }
+
+.react-flow__controls-button {
+  @apply !text-mastra-el-5 !bg-mastra-bg-1 !border-none;
+}
