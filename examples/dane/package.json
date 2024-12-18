@@ -44,7 +44,6 @@
     "node-ical": "^0.20.1",
     "node-screenshots": "^0.2.1",
     "pdf-parse": "^1.1.1",
-    "pdfreader": "^3.0.6",
     "playwright": "^1.49.1",
     "playwright-core": "^1.49.1",
     "sqlite3": "^5.1.7",
