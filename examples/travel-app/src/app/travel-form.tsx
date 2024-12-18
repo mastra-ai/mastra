@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 
 import { runAgent, runWorkflow } from './actions';
 import { TravelResults } from './travel-results';
+import { TravelSchemaProps } from './utils';
 
 interface TravelFormProps {
   executor: 'agent' | 'workflow';
@@ -54,7 +55,7 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
   const { setContent } = useSidebar();
   const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [showForm, setShowForm] = useState(true);
-  const [travelData, setTravelData] = useState(null);
+  const [travelData, setTravelData] = useState<TravelSchemaProps | null>(null);
 
   const runLoadingSequence = useCallback(async () => {
     for (let i = 0; i < LOADING_MESSAGES.length - 1; i++) {
@@ -93,16 +94,19 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
         console.log(result.message);
         setTravelData(result.message);
       } else {
-        const result = await runWorkflow({ userId: 'SYSTEM', formData });
+        const { results } = await runWorkflow({ userId: 'SYSTEM', formData });
         // console.log(result)
         // Need polling or some kind of way to get the workflow result
         // console.log(result.message);
         // setTravelData(result.message);
-        console.log(result);
+
         setTravelData({
-          flight: result?.results?.flight?.payload?.flightSelection?.typeSelection?.[0],
-          attractions: [],
-          hotel: result?.results?.hotel?.payload?.hotelSelection?.typeSelection?.[0],
+          flights: {
+            outbound: results?.outboundFlight?.payload?.outboundFlightSelection?.typeSelection?.[0],
+            return: results?.returnFlight?.payload?.returnFlightSelection?.typeSelection?.[0],
+          },
+          attractions: results?.attraction?.payload?.attractionSelection?.typeSelection || [],
+          hotel: results?.hotel?.payload?.hotelSelection?.typeSelection?.[0],
         });
       }
       setShowResults(true);
