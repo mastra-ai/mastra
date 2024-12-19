@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const flightSchema = z.object({
   airline: z.string(),
@@ -42,6 +42,12 @@ export const travelSchema = z.object({
   flights: z.object({
     outbound: flightSchema,
     return: flightSchema,
+    legs: z.array(
+      z.object({
+        duration: z.string(),
+        airport: z.string(),
+      }),
+    ),
   }),
   hotel: hotelSchema,
   attractions: attractionsSchema,
