@@ -3,6 +3,7 @@
 import { format } from 'date-fns';
 import { CalendarIcon, Loader2 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import { toast } from 'sonner';
 
 import { useRouter } from 'next/navigation';
@@ -135,10 +136,15 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
         <div className="max-w-2xl mx-auto">
           <form onSubmit={handleSubmit} className="space-y-8">
             {/* Travel Info Section */}
-            <Card className="max-w-2xl mx-auto">
+            <Card className="bg-[#00FF7F] p-6 border-4 border-black rounded-none shadow-[8px_8px_0px_0px_#000000] transform rotate-1 hover:rotate-0 transition-transform">
               <CardHeader>
-                <CardTitle className="text-xl font-semibold">Travel Info</CardTitle>
-                <CardDescription>Select your travel dates and locations</CardDescription>
+                <CardTitle className="text-2xl w-fit font-bold mb-2 bg-black text-white inline-block px-4 py-2 -rotate-2">
+                  Travel Info
+                </CardTitle>
+
+                <CardDescription className=" text-black font-semibold">
+                  Select your travel dates and locations
+                </CardDescription>
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -148,7 +154,7 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                       <Button
                         variant="outline"
                         className={cn(
-                          'w-full justify-start text-left font-normal',
+                          'w-full justify-start text-left font-bold bg-white border-4 border-black shadow-[4px_4px_0px_0px_#000000] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all',
                           !startDate && 'text-muted-foreground',
                         )}
                       >
@@ -159,6 +165,7 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                     <PopoverContent className="w-auto p-0">
                       <Calendar
                         mode="single"
+                        className="border-4 border-black bg-white"
                         selected={startDate}
                         onSelect={date => setStartDate(date as Date)}
                         initialFocus
@@ -179,7 +186,7 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                       <Button
                         variant="outline"
                         className={cn(
-                          'w-full justify-start text-left font-normal',
+                          'w-full justify-start text-left font-bold bg-white border-4 border-black shadow-[4px_4px_0px_0px_#000000] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all',
                           !endDate && 'text-muted-foreground',
                         )}
                       >
@@ -190,6 +197,7 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                     <PopoverContent className="w-auto p-0">
                       <Calendar
                         mode="single"
+                        className="border-4 border-black bg-white"
                         selected={endDate}
                         onSelect={date => {
                           if (date) {
@@ -218,12 +226,16 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                 <div className="space-y-2">
                   <Label htmlFor="departureLocation">Departure Location</Label>
                   <Select name="departureLocation">
-                    <SelectTrigger>
+                    <SelectTrigger className="bg-white font-bold border-4 border-black shadow-[4px_4px_0px_0px_#000000] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all">
                       <SelectValue placeholder="Select airport" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="border-4 border-black bg-white">
                       {PLACES.map(airport => (
-                        <SelectItem key={airport.value} value={airport.value}>
+                        <SelectItem
+                          className="font-bold hover:!bg-[var(--brut-bg)]"
+                          key={airport.value}
+                          value={airport.value}
+                        >
                           {airport.label}
                         </SelectItem>
                       ))}
@@ -234,12 +246,16 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                 <div className="space-y-2">
                   <Label htmlFor="arrivalLocation">Arrival Location</Label>
                   <Select name="arrivalLocation">
-                    <SelectTrigger>
+                    <SelectTrigger className="bg-white font-bold border-4 border-black shadow-[4px_4px_0px_0px_#000000] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all">
                       <SelectValue placeholder="Select airport" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="border-black border-4">
                       {PLACES.map(airport => (
-                        <SelectItem key={airport.value} value={airport.value}>
+                        <SelectItem
+                          className="font-bold hover:!bg-[var(--brut-bg)]"
+                          key={airport.value}
+                          value={airport.value}
+                        >
                           {airport.label}
                         </SelectItem>
                       ))}
@@ -250,35 +266,48 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
             </Card>
 
             {/* Trip Goals Section */}
-            <Card>
+            <Card className="bg-[var(--brut-pink)] p-6 border-4 border-black shadow-[8px_8px_0px_0px_#000000] transform -rotate-1 hover:rotate-0 transition-transform">
               <CardHeader>
-                <CardTitle className="text-xl font-semibold">Trip Goals</CardTitle>
-                <CardDescription>What are your goals for this trip?</CardDescription>
+                <CardTitle className="text-2xl w-fit font-bold mb-2 bg-black text-white inline-block px-4 py-2 rotate-2">
+                  Trip Goals
+                </CardTitle>
+                <CardDescription className=" text-black font-semibold">
+                  What are your goals for this trip?
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
                 <Textarea
                   id="tripGoals"
                   name="tripGoals"
                   placeholder="Tell us about your trip goals..."
-                  className="min-h-[100px]"
+                  className="min-h-[120px] bg-white border-4 border-black shadow-[4px_4px_0px_0px_#000000] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
                 />
               </CardContent>
             </Card>
 
             {/* Flight Preferences Section */}
-            <Card>
+            <Card className="bg-[var(--brut-blue)] p-6 border-4 border-black shadow-[8px_8px_0px_0px_#000000] transform rotate-1 hover:rotate-0 transition-transform">
               <CardHeader>
-                <CardTitle className="text-xl font-medium">Flight Preferences</CardTitle>
-                <CardDescription>Choose your preferred flight options</CardDescription>
+                <CardTitle className="text-2xl w-fit font-bold mb-2 bg-black text-white inline-block px-4 py-2 rotate-2">
+                  Flight Preferences
+                </CardTitle>
+                <CardDescription className=" text-black font-semibold">
+                  Choose your preferred flight options
+                </CardDescription>
               </CardHeader>
 
               <CardContent className="space-y-6">
                 <div className="space-y-2">
-                  <Label>Preferred Flight Times</Label>
+                  <Label className="text-lg font-bold mb-3 block">Preferred Flight Times</Label>
                   <div className="grid grid-cols-1 md:flex gap-4">
                     {FLIGHT_TIMES.map(time => (
-                      <div key={time.value} className="flex items-center space-x-2">
-                        <Checkbox id={time.value} name="preferredFlightTimes" value={time.value} />
+                      <div key={time.value} className="flex items-center border-2 border-black p-2 bg-white gap-2">
+                        <Checkbox
+                          className="border-2 border-black"
+                          id={time.value}
+                          name="preferredFlightTimes"
+                          value={time.value}
+                        />
                         <Label htmlFor={time.value}>{time.label}</Label>
                       </div>
                     ))}
@@ -286,96 +315,115 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Price vs. Flight Time Priority</Label>
-                  <div>
-                    <Slider
-                      name="flightPriority"
-                      value={flightPriority}
-                      onValueChange={setFlightPriority}
-                      max={100}
-                      step={1}
-                    />
-                    <div className="flex justify-between mt-2 text-sm text-muted-foreground">
-                      <span>Prioritize Price</span>
-                      <span>Prioritize Convenience</span>
-                    </div>
+                  <Label className="text-lg font-bold">Price vs. Flight Time Priority</Label>
+                  <Slider
+                    value={flightPriority}
+                    onValueChange={setFlightPriority}
+                    max={100}
+                    step={1}
+                    className="[&_[role=slider]]:border-4 [&_[role=slider]]:border-black [&_[role=slider]]:shadow-[4px_4px_0px_0px_#000000]"
+                  />
+                  <div className="flex justify-between text-sm font-bold">
+                    <span>Prioritize Price</span>
+                    <span>Prioritize Convenience</span>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             {/* Accommodation Preferences Section */}
-            <Card>
+            <Card className="bg-[var(--brut-orange)] p-6 border-4 border-black shadow-[8px_8px_0px_0px_#000000] transform -rotate-1 hover:rotate-0 transition-transform">
               <CardHeader className="text-xl font-medium">
-                <CardTitle>Accommodation Preferences</CardTitle>
+                <CardTitle className="text-2xl w-fit font-bold mb-2 bg-black text-white inline-block px-4 py-2 rotate-2">
+                  Accommodation Preferences
+                </CardTitle>
               </CardHeader>
 
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Accommodation Type</Label>
+                  <Label className="text-lg font-bold">Accommodation Type</Label>
                   <RadioGroup
                     name="accommodationType"
                     value={accommodationType}
                     onValueChange={value => setAccommodationType(value as 'hotel' | 'airbnb')}
-                    className="flex items-center gap-4"
+                    className="flex gap-4"
                   >
-                    <div className="flex items-center gap-1">
-                      <RadioGroupItem value="hotel" id="hotel" />
-                      <Label htmlFor="hotel">Hotel</Label>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <RadioGroupItem value="airbnb" id="airbnb" />
-                      <Label htmlFor="airbnb">AirBnB</Label>
-                    </div>
+                    {['Hotel', 'Airbnb'].map(type => (
+                      <Label key={type} className="flex items-center gap-2 bg-white p-2 border-2 border-black">
+                        <RadioGroupItem value={type.toLowerCase()} className="border-2 border-black" />
+                        {type}
+                      </Label>
+                    ))}
                   </RadioGroup>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="priceRange">Price Range</Label>
-                  <Select name={`${accommodationType}PriceRange`}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select price range" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {HOTEL_PRICE_RANGES.map(range => (
-                        <SelectItem key={range.value} value={range.value}>
-                          {range.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Select name={`${accommodationType}PriceRange`}>
+                  <SelectTrigger className="bg-white font-bold">
+                    <SelectValue placeholder="Select price range" />
+                  </SelectTrigger>
+                  <SelectContent className="border-4 border-black bg-white">
+                    {HOTEL_PRICE_RANGES.map(range => (
+                      <SelectItem
+                        key={range.value}
+                        value={range.value}
+                        className="font-bold hover:!bg-[var(--brut-bg)]"
+                      >
+                        {range.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
                 {accommodationType === 'airbnb' && (
-                  <div className="space-y-2">
-                    <Label>Property Type</Label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="flex items-center space-x-2">
-                        <Checkbox id="entirePlace" name="propertyType" value="entirePlace" />
-                        <Label htmlFor="entirePlace">Entire Place</Label>
+                  <React.Fragment>
+                    {/* <div className="space-y-2">
+                      <Label>Property Type</Label>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="flex items-center space-x-2">
+                          <Checkbox id="entirePlace" name="propertyType" value="entirePlace" />
+                          <Label htmlFor="entirePlace">Entire Place</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox id="privateRoom" name="propertyType" value="privateRoom" />
+                          <Label htmlFor="privateRoom">Private Room</Label>
+                        </div>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox id="privateRoom" name="propertyType" value="privateRoom" />
-                        <Label htmlFor="privateRoom">Private Room</Label>
-                      </div>
+                    </div> */}
+                    <div className="space-y-2">
+                      <Label className="text-lg font-bold">Property Type</Label>
+                      <RadioGroup name="propertyType" className="flex gap-4">
+                        {[
+                          { name: 'Entire Place', value: 'entirePlace' },
+                          { name: 'Private Room', value: 'privateRoom' },
+                        ].map(type => (
+                          <Label
+                            key={type.value}
+                            className="flex items-center gap-2 bg-white p-2 border-2 border-black"
+                          >
+                            <RadioGroupItem value={type.value} className="border-2 border-black" />
+                            {type.name}
+                          </Label>
+                        ))}
+                      </RadioGroup>
                     </div>
-                  </div>
+                  </React.Fragment>
                 )}
               </CardContent>
             </Card>
 
             {/* Attraction Preferences Section */}
-            <Card>
+            <Card className="bg-[var(--brut-light-green)] p-6 border-4 border-black shadow-[8px_8px_0px_0px_#000000] transform rotate-1 hover:rotate-0 transition-transform">
               <CardHeader className="text-xl font-medium">
-                <CardTitle>Attraction Preferences</CardTitle>
+                <CardTitle className="text-2xl w-fit font-bold mb-6 bg-black text-white inline-block px-4 py-2 -rotate-2">
+                  Attraction Preferences
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 <Label>Interests</Label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {INTERESTS.map(interest => (
-                    <div key={interest.value} className="flex items-center space-x-2">
+                    <Label key={interest.value} className="flex items-center gap-2 bg-white p-2 border-2 border-black">
                       <Checkbox
-                        id={interest.value}
                         name="interests"
                         value={interest.value}
                         checked={selectedInterests.includes(interest.value)}
@@ -386,25 +434,32 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                               : selectedInterests.filter(i => i !== interest.value),
                           );
                         }}
+                        id={interest.value}
+                        className="border-2 border-black"
                       />
-                      <Label htmlFor={interest.value}>{interest.label}</Label>
-                    </div>
+                      {interest.label}
+                    </Label>
                   ))}
                 </div>
               </CardContent>
             </Card>
 
-            <Button type="submit" className="w-full py-5" disabled={submitting}>
-              {submitting ? 'Submitting...' : 'Plan My Trip'}
+            <Button
+              type="submit"
+              disabled={submitting}
+              className="w-full bg-black text-white text-xl font-bold p-8 border-4 border-black shadow-[8px_8px_0px_0px_#FF3366] hover:shadow-none hover:translate-x-2 hover:translate-y-2 transition-all transform rotate-1 hover:rotate-0"
+              size="lg"
+            >
+              {submitting ? 'Submitting...' : ' PLAN MY TRIP!'}
             </Button>
           </form>
         </div>
       ) : (
-        <Card className="min-h-[400px] max-w-2xl mx-auto grid place-items-center">
+        <Card className="bg-white rounded-none border-4 border-black p-8 shadow-[8px_8px_0px_0px_#000000] max-w-2xl mx-auto transform -rotate-1 hover:rotate-0 transition-transform">
           <CardContent className="flex flex-col items-center justify-center h-full">
-            <div className="flex items-center gap-2 mt-12">
-              <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              <p className="text-lg text-muted-foreground animate-fade-in">{loadingMessage}</p>
+            <div className="flex flex-col items-center gap-4">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <p className="text-xl font-bold">{loadingMessage}</p>
             </div>
           </CardContent>
         </Card>
