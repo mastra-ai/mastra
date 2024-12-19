@@ -94,14 +94,12 @@ export default function TravelForm({
     setLoadingMessage(LOADING_MESSAGES[LOADING_MESSAGES.length - 1]);
   }, []);
 
-  // Create a client-side submit handler
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setShowForm(false);
     setSubmitting(true);
     setShowResults(false);
 
-    // Start the loading sequence
     runLoadingSequence();
 
     // Get form data and add the dates
@@ -150,13 +148,13 @@ export default function TravelForm({
       router.refresh();
     } catch (error) {
       toast.error("An error occured, I can't plan trip");
+      setShowResults(false);
       console.error("Error submitting form:", error);
     } finally {
       setSubmitting(false);
     }
   };
 
-  // When component mounts, set initial sidebar content
   useEffect(() => {
     setContent(sidebarContent.initial);
   }, [setContent, sidebarContent.initial]);
@@ -361,6 +359,7 @@ export default function TravelForm({
                     Price vs. Flight Time Priority
                   </Label>
                   <Slider
+                    name="flightPriority"
                     value={flightPriority}
                     onValueChange={setFlightPriority}
                     max={100}
