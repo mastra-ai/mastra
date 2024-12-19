@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.53
+
+### Patch Changes
+
+- de279d5: update apiKey
+
 ## 0.1.57-alpha.52
 
 ### Patch Changes
