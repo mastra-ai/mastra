@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.55
+
+### Patch Changes
+
+- f4ae8dd: dev playground, support multiple tool dirs
+
 ## 0.1.57-alpha.54
 
 ### Patch Changes
