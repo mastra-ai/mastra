@@ -23,12 +23,6 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Build
-        run: pnpm build
-
       - name: Install dane cli
         run: pnpm install -g @mastra/dane@alpha
 
@@ -40,14 +34,3 @@ jobs:
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-
-      - name: Add comment
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.name,
-              issue_number: context.issue.number,
-              body: 'Thanks for creating this issue! Our team will review it soon.'
-            });
