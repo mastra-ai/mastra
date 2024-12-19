@@ -467,9 +467,6 @@ export class Workflow<
           entry: () => {
             this.log(LogLevel.INFO, `Step ${stepNode.step.id} executing`);
           },
-          exit: () => {
-            this.log(LogLevel.INFO, `Step ${stepNode.step.id} finished executing`);
-          },
           invoke: {
             src: 'resolverFunction',
             input: ({ context }: { context: WorkflowContext }) => ({
@@ -479,6 +476,7 @@ export class Workflow<
             onDone: {
               target: 'runningSubscribers',
               actions: [
+                ({event}: {event: any}) => this.log(LogLevel.INFO, `Step ${stepNode.step.id} finished executing`, {output: event.output}),
                 { type: 'updateStepResult', params: { stepId: stepNode.step.id } },
                 { type: 'spawnSubscribers', params: { stepId: stepNode.step.id } },
               ],
