@@ -19,6 +19,13 @@
 
   :root {
     --background: 0 0% 100%;
+    --brut-bg: #ffde5a;
+    --brut-green: #00ff7f;
+    --brut-red: #ff3366;
+    --brut-pink: #ff9ecd;
+    --brut-blue: #00ffff;
+    --brut-orange: #ffa500;
+    --brut-light-green: #98fb98;
     --foreground: 240 10% 3.9%;
     --card: 0 0% 100%;
     --card-foreground: 240 10% 3.9%;
