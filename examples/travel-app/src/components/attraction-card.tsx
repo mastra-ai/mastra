@@ -1,11 +1,10 @@
 'use client';
 
-import { MapPin, Clock } from 'lucide-react';
-
-import Image from 'next/image';
+import { Clock, MapPin } from 'lucide-react';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 
+/* eslint-disable @next/next/no-img-element */
 interface AttractionCardProps {
   name: string;
   location: string;
@@ -17,33 +16,37 @@ interface AttractionCardProps {
 
 export function AttractionCard({ name, location, imageUrl, description, price, duration }: AttractionCardProps) {
   return (
-    <Card className="w-full h-full flex flex-col">
+    <Card className="w-full rounded-none border-black border-4 h-full flex flex-col">
       <div className="relative w-full h-[200px]">
-        <img src={imageUrl} alt={name} className="object-cover rounded-t-lg w-full h-full" />
+        <img
+          src={imageUrl || '/placeholder.svg?height=300&width=200'}
+          width={300}
+          height={200}
+          alt={name}
+          className="object-cover w-full h-full"
+        />
       </div>
       <CardHeader className="pb-2">
         <div>
           <h2 className="text-xl font-bold line-clamp-1">{name}</h2>
           <div className="flex items-center space-x-1 mt-1">
-            <MapPin className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">{location}</span>
+            <MapPin className="h-4 w-4 " />
+            <span className="text-sm ">{location}</span>
           </div>
           {duration && (
             <div className="flex items-center space-x-1 mt-1">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">{duration}</span>
+              <Clock className="h-4 w-4" />
+              <span className="text-sm">{duration}</span>
             </div>
           )}
         </div>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col">
-        <p className="text-sm text-muted-foreground line-clamp-3 flex-1">{description}</p>
+      <CardContent className="flex-1 flex flex-col gap-4">
+        <p className="text-sm  line-clamp-3 flex-1">{description}</p>
 
-        <div className="flex justify-start items-center pt-4 mt-4 border-t">
-          <div className="space-y-1">
-            <div className="text-2xl font-bold">${price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-            <div className="text-sm text-muted-foreground">per person</div>
-          </div>
+        <div className="bg-[var(--brut-red)] px-3 py-1 border-2 border-black inline-block transform -rotate-2">
+          <span className="font-bold">${price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+          <span className="text-sm"> per person</span>
         </div>
       </CardContent>
     </Card>

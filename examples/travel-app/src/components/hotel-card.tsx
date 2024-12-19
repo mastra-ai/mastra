@@ -4,6 +4,8 @@ import { Car, Coffee, MapPin, Phone, Star, Wifi } from 'lucide-react';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 
+/* eslint-disable @next/next/no-img-element */
+
 interface HotelCardProps {
   name: string;
   location: string;
@@ -16,12 +18,16 @@ interface HotelCardProps {
   phoneNumber: string;
 }
 
-const renderStars = (rating: number) => {
-  return Array(5)
-    .fill(0)
-    .map((_, index) => (
-      <Star key={index} className={`h-4 w-4 ${index < rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />
-    ));
+const getPhoneNumber = (number?: string | number | '<UNKNOWN>') => {
+  if (!number) {
+    return 'N/A';
+  }
+
+  if (number === '<UNKNOWN') {
+    return 'N/A';
+  }
+
+  return number;
 };
 
 export function HotelCard({
@@ -35,8 +41,6 @@ export function HotelCard({
   amenities,
   phoneNumber,
 }: HotelCardProps) {
-  console.log(rating);
-
   const renderAmenityIcon = (amenity: string) => {
     const amenityIcons: { [key: string]: JSX.Element } = {
       wifi: <Wifi className="h-4 w-4" />,
@@ -47,29 +51,33 @@ export function HotelCard({
   };
 
   return (
-    <Card className="w-full">
-      <div className="relative w-full h-[200px]">
-        <img src={imageUrl} alt={name} className="object-cover rounded-t-lg w-full h-full" />
+    <Card className="rounded-none border-black border-4 bg-white">
+      <div className="relative bg-white border-b-4 border-black w-full h-[300px]">
+        <img src={imageUrl || '/placeholder.svg?height=300'} alt={name} className="object-cover w-full h-full" />
       </div>
       <CardHeader className="pb-2">
-        <div className="flex justify-between items-start">
+        <div className="flex justify-between items-start mb-4">
           <div>
-            <h2 className="text-2xl font-bold">{name}</h2>
-            <div className="flex items-center space-x-1 mt-1">
-              <MapPin className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">{location}</span>
+            <h3 className="text-xl font-bold">{name}</h3>
+            <div className="flex items-center gap-2 text-sm">
+              <MapPin className="w-4 h-4" />
+              {location}
             </div>
           </div>
-          <div className="flex flex-col items-end">
-            <div className="flex space-x-1">{renderStars(rating)}</div>
-            <div className="text-sm text-muted-foreground mt-1">{rating} out of 5</div>
+          <div className="bg-[#FF3366] px-3 py-1 border-2 border-black transform rotate-2">
+            <div className="flex items-center gap-2">
+              <Star className="fill-black w-4 h-4 text-black" />
+              <div className="text-sm font-medium text-black mt-1">{rating} / 5</div>
+            </div>
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <p className="text-sm text-muted-foreground line-clamp-2">{description}</p>
-          <p className="text-sm">{address}</p>
+          <p className="text-sm text-black line-clamp-2">{description}</p>
+          <p className="text-sm font-semibold">
+            Address: <span className="font-normal"> {address}</span>
+          </p>
         </div>
 
         {/* Amenities */}
@@ -85,17 +93,13 @@ export function HotelCard({
         {/* Contact */}
         <div className="flex items-center space-x-2 text-sm">
           <Phone className="h-4 w-4" />
-          <span>{phoneNumber !== '<UNKNOWN>' ? phoneNumber : 'N/A'}</span>
+          <span className="text-black">{getPhoneNumber(phoneNumber)}</span>
         </div>
 
         {/* Price only - remove Book Now button */}
-        <div className="flex justify-between items-center pt-4 border-t">
-          <div className="space-y-1">
-            <div className="text-2xl font-bold">
-              ${pricePerNight.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-            </div>
-            <div className="text-sm text-muted-foreground">per night</div>
-          </div>
+        <div className="bg-[#00FF7F] ml-auto w-fit px-4 py-2 border-2 border-black font-bold transform -rotate-2">
+          ${pricePerNight.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          <span className="text-sm block">per night</span>
         </div>
       </CardContent>
     </Card>
