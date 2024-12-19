@@ -17,6 +17,7 @@ interface DynamicFormProps<T extends z.ZodSchema> {
   onSubmit: (values: z.infer<T>) => void | Promise<void>;
   onChange?: (values: Partial<z.infer<T>>) => void;
   isSubmitLoading?: boolean;
+  submitButtonLabel?: string;
 }
 
 export function DynamicForm<T extends z.ZodSchema>({
@@ -24,6 +25,7 @@ export function DynamicForm<T extends z.ZodSchema>({
   onSubmit,
   onChange,
   isSubmitLoading,
+  submitButtonLabel = 'Submit',
 }: DynamicFormProps<T>) {
   const schemaTypeName = (schema as any)?._def?.typeName;
   const discriminatedUnionSchemaOptions = (schema as any)?._def?.options;
@@ -76,7 +78,7 @@ export function DynamicForm<T extends z.ZodSchema>({
           handleFieldChange,
         })}
         <Button disabled={isSubmitLoading} type="submit">
-          {isSubmitLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Submit'}
+          {isSubmitLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : submitButtonLabel}
         </Button>
       </form>
     </ScrollArea>

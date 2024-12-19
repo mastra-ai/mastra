@@ -901,8 +901,8 @@ app.get('/api/tools', async (_req: Request, res: Response) => {
         const tool = _tool as any;
         acc[id] = {
           ...tool,
-          inputSchema: stringify(zodToJsonSchema(tool.inputSchema)),
-          outputSchema: stringify(zodToJsonSchema(tool.outputSchema)),
+          inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
+          outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
         };
         return acc;
       },
@@ -928,8 +928,8 @@ app.get('/api/tools/:toolId', async (req: Request, res: Response) => {
   if (tool) {
     const serializedTool = {
       ...tool,
-      inputSchema: stringify(zodToJsonSchema(tool.inputSchema)),
-      outputSchema: stringify(zodToJsonSchema(tool.outputSchema)),
+      inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
+      outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
     };
     res.json(serializedTool);
   } else {

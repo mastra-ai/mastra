@@ -1,6 +1,7 @@
 import { useParams } from 'react-router';
 
 import { Chat } from '@/components/Chat';
+import Breadcrumb from '@/components/ui/breadcrumbs';
 import { Header } from '@/components/ui/header';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -27,9 +28,21 @@ function Agent() {
     );
   }
 
+  const breadcrumbItems = [
+    {
+      label: 'Agents',
+      href: '/agents',
+    },
+    {
+      label: agent?.name,
+      href: `/agents/${agentId}`,
+      isCurrent: true,
+    },
+  ];
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <Header title={`Chat with ${agent?.name}`} />
+      <Header title={<Breadcrumb items={breadcrumbItems} />} />
       <main className="flex-1 relative grid grid-cols-[1fr_400px] divide-x">
         <Chat agentId={agentId!} agentName={agent?.name} />
         <div className="flex flex-col">
