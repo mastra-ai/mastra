@@ -10,7 +10,19 @@ const ___filename = _fileURLToPath(import.meta.url);
 const ___dirname = _path.dirname(___filename);
 
 const { mastra } = await import(join(process.cwd(), 'mastra.mjs'));
-const tools = await import(join(process.cwd(), 'tools.mjs'));
+
+const mastraToolsPaths = process.env.MASTRA_TOOLS_PATH;
+
+const toolImports = mastraToolsPaths
+  ? await Promise.all(mastraToolsPaths.split(',').map(toolPath => import(toolPath)))
+  : [];
+
+const tools = toolImports.reduce((acc, toolModule) => {
+  Object.entries(toolModule).forEach(([key, tool]) => {
+    acc[key] = tool;
+  });
+  return acc;
+}, {});
 
 const app = express();
 
