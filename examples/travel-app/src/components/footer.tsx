@@ -2,7 +2,7 @@ import { MastraLogo } from './ui/icons';
 
 export default function Footer() {
   return (
-    <footer className="border-t border-gray-200 bg-white">
+    <footer className="bg-[var(--brut-bg)] border-t-4 border-black font-mono">
       <div className="container mx-auto px-4 py-6">
         <a
           href="https://mastra.ai"
