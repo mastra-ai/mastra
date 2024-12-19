@@ -1,5 +1,16 @@
 # mastra
 
+## 0.1.57-alpha.56
+
+### Patch Changes
+
+- b135410: fix- mastra post install
+- d6d8159: Workflow graph diagram
+- 505d385: playground breadcrumb navigation
+- Updated dependencies [2e099d2]
+- Updated dependencies [d6d8159]
+  - @mastra/core@0.1.27-alpha.43
+
 ## 0.1.57-alpha.55
 
 ### Patch Changes

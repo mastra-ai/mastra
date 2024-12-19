@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.1.27-alpha.43
+
+### Patch Changes
+
+- 2e099d2: Allow trigger passed in to `then` step
+- d6d8159: Workflow graph diagram
+
 ## 0.1.27-alpha.42
 
 ### Patch Changes
