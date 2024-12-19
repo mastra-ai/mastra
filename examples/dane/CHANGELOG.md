@@ -1,5 +1,18 @@
 # @mastra/dane
 
+## 0.0.2-alpha.10
+
+### Patch Changes
+
+- 4a54c82: Fix dane labelling functionality
+- Updated dependencies [4a54c82]
+  - @mastra/core@0.1.27-alpha.42
+  - @mastra/firecrawl@1.0.4-alpha.27
+  - @mastra/github@1.0.3-alpha.26
+  - @mastra/engine@0.0.5-alpha.36
+  - @mastra/memory@0.0.2-alpha.21
+  - @mastra/rag@0.0.2-alpha.26
+
 ## 0.0.2-alpha.9
 
 ### Patch Changes
