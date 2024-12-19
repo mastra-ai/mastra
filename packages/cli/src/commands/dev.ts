@@ -68,16 +68,24 @@ export async function dev({
   const toolPathsWithFileNames = (
     await Promise.all(
       toolsPaths.map(async toolPath => {
-        const files = await fs.readdir(toolPath);
-        return files.map(file => {
-          const fullPath = path.join(toolPath, file);
-          const fileName = path.parse(file).name;
-          const name = fileName === 'index' ? path.basename(path.dirname(fullPath)) : fileName;
-          return {
-            path: toolPath,
-            name,
-          };
-        });
+        try {
+          const files = await fs.readdir(toolPath);
+          return files.map(file => {
+            const fullPath = path.join(toolPath, file);
+            const fileName = path.parse(file).name;
+            const name = fileName === 'index' ? path.basename(path.dirname(fullPath)) : fileName;
+            return {
+              path: toolPath,
+              name,
+            };
+          });
+        } catch (err) {
+          if (toolPath === defaultToolsPath) {
+            return [];
+          }
+          console.warn(`Error reading tools directory ${toolPath}:`, err);
+          return [];
+        }
       }),
     )
   ).flat();
@@ -95,13 +103,15 @@ export async function dev({
 
   await bundleServer(join(dotMastraPath, 'index.mjs'));
 
+  const MASTRA_TOOLS_PATH = toolPathsWithFileNames?.length
+    ? toolPathsWithFileNames.map(tool => path.join(dotMastraPath, 'tools', `${tool.name}.mjs`)).join(',')
+    : undefined;
+
   const proc = execa('node', ['server.mjs'], {
     cwd: dotMastraPath,
     env: {
       port: `${port} || 4111`,
-      MASTRA_TOOLS_PATH: toolPathsWithFileNames
-        .map(tool => path.join(dotMastraPath, 'tools', `${tool.name}.mjs`))
-        .join(','),
+      MASTRA_TOOLS_PATH,
     },
   });
 
