@@ -15,7 +15,6 @@ function processFormData(formData: FormData) {
   formData.forEach((value, key) => {
     formObject[key] = value;
   });
-
   // Look up cityIds for departure and arrival locations
   const departurePlace = PLACES.find(
     (place) => place.value === formObject.departureLocation,
@@ -40,6 +39,7 @@ export async function runWorkflow({
   formData: FormData;
 }) {
   const formObject = processFormData(formData);
+  console.log("formObject---runWorkflow", formObject);
 
   const result = await workflow.execute({
     triggerData: {
@@ -52,13 +52,14 @@ export async function runWorkflow({
         preferredFlightTimes: formObject.preferredFlightTimes,
         flightPriority: formObject.flightPriority,
         accommodationType: formObject.accommodationType,
-        hotelPriceRange: formObject.hotelPriceRange,
+        hotelPriceRange: formObject.hotelPriceRange || "",
         interests: formObject.interests,
         startDate: formObject.startDate,
         endDate: formObject.endDate,
         departureCityId: formObject.departureCityId,
         arrivalCityId: formObject.arrivalCityId,
         arrivalAttractionId: formObject.arrivalAttractionId,
+        typeOfPlace: formObject.typeOfPlace,
       },
     },
   });
@@ -79,6 +80,8 @@ export async function runAgent(formData: FormData) {
     - Find the best accommodation option for the customer (use arrivalCityId from formObject)
     - Find three activities and attractions for the customer based on their interests (use arrivalAttractionId from formObject)
     - Find the best flight option for the customer to return home (use departureLocation and arrivalLocation from formObject)
+    - Find the best Airbnb option for the customer to stay (use arrivalCityId from formObject) and pass it in to the searchAirbnbLocation tool
+    - After you have found the Airbnb location, call the searchAirbnb tool (use the id from the searchAirbnbLocation tool, and use typeOfPlace, startDate and endDate from formObject)
 
     Other Notes:
 
@@ -86,7 +89,9 @@ export async function runAgent(formData: FormData) {
     prioritize convenience the most (shortest trip and matching time).
     - ALWAYS pass entire date timestamps back for departureTime and arrivalTime.
     - ALWAYS pass the entire flight object back for the outbound and return flights.
-  
+    - You must not call the searchAirbnbLocation and searchAirbnb tools if the accommodationType is hotel.
+    - You must not call the searchHotels tool if the accommodationType is Airbnb.
+
     Here is the information about the customer's trip requirements:
     ${JSON.stringify(formObject)}
   `;
