@@ -25,7 +25,7 @@ const depsService = new DepsService();
 const version = await depsService.getPackageVersion();
 
 const analytics = new PosthogAnalytics({
-  apiKey: 'phc_yfAcSuemwdkkLzl6F6q4uyRGeUkHSHMHq9W2ZaRicZw',
+  apiKey: 'phc_SBLpZVAB6jmHOct9CABq3PF0Yn5FU3G2FgT4xUr2XrT',
   host: 'https://us.posthog.com',
   version: version!,
 });

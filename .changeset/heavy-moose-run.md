@@ -1,0 +1,5 @@
+---
+'mastra': patch
+---
+
+update apiKey
