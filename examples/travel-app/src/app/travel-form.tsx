@@ -1,34 +1,55 @@
-'use client';
+"use client";
 
-import { format } from 'date-fns';
-import { CalendarIcon, Loader2 } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
-import React from 'react';
-import { toast } from 'sonner';
+import { format } from "date-fns";
+import { CalendarIcon, Loader2 } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import React from "react";
+import { toast } from "sonner";
 
-import { useRouter } from 'next/navigation';
+import { useRouter } from "next/navigation";
 
-import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
-import { Textarea } from '@/components/ui/textarea';
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
+import { Textarea } from "@/components/ui/textarea";
 
-import { useSidebar } from '@/lib/sidebar-context';
-import { PLACES, FLIGHT_TIMES, HOTEL_PRICE_RANGES, INTERESTS } from '@/lib/types';
-import { cn } from '@/lib/utils';
+import { useSidebar } from "@/lib/sidebar-context";
+import {
+  PLACES,
+  FLIGHT_TIMES,
+  HOTEL_PRICE_RANGES,
+  INTERESTS,
+} from "@/lib/types";
+import { cn } from "@/lib/utils";
 
-import { runAgent, runWorkflow } from './actions';
-import { TravelResults } from './travel-results';
-import { TravelSchemaProps } from './utils';
+import { runAgent, runWorkflow } from "./actions";
+import { TravelResults } from "./travel-results";
+import { TravelSchemaProps } from "./utils";
 
 interface TravelFormProps {
-  executor: 'agent' | 'workflow';
+  executor: "agent" | "workflow";
   sidebarContent: {
     initial: React.ReactNode;
     submitted: React.ReactNode;
@@ -36,34 +57,39 @@ interface TravelFormProps {
 }
 
 const LOADING_MESSAGES = [
-  'Planning your Trip',
-  'Looking up Flight info',
-  'Selecting your Flight',
-  'Looking up accommodations',
-  'Selecting your accommodation',
-  'Finding things to do',
-  'Putting together your trip plan',
-  'Just one more thing',
+  "Planning your Trip",
+  "Looking up Flight info",
+  "Selecting your Flight",
+  "Looking up accommodations",
+  "Selecting your accommodation",
+  "Finding things to do",
+  "Putting together your trip plan",
+  "Just one more thing",
 ];
 
-export default function TravelForm({ executor, sidebarContent }: TravelFormProps) {
+export default function TravelForm({
+  executor,
+  sidebarContent,
+}: TravelFormProps) {
   const router = useRouter();
-  const [startDate, setStartDate] = useState<Date>(new Date('5/12/25'));
-  const [endDate, setEndDate] = useState<Date>(new Date('5/16/25'));
+  const [startDate, setStartDate] = useState<Date>(new Date("5/12/25"));
+  const [endDate, setEndDate] = useState<Date>(new Date("5/16/25"));
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [flightPriority, setFlightPriority] = useState([50]);
   const [submitting, setSubmitting] = useState(false);
-  const [accommodationType, setAccommodationType] = useState<'hotel' | 'airbnb'>('hotel');
+  const [accommodationType, setAccommodationType] = useState<
+    "hotel" | "airbnb"
+  >("hotel");
   const [showResults, setShowResults] = useState(false);
   const { setContent } = useSidebar();
-  const [loadingMessage, setLoadingMessage] = useState<string>('');
+  const [loadingMessage, setLoadingMessage] = useState<string>("");
   const [showForm, setShowForm] = useState(true);
   const [travelData, setTravelData] = useState<TravelSchemaProps | null>(null);
 
   const runLoadingSequence = useCallback(async () => {
     for (let i = 0; i < LOADING_MESSAGES.length - 1; i++) {
       setLoadingMessage(LOADING_MESSAGES[i]);
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 3000));
     }
     setLoadingMessage(LOADING_MESSAGES[LOADING_MESSAGES.length - 1]);
   }, []);
@@ -83,22 +109,22 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
 
     // Add the dates to formData in YYYY-MM-DD format if they exist
     if (startDate) {
-      const formattedStartDate = format(startDate, 'yyyy-MM-dd');
-      formData.append('startDate', formattedStartDate);
+      const formattedStartDate = format(startDate, "yyyy-MM-dd");
+      formData.append("startDate", formattedStartDate);
     }
     if (endDate) {
-      const formattedEndDate = format(endDate, 'yyyy-MM-dd');
-      formData.append('endDate', formattedEndDate);
+      const formattedEndDate = format(endDate, "yyyy-MM-dd");
+      formData.append("endDate", formattedEndDate);
     }
 
     try {
-      if (executor === 'agent') {
+      if (executor === "agent") {
         const result = await runAgent(formData);
         console.log(result.message);
         console.log(result.message);
         setTravelData(result.message);
       } else {
-        const { results } = await runWorkflow({ userId: 'SYSTEM', formData });
+        const { results } = await runWorkflow({ userId: "SYSTEM", formData });
         // console.log(result)
         // Need polling or some kind of way to get the workflow result
         // console.log(result.message);
@@ -106,10 +132,16 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
 
         setTravelData({
           flights: {
-            outbound: results?.outboundFlight?.payload?.outboundFlightSelection?.typeSelection?.[0],
-            return: results?.returnFlight?.payload?.returnFlightSelection?.typeSelection?.[0],
+            outbound:
+              results?.outboundFlight?.payload?.outboundFlightSelection
+                ?.typeSelection?.[0],
+            return:
+              results?.returnFlight?.payload?.returnFlightSelection
+                ?.typeSelection?.[0],
           },
-          attractions: results?.attraction?.payload?.attractionSelection?.typeSelection || [],
+          attractions:
+            results?.attraction?.payload?.attractionSelection?.typeSelection ||
+            [],
           hotel: results?.hotel?.payload?.hotelSelection?.typeSelection?.[0],
         });
       }
@@ -118,7 +150,7 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
       router.refresh();
     } catch (error) {
       toast.error("An error occured, I can't plan trip");
-      console.error('Error submitting form:', error);
+      console.error("Error submitting form:", error);
     } finally {
       setSubmitting(false);
     }
@@ -155,12 +187,12 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                       <Button
                         variant="outline"
                         className={cn(
-                          'w-full justify-start text-left font-bold bg-white border-4 border-black shadow-[4px_4px_0px_0px_#000000] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all',
-                          !startDate && 'text-muted-foreground',
+                          "w-full justify-start text-left font-bold bg-white border-4 border-black shadow-[4px_4px_0px_0px_#000000] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all",
+                          !startDate && "text-muted-foreground",
                         )}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
-                        {startDate ? format(startDate, 'PPP') : 'Select date'}
+                        {startDate ? format(startDate, "PPP") : "Select date"}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0">
@@ -168,9 +200,9 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                         mode="single"
                         className="border-4 border-black bg-white"
                         selected={startDate}
-                        onSelect={date => setStartDate(date as Date)}
+                        onSelect={(date) => setStartDate(date as Date)}
                         initialFocus
-                        disabled={date => {
+                        disabled={(date) => {
                           const today = new Date();
                           today.setHours(0, 0, 0, 0);
                           return date < today;
@@ -187,12 +219,12 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                       <Button
                         variant="outline"
                         className={cn(
-                          'w-full justify-start text-left font-bold bg-white border-4 border-black shadow-[4px_4px_0px_0px_#000000] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all',
-                          !endDate && 'text-muted-foreground',
+                          "w-full justify-start text-left font-bold bg-white border-4 border-black shadow-[4px_4px_0px_0px_#000000] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all",
+                          !endDate && "text-muted-foreground",
                         )}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
-                        {endDate ? format(endDate, 'PPP') : 'Select date'}
+                        {endDate ? format(endDate, "PPP") : "Select date"}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0">
@@ -200,18 +232,22 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                         mode="single"
                         className="border-4 border-black bg-white"
                         selected={endDate}
-                        onSelect={date => {
+                        onSelect={(date) => {
                           if (date) {
                             const maxDate = new Date(startDate);
                             maxDate.setDate(startDate.getDate() + 90);
 
                             if (date > maxDate) {
-                              toast.error('End date cannot be more than 90 days from start date');
+                              toast.error(
+                                "End date cannot be more than 90 days from start date",
+                              );
                               return;
                             }
 
                             if (date < startDate) {
-                              toast.error('End date cannot be before start date');
+                              toast.error(
+                                "End date cannot be before start date",
+                              );
                               return;
                             }
 
@@ -231,7 +267,7 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                       <SelectValue placeholder="Select airport" />
                     </SelectTrigger>
                     <SelectContent className="border-4 border-black bg-white">
-                      {PLACES.map(airport => (
+                      {PLACES.map((airport) => (
                         <SelectItem
                           className="font-bold hover:!bg-[var(--brut-bg)]"
                           key={airport.value}
@@ -251,7 +287,7 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                       <SelectValue placeholder="Select airport" />
                     </SelectTrigger>
                     <SelectContent className="border-black border-4">
-                      {PLACES.map(airport => (
+                      {PLACES.map((airport) => (
                         <SelectItem
                           className="font-bold hover:!bg-[var(--brut-bg)]"
                           key={airport.value}
@@ -299,10 +335,15 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
 
               <CardContent className="space-y-6">
                 <div className="space-y-2">
-                  <Label className="text-lg font-bold mb-3 block">Preferred Flight Times</Label>
+                  <Label className="text-lg font-bold mb-3 block">
+                    Preferred Flight Times
+                  </Label>
                   <div className="grid grid-cols-1 md:flex gap-4">
-                    {FLIGHT_TIMES.map(time => (
-                      <div key={time.value} className="flex items-center border-2 border-black p-2 bg-white gap-2">
+                    {FLIGHT_TIMES.map((time) => (
+                      <div
+                        key={time.value}
+                        className="flex items-center border-2 border-black p-2 bg-white gap-2"
+                      >
                         <Checkbox
                           className="border-2 border-black"
                           id={time.value}
@@ -316,7 +357,9 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-lg font-bold">Price vs. Flight Time Priority</Label>
+                  <Label className="text-lg font-bold">
+                    Price vs. Flight Time Priority
+                  </Label>
                   <Slider
                     value={flightPriority}
                     onValueChange={setFlightPriority}
@@ -342,16 +385,26 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
 
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label className="text-lg font-bold">Accommodation Type</Label>
+                  <Label className="text-lg font-bold">
+                    Accommodation Type
+                  </Label>
                   <RadioGroup
                     name="accommodationType"
                     value={accommodationType}
-                    onValueChange={value => setAccommodationType(value as 'hotel' | 'airbnb')}
+                    onValueChange={(value) =>
+                      setAccommodationType(value as "hotel" | "airbnb")
+                    }
                     className="flex gap-4"
                   >
-                    {['Hotel', 'Airbnb'].map(type => (
-                      <Label key={type} className="flex items-center gap-2 bg-white p-2 border-2 border-black">
-                        <RadioGroupItem value={type.toLowerCase()} className="border-2 border-black" />
+                    {["Hotel", "Airbnb"].map((type) => (
+                      <Label
+                        key={type}
+                        className="flex items-center gap-2 bg-white p-2 border-2 border-black"
+                      >
+                        <RadioGroupItem
+                          value={type.toLowerCase()}
+                          className="border-2 border-black"
+                        />
                         {type}
                       </Label>
                     ))}
@@ -363,7 +416,7 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                     <SelectValue placeholder="Select price range" />
                   </SelectTrigger>
                   <SelectContent className="border-4 border-black bg-white">
-                    {HOTEL_PRICE_RANGES.map(range => (
+                    {HOTEL_PRICE_RANGES.map((range) => (
                       <SelectItem
                         key={range.value}
                         value={range.value}
@@ -375,7 +428,7 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                   </SelectContent>
                 </Select>
 
-                {accommodationType === 'airbnb' && (
+                {accommodationType === "airbnb" && (
                   <React.Fragment>
                     {/* <div className="space-y-2">
                       <Label>Property Type</Label>
@@ -394,14 +447,17 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
                       <Label className="text-lg font-bold">Property Type</Label>
                       <RadioGroup name="propertyType" className="flex gap-4">
                         {[
-                          { name: 'Entire Place', value: 'entirePlace' },
-                          { name: 'Private Room', value: 'privateRoom' },
-                        ].map(type => (
+                          { name: "Entire Place", value: "entirePlace" },
+                          { name: "Private Room", value: "privateRoom" },
+                        ].map((type) => (
                           <Label
                             key={type.value}
                             className="flex items-center gap-2 bg-white p-2 border-2 border-black"
                           >
-                            <RadioGroupItem value={type.value} className="border-2 border-black" />
+                            <RadioGroupItem
+                              value={type.value}
+                              className="border-2 border-black"
+                            />
                             {type.name}
                           </Label>
                         ))}
@@ -422,17 +478,22 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
               <CardContent className="space-y-2">
                 <Label>Interests</Label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {INTERESTS.map(interest => (
-                    <Label key={interest.value} className="flex items-center gap-2 bg-white p-2 border-2 border-black">
+                  {INTERESTS.map((interest) => (
+                    <Label
+                      key={interest.value}
+                      className="flex items-center gap-2 bg-white p-2 border-2 border-black"
+                    >
                       <Checkbox
                         name="interests"
                         value={interest.value}
                         checked={selectedInterests.includes(interest.value)}
-                        onCheckedChange={checked => {
+                        onCheckedChange={(checked) => {
                           setSelectedInterests(
                             checked
                               ? [...selectedInterests, interest.value]
-                              : selectedInterests.filter(i => i !== interest.value),
+                              : selectedInterests.filter(
+                                  (i) => i !== interest.value,
+                                ),
                           );
                         }}
                         id={interest.value}
@@ -448,10 +509,10 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
             <Button
               type="submit"
               disabled={submitting}
-              size={'lg'}
+              size={"lg"}
               className="bg-[var(--brut-red)] text-xl text-white p-8 w-full border-4 border-black shadow-[8px_8px_0px_0px_#000000] hover:shadow-none hover:translate-x-2 hover:translate-y-2 transition-all font-mono font-bold transform rotate-1 hover:rotate-0"
             >
-              {submitting ? 'Submitting...' : ' PLAN MY TRIP!'}
+              {submitting ? "Submitting..." : " PLAN MY TRIP!"}
             </Button>
           </form>
         </div>
@@ -459,7 +520,7 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
         <Card className="bg-white rounded-none border-4 border-black p-8 shadow-[8px_8px_0px_0px_#000000] max-w-2xl mx-auto transform -rotate-1 hover:rotate-0 transition-transform">
           <CardContent className="flex flex-col items-center justify-center h-full">
             <div className="flex flex-col items-center gap-4">
-              <Loader2 className="h-8 w-8 animate-spin" />
+              <Loader2 className="h-8 w-8 animate-spin duration-300" />
               <p className="text-xl font-bold">{loadingMessage}</p>
             </div>
           </CardContent>
