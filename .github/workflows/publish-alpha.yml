@@ -50,8 +50,31 @@ jobs:
       - name: Create and publish alpha release
         id: publish
         run: |
-          OUTPUT=$(pnpm changeset publish 2>&1)
-          echo "$OUTPUT"
+          # Enable error tracing
+          set -x
+
+          # Try to publish and capture output
+          if OUTPUT=$(pnpm changeset publish 2>&1); then
+            # Show the output immediately
+            echo "$OUTPUT"
+            echo "Successfully published packages"
+          else
+            # Show the output immediately
+            echo "$OUTPUT"
+            echo "Failed to publish packages"
+            
+            # Check if it's because no changes were found
+            if echo "$OUTPUT" | grep -q "No changes to publish"; then
+              echo "No changes to publish - this is OK"
+              exit 0
+            else
+              # Real error occurred
+              echo "Error occurred during publish"
+              exit 1
+            fi
+          fi
+
+          # Store output for next steps
           echo "OUTPUT<<EOF" >> $GITHUB_OUTPUT
           echo "$OUTPUT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
