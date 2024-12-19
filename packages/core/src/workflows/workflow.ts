@@ -167,8 +167,8 @@ export class Workflow<
 
   then<
     TStep extends IAction<any, any, any, any>,
-    CondStep extends IAction<any, any, any, any>,
-    VarStep extends IAction<any, any, any, any>,
+    CondStep extends IAction<any, any, any, any> | 'trigger',
+    VarStep extends IAction<any, any, any, any> | 'trigger',
   >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep>) {
     const { variables = {} } = config || {};
 
