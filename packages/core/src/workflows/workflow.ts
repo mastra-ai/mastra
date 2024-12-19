@@ -541,7 +541,7 @@ export class Workflow<
   }
 
   #makeStepKey(step: Step<any, any, any>) {
-    // return `${step.id}${this.#delimiter}${Object.keys(this.#steps2).length}`;
+    // return `${step.id}${this.#delimiter}${Object.keys(this.steps2).length}`;
     return `${step.id}`;
   }
 
@@ -553,9 +553,10 @@ export class Workflow<
     const states: Record<string, any> = {};
 
     stepGraph.initial.forEach(stepNode => {
+      const nextSteps = [...(stepGraph[stepNode.step.id] || [])];
       // TODO: For identical steps, use index to create unique key
       states[stepNode.step.id] = {
-        ...this.#buildBaseState(stepNode, stepGraph[stepNode.step.id]),
+        ...this.#buildBaseState(stepNode, nextSteps),
       };
     });
 
@@ -933,5 +934,13 @@ export class Workflow<
 
   get stepGraph() {
     return this.#stepGraph;
+  }
+
+  get stepSubscriberGraph() {
+    return this.#stepSubscriberGraph;
+  }
+
+  get steps() {
+    return this.#steps;
   }
 }

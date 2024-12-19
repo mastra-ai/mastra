@@ -37,6 +37,7 @@
   "author": "",
   "dependencies": {
     "@clack/prompts": "^0.8.2",
+    "@dagrejs/dagre": "^1.1.4",
     "@hookform/resolvers": "^3.9.0",
     "@mastra/core": "workspace:*",
     "@radix-ui/react-checkbox": "^1.1.1",
@@ -56,6 +57,7 @@
     "@swc/core": "^1.9.3",
     "@tanstack/react-virtual": "^3.10.4",
     "@types/figlet": "^1.7.0",
+    "@xyflow/react": "^12.3.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",

@@ -1,7 +1,7 @@
 import { Mastra, createLogger } from '@mastra/core';
 
 import { catOne } from './agents/index';
-import { logCatWorkflow } from './workflows';
+import { sequentialWorkflow, parallelWorkflow, branchedWorkflow, cyclicalWorkflow } from './workflows';
 
 export const mastra = new Mastra({
   agents: { catOne },
@@ -10,6 +10,9 @@ export const mastra = new Mastra({
     level: 'DEBUG',
   }),
   workflows: {
-    logCatWorkflow,
+    sequentialWorkflow,
+    parallelWorkflow,
+    branchedWorkflow,
+    cyclicalWorkflow,
   },
 });

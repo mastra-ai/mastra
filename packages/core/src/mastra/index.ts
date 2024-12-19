@@ -105,7 +105,6 @@ export class Mastra<
 
     this.syncs = (config?.syncs || {}) as TSyncs;
 
-
     if (config?.syncs && !config?.engine) {
       throw new Error('Engine is required to run syncs');
     }
