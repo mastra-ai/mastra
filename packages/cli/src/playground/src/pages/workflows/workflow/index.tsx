@@ -31,7 +31,7 @@ function Workflow() {
     <div className="flex flex-col h-full overflow-hidden">
       <Header title={`Workflow: ${workflow?.name}`} />
       <main className="flex-1 relative grid grid-cols-[1fr_400px] divide-x">
-        <WorkflowGraph />
+        <WorkflowGraph workflow={workflow!} />
         <div className="flex flex-col">
           <WorkflowInformation workflowId={workflowId!} />
         </div>

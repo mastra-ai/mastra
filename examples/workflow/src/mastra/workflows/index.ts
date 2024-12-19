@@ -90,14 +90,29 @@ const stepFive = new Step({
   },
 });
 
-export const testWorkflow = new Workflow({
-  name: 'test-workflow',
+const stepSix = new Step({
+  id: 'stepSix',
+  description: 'Logs the input value',
+  inputSchema: z.object({
+    inputValue: z.number(),
+  }),
+  outputSchema: z.object({
+    rawText: z.string(),
+  }),
+  execute: async ({ context }) => {
+    console.log(context.inputValue);
+    return { rawText: context.inputValue.toString() };
+  },
+});
+
+export const sequentialWorkflow = new Workflow({
+  name: 'sequential-workflow',
   triggerSchema: z.object({
     firstValue: z.number(),
   }),
 });
 
-testWorkflow
+sequentialWorkflow
   .step(stepOne, {
     variables: {
       inputValue: {
@@ -118,4 +133,49 @@ testWorkflow
   .then(stepFour)
   .then(stepFive);
 
-testWorkflow.commit();
+sequentialWorkflow.commit();
+
+export const parallelWorkflow = new Workflow({
+  name: 'parallel-workflow',
+  triggerSchema: z.object({
+    firstValue: z.number(),
+  }),
+});
+
+parallelWorkflow.step(stepOne).step(stepTwo).step(stepThree);
+
+parallelWorkflow.commit();
+
+export const branchedWorkflow = new Workflow({
+  name: 'branched-workflow',
+  triggerSchema: z.object({
+    firstvalue: z.number(),
+  }),
+});
+
+branchedWorkflow.step(stepOne).then(stepTwo).then(stepFour).after(stepOne).step(stepThree).then(stepFive);
+
+branchedWorkflow.commit();
+
+export const cyclicalWorkflow = new Workflow({
+  name: 'cyclical-workflow',
+  triggerSchema: z.object({
+    firstvalue: z.number(),
+  }),
+});
+
+cyclicalWorkflow
+  .step(stepOne)
+  .then(stepTwo)
+  .after(stepOne)
+  .step(stepThree, {
+    when: { ref: { step: stepOne, path: 'doubledValue' }, query: { $eq: 10 } },
+  })
+  .step(stepOne, {
+    when: {
+      ref: { step: stepOne, path: 'doubledValue' },
+      query: { $eq: 12 },
+    },
+  });
+
+cyclicalWorkflow.commit();

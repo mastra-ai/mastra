@@ -553,9 +553,10 @@ export class Workflow<
     const states: Record<string, any> = {};
 
     stepGraph.initial.forEach(stepNode => {
+      const nextSteps = [...(stepGraph[stepNode.step.id] || [])];
       // TODO: For identical steps, use index to create unique key
       states[stepNode.step.id] = {
-        ...this.#buildBaseState(stepNode, stepGraph[stepNode.step.id]),
+        ...this.#buildBaseState(stepNode, nextSteps),
       };
     });
 
