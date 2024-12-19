@@ -13,58 +13,102 @@ export interface TravelFormData {
 // TODO: We should use engine and syncs to store these values in the db.
 // This just provides some sample data for now.
 export const PLACES = [
-  { value: 'ATL.AIRPORT', label: 'Atlanta (ATL)', cityId: '20024809', attractionId: 'eyJ1ZmkiOjIwMDI0ODA5fQ==' },
-  { value: 'LAX.AIRPORT', label: 'Los Angeles (LAX)', cityId: '20014181', attractionId: 'eyJ1ZmkiOjIwMDE0MTgxfQ==' },
-  { value: 'ORD.AIRPORT', label: 'Chicago (ORD)', cityId: '20033173', attractionId: 'eyJ1ZmkiOjIwMDMzMTczfQ==' },
   {
-    value: 'DFW.AIRPORT',
-    label: 'Dallas/Fort Worth (DFW)',
-    cityId: '20127504',
-    attractionId: 'eyJ1ZmkiOjIwMTI3NTA0fQ==',
+    value: "ATL.AIRPORT",
+    label: "Atlanta (ATL)",
+    cityId: "20024809",
+    attractionId: "eyJ1ZmkiOjIwMDI0ODA5fQ==",
   },
-  { value: 'DEN.AIRPORT', label: 'Denver (DEN)', cityId: '20017349', attractionId: 'eyJ1ZmkiOjIwMDE3MzQ5fQ==' },
-  { value: 'JFK.AIRPORT', label: 'New York (JFK)', cityId: '20088325', attractionId: 'eyJ1ZmkiOjIwMDg4MzI1fQ==' },
-  { value: 'SFO.AIRPORT', label: 'San Francisco (SFO)', cityId: '20015732', attractionId: 'eyJ1ZmkiOjIwMDE1NzMyfQ==' },
-  { value: 'SEA.AIRPORT', label: 'Seattle (SEA)', cityId: '20144883', attractionId: 'eyJ1ZmkiOjIwMTQ0ODgzfQ==' },
-  { value: 'LAS.AIRPORT', label: 'Las Vegas (LAS)', cityId: '20079110', attractionId: 'eyJ1ZmkiOjIwMDc5MTEwfQ==' },
-  { value: 'MCO.AIRPORT', label: 'Orlando (MCO)', cityId: '20023488', attractionId: 'eyJ1ZmkiOjIwMDIzNDg4fQ==' },
+  {
+    value: "LAX.AIRPORT",
+    label: "Los Angeles (LAX)",
+    cityId: "20014181",
+    attractionId: "eyJ1ZmkiOjIwMDE0MTgxfQ==",
+  },
+  {
+    value: "ORD.AIRPORT",
+    label: "Chicago (ORD)",
+    cityId: "20033173",
+    attractionId: "eyJ1ZmkiOjIwMDMzMTczfQ==",
+  },
+  {
+    value: "DFW.AIRPORT",
+    label: "Dallas/Fort Worth (DFW)",
+    cityId: "20127504",
+    attractionId: "eyJ1ZmkiOjIwMTI3NTA0fQ==",
+  },
+  {
+    value: "DEN.AIRPORT",
+    label: "Denver (DEN)",
+    cityId: "20017349",
+    attractionId: "eyJ1ZmkiOjIwMDE3MzQ5fQ==",
+  },
+  {
+    value: "JFK.AIRPORT",
+    label: "New York (JFK)",
+    cityId: "20088325",
+    attractionId: "eyJ1ZmkiOjIwMDg4MzI1fQ==",
+  },
+  {
+    value: "SFO.AIRPORT",
+    label: "San Francisco (SFO)",
+    cityId: "20015732",
+    attractionId: "eyJ1ZmkiOjIwMDE1NzMyfQ==",
+  },
+  {
+    value: "SEA.AIRPORT",
+    label: "Seattle (SEA)",
+    cityId: "20144883",
+    attractionId: "eyJ1ZmkiOjIwMTQ0ODgzfQ==",
+  },
+  {
+    value: "LAS.AIRPORT",
+    label: "Las Vegas (LAS)",
+    cityId: "20079110",
+    attractionId: "eyJ1ZmkiOjIwMDc5MTEwfQ==",
+  },
+  {
+    value: "MCO.AIRPORT",
+    label: "Orlando (MCO)",
+    cityId: "20023488",
+    attractionId: "eyJ1ZmkiOjIwMDIzNDg4fQ==",
+  },
 ] as const;
 
 export const FLIGHT_TIMES = [
-  { value: 'morning', label: 'Morning' },
-  { value: 'afternoon', label: 'Afternoon' },
-  { value: 'evening', label: 'Evening' },
+  { value: "morning", label: "Morning" },
+  { value: "afternoon", label: "Afternoon" },
+  { value: "evening", label: "Evening" },
 ] as const;
 
 export const HOTEL_PRICE_RANGES = [
-  { value: 'budget', label: 'Budget-friendly' },
-  { value: 'moderate', label: 'Moderately priced' },
-  { value: 'luxury', label: 'Luxury' },
+  { value: "budget", label: "Budget-friendly" },
+  { value: "moderate", label: "Moderately priced" },
+  { value: "luxury", label: "Luxury" },
 ] as const;
 
 export const INTERESTS = [
-  { value: 'museums', label: 'Museums & Culture' },
-  { value: 'sports', label: 'Sports & Recreation' },
-  { value: 'nightlife', label: 'Nightlife & Entertainment' },
-  { value: 'food', label: 'Food & Dining' },
-  { value: 'shopping', label: 'Shopping' },
-  { value: 'nature', label: 'Nature & Outdoors' },
-  { value: 'history', label: 'Historical Sites' },
+  { value: "museums", label: "Museums & Culture" },
+  { value: "sports", label: "Sports & Recreation" },
+  { value: "nightlife", label: "Nightlife & Entertainment" },
+  { value: "food", label: "Food & Dining" },
+  { value: "shopping", label: "Shopping" },
+  { value: "nature", label: "Nature & Outdoors" },
+  { value: "history", label: "Historical Sites" },
 ] as const;
 
+type Leg = {
+  carriersData: [{ name: string }];
+  flightInfo: {
+    carrierInfo: { marketingCarrier: string };
+    flightNumber: string;
+  };
+};
 // API Response Interfaces
 export interface FlightApiResponse {
   segments: [
     {
-      legs: [
-        {
-          carriersData: [{ name: string }];
-          flightInfo: {
-            carrierInfo: { marketingCarrier: string };
-            flightNumber: string;
-          };
-        },
-      ];
+      legs: Array<Leg>;
       departureAirport: { code: string; cityName: string };
       arrivalAirport: { code: string; cityName: string };
       departureTime: string;
@@ -117,6 +161,8 @@ export interface Flight {
   arrivalTime: Date;
   duration: string;
   price: number;
+
+  legs: Array<Leg>;
 }
 
 export interface Hotel {

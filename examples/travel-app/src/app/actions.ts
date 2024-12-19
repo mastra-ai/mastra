@@ -1,13 +1,13 @@
-'use server';
+"use server";
 
-import { randomUUID } from 'crypto';
+import { randomUUID } from "crypto";
 
-import { PLACES } from '@/lib/types';
+import { PLACES } from "@/lib/types";
 
-import { mastra } from '@/mastra';
-import { workflow } from '@/mastra/workflows/travel-submission';
+import { mastra } from "@/mastra";
+import { workflow } from "@/mastra/workflows/travel-submission";
 
-import { travelSchema } from './utils';
+import { travelSchema } from "./utils";
 
 function processFormData(formData: FormData) {
   // Convert FormData to a regular object for logging
@@ -17,8 +17,12 @@ function processFormData(formData: FormData) {
   });
 
   // Look up cityIds for departure and arrival locations
-  const departurePlace = PLACES.find(place => place.value === formObject.departureLocation);
-  const arrivalPlace = PLACES.find(place => place.value === formObject.arrivalLocation);
+  const departurePlace = PLACES.find(
+    (place) => place.value === formObject.departureLocation,
+  );
+  const arrivalPlace = PLACES.find(
+    (place) => place.value === formObject.arrivalLocation,
+  );
 
   // Add ids to the form object
   formObject.departureCityId = departurePlace?.cityId;
@@ -28,7 +32,13 @@ function processFormData(formData: FormData) {
   return formObject;
 }
 
-export async function runWorkflow({ userId, formData }: { userId: string; formData: FormData }) {
+export async function runWorkflow({
+  userId,
+  formData,
+}: {
+  userId: string;
+  formData: FormData;
+}) {
   const formObject = processFormData(formData);
 
   const result = await workflow.execute({
@@ -59,7 +69,7 @@ export async function runWorkflow({ userId, formData }: { userId: string; formDa
 export async function runAgent(formData: FormData) {
   const formObject = processFormData(formData);
 
-  const agent = mastra.getAgent('travelAgent');
+  const agent = mastra.getAgent("travelAgent");
 
   const toolsPrompt = `
     You are a travel agent and have been given the following information about a customer's trip requirements.
@@ -83,7 +93,7 @@ export async function runAgent(formData: FormData) {
 
   const toolResult = await agent.generate(toolsPrompt);
 
-  console.log('tool resulttt=======', toolResult);
+  console.log("tool resulttt=======", toolResult);
 
   const prompt = `
     You are a travel agent and after doing your research you have found the following information for the customer's trip.
@@ -101,6 +111,11 @@ export async function runAgent(formData: FormData) {
     If description contains "4.5 out of 5 stars" → return rating: 4.5
     If description contains "3 out of 5 stars" → return rating: 3
 
+    IMPORTANT 2: for layover
+    - Do not hallucinate layover information
+    - If you don't have it supplied, ignore it
+    - If not, make sure you add it in
+
 
     ${JSON.stringify(toolResult)}
   `;
@@ -109,7 +124,7 @@ export async function runAgent(formData: FormData) {
     schema: travelSchema,
   });
 
-  console.log('Travel Agent Result:', result);
+  console.log("Travel Agent Result:", result.object);
 
   return {
     message: result.object,
