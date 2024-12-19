@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.52
+
+### Patch Changes
+
+- 1b321d5: Get all tools
+
 ## 0.1.57-alpha.51
 
 ### Patch Changes

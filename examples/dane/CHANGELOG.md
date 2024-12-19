@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.9
+
+### Patch Changes
+
+- 7ea01ae: Use correct chunking api
+
 ## 0.0.2-alpha.8
 
 ### Patch Changes
