@@ -63,7 +63,7 @@ export async function dev({
     Bundle tools
   */
   const defaultToolsPath = path.join(dirPath, 'tools');
-  const toolsPaths = toolsDirs ? toolsDirs.split(',').map(tool => path.join(process.cwd(), tool)) : [defaultToolsPath];
+  const toolsPaths = [...(toolsDirs?.split(',').map(tool => path.join(process.cwd(), tool)) || []), defaultToolsPath];
 
   const toolPathsWithFileNames = (
     await Promise.all(
