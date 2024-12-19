@@ -85,6 +85,7 @@ export default function TravelForm({
   const [loadingMessage, setLoadingMessage] = useState<string>("");
   const [showForm, setShowForm] = useState(true);
   const [travelData, setTravelData] = useState<TravelSchemaProps | null>(null);
+  const [typeOfPlace, setTypeOfPlace] = useState<string>("");
 
   const runLoadingSequence = useCallback(async () => {
     for (let i = 0; i < LOADING_MESSAGES.length - 1; i++) {
@@ -115,6 +116,14 @@ export default function TravelForm({
       formData.append("endDate", formattedEndDate);
     }
 
+    if (accommodationType) {
+      formData.append("accommodationType", accommodationType);
+    }
+
+    if (typeOfPlace) {
+      formData.append("typeOfPlace", typeOfPlace);
+    }
+
     try {
       if (executor === "agent") {
         const result = await runAgent(formData);
@@ -127,6 +136,7 @@ export default function TravelForm({
         // Need polling or some kind of way to get the workflow result
         // console.log(result.message);
         // setTravelData(result.message);
+        console.log("results---workflow", results);
 
         setTravelData({
           flights: {
@@ -140,7 +150,9 @@ export default function TravelForm({
           attractions:
             results?.attraction?.payload?.attractionSelection?.typeSelection ||
             [],
-          hotel: results?.hotel?.payload?.hotelSelection?.typeSelection?.[0],
+          accommodation:
+            results?.accommodation?.payload?.accommodationSelection
+              ?.typeSelection?.[0],
         });
       }
       setShowResults(true);
@@ -446,12 +458,14 @@ export default function TravelForm({
                       <Label className="text-lg font-bold">Property Type</Label>
                       <RadioGroup name="propertyType" className="flex gap-4">
                         {[
-                          { name: "Entire Place", value: "entirePlace" },
-                          { name: "Private Room", value: "privateRoom" },
+                          { name: "Entire Place", value: "Entire home/apt" },
+                          { name: "Private Room", value: "Private room" },
+                          { name: "Shared Room", value: "Shared room" },
                         ].map((type) => (
                           <Label
                             key={type.value}
                             className="flex items-center gap-2 bg-white p-2 border-2 border-black"
+                            onClick={() => setTypeOfPlace(type.value)}
                           >
                             <RadioGroupItem
                               value={type.value}
