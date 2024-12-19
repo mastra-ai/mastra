@@ -29,14 +29,6 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Build Firecrawl
-        run: pnpm build
-        working-directory: ./integrations/firecrawl
-
-      - name: Build Github
-        run: pnpm build
-        working-directory: ./integrations/github
-
       - name: Install dane cli
         run: pnpm install -g @mastra/dane@alpha
 
@@ -47,6 +39,7 @@ jobs:
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Add comment
         uses: actions/github-script@v7
