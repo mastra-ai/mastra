@@ -1,6 +1,6 @@
 import { FirecrawlIntegration } from "@mastra/firecrawl";
 import { GithubIntegration } from "@mastra/github";
-import { StabilityAiIntegration } from "./stabilityai"
+import { StabilityAiIntegration } from "@mastra/stabilityai"
 
 export const firecrawl = new FirecrawlIntegration({
     config: {
