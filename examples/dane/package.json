@@ -31,6 +31,7 @@
     "@mastra/engine": "workspace:*",
     "@mastra/firecrawl": "workspace:*",
     "@mastra/github": "workspace:*",
+    "@mastra/stabilityai": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/rag": "workspace:*",
     "boxen": "^8.0.1",
