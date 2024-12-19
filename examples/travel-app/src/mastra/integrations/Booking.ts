@@ -1,6 +1,7 @@
 // TODO: convert into an integration
 
-import { Attraction, AttractionApiResponse, Flight, FlightApiResponse, Hotel, HotelApiResponse } from "@/lib/types";
+import { AirbnbLocation, AirbnbPlace, Attraction, AttractionApiResponse, Flight, FlightApiResponse, Hotel, HotelApiResponse } from "@/lib/types";
+import { StepResult } from "@mastra/core";
 
 export class Booking {
     uri: string;
@@ -41,7 +42,7 @@ export class Booking {
                 }),
             );
         } catch (error) {
-            console.error(error);
+            console.log("error---getAttractions", error);
             return [];
         }
     }
@@ -113,7 +114,7 @@ export class Booking {
             }
             return result.data.flightOffers.map(
                 (flight: FlightApiResponse): Flight => {
-                    
+
                     return {
                         airline: flight.segments[0].legs[0].carriersData[0].name,
                         flightNumber: `${flight.segments[0].legs[0].flightInfo.carrierInfo.marketingCarrier}${flight.segments[0].legs[0].flightInfo.flightNumber}`,
@@ -131,6 +132,79 @@ export class Booking {
             );
         } catch (error) {
             console.error(error);
+        }
+    }
+
+    async getAirbnbSearchPlaces({ place, country = 'usa' }: { place: string, country?: string }) {
+        const url = `${this.uri}/searchDestination?query=${place}&country=${country}`;
+
+        const options = {
+            method: 'GET',
+            headers: {
+                'x-rapidapi-key': this.token,
+                'x-rapidapi-host': 'airbnb19.p.rapidapi.com'
+            }
+        };
+
+        try {
+            const response = await fetch(url, options);
+            const result = await response.json() as { data: AirbnbLocation[] };
+            console.log('airbnb places', result);
+
+            if (result.data.length > 0) {
+                return result.data[0];
+            }
+            throw new Error('No airbnb places found');
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    async getAirbnb(
+        { placeId, checkIn, checkOut, typeOfPlace, payload }
+        : { placeId: string, checkIn: string, checkOut: string, typeOfPlace: string, payload?: StepResult<any> }
+    ) {
+
+        let place = placeId;
+
+        if (payload?.status === 'success') {
+           place = payload.payload?.id
+        }
+
+        const url = `${this.uri}/searchPropertyByPlace?id=${place}&totalRecords=10&currency=USD&adults=1&typeOfPlace=${typeOfPlace}&checkin=${checkIn}`;
+
+        const options = {
+            method: 'GET',
+            headers: {
+                'x-rapidapi-key': this.token,
+                'x-rapidapi-host': 'airbnb19.p.rapidapi.com'
+            }
+        };
+
+        console.log('Fetching airbnb', {url });
+
+        try {
+            const response = await fetch(url, options);
+            const result = await response.json() as { data: AirbnbPlace[] };
+            console.log('airbnb result', result);
+            return result.data.map(({ adults, avgRating, bathrooms, bedrooms, beds, city, images, price, roomType, summary, title, publicAddress, ...otherProps }) => {
+                return {
+                adults,
+                avgRating,
+                bathrooms,
+                bedrooms,
+                beds,
+                city,
+                images,
+                price,
+                roomType,
+                summary,
+                title,
+                url,
+                publicAddress
+            }});
+        } catch (error) {
+            console.error('error---getAirbnb', error);
         }
     }
 }
