@@ -143,7 +143,7 @@ export const contructNodesAndEdges = ({
     edges = [...edges, ...newEdges];
   }
 
-  if (!Object.keys(stepSubscriberGraph).length || !stepSubscriberGraph) {
+  if (!stepSubscriberGraph || !Object.keys(stepSubscriberGraph).length) {
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges);
     return { nodes: layoutedNodes, edges: layoutedEdges };
   }
