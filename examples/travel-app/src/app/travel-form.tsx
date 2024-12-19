@@ -43,6 +43,7 @@ const LOADING_MESSAGES = [
   'Selecting your accommodation',
   'Finding things to do',
   'Putting together your trip plan',
+  'Just one more thing',
 ];
 
 export default function TravelForm({ executor, sidebarContent }: TravelFormProps) {
@@ -447,8 +448,8 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
             <Button
               type="submit"
               disabled={submitting}
-              className="w-full bg-black text-white text-xl font-bold p-8 border-4 border-black shadow-[8px_8px_0px_0px_#FF3366] hover:shadow-none hover:translate-x-2 hover:translate-y-2 transition-all transform rotate-1 hover:rotate-0"
-              size="lg"
+              size={'lg'}
+              className="bg-[var(--brut-red)] text-xl text-white p-8 w-full border-4 border-black shadow-[8px_8px_0px_0px_#000000] hover:shadow-none hover:translate-x-2 hover:translate-y-2 transition-all font-mono font-bold transform rotate-1 hover:rotate-0"
             >
               {submitting ? 'Submitting...' : ' PLAN MY TRIP!'}
             </Button>
