@@ -5,6 +5,7 @@ import { parse } from 'superjson';
 
 import { DynamicForm } from '@/components/dynamic-form';
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
+import Breadcrumb from '@/components/ui/breadcrumbs';
 import { CodeBlockDemo } from '@/components/ui/code-block';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Header } from '@/components/ui/header';
@@ -58,10 +59,22 @@ const Tool = () => {
 
   const zodInputSchema = resolveSerializedZodOutput(jsonSchemaToZod(parse(tool.inputSchema)));
 
+  const breadcrumbItems = [
+    {
+      label: 'Tools',
+      href: '/tools',
+    },
+    {
+      label: toolId,
+      href: `/tools/all/${tool.id}`,
+      isCurrent: true,
+    },
+  ];
+
   return (
     <div className="flex flex-col h-full w-full bg-mastra-bg-1">
-      <Header title={`Tool - ${toolId}`} />
-      <div className="w-full h-full grid grid-cols-[1fr_2fr] p-2 gap-2">
+      <Header title={<Breadcrumb items={breadcrumbItems} />} />
+      <div className="w-full h-full gridg rid-cols-[300px_1fr] p-2 gap-2">
         <div className="flex flex-col gap-4 border-[0.5px] border-mastra-border-1 rounded-[0.25rem] bg-mastra-bg-2 p-4 py-6">
           <Text variant="secondary" className="text-mastra-el-3 px-4" size="xs">
             Input
@@ -72,6 +85,7 @@ const Tool = () => {
             onSubmit={data => {
               handleExecuteTool(data);
             }}
+            submitButtonLabel="Run"
           />
         </div>
         <div className="flex relative group flex-col gap-4 border-[0.5px] border-mastra-border-1 rounded-[0.25rem] bg-mastra-bg-2 p-4 py-6">
