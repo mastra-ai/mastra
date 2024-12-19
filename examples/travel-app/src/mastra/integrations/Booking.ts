@@ -106,19 +106,28 @@ export class Booking {
         try {
             const response = await fetch(url, options);
             const result = await response.json();
-            return result?.data?.flightOffers?.map(
-                (flight: FlightApiResponse): Flight => ({
-                    airline: flight.segments[0].legs[0].carriersData[0].name,
-                    flightNumber: `${flight.segments[0].legs[0].flightInfo.carrierInfo.marketingCarrier}${flight.segments[0].legs[0].flightInfo.flightNumber}`,
-                    departureAirport: flight.segments[0].departureAirport.code,
-                    departureCity: flight.segments[0].departureAirport.cityName,
-                    departureTime: new Date(flight.segments[0].departureTime),
-                    arrivalAirport: flight.segments[0].arrivalAirport.code,
-                    arrivalCity: flight.segments[0].arrivalAirport.cityName,
-                    arrivalTime: new Date(flight.segments[0].arrivalTime),
-                    duration: `${Math.floor(flight.segments[0].totalTime / 60)}h ${flight.segments[0].totalTime % 60}m`,
-                    price: flight.priceBreakdown.total.units + flight.priceBreakdown.total.nanos / 1000000000,
-                }),
+
+            if (!result?.data?.flightOffers) {
+                console.error('No flight offers found', result);
+                return [];
+            }
+            return result.data.flightOffers.map(
+                (flight: FlightApiResponse): Flight => {
+                    
+                    return {
+                        airline: flight.segments[0].legs[0].carriersData[0].name,
+                        flightNumber: `${flight.segments[0].legs[0].flightInfo.carrierInfo.marketingCarrier}${flight.segments[0].legs[0].flightInfo.flightNumber}`,
+                        departureAirport: flight.segments[0].departureAirport.code,
+                        departureCity: flight.segments[0].departureAirport.cityName,
+                        departureTime: new Date(flight.segments[0].departureTime),
+                        arrivalAirport: flight.segments[0].arrivalAirport.code,
+                        arrivalCity: flight.segments[0].arrivalAirport.cityName,
+                        arrivalTime: new Date(flight.segments[0].arrivalTime),
+                        duration: `${Math.floor(flight.segments[0].totalTime / 60)}h ${flight.segments[0].totalTime % 60}m`,
+                        price: flight.priceBreakdown.total.units + flight.priceBreakdown.total.nanos / 1000000000,
+                        legs: flight.segments[0].legs
+                    }
+                }
             );
         } catch (error) {
             console.error(error);
