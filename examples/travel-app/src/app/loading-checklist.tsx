@@ -12,7 +12,7 @@ export function LoadingChecklist({ isLoading }: { isLoading: boolean }) {
     if (isLoading) {
       const timer = setTimeout(() => {
         setCurrentIndex((prev) =>
-          prev < LOADING_MESSAGES.length - 1 ? prev + 1 : 0,
+          prev < LOADING_MESSAGES.length - 1 ? prev + 1 : prev,
         );
       }, 2000);
 
