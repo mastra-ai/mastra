@@ -18,7 +18,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
   const { conditions } = data;
   return (
     <div className={cn('bg-mastra-bg-3 rounded-md min-w-[154.23px] max-w-[274px] flex flex-col p-2 gap-2')}>
-      <Handle type="target" position={Position.Top} />
+      <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />
       {conditions.map((condition, index) => {
         return (
           <Fragment key={`${condition.ref.path}-${index}`}>
@@ -51,7 +51,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
           </Fragment>
         );
       })}
-      <Handle type="source" position={Position.Bottom} />
+      <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import Dagre from '@dagrejs/dagre';
 import { StepCondition } from '@mastra/core';
-import { Node, Edge } from '@xyflow/react';
+import { Node, Edge, MarkerType } from '@xyflow/react';
 
 export type Condition = {
   ref: {
@@ -73,7 +73,12 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
 
 const defaultEdgeOptions = {
   animated: true,
-  type: 'floating',
+  markerEnd: {
+    type: MarkerType.ArrowClosed,
+    width: 20,
+    height: 20,
+    color: '#8e8e8e',
+  },
 };
 
 export const contructNodesAndEdges = ({

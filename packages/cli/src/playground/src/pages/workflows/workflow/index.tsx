@@ -1,5 +1,6 @@
 import { useParams } from 'react-router';
 
+import Breadcrumb from '@/components/ui/breadcrumbs';
 import { Header } from '@/components/ui/header';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -27,9 +28,21 @@ function Workflow() {
     );
   }
 
+  const breadcrumbItems = [
+    {
+      label: 'Workflows',
+      href: '/workflows',
+    },
+    {
+      label: workflow?.name,
+      href: `/workflows/${workflowId}`,
+      isCurrent: true,
+    },
+  ];
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <Header title={`Workflow: ${workflow?.name}`} />
+      <Header title={<Breadcrumb items={breadcrumbItems} />} />
       <main className="flex-1 relative grid grid-cols-[1fr_400px] divide-x">
         <WorkflowGraph workflow={workflow!} />
         <div className="flex flex-col">
