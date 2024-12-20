@@ -28,7 +28,7 @@ function Workflows() {
             </TableHeader>
             <TableBody className="border-b border-gray-6">
               {isLoading ? (
-                <TableRow className="border-b-gray-6 cursor-pointer border-b-[0.1px] text-[0.8125rem]">
+                <TableRow className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem]">
                   <TableCell>
                     <Skeleton className="h-8 w-8" />
                   </TableCell>
@@ -41,7 +41,7 @@ function Workflows() {
                 </TableRow>
               ) : (
                 Object.entries(workflows).map(([key, workflow]) => (
-                  <TableRow key={key} className="border-b-gray-6 cursor-pointer border-b-[0.1px] text-[0.8125rem]">
+                  <TableRow key={key} className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem]">
                     <TableCell>
                       <div className="h-8 w-full flex items-center justify-center">
                         <Workflow className="h-4 w-4 text-mastra-el-5" />

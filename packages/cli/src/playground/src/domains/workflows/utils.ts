@@ -1,6 +1,6 @@
 import Dagre from '@dagrejs/dagre';
 import { StepCondition } from '@mastra/core';
-import { Node, Edge } from '@xyflow/react';
+import { Node, Edge, MarkerType } from '@xyflow/react';
 
 export type Condition = {
   ref: {
@@ -71,6 +71,16 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
   };
 };
 
+const defaultEdgeOptions = {
+  animated: true,
+  markerEnd: {
+    type: MarkerType.ArrowClosed,
+    width: 20,
+    height: 20,
+    color: '#8e8e8e',
+  },
+};
+
 export const contructNodesAndEdges = ({
   stepGraph,
   stepSubscriberGraph,
@@ -137,7 +147,7 @@ export const contructNodesAndEdges = ({
       id: `e${step.id}-${steps[index + 1].id}`,
       source: step.id,
       target: steps[index + 1].id,
-      animated: true,
+      ...defaultEdgeOptions,
     }));
 
     edges = [...edges, ...newEdges];
@@ -204,7 +214,7 @@ export const contructNodesAndEdges = ({
           id: `e${step.id}-${steps[index + 1].id}`,
           source: step.id,
           target: steps[index + 1].id,
-          animated: true,
+          ...defaultEdgeOptions,
         }));
 
         const firstEdgeStep = steps[0];
@@ -218,7 +228,7 @@ export const contructNodesAndEdges = ({
                   id: `e${connectingStepId}-${firstEdgeStep.id}`,
                   source: connectingStepId,
                   target: firstEdgeStep.id,
-                  animated: true,
+                  ...defaultEdgeOptions,
                 },
               ];
 
@@ -228,7 +238,7 @@ export const contructNodesAndEdges = ({
                 id: `e${lastEdgeStep.id}-${connectingStepId}`,
                 source: lastEdgeStep.id,
                 target: connectingStepId,
-                animated: true,
+                ...defaultEdgeOptions,
               },
             ]
           : [];

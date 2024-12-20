@@ -1,21 +1,6 @@
 import { Workflow, Step } from '@mastra/core';
 import { z } from 'zod';
 
-const logCatName = new Step({
-  id: 'logCatName',
-  description: 'Log a cat name',
-  inputSchema: z.object({
-    name: z.string(),
-  }),
-  outputSchema: z.object({
-    rawText: z.string(),
-  }),
-  execute: async ({ context }) => {
-    console.log(`Hello, ${context.name} 🐈`);
-    return { rawText: `Hello ${context.name}` };
-  },
-});
-
 const stepOne = new Step({
   id: 'stepOne',
   description: 'Doubles the input value',
@@ -129,9 +114,30 @@ sequentialWorkflow
       },
     },
   })
-  .then(stepThree)
-  .then(stepFour)
-  .then(stepFive);
+  .then(stepThree, {
+    variables: {
+      valueToSquare: {
+        step: stepTwo,
+        path: 'incrementedValue',
+      },
+    },
+  })
+  .then(stepFour, {
+    variables: {
+      valueToRoot: {
+        step: stepThree,
+        path: 'squaredValue',
+      },
+    },
+  })
+  .then(stepFive, {
+    variables: {
+      inputValue: {
+        step: stepFour,
+        path: 'rootValue',
+      },
+    },
+  });
 
 sequentialWorkflow.commit();
 
@@ -142,39 +148,138 @@ export const parallelWorkflow = new Workflow({
   }),
 });
 
-parallelWorkflow.step(stepOne).step(stepTwo).step(stepThree);
+parallelWorkflow
+  .step(stepOne, {
+    variables: {
+      inputValue: {
+        step: 'trigger',
+        path: 'firstValue',
+      },
+    },
+  })
+  .then(stepSix, {
+    variables: {
+      inputValue: {
+        step: stepOne,
+        path: 'doubledValue',
+      },
+    },
+  })
+  .step(stepTwo, {
+    variables: {
+      valueToIncrement: {
+        step: 'trigger',
+        path: 'firstValue',
+      },
+    },
+  })
+  .step(stepThree, {
+    variables: {
+      valueToSquare: {
+        step: 'trigger',
+        path: 'firstValue',
+      },
+    },
+  });
 
 parallelWorkflow.commit();
 
 export const branchedWorkflow = new Workflow({
   name: 'branched-workflow',
   triggerSchema: z.object({
-    firstvalue: z.number(),
+    firstValue: z.number(),
   }),
 });
 
-branchedWorkflow.step(stepOne).then(stepTwo).then(stepFour).after(stepOne).step(stepThree).then(stepFive);
+branchedWorkflow
+  .step(stepOne, {
+    variables: {
+      inputValue: {
+        step: 'trigger',
+        path: 'firstValue',
+      },
+    },
+  })
+  .then(stepTwo, {
+    variables: {
+      valueToIncrement: {
+        step: stepOne,
+        path: 'doubledValue',
+      },
+    },
+  })
+  .then(stepFour, {
+    variables: {
+      valueToRoot: {
+        step: stepTwo,
+        path: 'incrementedValue',
+      },
+    },
+  })
+  .after(stepOne)
+  .step(stepThree, {
+    variables: {
+      valueToSquare: {
+        step: stepOne,
+        path: 'doubledValue',
+      },
+    },
+  })
+  .then(stepFive, {
+    variables: {
+      inputValue: {
+        step: stepThree,
+        path: 'squaredValue',
+      },
+    },
+  });
 
 branchedWorkflow.commit();
 
 export const cyclicalWorkflow = new Workflow({
   name: 'cyclical-workflow',
   triggerSchema: z.object({
-    firstvalue: z.number(),
+    firstValue: z.number(),
   }),
 });
 
 cyclicalWorkflow
-  .step(stepOne)
-  .then(stepTwo)
+  .step(stepOne, {
+    variables: {
+      inputValue: {
+        step: 'trigger',
+        path: 'firstValue',
+      },
+    },
+  })
+  .then(stepTwo, {
+    variables: {
+      valueToIncrement: {
+        step: 'trigger',
+        path: 'firstValue',
+      },
+    },
+  })
   .after(stepOne)
   .step(stepThree, {
     when: { ref: { step: stepOne, path: 'doubledValue' }, query: { $eq: 10 } },
+    variables: {
+      valueToSquare: {
+        step: stepOne,
+        path: 'doubledValue',
+      },
+    },
   })
   .step(stepOne, {
     when: {
       ref: { step: stepOne, path: 'doubledValue' },
       query: { $eq: 12 },
+    },
+    variables: {
+      inputValue: {
+        step: stepOne,
+        path: 'doubledValue',
+      },
     },
   });
 
