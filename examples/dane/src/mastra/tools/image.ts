@@ -1,9 +1,10 @@
-import { z } from 'zod';
-import { createTool } from '@mastra/core'
-import { stabilityai } from "../integrations"
-import { writeFileSync } from "fs"
-import { resolve } from "path"
+import { createTool } from '@mastra/core';
 import chalk from 'chalk';
+import { writeFileSync } from 'fs';
+import { resolve } from 'path';
+import { z } from 'zod';
+
+import { stabilityai } from '../integrations/index.js';
 
 export const imageTool = createTool({
   id: 'imageTool',
@@ -16,13 +17,13 @@ export const imageTool = createTool({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async({ context: { directory, prompt } }) => {
+  execute: async ({ context: { directory, prompt } }) => {
     try {
-      console.log('\n' + chalk.blue(`Generating image...`))
-      const generateImageResult = await stabilityai.generateImage(prompt)
-      const file = resolve(directory, generateImageResult.filename)
+      console.log('\n' + chalk.blue(`Generating image...`));
+      const generateImageResult = await stabilityai.generateImage(prompt);
+      const file = resolve(directory, generateImageResult.filename);
 
-      writeFileSync(file, generateImageResult.buffer)
+      writeFileSync(file, generateImageResult.buffer);
 
       console.log(chalk.blue(`Successfully generated: ${file}`));
 
@@ -32,9 +33,9 @@ export const imageTool = createTool({
     } catch (e) {
       if (e instanceof Error) {
         console.log(`\n${chalk.red(e.message)}`);
-        return { message: e.message }
+        return { message: e.message };
       }
-      return { message: 'Error' }
+      return { message: 'Error' };
     }
   },
 });
