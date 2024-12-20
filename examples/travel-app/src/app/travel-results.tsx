@@ -50,18 +50,30 @@ export function TravelResults({ travelData }: TravelResultsProps) {
           <h2 className="text-xl font-bold mb-6 bg-black text-white inline-block px-4 py-2 rotate-2">
             Accommodation
           </h2>
-          <HotelCard {...travelData.hotel} />
+          {travelData.accommodation ? (
+            <HotelCard {...travelData.accommodation} />
+          ) : (
+            <div className="text-center text-black">
+              <p>No accommodation found</p>
+            </div>
+          )}
         </div>
 
         <div className="bg-[var(--brut-light-green)] p-6 border-4 border-black shadow-[8px_8px_0px_0px_#000000] transform rotate-1 hover:rotate-0 transition-transform">
           <h3 className="text-xl font-bold mb-6 bg-black text-white inline-block px-4 py-2 -rotate-2">
             Recommended Attractions
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {travelData.attractions.map((attraction, index) => (
-              <AttractionCard key={index} {...attraction} />
-            ))}
-          </div>
+          {travelData.attractions.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {travelData.attractions.map((attraction, index) => (
+                <AttractionCard key={index} {...attraction} />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center text-black">
+              <p>No attraction centers found</p>
+            </div>
+          )}
         </div>
 
         <div className="pt-8">

@@ -14,7 +14,7 @@ export const flightSchema = z.object({
   arrivalCity: z.string(),
 });
 
-const hotelSchema = z.object({
+const accommodationSchema = z.object({
   name: z.string(),
   rating: z.number(),
   pricePerNight: z.number(),
@@ -49,7 +49,7 @@ export const travelSchema = z.object({
       }),
     ),
   }),
-  hotel: hotelSchema,
+  accommodation: accommodationSchema,
   attractions: attractionsSchema,
 });
 

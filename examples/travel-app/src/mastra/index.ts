@@ -1,11 +1,11 @@
-import { Mastra, createLogger } from '@mastra/core';
-import { PostgresEngine } from '@mastra/engine';
-import { PgMemory } from '@mastra/memory';
+import { Mastra, createLogger } from "@mastra/core";
+import { PostgresEngine } from "@mastra/engine";
+import { PgMemory } from "@mastra/memory";
 
-import { travelAgent, travelAnalyzer } from './agents';
-import { syncCsvData } from './syncs/attractions';
+import { travelAgent, travelAnalyzer } from "./agents";
+import { syncCsvData } from "./syncs/attractions";
 
-const url = 'postgresql://postgres:postgres@localhost:5433/mastra';
+const url = "postgresql://postgres:postgres@localhost:5433/mastra";
 
 const engine = new PostgresEngine({
   url,
@@ -20,10 +20,9 @@ export const mastra = new Mastra({
   syncs: { syncCsvData },
   engine,
   memory,
-  //agents: [travelAgent, travelAgent2, travelAnalyzer],
   agents: { travelAgent, travelAnalyzer },
   logger: createLogger({
-    type: 'CONSOLE',
-    level: 'INFO',
+    type: "CONSOLE",
+    level: "INFO",
   }),
 });

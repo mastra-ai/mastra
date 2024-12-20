@@ -176,7 +176,6 @@ export interface Hotel {
   description: string;
   amenities: string[];
   phoneNumber: string;
-
   reviewScore: number;
 }
 
@@ -191,4 +190,32 @@ export interface Attraction {
   rating?: number;
   reviewCount?: number;
   hasFreeCancellation: boolean;
+}
+
+export interface AirbnbLocation {
+  id: string;
+  location_name: string;
+  terms: {
+    offset: number;
+    value: string;
+  }[];
+  country_code: string;
+  countryCode: string;
+  display_name: string;
+  display_style: string;
+}
+
+export interface AirbnbPlace {
+  avgRating: number;
+  bathrooms: number;
+  bedrooms: number;
+  beds: number;
+  city: string;
+  roomType: string;
+  summary: string;
+  title: string;
+  price: string;
+  adults: number;
+  images: string[];
+  publicAddress: string;
 }

@@ -88,7 +88,7 @@ export function FlightCard({
         {/* Price only - remove Book Now button */}
         <div className="mt-6 flex justify-end items-center">
           <div className="inline-block bg-[var(--brut-green)] px-4 py-2 border-2 border-black font-mono font-bold transform -rotate-1">
-            ${price.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+            ${price?.toLocaleString("en-US", { minimumFractionDigits: 2 })}
           </div>
         </div>
       </CardContent>

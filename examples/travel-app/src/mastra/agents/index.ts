@@ -1,20 +1,28 @@
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
-import { searchAttractions, searchFlights, searchHotels } from '../tools';
+import {
+  searchAirbnb,
+  searchAirbnbLocation,
+  searchAttractions,
+  searchFlights,
+  searchHotels,
+} from "../tools";
 
 export const travelAgent = new Agent({
-  name: 'travelAgent',
+  name: "travelAgent",
   instructions:
-    'You are an expert travel agent responsible for finding a flight, hotel, and three attractions for a user. You will be given a set of user preferences along with some tools and you will need to find the best options for them.',
+    "You are an expert travel agent responsible for finding a flight, hotel, and three attractions for a user. You will be given a set of user preferences along with some tools and you will need to find the best options for them.",
   model: {
-    provider: 'ANTHROPIC',
-    name: 'claude-3-5-sonnet-20240620',
-    toolChoice: 'auto',
+    provider: "ANTHROPIC",
+    name: "claude-3-5-sonnet-20240620",
+    toolChoice: "auto",
   },
   tools: {
     searchFlights,
     searchHotels,
     searchAttractions,
+    searchAirbnbLocation,
+    searchAirbnb,
   },
 });
 
@@ -35,12 +43,12 @@ export const travelAgent = new Agent({
 // });
 
 export const travelAnalyzer = new Agent({
-  name: 'travel-analyzer',
+  name: "travel-analyzer",
   instructions:
-    'You are an expert travel agent responsible for finding a flight, hotel, and three attractions for a user. You will be given a set of user preferences along with some data to find the best options for them.',
+    "You are an expert travel agent responsible for finding a flight, hotel, and three attractions for a user. You will be given a set of user preferences along with some data to find the best options for them.",
   model: {
-    provider: 'ANTHROPIC',
-    name: 'claude-3-5-sonnet-20240620',
-    toolChoice: 'auto',
+    provider: "ANTHROPIC",
+    name: "claude-3-5-sonnet-20240620",
+    toolChoice: "auto",
   },
 });
