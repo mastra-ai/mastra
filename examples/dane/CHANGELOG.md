@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.13
+
+### Patch Changes
+
+- d8b7f2a: Fix import bug
+
 ## 0.0.2-alpha.12
 
 ### Patch Changes
