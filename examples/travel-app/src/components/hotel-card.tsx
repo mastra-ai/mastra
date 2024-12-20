@@ -15,7 +15,6 @@ interface HotelCardProps {
   imageUrl: string;
   description: string;
   amenities: string[];
-  phoneNumber: string;
 }
 
 const getPhoneNumber = (number?: string | number | "<UNKNOWN>") => {
@@ -97,12 +96,6 @@ export function HotelCard({
               <span className="text-sm">{amenity}</span>
             </div>
           ))}
-        </div>
-
-        {/* Contact */}
-        <div className="flex items-center space-x-2 text-sm">
-          <Phone className="h-4 w-4" />
-          <span className="text-black">{getPhoneNumber(phoneNumber)}</span>
         </div>
 
         {/* Price only - remove Book Now button */}
