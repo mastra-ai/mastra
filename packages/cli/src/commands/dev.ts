@@ -77,6 +77,7 @@ export async function dev({
             return {
               path: toolPath,
               name,
+              fileName,
             };
           });
         } catch (err) {
@@ -90,10 +91,10 @@ export async function dev({
     )
   ).flat();
 
-  for (const { path, name } of toolPathsWithFileNames) {
+  for (const { path, name, fileName } of toolPathsWithFileNames) {
     await bundle(path, {
       outfile: join(dotMastraPath, 'tools', `${name}.mjs`),
-      entryFile: name,
+      entryFile: fileName,
     });
   }
 
