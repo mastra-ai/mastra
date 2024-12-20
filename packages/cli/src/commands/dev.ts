@@ -32,14 +32,14 @@ export async function dev({
   const key = env[0]?.name;
   const value = env[0]?.value;
 
-  /* 
+  /*
     Copy playground dist files
   */
   await fsExtra.copy(join(path.dirname(path.dirname(__dirname)), 'src/playground/dist'), playgroundServePath, {
     overwrite: true,
   });
 
-  /* 
+  /*
     Load env
   */
 
@@ -53,13 +53,13 @@ export async function dev({
     await fs.writeFile(path.join(process.cwd(), '.env'), `${key}=${value}`);
   }
 
-  /* 
+  /*
     Bundle mastra
   */
   const dirPath = dir || path.join(process.cwd(), 'src/mastra');
   await bundle(dirPath);
 
-  /* 
+  /*
     Bundle tools
   */
   const defaultToolsPath = path.join(dirPath, 'tools');
@@ -93,10 +93,11 @@ export async function dev({
   for (const { path, name } of toolPathsWithFileNames) {
     await bundle(path, {
       outfile: join(dotMastraPath, 'tools', `${name}.mjs`),
+      entryFile: name,
     });
   }
 
-  /* 
+  /*
     Bundle server
   */
   writeFileSync(join(dotMastraPath, 'index.mjs'), EXPRESS_SERVER);
@@ -107,16 +108,28 @@ export async function dev({
     ? toolPathsWithFileNames.map(tool => path.join(dotMastraPath, 'tools', `${tool.name}.mjs`)).join(',')
     : undefined;
 
-  const proc = execa('node', ['server.mjs'], {
-    cwd: dotMastraPath,
-    env: {
-      port: `${port} || 4111`,
-      MASTRA_TOOLS_PATH,
-    },
-  });
+  try {
+    console.log('Starting server...');
+    const serverProcess = await execa('node', ['server.mjs'], {
+      cwd: dotMastraPath,
+      env: {
+        PORT: port.toString() || '4111',
+        MASTRA_TOOLS_PATH,
+      },
+      stdio: 'inherit',
+      reject: false,
+    });
 
-  proc.stdout.pipe(process.stdout);
-  proc.stderr.pipe(process.stderr);
+    if (serverProcess.failed) {
+      console.error('Server failed to start with error:', serverProcess.stderr);
+      process.exit(1);
+    }
 
-  return proc;
+    console.log('Server started successfully');
+  } catch (err) {
+    const execaError = err as { stderr?: string; stdout?: string };
+    if (execaError.stderr) console.error('Server error output:', execaError.stderr);
+    if (execaError.stdout) console.error('Server output:', execaError.stdout);
+    process.exit(1);
+  }
 }
