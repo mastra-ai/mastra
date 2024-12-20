@@ -1,6 +1,6 @@
 "use client";
 
-import { Car, Coffee, MapPin, Phone, Star, Wifi } from "lucide-react";
+import { Car, Coffee, MapPin, Star, Wifi } from "lucide-react";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
@@ -17,18 +17,6 @@ interface HotelCardProps {
   amenities: string[];
 }
 
-const getPhoneNumber = (number?: string | number | "<UNKNOWN>") => {
-  if (!number) {
-    return "N/A";
-  }
-
-  if (number === "<UNKNOWN") {
-    return "N/A";
-  }
-
-  return number;
-};
-
 export function HotelCard({
   name,
   location,
@@ -38,7 +26,6 @@ export function HotelCard({
   imageUrl,
   description,
   amenities,
-  phoneNumber,
 }: HotelCardProps) {
   const renderAmenityIcon = (amenity: string) => {
     const amenityIcons: { [key: string]: JSX.Element } = {
