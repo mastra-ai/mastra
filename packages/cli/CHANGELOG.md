@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.58
+
+### Patch Changes
+
+- 1d88043: Fix tools bundling
+
 ## 0.1.57-alpha.57
 
 ### Patch Changes
