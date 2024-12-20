@@ -8,10 +8,36 @@ import { mastra } from "@/mastra";
 import { workflow } from "@/mastra/workflows/travel-submission";
 
 import { travelSchema } from "./utils";
+import { z } from "zod";
+
+const tripDataSchema = z.object({
+  departureLocation: z.string().min(1, "Departure location is required"),
+  arrivalLocation: z.string().min(1, "Arrival location is required"),
+  tripGoals: z.string(),
+  preferredFlightTimes: z.string(),
+  flightPriority: z
+    .string()
+    .regex(/^\d{1,3}$/, "Flight priority must be a number between 0 and 100"),
+  accommodationType: z.enum(["hotel", "airbnb"]),
+  hotelPriceRange: z.enum(["budget", "moderate", "luxury"]).optional(),
+  interests: z.string(),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format (YYYY-MM-DD)"),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format (YYYY-MM-DD)"),
+  departureCityId: z.string().min(1, "Departure city ID is required"),
+  arrivalCityId: z.string().min(1, "Arrival city ID is required"),
+  arrivalAttractionId: z.string(),
+  typeOfPlace: z
+    .enum(["Entire home/apt", "Private room", "Shared room"])
+    .optional(),
+});
 
 function processFormData(formData: FormData) {
   // Convert FormData to a regular object for logging
-  const formObject: Record<string, any> = {};
+  const formObject: Record<string, unknown> = {};
   formData.forEach((value, key) => {
     formObject[key] = value;
   });
@@ -28,7 +54,9 @@ function processFormData(formData: FormData) {
   formObject.arrivalCityId = arrivalPlace?.cityId;
   formObject.arrivalAttractionId = arrivalPlace?.attractionId;
 
-  return formObject;
+  const parsedData = tripDataSchema.parse(formObject);
+
+  return parsedData;
 }
 
 export async function runWorkflow({
@@ -70,11 +98,11 @@ export async function runWorkflow({
 export async function runAgent(formData: FormData) {
   const formObject = processFormData(formData);
 
-  const agent = mastra.getAgent("travelAgent");
+  const travelAgent = mastra.getAgent("travelAgent");
+  const travelAnalyzer = mastra.getAgent("travelAnalyzer");
 
-  const toolsPrompt = `
+  const message = `
     You are a travel agent and have been given the following information about a customer's trip requirements.
-    You will need to complete the following tasks:
 
     - Find the best flight option for the customer (use departureLocation and arrivalLocation from formObject)
     - Find the best accommodation option for the customer (use arrivalCityId from formObject)
@@ -84,7 +112,8 @@ export async function runAgent(formData: FormData) {
     - After you have found the Airbnb location, call the searchAirbnb tool (use the id from the searchAirbnbLocation tool, and use typeOfPlace, startDate and endDate from formObject)
 
     Other Notes:
-
+    - make sure to add layover information if it exists, if not, ignore it
+    - make sure to add images for the hotels and accomodations
     - flightPriority is a value between 0 and 100 where 0 means the prioritize price the most and 100 means
     prioritize convenience the most (shortest trip and matching time).
     - ALWAYS pass entire date timestamps back for departureTime and arrivalTime.
@@ -93,41 +122,58 @@ export async function runAgent(formData: FormData) {
     - You must not call the searchHotels tool if the accommodationType is Airbnb.
 
     Here is the information about the customer's trip requirements:
-    ${JSON.stringify(formObject)}
+
+    Departure Location: ${formObject.departureLocation}
+    Arrival Location: ${formObject.arrivalLocation}
+    Trip Goals: ${formObject.tripGoals}
+    Preferred Flight Times: ${formObject.preferredFlightTimes}
+    Flight Priority: ${formObject.flightPriority}
+    Accommodation Type: ${formObject.accommodationType}
+    Hotel Price Range: ${formObject.hotelPriceRange}
+    Interests: ${formObject.interests}
+    Start Date: ${formObject.startDate}
+    End Date: ${formObject.endDate}
+    Departure City ID: ${formObject.departureCityId}
+    Arrival City ID: ${formObject.arrivalCityId}
+    Arrival Attraction ID: ${formObject.arrivalAttractionId}
+    Type of Place: ${formObject.typeOfPlace}
   `;
 
-  const toolResult = await agent.generate(toolsPrompt);
+  const agentResult = await travelAgent.generate(message);
 
-  console.log("tool resulttt=======", toolResult);
+  console.log("from travelAgent", agentResult.usage);
 
-  const prompt = `
+  const data = agentResult.steps.map((step) => step.text);
+
+  console.log("data from travelAgent=======", data);
+
+  const messageToAnalyze = `
     You are a travel agent and after doing your research you have found the following information for the customer's trip.
 
     Use this information to format the response in the correct output schema so it can be used by your travel planner application.
 
-     IMPORTANT: For hotel ratings:
+   IMPORTANT: For hotel ratings:
     - IGNORE the reviewScore property
     - Instead, find and extract the numeric rating from the description or accessibilityLabel field
     - The rating will be in the format "X.X out of 5 stars" or "X out of 5 stars"
     - Extract ONLY the first number (before "out of")
     - The extracted rating must be less than or equal to 5
+    - Add layover information in the legs
 
     Example:
     If description contains "4.5 out of 5 stars" → return rating: 4.5
     If description contains "3 out of 5 stars" → return rating: 3
 
-    IMPORTANT 2: for layover
-    - Do not hallucinate layover information
-    - If you don't have it supplied, ignore it
-    - If not, make sure you add it in
-
-
-    ${JSON.stringify(toolResult)}
+    IMPORTANT 3: for <UKNOWN> values:
+    - make sure to replace all instane of <UNKNOWN> with empty strings
+    ${JSON.stringify(data)}
   `;
 
-  const result = await agent.generate(prompt, {
+  const result = await travelAnalyzer.generate(messageToAnalyze, {
     schema: travelSchema,
   });
+
+  console.log("from travelAnalyzer", result.usage);
 
   console.log("Travel Agent Result:", result.object);
 

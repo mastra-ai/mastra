@@ -1,29 +1,36 @@
-import CodeBlock from '@/components/code-block';
-import Footer from '@/components/footer';
-import Header from '@/components/header';
-import Sidebar from '@/components/sidebar';
+import CodeBlock from "@/components/code-block";
+import Footer from "@/components/footer";
+import Header from "@/components/header";
+import Sidebar from "@/components/sidebar";
 
-import { SidebarProvider } from '@/lib/sidebar-context';
+import { SidebarProvider } from "@/lib/sidebar-context";
 
-import TravelForm from './travel-form';
+import TravelForm from "./travel-form";
 
 export default function Page() {
   const sidebarContent = {
     initial: (
       <>
-        <h2 className="text-xl font-bold mb-4">How It Works</h2>
+        <h1 className="inline-block bg-black text-white px-6 py-3 text-3xl font-mono font-bold mb-8 rotate-1">
+          How It Works
+        </h1>
         <p className="mb-4">
-          This travel planner uses AI agents to help plan your trip. Here&apos;s how the code works:
+          This travel planner uses AI agents to help plan your trip. Here&apos;s
+          how the code works:
         </p>
 
-        <h3 className="text-lg font-semibold mb-2">1. Assemble Agent</h3>
-        <p className="mb-2">
-          The agent is is defined with a name, a set of instructions, a model, and a collection of enabled tools:
-        </p>
-        <CodeBlock
-          fileName="src/mastra/agents/index.ts"
-          language="typescript"
-          code={`import { Agent } from '@mastra/core';
+        <div className="bg-[var(--brut-pink)] p-4">
+          <h3 className="inline-block bg-black text-white px-4 py-2 text-xl font-bold mb-6 -rotate-1">
+            1. Assemble Agent
+          </h3>
+          <p className="mb-2">
+            The agent is is defined with a name, a set of instructions, a model,
+            and a collection of enabled tools:
+          </p>
+          <CodeBlock
+            fileName="src/mastra/agents/index.ts"
+            language="typescript"
+            code={`import { Agent } from '@mastra/core';
 
 export const travelAgent = new Agent({
   name: 'travelAgent',
@@ -43,18 +50,23 @@ export const travelAgent = new Agent({
     searchAttractions: true,
   },
 });`}
-        />
+          />
+        </div>
 
-        <h3 className="text-lg font-semibold mt-6 mb-2">2. Agent Tools</h3>
-        <p className="mb-2">
-          Tools are just functions that can be used by the agent. You can define these functions and then enable them
-          for any agent you create. These tools can also be used within workflows. Here is the code for the{' '}
-          <code>searchFlights</code> tool
-        </p>
-        <CodeBlock
-          fileName="mastra/agents/index.ts"
-          language="typescript"
-          code={`export const searchFlights = createTool({
+        <div className="bg-[var(--brut-green)] flex flex-col gap-4 mt-4 p-4">
+          <h3 className="inline-block w-fit bg-black text-white px-4 py-2 text-xl font-bold mb-6 -rotate-1">
+            2. Agent Tools
+          </h3>
+          <p className="mb-2 text-sm">
+            Tools are just functions that can be used by the agent. You can
+            define these functions and then enable them for any agent you
+            create. These tools can also be used within workflows. Here is the
+            code for the <code>searchFlights</code> tool
+          </p>
+          <CodeBlock
+            fileName="mastra/agents/index.ts"
+            language="typescript"
+            code={`export const searchFlights = createTool({
   label: 'Get Flight Info',
   schema: z.object({
     startDate: z.string(),
@@ -72,20 +84,22 @@ export const travelAgent = new Agent({
   },
 });
 `}
-        />
-        <p className="mb-2 mt-2">
-          Note: The label and description of the tool are both important to help the model decide when to call the tool.
-          It is also a good idea to pass in information in the Agent instructions that tells the model when certain
-          tools should be used.
-        </p>
-        <p className="mb-2">
-          The getFlights function just makes a GET request to a flight search API and then pulls out only the data we
-          want to pass back to the model.
-        </p>
-        <CodeBlock
-          fileName="app/travel-results.tsx"
-          language="typescript"
-          code={`export const getFlights = async (startDate: string, endDate: string, origin: string, destination: string) => {
+          />
+          <p className="mb-2 mt-2 text-sm">
+            Note: The label and description of the tool are both important to
+            help the model decide when to call the tool. It is also a good idea
+            to pass in information in the Agent instructions that tells the
+            model when certain tools should be used.
+          </p>
+          <p className="mb-2 text-sm">
+            The getFlights function just makes a GET request to a flight search
+            API and then pulls out only the data we want to pass back to the
+            model.
+          </p>
+          <CodeBlock
+            fileName="app/travel-results.tsx"
+            language="typescript"
+            code={`export const getFlights = async (startDate: string, endDate: string, origin: string, destination: string) => {
   const url = \`https://booking-com15.p.rapidapi.com/api/v1/flights/searchFlights?fromId=\${origin}&toId=\${destination}&departDate=\${startDate}&returnDate=\${endDate}&pageNo=1&adults=1&sort=BEST&cabinClass=ECONOMY&currency_code=USD\`;
   const options = {
     method: 'GET',
@@ -117,13 +131,17 @@ export const travelAgent = new Agent({
     console.error(error);
   }
 };`}
-        />
+          />
+        </div>
       </>
     ),
     submitted: (
       <div className="space-y-4">
         <h2 className="text-xl font-bold">How the Form Submission Works</h2>
-        <p className="mb-4">Once the form is submitted, the data is passed to the agent with a detailed prompt...</p>
+        <p className="mb-4">
+          Once the form is submitted, the data is passed to the agent with a
+          detailed prompt...
+        </p>
       </div>
     ),
   };

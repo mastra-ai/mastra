@@ -73,6 +73,12 @@ export const PLACES = [
     cityId: "20023488",
     attractionId: "eyJ1ZmkiOjIwMDIzNDg4fQ==",
   },
+  {
+    value: "FSD.AIRPORT",
+    label: "Sioux Falls (FSD)",
+    cityId: "20120053",
+    attractionId: "eyJ1ZmkiOjIwMTIwMDUzfQ==",
+  },
 ] as const;
 
 export const FLIGHT_TIMES = [
@@ -162,7 +168,13 @@ export interface Flight {
   duration: string;
   price: number;
 
-  legs: Array<Leg>;
+  legs: Array<{
+    departureAirport: { code: string; cityName: string };
+    arrivalAirport: { code: string; cityName: string };
+    departureTime: Date;
+    arrivalTime: Date;
+    duration: string;
+  }>;
 }
 
 export interface Hotel {
@@ -175,7 +187,7 @@ export interface Hotel {
   imageUrl: string;
   description: string;
   amenities: string[];
-  phoneNumber: string;
+
   reviewScore: number;
 }
 

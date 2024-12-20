@@ -4,14 +4,33 @@ export const flightSchema = z.object({
   airline: z.string(),
   flightNumber: z.string(),
   departureTime: z.string(),
+  departureAirport: z.string(),
+  departureCity: z.string(),
+
   arrivalTime: z.string(),
+  arrivalAirport: z.string(),
+  arrivalCity: z.string(),
+
   duration: z.string(),
   price: z.number(),
   stops: z.number(),
-  departureAirport: z.string(),
-  arrivalAirport: z.string(),
-  departureCity: z.string(),
-  arrivalCity: z.string(),
+
+  layover: z
+    .object({
+      airport: z.string(),
+      city: z.string(),
+
+      depatureToLayoverDuration: z.string(),
+      layoverToDestinationDuration: z.string(),
+      //from origin
+      arrivalTime: z.string(),
+      //to final destination
+      departureTime: z.string(),
+
+      durationAtLayover: z.string(),
+      airline: z.string(),
+    })
+    .optional(),
 });
 
 const accommodationSchema = z.object({
@@ -23,7 +42,6 @@ const accommodationSchema = z.object({
   description: z.string(),
   amenities: z.array(z.string()),
   imageUrl: z.string(),
-  phoneNumber: z.string(),
   reviewScore: z.number(),
 });
 
@@ -42,12 +60,6 @@ export const travelSchema = z.object({
   flights: z.object({
     outbound: flightSchema,
     return: flightSchema,
-    legs: z.array(
-      z.object({
-        duration: z.string(),
-        airport: z.string(),
-      }),
-    ),
   }),
   accommodation: accommodationSchema,
   attractions: attractionsSchema,

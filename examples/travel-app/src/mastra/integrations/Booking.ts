@@ -3,6 +3,7 @@
 import { AirbnbLocation, AirbnbPlace, Attraction, AttractionApiResponse, Flight, FlightApiResponse, Hotel, HotelApiResponse } from "@/lib/types";
 import { StepResult } from "@mastra/core";
 
+
 export class Booking {
     uri: string;
     token: string;
@@ -27,7 +28,7 @@ export class Booking {
             const response = await fetch(url, options);
             const result = await response.json();
             console.log('attractions', result);
-            return result?.data?.products.map(
+            return result?.data?.products.slice(0, 5).map(
                 (attraction: AttractionApiResponse): Attraction => ({
                     id: attraction.id,
                     name: attraction.name,
@@ -66,7 +67,7 @@ export class Booking {
             const numberOfNights = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
 
 
-            return result?.data?.hotels.map(
+            return result?.data?.hotels.slice(0, 5).map(
                 (hotel: HotelApiResponse): Hotel => ({
                     id: hotel.property.name,
                     name: hotel.property.name,
@@ -78,7 +79,6 @@ export class Booking {
                     description: hotel.accessibilityLabel,
                     reviewScore: hotel.property.reviewScore,
                     amenities: [],
-                    phoneNumber: '',
                 }),
             );
         } catch (error) {
@@ -101,9 +101,7 @@ export class Booking {
                 'x-rapidapi-host': 'booking-com15.p.rapidapi.com',
             },
         };
-
-        console.log('Fetching flights', { destination, origin, url });
-
+     
         try {
             const response = await fetch(url, options);
             const result = await response.json();
@@ -112,9 +110,14 @@ export class Booking {
                 console.error('No flight offers found', result);
                 return [];
             }
-            return result.data.flightOffers.map(
-                (flight: FlightApiResponse): Flight => {
 
+            const firstFiveItems = result.data.flightOffers.slice(0, 5)
+
+         
+
+            const flights= firstFiveItems.map(
+                (flight: FlightApiResponse): Flight => {
+                   
                     return {
                         airline: flight.segments[0].legs[0].carriersData[0].name,
                         flightNumber: `${flight.segments[0].legs[0].flightInfo.carrierInfo.marketingCarrier}${flight.segments[0].legs[0].flightInfo.flightNumber}`,
@@ -126,10 +129,20 @@ export class Booking {
                         arrivalTime: new Date(flight.segments[0].arrivalTime),
                         duration: `${Math.floor(flight.segments[0].totalTime / 60)}h ${flight.segments[0].totalTime % 60}m`,
                         price: flight.priceBreakdown.total.units + flight.priceBreakdown.total.nanos / 1000000000,
-                        legs: flight.segments[0].legs
+                        legs: flight.segments[0].legs.map((leg: any) => ({
+                            departureAirport: leg.departureAirport.code,
+                            departureCity: leg.departureAirport.cityName,
+                            arrivalAirport: leg.arrivalAirport.code,
+                            arrivalCity: leg.arrivalAirport.cityName,
+                            departureTime: new Date(leg.departureTime),
+                            arrivalTime: new Date(leg.arrivalTime),
+                            duration: `${Math.floor(leg.totalTime / 60)}h ${leg.totalTime % 60}m`,
+                        })),
                     }
                 }
             );
+
+            return flights
         } catch (error) {
             console.error(error);
         }
@@ -187,7 +200,7 @@ export class Booking {
             const response = await fetch(url, options);
             const result = await response.json() as { data: AirbnbPlace[] };
             console.log('airbnb result', result);
-            return result.data.map(({ adults, avgRating, bathrooms, bedrooms, beds, city, images, price, roomType, summary, title, publicAddress, ...otherProps }) => {
+            return result.data.slice(0, 5).map(({ adults, avgRating, bathrooms, bedrooms, beds, city, images, price, roomType, summary, title, publicAddress, ...otherProps }) => {
                 return {
                 adults,
                 avgRating,

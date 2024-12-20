@@ -21,6 +21,7 @@ interface TravelResultsProps {
 
 export function TravelResults({ travelData }: TravelResultsProps) {
   const [showDialog, setShowDialog] = useState(false);
+
   return (
     <div className="space-y-8">
       <div className="space-y-6 max-w-2xl mx-auto">
