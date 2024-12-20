@@ -12,6 +12,16 @@ export const flightSchema = z.object({
   arrivalAirport: z.string(),
   departureCity: z.string(),
   arrivalCity: z.string(),
+  layover: z
+    .object({
+      airport: z.string(),
+      city: z.string(),
+      arrivalTime: z.string(),
+      departureTime: z.string(),
+      duration: z.string(),
+      airline: z.string(),
+    })
+    .optional(),
 });
 
 const accommodationSchema = z.object({
@@ -23,7 +33,6 @@ const accommodationSchema = z.object({
   description: z.string(),
   amenities: z.array(z.string()),
   imageUrl: z.string(),
-  phoneNumber: z.string(),
   reviewScore: z.number(),
 });
 
@@ -42,12 +51,6 @@ export const travelSchema = z.object({
   flights: z.object({
     outbound: flightSchema,
     return: flightSchema,
-    legs: z.array(
-      z.object({
-        duration: z.string(),
-        airport: z.string(),
-      }),
-    ),
   }),
   accommodation: accommodationSchema,
   attractions: attractionsSchema,
