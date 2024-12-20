@@ -819,8 +819,6 @@ export class Workflow<
     const resolvedData: Record<string, any> = {};
 
     this.log(LogLevel.DEBUG, `Resolving variables for ${stepId}`, {
-      variables: stepConfig.data,
-      context,
       runId: this.#runId,
     });
 
@@ -834,6 +832,7 @@ export class Workflow<
         `Got source data for ${key} variable from ${variable.step === 'trigger' ? 'trigger' : variable.step.id}`,
         {
           sourceData,
+          path: variable.path,
           runId: this.#runId,
         },
       );
