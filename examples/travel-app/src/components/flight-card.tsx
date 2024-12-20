@@ -1,12 +1,16 @@
 "use client";
 
 import { format } from "date-fns";
-import { Plane, Clock, Calendar } from "lucide-react";
+import { Plane, Clock, Calendar, Coffee } from "lucide-react";
 import { z } from "zod";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 import { flightSchema } from "@/app/utils";
+
+export function isObjectEmpty(obj: Record<string, unknown>) {
+  return Object.keys(obj).length === 0 && obj.constructor === Object;
+}
 
 type FlightCardProps = z.infer<typeof flightSchema>;
 
@@ -21,6 +25,7 @@ export function FlightCard({
   arrivalTime,
   duration,
   price,
+  layover,
 }: FlightCardProps) {
   return (
     <Card className="border-4 space-y-6 rounded-none border-black w-full">
@@ -53,35 +58,69 @@ export function FlightCard({
           </div>
 
           {/* Flight Duration */}
-          <div className="flex flex-col items-center justify-center py-4">
-            <div className="my-4 w-full flex items-center justify-center">
-              <Plane className="mx-2 h-4 w-4 rotate-90" />
-            </div>
-            <div className="flex items-center space-x-2 text-sm">
+          <div className="flex flex-col gap-2 items-center justify-center py-4">
+            <Plane className="mx-2 h-4 w-4 rotate-90" />
+            <div className="flex items-center font-medium space-x-2 text-sm">
               <Clock className="h-4 w-4" />
-              <span>{duration}</span>
+              <span className="text-black font-semibold font-mono">
+                {layover ? layover.duration : duration}
+              </span>
             </div>
           </div>
 
           {/* Arrival Info */}
-          <div className="space-y-2 text-right">
-            <div className="text-sm text-gray-600">Arrival</div>
-
-            {arrivalTime && (
-              <div className="text-3xl font-bold">
-                {format(arrivalTime, "HH:mm")}
-              </div>
-            )}
-            <div className="font-bold text-black">{arrivalAirport}</div>
-            <div className="text-sm text-gray-600">{arrivalCity}</div>
-            <div className="flex items-center justify-end text-black text-sm space-x-2">
-              <Calendar className="h-4 w-4" />
-              {arrivalTime && (
-                <span className=" text-black text-sm">
-                  {format(arrivalTime, "EEE, MMM d")}
-                </span>
+          {layover && !isObjectEmpty(layover) ? (
+            <div className="space-y-2 text-right">
+              <div className="text-sm text-gray-600">Arrival</div>
+              {layover.arrivalTime && (
+                <div className="text-3xl font-bold">
+                  {format(layover.arrivalTime, "HH:mm")}
+                </div>
               )}
+              <div className="font-bold text-black">{layover.airport}</div>
+              <div className="text-sm text-gray-600">{layover.city}</div>
+              <div className="flex items-center justify-end text-black text-sm space-x-2">
+                <Calendar className="h-4 w-4" />
+                {layover.arrivalTime && (
+                  <span className=" text-black text-sm">
+                    {format(layover.arrivalTime, "EEE, MMM d")}
+                  </span>
+                )}
+              </div>
             </div>
+          ) : (
+            <div className="space-y-2 text-right">
+              <div className="text-sm text-gray-600">Arrival</div>
+
+              {arrivalTime && (
+                <div className="text-3xl font-bold">
+                  {format(arrivalTime, "HH:mm")}
+                </div>
+              )}
+              <div className="font-bold text-black">{arrivalAirport}</div>
+              <div className="text-sm text-gray-600">{arrivalCity}</div>
+              <div className="flex items-center justify-end text-black text-sm space-x-2">
+                <Calendar className="h-4 w-4" />
+                {arrivalTime && (
+                  <span className=" text-black text-sm">
+                    {format(arrivalTime, "EEE, MMM d")}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="my-4 py-4 border-y-2 border-dashed border-black">
+          <div className="flex items-center justify-center gap-2 font-mono">
+            <Coffee className="w-4 h-4" />
+            <span className="font-bold">
+              {layover ? layover.duration : duration} layover
+            </span>
+            <span>in</span>
+            <span className="font-bold">
+              {layover ? `${layover.city} (${layover.airport})` : ""}
+            </span>
           </div>
         </div>
 
