@@ -32,6 +32,17 @@ export async function bundleServer(entryPoint: string) {
       metafile: true, // Generates build metadata
       logLevel: 'error',
       nodePaths: [cliNodeModules],
+      conditions: ['import', 'node'],
+      banner: {
+        js: `
+          import { createRequire } from "module";
+          import { fileURLToPath } from 'url';
+          import path from 'path';
+          const require = createRequire(import.meta.url);
+          const __filename = fileURLToPath(import.meta.url);
+          const __dirname = path.dirname(__filename);
+        `,
+      },
       external: [
         // Mark node built-ins as external
         'fs',
@@ -66,17 +77,9 @@ export async function bundleServer(entryPoint: string) {
         '@mastra/engine',
         '@mastra/firecrawl',
         '@mastra/github',
+        '@mastra/rag',
+        '@mastra/stabilityai',
       ],
-      banner: {
-        js: `
-          import { createRequire } from "module";
-          import { fileURLToPath } from 'url';
-          import path from 'path';
-          const require = createRequire(import.meta.url);
-          const __filename = fileURLToPath(import.meta.url);
-          const __dirname = path.dirname(__filename);
-        `,
-      },
       logOverride: {
         'commonjs-variable-in-esm': 'silent',
       },
@@ -98,13 +101,13 @@ export async function bundleServer(entryPoint: string) {
   }
 }
 
-export async function bundle(dirPath: string, options?: { outfile?: string }) {
+export async function bundle(dirPath: string, options?: { outfile?: string; entryFile?: string }) {
   try {
     // Ensure .mastra directory exists
     upsertMastraDir();
 
     const fileService = new FileService();
-    const entryPoint = fileService.getFirstExistingFile([join(dirPath, 'index.ts')]);
+    const entryPoint = fileService.getFirstExistingFile([join(dirPath, `${options?.entryFile || 'index'}.ts`)]);
     const outfile = options?.outfile || join(process.cwd(), '.mastra', 'mastra.mjs');
 
     const result = await esbuild.build({
@@ -122,8 +125,12 @@ export async function bundle(dirPath: string, options?: { outfile?: string }) {
       conditions: ['import', 'node'],
       banner: {
         js: `
-          import { createRequire } from 'module';
+          import { createRequire } from "module";
+          import { fileURLToPath } from 'url';
+          import path from 'path';
           const require = createRequire(import.meta.url);
+          const __filename = fileURLToPath(import.meta.url);
+          const __dirname = path.dirname(__filename);
         `,
       },
       logOverride: {
@@ -166,6 +173,8 @@ export async function bundle(dirPath: string, options?: { outfile?: string }) {
         'wasi',
         'worker_threads',
         'zlib',
+        'chromium-bidi/lib/cjs/bidiMapper/BidiMapper',
+        'chromium-bidi/lib/cjs/cdp/CdpConnection',
 
         // Your packages
         '@mastra/core',
@@ -173,6 +182,8 @@ export async function bundle(dirPath: string, options?: { outfile?: string }) {
         '@mastra/engine',
         '@mastra/firecrawl',
         '@mastra/github',
+        '@mastra/rag',
+        '@mastra/stabilityai',
       ],
     });
 
