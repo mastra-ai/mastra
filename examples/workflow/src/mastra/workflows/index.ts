@@ -142,7 +142,7 @@ export const parallelWorkflow = new Workflow({
   }),
 });
 
-parallelWorkflow.step(stepOne).step(stepTwo).step(stepThree);
+parallelWorkflow.step(stepOne).then(stepSix).step(stepTwo).step(stepThree);
 
 parallelWorkflow.commit();
 
@@ -165,16 +165,42 @@ export const cyclicalWorkflow = new Workflow({
 });
 
 cyclicalWorkflow
-  .step(stepOne)
-  .then(stepTwo)
+  .step(stepOne, {
+    variables: {
+      inputValue: {
+        step: 'trigger',
+        path: 'firstValue',
+      },
+    },
+  })
+  .then(stepTwo, {
+    variables: {
+      valueToIncrement: {
+        step: stepOne,
+        path: 'doubledValue',
+      },
+    },
+  })
   .after(stepOne)
   .step(stepThree, {
     when: { ref: { step: stepOne, path: 'doubledValue' }, query: { $eq: 10 } },
+    variables: {
+      valueToSquare: {
+        step: stepOne,
+        path: 'doubledValue',
+      },
+    },
   })
   .step(stepOne, {
     when: {
       ref: { step: stepOne, path: 'doubledValue' },
       query: { $eq: 12 },
+    },
+    variables: {
+      inputValue: {
+        step: stepTwo,
+        path: 'incrementedValue',
+      },
     },
   });
 
