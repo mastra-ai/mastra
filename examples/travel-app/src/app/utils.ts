@@ -4,21 +4,30 @@ export const flightSchema = z.object({
   airline: z.string(),
   flightNumber: z.string(),
   departureTime: z.string(),
+  departureAirport: z.string(),
+  departureCity: z.string(),
+
   arrivalTime: z.string(),
+  arrivalAirport: z.string(),
+  arrivalCity: z.string(),
+
   duration: z.string(),
   price: z.number(),
   stops: z.number(),
-  departureAirport: z.string(),
-  arrivalAirport: z.string(),
-  departureCity: z.string(),
-  arrivalCity: z.string(),
+
   layover: z
     .object({
       airport: z.string(),
       city: z.string(),
+
+      depatureToLayoverDuration: z.string(),
+      layoverToDestinationDuration: z.string(),
+      //from origin
       arrivalTime: z.string(),
+      //to final destination
       departureTime: z.string(),
-      duration: z.string(),
+
+      durationAtLayover: z.string(),
       airline: z.string(),
     })
     .optional(),
