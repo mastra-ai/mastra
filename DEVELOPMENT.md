@@ -36,9 +36,19 @@ From the project root, run the following commands
    },
    ```
 
-4. Once you finish adding your integration, run: `pnpm run generate:integration  `
+4. Once you finish adding your integration, run:
+
+   ```
+   pnpm run generate:integration
+   ```
 
    This command creates your integration. You can find it in the `integrations` folder.
+
+5. Navigate to your newly created integration in the `integrations/myIntegration` directory, then run:
+   ```
+   pnpm run gen:zod:schema
+   ```
+   This command finalizes the schema generation for your integration.
 
 ## TESTING
 
