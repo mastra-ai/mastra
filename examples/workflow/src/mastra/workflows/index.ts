@@ -160,7 +160,7 @@ branchedWorkflow.commit();
 export const cyclicalWorkflow = new Workflow({
   name: 'cyclical-workflow',
   triggerSchema: z.object({
-    firstvalue: z.number(),
+    firstValue: z.number(),
   }),
 });
 
@@ -176,8 +176,8 @@ cyclicalWorkflow
   .then(stepTwo, {
     variables: {
       valueToIncrement: {
-        step: stepOne,
-        path: 'doubledValue',
+        step: 'trigger',
+        path: 'firstValue',
       },
     },
   })
@@ -198,8 +198,8 @@ cyclicalWorkflow
     },
     variables: {
       inputValue: {
-        step: stepTwo,
-        path: 'incrementedValue',
+        step: stepOne,
+        path: 'doubledValue',
       },
     },
   });

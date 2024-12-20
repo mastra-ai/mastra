@@ -476,7 +476,8 @@ export class Workflow<
             onDone: {
               target: 'runningSubscribers',
               actions: [
-                ({event}: {event: any}) => this.log(LogLevel.INFO, `Step ${stepNode.step.id} finished executing`, {output: event.output}),
+                ({ event }: { event: any }) =>
+                  this.log(LogLevel.INFO, `Step ${stepNode.step.id} finished executing`, { output: event.output }),
                 { type: 'updateStepResult', params: { stepId: stepNode.step.id } },
                 { type: 'spawnSubscribers', params: { stepId: stepNode.step.id } },
               ],
@@ -628,7 +629,16 @@ export class Workflow<
       resolverFunction: fromPromise(async ({ input }: { input: ResolverFunctionInput }) => {
         const { stepNode, context } = input;
         const injectables = this.#getInjectables();
-        const resolvedData = this.#resolveVariables({ stepConfig: stepNode.config, context });
+        const resolvedData = this.#resolveVariables({
+          stepConfig: stepNode.config,
+          context,
+          stepId: stepNode.step.id,
+        });
+
+        this.log(LogLevel.DEBUG, `Resolved variables for ${stepNode.step.id}`, {
+          resolvedData,
+          runId: this.#runId,
+        });
 
         const result = await stepNode.config.handler({
           context: {
@@ -636,6 +646,11 @@ export class Workflow<
             ...resolvedData,
           },
           ...injectables,
+        });
+
+        this.log(LogLevel.DEBUG, `Step ${stepNode.step.id} result`, {
+          result,
+          runId: this.#runId,
         });
 
         return {
@@ -795,16 +810,33 @@ export class Workflow<
   >({
     stepConfig,
     context,
+    stepId,
   }: {
     stepConfig: StepDef<TStepId, TSteps, TSchemaIn, TSchemaOut>[TStepId];
     context: WorkflowContext;
+    stepId: TStepId;
   }): Record<string, any> {
     const resolvedData: Record<string, any> = {};
+
+    this.log(LogLevel.DEBUG, `Resolving variables for ${stepId}`, {
+      variables: stepConfig.data,
+      context,
+      runId: this.#runId,
+    });
 
     for (const [key, variable] of Object.entries(stepConfig.data)) {
       // Check if variable comes from trigger data or a previous step's result
       const sourceData =
         variable.step === 'trigger' ? context.triggerData : getStepResult(context.stepResults[variable.step.id]);
+
+      this.log(
+        LogLevel.DEBUG,
+        `Got source data for ${key} variable from ${variable.step === 'trigger' ? 'trigger' : variable.step.id}`,
+        {
+          sourceData,
+          runId: this.#runId,
+        },
+      );
 
       if (!sourceData && variable.step !== 'trigger') {
         resolvedData[key] = undefined;
@@ -813,6 +845,11 @@ export class Workflow<
 
       // If path is empty or '.', return the entire source data
       const value = variable.path === '' || variable.path === '.' ? sourceData[key] : get(sourceData, variable.path);
+
+      this.log(LogLevel.DEBUG, `Resolved variable ${key}`, {
+        value,
+        runId: this.#runId,
+      });
 
       resolvedData[key] = value;
     }
@@ -833,6 +870,11 @@ export class Workflow<
       const { ref, query } = condition;
       const sourceData = ref.step === 'trigger' ? context.triggerData : getStepResult(context.stepResults[ref.step.id]);
 
+      this.log(LogLevel.DEBUG, `Got condition data from ${ref.step === 'trigger' ? 'trigger' : ref.step.id}`, {
+        sourceData,
+        runId: this.#runId,
+      });
+
       if (!sourceData) {
         return false;
       }
@@ -844,14 +886,28 @@ export class Workflow<
     // AND condition
     if ('and' in condition) {
       andBranchResult = condition.and.every(cond => this.#evaluateCondition(cond, context));
+      this.log(LogLevel.DEBUG, `Evaluated AND condition`, {
+        andBranchResult,
+        runId: this.#runId,
+      });
     }
 
     // OR condition
     if ('or' in condition) {
       orBranchResult = condition.or.some(cond => this.#evaluateCondition(cond, context));
+      this.log(LogLevel.DEBUG, `Evaluated OR condition`, {
+        orBranchResult,
+        runId: this.#runId,
+      });
     }
 
     const finalResult = baseResult && andBranchResult && orBranchResult;
+
+    this.log(LogLevel.DEBUG, `Evaluated condition`, {
+      finalResult,
+      runId: this.#runId,
+    });
+
     return finalResult;
   }
 
