@@ -299,14 +299,14 @@ export class Workflow<
 
         if (allStatesComplete) {
           // Check if any steps failed
-          const hasFailures = Object.values(state.context.stepResults).some(result => result.status === 'failed');
+          const allStepsFailed = Object.values(state.context.stepResults).every(result => result.status === 'failed');
           const hasSuspended = Object.values(state.context.stepResults).some(result => result.status === 'suspended');
 
           if (hasSuspended) {
             this.#persistWorkflowSnapshot();
           }
 
-          if (hasFailures) {
+          if (allStepsFailed) {
             this.log(LogLevel.ERROR, 'Workflow failed', {
               results: state.context.stepResults,
               runId: this.#runId,
