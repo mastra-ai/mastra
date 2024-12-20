@@ -1,5 +1,12 @@
 # @mastra/composio
 
+## 0.0.1-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [2fa7f53]
+  - @mastra/core@0.1.27-alpha.44
+
 ## 0.0.1-alpha.9
 
 ### Patch Changes
