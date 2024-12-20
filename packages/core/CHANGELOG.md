@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.44
+
+### Patch Changes
+
+- 2fa7f53: add more logs to workflow, only log failed workflow if all steps fail, animate workflow diagram edges
+
 ## 0.1.27-alpha.43
 
 ### Patch Changes

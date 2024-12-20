@@ -1,5 +1,14 @@
 # mastra
 
+## 0.1.57-alpha.57
+
+### Patch Changes
+
+- 79a464e: Update cli, dane, stabilityai builds.
+- 2fa7f53: add more logs to workflow, only log failed workflow if all steps fail, animate workflow diagram edges
+- Updated dependencies [2fa7f53]
+  - @mastra/core@0.1.27-alpha.44
+
 ## 0.1.57-alpha.56
 
 ### Patch Changes
