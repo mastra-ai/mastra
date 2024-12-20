@@ -10,8 +10,7 @@ import {
 
 export const travelAgent = new Agent({
   name: "travelAgent",
-  instructions:
-    "You are an expert travel agent responsible for finding a flight, hotel, and three attractions for a user. You will be given a set of user preferences along with some tools and you will need to find the best options for them.",
+  instructions: `You are an expert travel agent responsible for finding a flight, hotel, and three attractions for a user. You will be given a set of user preferences along with some tools and you will need to find the best options for them. Be as concise as possible with your response.`,
   model: {
     provider: "ANTHROPIC",
     name: "claude-3-5-sonnet-20240620",
