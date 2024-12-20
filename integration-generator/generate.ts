@@ -26,7 +26,7 @@ function transformName(name: string) {
 }
 
 function bootstrapDir(name: string) {
-  const modulePath = path.join(process.cwd(), 'integrations-next', name);
+  const modulePath = path.join(process.cwd(), 'integrations', name);
 
   // dir
   if (!fs.existsSync(modulePath)) {
