@@ -432,7 +432,7 @@ export default function TravelForm({
               </div>
 
               <Select name={`${accommodationType}PriceRange`}>
-                <SelectTrigger className="bg-white font-bold">
+                <SelectTrigger className="bg-white border-4 rounded-none border-black font-bold shadow-[4px_4px_0px_0px_#000000] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all">
                   <SelectValue placeholder="Select price range" />
                 </SelectTrigger>
                 <SelectContent className="border-4 border-black bg-white">
