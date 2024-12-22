@@ -1,5 +1,31 @@
 # mastra
 
+## 0.1.57-alpha.58
+
+### Patch Changes
+
+- 1d88043: Fix tools bundling
+
+## 0.1.57-alpha.57
+
+### Patch Changes
+
+- 79a464e: Update cli, dane, stabilityai builds.
+- 2fa7f53: add more logs to workflow, only log failed workflow if all steps fail, animate workflow diagram edges
+- Updated dependencies [2fa7f53]
+  - @mastra/core@0.1.27-alpha.44
+
+## 0.1.57-alpha.56
+
+### Patch Changes
+
+- b135410: fix- mastra post install
+- d6d8159: Workflow graph diagram
+- 505d385: playground breadcrumb navigation
+- Updated dependencies [2e099d2]
+- Updated dependencies [d6d8159]
+  - @mastra/core@0.1.27-alpha.43
+
 ## 0.1.57-alpha.55
 
 ### Patch Changes

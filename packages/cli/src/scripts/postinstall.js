@@ -50,8 +50,14 @@ function detectPackageManager() {
   return 'npm'; // Default fallback
 }
 
+const packageManager = detectPackageManager();
+
+// Skip postinstall for npm and yarn
+if (packageManager !== 'pnpm') {
+  process.exit(0);
+}
+
 try {
-  const packageManager = detectPackageManager();
   const installCmd = {
     npm: 'npm install',
     yarn: 'yarn install',

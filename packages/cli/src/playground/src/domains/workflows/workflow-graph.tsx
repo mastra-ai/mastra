@@ -26,10 +26,19 @@ function WorkflowGraph({ workflow }: { workflow: Workflow }) {
 
   return (
     <div className="w-full h-full">
-      <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} fitView>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onNodesChange={onNodesChange}
+        fitView
+        fitViewOptions={{
+          maxZoom: 0.85,
+        }}
+      >
         <Controls />
         <MiniMap pannable zoomable maskColor="#121212" bgColor="#171717" nodeColor="#2c2c2c" />
-        <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
+        <Background variant={BackgroundVariant.Dots} gap={12} size={0.5} />
       </ReactFlow>
     </div>
   );

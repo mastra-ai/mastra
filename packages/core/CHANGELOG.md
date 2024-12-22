@@ -1,5 +1,18 @@
 # @mastra/core
 
+## 0.1.27-alpha.44
+
+### Patch Changes
+
+- 2fa7f53: add more logs to workflow, only log failed workflow if all steps fail, animate workflow diagram edges
+
+## 0.1.27-alpha.43
+
+### Patch Changes
+
+- 2e099d2: Allow trigger passed in to `then` step
+- d6d8159: Workflow graph diagram
+
 ## 0.1.27-alpha.42
 
 ### Patch Changes
