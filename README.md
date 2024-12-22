@@ -61,7 +61,6 @@ import { Agent } from '@mastra/core';
 async function main() {
   const agent = new Agent({
     name: 'story-writer',
-    maxSteps: 3,
     model: {
       provider: 'OPEN_AI',
       name: 'gpt-4o',
