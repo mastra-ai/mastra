@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.59
+
+### Patch Changes
+
+- e5e2bb4: Configure vercel deployment project name
+
 ## 0.1.57-alpha.58
 
 ### Patch Changes
