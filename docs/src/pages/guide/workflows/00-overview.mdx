@@ -316,7 +316,7 @@ mastra dev
 This command will start the server and make your workflow available at:
 
 ```
-http://localhost:3000/workflows/my-workflow/execute
+http://localhost:4111/workflows/my-workflow/execute
 ```
 
 ### **9. Test the Workflow with cURL**
@@ -324,7 +324,7 @@ http://localhost:3000/workflows/my-workflow/execute
 With the server running, you can test your workflow using `curl`:
 
 ```bash
-curl -X POST http://localhost:3000/workflows/my-workflow/execute \
+curl -X POST http://localhost:4111/workflows/my-workflow/execute \
   -H "Content-Type: application/json" \
   -d '{
     "inputValue": 5
