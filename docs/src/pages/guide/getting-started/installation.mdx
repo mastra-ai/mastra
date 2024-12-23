@@ -170,14 +170,14 @@ You can test the agent's endpoint using `curl` or `fetch`:
 <Tabs items={['curl', 'fetch']}>
   <Tabs.Tab>
 ```bash copy
-curl -X POST http://localhost:4111/agent/story-writer/text \
+curl -X POST http://localhost:4111/api/agents/storyWriter/text \
 -H "Content-Type: application/json" \
 -d '{"messages": ["Tell me a story about a courageous astronaut."]}'
 ```
   </Tabs.Tab>
   <Tabs.Tab>
 ```js copy showLineNumbers
-fetch('http://localhost:4111/agent/story-writer/text', {
+fetch('http://localhost:4111/api/agents/storyWriter/text', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
