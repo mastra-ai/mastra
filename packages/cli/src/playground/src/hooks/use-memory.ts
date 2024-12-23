@@ -10,7 +10,7 @@ export const useMemory = () => {
     data: memory,
     isLoading,
     mutate,
-  } = useSWR<{ result: boolean }>('/api/memory', fetcher, {
+  } = useSWR<{ result: boolean }>('/api/memory/status', fetcher, {
     fallbackData: { result: false },
   });
   return { memory, isLoading, mutate };

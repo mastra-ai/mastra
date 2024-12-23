@@ -436,13 +436,13 @@ app.post('/api/workflows/:workflowId/execute', async (req: Request, res: Respons
 });
 
 /**
- * GET /api/memory
+ * GET /api/memory/status
  * @summary Get memory status
  * @tags Memory
  * @return {object} 200 - Memory status
  * @return {Error} 500 - Server error
  */
-app.get('/api/memory', async (_req: Request, res: Response) => {
+app.get('/api/memory/status', async (_req: Request, res: Response) => {
   try {
     const memory = mastra.memory;
 
