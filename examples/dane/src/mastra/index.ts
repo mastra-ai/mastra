@@ -1,4 +1,4 @@
-import { createLogger, Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core';
 import { PostgresEngine } from '@mastra/engine';
 import { UpstashKVMemory } from '@mastra/memory';
 
