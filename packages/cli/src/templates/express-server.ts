@@ -166,7 +166,7 @@ app.post('/api/agents/:agentId/text', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    const messages = req.body.messages;
+    const { messages, threadId, resourceid } = req.body;
     const { ok, errorResponse } = await validateBody({
       messages,
     });
@@ -181,7 +181,7 @@ app.post('/api/agents/:agentId/text', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await agent.generate(messages);
+    const result = await agent.generate(messages, { threadId, resourceid });
     res.json(result);
   } catch (error) {
     const apiError = error as ApiError;
@@ -205,7 +205,7 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    const messages = req.body.messages;
+    const { messages, threadId, resourceid } = req.body;
     const { ok, errorResponse } = await validateBody({
       messages,
     });
@@ -222,6 +222,8 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
 
     const streamResult = await agent.generate(messages, {
       stream: true,
+      threadId,
+      resourceid,
     });
 
     streamResult.pipeDataStreamToResponse(res);
@@ -247,8 +249,7 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    const messages = req.body.messages;
-    const schema = req.body.schema;
+    const { messages, schema, threadId, resourceid } = req.body;
 
     const { ok, errorResponse } = await validateBody({
       messages,
@@ -265,7 +266,7 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
       return;
     }
 
-    const result = await agent.generate(messages, { schema });
+    const result = await agent.generate(messages, { schema, threadId, resourceid });
     res.json(result);
   } catch (error) {
     const apiError = error as ApiError;
@@ -291,8 +292,7 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    const messages = req.body.messages;
-    const schema = req.body.schema;
+    const { messages, schema, threadId, resourceid } = req.body;
 
     const { ok, errorResponse } = await validateBody({
       messages,
@@ -309,7 +309,7 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
       return;
     }
 
-    const streamResult = await agent.generate(messages, { schema, stream: true });
+    const streamResult = await agent.generate(messages, { schema, stream: true, threadId, resourceid });
 
     streamResult.pipeTextStreamToResponse(res);
   } catch (error) {
@@ -436,23 +436,55 @@ app.post('/api/workflows/:workflowId/execute', async (req: Request, res: Respons
 });
 
 /**
- * GET /api/memory/threads/get-by-resourceid/{resourceid}
- * @summary Get threads by resource ID
+ * GET /api/memory/status
+ * @summary Get memory status
  * @tags Memory
- * @param {string} resourceid.path.required - Resource identifier
+ * @return {object} 200 - Memory status
+ * @return {Error} 500 - Server error
+ */
+app.get('/api/memory/status', async (_req: Request, res: Response) => {
+  try {
+    const memory = mastra.memory;
+
+    if (!memory) {
+      res.json({ result: false });
+      return;
+    }
+    res.json({ result: true });
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting memory status', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting memory status' });
+    return;
+  }
+});
+
+/**
+ * GET /api/memory/threads
+ * @summary Get threads
+ * @tags Memory
+ * @param {string} resourceid.query.required - Resource identifier
  * @return {Thread[]} 200 - Array of threads
  * @return {Error} 400 - Memory not initialized
  * @return {Error} 500 - Server error
  */
-app.get('/api/memory/threads/get-by-resourceid/:resourceid', async (req: Request, res: Response) => {
+app.get('/api/memory/threads', async (req: Request, res: Response) => {
   try {
-    const resourceid = req.params.resourceid;
+    const resourceid = req.query.resourceid as string;
     const memory = mastra.memory;
 
     if (!memory) {
       res.status(400).json({ error: 'Memory is not initialized' });
       return;
     }
+
+    const { ok, errorResponse } = await validateBody({ resourceid });
+
+    if (!ok) {
+      res.status(400).json({ error: errorResponse });
+      return;
+    }
+
     const threads = await memory.getThreadsByResourceId({ resourceid });
     res.json(threads);
   } catch (error) {

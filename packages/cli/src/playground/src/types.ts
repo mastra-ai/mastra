@@ -8,5 +8,7 @@ export interface Message {
 export interface ChatProps {
   agentId: string;
   agentName?: string;
+  threadId?: string;
   initialMessages?: Message[];
+  memory?: boolean;
 }

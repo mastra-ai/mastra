@@ -9,6 +9,8 @@ import {
   CoreMessage,
 } from 'ai';
 
+export type AiMessageType = AiMessage;
+
 // Types for the memory system
 export type MessageType = {
   id: string;
@@ -54,16 +56,16 @@ export abstract class MastraMemory {
     }));
   }
 
-  convertToUIMessages(messages: MessageType[]): AiMessage[] {
+  convertToUIMessages(messages: MessageType[]): AiMessageType[] {
     function addToolMessageToChat({
       toolMessage,
       messages,
       toolResultContents,
     }: {
       toolMessage: CoreToolMessage;
-      messages: Array<AiMessage>;
+      messages: Array<AiMessageType>;
       toolResultContents: Array<ToolResultPart>;
-    }): { chatMessages: Array<AiMessage>; toolResultContents: Array<ToolResultPart> } {
+    }): { chatMessages: Array<AiMessageType>; toolResultContents: Array<ToolResultPart> } {
       const chatMessages = messages.map(message => {
         if (message.toolInvocations) {
           return {
@@ -85,7 +87,7 @@ export abstract class MastraMemory {
         }
 
         return message;
-      }) as Array<AiMessage>;
+      }) as Array<AiMessageType>;
 
       const resultContents = [...toolResultContents, ...toolMessage.content];
 
@@ -93,7 +95,7 @@ export abstract class MastraMemory {
     }
 
     const { chatMessages } = messages.reduce(
-      (obj: { chatMessages: Array<AiMessage>; toolResultContents: Array<ToolResultPart> }, message) => {
+      (obj: { chatMessages: Array<AiMessageType>; toolResultContents: Array<ToolResultPart> }, message) => {
         if (message.role === 'tool') {
           return addToolMessageToChat({
             toolMessage: message as CoreToolMessage,
@@ -126,7 +128,7 @@ export abstract class MastraMemory {
 
         obj.chatMessages.push({
           id: message.id,
-          role: message.role as AiMessage['role'],
+          role: message.role as AiMessageType['role'],
           content: textContent,
           toolInvocations,
         });
@@ -134,7 +136,7 @@ export abstract class MastraMemory {
         return obj;
       },
       { chatMessages: [], toolResultContents: [] } as {
-        chatMessages: Array<AiMessage>;
+        chatMessages: Array<AiMessageType>;
         toolResultContents: Array<ToolResultPart>;
       },
     );
@@ -173,7 +175,7 @@ export abstract class MastraMemory {
     threadId,
   }: {
     threadId: string;
-  }): Promise<{ messages: MessageType[]; uiMessages: AiMessage[] }>;
+  }): Promise<{ messages: MessageType[]; uiMessages: AiMessageType[] }>;
 
   /**
    * Retrieves all messages for a specific thread within a context window
