@@ -2,25 +2,18 @@ import { Callout, Steps, Tabs } from "nextra/components";
 
 # Installation
 
-## System Requirements
+To run Mastra, you need access to an LLM. Typically, you'll want to get an API key from an LLM provider such as [OpenAI](https://platform.openai.com/), [Anthropic](https://console.anthropic.com/settings/keys), or [Google Gemini](https://ai.google.dev/gemini-api/docs). You can also run Mastra with a local LLM using [Ollama](https://ollama.ai/).
 
-- [Node.js v20.0+](https://nodejs.org/)
+We recommend starting a new Mastra project [using the Mastra CLI](#automatic-installation) which will scaffold your project.
 
-### Get an LLM Provider API Key
+## Prerequisites
 
-If you don't have an API key for an LLM provider, you can get one from the following services:
-
-- [OpenAI](https://platform.openai.com/)
-- [Anthropic](https://console.anthropic.com/settings/keys)
-- [Google Gemini](https://ai.google.dev/gemini-api/docs)
-
-If you don't have an account with these providers, you can sign up and get an API key. OpenAI and Anthropic require a credit card to get an API key. Google Gemini does not and has a generous free tier for its API.
+- Node.js `v20.0` or higher
+- Access to a [supported large language model (LLM)](/guide/reference/llm/providers-and-models.mdx).
 
 ## Automatic Installation
-
-<br/>
 <Steps>
-We recommend starting a new Mastra project using the Mastra CLI, which sets up everything automatically for you.
+
 
 ### Install the Mastra CLI
 
