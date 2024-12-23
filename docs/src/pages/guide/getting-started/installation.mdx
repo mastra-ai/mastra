@@ -46,7 +46,7 @@ On initialization, you'll be guided through the following prompts:
   - Tools
   - Workflows
 - **Select a default LLM provider**: Choose from supported providers like OpenAI, Anthropic, or Google Gemini.
-- **Include example code**: **Select `Yes` to include example code.** This will add sample agents, tools, and workflows to your project, allowing you to test and run `mastra serve` immediately.
+- **Include example code**: **Select `Yes` to include example code.** This will add sample agents, tools, and workflows to your project, allowing you to test and run `mastra dev` immediately.
 
 ### Set Up Your API Key
 
@@ -146,7 +146,7 @@ export const mastra = new Mastra({
 });
 ```
 
-This registers your agent with Mastra so that `mastra serve` can discover and serve it.
+This registers your agent with Mastra so that `mastra dev` can discover and serve it.
 
 If you're using Anthropic, set the `ANTHROPIC_API_KEY`. If you're using Google Gemini,
 set the `GOOGLE_GENERATIVE_AI_API_KEY`.
@@ -158,7 +158,7 @@ set the `GOOGLE_GENERATIVE_AI_API_KEY`.
 Mastra provides commands to serve your agents via REST endpoints. Run the following command to start the Mastra server:
 
 ```bash copy
-OPENAI_API_KEY=<your-openai-api-key> mastra serve
+OPENAI_API_KEY=<your-openai-api-key> mastra dev
 ```
 
 This command creates REST API endpoints for your agents.

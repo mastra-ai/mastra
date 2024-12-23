@@ -127,12 +127,12 @@ export const mastra = new Mastra({
 
 ## **5. Serve the Application**
 
-Instead of running the application directly, we'll use the `mastra serve` command to start the server. This will expose your agent via REST API endpoints, allowing you to interact with it over HTTP.
+Instead of running the application directly, we'll use the `mastra dev` command to start the server. This will expose your agent via REST API endpoints, allowing you to interact with it over HTTP.
 
 In your terminal, start the Mastra server by running:
 
 ```bash
-mastra serve
+mastra dev
 ```
 
 This command will start the server and make your agent available at:
@@ -144,7 +144,7 @@ http://localhost:3000/agents/stock-agent/generate
 Make sure that your environment variables are set, especially your OpenAI API key. If you haven't set it yet, you can provide it inline:
 
 ```bash
-OPENAI_API_KEY=your_openai_api_key mastra serve
+OPENAI_API_KEY=your_openai_api_key mastra dev
 ```
 
 ---
