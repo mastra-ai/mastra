@@ -79,7 +79,7 @@ export abstract class Deployer {
   }
 
   async deployCommand({ scope, siteId, projectName }: { scope: string; siteId?: string; projectName?: string }) {
-    console.log(`Deploy command ${scope}...${siteId || ''} to ${projectName || '.mastra'}`);
+    console.log(`Deploy command ${scope}...${siteId || ''} to ${projectName || 'mastra-starter'}`);
   }
 
   async deploy({

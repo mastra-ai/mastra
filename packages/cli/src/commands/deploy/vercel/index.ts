@@ -145,7 +145,13 @@ export class VercelDeployer extends Deployer {
     }
   }
 
-  async deployCommand({ scope, projectName }: { scope: string; projectName?: string }): Promise<void> {
+  async deployCommand({
+    scope,
+    projectName = 'mastra-starter',
+  }: {
+    scope: string;
+    projectName?: string;
+  }): Promise<void> {
     // Get env vars for initial deployment
     const envFiles = this.getEnvFiles();
     const envVars: string[] = [];
