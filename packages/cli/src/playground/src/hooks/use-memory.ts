@@ -39,19 +39,19 @@ export const useThreads = ({ resourceid }: { resourceid: string }) => {
 export const useMessages = ({ threadId, memory }: { threadId: string; memory: boolean }) => {
   const { data, isLoading, mutate } = useSWR<{ uiMessages: Array<AiMessageType>; messages: Array<MessageType> }>(
     `/api/memory/threads/${threadId}/messages`,
-    fetcher,
+    url => fetcher(url, true),
     {
       fallbackData: { uiMessages: [], messages: [] },
-      isPaused: () => (memory ? !threadId : true),
       revalidateOnFocus: false,
+      shouldRetryOnError: false,
     },
   );
 
   useEffect(() => {
-    if (threadId) {
+    if (threadId && memory) {
       mutate();
     }
-  }, [threadId]);
+  }, [threadId, memory]);
 
   return { messages: data?.uiMessages, isLoading, mutate };
 };

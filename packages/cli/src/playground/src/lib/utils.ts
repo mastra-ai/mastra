@@ -11,7 +11,7 @@ interface ApplicationError extends Error {
   status: number;
 }
 
-export const fetcher = async (url: string) => {
+export const fetcher = async (url: string, hideError?: boolean) => {
   const res = await fetch(url);
 
   if (!res.ok) {
@@ -20,7 +20,9 @@ export const fetcher = async (url: string) => {
     error.info = await res.json();
     error.status = res.status;
 
-    toast.error((error?.info as any)?.error || error?.message);
+    if (!hideError) {
+      toast.error((error?.info as any)?.error || error?.message);
+    }
 
     throw error;
   }

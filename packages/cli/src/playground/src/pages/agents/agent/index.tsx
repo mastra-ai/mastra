@@ -1,6 +1,6 @@
 import { PanelLeft } from 'lucide-react';
-import { useState } from 'react';
-import { useParams } from 'react-router';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router';
 
 import { Chat } from '@/components/Chat';
 import Breadcrumb from '@/components/ui/breadcrumbs';
@@ -20,8 +20,15 @@ function Agent() {
   const { agentId, threadId } = useParams();
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { memory } = useMemory();
-  const { messages } = useMessages({ threadId: threadId!, memory: !!memory?.result });
+  const navigate = useNavigate();
+  const { messages, isLoading: isMessagesLoading } = useMessages({ threadId: threadId!, memory: !!memory?.result });
   const [sidebar, setSidebar] = useState(true);
+
+  useEffect(() => {
+    if (memory?.result && !threadId) {
+      navigate(`/agents/${agentId}/${crypto.randomUUID()}`);
+    }
+  }, [memory?.result, threadId]);
 
   if (isAgentLoading) {
     return (
@@ -79,7 +86,7 @@ function Agent() {
             agentId={agentId!}
             agentName={agent?.name}
             threadId={threadId!}
-            initialMessages={messages as Message[]}
+            initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
             memory={memory?.result}
           />
         </div>
