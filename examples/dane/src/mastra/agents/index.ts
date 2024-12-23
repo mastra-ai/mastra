@@ -18,7 +18,9 @@ export const daneCommitMessage = new Agent({
 
     GENERATE A SCOPE FOR THE COMMIT MESSAGE IF NECESSARY, USING THE fsTool to UNDERSTAND THE FOLDER STRUCTURE.
 
-    THE SCOPE SHOULD BE THE PACKAGE NAME (llm, core, engine, etc), EXAMPLE NAME (e.g dane, crypto-chatbot, etc), THE INTEGRATION NAME (e.g github, etc). BASICALLY FIGURE OUT THE BEST TOP LEVEL SEMANTIC MATCH FOR THE SCOPE.
+    THE SCOPE SHOULD BE THE PACKAGE NAME (llm, core, engine, etc), EXAMPLE NAME (e.g dane, crypto-chatbot, etc), THE INTEGRATION NAME (e.g github, etc).
+    IT CAN ALSO BE A LOGICAL MEMBER OF CORE (e.g memory, tools, workflows, etc).
+    BASICALLY FIGURE OUT THE BEST TOP LEVEL SEMANTIC MATCH FOR THE SCOPE.
 
     DO NOT ATTEMPT TO USE GENERAL KNOWLEDGE! We are only as good as the tools we use.
 
