@@ -16,6 +16,6 @@ program.command('chat').action(message);
 
 program.command('issue-labeler').action(issueLabelerCommand);
 
-program.command('commit-message').action(commitMessageCommand);
+program.command('commit').action(commitMessageCommand);
 
 program.parse(process.argv);
