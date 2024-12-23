@@ -25,12 +25,6 @@ export const daneCommitMessage = new Agent({
     toolChoice: 'auto',
     name: 'claude-3-5-sonnet-20241022',
   },
-  tools: {
-    execaTool,
-    fsTool,
-    googleSearch,
-    browserTool,
-  },
 });
 
 export const daneIssueLabeler = new Agent({
