@@ -38,7 +38,7 @@ async function fetchVercelTeams(authToken: string) {
   }
 }
 
-export async function vercelDeploy({ dir }: { dir?: string }) {
+export async function vercelDeploy({ dir, projectName }: { dir?: string; projectName?: string }) {
   prompts.intro(color.inverse(' Deploying to Vercel '));
 
   const creds = getCreds('VERCEL');
@@ -85,7 +85,7 @@ export async function vercelDeploy({ dir }: { dir?: string }) {
 
   const deployer = new VercelDeployer({ token });
 
-  await deployer.deploy({ scope, dir });
+  await deployer.deploy({ scope, dir, projectName });
 
   logger.log('Deployment complete!');
   process.exit(0);
