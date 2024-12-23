@@ -20,7 +20,7 @@ Create a new file `src/mastra/agents/chefAgent.ts` and define your agent:
 import { Agent } from "@mastra/core";
 
 export const chefAgent = new Agent({
-  name: "chef-assistant",
+  name: "chef-agent",
   instructions: 'You are Michel, a practical and experienced home chef' +
   'You helps people cook with whatever ingredients they have available.',
   model: {
@@ -257,7 +257,7 @@ This will start a server exposing endpoints to interact with your registered age
 By default, `mastra dev` runs on `http://localhost:4111`. Your Chef Assistant agent will be available at:
 
 ```
-POST http://localhost:4111/agents/chef-assistant/generate
+POST http://localhost:4111/api/agents/chefAgent/generate
 ```
 
 ### **Interacting with the Agent via `curl`**
@@ -265,7 +265,7 @@ POST http://localhost:4111/agents/chef-assistant/generate
 You can interact with the agent using `curl` from the command line:
 
 ```bash
-curl -X POST http://localhost:4111/agents/chef-assistant/generate \
+curl -X POST http://localhost:4111/api/agents/chefAgent/generate \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
