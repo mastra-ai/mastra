@@ -45,13 +45,14 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
 
   if (!threads?.length) {
     return (
-      <div className="p-4 w-full space-y-2 h-full text-mastra-el-3">
-        <div className="flex justify-end">
+      <div className="p-4 w-full space-y-2 h-full">
+        <div className="flex justify-between items-center">
+          <div className="text-sm">Chat history</div>
           <Button variant="primary" size="icon" onClick={() => navigate(`/agents/${agentId}`)}>
             <Plus />
           </Button>
         </div>
-        <div className="text-small">Your conversations will appear here once you start chatting!</div>
+        <div className="text-small text-mastra-el-3">Your conversations will appear here once you start chatting!</div>
       </div>
     );
   }
@@ -59,7 +60,8 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
   return (
     <ScrollArea className="h-full p-2 w-[256px]">
       <div className="space-y-2">
-        <div className="flex justify-end">
+        <div className="flex justify-between items-center">
+          <div className="text-sm">Chat history</div>
           <Button variant="primary" size="icon" onClick={() => navigate(`/agents/${agentId}`)}>
             <Plus />
           </Button>
