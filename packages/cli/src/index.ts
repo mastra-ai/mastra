@@ -225,12 +225,13 @@ deploy
   .command('vercel')
   .description('Deploy your Mastra project to Vercel')
   .option('-d, --dir <dir>', 'Path to your mastra folder')
+  .option('-n, --name <name>', 'Name of the project')
   .action(async args => {
     await analytics.trackCommandExecution({
       command: 'deploy vercel',
       args,
       execution: async () => {
-        await vercelDeploy({ dir: args?.dir });
+        await vercelDeploy({ dir: args?.dir, projectName: args?.name });
       },
     });
   });
