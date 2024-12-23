@@ -40,7 +40,6 @@ export const Sidebar = () => {
           <div className="flex flex-col gap-0.5">
             {links.map(link => {
               const [_, pagePath] = path.split('/');
-              console.log({ pagePath, link, path });
               const lowercasedPagePath = link.name.toLowerCase();
               const isActive = link.url === path || link.name === path || pagePath === lowercasedPagePath;
               return (

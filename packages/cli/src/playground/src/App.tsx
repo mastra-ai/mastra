@@ -25,6 +25,7 @@ function App() {
           <Route path="/" element={<Navigate to="/agents" />} />
           <Route path="/agents" element={<Agents />} />
           <Route path="/agents/:agentId" element={<Agent />} />
+          <Route path="/agents/:agentId/:threadId" element={<Agent />} />
           <Route path="/tools" element={<Tools />} />
           <Route path="/tools/:agentId/:toolId" element={<AgentTool />} />
           <Route path="/tools/all/:toolId" element={<Tool />} />

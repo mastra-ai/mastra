@@ -16,6 +16,7 @@
     "zod": "^3.24.1"
   },
   "dependencies": {
-    "@mastra/core": "workspace:*"
+    "@mastra/core": "workspace:*",
+    "@mastra/memory": "workspace:*"
   }
 }

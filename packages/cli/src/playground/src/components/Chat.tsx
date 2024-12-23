@@ -1,4 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router';
+import { useSWRConfig } from 'swr';
 
 import { Message, ChatProps } from '../types';
 
@@ -8,10 +10,16 @@ import { MessageList } from './ui/message-list';
 import { PromptSuggestions } from './ui/prompt-suggestions';
 import { ScrollArea } from './ui/scroll-area';
 
-export function Chat({ agentId, initialMessages = [], agentName }: ChatProps) {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+export function Chat({ agentId, initialMessages = [], agentName, threadId, memory }: ChatProps) {
+  const [messages, setMessages] = useState<Message[]>(() => initialMessages);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const { mutate } = useSWRConfig();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    setMessages(initialMessages);
+  }, [initialMessages]);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
@@ -24,7 +32,6 @@ export function Chat({ agentId, initialMessages = [], agentName }: ChatProps) {
     const userMessage = input;
     setInput('');
     setIsLoading(true);
-
     const newUserMessage = {
       id: Date.now().toString(),
       role: 'user' as const,
@@ -40,10 +47,18 @@ export function Chat({ agentId, initialMessages = [], agentName }: ChatProps) {
     setMessages(prev => [...prev, newUserMessage, newAssistantMessage]);
 
     try {
+      let _threadId = threadId;
+      if (!_threadId && memory) {
+        _threadId = crypto.randomUUID();
+      }
+
       const response = await fetch('/api/agents/' + agentId + '/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [userMessage] }),
+        body: JSON.stringify({
+          messages: [userMessage],
+          ...(memory ? { threadId: _threadId, resourceid: agentId } : {}),
+        }),
       });
 
       if (!response.body) return;
@@ -61,6 +76,8 @@ export function Chat({ agentId, initialMessages = [], agentName }: ChatProps) {
         return;
       }
 
+      mutate(`/api/memory/threads?resourceid=${agentId}`);
+
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -68,10 +85,27 @@ export function Chat({ agentId, initialMessages = [], agentName }: ChatProps) {
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          if (!threadId && memory) {
+            navigate(`/agents/${agentId}/${_threadId}`);
+          }
+          break;
+        }
 
         const chunk = decoder.decode(value);
         buffer += chunk;
+
+        if (buffer?.toLocaleLowerCase()?.includes('an error occurred')) {
+          setMessages(prev => [
+            ...prev.slice(0, -1),
+            {
+              ...prev[prev.length - 1],
+              content: 'An error occurred while processing your request.',
+              isError: true,
+            },
+          ]);
+          return;
+        }
 
         const matches = buffer.matchAll(/0:"([^"]*)"/g);
         for (const match of matches) {
@@ -98,7 +132,7 @@ export function Chat({ agentId, initialMessages = [], agentName }: ChatProps) {
 
   const lastMessage = messages.at(-1);
   const isEmpty = messages.length === 0;
-  const isTyping = lastMessage?.role === 'user' || (lastMessage?.role === 'assistant' && !lastMessage?.content.trim());
+  const isTyping = isLoading || (lastMessage?.role === 'assistant' && !lastMessage?.content.trim());
 
   const append = useCallback(
     (message: { role: 'user'; content: string }) => {
@@ -111,7 +145,7 @@ export function Chat({ agentId, initialMessages = [], agentName }: ChatProps) {
   const suggestions = ['What capabilities do you have?', 'How can you help me?', 'Tell me about yourself'];
 
   return (
-    <ChatContainer className="h-full p-4 lg:px-[10rem] max-w-[1000px] mx-auto">
+    <ChatContainer className="h-full p-4 max-w-[1000px] mx-auto">
       <div className="flex flex-col h-full py-4">
         {isEmpty ? (
           <div className="mx-auto max-w-2xl">
