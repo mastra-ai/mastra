@@ -58,7 +58,7 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
   }
 
   return (
-    <ScrollArea className="h-full p-2 w-[256px]">
+    <ScrollArea className="h-full p-4 w-[256px]">
       <div className="space-y-2">
         <div className="flex justify-between items-center pl-2">
           <div className="text-sm text-mastra-el-5">Chat history</div>
