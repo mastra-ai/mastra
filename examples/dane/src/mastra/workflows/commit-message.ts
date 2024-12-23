@@ -5,8 +5,6 @@ import { z } from 'zod';
 export const commitMessageGenerator = new Workflow({
   name: 'commit-message',
   triggerSchema: z.object({
-    resourceid: z.string(),
-    threadId: z.string(),
     repoPath: z.string(),
   }),
 });
