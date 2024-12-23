@@ -23,6 +23,7 @@ import { logger } from './utils/logger.js';
 
 const depsService = new DepsService();
 const version = await depsService.getPackageVersion();
+const projectName = 'mastra-starter';
 
 const analytics = new PosthogAnalytics({
   apiKey: 'phc_SBLpZVAB6jmHOct9CABq3PF0Yn5FU3G2FgT4xUr2XrT',
@@ -231,7 +232,7 @@ deploy
       command: 'deploy vercel',
       args,
       execution: async () => {
-        await vercelDeploy({ dir: args?.dir, projectName: args?.name });
+        await vercelDeploy({ dir: args?.dir, projectName: args?.name || projectName });
       },
     });
   });
