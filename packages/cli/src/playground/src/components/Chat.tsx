@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router';
 import { useSWRConfig } from 'swr';
 
 import { Message, ChatProps } from '../types';
@@ -11,14 +10,15 @@ import { PromptSuggestions } from './ui/prompt-suggestions';
 import { ScrollArea } from './ui/scroll-area';
 
 export function Chat({ agentId, initialMessages = [], agentName, threadId, memory }: ChatProps) {
-  const [messages, setMessages] = useState<Message[]>(() => initialMessages);
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { mutate } = useSWRConfig();
-  const navigate = useNavigate();
 
   useEffect(() => {
-    setMessages(initialMessages);
+    if (initialMessages) {
+      setMessages(initialMessages);
+    }
   }, [initialMessages]);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -47,17 +47,12 @@ export function Chat({ agentId, initialMessages = [], agentName, threadId, memor
     setMessages(prev => [...prev, newUserMessage, newAssistantMessage]);
 
     try {
-      let _threadId = threadId;
-      if (!_threadId && memory) {
-        _threadId = crypto.randomUUID();
-      }
-
       const response = await fetch('/api/agents/' + agentId + '/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [userMessage],
-          ...(memory ? { threadId: _threadId, resourceid: agentId } : {}),
+          ...(memory ? { threadId, resourceid: agentId } : {}),
         }),
       });
 
@@ -86,9 +81,6 @@ export function Chat({ agentId, initialMessages = [], agentName, threadId, memor
       while (true) {
         const { done, value } = await reader.read();
         if (done) {
-          if (!threadId && memory) {
-            navigate(`/agents/${agentId}/${_threadId}`);
-          }
           break;
         }
 
