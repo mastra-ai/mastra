@@ -43,10 +43,8 @@ describe('LLM Class Integration Tests', () => {
   });
 
   const llm = mastra.LLM({
-    // provider: 'OPEN_AI',
-    // name: 'gpt-4o-mini',
-    provider: 'GOOGLE',
-    name: 'gemini-1.5-flash-latest',
+    provider: 'OPEN_AI',
+    name: 'gpt-4o-mini',
   });
 
   describe('OpenAI Integration', () => {
@@ -199,7 +197,7 @@ describe('LLM Class Integration Tests', () => {
     }, 30000);
   });
 
-  describe.skip('Tool Integration', () => {
+  describe('Tool Integration', () => {
     const llm = mastra.LLM({
       provider: 'OPEN_AI',
       name: 'gpt-4',

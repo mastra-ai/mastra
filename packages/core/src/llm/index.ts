@@ -338,11 +338,6 @@ export class LLM extends MastraBase {
     return converted;
   }
 
-  private createOutputSchema(output: JSONSchema7) {
-    const schema = jsonSchema(output);
-    return schema as Schema<JSONSchema7>;
-  }
-
   async generate<S extends boolean = false, Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     {
@@ -715,7 +710,7 @@ export class LLM extends MastraBase {
         schema = schema._def.type;
       }
     } else {
-      schema = this.createOutputSchema(structuredOutput as JSONSchema7);
+      schema = jsonSchema(structuredOutput as JSONSchema7) as Schema<T>;
     }
 
     return await streamObject({
