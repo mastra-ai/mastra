@@ -561,14 +561,13 @@ export class LLM extends MastraBase {
       schema = jsonSchema(structuredOutput as JSONSchema7) as Schema<T>;
     }
 
-    const objectGen = await generateObject({
+    return await generateObject({
       messages,
       ...argsForExecute,
       schema,
       output: output as any,
       experimental_telemetry: this.experimental_telemetry,
     });
-    return objectGen;
   }
 
   async __stream({
