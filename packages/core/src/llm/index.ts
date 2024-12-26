@@ -548,14 +548,14 @@ export class LLM extends MastraBase {
       },
     };
 
-    let schema: z.Schema<T, z.ZodTypeDef, any> | Schema<T>;
+    let schema: z.ZodType<T> | Schema<T>;
     let output = 'object';
 
     if (typeof (structuredOutput as any).parse === 'function') {
-      schema = structuredOutput as z.Schema<T, z.ZodTypeDef, any>;
+      schema = structuredOutput as z.ZodType<T>;
       if (schema instanceof z.ZodArray) {
         output = 'array';
-        schema = schema._def.type as z.Schema<T, z.ZodTypeDef, any>;
+        schema = schema._def.type as z.ZodType<T>;
       }
     } else {
       schema = jsonSchema(structuredOutput as JSONSchema7) as Schema<T>;
@@ -647,7 +647,7 @@ export class LLM extends MastraBase {
     structuredOutput,
     runId,
   }: {
-    structuredOutput: StructuredOutput | JSONSchema7 | ZodSchema;
+    structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
     tools?: ToolsInput;
     convertedTools?: Record<string, CoreTool>;
     messages: CoreMessage[];
@@ -699,14 +699,14 @@ export class LLM extends MastraBase {
       },
     };
 
-    let schema: ZodSchema | Schema;
+    let schema: z.ZodType<T> | Schema<T>;
     let output = 'object';
 
     if (typeof (structuredOutput as any).parse === 'function') {
-      schema = structuredOutput as ZodSchema;
+      schema = structuredOutput as z.ZodType<T>;
       if (schema instanceof z.ZodArray) {
         output = 'array';
-        schema = schema._def.type;
+        schema = schema._def.type as z.ZodType<T>;
       }
     } else {
       schema = jsonSchema(structuredOutput as JSONSchema7) as Schema<T>;
