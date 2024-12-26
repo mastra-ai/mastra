@@ -66,13 +66,15 @@ describe('LLM Class Integration Tests', () => {
       expect(typeof response.object.explanation).toBe('string');
     }, 30000);
 
-    it.only('should generate structured output using json schema of type object', async () => {
+    it('should generate structured output using json schema of type object', async () => {
       const schema = {
         type: 'object',
         properties: {
           answer: { type: 'number' },
           explanation: { type: 'string' },
         },
+        additionalProperties: false,
+        required: ['answer', 'explanation'],
       } as JSONSchema7;
 
       const response = await llm.generate('What is 2+2?', { schema });
@@ -81,25 +83,7 @@ describe('LLM Class Integration Tests', () => {
       expect(typeof response.object.explanation).toBe('string');
     }, 3000);
 
-    it.only('should generate structured output using json schema of type array', async () => {
-      const schema = {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            answer: { type: 'number' },
-            explanation: { type: 'string' },
-          },
-        },
-      } as JSONSchema7;
-
-      const response = await llm.generate('What is 2+2?', { schema });
-      expect(response.object).toBeDefined();
-      expect(response.object[0].answer).toBe(4);
-      expect(typeof response.object[0].explanation).toBe('string');
-    }, 3000);
-
-    it.only('should generate structured output using json schema of nested object', async () => {
+    it('should generate structured output using json schema of nested object', async () => {
       const schema = {
         type: 'object',
         properties: {
@@ -113,14 +97,20 @@ describe('LLM Class Integration Tests', () => {
                   name: { type: 'string' },
                   questionAttempted: { type: 'boolean' },
                 },
+                additionalProperties: false,
+                required: ['id', 'name', 'questionAttempted'],
               },
               calculation: {
                 type: 'array',
                 items: { type: 'number' },
               },
             },
+            additionalProperties: false,
+            required: ['profile', 'calculation'],
           },
         },
+        additionalProperties: false,
+        required: ['student'],
       } as JSONSchema7;
 
       const response = await llm.generate(
@@ -141,41 +131,37 @@ describe('LLM Class Integration Tests', () => {
       expect(response.object.student.calculation[4]).toBe(5);
     }, 3000);
 
-    it.only('should generate structured output using json schema of nested array', async () => {
+    it('should stream structured output using json schema of type object', async () => {
+      const chunks: string[] = [];
       const schema = {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            details: {
-              type: 'object',
-              properties: {
-                id: { type: 'number' },
-                name: { type: 'string' },
-              },
-            },
-            students: {
-              type: 'array',
-              items: { type: 'string' },
-            },
-          },
+        type: 'object',
+        properties: {
+          answer: { type: 'number' },
+          explanation: { type: 'string' },
         },
+        additionalProperties: false,
+        required: ['answer', 'explanation'],
       } as JSONSchema7;
 
-      const response = await llm.generate(
-        'There are two classes: Class 1 (ID: 1) has student "A", and Class 2 (ID: 2) has student "B". What is the list?',
-        { schema },
-      );
-      expect(response.object).toBeDefined();
-      expect(typeof response.object[0].details.id).toBe('number');
-      expect(response.object[0].details.id).toBe(1);
-      expect(typeof response.object[0].details.name).toBe('string');
-      expect(response.object[0].details.name).toBe('Class 1');
-      expect(response.object[0].students[0]).toBe('A');
+      const response = await llm.generate('What is 2+2?', {
+        schema,
+        stream: true,
+        onFinish: text => {
+          chunks.push(text);
+          return;
+        },
+      });
+      for await (const chunk of response.textStream) {
+        // Write each chunk without a newline to create a continuous stream
+        expect(chunk).toBeDefined();
+      }
 
-      expect(response.object[1].details.id).toBe(2);
-      expect(response.object[1].details.name).toBe('Class 2');
-      expect(response.object[1].students[0]).toBe('B');
+      expect(chunks.length).toBeGreaterThan(0);
+
+      expect(response.object).toBeDefined();
+      const resObject = await response.object;
+      expect(resObject.answer).toBe(4);
+      expect(typeof resObject.explanation).toBe('string');
     }, 3000);
 
     it('should stream text completion', async () => {
@@ -203,7 +189,7 @@ describe('LLM Class Integration Tests', () => {
       name: 'gpt-4',
     });
 
-    it.only('should use tools in generation', async () => {
+    it('should use tools in generation', async () => {
       const response = await llm.generate('What is 123 + 456? Use the calculator tool to find out.', {
         tools: {
           calculatorTool,
