@@ -87,7 +87,7 @@ export class Agent<
   }
 
   async generateTitleFromUserMessage({ message }: { message: CoreUserMessage }) {
-    const { object } = await this.llm.__textObject({
+    const { object } = await this.llm.__textObject<{ title: string }>({
       messages: [
         {
           role: 'system',
