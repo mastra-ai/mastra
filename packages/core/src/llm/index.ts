@@ -637,7 +637,7 @@ export class LLM extends MastraBase {
     });
   }
 
-  async __streamObject({
+  async __streamObject<T>({
     messages,
     onStepFinish,
     onFinish,
