@@ -564,8 +564,8 @@ export class LLM extends MastraBase {
     return await generateObject({
       messages,
       ...argsForExecute,
-      schema,
       output: output as any,
+      schema,
       experimental_telemetry: this.experimental_telemetry,
     });
   }
