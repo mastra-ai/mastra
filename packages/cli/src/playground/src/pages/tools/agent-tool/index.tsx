@@ -2,6 +2,7 @@ import jsonSchemaToZod from 'json-schema-to-zod';
 import { useState } from 'react';
 import { useParams } from 'react-router';
 import { parse } from 'superjson';
+import { z } from 'zod';
 
 import { DynamicForm } from '@/components/dynamic-form';
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
@@ -62,7 +63,9 @@ const AgentTool = () => {
     return null;
   }
 
-  const zodInputSchema = resolveSerializedZodOutput(jsonSchemaToZod(parse(tool.inputSchema)));
+  const zodInputSchema = tool?.inputSchema
+    ? resolveSerializedZodOutput(jsonSchemaToZod(parse(tool?.inputSchema)))
+    : z.object({});
 
   const breadcrumbItems = [
     {
