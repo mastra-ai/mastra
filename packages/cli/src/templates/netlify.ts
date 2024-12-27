@@ -2,9 +2,27 @@ import express, { Request, Response } from 'express';
 import { join } from 'path';
 import serverless from 'serverless-http';
 import { stringify } from 'superjson';
+import { pathToFileURL } from 'url';
 import zodToJsonSchema from 'zod-to-json-schema';
 
 const { mastra } = await import(join(process.cwd(), 'mastra.mjs'));
+
+const mastraToolsPaths = process.env.MASTRA_TOOLS_PATH;
+
+const toolImports = mastraToolsPaths
+  ? await Promise.all(
+      mastraToolsPaths.split(',').map(async toolPath => {
+        return import(pathToFileURL(toolPath).href);
+      }),
+    )
+  : [];
+
+const tools = toolImports.reduce((acc, toolModule) => {
+  Object.entries(toolModule).forEach(([key, tool]) => {
+    acc[key] = tool;
+  });
+  return acc;
+}, {});
 
 const app = express();
 
@@ -42,7 +60,25 @@ app.get('/', (_req: Request, res: Response) => {
 app.get('/api/agents', async (_req: Request, res: Response) => {
   try {
     const agents = mastra.getAgents();
-    res.json(agents);
+
+    const serializedAgents = Object.entries(agents).reduce<any>((acc, [_id, _agent]) => {
+      const agent = _agent as any;
+      const serializedAgentTools = Object.entries(agent?.tools || {}).reduce<any>((acc, [key, tool]) => {
+        const _tool = tool as any;
+        acc[key] = {
+          ..._tool,
+          inputSchema: _tool.inputSchema ? stringify(zodToJsonSchema(_tool.inputSchema)) : undefined,
+          outputSchema: _tool.outputSchema ? stringify(zodToJsonSchema(_tool.outputSchema)) : undefined,
+        };
+        return acc;
+      }, {});
+      acc[_id] = {
+        ...agent,
+        tools: serializedAgentTools,
+      };
+      return acc;
+    }, {});
+    res.json(serializedAgents);
   } catch (error) {
     const apiError = error as ApiError;
     console.error('Error getting agents', apiError);
@@ -55,7 +91,19 @@ app.get('/api/agents/:agentId', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    res.json(agent);
+    const serializedAgentTools = Object.entries(agent?.tools || {}).reduce<any>((acc, [key, tool]) => {
+      const _tool = tool as any;
+      acc[key] = {
+        ..._tool,
+        inputSchema: _tool.inputSchema ? stringify(zodToJsonSchema(_tool.inputSchema)) : undefined,
+        outputSchema: _tool.outputSchema ? stringify(zodToJsonSchema(_tool.outputSchema)) : undefined,
+      };
+      return acc;
+    }, {});
+    res.json({
+      ...agent,
+      tools: serializedAgentTools,
+    });
   } catch (error) {
     const apiError = error as ApiError;
     console.error('Error getting agent', apiError);
@@ -68,7 +116,7 @@ app.post('/api/agents/:agentId/text', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    const messages = req.body.messages;
+    const { messages, threadId, resourceid } = req.body;
     const { ok, errorResponse } = await validateBody({
       messages,
     });
@@ -78,12 +126,7 @@ app.post('/api/agents/:agentId/text', async (req: Request, res: Response) => {
       return;
     }
 
-    if (!Array.isArray(messages)) {
-      res.status(400).json({ error: { messages: 'Messages should be an array' } });
-      return;
-    }
-
-    const result = await agent.generate(messages);
+    const result = await agent.generate(messages, { threadId, resourceid });
     res.json(result);
   } catch (error) {
     const apiError = error as ApiError;
@@ -97,7 +140,7 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    const messages = req.body.messages;
+    const { messages, threadId, resourceid } = req.body;
     const { ok, errorResponse } = await validateBody({
       messages,
     });
@@ -107,12 +150,11 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
       return;
     }
 
-    if (!Array.isArray(messages)) {
-      res.status(400).json({ error: { messages: 'Messages should be an array' } });
-      return;
-    }
-
-    const streamResult = await agent.generate(messages, { stream: true });
+    const streamResult = await agent.generate(messages, {
+      stream: true,
+      threadId,
+      resourceid,
+    });
 
     streamResult.pipeDataStreamToResponse(res);
   } catch (error) {
@@ -127,8 +169,7 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    const messages = req.body.messages;
-    const schema = req.body.schema;
+    const { messages, schema, threadId, resourceid } = req.body;
 
     const { ok, errorResponse } = await validateBody({
       messages,
@@ -140,12 +181,7 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
       return;
     }
 
-    if (!Array.isArray(messages)) {
-      res.status(400).json({ error: { messages: 'Messages should be an array' } });
-      return;
-    }
-
-    const result = await agent.generate(messages, { schema });
+    const result = await agent.generate(messages, { schema, threadId, resourceid });
     res.json(result);
   } catch (error) {
     const apiError = error as ApiError;
@@ -161,8 +197,7 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    const messages = req.body.messages;
-    const schema = req.body.schema;
+    const { messages, schema, threadId, resourceid } = req.body;
 
     const { ok, errorResponse } = await validateBody({
       messages,
@@ -174,12 +209,7 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
       return;
     }
 
-    if (!Array.isArray(messages)) {
-      res.status(400).json({ error: { messages: 'Messages should be an array' } });
-      return;
-    }
-
-    const streamResult = await agent.generate(messages, { schema, stream: true });
+    const streamResult = await agent.generate(messages, { schema, stream: true, threadId, resourceid });
 
     streamResult.pipeTextStreamToResponse(res);
   } catch (error) {
@@ -188,6 +218,28 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
     res
       .status(apiError.status || 500)
       .json({ error: apiError.message || 'Error streaming structured output from agent' });
+    return;
+  }
+});
+
+app.post('/api/agents/:agentId/tools/:toolId/execute', async (req: Request, res: Response) => {
+  try {
+    const agentId = req.params.agentId;
+    const toolId = req.params.toolId;
+    const agent = mastra.getAgent(agentId);
+    const tool = Object.values(agent?.tools || {}).find((tool: any) => tool.id === toolId) as any;
+    const result = await tool.execute({
+      context: {
+        ...req.body,
+      },
+      mastra,
+      runId: agentId,
+    });
+    res.json(result);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error executing tool', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error executing tool' });
     return;
   }
 });
@@ -209,9 +261,23 @@ app.get('/api/workflows/:workflowId', async (req: Request, res: Response) => {
     const workflowId = req.params.workflowId;
     const workflow = mastra.getWorkflow(workflowId);
     const triggerSchema = workflow.triggerSchema;
+    const stepGraph = workflow.stepGraph;
+    const stepSubscriberGraph = workflow.stepSubscriberGraph;
+    const serializedSteps = Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
+      const _step = step as any;
+      acc[key] = {
+        ..._step,
+        inputSchema: _step.inputSchema ? stringify(zodToJsonSchema(_step.inputSchema)) : undefined,
+        outputSchema: _step.outputSchema ? stringify(zodToJsonSchema(_step.outputSchema)) : undefined,
+      };
+      return acc;
+    }, {});
     res.json({
       ...workflow,
       triggerSchema: triggerSchema ? stringify(zodToJsonSchema(triggerSchema)) : undefined,
+      steps: serializedSteps,
+      stepGraph,
+      stepSubscriberGraph,
     });
   } catch (error) {
     const apiError = error as ApiError;
@@ -224,8 +290,7 @@ app.get('/api/workflows/:workflowId', async (req: Request, res: Response) => {
 app.post('/api/workflows/:workflowId/execute', async (req: Request, res: Response) => {
   try {
     const workflowId = req.params.workflowId;
-    const workflow = mastra.workflows.get(workflowId);
-    console.log('req.body', req.body);
+    const workflow = mastra.getWorkflow(workflowId);
     const result = await workflow.execute(req.body);
     res.json(result);
   } catch (error) {
@@ -236,15 +301,40 @@ app.post('/api/workflows/:workflowId/execute', async (req: Request, res: Respons
   }
 });
 
-app.get('/api/memory/threads/get-by-resourceid/:resourceid', async (req: Request, res: Response) => {
+app.get('/api/memory/status', async (_req: Request, res: Response) => {
   try {
-    const resourceid = req.params.resourceid;
+    const memory = mastra.memory;
+
+    if (!memory) {
+      res.json({ result: false });
+      return;
+    }
+    res.json({ result: true });
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting memory status', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting memory status' });
+    return;
+  }
+});
+
+app.get('/api/memory/threads', async (req: Request, res: Response) => {
+  try {
+    const resourceid = req.query.resourceid as string;
     const memory = mastra.memory;
 
     if (!memory) {
       res.status(400).json({ error: 'Memory is not initialized' });
       return;
     }
+
+    const { ok, errorResponse } = await validateBody({ resourceid });
+
+    if (!ok) {
+      res.status(400).json({ error: errorResponse });
+      return;
+    }
+
     const threads = await memory.getThreadsByResourceId({ resourceid });
     res.json(threads);
   } catch (error) {
@@ -552,6 +642,91 @@ app.post('/api/syncs/:syncId/execute', async (req: Request, res: Response) => {
     const apiError = error as ApiError;
     console.error('Error executing sync', apiError);
     res.status(apiError.status || 500).json({ error: apiError.message || 'Error executing sync' });
+    return;
+  }
+});
+
+app.get('/api/logs', async (_req: Request, res: Response) => {
+  try {
+    const logs = await mastra.getLogs();
+    res.json(logs);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting logs', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting logs' });
+    return;
+  }
+});
+
+app.get('/api/logs/:runId', async (req: Request, res: Response) => {
+  try {
+    const runId = req.params.runId;
+    const logs = await mastra.getLogsByRunId(runId);
+    res.json(logs);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting logs', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting logs' });
+    return;
+  }
+});
+
+app.get('/api/tools', async (_req: Request, res: Response) => {
+  if (tools) {
+    const serializedTools = Object.entries(tools).reduce(
+      (acc, [id, _tool]) => {
+        const tool = _tool as any;
+        acc[id] = {
+          ...tool,
+          inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
+          outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+        };
+        return acc;
+      },
+      {} as Record<string, any>,
+    );
+    res.json(serializedTools);
+  } else {
+    res.status(200).json({});
+  }
+});
+
+app.get('/api/tools/:toolId', async (req: Request, res: Response) => {
+  const toolId = req.params.toolId;
+  const tool = Object.values(tools || {}).find((tool: any) => tool.id === toolId) as any;
+  if (tool) {
+    const serializedTool = {
+      ...tool,
+      inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
+      outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+    };
+    res.json(serializedTool);
+  } else {
+    res.status(404).json({ error: 'Tool not found' });
+  }
+});
+
+app.post('/api/tools/:toolId/execute', async (req: Request, res: Response) => {
+  try {
+    const toolId = req.params.toolId;
+    const tool = Object.values(tools || {}).find((tool: any) => tool.id === toolId) as any;
+    if (!tool) {
+      res.status(404).json({ error: 'Tool not found' });
+      return;
+    }
+    const { input } = req.body;
+    const result = await tool.execute({
+      context: {
+        ...input,
+      },
+      mastra,
+      runId: mastra.runId,
+    });
+    res.json(result);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error executing tool', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error executing tool' });
     return;
   }
 });
