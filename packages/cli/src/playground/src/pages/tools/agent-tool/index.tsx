@@ -63,7 +63,9 @@ const AgentTool = () => {
     return null;
   }
 
-  const zodInputSchema = resolveSerializedZodOutput(jsonSchemaToZod(parse(tool.inputSchema || z.object({}))));
+  const zodInputSchema = tool?.inputSchema
+    ? resolveSerializedZodOutput(jsonSchemaToZod(parse(tool?.inputSchema)))
+    : z.object({});
 
   const breadcrumbItems = [
     {
