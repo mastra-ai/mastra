@@ -257,7 +257,7 @@ This will start a server exposing endpoints to interact with your registered age
 By default, `mastra dev` runs on `http://localhost:4111`. Your Chef Assistant agent will be available at:
 
 ```
-POST http://localhost:4111/api/agents/chefAgent/generate
+POST http://localhost:4111/api/agents/chefAgent/text
 ```
 
 ### **Interacting with the Agent via `curl`**
@@ -265,7 +265,7 @@ POST http://localhost:4111/api/agents/chefAgent/generate
 You can interact with the agent using `curl` from the command line:
 
 ```bash
-curl -X POST http://localhost:4111/api/agents/chefAgent/generate \
+curl -X POST http://localhost:4111/api/agents/chefAgent/text \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [

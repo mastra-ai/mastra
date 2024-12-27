@@ -138,7 +138,7 @@ mastra dev
 This command will start the server and make your agent available at:
 
 ```
-http://localhost:4111/api/agents/stockAgent/generate
+http://localhost:4111/api/agents/stockAgent/text
 ```
 
 Make sure that your environment variables are set, especially your OpenAI API key. If you haven't set it yet, you can provide it inline:
@@ -154,7 +154,7 @@ OPENAI_API_KEY=your_openai_api_key mastra dev
 Now that your server is running, you can test your agent's endpoint using `curl`:
 
 ```bash
-curl -X POST http://localhost:4111/api/agents/stockAgent/generate \
+curl -X POST http://localhost:4111/api/agents/stockAgent/text \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
