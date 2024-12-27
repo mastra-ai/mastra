@@ -1,8 +1,14 @@
-'use client';
+"use client";
 
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter } from "next/navigation";
 
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from './ui/select';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "./ui/select";
 
 type MenuItem = {
   title: string;
@@ -10,8 +16,9 @@ type MenuItem = {
 };
 
 const MENU_ITEMS: MenuItem[] = [
-  { title: 'Agent Example', href: '/' },
-  { title: 'Workflow Example', href: '/workflow' },
+  { title: "Agent Example", href: "/" },
+  // TODO: fix and add the workflow example
+  // { title: 'Workflow Example', href: '/workflow' },
   // { title: 'Agent with Memory Example', href: '/agent-memory' }, // TODO: add this back in when we have a memory example
 ];
 
@@ -19,11 +26,12 @@ export default function ExamplesDropdown() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const activeItem = MENU_ITEMS.find(item => item.href === pathname) || MENU_ITEMS[0];
+  const activeItem =
+    MENU_ITEMS.find((item) => item.href === pathname) || MENU_ITEMS[0];
 
   return (
     <Select
-      onValueChange={href => {
+      onValueChange={(href) => {
         router.push(href); // Use `router.push` to programmatically navigate
       }}
       value={activeItem.href}
@@ -32,8 +40,12 @@ export default function ExamplesDropdown() {
         <SelectValue placeholder={activeItem.title} />
       </SelectTrigger>
       <SelectContent className="font-mono border-2 border-black bg-white">
-        {MENU_ITEMS.map(item => (
-          <SelectItem key={item.href} value={item.href} className="hover:!bg-[#FFDE5A] cursor-pointer font-bold">
+        {MENU_ITEMS.map((item) => (
+          <SelectItem
+            key={item.href}
+            value={item.href}
+            className="hover:!bg-[#FFDE5A] cursor-pointer font-bold"
+          >
             {item.title}
           </SelectItem>
         ))}
