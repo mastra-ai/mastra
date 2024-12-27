@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.62
+
+### Patch Changes
+
+- 0f08180: Update docs for mastra dev
+
 ## 0.1.57-alpha.61
 
 ### Patch Changes
