@@ -3,6 +3,7 @@ const meta = {
   agents: "Agents",
   engine: "Engine",
   dev: "Dev",
+  deploy: "Deploy",
 };
 
 export default meta;

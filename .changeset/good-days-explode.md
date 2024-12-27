@@ -3,4 +3,4 @@
 'docs': patch
 ---
 
-Add dev to references on documentation, update build successful message in dev command
+Add dev and deploy mastra commands to CLI references in documentation, update build successful message in dev command
