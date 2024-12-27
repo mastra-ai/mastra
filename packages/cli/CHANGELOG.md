@@ -1,5 +1,15 @@
 # mastra
 
+## 0.1.57-alpha.60
+
+### Patch Changes
+
+- cc5bd40: Fix playground agent chat losing some chat during redirect
+- 002d6d8: add memory to playground agent
+- Updated dependencies [e608d8c]
+- Updated dependencies [002d6d8]
+  - @mastra/core@0.1.27-alpha.45
+
 ## 0.1.57-alpha.59
 
 ### Patch Changes
