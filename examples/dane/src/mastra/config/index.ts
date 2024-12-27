@@ -52,9 +52,17 @@ export class ConfigManager {
   public getAnthropicApiKey(): string {
     const key = this.get('ANTHROPIC_API_KEY');
     if (!key) {
-      throw new Error(
-        'ANTHROPIC_API_KEY not found in config. Please set it using: dane config --set ANTHROPIC_API_KEY=your_key_here',
-      );
+      // Check if we're in a command that requires the API key
+      const command = process.argv[2] || '';
+      const configCommands = ['config', '--help', '-h'];
+
+      // Only throw if we're not in a config-related command
+      if (!configCommands.includes(command)) {
+        throw new Error(
+          'ANTHROPIC_API_KEY not found in config. Please set it using: dane config --set ANTHROPIC_API_KEY=your_key_here',
+        );
+      }
+      return '';
     }
     return key;
   }

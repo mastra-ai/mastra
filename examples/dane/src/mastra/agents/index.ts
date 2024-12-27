@@ -9,12 +9,12 @@ import { fsTool } from '../tools/fs.js';
 import { imageTool } from '../tools/image.js';
 import { readPDF } from '../tools/pdf.js';
 
-const baseModelConfig = {
+const getBaseModelConfig = () => ({
   provider: 'ANTHROPIC' as const,
   toolChoice: 'auto' as const,
   name: 'claude-3-5-sonnet-20241022',
   apiKey: config.getAnthropicApiKey(),
-};
+});
 
 export const daneCommitMessage = new Agent({
   name: 'DaneCommitMessage',
@@ -28,7 +28,7 @@ export const daneCommitMessage = new Agent({
 
     FIGURE OUT THE BEST TOP LEVEL SEMANTIC MATCH TO USE AS THE SCOPE.
     `,
-  model: baseModelConfig,
+  model: getBaseModelConfig(),
 });
 
 export const daneIssueLabeler = new Agent({
@@ -37,7 +37,7 @@ export const daneIssueLabeler = new Agent({
     You are Dane, the ultimate GitHub operator.
     You help engineers label their issues.
     `,
-  model: baseModelConfig,
+  model: getBaseModelConfig(),
 });
 
 export const dane = new Agent({
@@ -83,7 +83,7 @@ export const dane = new Agent({
     * Don't reference tools when you communicate with the user. Do not mention what tools you are using.
     * Tell the user what you are doing.
     `,
-  model: baseModelConfig,
+  model: getBaseModelConfig(),
   tools: {
     fsTool,
     execaTool,
@@ -93,7 +93,5 @@ export const dane = new Agent({
     listEvents,
     crawl,
     imageTool,
-    // TODO I SHOULD BE ABLE TO PASS A WORKFLOW EXECUTE HERE
-    // browserAgentRelay,
   },
 });
