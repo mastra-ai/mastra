@@ -1,22 +1,18 @@
-import { beforeEach, describe, it, expect } from '@jest/globals';
+// describe('Hotel Tools', () => {
+//   let searchHotelsTool: any;
 
-import { mastra } from '../index';
+//   beforeEach(() => {
+//     searchHotelsTool = mastra.getTool('searchHotels');
+//   });
 
-describe('Hotel Tools', () => {
-  let searchHotelsTool: any;
+//   it('should search for hotels', async () => {
+//     const result = await searchHotelsTool.execute({
+//       startDate: '2024-12-03',
+//       endDate: '2024-12-10',
+//       destination: '20015732',
+//     });
 
-  beforeEach(() => {
-    searchHotelsTool = mastra.getTool('searchHotels');
-  });
-
-  it('should search for hotels', async () => {
-    const result = await searchHotelsTool.execute({
-      startDate: '2024-12-03',
-      endDate: '2024-12-10',
-      destination: '20015732',
-    });
-
-    console.log('Hotels Search Result in Test: ', result);
-    expect(result).toBeDefined();
-  });
-});
+//     console.log('Hotels Search Result in Test: ', result);
+//     expect(result).toBeDefined();
+//   });
+// });

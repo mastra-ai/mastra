@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { AttractionCard } from './attraction-card';
+import { AttractionCard } from "./attraction-card";
 
 interface Attraction {
   id: string;
@@ -17,11 +17,11 @@ interface AttractionGridProps {
   onBook?: (attractionId: string) => void;
 }
 
-export function AttractionGrid({ attractions, onBook }: AttractionGridProps) {
+export function AttractionGrid({ attractions }: AttractionGridProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      {attractions.map(attraction => (
-        <AttractionCard key={attraction.id} {...attraction} onBook={() => onBook?.(attraction.id)} />
+      {attractions.map((attraction) => (
+        <AttractionCard key={attraction.id} {...attraction} />
       ))}
     </div>
   );
