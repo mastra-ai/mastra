@@ -95,7 +95,7 @@ export async function dev({
     await bundle(path, {
       outfile: join(dotMastraPath, 'tools', `${name}.mjs`),
       entryFile: fileName,
-      buildName: `${name} Tool`,
+      buildName: `${name}`,
     });
   }
 
