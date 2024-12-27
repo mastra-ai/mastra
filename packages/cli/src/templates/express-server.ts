@@ -4,17 +4,24 @@ import _path, { join } from 'path';
 import serverless from 'serverless-http';
 import { stringify } from 'superjson';
 import { fileURLToPath as _fileURLToPath } from 'url';
+import { pathToFileURL } from 'url';
 import zodToJsonSchema from 'zod-to-json-schema';
 
 const ___filename = _fileURLToPath(import.meta.url);
 const ___dirname = _path.dirname(___filename);
 
-const { mastra } = await import(join(process.cwd(), 'mastra.mjs'));
+// Use pathToFileURL for cross-platform compatibility
+const mastraPath = pathToFileURL(join(process.cwd(), 'mastra.mjs')).href;
+const { mastra } = await import(mastraPath);
 
 const mastraToolsPaths = process.env.MASTRA_TOOLS_PATH;
 
 const toolImports = mastraToolsPaths
-  ? await Promise.all(mastraToolsPaths.split(',').map(toolPath => import(toolPath)))
+  ? await Promise.all(
+      mastraToolsPaths.split(',').map(async toolPath => {
+        return import(pathToFileURL(toolPath).href);
+      }),
+    )
   : [];
 
 const tools = toolImports.reduce((acc, toolModule) => {
