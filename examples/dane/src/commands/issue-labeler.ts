@@ -15,7 +15,7 @@ export async function issueLabelerCommand() {
 
   if (result.results?.labelIssue?.status === 'failed') {
     console.error(chalk.red(`Error applying labels for issue: ${result.triggerData?.issue_number}`));
-    console.error({error: result.results?.labelIssue?.error});
+    console.error({ error: result.results?.labelIssue?.error });
     return;
   }
 
