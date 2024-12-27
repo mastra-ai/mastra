@@ -15,7 +15,10 @@ const program = new Command();
 
 program.command('chat').action(message);
 
-program.command('issue-labeler').action(issueLabelerCommand);
+program
+  .command('issue-labeler')
+  .description('Automatically label GitHub issues based on their content and context')
+  .action(issueLabelerCommand);
 
 program.command('commit').action(commitMessageCommand);
 
