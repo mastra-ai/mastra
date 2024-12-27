@@ -39,7 +39,8 @@
     "@mastra/composio": "0.0.0",
     "@mastra/dane": "0.0.1",
     "workflow": "1.0.0",
-    "@mastra/stabilityai": "1.0.1-alpha.17"
+    "@mastra/stabilityai": "1.0.1-alpha.17",
+    "travel-app": "0.1.0"
   },
   "changesets": [
     "big-goats-try",
@@ -59,6 +60,7 @@
     "curly-cheetahs-sit",
     "curvy-mirrors-march",
     "dry-bottles-develop",
+    "eight-walls-kick",
     "eleven-islands-hang",
     "eleven-llamas-warn",
     "fair-colts-know",
@@ -89,6 +91,7 @@
     "new-lizards-lick",
     "nine-ghosts-draw",
     "ninety-bags-count",
+    "ninety-mayflies-reflect",
     "olive-oranges-flow",
     "olive-trainers-provide",
     "perfect-jars-look",
@@ -101,6 +104,8 @@
     "real-pianos-wonder",
     "real-tips-leave",
     "red-chicken-approve",
+    "red-zoos-happen",
+    "rich-pumas-play",
     "serious-bananas-rush",
     "seven-mayflies-impress",
     "seven-teachers-talk",

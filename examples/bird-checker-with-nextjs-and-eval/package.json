@@ -1,6 +1,6 @@
 {
   "name": "bird-checker-with-nextjs-and-eval",
-  "version": "0.1.1-alpha.23",
+  "version": "0.1.1-alpha.24",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
