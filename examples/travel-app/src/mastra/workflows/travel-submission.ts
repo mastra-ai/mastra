@@ -124,7 +124,7 @@ function createArrangementStep({
           }),
         });
 
-        const typeSelection = items?.filter((item: any) => {
+        const typeSelection = items?.filter((item: Record<string, unknown>) => {
           return result?.object?.ids?.includes(item?.id || item?.flightNumber);
         });
         console.log(type, typeSelection);
@@ -299,7 +299,7 @@ workflow
       travelForm: {
         step: "trigger",
         path: "travelForm",
-      } as any,
+      },
     },
   })
   .commit();

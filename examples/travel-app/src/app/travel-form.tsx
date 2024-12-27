@@ -80,7 +80,6 @@ export default function TravelForm({
   const [accommodationType, setAccommodationType] = useState<
     "hotel" | "airbnb"
   >("hotel");
-  const [showResults, setShowResults] = useState(false);
   const { setContent } = useSidebar();
   const [travelData, setTravelData] = useState<TravelSchemaProps | null>(null);
   const [typeOfPlace, setTypeOfPlace] = useState<string>("");
@@ -90,9 +89,8 @@ export default function TravelForm({
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // setShowForm(false);
+
     setSubmitting(true);
-    setShowResults(false);
 
     setStatus("loading");
 
@@ -149,12 +147,11 @@ export default function TravelForm({
         //       ?.typeSelection?.[0],
         // });
       }
-      setShowResults(true);
+
       setContent(sidebarContent.submitted);
       router.refresh();
     } catch (error) {
       toast.error("An error occured, I can't plan trip");
-      setShowResults(false);
       setStatus("error");
       console.error("Error submitting form:", error);
     } finally {

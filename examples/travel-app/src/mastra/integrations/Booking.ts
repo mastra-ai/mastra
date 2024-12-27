@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // TODO: convert into an integration
 
 import { AirbnbLocation, AirbnbPlace, Attraction, AttractionApiResponse, Flight, FlightApiResponse, Hotel, HotelApiResponse } from "@/lib/types";
@@ -129,7 +130,7 @@ export class Booking {
                         arrivalTime: new Date(flight.segments[0].arrivalTime),
                         duration: `${Math.floor(flight.segments[0].totalTime / 60)}h ${flight.segments[0].totalTime % 60}m`,
                         price: flight.priceBreakdown.total.units + flight.priceBreakdown.total.nanos / 1000000000,
-                        legs: flight.segments[0].legs.map((leg: any) => ({
+                        legs: flight.segments[0].legs.map((leg: Record<string, any>) => ({
                             departureAirport: leg.departureAirport.code,
                             departureCity: leg.departureAirport.cityName,
                             arrivalAirport: leg.arrivalAirport.code,
@@ -175,7 +176,7 @@ export class Booking {
 
     async getAirbnb(
         { placeId, checkIn, checkOut, typeOfPlace, payload }
-        : { placeId: string, checkIn: string, checkOut: string, typeOfPlace: string, payload?: StepResult<any> }
+        : { placeId: string, checkIn: string, checkOut: string, typeOfPlace: string, payload?: StepResult<{id: string}> }
     ) {
 
         let place = placeId;
@@ -184,7 +185,7 @@ export class Booking {
            place = payload.payload?.id
         }
 
-        const url = `${this.uri}/searchPropertyByPlace?id=${place}&totalRecords=10&currency=USD&adults=1&typeOfPlace=${typeOfPlace}&checkin=${checkIn}`;
+        const url = `${this.uri}/searchPropertyByPlace?id=${place}&totalRecords=10&currency=USD&adults=1&typeOfPlace=${typeOfPlace}&checkin=${checkIn}&checkout=${checkOut}`;
 
         const options = {
             method: 'GET',
@@ -200,7 +201,8 @@ export class Booking {
             const response = await fetch(url, options);
             const result = await response.json() as { data: AirbnbPlace[] };
             console.log('airbnb result', result);
-            return result.data.slice(0, 5).map(({ adults, avgRating, bathrooms, bedrooms, beds, city, images, price, roomType, summary, title, publicAddress, ...otherProps }) => {
+            return result.data.slice(0, 5).map(({ adults, avgRating, bathrooms, bedrooms, beds, city, images, price, roomType, summary, title, publicAddress, ...rest }) => {
+                console.log(rest)
                 return {
                 adults,
                 avgRating,
