@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 import dotenv from 'dotenv';
 
+import { commitMessageCommand } from './commands/commit-message.js';
 import { issueLabelerCommand } from './commands/issue-labeler.js';
 import { message } from './commands/message.js';
 
@@ -14,5 +15,7 @@ const program = new Command();
 program.command('chat').action(message);
 
 program.command('issue-labeler').action(issueLabelerCommand);
+
+program.command('commit').action(commitMessageCommand);
 
 program.parse(process.argv);

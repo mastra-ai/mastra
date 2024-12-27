@@ -511,6 +511,9 @@ importers:
 
   examples/dane:
     dependencies:
+      '@inquirer/prompts':
+        specifier: ^7.2.1
+        version: 7.2.1(@types/node@22.10.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -550,9 +553,6 @@ importers:
       execa:
         specifier: ^9.3.1
         version: 9.5.2
-      inquirer:
-        specifier: ^12.2.0
-        version: 12.3.0(@types/node@22.10.2)
       luxon:
         specifier: ^3.5.0
         version: 3.5.0
@@ -4761,6 +4761,10 @@ packages:
     engines: {node: '>=18'}
     peerDependencies:
       '@types/node': '>=18'
+
+  '@inquirer/figures@1.0.8':
+    resolution: {integrity: sha512-tKd+jsmhq21AP1LhexC0pPwsCxEhGgAkg28byjJAd+xhmIs8LUX8JbUc3vBf3PhLxWiB5EvyBE5X7JSPAqMAqg==}
+    engines: {node: '>=18'}
 
   '@inquirer/figures@1.0.9':
     resolution: {integrity: sha512-BXvGj0ehzrngHTPTDqUoDT3NXL8U0RxUk2zJm2A66RhCEIWdtU1v6GuUqNAgArW4PQ9CinqIWyHdQgdwOj06zQ==}
@@ -10717,12 +10721,6 @@ packages:
   inquirer@10.2.2:
     resolution: {integrity: sha512-tyao/4Vo36XnUItZ7DnUXX4f1jVao2mSrleV/5IPtW/XAEA26hRVsbc68nuTEKWcr5vMP/1mVoT2O7u8H4v1Vg==}
     engines: {node: '>=18'}
-
-  inquirer@12.3.0:
-    resolution: {integrity: sha512-3NixUXq+hM8ezj2wc7wC37b32/rHq1MwNZDYdvx+d6jokOD+r+i8Q4Pkylh9tISYP114A128LCX8RKhopC5RfQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      '@types/node': '>=18'
 
   inquirer@8.2.6:
     resolution: {integrity: sha512-M1WuAmb7pn9zdFRtQYk26ZBoY043Sse0wVDdk4Bppr+JOXyQYybdtvK+l9wUibhtjdjvtoiNy8tk+EgsYIUqKg==}
@@ -18279,6 +18277,8 @@ snapshots:
       '@inquirer/type': 3.0.2(@types/node@22.10.2)
       '@types/node': 22.10.2
       yoctocolors-cjs: 2.1.2
+
+  '@inquirer/figures@1.0.8': {}
 
   '@inquirer/figures@1.0.9': {}
 
@@ -26826,17 +26826,6 @@ snapshots:
       '@types/mute-stream': 0.0.4
       ansi-escapes: 4.3.2
       mute-stream: 1.0.0
-      run-async: 3.0.0
-      rxjs: 7.8.1
-
-  inquirer@12.3.0(@types/node@22.10.2):
-    dependencies:
-      '@inquirer/core': 10.1.2(@types/node@22.10.2)
-      '@inquirer/prompts': 7.2.1(@types/node@22.10.2)
-      '@inquirer/type': 3.0.2(@types/node@22.10.2)
-      '@types/node': 22.10.2
-      ansi-escapes: 4.3.2
-      mute-stream: 2.0.0
       run-async: 3.0.0
       rxjs: 7.8.1
 

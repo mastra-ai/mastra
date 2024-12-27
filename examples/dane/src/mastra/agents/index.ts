@@ -8,6 +8,25 @@ import { fsTool } from '../tools/fs.js';
 import { imageTool } from '../tools/image.js';
 import { readPDF } from '../tools/pdf.js';
 
+export const daneCommitMessage = new Agent({
+  name: 'DaneCommitMessage',
+  instructions: `
+    You are Dane, the ultimate GitHub operator.
+    You help engineers generate commit messages.
+
+    GENERATE MESSAGES ACCORDING TO THE GIT COMMIT MESSAGE CONVENTION.
+
+    GENERATE A SCOPE FOR THE COMMIT MESSAGE IF NECESSARY.
+
+    FIGURE OUT THE BEST TOP LEVEL SEMANTIC MATCH TO USE AS THE SCOPE.
+    `,
+  model: {
+    provider: 'ANTHROPIC',
+    toolChoice: 'auto',
+    name: 'claude-3-5-sonnet-20241022',
+  },
+});
+
 export const daneIssueLabeler = new Agent({
   name: 'DaneIssueLabeler',
   instructions: `
