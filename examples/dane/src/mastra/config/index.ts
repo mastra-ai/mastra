@@ -41,6 +41,18 @@ export class ConfigManager {
     }
   }
 
+  public delete(key: string): void {
+    try {
+      const config = fs.existsSync(this.configPath) ? JSON.parse(fs.readFileSync(this.configPath, 'utf-8')) : {};
+      if (key in config) {
+        delete config[key];
+        fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2));
+      }
+    } catch (error) {
+      throw new Error(`Failed to delete config value: ${error}`);
+    }
+  }
+
   public list(): Record<string, string> {
     try {
       return JSON.parse(fs.readFileSync(this.configPath, 'utf-8'));

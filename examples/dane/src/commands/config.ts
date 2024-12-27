@@ -7,6 +7,7 @@ export const configCommand = new Command('config')
   .option('--set <key=value>', 'Set a configuration value')
   .option('--get <key>', 'Get a configuration value')
   .option('--list', 'List all configuration values')
+  .option('--del <key>', 'Delete a configuration value')
   .action(options => {
     const configManager = new ConfigManager();
 
@@ -25,6 +26,9 @@ export const configCommand = new Command('config')
       } else {
         console.log(value);
       }
+    } else if (options.del) {
+      configManager.delete(options.del);
+      console.log(`Deleted ${options.del} successfully`);
     } else if (options.list) {
       const config = configManager.list();
       console.log(JSON.stringify(config, null, 2));
