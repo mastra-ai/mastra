@@ -1029,6 +1029,7 @@ export const handler = serverless(app);
 app.listen(process.env.PORT || 4111, () => {
   console.log(`🦄Server running on port ${process.env.PORT || 4111}`);
   console.log(`📚 Open API documentation available at http://localhost:${process.env.PORT || 4111}/openapi.json`);
+  console.log(`👨‍💻 Playground available at http://localhost:${process.env.PORT || 4111}/`);
 });
 
 export default handler;

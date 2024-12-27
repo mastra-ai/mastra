@@ -57,7 +57,7 @@ export async function dev({
     Bundle mastra
   */
   const dirPath = dir || path.join(process.cwd(), 'src/mastra');
-  await bundle(dirPath);
+  await bundle(dirPath, { buildName: 'Mastra' });
 
   /*
     Bundle tools
@@ -95,6 +95,7 @@ export async function dev({
     await bundle(path, {
       outfile: join(dotMastraPath, 'tools', `${name}.mjs`),
       entryFile: fileName,
+      buildName: `${name} Tool`,
     });
   }
 
