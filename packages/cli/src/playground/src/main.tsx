@@ -1,5 +1,6 @@
-import '@shared/global.css';
 import { StrictMode } from 'react';
+
+import '@/index.css';
 
 import { createRoot } from 'react-dom/client';
 

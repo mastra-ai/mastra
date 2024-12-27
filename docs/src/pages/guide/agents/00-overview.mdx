@@ -53,9 +53,10 @@ export const mastra = new Mastra({
 Use the `.generate()` method to have your agent produce text responses:
 
 ```ts showLineNumbers filename="src/mastra/index.ts" copy
-const response = await myAgent.generate({
-  messages: [{ role: "user", content: "Hello, how can you assist me today?" }],
-});
+const messages = [
+  { role: "user", content: "Hello, how can you assist me today?" },
+];
+const response = await myAgent.generate(messages);
 
 console.log("Agent:", response.text);
 ```
@@ -65,8 +66,8 @@ console.log("Agent:", response.text);
 For more real-time responses, you can stream the agent's response:
 
 ```ts showLineNumbers filename="src/mastra/index.ts" lines={6} copy
-const stream = await myAgent.generate({
-  messages: [{ role: "user", content: "Tell me a story." }],
+const messages = [{ role: "user", content: "Tell me a story." }];
+const stream = await myAgent.generate(messages, {
   stream: true,
 });
 
@@ -81,7 +82,7 @@ for await (const chunk of stream.textStream) {
 
 Agents can return structured data by providing a JSON Schema or using a Zod schema.
 
-#### Using JSON Schema
+### Using JSON Schema
 
 ```typescript
 const schema = {
@@ -93,21 +94,21 @@ const schema = {
   required: ["summary", "keywords"],
 };
 
-const response = await myAgent.generate({
-  messages: [
-    {
-      role: "user",
-      content:
-        "Please provide a summary and keywords for the following text: ...",
-    },
-  ],
+const messages = [
+  {
+    role: "user",
+    content:
+      "Please provide a summary and keywords for the following text: ...",
+  },
+];
+const response = await myAgent.generate(messages, {
   schema: schema,
 });
 
 console.log("Structured Output:", response.object);
 ```
 
-#### Using Zod
+### Using Zod
 
 You can also use Zod schemas for type-safe structured outputs.
 
@@ -129,14 +130,14 @@ const schema = z.object({
 });
 
 // Use the schema with the agent
-const response = await myAgent.generate({
-  messages: [
-    {
-      role: "user",
-      content:
-        "Please provide a summary and keywords for the following text: ...",
-    },
-  ],
+const messages = [
+  {
+    role: "user",
+    content:
+      "Please provide a summary and keywords for the following text: ...",
+  },
+];
+const response = await myAgent.generate(messages, {
   schema: schema,
 });
 
@@ -163,24 +164,24 @@ const memoryMessages = await myAgent.memory.getMessages({
 console.log("Agent Memory:", memoryMessages);
 ```
 
-## \*\*5. Running Agents
+## **5. Running Agents**
 
-Mastra provides a CLI command `mastra serve` to run your agents behind an API. By default, this looks for exported agents in files in the `src/mastra/agents` directory.
+Mastra provides a CLI command `mastra dev` to run your agents behind an API. By default, this looks for exported agents in files in the `src/mastra/agents` directory.
 
-### **Starting the Server**
+### Starting the Server
 
 ```bash
-mastra serve
+mastra dev
 ```
 
-This will start the server and make your agent available at `http://localhost:3000/agents/my-agent/generate`.
+This will start the server and make your agent available at `http://localhost:4111/api/agents/myAgent/generate`.
 
-### **Interacting with the Agent**
+### Interacting with the Agent
 
 You can interact with the agent using `curl` from the command line:
 
 ```bash
-curl -X POST http://localhost:3000/agents/my-agent/generate \
+curl -X POST http://localhost:4111/api/agents/myAgent/generate \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [

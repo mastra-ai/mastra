@@ -1,6 +1,12 @@
-import { MastraMemory, MessageType as BaseMastraMessageType, ThreadType, MessageResponse } from '@mastra/core';
+import {
+  MastraMemory,
+  MessageType as BaseMastraMessageType,
+  ThreadType,
+  MessageResponse,
+  AiMessageType,
+} from '@mastra/core';
 import { Redis } from '@upstash/redis';
-import { ToolResultPart, Message as AiMessage, TextPart } from 'ai';
+import { ToolResultPart, TextPart } from 'ai';
 import crypto from 'crypto';
 
 interface ToolCacheData {
@@ -194,7 +200,11 @@ export class UpstashKVMemory extends MastraMemory {
    * Messages
    */
 
-  async getMessages({ threadId }: { threadId: string }): Promise<{ messages: MessageType[]; uiMessages: AiMessage[] }> {
+  async getMessages({
+    threadId,
+  }: {
+    threadId: string;
+  }): Promise<{ messages: MessageType[]; uiMessages: AiMessageType[] }> {
     const messagesKey = this.getMessagesKey(threadId);
     const messages = await this.kv.lrange<MessageType>(messagesKey, 0, -1);
     const parsedMessages = this.parseMessages(messages);

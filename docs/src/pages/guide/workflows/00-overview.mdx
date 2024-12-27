@@ -301,30 +301,40 @@ After defining all steps and their relationships, commit the workflow.
 myWorkflow.commit();
 ```
 
-### **8. Serve the Workflow**
+### **8. Add Workflow to Mastra Instance**
 
-We can now serve the workflow using the `mastra serve` command.
+Add the workflow to your Mastra instance. 
+
+```typescript
+export const mastra = new Mastra({
+  workflows: { myWorkflow },
+});
+```
+
+### **9. Serve the Workflow**
+
+We can now serve the workflow using the `mastra dev` command.
 
 #### **Start the Mastra Server**
 
 Open your terminal and run:
 
 ```bash
-mastra serve
+mastra dev
 ```
 
 This command will start the server and make your workflow available at:
 
 ```
-http://localhost:3000/workflows/my-workflow/execute
+http://localhost:4111/api/workflows/myWorkflow/execute
 ```
 
-### **9. Test the Workflow with cURL**
+### **10. Test the Workflow with cURL**
 
 With the server running, you can test your workflow using `curl`:
 
 ```bash
-curl -X POST http://localhost:3000/workflows/my-workflow/execute \
+curl -X POST http://localhost:4111/api/workflows/myWorkflow/execute \
   -H "Content-Type: application/json" \
   -d '{
     "inputValue": 5

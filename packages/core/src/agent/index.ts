@@ -146,6 +146,9 @@ export class Agent<
     if (this.#mastra?.memory) {
       let thread: ThreadType | null;
       if (!threadId) {
+        this.log(LogLevel.DEBUG, `No threadId, creating new thread for agent ${this.name}`, {
+          runId: this.name,
+        });
         const title = await this.genTitle(userMessage);
 
         thread = await this.#mastra.memory.createThread({
@@ -156,6 +159,9 @@ export class Agent<
       } else {
         thread = await this.#mastra.memory.getThreadById({ threadId });
         if (!thread) {
+          this.log(LogLevel.DEBUG, `Thread not found, creating new thread for agent ${this.name}`, {
+            runId: this.name,
+          });
           const title = await this.genTitle(userMessage);
           thread = await this.#mastra.memory.createThread({
             threadId,
@@ -234,6 +240,11 @@ export class Agent<
         }
 
         await this.#mastra.memory.saveMessages({ messages });
+
+        this.log(LogLevel.DEBUG, 'Saved messages to memory', {
+          threadId: thread.id,
+          runId: this.name,
+        });
 
         return {
           threadId: thread.id,
@@ -316,7 +327,10 @@ export class Agent<
         }
       }
     } catch (err) {
-      console.error('Failed to save chat', err);
+      this.log(LogLevel.ERROR, 'Failed to save assistant response', {
+        error: err,
+        runId: this.name,
+      });
     }
   }
 
@@ -366,6 +380,7 @@ export class Agent<
     threadId?: string;
     runId?: string;
   }): Record<string, CoreTool> {
+    this.log(LogLevel.DEBUG, `Starting tool conversion for Agent ${this.name}`, { runId });
     const converted = Object.entries(this.tools || {}).reduce(
       (memo, value) => {
         const k = value[0];
@@ -414,7 +429,7 @@ export class Agent<
     const toolsFromToolsets = Object.values(toolsets || {});
 
     if (toolsFromToolsets.length > 0) {
-      console.log(`Adding tools from toolsets ${Object.keys(toolsets || {}).join(', ')}`);
+      this.log(LogLevel.DEBUG, `Adding tools from toolsets ${Object.keys(toolsets || {}).join(', ')}`, { runId });
       toolsFromToolsets.forEach(toolset => {
         Object.entries(toolset).forEach(([toolName, tool]) => {
           const toolObj = tool;
@@ -521,6 +536,10 @@ export class Agent<
 
           coreMessages = preExecuteResult.coreMessages;
           threadIdToUse = preExecuteResult.threadIdToUse;
+        } else {
+          this.log(LogLevel.DEBUG, `No memory or resourceid, skipping save to memory for agent ${this.name}`, {
+            runId: this.name,
+          });
         }
 
         if (
@@ -534,6 +553,10 @@ export class Agent<
             threadId: threadIdToUse,
             runId,
           });
+        } else {
+          this.log(LogLevel.DEBUG, `Skipping tool conversion for agent ${this.name}`, {
+            runId: this.name,
+          });
         }
 
         const messageObjects = [systemMessage, ...(context || []), ...coreMessages];
@@ -541,6 +564,9 @@ export class Agent<
         return { messageObjects, convertedTools, threadId: threadIdToUse as string };
       },
       after: async ({ result, threadId }: { result: Record<string, any>; threadId: string }) => {
+        this.log(LogLevel.DEBUG, `After LLM call for agent ${this.name}`, {
+          runId: this.name,
+        });
         if (this.#mastra?.memory && resourceid) {
           try {
             this.log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, { runId });
@@ -554,6 +580,14 @@ export class Agent<
               runId,
             });
           }
+        } else {
+          this.log(
+            LogLevel.DEBUG,
+            `No memory or resourceid, skipping save assistant response to memory for agent ${this.name}`,
+            {
+              runId: this.name,
+            },
+          );
         }
       },
     };
@@ -610,6 +644,9 @@ export class Agent<
     const { threadId, messageObjects, convertedTools } = await before();
 
     if (stream && schema) {
+      this.log(LogLevel.DEBUG, `Starting agent ${this.name} llm streamObject call`, {
+        runId: this.name,
+      });
       return this.llm.__streamObject({
         messages: messageObjects,
         tools: this.tools,
@@ -621,7 +658,10 @@ export class Agent<
             const res = JSON.parse(result) || {};
             await after({ result: res, threadId });
           } catch (e) {
-            console.error('Error saving memory on finish', e);
+            this.log(LogLevel.ERROR, 'Error saving memory on finish', {
+              error: e,
+              runId: this.name,
+            });
           }
           onFinish?.(result);
         },
@@ -631,6 +671,9 @@ export class Agent<
     }
 
     if (stream) {
+      this.log(LogLevel.DEBUG, `Starting agent ${this.name} llm stream call`, {
+        runId: this.name,
+      });
       return this.llm.__stream({
         messages: messageObjects,
         tools: this.tools,
@@ -641,7 +684,10 @@ export class Agent<
             const res = JSON.parse(result) || {};
             await after({ result: res, threadId });
           } catch (e) {
-            console.error('Error saving memory on finish', e);
+            this.log(LogLevel.ERROR, 'Error saving memory on finish', {
+              error: e,
+              runId: this.name,
+            });
           }
           onFinish?.(result);
         },
@@ -651,6 +697,9 @@ export class Agent<
     }
 
     if (schema) {
+      this.log(LogLevel.DEBUG, `Starting agent ${this.name} llm textObject call`, {
+        runId: this.name,
+      });
       const result = await this.llm.__textObject({
         messages: messageObjects,
         tools: this.tools,
@@ -665,6 +714,10 @@ export class Agent<
 
       return result as unknown as GenerateReturn<S, Z>;
     }
+
+    this.log(LogLevel.DEBUG, `Starting agent ${this.name} llm text call`, {
+      runId: this.name,
+    });
 
     const result = await this.llm.__text({
       messages: messageObjects,

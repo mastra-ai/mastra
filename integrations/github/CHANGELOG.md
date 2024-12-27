@@ -1,5 +1,49 @@
 # @mastra/github
 
+## 1.0.3-alpha.28
+
+### Patch Changes
+
+- Updated dependencies [2fa7f53]
+  - @mastra/core@0.1.27-alpha.44
+
+## 1.0.3-alpha.27
+
+### Patch Changes
+
+- Updated dependencies [2e099d2]
+- Updated dependencies [d6d8159]
+  - @mastra/core@0.1.27-alpha.43
+
+## 1.0.3-alpha.26
+
+### Patch Changes
+
+- Updated dependencies [4a54c82]
+  - @mastra/core@0.1.27-alpha.42
+
+## 1.0.3-alpha.25
+
+### Patch Changes
+
+- Updated dependencies [5cdfb88]
+  - @mastra/core@0.1.27-alpha.41
+
+## 1.0.3-alpha.24
+
+### Patch Changes
+
+- Updated dependencies [9029796]
+  - @mastra/core@0.1.27-alpha.40
+
+## 1.0.3-alpha.23
+
+### Patch Changes
+
+- 6101f2d: Fix module incompatibility, and dane cli build
+- Updated dependencies [2b01511]
+  - @mastra/core@0.1.27-alpha.39
+
 ## 1.0.3-alpha.22
 
 ### Patch Changes

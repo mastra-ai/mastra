@@ -1,7 +1,28 @@
-import { GenerateObjectResult, GenerateTextResult, LanguageModelV1, StreamObjectResult, StreamTextResult } from 'ai';
+import {
+  CoreMessage as AiCoreMessage,
+  CoreSystemMessage as AiCoreSystemMessage,
+  CoreAssistantMessage as AiCoreAssistantMessage,
+  CoreUserMessage as AiCoreUserMessage,
+  CoreToolMessage as AiCoreToolMessage,
+  GenerateObjectResult,
+  GenerateTextResult,
+  LanguageModelV1,
+  StreamObjectResult,
+  StreamTextResult,
+} from 'ai';
 import { ZodSchema } from 'zod';
 
 export type OpenAIModel = 'gpt-4' | 'gpt-4-turbo' | 'gpt-3.5-turbo' | 'gpt-4o' | 'gpt-4o-mini';
+
+export type CoreMessage = AiCoreMessage;
+
+export type CoreSystemMessage = AiCoreSystemMessage;
+
+export type CoreAssistantMessage = AiCoreAssistantMessage;
+
+export type CoreUserMessage = AiCoreUserMessage;
+
+export type CoreToolMessage = AiCoreToolMessage;
 
 export type OpenAIConfig = {
   provider: 'OPEN_AI';

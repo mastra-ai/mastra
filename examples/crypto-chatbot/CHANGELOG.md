@@ -1,5 +1,54 @@
 # ai-chatbot
 
+## 0.1.1-alpha.23
+
+### Patch Changes
+
+- Updated dependencies [2fa7f53]
+  - @mastra/core@0.1.27-alpha.44
+  - @mastra/memory@0.0.2-alpha.23
+
+## 0.1.1-alpha.22
+
+### Patch Changes
+
+- Updated dependencies [2e099d2]
+- Updated dependencies [d6d8159]
+  - @mastra/core@0.1.27-alpha.43
+  - @mastra/memory@0.0.2-alpha.22
+
+## 0.1.1-alpha.21
+
+### Patch Changes
+
+- Updated dependencies [4a54c82]
+  - @mastra/core@0.1.27-alpha.42
+  - @mastra/memory@0.0.2-alpha.21
+
+## 0.1.1-alpha.20
+
+### Patch Changes
+
+- Updated dependencies [5cdfb88]
+  - @mastra/core@0.1.27-alpha.41
+  - @mastra/memory@0.0.2-alpha.20
+
+## 0.1.1-alpha.19
+
+### Patch Changes
+
+- Updated dependencies [9029796]
+  - @mastra/core@0.1.27-alpha.40
+  - @mastra/memory@0.0.2-alpha.19
+
+## 0.1.1-alpha.18
+
+### Patch Changes
+
+- Updated dependencies [2b01511]
+  - @mastra/core@0.1.27-alpha.39
+  - @mastra/memory@0.0.2-alpha.18
+
 ## 0.1.1-alpha.17
 
 ### Patch Changes

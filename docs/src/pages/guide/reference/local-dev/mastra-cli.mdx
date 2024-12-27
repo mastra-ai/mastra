@@ -97,7 +97,7 @@ Runs database migrations to keep your schema up to date.
 
 ### Server
 
-#### `mastra serve`
+#### `mastra dev`
 
 Starts a development server that creates REST API endpoints for your agents and workflows:
 
@@ -114,7 +114,7 @@ Example usage:
 mastra serve
 
 # Make a request to an agent
-curl -X POST http://localhost:4111/agent/my-agent/text \
+curl -X POST http://localhost:4111/api/agents/:agentId/text \
 -H "Content-Type: application/json" \
 -d '{"messages": ["Your prompt here"]}'
 ```

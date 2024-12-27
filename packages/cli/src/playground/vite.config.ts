@@ -7,7 +7,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@shared': path.resolve(__dirname, '../shared'),
     },
   },
   optimizeDeps: {
@@ -15,7 +14,6 @@ export default defineConfig({
   },
   build: {
     cssCodeSplit: false,
-    assetsDir: 'playground-assets',
   },
   server: {
     fs: {

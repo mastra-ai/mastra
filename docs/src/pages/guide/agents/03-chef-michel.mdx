@@ -15,14 +15,14 @@ In this guide, we'll walk through creating a "Chef Assistant" agent that helps u
 
 Create a new file `src/mastra/agents/chefAgent.ts` and define your agent:
 
-```typescript
+```typescript copy filename="src/mastra/agents/chefAgent.ts"
 // src/mastra/agents/chefAgent.ts
 import { Agent } from "@mastra/core";
 
 export const chefAgent = new Agent({
-  name: "chef-assistant",
-  instructions:
-    "You are Michel, a practical and experienced home chef who helps people cook great meals with whatever ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes. You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.",
+  name: "chef-agent",
+  instructions: 'You are Michel, a practical and experienced home chef' +
+  'You helps people cook with whatever ingredients they have available.',
   model: {
     provider: "OPEN_AI",
     name: "gpt-4o",
@@ -242,22 +242,22 @@ This resets the agent's memory to an empty state.
 
 ## **Step 7: Running the Agent Server**
 
-### **Using `mastra serve`**
+### **Using `mastra dev`**
 
-You can run your agent as a service using the `mastra serve` command:
+You can run your agent as a service using the `mastra dev` command:
 
 ```bash
-mastra serve
+mastra dev
 ```
 
 This will start a server exposing endpoints to interact with your registered agents.
 
 ### **Accessing the Chef Assistant API**
 
-By default, `mastra serve` runs on `http://localhost:3000`. Your Chef Assistant agent will be available at:
+By default, `mastra dev` runs on `http://localhost:4111`. Your Chef Assistant agent will be available at:
 
 ```
-POST http://localhost:3000/agents/chef-assistant/generate
+POST http://localhost:4111/api/agents/chefAgent/generate
 ```
 
 ### **Interacting with the Agent via `curl`**
@@ -265,7 +265,7 @@ POST http://localhost:3000/agents/chef-assistant/generate
 You can interact with the agent using `curl` from the command line:
 
 ```bash
-curl -X POST http://localhost:3000/agents/chef-assistant/generate \
+curl -X POST http://localhost:4111/api/agents/chefAgent/generate \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [

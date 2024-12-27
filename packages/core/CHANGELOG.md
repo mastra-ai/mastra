@@ -1,5 +1,42 @@
 # @mastra/core
 
+## 0.1.27-alpha.44
+
+### Patch Changes
+
+- 2fa7f53: add more logs to workflow, only log failed workflow if all steps fail, animate workflow diagram edges
+
+## 0.1.27-alpha.43
+
+### Patch Changes
+
+- 2e099d2: Allow trigger passed in to `then` step
+- d6d8159: Workflow graph diagram
+
+## 0.1.27-alpha.42
+
+### Patch Changes
+
+- 4a54c82: Fix dane labelling functionality
+
+## 0.1.27-alpha.41
+
+### Patch Changes
+
+- 5cdfb88: add getWorkflows method to core, add runId to workflow logs, update workflow starter file, add workflows page with table and workflow page with info, endpoints and logs
+
+## 0.1.27-alpha.40
+
+### Patch Changes
+
+- 9029796: add more logs to agent for debugging
+
+## 0.1.27-alpha.39
+
+### Patch Changes
+
+- 2b01511: Update CONSOLE logger to store logs and return logs, add logs to dev agent page
+
 ## 0.1.27-alpha.38
 
 ### Patch Changes

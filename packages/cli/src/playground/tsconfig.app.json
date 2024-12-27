@@ -21,17 +21,9 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@shared/*": ["../shared/*"]
+      "@/*": ["./src/*"]
     },
     "types": ["node", "vite/client"]
   },
-  "include": [
-    "src",
-    "tailwind.config.ts",
-    "postcss.config.js",
-    "../shared/lib",
-    "../shared/types.ts",
-    "../shared/hooks"
-  ]
+  "include": ["src/**/*", "tailwind.config.ts", "postcss.config.js"]
 }

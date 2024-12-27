@@ -1,5 +1,92 @@
 # mastra
 
+## 0.1.57-alpha.59
+
+### Patch Changes
+
+- e5e2bb4: Configure vercel deployment project name
+
+## 0.1.57-alpha.58
+
+### Patch Changes
+
+- 1d88043: Fix tools bundling
+
+## 0.1.57-alpha.57
+
+### Patch Changes
+
+- 79a464e: Update cli, dane, stabilityai builds.
+- 2fa7f53: add more logs to workflow, only log failed workflow if all steps fail, animate workflow diagram edges
+- Updated dependencies [2fa7f53]
+  - @mastra/core@0.1.27-alpha.44
+
+## 0.1.57-alpha.56
+
+### Patch Changes
+
+- b135410: fix- mastra post install
+- d6d8159: Workflow graph diagram
+- 505d385: playground breadcrumb navigation
+- Updated dependencies [2e099d2]
+- Updated dependencies [d6d8159]
+  - @mastra/core@0.1.27-alpha.43
+
+## 0.1.57-alpha.55
+
+### Patch Changes
+
+- f4ae8dd: dev playground, support multiple tool dirs
+
+## 0.1.57-alpha.54
+
+### Patch Changes
+
+- Updated dependencies [4a54c82]
+  - @mastra/core@0.1.27-alpha.42
+
+## 0.1.57-alpha.53
+
+### Patch Changes
+
+- de279d5: update apiKey
+
+## 0.1.57-alpha.52
+
+### Patch Changes
+
+- 1b321d5: Get all tools
+
+## 0.1.57-alpha.51
+
+### Patch Changes
+
+- 5cdfb88: add getWorkflows method to core, add runId to workflow logs, update workflow starter file, add workflows page with table and workflow page with info, endpoints and logs
+- Updated dependencies [5cdfb88]
+  - @mastra/core@0.1.27-alpha.41
+
+## 0.1.57-alpha.50
+
+### Patch Changes
+
+- ba2437d: one central cli dev playground app
+- 8890cac: group mastra dev playground tools
+
+## 0.1.57-alpha.49
+
+### Patch Changes
+
+- Updated dependencies [9029796]
+  - @mastra/core@0.1.27-alpha.40
+
+## 0.1.57-alpha.48
+
+### Patch Changes
+
+- 2b01511: Update CONSOLE logger to store logs and return logs, add logs to dev agent page
+- Updated dependencies [2b01511]
+  - @mastra/core@0.1.27-alpha.39
+
 ## 0.1.57-alpha.47
 
 ### Patch Changes

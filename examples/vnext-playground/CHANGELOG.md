@@ -1,5 +1,54 @@
 # examples-vnext-playground
 
+## 1.0.1-alpha.20
+
+### Patch Changes
+
+- Updated dependencies [2fa7f53]
+  - @mastra/core@0.1.27-alpha.44
+  - @mastra/engine@0.0.5-alpha.38
+
+## 1.0.1-alpha.19
+
+### Patch Changes
+
+- Updated dependencies [2e099d2]
+- Updated dependencies [d6d8159]
+  - @mastra/core@0.1.27-alpha.43
+  - @mastra/engine@0.0.5-alpha.37
+
+## 1.0.1-alpha.18
+
+### Patch Changes
+
+- Updated dependencies [4a54c82]
+  - @mastra/core@0.1.27-alpha.42
+  - @mastra/engine@0.0.5-alpha.36
+
+## 1.0.1-alpha.17
+
+### Patch Changes
+
+- Updated dependencies [5cdfb88]
+  - @mastra/core@0.1.27-alpha.41
+  - @mastra/engine@0.0.5-alpha.35
+
+## 1.0.1-alpha.16
+
+### Patch Changes
+
+- Updated dependencies [9029796]
+  - @mastra/core@0.1.27-alpha.40
+  - @mastra/engine@0.0.5-alpha.34
+
+## 1.0.1-alpha.15
+
+### Patch Changes
+
+- Updated dependencies [2b01511]
+  - @mastra/core@0.1.27-alpha.39
+  - @mastra/engine@0.0.5-alpha.33
+
 ## 1.0.1-alpha.14
 
 ### Patch Changes

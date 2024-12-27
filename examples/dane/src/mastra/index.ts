@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { createLogger, Mastra } from '@mastra/core';
 import { PostgresEngine } from '@mastra/engine';
 import { UpstashKVMemory } from '@mastra/memory';
 
@@ -25,7 +25,10 @@ export const mastra = new Mastra({
     message: messageWorkflow,
     githubIssueLabeler: githubIssueLabeler,
   },
-  logger: false,
+  logger: createLogger({
+    level: 'DEBUG',
+    type: 'CONSOLE',
+  }),
   syncs: {
     ...firecrawl.getSyncs(),
   },

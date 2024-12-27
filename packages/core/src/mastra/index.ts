@@ -105,6 +105,22 @@ export class Mastra<
 
     this.syncs = (config?.syncs || {}) as TSyncs;
 
+    if (config?.syncs && !config?.engine) {
+      throw new Error('Engine is required to run syncs');
+    }
+
+    this.syncs = (config?.syncs || {}) as TSyncs;
+
+    if (config?.engine) {
+      this.engine = config.engine;
+    }
+
+    if (config?.vectors) {
+      this.vectors = config.vectors;
+    }
+
+    this.memory = config?.memory;
+
     /*
     Agents
     */
@@ -130,22 +146,6 @@ export class Mastra<
     }
 
     this.agents = agents as TAgents;
-
-    if (config?.syncs && !config?.engine) {
-      throw new Error('Engine is required to run syncs');
-    }
-
-    this.syncs = (config?.syncs || {}) as TSyncs;
-
-    if (config?.engine) {
-      this.engine = config.engine;
-    }
-
-    if (config?.vectors) {
-      this.vectors = config.vectors;
-    }
-
-    this.memory = config?.memory;
 
     /*
     Workflows
@@ -236,9 +236,13 @@ export class Mastra<
   public getWorkflow<TWorkflowId extends keyof TWorkflows>(id: TWorkflowId): TWorkflows[TWorkflowId] {
     const workflow = this.workflows?.[id];
     if (!workflow) {
-      throw new Error(`Workflow with name ${name} not found`);
+      throw new Error(`Workflow with ID ${String(id)} not found`);
     }
     return workflow;
+  }
+
+  public getWorkflows() {
+    return this.workflows;
   }
 
   public setLogger({ logger }: { logger: TLogger }) {

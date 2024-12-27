@@ -23,9 +23,10 @@ import { logger } from './utils/logger.js';
 
 const depsService = new DepsService();
 const version = await depsService.getPackageVersion();
+const projectName = 'mastra-starter';
 
 const analytics = new PosthogAnalytics({
-  apiKey: 'phc_yfAcSuemwdkkLzl6F6q4uyRGeUkHSHMHq9W2ZaRicZw',
+  apiKey: 'phc_SBLpZVAB6jmHOct9CABq3PF0Yn5FU3G2FgT4xUr2XrT',
   host: 'https://us.posthog.com',
   version: version!,
 });
@@ -92,12 +93,13 @@ program
   .description('Start mastra server')
   .option('-d, --dir <dir>', 'Path to your mastra folder')
   .option('-e, --env <env>', 'Environment File to use (defaults to .env.development)')
+  .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .action(args => {
     analytics.trackCommand({
       command: 'dev',
     });
     const apiKeys = findApiKeys();
-    dev({ port: 4111, env: apiKeys, dir: args?.dir });
+    dev({ port: 4111, env: apiKeys, dir: args?.dir, toolsDirs: args?.tools });
   });
 
 const engine = program.command('engine').description('Manage the mastra engine');
@@ -224,12 +226,13 @@ deploy
   .command('vercel')
   .description('Deploy your Mastra project to Vercel')
   .option('-d, --dir <dir>', 'Path to your mastra folder')
+  .option('-n, --name <name>', 'Name of the project')
   .action(async args => {
     await analytics.trackCommandExecution({
       command: 'deploy vercel',
       args,
       execution: async () => {
-        await vercelDeploy({ dir: args?.dir });
+        await vercelDeploy({ dir: args?.dir, projectName: args?.name || projectName });
       },
     });
   });

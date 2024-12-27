@@ -11,6 +11,19 @@ const ___dirname = _path.dirname(___filename);
 
 const { mastra } = await import(join(process.cwd(), 'mastra.mjs'));
 
+const mastraToolsPaths = process.env.MASTRA_TOOLS_PATH;
+
+const toolImports = mastraToolsPaths
+  ? await Promise.all(mastraToolsPaths.split(',').map(toolPath => import(toolPath)))
+  : [];
+
+const tools = toolImports.reduce((acc, toolModule) => {
+  Object.entries(toolModule).forEach(([key, tool]) => {
+    acc[key] = tool;
+  });
+  return acc;
+}, {});
+
 const app = express();
 
 app.use(express.json());
@@ -68,111 +81,6 @@ const validateBody = async (body: Record<string, unknown>): Promise<ValidationRe
 
   return { ok: true };
 };
-
-// Serve static files for homepage
-app.use(
-  '/homepage-assets',
-  express.static(join(___dirname, 'homepage/homepage-assets'), {
-    setHeaders: (res: Response, path: string) => {
-      // Set correct MIME types
-      if (path.endsWith('.js')) {
-        res.set('Content-Type', 'application/javascript');
-      } else if (path.endsWith('.css')) {
-        res.set('Content-Type', 'text/css');
-      }
-    },
-  }),
-);
-
-// Serve other static files
-app.use(express.static(join(___dirname, 'homepage')));
-
-/**
- * GET /
- * @summary Redirect to agents list interface
- * @tags System
- * @return {void} 302 - Redirect to agents page
- */
-app.get('/', (_req: Request, res: Response) => {
-  res.redirect('/agents');
-});
-
-/**
- * GET /agents
- * @summary Serve homepage with agents list interface
- * @tags System
- * @return  {html} 200 - Agent list interface
- */
-app.get('/agents', (_req: Request, res: Response) => {
-  res.sendFile(join(___dirname, 'homepage/index.html'));
-});
-
-// Serve static files for agent page
-app.use(
-  '/agent-chat-assets',
-  express.static(join(___dirname, 'agent-chat/agent-chat-assets'), {
-    setHeaders: (res: Response, path: string) => {
-      // Set correct MIME types
-      if (path.endsWith('.js')) {
-        res.set('Content-Type', 'application/javascript');
-      } else if (path.endsWith('.css')) {
-        res.set('Content-Type', 'text/css');
-      }
-    },
-  }),
-);
-
-// Serve other static files
-app.use(express.static(join(___dirname, 'agent-chat')));
-
-/**
- * GET /agents/{agentId}
- * @summary Serve agent chat interface
- * @tags Agent
- * @param {string} agentId.path.required - Agent identifier
- * @return {html} 200 - Agent chat interface
- */
-app.get('/agents/:agentId', (_req: Request, res: Response) => {
-  res.sendFile(join(___dirname, 'agent-chat/index.html'));
-});
-
-// serve static files for playground
-app.use(
-  '/playground-assets',
-  express.static(join(__dirname, 'playground/playground-assets'), {
-    setHeaders: (res: Response, path: string) => {
-      // Set correct MIME types
-      if (path.endsWith('.js')) {
-        res.set('Content-Type', 'application/javascript');
-      } else if (path.endsWith('.css')) {
-        res.set('Content-Type', 'text/css');
-      }
-    },
-  }),
-);
-
-// Serve other static files
-app.use(express.static(join(__dirname, 'playground')));
-
-/**
- * GET /playground
- * @summary Serve playground page
- * @tags System
- * @return  {html} 200 - Playground page
- */
-app.get('/playground', (_req: Request, res: Response) => {
-  res.sendFile(join(__dirname, 'playground/index.html'));
-});
-
-/**
- * GET /playground routes
- * @summary Sereve all playground routes
- * @tags System
- * @return  {html} 200 - Playground
- */
-app.get('/playground/*', (_req: Request, res: Response) => {
-  res.sendFile(join(__dirname, 'playground/index.html'));
-});
 
 /**
  * GET /api/agents/{agentId}
@@ -258,7 +166,7 @@ app.post('/api/agents/:agentId/text', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    const messages = req.body.messages;
+    const { messages, threadId, resourceid } = req.body;
     const { ok, errorResponse } = await validateBody({
       messages,
     });
@@ -273,7 +181,7 @@ app.post('/api/agents/:agentId/text', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await agent.generate(messages);
+    const result = await agent.generate(messages, { threadId, resourceid });
     res.json(result);
   } catch (error) {
     const apiError = error as ApiError;
@@ -297,7 +205,7 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    const messages = req.body.messages;
+    const { messages, threadId, resourceid } = req.body;
     const { ok, errorResponse } = await validateBody({
       messages,
     });
@@ -314,6 +222,8 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
 
     const streamResult = await agent.generate(messages, {
       stream: true,
+      threadId,
+      resourceid,
     });
 
     streamResult.pipeDataStreamToResponse(res);
@@ -339,8 +249,7 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    const messages = req.body.messages;
-    const schema = req.body.schema;
+    const { messages, schema, threadId, resourceid } = req.body;
 
     const { ok, errorResponse } = await validateBody({
       messages,
@@ -357,7 +266,7 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
       return;
     }
 
-    const result = await agent.generate(messages, { schema });
+    const result = await agent.generate(messages, { schema, threadId, resourceid });
     res.json(result);
   } catch (error) {
     const apiError = error as ApiError;
@@ -383,8 +292,7 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    const messages = req.body.messages;
-    const schema = req.body.schema;
+    const { messages, schema, threadId, resourceid } = req.body;
 
     const { ok, errorResponse } = await validateBody({
       messages,
@@ -401,7 +309,7 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
       return;
     }
 
-    const streamResult = await agent.generate(messages, { schema, stream: true });
+    const streamResult = await agent.generate(messages, { schema, stream: true, threadId, resourceid });
 
     streamResult.pipeTextStreamToResponse(res);
   } catch (error) {
@@ -447,6 +355,64 @@ app.post('/api/agents/:agentId/tools/:toolId/execute', async (req: Request, res:
 });
 
 /**
+ * GET /api/workflows
+ * @summary Get all workflows
+ * @tags Workflow
+ * @return {object} 200 - Workflows response
+ * @return {Error} 500 - Server error
+ */
+app.get('/api/workflows', async (_req: Request, res: Response) => {
+  try {
+    const workflows = mastra.getWorkflows();
+    res.json(workflows);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting workflows', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting workflows' });
+    return;
+  }
+});
+
+/**
+ * GET /api/workflows/{workflowId}
+ * @summary Get a workflow
+ * @tags Workflow
+ * @param {string} workflowId.path.required - Workflow identifier
+ * @return {object} 200 - Workflow response
+ * @return {Error} 500 - Server error
+ */
+app.get('/api/workflows/:workflowId', async (req: Request, res: Response) => {
+  try {
+    const workflowId = req.params.workflowId;
+    const workflow = mastra.getWorkflow(workflowId);
+    const triggerSchema = workflow.triggerSchema;
+    const stepGraph = workflow.stepGraph;
+    const stepSubscriberGraph = workflow.stepSubscriberGraph;
+    const serializedSteps = Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
+      const _step = step as any;
+      acc[key] = {
+        ..._step,
+        inputSchema: _step.inputSchema ? stringify(zodToJsonSchema(_step.inputSchema)) : undefined,
+        outputSchema: _step.outputSchema ? stringify(zodToJsonSchema(_step.outputSchema)) : undefined,
+      };
+      return acc;
+    }, {});
+    res.json({
+      ...workflow,
+      triggerSchema: triggerSchema ? stringify(zodToJsonSchema(triggerSchema)) : undefined,
+      steps: serializedSteps,
+      stepGraph,
+      stepSubscriberGraph,
+    });
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting workflow', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting workflow' });
+    return;
+  }
+});
+
+/**
  * POST /api/workflows/{workflowId}/execute
  * @summary Execute a workflow
  * @tags Workflow
@@ -458,7 +424,7 @@ app.post('/api/agents/:agentId/tools/:toolId/execute', async (req: Request, res:
 app.post('/api/workflows/:workflowId/execute', async (req: Request, res: Response) => {
   try {
     const workflowId = req.params.workflowId;
-    const workflow = mastra.workflows.get(workflowId);
+    const workflow = mastra.getWorkflow(workflowId);
     const result = await workflow.execute(req.body);
     res.json(result);
   } catch (error) {
@@ -470,23 +436,55 @@ app.post('/api/workflows/:workflowId/execute', async (req: Request, res: Respons
 });
 
 /**
- * GET /api/memory/threads/get-by-resourceid/{resourceid}
- * @summary Get threads by resource ID
+ * GET /api/memory/status
+ * @summary Get memory status
  * @tags Memory
- * @param {string} resourceid.path.required - Resource identifier
+ * @return {object} 200 - Memory status
+ * @return {Error} 500 - Server error
+ */
+app.get('/api/memory/status', async (_req: Request, res: Response) => {
+  try {
+    const memory = mastra.memory;
+
+    if (!memory) {
+      res.json({ result: false });
+      return;
+    }
+    res.json({ result: true });
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting memory status', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting memory status' });
+    return;
+  }
+});
+
+/**
+ * GET /api/memory/threads
+ * @summary Get threads
+ * @tags Memory
+ * @param {string} resourceid.query.required - Resource identifier
  * @return {Thread[]} 200 - Array of threads
  * @return {Error} 400 - Memory not initialized
  * @return {Error} 500 - Server error
  */
-app.get('/api/memory/threads/get-by-resourceid/:resourceid', async (req: Request, res: Response) => {
+app.get('/api/memory/threads', async (req: Request, res: Response) => {
   try {
-    const resourceid = req.params.resourceid;
+    const resourceid = req.query.resourceid as string;
     const memory = mastra.memory;
 
     if (!memory) {
       res.status(400).json({ error: 'Memory is not initialized' });
       return;
     }
+
+    const { ok, errorResponse } = await validateBody({ resourceid });
+
+    if (!ok) {
+      res.status(400).json({ error: errorResponse });
+      return;
+    }
+
     const threads = await memory.getThreadsByResourceId({ resourceid });
     res.json(threads);
   } catch (error) {
@@ -933,6 +931,117 @@ app.get('/api/logs/:runId', async (req: Request, res: Response) => {
     res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting logs' });
     return;
   }
+});
+
+/**
+ * GET /api/tools
+ * @summary Get tools
+ * @tags Tools
+ * @return {object} 200 - Tools with schemas
+ * @return {Error} 404 - Tools not found
+ */
+app.get('/api/tools', async (_req: Request, res: Response) => {
+  if (tools) {
+    const serializedTools = Object.entries(tools).reduce(
+      (acc, [id, _tool]) => {
+        const tool = _tool as any;
+        acc[id] = {
+          ...tool,
+          inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
+          outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+        };
+        return acc;
+      },
+      {} as Record<string, any>,
+    );
+    res.json(serializedTools);
+  } else {
+    res.status(200).json({});
+  }
+});
+
+/**
+ * GET /api/tools/{toolId}
+ * @summary Get tool
+ * @tags Tools
+ * @param {string} toolId.path.required - Tool identifier
+ * @return {object} 200 - Tool with schemas
+ * @return {Error} 404 - Tool not found
+ */
+app.get('/api/tools/:toolId', async (req: Request, res: Response) => {
+  const toolId = req.params.toolId;
+  const tool = Object.values(tools || {}).find((tool: any) => tool.id === toolId) as any;
+  if (tool) {
+    const serializedTool = {
+      ...tool,
+      inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
+      outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+    };
+    res.json(serializedTool);
+  } else {
+    res.status(404).json({ error: 'Tool not found' });
+  }
+});
+
+/**
+ * POST /api/tools/{toolId}/execute
+ * @summary Execute a tool
+ * @tags Tools
+ * @param {string} toolId.path.required - Tool identifier
+ * @return {object} 200 - Tool execution result
+ * @return {Error} 404 - Tool not found
+ */
+app.post('/api/tools/:toolId/execute', async (req: Request, res: Response) => {
+  try {
+    const toolId = req.params.toolId;
+    const tool = Object.values(tools || {}).find((tool: any) => tool.id === toolId) as any;
+    if (!tool) {
+      res.status(404).json({ error: 'Tool not found' });
+      return;
+    }
+    const { input } = req.body;
+    const result = await tool.execute({
+      context: {
+        ...input,
+      },
+      mastra,
+      runId: mastra.runId,
+    });
+    res.json(result);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error executing tool', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error executing tool' });
+    return;
+  }
+});
+
+// serve static files for playground
+app.use(
+  '/assets',
+  express.static(join(__dirname, 'playground/assets'), {
+    setHeaders: (res: Response, path: string) => {
+      // Set correct MIME types
+      if (path.endsWith('.js')) {
+        res.set('Content-Type', 'application/javascript');
+      } else if (path.endsWith('.css')) {
+        res.set('Content-Type', 'text/css');
+      }
+    },
+  }),
+);
+
+// Serve other static files
+app.use(express.static(join(__dirname, 'playground')));
+
+/**
+ * GET /playground
+ * @summary Serve playground
+ * @tags System
+ * @return  {html} 200 - Playground
+ */
+app.get('*', (_req: Request, res: Response) => {
+  res.sendFile(join(__dirname, 'playground/index.html'));
 });
 
 export const handler = serverless(app);

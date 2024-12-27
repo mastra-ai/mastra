@@ -90,3 +90,15 @@ button._flex._transition:has(+ div._transform-gpu li.active):is(html[class~='dar
 ._font-semibold {
   font-weight: 500 !important;
 }
+
+h2 {
+  border-bottom: none !important;
+}
+
+p[class*="not(:first-child)"] {
+  margin-top: 1rem !important; /* mt-4 equivalent */
+}
+
+ul[class*="not(:first-child)"] {
+  margin-top: 1rem !important; /* mt-4 equivalent */
+}

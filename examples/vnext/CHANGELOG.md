@@ -1,5 +1,79 @@
 # vnext
 
+## 0.1.1-alpha.26
+
+### Patch Changes
+
+- Updated dependencies [2fa7f53]
+  - @mastra/core@0.1.27-alpha.44
+  - @mastra/claude@1.0.1-alpha.23
+  - @mastra/firecrawl@1.0.4-alpha.29
+  - @mastra/github@1.0.3-alpha.28
+  - @mastra/engine@0.0.5-alpha.38
+  - @mastra/memory@0.0.2-alpha.23
+
+## 0.1.1-alpha.25
+
+### Patch Changes
+
+- Updated dependencies [2e099d2]
+- Updated dependencies [d6d8159]
+  - @mastra/core@0.1.27-alpha.43
+  - @mastra/claude@1.0.1-alpha.22
+  - @mastra/firecrawl@1.0.4-alpha.28
+  - @mastra/github@1.0.3-alpha.27
+  - @mastra/engine@0.0.5-alpha.37
+  - @mastra/memory@0.0.2-alpha.22
+
+## 0.1.1-alpha.24
+
+### Patch Changes
+
+- Updated dependencies [4a54c82]
+  - @mastra/core@0.1.27-alpha.42
+  - @mastra/claude@1.0.1-alpha.21
+  - @mastra/firecrawl@1.0.4-alpha.27
+  - @mastra/github@1.0.3-alpha.26
+  - @mastra/engine@0.0.5-alpha.36
+  - @mastra/memory@0.0.2-alpha.21
+
+## 0.1.1-alpha.23
+
+### Patch Changes
+
+- Updated dependencies [5cdfb88]
+  - @mastra/core@0.1.27-alpha.41
+  - @mastra/claude@1.0.1-alpha.20
+  - @mastra/firecrawl@1.0.4-alpha.26
+  - @mastra/github@1.0.3-alpha.25
+  - @mastra/engine@0.0.5-alpha.35
+  - @mastra/memory@0.0.2-alpha.20
+
+## 0.1.1-alpha.22
+
+### Patch Changes
+
+- Updated dependencies [9029796]
+  - @mastra/core@0.1.27-alpha.40
+  - @mastra/claude@1.0.1-alpha.19
+  - @mastra/firecrawl@1.0.4-alpha.25
+  - @mastra/github@1.0.3-alpha.24
+  - @mastra/engine@0.0.5-alpha.34
+  - @mastra/memory@0.0.2-alpha.19
+
+## 0.1.1-alpha.21
+
+### Patch Changes
+
+- Updated dependencies [2b01511]
+- Updated dependencies [6101f2d]
+  - @mastra/core@0.1.27-alpha.39
+  - @mastra/github@1.0.3-alpha.23
+  - @mastra/claude@1.0.1-alpha.18
+  - @mastra/firecrawl@1.0.4-alpha.24
+  - @mastra/engine@0.0.5-alpha.33
+  - @mastra/memory@0.0.2-alpha.18
+
 ## 0.1.1-alpha.20
 
 ### Patch Changes

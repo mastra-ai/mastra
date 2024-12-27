@@ -2,8 +2,10 @@ import { createTool } from '@mastra/core';
 import chalk from 'chalk';
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
-import pdf from 'pdf-parse';
 import { z } from 'zod';
+
+// @ts-ignore
+import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 
 export const readPDF = createTool({
   id: 'readPDF',
@@ -31,7 +33,7 @@ export const readPDF = createTool({
       const dataBuffer = readFileSync(pdfPath);
 
       // Parse PDF content
-      const data = await pdf(dataBuffer);
+      const data = await pdfParse(dataBuffer);
 
       console.log(chalk.blue('\n'));
       console.log(chalk.blue('PDF Information:'));

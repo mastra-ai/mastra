@@ -1,3 +1,5 @@
+import { Callout } from "nextra/components";
+
 # LLM Class Overview
 
 Mastra provides direct support for Large Language Models (LLMs) through the `LLM` class. The `LLM` class allows you to interact with various language models seamlessly, enabling you to generate text, handle conversations, and more. This guide covers:
@@ -21,7 +23,7 @@ const mastra = new Mastra();
 
 const llm = mastra.LLM({
   provider: 'OPEN_AI',
-  name: 'gpt-4o',
+  name: 'gpt-4o-mini',
 });
 ```
 
@@ -44,6 +46,8 @@ Mastra supports major LLM providers out of the box, plus additional providers th
 | **Google Gemini** | `gemini-1.5-pro-latest`, `gemini-1.5-pro`, `gemini-1.5-flash-latest`, `gemini-1.5-flash`                                                                                 |
 
 A full list of supported models can be found [here](../reference/llm/providers-and-models.mdx).
+
+<Callout> If you don't want to pay for an LLM provider, Google Gemini has a generous free tier for its API.</Callout>
 
 ---
 

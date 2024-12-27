@@ -1,6 +1,8 @@
 import { Agent } from '@mastra/core';
 import { AutoRouter } from 'itty-router';
 import { join } from 'path';
+import { stringify } from 'superjson';
+import zodToJsonSchema from 'zod-to-json-schema';
 
 const { mastra } = await import(join(process.cwd(), 'mastra.mjs'));
 
@@ -280,6 +282,54 @@ router.post('/api/agents/:agentId/stream-object', async ({ params, json }: IRequ
     const apiError = error as ApiError;
     console.error('Error streaming structured output from agent', apiError);
     return new Response(JSON.stringify({ error: apiError.message || 'Error streaming structured output from agent' }), {
+      status: apiError.status || 500,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  }
+});
+
+router.get('/api/workflows', async () => {
+  try {
+    const workflows = mastra.getWorkflows();
+    return new Response(JSON.stringify(workflows), {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting workflows', apiError);
+    return new Response(JSON.stringify({ error: apiError.message || 'Error getting workflows' }), {
+      status: apiError.status || 500,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  }
+});
+
+router.get('/api/workflows/:workflowId', async ({ params }: IRequest) => {
+  try {
+    const workflowId = decodeURIComponent(params.workflowId);
+    const workflow = mastra.getWorkflow(workflowId);
+    const triggerSchema = workflow.triggerSchema;
+    return new Response(
+      JSON.stringify({
+        ...workflow,
+        triggerSchema: triggerSchema ? stringify(zodToJsonSchema(triggerSchema)) : undefined,
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting workflow', apiError);
+    return new Response(JSON.stringify({ error: apiError.message || 'Error getting workflow' }), {
       status: apiError.status || 500,
       headers: {
         'Content-Type': 'application/json',

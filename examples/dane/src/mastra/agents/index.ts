@@ -5,12 +5,13 @@ import { listEvents } from '../tools/calendar.js';
 import { crawl } from '../tools/crawl.js';
 import { execaTool } from '../tools/execa.js';
 import { fsTool } from '../tools/fs.js';
+import { imageTool } from '../tools/image.js';
 import { readPDF } from '../tools/pdf.js';
 
 export const daneIssueLabeler = new Agent({
   name: 'DaneIssueLabeler',
   instructions: `
-    You are Dane, the ultimate GitHub operator. 
+    You are Dane, the ultimate GitHub operator.
     You help engineers label their issues.
     `,
   model: {
@@ -29,35 +30,38 @@ export const dane = new Agent({
     DO NOT ATTEMPT TO USE GENERAL KNOWLEDGE! We are only as good as the tools we use.
 
     # Our tools:
-    
+
     ## readPDF
     Makes you a powerful agent capable of reading PDF files.
 
     ## fsTool
     Makes you a powerful agent capable of reading and writing files to the local filesystem.
-    
+
     ## execaTool
-    Makes you a powerful agent capabale of executing files on the local system. 
-    
-    ## googleSearch 
+    Makes you a powerful agent capabale of executing files on the local system.
+
+    ## googleSearch
     Makes you a powerful agent capabale answering all questions by finding the answer on Google search.
     Pass the query as a JS object. If you have links, ALWAYS CITE YOUR SOURCES.
-    
+
     ## browserTool
-    Makes you a powerful agent capable of scraping the web. Pass the url as a JS object. 
+    Makes you a powerful agent capable of scraping the web. Pass the url as a JS object.
 
     ## listEvents
-    Makes you a powerful agent capable of listing events on a calendar. When using this tool ONLY RETURN RELEVANT EVENTS. 
+    Makes you a powerful agent capable of listing events on a calendar. When using this tool ONLY RETURN RELEVANT EVENTS.
     DO NOT ATTEMPT TO DO ANYTHING MORE.
 
     ## crawl
     Use this when the user asks you to crawl. CRAWL is the signal to use this tool.
-    Makes you a powerful agent capable of crawling a site and extracting markdown metadata. 
+    Makes you a powerful agent capable of crawling a site and extracting markdown metadata.
     The data will be stored in a database. Confirm that it is sucessful.
-    
+
+    ## imageTool
+    Makes you a powerful agent capable of generating images and saving them to disk. Pass the directory and an image prompt.
+
     # Rules
     * DO NOT ATTEMPT TO USE GENERAL KNOWLEDGE. Use the 'googleSearch' tool to find the answer.
-    * Don't reference tools when you communicate with the user. Do not mention what tools you are using. 
+    * Don't reference tools when you communicate with the user. Do not mention what tools you are using.
     * Tell the user what you are doing.
     `,
   model: {
@@ -73,6 +77,7 @@ export const dane = new Agent({
     readPDF,
     listEvents,
     crawl,
+    imageTool,
     // TODO I SHOULD BE ABLE TO PASS A WORKFLOW EXECUTE HERE
     // browserAgentRelay,
   },

@@ -1,5 +1,104 @@
 # @mastra/dane
 
+## 0.0.2-alpha.13
+
+### Patch Changes
+
+- d8b7f2a: Fix import bug
+
+## 0.0.2-alpha.12
+
+### Patch Changes
+
+- 79a464e: Update cli, dane, stabilityai builds.
+- Updated dependencies [79a464e]
+- Updated dependencies [2fa7f53]
+  - @mastra/stabilityai@1.0.1-alpha.19
+  - @mastra/core@0.1.27-alpha.44
+  - @mastra/firecrawl@1.0.4-alpha.29
+  - @mastra/github@1.0.3-alpha.28
+  - @mastra/engine@0.0.5-alpha.38
+  - @mastra/memory@0.0.2-alpha.23
+  - @mastra/rag@0.0.2-alpha.28
+
+## 0.0.2-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [2e099d2]
+- Updated dependencies [d6d8159]
+  - @mastra/core@0.1.27-alpha.43
+  - @mastra/firecrawl@1.0.4-alpha.28
+  - @mastra/github@1.0.3-alpha.27
+  - @mastra/stabilityai@1.0.1-alpha.18
+  - @mastra/engine@0.0.5-alpha.37
+  - @mastra/memory@0.0.2-alpha.22
+  - @mastra/rag@0.0.2-alpha.27
+
+## 0.0.2-alpha.10
+
+### Patch Changes
+
+- 4a54c82: Fix dane labelling functionality
+- Updated dependencies [4a54c82]
+  - @mastra/core@0.1.27-alpha.42
+  - @mastra/firecrawl@1.0.4-alpha.27
+  - @mastra/github@1.0.3-alpha.26
+  - @mastra/engine@0.0.5-alpha.36
+  - @mastra/memory@0.0.2-alpha.21
+  - @mastra/rag@0.0.2-alpha.26
+
+## 0.0.2-alpha.9
+
+### Patch Changes
+
+- 7ea01ae: Use correct chunking api
+
+## 0.0.2-alpha.8
+
+### Patch Changes
+
+- 944e523: Fix pdf-parse breaking dane cli
+- Updated dependencies [5cdfb88]
+  - @mastra/core@0.1.27-alpha.41
+  - @mastra/firecrawl@1.0.4-alpha.26
+  - @mastra/github@1.0.3-alpha.25
+  - @mastra/engine@0.0.5-alpha.35
+  - @mastra/memory@0.0.2-alpha.20
+  - @mastra/rag@0.0.2-alpha.25
+
+## 0.0.2-alpha.7
+
+### Patch Changes
+
+- c67d62b: Add required files to bundle
+
+## 0.0.2-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [9029796]
+  - @mastra/core@0.1.27-alpha.40
+  - @mastra/firecrawl@1.0.4-alpha.25
+  - @mastra/github@1.0.3-alpha.24
+  - @mastra/engine@0.0.5-alpha.34
+  - @mastra/memory@0.0.2-alpha.19
+  - @mastra/rag@0.0.2-alpha.24
+
+## 0.0.2-alpha.5
+
+### Patch Changes
+
+- 6101f2d: Fix module incompatibility, and dane cli build
+- Updated dependencies [2b01511]
+- Updated dependencies [6101f2d]
+  - @mastra/core@0.1.27-alpha.39
+  - @mastra/github@1.0.3-alpha.23
+  - @mastra/rag@0.0.2-alpha.23
+  - @mastra/firecrawl@1.0.4-alpha.24
+  - @mastra/engine@0.0.5-alpha.33
+  - @mastra/memory@0.0.2-alpha.18
+
 ## 0.0.2-alpha.4
 
 ### Patch Changes

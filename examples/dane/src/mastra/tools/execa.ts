@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core';
 import chalk from 'chalk';
-import { execa } from 'execa';
+import { execa, ExecaError } from 'execa';
 import { Transform } from 'stream';
 import { z } from 'zod';
 
@@ -35,6 +35,9 @@ export const execaTool = createTool({
 
       return { message: r.stdout };
     } catch (e) {
+      if (e instanceof ExecaError) {
+        return { message: e.message };
+      }
       return { message: 'Error' };
     }
   },

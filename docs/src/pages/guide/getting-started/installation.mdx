@@ -2,25 +2,18 @@ import { Callout, Steps, Tabs } from "nextra/components";
 
 # Installation
 
-## System Requirements
+To run Mastra, you need access to an LLM. Typically, you'll want to get an API key from an LLM provider such as [OpenAI](https://platform.openai.com/), [Anthropic](https://console.anthropic.com/settings/keys), or [Google Gemini](https://ai.google.dev/gemini-api/docs). You can also run Mastra with a local LLM using [Ollama](https://ollama.ai/).
 
-- [Node.js v20.0+](https://nodejs.org/)
+We recommend starting a new Mastra project [using the Mastra CLI](#automatic-installation) which will scaffold your project.
 
-### Get an LLM Provider API Key
+## Prerequisites
 
-If you don't have an API key for an LLM provider, you can get one from the following services:
-
-- [OpenAI](https://platform.openai.com/)
-- [Anthropic](https://console.anthropic.com/settings/keys)
-- [Google Gemini](https://ai.google.dev/gemini-api/docs)
-
-If you don't have an account with these providers, you can sign up and get an API key. OpenAI and Anthropic require a credit card to get an API key. Google Gemini does not and has a generous free tier for its API.
+- Node.js `v20.0` or higher
+- Access to a [supported large language model (LLM)](/guide/reference/llm/providers-and-models.mdx).
 
 ## Automatic Installation
-
-<br/>
 <Steps>
-We recommend starting a new Mastra project using the Mastra CLI, which sets up everything automatically for you.
+
 
 ### Install the Mastra CLI
 
@@ -53,7 +46,7 @@ On initialization, you'll be guided through the following prompts:
   - Tools
   - Workflows
 - **Select a default LLM provider**: Choose from supported providers like OpenAI, Anthropic, or Google Gemini.
-- **Include example code**: **Select `Yes` to include example code.** This will add sample agents, tools, and workflows to your project, allowing you to test and run `mastra serve` immediately.
+- **Include example code**: **Select `Yes` to include example code.** This will add sample agents, tools, and workflows to your project, allowing you to test and run `mastra dev` immediately.
 
 ### Set Up Your API Key
 
@@ -119,26 +112,25 @@ Replace `your_openai_api_key` with your actual API key.
 
 ### Create the Agent
 
-First, create the `story-writer` agent file:
+First, create the `cat-one` agent file:
 
 ```bash copy
-touch src/mastra/agents/story-writer.ts
+touch src/mastra/agents/cat-one.ts
 ```
 
-Then, add the following code to `src/mastra/agents/story-writer.ts`:
+Then, add the following code to `src/mastra/agents/cat-one.ts`:
 
-```ts filename="src/mastra/agents/story-writer.ts" showLineNumbers
+```ts filename="src/mastra/agents/cat-one.ts" showLineNumbers
 import { Agent } from "@mastra/core";
 
-export const storyWriterAgent = new Agent({
-  name: "story-writer",
-  maxSteps: 3,
+export const catOne = new Agent({
+  name: "cat-one",
   model: {
     provider: "OPEN_AI",
     name: "gpt-4o",
     toolChoice: "auto",
   },
-  instructions: `You are a helpful assistant who writes creative stories.`,
+  instructions: `You are a feline expert with comprehensive knowledge of all cat species, from domestic breeds to wild big cats. As a lifelong cat specialist, you understand their behavior, biology, social structures, and evolutionary history in great depth.`,
   tools: {},
 });
 ```
@@ -147,14 +139,14 @@ Finally, create the Mastra entry point in `src/mastra/index.ts`:
 
 ```ts filename="src/mastra/index.ts" showLineNumbers
 import { Mastra } from "@mastra/core";
-import { storyWriterAgent } from "./agents/story-writer";
+import { catOne } from "./agents/cat-one";
 
 export const mastra = new Mastra({
-  agents: { storyWriter: storyWriterAgent },
+  agents: { catOne },
 });
 ```
 
-This registers your agent with Mastra so that `mastra serve` can discover and serve it.
+This registers your agent with Mastra so that `mastra dev` can discover and serve it.
 
 If you're using Anthropic, set the `ANTHROPIC_API_KEY`. If you're using Google Gemini,
 set the `GOOGLE_GENERATIVE_AI_API_KEY`.
@@ -166,7 +158,7 @@ set the `GOOGLE_GENERATIVE_AI_API_KEY`.
 Mastra provides commands to serve your agents via REST endpoints. Run the following command to start the Mastra server:
 
 ```bash copy
-OPENAI_API_KEY=<your-openai-api-key> mastra serve
+OPENAI_API_KEY=<your-openai-api-key> mastra dev
 ```
 
 This command creates REST API endpoints for your agents.
@@ -178,20 +170,20 @@ You can test the agent's endpoint using `curl` or `fetch`:
 <Tabs items={['curl', 'fetch']}>
   <Tabs.Tab>
 ```bash copy
-curl -X POST http://localhost:4111/agent/story-writer/text \
+curl -X POST http://localhost:4111/api/agents/catOne/text \
 -H "Content-Type: application/json" \
--d '{"messages": ["Tell me a story about a courageous astronaut."]}'
+-d '{"messages": ["What do cats like to eat?"]}'
 ```
   </Tabs.Tab>
   <Tabs.Tab>
 ```js copy showLineNumbers
-fetch('http://localhost:4111/agent/story-writer/text', {
+fetch('http://localhost:4111/api/agents/catOne/text', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
   },
   body: JSON.stringify({
-    messages: ['Tell me a story about a courageous astronaut.'],
+    messages: ['What do cats like to eat?'],
   }),
 })
   .then(response => response.json())
@@ -213,10 +205,10 @@ If you'd like to directly call agents from the command line, you can create a sc
 import { mastra } from "./mastra";
 
 async function main() {
-  const agent = mastra.getAgent("storyWriter");
+  const agent = mastra.getAgent("catOne");
 
   const result = await agent.generate(
-    "Write a short story about a robot learning to paint.",
+    "What do cats like to eat?",
   );
 
   console.log("Agent response:", result.text);
