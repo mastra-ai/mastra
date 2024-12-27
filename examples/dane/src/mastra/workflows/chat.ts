@@ -1,6 +1,6 @@
+import { input } from '@inquirer/prompts';
 import { Step, Workflow } from '@mastra/core';
 import chalk from 'chalk';
-import inquirer from 'inquirer';
 import { z } from 'zod';
 
 import { dane } from '../agents/index.js';
@@ -19,14 +19,10 @@ const messageStep = new Step({
     message: z.string(),
   }),
   execute: async () => {
-    const { content } = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'content',
-        message: '\n You:',
-        validate: input => input.trim().length > 0 || 'Message cannot be empty',
-      },
-    ]);
+    const content = await input({
+      message: '\n You:',
+      validate: input => input.trim().length > 0 || 'Message cannot be empty',
+    });
 
     return { message: content };
   },

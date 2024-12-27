@@ -13,7 +13,6 @@
   },
   "scripts": {
     "build": "npx tsc",
-    "issue-labeler": "npx bun src/issue-labeler.ts",
     "start": "npx bun src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -27,20 +26,20 @@
     "tsx": "^4.19.2"
   },
   "dependencies": {
+    "@inquirer/prompts": "^7.2.1",
     "@mastra/core": "workspace:*",
     "@mastra/engine": "workspace:*",
     "@mastra/firecrawl": "workspace:*",
     "@mastra/github": "workspace:*",
-    "@mastra/stabilityai": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/rag": "workspace:*",
+    "@mastra/stabilityai": "workspace:*",
     "boxen": "^8.0.1",
     "chalk": "^5.3.0",
     "cli-table3": "^0.6.5",
     "commander": "^12.1.0",
     "dotenv": "^16.4.7",
     "execa": "^9.3.1",
-    "inquirer": "^12.2.0",
     "luxon": "^3.5.0",
     "node-ical": "^0.20.1",
     "node-screenshots": "^0.2.1",
