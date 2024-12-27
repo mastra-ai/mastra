@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.61
+
+### Patch Changes
+
+- 689b529: fix mastra dev for windows
+
 ## 0.1.57-alpha.60
 
 ### Patch Changes
