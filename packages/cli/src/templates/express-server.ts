@@ -10,7 +10,6 @@ import zodToJsonSchema from 'zod-to-json-schema';
 const ___filename = _fileURLToPath(import.meta.url);
 const ___dirname = _path.dirname(___filename);
 
-// Use pathToFileURL for cross-platform compatibility
 const mastraPath = pathToFileURL(join(process.cwd(), 'mastra.mjs')).href;
 const { mastra } = await import(mastraPath);
 
