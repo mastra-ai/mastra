@@ -680,12 +680,13 @@ export class Workflow<
         // All dependencies available, check conditions
         if (typeof stepConfig?.when === 'function') {
           const conditionMet = await stepConfig.when({ context });
-          if (!conditionMet) {
-            return {
-              type: 'CONDITION_FAILED' as const,
-              error: `Step:${stepNode.step.id} condition function check failed`,
-            };
+          if (conditionMet) {
+            return { type: 'DEPENDENCIES_MET' as const };
           }
+          if (stepConfig?.snapshotOnTimeout) {
+            return { type: 'SUSPENDED' as const, stepId: stepNode.step.id };
+          }
+          return { type: 'CONDITION_FAILED' as const, error: `Step:${stepNode.step.id} condition check failed` };
         } else {
           const conditionMet = this.#evaluateCondition(stepConfig.when, context);
           if (!conditionMet) {
