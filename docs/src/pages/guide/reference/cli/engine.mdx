@@ -1,0 +1,32 @@
+# Engine
+
+## `mastra engine add`
+
+Installs the `@mastra/engine` dependency to your project. The Mastra engine enables:
+
+- **Data Persistence**: Store conversation history, agent states, and vector embeddings
+- **Background Processing**: Run long-running tasks and data synchronization jobs
+- **RAG Capabilities**: Build and search knowledge bases with vector embeddings
+- **Type Safety**: Generate TypeScript types from your database schema
+
+While not required for basic agent interactions, the engine becomes essential when your application needs persistence, background tasks, or vector search capabilities.
+
+## `mastra engine generate`
+
+Generates the Drizzle database client and TypeScript types based on your database schema. Requires a valid database connection.
+
+## `mastra engine up`
+
+Sets up your development environment by:
+
+1. Running `docker-compose up` to start required Docker containers
+2. Creating or updating your environment file with the correct database URL
+3. Configuring the necessary environment variables
+
+## `mastra engine migrate`
+
+Runs database migrations to keep your schema up to date.
+
+- Requires a valid `DB_URL` in your environment file
+- If `DB_URL` is missing, you'll be prompted to run `mastra engine up` first
+- Automatically applies any pending migrations

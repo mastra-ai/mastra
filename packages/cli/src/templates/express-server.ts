@@ -182,11 +182,6 @@ app.post('/api/agents/:agentId/text', async (req: Request, res: Response) => {
       return;
     }
 
-    if (!Array.isArray(messages)) {
-      res.status(400).json({ error: { messages: 'Messages should be an array' } });
-      return;
-    }
-
     const result = await agent.generate(messages, { threadId, resourceid });
     res.json(result);
   } catch (error) {
@@ -218,11 +213,6 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
 
     if (!ok) {
       res.status(400).json({ error: errorResponse });
-      return;
-    }
-
-    if (!Array.isArray(messages)) {
-      res.status(400).json({ error: { messages: 'Messages should be an array' } });
       return;
     }
 
@@ -267,11 +257,6 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
       return;
     }
 
-    if (!Array.isArray(messages)) {
-      res.status(400).json({ error: { messages: 'Messages should be an array' } });
-      return;
-    }
-
     const result = await agent.generate(messages, { schema, threadId, resourceid });
     res.json(result);
   } catch (error) {
@@ -307,11 +292,6 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
 
     if (!ok) {
       res.status(400).json({ error: errorResponse });
-      return;
-    }
-
-    if (!Array.isArray(messages)) {
-      res.status(400).json({ error: { messages: 'Messages should be an array' } });
       return;
     }
 
@@ -1055,6 +1035,7 @@ export const handler = serverless(app);
 app.listen(process.env.PORT || 4111, () => {
   console.log(`🦄Server running on port ${process.env.PORT || 4111}`);
   console.log(`📚 Open API documentation available at http://localhost:${process.env.PORT || 4111}/openapi.json`);
+  console.log(`👨‍💻 Playground available at http://localhost:${process.env.PORT || 4111}/`);
 });
 
 export default handler;

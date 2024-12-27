@@ -1,0 +1,30 @@
+# REST Endpoints
+
+Mastra provides a development server that exposes REST endpoints for your agents, tools and workflows.
+
+## Starting the Development Server
+
+To start the server, you use the `mastra dev` command:
+
+```bash
+mastra dev
+```
+
+The server:
+
+- Runs on port 4111 by default
+- Loads environment from `.env.development` or `.env`
+- Automatically configures available API keys
+- Renders documentation on `http://localhost:4111/openapi.json`
+
+**Note:** Ensure that you have set the necessary environment variables, such as your OpenAI API key, in your `.env` or `.env.development` file:
+
+```.env filename=".env" copy
+OPENAI_API_KEY=your_openai_api_key
+```
+
+Also, make sure you have the `@mastra/core` package installed:
+
+```bash npm2yarn copy
+npm install @mastra/core
+```
