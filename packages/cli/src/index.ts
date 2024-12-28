@@ -1,12 +1,8 @@
 #! /usr/bin/env node
-import * as p from '@clack/prompts';
 import { Command } from 'commander';
 import color from 'picocolors';
 
 import { PosthogAnalytics } from './analytics/index.js';
-import { createNewAgent } from './commands/agents/create-new-agent.js';
-import { listAgents } from './commands/agents/list-agent.js';
-import { updateAgentIndexFile } from './commands/agents/update-agent-file.js';
 import { cloudflareDeploy, netlifyDeploy, vercelDeploy } from './commands/deploy/index.js';
 import { dev } from './commands/dev.js';
 import { add } from './commands/engine/add.js';
@@ -174,49 +170,6 @@ engine
             `Run ${color.blueBright('mastra engine add')} to get started with a Postgres DB in a docker container`,
           );
         }
-      },
-    });
-  });
-
-const agent = program.command('agent').description('Manage Mastra agents');
-
-agent
-  .command('new')
-  .description('Create a new agent')
-  .option('-d, --dir <dir>', 'Path to your mastra folder')
-  .action(async args => {
-    await analytics.trackCommandExecution({
-      command: 'agent new',
-      args: {},
-      execution: async () => {
-        const result = await createNewAgent({ dir: args?.dir });
-        if (!result) return;
-        await updateAgentIndexFile({ newAgentName: result, dir: args?.dir });
-      },
-    });
-  });
-
-agent
-  .command('list')
-  .description('List all agents')
-  .option('-d, --dir <dir>', 'Path to your mastra folder')
-  .action(async args => {
-    await analytics.trackCommandExecution({
-      command: 'agent list',
-      args,
-      execution: async () => {
-        const agents = await listAgents({ dir: args?.dir });
-
-        if (!agents.length) {
-          p.note('No Agents...');
-          return;
-        }
-
-        p.intro(color.bgCyan(color.black(' Agents List ')));
-
-        agents.forEach((agent, index) => {
-          logger.log(`${index + 1}. ${color.blue(agent)}`);
-        });
       },
     });
   });
