@@ -27,6 +27,16 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
       id: 'FIRECRAWL:CRAWL_AND_SYNC',
       name: 'Crawl and Sync',
       description: 'Crawl and Sync',
+      outputSchema: z.object({
+        success: z.boolean(),
+        entityType: z.string(),
+        crawlData: z.array(z.object({
+          markdown: z.string(),
+          metadata: z.object({
+            sourceURL: z.string(),
+          }),
+        })),
+      }),
       inputSchema: z.object({
         url: z.string(),
         limit: z.number().default(3),
