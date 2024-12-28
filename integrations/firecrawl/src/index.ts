@@ -43,6 +43,22 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
         pathRegex: z.string().nullable(),
       }),
       execute: async ({ context: { url, pathRegex, limit }, engine }) => {
+        const entityType = `CRAWL_${url}`;
+
+        const existingCrawl = await engine?.getRecords({
+          connectionId: "SYSTEM",
+          name: entityType,
+        });
+
+        if (existingCrawl.length > 0) {
+          console.log("Crawl already exists", url);
+          return {
+            success: true,
+            entityType,
+            crawlData: existingCrawl,
+          };
+        }
+
         console.log("Starting crawl", url);
         try {
           const client = await this.openapi.getApiClient();
@@ -91,7 +107,6 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
             });
           }
 
-          const entityType = `CRAWL_${url}`;
 
           const crawlData = (crawl?.data?.data || []).map((item) => ({
             markdown: item.markdown || "",
