@@ -4,6 +4,10 @@ const meta = {
     title: "Getting Started",
     collapsed: false,
   },
+  "guides": {
+    title: "Guides",
+    collapsed: false,
+  },
   "llm-models": {
     title: "LLM Models",
     collapsed: false,
