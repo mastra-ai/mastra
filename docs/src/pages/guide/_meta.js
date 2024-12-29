@@ -28,12 +28,8 @@ const meta = {
     title: "Engine",
     collapsed: false,
   },
-  "local-dev": {
-    title: "Local Development",
-    collapsed: false,
-  },
   deployment: {
-    title: "Deploying to Prod",
+    title: "Development & Deployment",
     collapsed: false,
   },
   "08-running-evals": "Evals",
