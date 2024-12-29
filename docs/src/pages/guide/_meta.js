@@ -24,12 +24,12 @@ const meta = {
     title: "RAG",
     collapsed: false,
   },
-  engine: {
-    title: "Engine",
+  "local-dev": {
+    title: "Local Dev",
     collapsed: false,
   },
   deployment: {
-    title: "Development & Deployment",
+    title: "Deployment",
     collapsed: false,
   },
   "08-running-evals": "Evals",
