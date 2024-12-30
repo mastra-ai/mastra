@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-.dark\:_bg-black:is(html[class~="dark"] *) {
+.dark\:_bg-black:is(html[class~='dark'] *) {
   background-color: #141415 !important;
 }
 
@@ -42,21 +42,21 @@ a {
   background: transparent !important;
 }
 
-button._transition:not([title="Copy code"]):is(html[class~="dark"] *),
-li:is(html[class~="dark"] *) {
+button._transition:not([title='Copy code']):is(html[class~='dark'] *),
+li:is(html[class~='dark'] *) {
   font-weight: 400;
   color: #fff !important;
 }
 
-button._transition:not([title="Copy code"]),
-a[href="/docs/guide"],
-a[href="/docs/guide/08-running-evals"] {
+button._transition:not([title='Copy code']),
+a[href='/docs/guide'],
+a[href='/docs/guide/08-running-evals'] {
   padding-inline: 0.375rem !important;
   color: #000 !important;
 }
 
-a[href="/docs/guide"]:is(html[class~="dark"] *),
-a[href="/docs/guide/08-running-evals"]:is(html[class~="dark"] *) {
+a[href='/docs/guide']:is(html[class~='dark'] *),
+a[href='/docs/guide/08-running-evals']:is(html[class~='dark'] *) {
   color: #fff !important;
   font-weight: 400;
   padding-inline: 0.375rem !important;
@@ -69,8 +69,9 @@ div._overflow-y-auto {
 ul._flex {
   padding-inline-start: 0.375rem !important;
   margin-inline-start: 0 !important;
+  padding-block-start: 0 !important;
   &::before {
-    content: "";
+    content: '';
     background: transparent !important;
   }
 }
@@ -79,16 +80,11 @@ ul._flex > li a {
   padding-inline-start: 0.375rem !important;
 }
 
-button._transition
-  + div._transform-gpu
-  ul
-  button:not(:has(.active)):is(html[class~="dark"] *) {
+button._transition + div._transform-gpu ul button:not(:has(.active)):is(html[class~='dark'] *) {
   color: #a3a3a3 !important;
 }
 
-button._flex._transition:has(+ div._transform-gpu li.active):is(
-    html[class~="dark"] *
-  ) {
+button._flex._transition:has(+ div._transform-gpu li.active):is(html[class~='dark'] *) {
   color: white !important;
 }
 
@@ -100,14 +96,36 @@ h2 {
   border-bottom: none !important;
 }
 
-p[class*="not(:first-child)"] {
+p[class*='not(:first-child)'] {
   margin-top: 1rem !important; /* mt-4 equivalent */
 }
 
-ul[class*="not(:first-child)"] {
+ul[class*='not(:first-child)'] {
   margin-top: 1rem !important; /* mt-4 equivalent */
 }
 
 .nextra-callout p {
   margin-top: 0 !important;
+}
+
+tr {
+  background: none !important;
+  border: none;
+}
+
+th {
+  border: none !important;
+  border-bottom: 0.5px solid hsl(0, 0%, 20%) !important;
+  &:is(:not(html[class~='dark'] *)) {
+    border-bottom: 0.5px solid hsl(0, 0%, 80%) !important;
+  }
+}
+
+td {
+  border: none !important;
+  border-bottom: 0.5px solid hsl(0, 0%, 20%) !important;
+
+  &:is(:not(html[class~='dark'] *)) {
+    border-bottom: 0.5px solid hsl(0, 0%, 80%) !important;
+  }
 }
