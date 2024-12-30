@@ -76,6 +76,34 @@ export const pnpmBuild = createTool({
   },
 });
 
+export const pnpmChangesetStatus = createTool({
+  id: 'pnpmChangesetStatus',
+  name: 'PNPM Changeset Status Tool',
+  description: 'Used to check which pnpm modules need to be published',
+  inputSchema: z.object({}),
+  outputSchema: z.object({
+    message: z.array(z.string()),
+  }),
+  execute: async () => {
+    try {
+      console.log('Checking');
+      const { stdout } = await execa('pnpm', ['publish', '-r', '--dry-run', '--no-git-checks']);
+      const packages = stdout
+        .split('\n')
+        .filter(line => line.includes('Publishing'))
+        .map(line => line.split(' ')[1] as string);
+
+      return { message: packages };
+    } catch (e) {
+      console.error(e);
+      if (e instanceof ExecaError) {
+        return { message: [e.message] };
+      }
+      return { message: ['Error'] };
+    }
+  },
+});
+
 export const pnpmChangesetPublish = createTool({
   id: 'pnpmChangesetPublish',
   name: 'PNPM Changeset Publish Tool',
