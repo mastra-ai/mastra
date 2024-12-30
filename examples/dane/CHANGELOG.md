@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.25
+
+### Patch Changes
+
+- c82a846: Dane testing
+
 ## 0.0.2-alpha.24
 
 ### Patch Changes
