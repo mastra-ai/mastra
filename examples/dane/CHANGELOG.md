@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.15
+
+### Patch Changes
+
+- a5056a9: Add config manager
+
 ## 0.0.2-alpha.14
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.1-alpha.4
+
+### Patch Changes
+
+- 0091799: Add dev and deploy mastra commands to CLI references in documentation, update build successful message in dev command
+
 ## 0.1.1-alpha.3
 
 ### Patch Changes
