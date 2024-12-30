@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.23
+
+### Patch Changes
+
+- 91ee5df: Test release
+
 ## 0.0.2-alpha.22
 
 ### Patch Changes
