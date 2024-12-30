@@ -8,14 +8,14 @@ The most powerful feature of workflows is that you can log the input and output 
 
 In this overview, we'll create a workflow with dummy steps to demonstrate how workflows are structured and executed in Mastra. We'll cover options for defining steps, different kinds of control flow between steps, conditions, and variables.
 
-### **1. Import Necessary Modules**
+### 1. Import Necessary Modules
 
 ```typescript
 import { Step, Workflow, Mastra } from "@mastra/core";
 import { z } from "zod";
 ```
 
-### **2. Initialize Mastra Instance**
+### 2. Initialize Mastra Instance
 
 Initialize your Mastra instance. 
 
@@ -23,11 +23,11 @@ Initialize your Mastra instance.
 export const mastra = new Mastra({});
 ```
 
-### **3. Define Steps**
+### 3. Define Steps
 
 You can define steps inline or by function reference.
 
-#### **Option 1: Inline Step Creation**
+#### Option 1: Inline Step Creation
 
 Define steps directly within the workflow using the `.step()` and `.then()` methods.
 
@@ -78,7 +78,7 @@ myWorkflow
   );
 ```
 
-#### **Option 2: Define Steps Separately**
+#### Option 2: Define Steps Separately
 
 Define steps separately and then add them to the workflow.
 
@@ -130,9 +130,9 @@ myWorkflow.step(stepOne).then(stepTwo, {
 });
 ```
 
-### **4. Control Flow Between Steps**
+### 4. Control Flow Between Steps
 
-#### **Parallel Execution**
+#### Parallel Execution
 
 Use `.step()` to add steps that can run in parallel.
 
@@ -142,7 +142,7 @@ myWorkflow
   .step(fetchOrderData); // These steps run in parallel
 ```
 
-#### **Sequential Execution**
+#### Sequential Execution
 
 Use `.then()` to chain steps that depend on the previous step.
 
@@ -153,7 +153,7 @@ myWorkflow
   .then(processOrder);
 ```
 
-#### **Branching and Merging Paths**
+#### Branching and Merging Paths
 
 Use `.after()` to specify dependencies explicitly and to manage branching.
 
@@ -175,7 +175,7 @@ In this example:
 - Separately, after `stepA`, we start `stepC`, which leads to `stepE`.
 - Once both `stepD` and `stepE` complete, `stepF` runs.
 
-#### **Cyclical Dependencies**
+#### Cyclical Dependencies
 
 Workflows can support cyclical dependencies, allowing steps to loop based on conditions.
 
@@ -197,11 +197,11 @@ In this example:
 - If `processData` results in a status of `"success"`, `finalizeData` will run.
 - If `processData` results in a status of `"retry"`, the workflow loops back to `fetchData`.
 
-### **5. Conditions**
+### 5. Conditions
 
 Use the `when` property to define conditions under which a step should execute.
 
-#### **Option 1: Function**
+#### Option 1: Function
 
 ```typescript
 myWorkflow.step(
@@ -217,7 +217,7 @@ myWorkflow.step(
 );
 ```
 
-#### **Option 2: Query Object**
+#### Option 2: Query Object
 
 ```typescript
 myWorkflow.step(
@@ -234,7 +234,7 @@ myWorkflow.step(
 );
 ```
 
-#### **Option 3: Simple Path Comparison (Syntactic Sugar)**
+#### Option 3: Simple Path Comparison (Syntactic Sugar)
 
 ```typescript
 myWorkflow.step(
@@ -250,7 +250,7 @@ myWorkflow.step(
 );
 ```
 
-### **6. Variables**
+### 6. Variables
 
 Variables allow you to pass data between steps.
 
@@ -293,7 +293,7 @@ const stepTwo = new Step({
 
 In both options, the `valueToIncrement` input for `stepTwo` is fetched from the `doubledValue` output of `stepOne`.
 
-### **7. Finalize the Workflow**
+### 7. Finalize the Workflow
 
 After defining all steps and their relationships, commit the workflow.
 
@@ -301,7 +301,7 @@ After defining all steps and their relationships, commit the workflow.
 myWorkflow.commit();
 ```
 
-### **8. Add Workflow to Mastra Instance**
+### 8. Add Workflow to Mastra Instance
 
 Add the workflow to your Mastra instance. 
 
@@ -311,11 +311,11 @@ export const mastra = new Mastra({
 });
 ```
 
-### **9. Serve the Workflow**
+### 9. Serve the Workflow
 
 We can now serve the workflow using the `mastra dev` command.
 
-#### **Start the Mastra Server**
+#### Start the Mastra Server
 
 Open your terminal and run:
 
@@ -329,7 +329,7 @@ This command will start the server and make your workflow available at:
 http://localhost:4111/api/workflows/myWorkflow/execute
 ```
 
-### **10. Test the Workflow with cURL**
+### 10. Test the Workflow with cURL
 
 With the server running, you can test your workflow using `curl`:
 
@@ -341,7 +341,7 @@ curl -X POST http://localhost:4111/api/workflows/myWorkflow/execute \
   }'
 ```
 
-**Expected Response:**
+Expected Response:
 
 You should receive a JSON response similar to:
 
