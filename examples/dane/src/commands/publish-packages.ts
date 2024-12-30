@@ -66,6 +66,11 @@ export async function publishPackages() {
 
   console.log(packagesToBuild);
 
+  if (!packagesToBuild || !packagesToBuild.length) {
+    console.error(chalk.red('No packages to build.'));
+    process.exit(1);
+  }
+
   let res = await agent.generate(`
         Here are the packages that need to be built: ${packagesToBuild.join(',')}.
         We need to build core first. And dane last. The rest can be done in parallel.
