@@ -74,7 +74,7 @@ export async function publishPackages() {
   console.log(chalk.green(res.text));
 
   res = await agent.generate(`
-        Publish the changeset with 'pnpm changest publish' and then set the dist-tag of latest to the new version.
+        Publish the changeset and then set the dist-tag of latest to the new version.
     `);
 
   console.log(chalk.green(result.text));

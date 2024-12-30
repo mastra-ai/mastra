@@ -1,5 +1,6 @@
 {
   "name": "workflow",
+  "private": true,
   "version": "1.0.1-alpha.5",
   "main": "index.js",
   "scripts": {

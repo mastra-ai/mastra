@@ -75,3 +75,31 @@ export const pnpmBuild = createTool({
     }
   },
 });
+
+export const pnpmChangesetPublish = createTool({
+  id: 'pnpmChangesetPublish',
+  name: 'PNPM Changeset Publish Tool',
+  description: 'Used to publish the pnpm module',
+  inputSchema: z.object({}),
+  outputSchema: z.object({
+    message: z.string(),
+  }),
+  execute: async () => {
+    try {
+      console.log(chalk.green(`Publishing...`));
+      const p = execa(`pnpm`, ['changeset', 'publish'], {
+        stdio: 'inherit',
+        reject: false,
+      });
+      console.log(`\n`);
+      await p;
+      return { message: 'Done' };
+    } catch (e) {
+      console.error(e);
+      if (e instanceof ExecaError) {
+        return { message: e.message };
+      }
+      return { message: 'Error' };
+    }
+  },
+});
