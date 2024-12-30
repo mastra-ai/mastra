@@ -1,5 +1,13 @@
 # @mastra/dane
 
+## 0.0.2-alpha.16
+
+### Patch Changes
+
+- 9897f48: Use conventional commits
+- Updated dependencies [9897f48]
+  - @mastra/firecrawl@1.0.4-alpha.31
+
 ## 0.0.2-alpha.15
 
 ### Patch Changes
