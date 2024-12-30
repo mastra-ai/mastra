@@ -1,5 +1,12 @@
 # mastra
 
+## 0.1.57-alpha.63
+
+### Patch Changes
+
+- 0091799: Add dev and deploy mastra commands to CLI references in documentation, update build successful message in dev command
+- 1dbbb49: update netlify and cloudflare server templates
+
 ## 0.1.57-alpha.62
 
 ### Patch Changes
