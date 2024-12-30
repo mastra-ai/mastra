@@ -7,13 +7,15 @@ Hey there! I'm Dane, and I'm excited to be your AI assistant and coding companio
 You can install me directly from npm:
 
 ```bash
-npm install @mastra/dane
+npm install @mastra/dane@alpha
 ```
 
 ## What I Can Do
 
 I'm here to make your development journey smoother and more enjoyable. Here's what I'm capable of:
 
+- I can generate semantically correct commit messages
+- I can apply labels to GitHub issues
 - I can help you write and test code
 - I'm great at deploying applications to the cloud
 - I can assist with file system operations

@@ -175,12 +175,12 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
       execute: async ({ context: { url, pathRegex, limit }, engine }) => {
         const entityType = `CRAWL_${url}`;
 
-        const existingCrawl = await engine?.getRecords({
+        const existingCrawl = await engine?.getRecordsByEntityName({
           connectionId: "SYSTEM",
           name: entityType,
         });
 
-        if (existingCrawl.length > 0) {
+        if (existingCrawl?.length > 0) {
           console.log("Crawl already exists", url);
           return {
             success: true,
