@@ -29,6 +29,27 @@ const getDiff = new Step({
   },
 });
 
+const getConventionalCommitSpec = new Step({
+  id: 'getConventionalCommitSpec',
+  outputSchema: z.object({
+    conventionalCommitSpec: z.any(),
+  }),
+  execute: async ({ mastra }) => {
+    const crawlData = await mastra?.syncs?.['FIRECRAWL:CRAWL_AND_SYNC']?.execute({
+      context: {
+        url: 'https://www.conventionalcommits.org/en/v1.0.0/',
+        limit: 3,
+        pathRegex: null,
+      },
+      engine: mastra?.engine,
+    });
+
+    console.log({ crawlData });
+
+    return { conventionalCommitSpec: crawlData };
+  },
+});
+
 const generateMessage = new Step({
   id: 'generateMessage',
   outputSchema: z.object({
@@ -36,8 +57,9 @@ const generateMessage = new Step({
     generated: z.boolean(),
   }),
   execute: async ({ context, mastra }) => {
-    const parentStep = context?.machineContext?.stepResults?.getDiff;
-    if (!parentStep || parentStep.status !== 'success') {
+    const diffStep = context?.machineContext?.stepResults?.getDiff;
+    const conventionalCommitSpecStep = context?.machineContext?.stepResults?.getConventionalCommitSpec;
+    if (!diffStep || diffStep.status !== 'success') {
       return { commitMessage: '', generated: false };
     }
 
@@ -46,17 +68,22 @@ const generateMessage = new Step({
     const res = await daneCommitGenerator?.generate(
       `
         Given this git diff:
-        ${parentStep.payload.diff}
+        ${diffStep.payload.diff}
 
         IF THE DIFF IS EMPTY, RETURN "No staged changes found", AND SET GENERATED TO FALSE,
         OTHERWISE, SET GENERATED TO TRUE
 
-        Please generate a concise and descriptive commit message that follows these guidelines:
+        ${
+          conventionalCommitSpecStep && conventionalCommitSpecStep.status === 'success'
+            ? `Please generate a concise and descriptive commit message that follows the conventional commit guidelines:
+        ${conventionalCommitSpecStep.payload.conventionalCommitSpec}`
+            : `Please generate a concise and descriptive commit message that follows these guidelines:
         - Start with a verb in the present tense
         - Be specific but concise
         - Focus on the "what" and "why" of the changes
         - Keep the first line under 50 characters
-        - If needed, add more detailed description after a blank line
+        - If needed, add more detailed description after a blank line`
+        }
       `,
       {
         schema: z.object({
@@ -124,4 +151,10 @@ const commitStep = new Step({
   },
 });
 
-commitMessageGenerator.step(getDiff).then(generateMessage).then(confirmationStep).then(commitStep).commit();
+commitMessageGenerator
+  .step(getDiff)
+  .then(getConventionalCommitSpec)
+  .then(generateMessage)
+  .then(confirmationStep)
+  .then(commitStep)
+  .commit();
