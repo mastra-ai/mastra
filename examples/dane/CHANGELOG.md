@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.20
+
+### Patch Changes
+
+- d0e7f2c: Fix anthropic env source
+
 ## 0.0.2-alpha.19
 
 ### Patch Changes
