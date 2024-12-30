@@ -1,5 +1,6 @@
 import { describe, it, expect } from '@jest/globals';
 import dotenv from 'dotenv';
+import { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 
 import { Logger, createLogger } from '../logger';
@@ -65,6 +66,104 @@ describe('LLM Class Integration Tests', () => {
       expect(typeof response.object.explanation).toBe('string');
     }, 30000);
 
+    it('should generate structured output using json schema of type object', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          answer: { type: 'number' },
+          explanation: { type: 'string' },
+        },
+        additionalProperties: false,
+        required: ['answer', 'explanation'],
+      } as JSONSchema7;
+
+      const response = await llm.generate('What is 2+2?', { schema });
+      expect(response.object).toBeDefined();
+      expect(response.object.answer).toBe(4);
+      expect(typeof response.object.explanation).toBe('string');
+    }, 3000);
+
+    it('should generate structured output using json schema of nested object', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          student: {
+            type: 'object',
+            properties: {
+              profile: {
+                type: 'object',
+                properties: {
+                  id: { type: 'number' },
+                  name: { type: 'string' },
+                  questionAttempted: { type: 'boolean' },
+                },
+                additionalProperties: false,
+                required: ['id', 'name', 'questionAttempted'],
+              },
+              calculation: {
+                type: 'array',
+                items: { type: 'number' },
+              },
+            },
+            additionalProperties: false,
+            required: ['profile', 'calculation'],
+          },
+        },
+        additionalProperties: false,
+        required: ['student'],
+      } as JSONSchema7;
+
+      const response = await llm.generate(
+        'Student Sarah Johnson (ID: 78901) is counting from 1 to 5. What are her numbers?',
+        { schema },
+      );
+      expect(response.object).toBeDefined();
+      expect(typeof response.object.student.profile.id).toBe('number');
+      expect(response.object.student.profile.id).toBe(78901);
+      expect(typeof response.object.student.profile.name).toBe('string');
+      expect(response.object.student.profile.name).toBe('Sarah Johnson');
+      expect(typeof response.object.student.profile.questionAttempted).toBe('boolean');
+      expect(response.object.student.profile.questionAttempted).toBe(true);
+      expect(response.object.student.calculation[0]).toBe(1);
+      expect(response.object.student.calculation[1]).toBe(2);
+      expect(response.object.student.calculation[2]).toBe(3);
+      expect(response.object.student.calculation[3]).toBe(4);
+      expect(response.object.student.calculation[4]).toBe(5);
+    }, 3000);
+
+    it('should stream structured output using json schema of type object', async () => {
+      const chunks: string[] = [];
+      const schema = {
+        type: 'object',
+        properties: {
+          answer: { type: 'number' },
+          explanation: { type: 'string' },
+        },
+        additionalProperties: false,
+        required: ['answer', 'explanation'],
+      } as JSONSchema7;
+
+      const response = await llm.generate('What is 2+2?', {
+        schema,
+        stream: true,
+        onFinish: text => {
+          chunks.push(text);
+          return;
+        },
+      });
+      for await (const chunk of response.textStream) {
+        // Write each chunk without a newline to create a continuous stream
+        expect(chunk).toBeDefined();
+      }
+
+      expect(chunks.length).toBeGreaterThan(0);
+
+      expect(response.object).toBeDefined();
+      const resObject = await response.object;
+      expect(resObject.answer).toBe(4);
+      expect(typeof resObject.explanation).toBe('string');
+    }, 3000);
+
     it('should stream text completion', async () => {
       const chunks: string[] = [];
       const response = await llm.generate('Count from 1 to 5.', {
@@ -90,7 +189,7 @@ describe('LLM Class Integration Tests', () => {
       name: 'gpt-4',
     });
 
-    it.only('should use tools in generation', async () => {
+    it('should use tools in generation', async () => {
       const response = await llm.generate('What is 123 + 456? Use the calculator tool to find out.', {
         tools: {
           calculatorTool,

@@ -2233,6 +2233,9 @@ importers:
       express:
         specifier: ^4.21.1
         version: 4.21.2
+      json-schema:
+        specifier: ^0.4.0
+        version: 0.4.0
       radash:
         specifier: ^12.1.0
         version: 12.1.0
@@ -2267,6 +2270,9 @@ importers:
       '@types/jest':
         specifier: ^29.5.14
         version: 29.5.14
+      '@types/json-schema':
+        specifier: ^7.0.15
+        version: 7.0.15
       '@types/lodash-es':
         specifier: ^4.17.12
         version: 4.17.12
@@ -4761,10 +4767,6 @@ packages:
     engines: {node: '>=18'}
     peerDependencies:
       '@types/node': '>=18'
-
-  '@inquirer/figures@1.0.8':
-    resolution: {integrity: sha512-tKd+jsmhq21AP1LhexC0pPwsCxEhGgAkg28byjJAd+xhmIs8LUX8JbUc3vBf3PhLxWiB5EvyBE5X7JSPAqMAqg==}
-    engines: {node: '>=18'}
 
   '@inquirer/figures@1.0.9':
     resolution: {integrity: sha512-BXvGj0ehzrngHTPTDqUoDT3NXL8U0RxUk2zJm2A66RhCEIWdtU1v6GuUqNAgArW4PQ9CinqIWyHdQgdwOj06zQ==}
@@ -18277,8 +18279,6 @@ snapshots:
       '@inquirer/type': 3.0.2(@types/node@22.10.2)
       '@types/node': 22.10.2
       yoctocolors-cjs: 2.1.2
-
-  '@inquirer/figures@1.0.8': {}
 
   '@inquirer/figures@1.0.9': {}
 
