@@ -4,6 +4,14 @@ const meta = {
     title: "Getting Started",
     collapsed: false,
   },
+  showcase: {
+    title: "Showcase",
+    type: "page",
+  },
+  overview: {
+    title: "Docs",
+    type: "page",
+  },
   guides: {
     title: "Guides",
     collapsed: false,
