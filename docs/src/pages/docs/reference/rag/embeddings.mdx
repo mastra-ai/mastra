@@ -1,0 +1,46 @@
+# Embed
+
+The `embed` function generates vector embeddings for text inputs, enabling similarity search and RAG workflows.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: 'input',
+      type: 'string | string[] | { text: string; metadata?: Record<string, any> }[]',
+      description:
+        'Content to embed. Can be a single string, an array of strings, or an array of objects with `text` and optional `metadata`.',
+    },
+    {
+      name: 'options',
+      type: 'object',
+      description: 'Configuration for the embedding call.',
+      properties: [
+        {
+          name: 'provider',
+          type: "'openai' | 'anthropic' | 'google' | 'custom'",
+          description: 'Embedding provider.',
+        },
+        {
+          name: 'model',
+          type: 'string',
+          description: 'Name of the embedding model.',
+        },
+      ],
+    },
+  ]}
+/>
+
+## Return Value
+
+<PropertiesTable
+  content={[
+    {
+      name: 'embedding',
+      type: 'number[] | number[][]',
+      description:
+        'The embedding vector(s). If `input` is a single string, returns one vector; if multiple, returns an array of vectors.',
+    },
+  ]}
+/>

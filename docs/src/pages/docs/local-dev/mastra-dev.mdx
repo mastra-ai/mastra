@@ -1,0 +1,33 @@
+# `mastra dev`
+
+The `mastra dev` command launches a development server that serves your Mastra application locally.
+
+## REST API Endpoints
+
+`mastra dev` spins up REST API endpoints for your agents and workflows, such as:
+
+- `POST /api/agents/:agentId/generate`
+- `POST /api/agents/:agentId/stream`
+- `POST /api/workflows/:workflowId/start`
+- `POST /api/workflows/:workflowId/:instanceId/event`
+- `GET /api/workflows/:workflowId/:instanceId/status`
+
+By default, the server runs at http://localhost:4111, but you can change the port with the `--port` flag.
+
+## UI Playground
+
+`mastra dev` creates a UI with an agent chat interface, a workflow visualizer and a tool playground.
+
+{/* TODO: Record a quick tour video here */}
+
+## OpenAPI Specification
+
+`mastra dev` provides an OpenAPI spec at:
+
+- `GET /openapi.json`
+
+## Summary
+
+`mastra dev` makes it easy to develop, debug, and iterate on your AI logic in a self-contained environment before deploying to production.
+
+- [Mastra Dev reference](../reference/cli/dev.mdx)

@@ -1,0 +1,18 @@
+## Step 3: Vector Storage
+
+Store embeddings in a vector database for efficient querying. Mastra supports PgVector, Pinecone, Qdrant, and more.
+
+**Example with PgVector:**
+
+```typescript showLineNumbers copy
+import { PgVector } from '@mastra/rag';
+
+await PgVector.upsert({
+  connectionString: 'postgresql://localhost:5432/mydb',
+  tableName: 'embeddings',
+  documents: chunks,
+  embeddings,
+});
+```
+
+For details on each vector store’s configuration and usage, see the reference docs for [PgVector](/guide/reference/rag/pgstore.mdx), [Pinecone](/guide/reference/rag/pinecone.mdx), and [Qdrant](/guide/reference/rag/qdrant.mdx).

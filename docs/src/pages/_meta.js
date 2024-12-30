@@ -1,11 +1,11 @@
 const meta = {
   showcase: {
-    title: "Showcase",
-    type: "page",
+    title: 'Showcase',
+    type: 'page',
   },
-  guide: {
-    title: "Docs",
-    type: "page",
+  docs: {
+    title: 'Docs',
+    type: 'page',
   },
 };
 

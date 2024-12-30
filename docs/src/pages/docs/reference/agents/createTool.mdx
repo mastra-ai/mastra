@@ -1,0 +1,156 @@
+---
+title: createTool
+description: API Reference for createTool.
+---
+
+# `createTool()`
+
+Tools are typed functions that can be executed by agents or workflows, with built-in integration access and parameter validation. Each tool has a schema that defines its inputs, an executor function that implements its logic, and access to configured integrations.
+
+```ts filename="src/mastra/tools/index.ts" showLineNumbers copy
+import { createTool } from '@mastra/core';
+import { z } from 'zod';
+
+const getStockPrice = async (symbol: string) => {
+  const data = await fetch(`https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`).then(r => r.json());
+  return data.prices['4. close'];
+};
+
+export const stockPrices = createTool({
+  id: 'Get Stock Price',
+  inputSchema: z.object({
+    symbol: z.string(),
+  }),
+  description: `Fetches the last day's closing stock price for a given symbol`,
+  execute: async ({ context }) => {
+    console.log('Using tool to fetch stock price for', context.symbol);
+    return {
+      symbol: context.symbol,
+      currentPrice: await getStockPrice(context.symbol),
+    };
+  },
+});
+```
+
+## API Signature
+
+### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: 'label',
+      type: 'string',
+      required: true,
+      description: 'Name of the tool (e.g., "Get Stock Prices")',
+    },
+    {
+      name: 'schema',
+      type: 'ZodSchema',
+      required: true,
+      description: 'Zod schema for validating inputs',
+    },
+    {
+      name: 'description',
+      type: 'string',
+      required: true,
+      description: 'Clear explanation of what market data the tool provides',
+    },
+    {
+      name: 'executor',
+      type: '(params: ExecutorParams) => Promise<any>',
+      required: true,
+      description: 'Async function that fetches the requested market data',
+      properties: [
+        {
+          type: 'ExecutorParams',
+          parameters: [
+            {
+              name: 'data',
+              type: 'object',
+              description: 'The validated input data (in this case, symbol)',
+            },
+            {
+              name: 'integrationsRegistry',
+              type: 'function',
+              description: 'Function to get connected integrations',
+            },
+            {
+              name: 'runId',
+              type: 'string',
+              isOptional: true,
+              description: 'The runId of the current run',
+            },
+            {
+              name: 'agents',
+              type: 'Map<string, Agent<any>>',
+              description: 'Map of registered agents',
+            },
+            {
+              name: 'engine',
+              isOptional: true,
+              type: 'MastraEngine',
+              description: 'Mastra engine instance',
+            },
+            {
+              name: 'llm',
+              type: 'LLM',
+              description: 'LLM instance',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: 'outputSchema',
+      type: 'ZodSchema',
+      isOptional: true,
+      description: 'Zod schema for validating outputs',
+    },
+  ]}
+/>
+
+### Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: 'ToolApi',
+      type: 'object',
+      description: 'The tool API object that includes the schema, label, description, and executor function.',
+      properties: [
+        {
+          type: 'ToolApi',
+          parameters: [
+            {
+              name: 'schema',
+              type: 'ZodSchema<IN>',
+              description: 'Zod schema for validating inputs.',
+            },
+            {
+              name: 'label',
+              type: 'string',
+              description: 'Name of the tool.',
+            },
+            {
+              name: 'description',
+              type: 'string',
+              description: "Description of the tool's functionality.",
+            },
+            {
+              name: 'outputSchema',
+              type: 'ZodSchema<OUT>',
+              isOptional: true,
+              description: 'Zod schema for validating outputs.',
+            },
+            {
+              name: 'executor',
+              type: '(params: IntegrationApiExcutorParams<IN>) => Promise<OUT>',
+              description: "Async function that executes the tool's logic.",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
