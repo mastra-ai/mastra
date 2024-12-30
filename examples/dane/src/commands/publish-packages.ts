@@ -77,7 +77,7 @@ export async function publishPackages() {
 
   if (!packagesToBuild.size) {
     console.error(chalk.red('No packages to build.'));
-    process.exit(1);
+    process.exit(0);
   }
 
   let res = await agent.generate(`
