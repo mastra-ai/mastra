@@ -1,5 +1,6 @@
 const meta = {
-  engine: "Engine",
+  "mastra-dev": "Mastra Dev",
+  engine: "Mastra Engine",
   syncs: "Syncs",
   integrations: "Integrations",
 };

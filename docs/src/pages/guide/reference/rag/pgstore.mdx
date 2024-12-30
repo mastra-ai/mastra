@@ -1,8 +1,8 @@
-## PgStore
+# PgStore
 
 The PgStore class provides vector search using PostgreSQL with pgvector extension.
 
-### Constructor Options
+## Constructor Options
 
 <PropertiesTable
   content={[
@@ -28,9 +28,9 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
   ]}
 />
 
-### Methods
+## Methods
 
-#### createIndex()
+### createIndex()
 
 <PropertiesTable
   content={[
@@ -54,7 +54,7 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
   ]}
 />
 
-#### upsert()
+### upsert()
 
 <PropertiesTable
   content={[
@@ -78,7 +78,7 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
   ]}
 />
 
-#### query()
+### query()
 
 <PropertiesTable
   content={[
@@ -110,7 +110,7 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
   ]}
 />
 
-#### describeIndex()
+### describeIndex()
 
 <PropertiesTable
   content={[
@@ -132,7 +132,7 @@ interface IndexStats {
 }
 ```
 
-#### deleteIndex()
+### deleteIndex()
 
 <PropertiesTable
   content={[
@@ -144,11 +144,11 @@ interface IndexStats {
   ]}
 />
 
-#### disconnect()
+### disconnect()
 
 Closes the database connection pool. Should be called when done using the store.
 
-### Response Types
+## Response Types
 
 Query results are returned in this format:
 
@@ -160,7 +160,7 @@ interface QueryResult {
 }
 ```
 
-### Error Handling
+## Error Handling
 
 The store throws typed errors that can be caught:
 

@@ -10,9 +10,9 @@ In this section, we'll walk through the process of creating a tool that can be u
 
 First, let's define a tool that retrieves weather data using a public API.
 
-#### `src/mastra/tools/weatherInfo.ts`
+#### Adding a Weather Tool
 
-```typescript:src/mastra/tools/weatherInfo.ts
+```typescript filename="src/mastra/tools/weatherInfo.ts"
 import { createTool } from "@mastra/core";
 import { z } from "zod";
 
@@ -48,9 +48,9 @@ In this code:
 
 Now we'll add the tool to an agent. We'll create an agent that can answer questions about the weather and configure it to use our `weatherInfo` tool.
 
-#### `src/mastra/agents/weatherAgent.ts`
+#### Adding the Weather Tool to an Agent
 
-```typescript:src/mastra/agents/weatherAgent.ts
+```typescript filename="src/mastra/agents/weatherAgent.ts"
 import { Agent } from "@mastra/core";
 import { weatherInfo } from "../tools";
 
@@ -80,9 +80,9 @@ In this agent configuration:
 
 We need to initialize Mastra with our agent.
 
-#### `src/index.ts`
+#### Registering the Agent
 
-```typescript:src/index.ts
+```typescript filename="src/index.ts"
 import { Mastra } from "@mastra/core";
 import { weatherAgent } from "./agents/weatherAgent";
 
@@ -101,9 +101,9 @@ You can test tools using Jest or any other testing framework. Writing unit tests
 
 Now we can call the agent, and it will use the tool to fetch the weather information.
 
-#### **Example: Interacting with the Agent**
+#### Example: Interacting with the Agent
 
-```typescript
+```typescript filename="src/index.ts"
 import { mastra } from "./index";
 
 async function main() {
