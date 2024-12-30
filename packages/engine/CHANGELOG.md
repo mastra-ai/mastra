@@ -1,5 +1,17 @@
 # @mastra/engine
 
+## 0.0.5-alpha.40
+
+### Patch Changes
+
+- 8ae2bbc: Dane publishing
+- 0bd142c: Fixes learned from docs
+- ee4de15: Dane fixes
+- Updated dependencies [8ae2bbc]
+- Updated dependencies [0bd142c]
+- Updated dependencies [ee4de15]
+  - @mastra/core@0.1.27-alpha.46
+
 ## 0.0.5-alpha.39
 
 ### Patch Changes
