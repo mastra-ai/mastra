@@ -1,5 +1,34 @@
 # mastra
 
+## 0.1.57-alpha.63
+
+### Patch Changes
+
+- 0091799: Add dev and deploy mastra commands to CLI references in documentation, update build successful message in dev command
+- 1dbbb49: update netlify and cloudflare server templates
+
+## 0.1.57-alpha.62
+
+### Patch Changes
+
+- 0f08180: Update docs for mastra dev
+
+## 0.1.57-alpha.61
+
+### Patch Changes
+
+- 689b529: fix mastra dev for windows
+
+## 0.1.57-alpha.60
+
+### Patch Changes
+
+- cc5bd40: Fix playground agent chat losing some chat during redirect
+- 002d6d8: add memory to playground agent
+- Updated dependencies [e608d8c]
+- Updated dependencies [002d6d8]
+  - @mastra/core@0.1.27-alpha.45
+
 ## 0.1.57-alpha.59
 
 ### Patch Changes

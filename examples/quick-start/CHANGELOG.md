@@ -1,5 +1,13 @@
 # quick-start
 
+## 1.0.1-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [e608d8c]
+- Updated dependencies [002d6d8]
+  - @mastra/core@0.1.27-alpha.45
+
 ## 1.0.1-alpha.10
 
 ### Patch Changes

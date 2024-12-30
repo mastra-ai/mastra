@@ -2,9 +2,10 @@ import { createTool } from '@mastra/core';
 import chalk from 'chalk';
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
-// @ts-ignore
-import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { z } from 'zod';
+
+// @ts-ignore
+import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 
 export const readPDF = createTool({
   id: 'readPDF',

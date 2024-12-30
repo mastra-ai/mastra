@@ -1,5 +1,20 @@
 # @mastra/memory
 
+## 0.0.2-alpha.25
+
+### Patch Changes
+
+- 3220d26: Fix lastStep error in agent stream
+
+## 0.0.2-alpha.24
+
+### Patch Changes
+
+- 002d6d8: add memory to playground agent
+- Updated dependencies [e608d8c]
+- Updated dependencies [002d6d8]
+  - @mastra/core@0.1.27-alpha.45
+
 ## 0.0.2-alpha.23
 
 ### Patch Changes

@@ -4,6 +4,10 @@ const meta = {
     title: "Getting Started",
     collapsed: false,
   },
+  "guides": {
+    title: "Guides",
+    collapsed: false,
+  },
   "llm-models": {
     title: "LLM Models",
     collapsed: false,
@@ -20,12 +24,12 @@ const meta = {
     title: "RAG",
     collapsed: false,
   },
-  engine: {
-    title: "Engine",
+  "local-dev": {
+    title: "Local Dev",
     collapsed: false,
   },
   deployment: {
-    title: "Deploying to Prod",
+    title: "Deployment",
     collapsed: false,
   },
   "08-running-evals": "Evals",

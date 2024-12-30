@@ -1,0 +1,14 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: 'travel-app-db'
+    ports:
+      - '5433:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-mastra}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:

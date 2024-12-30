@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.1.27-alpha.45
+
+### Patch Changes
+
+- e608d8c: Export CoreMessage Types from ai sdk
+- 002d6d8: add memory to playground agent
+
 ## 0.1.27-alpha.44
 
 ### Patch Changes

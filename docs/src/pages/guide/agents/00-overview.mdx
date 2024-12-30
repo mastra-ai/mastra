@@ -174,14 +174,14 @@ Mastra provides a CLI command `mastra dev` to run your agents behind an API. By 
 mastra dev
 ```
 
-This will start the server and make your agent available at `http://localhost:4111/api/agents/myAgent/generate`.
+This will start the server and make your agent available at `http://localhost:4111/api/agents/myAgent/text`.
 
 ### Interacting with the Agent
 
 You can interact with the agent using `curl` from the command line:
 
 ```bash
-curl -X POST http://localhost:4111/api/agents/myAgent/generate \
+curl -X POST http://localhost:4111/api/agents/myAgent/text \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [

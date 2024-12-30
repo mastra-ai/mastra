@@ -12,15 +12,17 @@ export const crawl = createTool({
   }),
   outputSchema: z.object({
     message: z.string(),
+    crawlData: z.any(),
   }),
   execute: async ({ context, mastra }) => {
-    await mastra?.syncs?.['FIRECRAWL:CRAWL_AND_SYNC']?.execute({
+    const crawlData = await mastra?.syncs?.['FIRECRAWL:CRAWL_AND_SYNC']?.execute({
       context,
-      mastra,
+      engine: mastra?.engine,
     });
 
     return {
       message: 'The website has been successfully crawled and chunks have been synced to the database. Finish.',
+      crawlData,
     };
   },
 });

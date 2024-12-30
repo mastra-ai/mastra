@@ -1,0 +1,37 @@
+# Init
+
+## `mastra init`
+
+This creates a new Mastra project. You can run it in three different ways:
+
+1. **Interactive Mode (Recommended)**
+   Run without flags to use the interactive prompt, which will guide you through:
+
+   - Choosing a directory for Mastra files
+   - Selecting components to install (Agents, Tools, Workflows)
+   - Choosing a default LLM provider (OpenAI, Anthropic, or Groq)
+   - Deciding whether to include example code
+
+2. **Quick Start with Defaults**
+
+   ```bash
+   mastra init --default
+   ```
+
+   This sets up a project with:
+
+   - Source directory: `src/`
+   - All components: agents, tools, workflows
+   - OpenAI as the default provider
+   - No example code
+
+3. **Custom Setup**
+   ```bash
+   mastra init --dir src/mastra --components agents,tools --llm openai --example
+   ```
+   Options:
+   - `-d, --dir`: Directory for Mastra files (defaults to src/mastra)
+   - `-c, --components`: Comma-separated list of components (agents, tools, workflows)
+   - `-l, --llm`: Default model provider (openai, anthropic, or groq)
+   - `-e, --example`: Include example code
+   - `-ne, --no-example`: Skip example code

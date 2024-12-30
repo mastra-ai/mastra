@@ -1,5 +1,42 @@
 # @mastra/dane
 
+## 0.0.2-alpha.17
+
+### Patch Changes
+
+- 0bdaab8: Fix esm import
+- Updated dependencies [3220d26]
+  - @mastra/memory@0.0.2-alpha.25
+
+## 0.0.2-alpha.16
+
+### Patch Changes
+
+- 9897f48: Use conventional commits
+- Updated dependencies [9897f48]
+  - @mastra/firecrawl@1.0.4-alpha.31
+
+## 0.0.2-alpha.15
+
+### Patch Changes
+
+- a5056a9: Add config manager
+
+## 0.0.2-alpha.14
+
+### Patch Changes
+
+- 6728d67: Dane can generate commit messages from staged changes
+- Updated dependencies [e608d8c]
+- Updated dependencies [002d6d8]
+  - @mastra/core@0.1.27-alpha.45
+  - @mastra/memory@0.0.2-alpha.24
+  - @mastra/firecrawl@1.0.4-alpha.30
+  - @mastra/github@1.0.3-alpha.29
+  - @mastra/stabilityai@1.0.1-alpha.20
+  - @mastra/engine@0.0.5-alpha.39
+  - @mastra/rag@0.0.2-alpha.29
+
 ## 0.0.2-alpha.13
 
 ### Patch Changes

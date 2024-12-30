@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.1.27-alpha.44",
+  "version": "0.1.27-alpha.45",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",

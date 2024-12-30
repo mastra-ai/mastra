@@ -36,7 +36,7 @@ export const execaTool = createTool({
       return { message: r.stdout };
     } catch (e) {
       if (e instanceof ExecaError) {
-        return { message: e.message }
+        return { message: e.message };
       }
       return { message: 'Error' };
     }

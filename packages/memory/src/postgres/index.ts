@@ -246,7 +246,6 @@ export class PgMemory extends MastraMemory {
                     SUM(tokens) OVER (ORDER BY created_at DESC) as running_total
              FROM mastra_messages
              WHERE thread_id = $1
-             AND type IN ('text', 'tool-result')
              ${startDate ? `AND created_at >= '${startDate.toISOString()}'` : ''}
              ${endDate ? `AND created_at <= '${endDate.toISOString()}'` : ''}
              ORDER BY created_at DESC
@@ -277,7 +276,6 @@ export class PgMemory extends MastraMemory {
                 thread_id AS threadId
            FROM mastra_messages
            WHERE thread_id = $1
-           AND type IN ('text', 'tool-result')
            ${startDate ? `AND created_at >= '${startDate.toISOString()}'` : ''}
            ${endDate ? `AND created_at <= '${endDate.toISOString()}'` : ''}
            ORDER BY created_at ASC`,

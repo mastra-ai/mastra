@@ -101,7 +101,7 @@ export async function bundleServer(entryPoint: string) {
   }
 }
 
-export async function bundle(dirPath: string, options?: { outfile?: string; entryFile?: string }) {
+export async function bundle(dirPath: string, options?: { outfile?: string; entryFile?: string; buildName?: string }) {
   try {
     // Ensure .mastra directory exists
     upsertMastraDir();
@@ -188,7 +188,7 @@ export async function bundle(dirPath: string, options?: { outfile?: string; entr
     });
 
     // Log build results
-    logger.success('Build completed successfully');
+    logger.success(`${options?.buildName} Build completed successfully`);
 
     // Output build metadata
     await esbuild.analyzeMetafile(result.metafile);

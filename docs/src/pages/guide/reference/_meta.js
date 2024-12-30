@@ -1,5 +1,6 @@
 const meta = {
-  "local-dev": "Local Dev",
+  core: "Core",
+  cli: "CLI",
   llm: "LLM",
   agents: "Agents",
   workflows: "Workflows",

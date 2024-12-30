@@ -1,8 +1,8 @@
-## Qdrant
+# Qdrant
 
 [Qdrant](http://qdrant.tech/) is a vector similarity search engine. It provides a production-ready service with a convenient API to store, search, and manage vectors with additional payload and extended filtering support.
 
-### Constructor Options
+## Constructor Options
 
 <PropertiesTable
   content={[
@@ -26,9 +26,9 @@
   ]}
 />
 
-### Methods
+## Methods
 
-#### createIndex()
+### createIndex()
 
 <PropertiesTable
   content={[
@@ -52,7 +52,7 @@
   ]}
 />
 
-#### upsert()
+### upsert()
 
 <PropertiesTable
   content={[
@@ -76,7 +76,7 @@
   ]}
 />
 
-#### query()
+### query()
 
 <PropertiesTable
   content={[
@@ -101,11 +101,11 @@
   ]}
 />
 
-#### listIndexes()
+### listIndexes()
 
 Returns an array of index names as strings.
 
-#### describeIndex()
+### describeIndex()
 
 <PropertiesTable
   content={[
@@ -127,7 +127,7 @@ interface IndexStats {
 }
 ```
 
-#### deleteIndex()
+### deleteIndex()
 
 <PropertiesTable
   content={[
@@ -139,7 +139,7 @@ interface IndexStats {
   ]}
 />
 
-### Response Types
+## Response Types
 
 Query results are returned in this format:
 
@@ -151,7 +151,7 @@ interface QueryResult {
 }
 ```
 
-### Error Handling
+## Error Handling
 
 The store throws typed errors that can be caught:
 

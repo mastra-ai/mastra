@@ -3,9 +3,9 @@ import path, { join } from 'path';
 import { fileURLToPath } from 'url';
 
 export const SERVER_TEMPLATES = {
-    express: '../../templates/express-server.js',
-    netlify: '../../templates/netlify.js',
-    worker: '../../templates/worker.js',
+  express: '../../templates/express-server.js',
+  netlify: '../../templates/netlify.js',
+  worker: '../../templates/worker.js',
 };
 
 const __filename = fileURLToPath(import.meta.url);
