@@ -4,6 +4,8 @@ import chalk from 'chalk';
 import { execSync } from 'child_process';
 import { z } from 'zod';
 
+import { fsTool } from '../tools/fs';
+
 export const commitMessageGenerator = new Workflow({
   name: 'commit-message',
   triggerSchema: z.object({
@@ -29,38 +31,53 @@ const getDiff = new Step({
   },
 });
 
-const getConventionalCommitSpec = new Step({
-  id: 'getConventionalCommitSpec',
+const readConventionalCommitSpec = new Step({
+  id: 'readConventionalCommitSpec',
   outputSchema: z.object({
-    conventionalCommitSpec: z.any(),
+    fileData: z.any(),
   }),
-  execute: async ({ mastra }) => {
-    const crawlData = await mastra?.syncs?.['FIRECRAWL:CRAWL_AND_SYNC']?.execute({
-      context: {
-        url: 'https://www.conventionalcommits.org/en/v1.0.0/',
-        limit: 3,
-        pathRegex: null,
-      },
-      engine: mastra?.engine,
+  execute: async () => {
+    const fileData = await fsTool.execute({
+      context: { action: 'read', file: 'data/crawl/conventional-commit.json', data: '' },
     });
 
-    console.log({ crawlData });
-
-    return { conventionalCommitSpec: crawlData };
+    return { fileData };
   },
 });
+
+// const getConventionalCommitSpec = new Step({
+//   id: 'getConventionalCommitSpec',
+//   outputSchema: z.object({
+//     conventionalCommitSpec: z.any(),
+//   }),
+//   execute: async ({ mastra }) => {
+//     const crawlData = await mastra?.syncs?.['FIRECRAWL:CRAWL_AND_SYNC']?.execute({
+//       context: {
+//         url: 'https://www.conventionalcommits.org/en/v1.0.0/',
+//         limit: 3,
+//         pathRegex: null,
+//       },
+//       engine: mastra?.engine,
+//     });
+
+//     console.log({ crawlData });
+
+//     return { conventionalCommitSpec: crawlData };
+//   },
+// });
 
 const generateMessage = new Step({
   id: 'generateMessage',
   outputSchema: z.object({
     commitMessage: z.string(),
     generated: z.boolean(),
+    guidelines: z.array(z.string()),
   }),
   execute: async ({ context, mastra }) => {
     const diffStep = context?.machineContext?.stepResults?.getDiff;
-    const conventionalCommitSpecStep = context?.machineContext?.stepResults?.getConventionalCommitSpec;
+    const fileDataStep = context?.machineContext?.stepResults?.readConventionalCommitSpec;
     if (!diffStep || diffStep.status !== 'success') {
-      return { commitMessage: '', generated: false };
+      return { commitMessage: '', generated: false, guidelines: [] };
     }
 
     const daneCommitGenerator = mastra?.agents?.daneCommitMessage;
@@ -74,21 +91,23 @@ const generateMessage = new Step({
         OTHERWISE, SET GENERATED TO TRUE
 
         ${
-          conventionalCommitSpecStep && conventionalCommitSpecStep.status === 'success'
-            ? `Please generate a concise and descriptive commit message that follows the conventional commit guidelines:
-        ${conventionalCommitSpecStep.payload.conventionalCommitSpec}`
-            : `Please generate a concise and descriptive commit message that follows these guidelines:
+          fileDataStep?.status === 'success' && fileDataStep?.payload?.fileData?.message
+            ? `USE THE FOLLOWING GUIDELINES: ${fileDataStep?.payload?.fileData?.message}`
+            : `USE THE FOLLOWING GUIDELINES:
         - Start with a verb in the present tense
         - Be specific but concise
         - Focus on the "what" and "why" of the changes
         - Keep the first line under 50 characters
         - If needed, add more detailed description after a blank line`
         }
+
+        RETURN THE GUIDELINES YOU ARE USING AS AN ARRAY OF STRINGS ON THE GUIDELINES KEY, AND THE COMMIT MESSAGE ON THE COMMIT MESSAGE KEY
       `,
       {
         schema: z.object({
           commitMessage: z.string(),
           generated: z.boolean(),
+          guidelines: z.array(z.string()),
         }),
       },
     );
@@ -97,7 +116,13 @@ const generateMessage = new Step({
       throw new Error(res?.object?.commitMessage as string);
     }
 
-    return { commitMessage: res?.object?.commitMessage as string, generated: res?.object?.generated as boolean };
+    console.log({ res });
+
+    return {
+      commitMessage: res?.object?.commitMessage as string,
+      generated: res?.object?.generated as boolean,
+      guidelines: res?.object?.guidelines as string[],
+    };
   },
 });
 
@@ -153,7 +178,7 @@ const commitStep = new Step({
 
 commitMessageGenerator
   .step(getDiff)
-  .then(getConventionalCommitSpec)
+  .then(readConventionalCommitSpec)
   .then(generateMessage)
   .then(confirmationStep)
   .then(commitStep)
