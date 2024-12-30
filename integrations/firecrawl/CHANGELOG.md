@@ -1,5 +1,11 @@
 # @mastra/firecrawl
 
+## 1.0.4-alpha.31
+
+### Patch Changes
+
+- 9897f48: Use conventional commits
+
 ## 1.0.4-alpha.30
 
 ### Patch Changes

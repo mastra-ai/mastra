@@ -1,6 +1,6 @@
 {
   "name": "vnext",
-  "version": "0.1.1-alpha.27",
+  "version": "0.1.1-alpha.28",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
