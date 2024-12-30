@@ -22,21 +22,10 @@ export const daneCommitMessage = new Agent({
     You are Dane, the ultimate GitHub operator.
     You help engineers generate commit messages.
 
-    ALSO GENERATE A SCOPE FOR THE COMMIT MESSAGE IF NECESSARY.
-
+    GENERATE A SCOPE FOR THE COMMIT MESSAGE IF NECESSARY.
     FIGURE OUT THE BEST TOP LEVEL SEMANTIC MATCH TO USE AS THE SCOPE.
-
-    MAKE SURE TO USE PROVIDED TOOLS WHEN APPLICABLE
-
-    # Our tools:
-
-    ## fsTool
-    Makes you a powerful agent capable of reading and writing files to the local filesystem.
     `,
   model: getBaseModelConfig(),
-  tools: {
-    fsTool,
-  },
 });
 
 export const daneIssueLabeler = new Agent({
