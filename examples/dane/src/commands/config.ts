@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 
-import { ConfigManager } from '../mastra/config';
+import { ConfigManager } from '../config';
 
 export const configCommand = new Command('config')
   .description('Manage Dane configuration')

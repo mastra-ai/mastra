@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core';
 
-import { config } from '../config';
+import { config } from '../../config';
 import { browserTool, googleSearch } from '../tools/browser.js';
 import { listEvents } from '../tools/calendar.js';
 import { crawl } from '../tools/crawl.js';
@@ -22,10 +22,7 @@ export const daneCommitMessage = new Agent({
     You are Dane, the ultimate GitHub operator.
     You help engineers generate commit messages.
 
-    GENERATE MESSAGES ACCORDING TO THE GIT COMMIT MESSAGE CONVENTION.
-
     GENERATE A SCOPE FOR THE COMMIT MESSAGE IF NECESSARY.
-
     FIGURE OUT THE BEST TOP LEVEL SEMANTIC MATCH TO USE AS THE SCOPE.
     `,
   model: getBaseModelConfig(),
@@ -73,7 +70,8 @@ export const dane = new Agent({
     ## crawl
     Use this when the user asks you to crawl. CRAWL is the signal to use this tool.
     Makes you a powerful agent capable of crawling a site and extracting markdown metadata.
-    The data will be stored in a database. Confirm that it is sucessful.
+    The data will be stored in a database if it is not already there. Confirm that it is sucessful.
+    The crawled data will be returned in the response on the 'crawlData' field.
 
     ## imageTool
     Makes you a powerful agent capable of generating images and saving them to disk. Pass the directory and an image prompt.

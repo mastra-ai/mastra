@@ -4,6 +4,8 @@ import chalk from 'chalk';
 import { execSync } from 'child_process';
 import { z } from 'zod';
 
+import { fsTool } from '../tools/fs';
+
 export const commitMessageGenerator = new Workflow({
   name: 'commit-message',
   triggerSchema: z.object({
@@ -29,16 +31,32 @@ const getDiff = new Step({
   },
 });
 
+const readConventionalCommitSpec = new Step({
+  id: 'readConventionalCommitSpec',
+  outputSchema: z.object({
+    fileData: z.any(),
+  }),
+  execute: async () => {
+    const fileData = await fsTool.execute({
+      context: { action: 'read', file: 'data/crawl/conventional-commit.json', data: '' },
+    });
+
+    return { fileData };
+  },
+});
+
 const generateMessage = new Step({
   id: 'generateMessage',
   outputSchema: z.object({
     commitMessage: z.string(),
     generated: z.boolean(),
+    guidelines: z.array(z.string()),
   }),
   execute: async ({ context, mastra }) => {
-    const parentStep = context?.machineContext?.stepResults?.getDiff;
-    if (!parentStep || parentStep.status !== 'success') {
-      return { commitMessage: '', generated: false };
+    const diffStep = context?.machineContext?.stepResults?.getDiff;
+    const fileDataStep = context?.machineContext?.stepResults?.readConventionalCommitSpec;
+    if (!diffStep || diffStep.status !== 'success') {
+      return { commitMessage: '', generated: false, guidelines: [] };
     }
 
     const daneCommitGenerator = mastra?.agents?.daneCommitMessage;
@@ -46,22 +64,31 @@ const generateMessage = new Step({
     const res = await daneCommitGenerator?.generate(
       `
         Given this git diff:
-        ${parentStep.payload.diff}
+        ${diffStep.payload.diff}
 
         IF THE DIFF IS EMPTY, RETURN "No staged changes found", AND SET GENERATED TO FALSE,
         OTHERWISE, SET GENERATED TO TRUE
 
-        Please generate a concise and descriptive commit message that follows these guidelines:
+        ${
+          fileDataStep?.status === 'success' && fileDataStep?.payload?.fileData?.message
+            ? `USE THE FOLLOWING GUIDELINES: ${fileDataStep?.payload?.fileData?.message}`
+            : `USE THE FOLLOWING GUIDELINES:
         - Start with a verb in the present tense
         - Be specific but concise
         - Focus on the "what" and "why" of the changes
+        IF THERE ARE MULTIPLE LOGICAL CHANGES, USE THE DESCRIPTION TO EXPLAIN THE CHANGES IN BULLET POINTS.
+
         - Keep the first line under 50 characters
-        - If needed, add more detailed description after a blank line
+        - If needed, add more detailed description after a blank line`
+        }
+
+        RETURN THE GUIDELINES YOU ARE USING AS AN ARRAY OF STRINGS ON THE GUIDELINES KEY, AND THE COMMIT MESSAGE ON THE COMMIT MESSAGE KEY
       `,
       {
         schema: z.object({
           commitMessage: z.string(),
           generated: z.boolean(),
+          guidelines: z.array(z.string()),
         }),
       },
     );
@@ -70,7 +97,11 @@ const generateMessage = new Step({
       throw new Error(res?.object?.commitMessage as string);
     }
 
-    return { commitMessage: res?.object?.commitMessage as string, generated: res?.object?.generated as boolean };
+    return {
+      commitMessage: res?.object?.commitMessage as string,
+      generated: res?.object?.generated as boolean,
+      guidelines: res?.object?.guidelines as string[],
+    };
   },
 });
 
@@ -124,4 +155,10 @@ const commitStep = new Step({
   },
 });
 
-commitMessageGenerator.step(getDiff).then(generateMessage).then(confirmationStep).then(commitStep).commit();
+commitMessageGenerator
+  .step(getDiff)
+  .then(readConventionalCommitSpec)
+  .then(generateMessage)
+  .then(confirmationStep)
+  .then(commitStep)
+  .commit();

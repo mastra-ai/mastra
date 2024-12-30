@@ -5,6 +5,7 @@
   "type": "module",
   "files": [
     "dist",
+    "data",
     "test",
     "test-files"
   ],

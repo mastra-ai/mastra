@@ -7,13 +7,15 @@ Hey there! I'm Dane, and I'm excited to be your AI assistant and coding companio
 You can install me directly from npm:
 
 ```bash
-npm install @mastra/dane
+npm install -g @mastra/dane@alpha
 ```
 
 ## What I Can Do
 
 I'm here to make your development journey smoother and more enjoyable. Here's what I'm capable of:
 
+- I can generate semantically correct commit messages
+- I can apply labels to GitHub issues
 - I can help you write and test code
 - I'm great at deploying applications to the cloud
 - I can assist with file system operations
@@ -27,7 +29,8 @@ I'm here to make your development journey smoother and more enjoyable. Here's wh
 ```
 src/
 ├── index.ts              # Main entry point
-├── issue-labeler.ts      # GitHub issue labeling functionality
+├── config/              # Configuration setup
+├── commands/            # CLI commands
 └── mastra/              # Core functionality
     ├── agents/          # AI agents definitions
     ├── integrations/    # External service integrations
@@ -39,6 +42,12 @@ src/
 
 - **Interactive CLI Interface**: I provide a friendly command-line interface with colored output using chalk
 - **GitHub Integration**: I can help with automated issue labeling
+- **GitHub Integration**: I can help with generating commit messages
+- **FireCrawl Integration**: I can crawl websites and gather data
+- **Tool: PDF Reader**: I can read PDFs and extract information
+- **Tool: Calendar**: I can help with managing your calendar
+- **Tool: Web Search**: I can search the web for answers to your questions
+- **Tool: File System**: I can help with file system operations (read, write, append)
 - **Workflow System**: I use a modular workflow system to execute various tasks
 - **Mastra Framework**: I leverage a core framework with agents, integrations, and tools
 
@@ -46,12 +55,24 @@ src/
 
 To start working with me:
 
+Make sure you have a local postgres database running at `5433:5432` with the database name `mastra`.
+
+```bash
+# Setup config keys (one time setup)
+dane config --set ANTHROPIC_API_KEY=<your-key>
+```
+
 ```bash
 # Run the main application
-npm start
+dane
 
 # Run the issue labeler
-npm run issue-labeler
+dane issue-labeler
+```
+
+```bash
+# Run the commit message generator
+dane commit
 ```
 
 ## Environment Variables
