@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core';
 
-import { config } from '../../config';
+import { config } from '../../config/index.js';
 import { browserTool, googleSearch } from '../tools/browser.js';
 import { listEvents } from '../tools/calendar.js';
 import { crawl } from '../tools/crawl.js';

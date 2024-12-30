@@ -86,6 +86,37 @@ async function textObject() {
   console.log('\n-------------------\n');
 }
 
+async function textObjectJsonSchema() {
+  // Query 3: Generate a lasagna recipe
+  const query3 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
+  console.log(`Query 3: ${query3}`);
+
+  const lasagnaResponse = await agent.generate(query3, {
+    schema: {
+      type: 'object',
+      properties: {
+        ingredients: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              amount: { type: 'number' },
+            },
+          },
+        },
+        steps: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+      },
+    },
+  });
+
+  console.log('\n👨‍🍳 Chef Michel:', lasagnaResponse.object);
+  console.log('\n-------------------\n');
+}
+
 async function generateObject() {
   // Query 3: Generate a lasagna recipe
   const query3 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
@@ -174,6 +205,8 @@ async function main() {
   await generateStream();
 
   await textObject();
+
+  await textObjectJsonSchema();
 
   await generateObject();
 

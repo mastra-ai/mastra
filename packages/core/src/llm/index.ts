@@ -11,12 +11,15 @@ import {
   CoreTool as CT,
   generateObject,
   generateText,
+  jsonSchema,
   LanguageModelV1,
+  Schema,
   streamObject,
   streamText,
   tool,
 } from 'ai';
 import { createAnthropicVertex } from 'anthropic-vertex-ai';
+import { JSONSchema7 } from 'json-schema';
 import { z, ZodSchema } from 'zod';
 
 import { ToolsInput } from '../agent/types';
@@ -34,7 +37,6 @@ import {
   LLMProvider,
   ModelConfig,
   StructuredOutput,
-  StructuredOutputType,
 } from './types';
 
 @InstrumentClass({
@@ -336,58 +338,7 @@ export class LLM extends MastraBase {
     return converted;
   }
 
-  private isBaseOutputType(outputType: StructuredOutputType) {
-    return outputType === 'string' || outputType === 'number' || outputType === 'boolean' || outputType === 'date';
-  }
-
-  private baseOutputTypeSchema(outputType: StructuredOutputType) {
-    switch (outputType) {
-      case 'string':
-        return z.string();
-      case 'number':
-        return z.number();
-      case 'boolean':
-        return z.boolean();
-      case 'date':
-        return z.string().describe('ISO 8601 date string');
-      default:
-        return z.string();
-    }
-  }
-
-  private createOutputSchema(output: StructuredOutput) {
-    const schema = Object.entries(output).reduce(
-      (memo, [k, v]) => {
-        if (this.isBaseOutputType(v.type)) {
-          memo[k] = this.baseOutputTypeSchema(v.type);
-        }
-        if (v.type === 'object') {
-          const objectItem = v.items;
-          const objectItemSchema = this.createOutputSchema(objectItem);
-
-          memo[k] = objectItemSchema;
-        }
-        if (v.type === 'array') {
-          const arrayItem = v.items;
-          if (this.isBaseOutputType(arrayItem.type)) {
-            const itemSchema = this.baseOutputTypeSchema(arrayItem.type);
-            memo[k] = z.array(itemSchema);
-          }
-
-          if (arrayItem.type === 'object') {
-            const objectInArrayItemSchema = this.createOutputSchema(arrayItem.items);
-            memo[k] = z.array(objectInArrayItemSchema);
-          }
-        }
-        return memo;
-      },
-      {} as Record<string, any>,
-    );
-
-    return z.object(schema);
-  }
-
-  async generate<S extends boolean = false, Z extends ZodSchema | undefined = undefined>(
+  async generate<S extends boolean = false, Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     {
       schema,
@@ -539,7 +490,7 @@ export class LLM extends MastraBase {
     });
   }
 
-  async __textObject({
+  async __textObject<T>({
     messages,
     onStepFinish,
     maxSteps = 5,
@@ -548,7 +499,7 @@ export class LLM extends MastraBase {
     structuredOutput,
     runId,
   }: {
-    structuredOutput: StructuredOutput | ZodSchema;
+    structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
     tools?: ToolsInput;
     convertedTools?: Record<string, CoreTool>;
     messages: CoreMessage[];
@@ -597,17 +548,17 @@ export class LLM extends MastraBase {
       },
     };
 
-    let schema: ZodSchema;
+    let schema: z.ZodType<T> | Schema<T>;
     let output = 'object';
 
     if (typeof (structuredOutput as any).parse === 'function') {
-      schema = structuredOutput as ZodSchema;
+      schema = structuredOutput as z.ZodType<T>;
       if (schema instanceof z.ZodArray) {
         output = 'array';
-        schema = schema._def.type;
+        schema = schema._def.type as z.ZodType<T>;
       }
     } else {
-      schema = this.createOutputSchema(structuredOutput as StructuredOutput);
+      schema = jsonSchema(structuredOutput as JSONSchema7) as Schema<T>;
     }
 
     return await generateObject({
@@ -686,7 +637,7 @@ export class LLM extends MastraBase {
     });
   }
 
-  async __streamObject({
+  async __streamObject<T>({
     messages,
     onStepFinish,
     onFinish,
@@ -696,7 +647,7 @@ export class LLM extends MastraBase {
     structuredOutput,
     runId,
   }: {
-    structuredOutput: StructuredOutput | ZodSchema;
+    structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
     tools?: ToolsInput;
     convertedTools?: Record<string, CoreTool>;
     messages: CoreMessage[];
@@ -748,17 +699,17 @@ export class LLM extends MastraBase {
       },
     };
 
-    let schema: ZodSchema;
+    let schema: z.ZodType<T> | Schema<T>;
     let output = 'object';
 
     if (typeof (structuredOutput as any).parse === 'function') {
-      schema = structuredOutput as ZodSchema;
+      schema = structuredOutput as z.ZodType<T>;
       if (schema instanceof z.ZodArray) {
         output = 'array';
-        schema = schema._def.type;
+        schema = schema._def.type as z.ZodType<T>;
       }
     } else {
-      schema = this.createOutputSchema(structuredOutput as StructuredOutput);
+      schema = jsonSchema(structuredOutput as JSONSchema7) as Schema<T>;
     }
 
     return await streamObject({

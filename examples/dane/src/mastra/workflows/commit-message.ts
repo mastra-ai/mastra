@@ -4,7 +4,7 @@ import chalk from 'chalk';
 import { execSync } from 'child_process';
 import { z } from 'zod';
 
-import { fsTool } from '../tools/fs';
+import { fsTool } from '../tools/fs.js';
 
 export const commitMessageGenerator = new Workflow({
   name: 'commit-message',
