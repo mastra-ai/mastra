@@ -45,27 +45,6 @@ const readConventionalCommitSpec = new Step({
   },
 });
 
-// const getConventionalCommitSpec = new Step({
-//   id: 'getConventionalCommitSpec',
-//   outputSchema: z.object({
-//     conventionalCommitSpec: z.any(),
-//   }),
-//   execute: async ({ mastra }) => {
-//     const crawlData = await mastra?.syncs?.['FIRECRAWL:CRAWL_AND_SYNC']?.execute({
-//       context: {
-//         url: 'https://www.conventionalcommits.org/en/v1.0.0/',
-//         limit: 3,
-//         pathRegex: null,
-//       },
-//       engine: mastra?.engine,
-//     });
-
-//     console.log({ crawlData });
-
-//     return { conventionalCommitSpec: crawlData };
-//   },
-// });
-
 const generateMessage = new Step({
   id: 'generateMessage',
   outputSchema: z.object({
