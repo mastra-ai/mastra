@@ -1,5 +1,13 @@
 # @mastra/dane
 
+## 0.0.2-alpha.17
+
+### Patch Changes
+
+- 0bdaab8: Fix esm import
+- Updated dependencies [3220d26]
+  - @mastra/memory@0.0.2-alpha.25
+
 ## 0.0.2-alpha.16
 
 ### Patch Changes
