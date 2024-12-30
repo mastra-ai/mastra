@@ -97,6 +97,8 @@ const generateMessage = new Step({
         - Start with a verb in the present tense
         - Be specific but concise
         - Focus on the "what" and "why" of the changes
+        IF THERE ARE MULTIPLE LOGICAL CHANGES, USE THE DESCRIPTION TO EXPLAIN THE CHANGES IN BULLET POINTS.
+
         - Keep the first line under 50 characters
         - If needed, add more detailed description after a blank line`
         }
@@ -115,8 +117,6 @@ const generateMessage = new Step({
     if (!res?.object?.generated) {
       throw new Error(res?.object?.commitMessage as string);
     }
-
-    console.log({ res });
 
     return {
       commitMessage: res?.object?.commitMessage as string,
