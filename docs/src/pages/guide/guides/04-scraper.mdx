@@ -8,7 +8,7 @@ They support loops, branching, parallel execution, error handling, and more.
 
 Here's an updated example of creating a workflow that uses predefined tools to crawl a website, structure the data using an LLM, and analyze the sentiment of the content.
 
-### **1. Import Necessary Modules**
+### 1. Import Necessary Modules
 
 ```typescript
 import { Step, Workflow, Mastra, Agent } from "@mastra/core";
@@ -17,7 +17,7 @@ import { z } from "zod";
 import * as syncs from "./syncs";
 ```
 
-### **2. Initialize Mastra Instance**
+### 2. Initialize Mastra Instance
 
 ```typescript
 const crawlWebpage = createTool({
@@ -57,11 +57,11 @@ export const mastra = new Mastra({
 });
 ```
 
-### **3. Define Steps**
+### 3. Define Steps
 
 You can define steps inline or by function reference.
 
-#### **Option 1: Inline Step Creation**
+#### Option 1: Inline Step Creation
 
 ```typescript
 const contentWorkflow = new Workflow({ name: "content-review" });
@@ -86,7 +86,7 @@ contentWorkflow
   );
 ```
 
-#### **Option 2: Step by Function Reference**
+#### Option 2: Step by Function Reference
 
 ```typescript
 // Define steps separately
@@ -109,9 +109,9 @@ const contentWorkflow = new Workflow({ name: "content-review" });
 contentWorkflow.step(crawlWebpage).then(structureStep);
 ```
 
-### **4. Control Flow Between Steps**
+### 4. Control Flow Between Steps
 
-#### **Parallel Execution**
+#### Parallel Execution
 
 Use `.step()` to add steps that can run in parallel.
 
@@ -121,7 +121,7 @@ contentWorkflow
   .step(fetchOrderData); // These steps run in parallel
 ```
 
-#### **Sequential Execution**
+#### Sequential Execution
 
 Use `.then()` to chain steps that depend on the previous step.
 
@@ -132,7 +132,7 @@ contentWorkflow
   .then(processOrder);
 ```
 
-#### **Branching and Merging Paths**
+#### Branching and Merging Paths
 
 Use `.after()` to specify dependencies explicitly and to manage branching.
 
@@ -154,7 +154,7 @@ In this example:
 - Separately, after `stepA`, we start `stepC`, which leads to `stepE`.
 - Once both `stepD` and `stepE` complete, `stepF` runs.
 
-#### **Cyclical Dependencies**
+#### Cyclical Dependencies
 
 Workflows can support cyclical dependencies, allowing steps to loop based on conditions.
 
@@ -171,11 +171,11 @@ contentWorkflow
     });
 ```
 
-### **5. Conditions and Variables**
+### 5. Conditions and Variables
 
 Use the `when` property to define conditions under which a step should execute.
 
-#### **Option 1: Function**
+#### Option 1: Function
 
 ```typescript
 contentWorkflow.step(
@@ -191,7 +191,7 @@ contentWorkflow.step(
 );
 ```
 
-#### **Option 2: Query Object**
+#### Option 2: Query Object
 
 ```typescript
 contentWorkflow.step(
@@ -208,7 +208,7 @@ contentWorkflow.step(
 );
 ```
 
-#### **Option 3: Simple Path Comparison (Syntactic Sugar)**
+#### Option 3: Simple Path Comparison (Syntactic Sugar)
 
 ```typescript
 contentWorkflow.step(
@@ -224,7 +224,7 @@ contentWorkflow.step(
 );
 ```
 
-### **6. Defining Variables**
+### 6. Defining Variables
 
 Variables allow you to pass data between steps.
 
@@ -246,7 +246,7 @@ contentWorkflow
   );
 ```
 
-### **7. Finalizing the Workflow**
+### 7. Finalizing the Workflow
 
 After defining all steps and their relationships, you can finalize the workflow.
 
