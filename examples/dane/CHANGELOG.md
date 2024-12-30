@@ -1,5 +1,13 @@
 # @mastra/dane
 
+## 0.0.2-alpha.22
+
+### Patch Changes
+
+- 9045bae: Test release
+
+  Please enter a summary for your changes.
+
 ## 0.0.2-alpha.20
 
 ### Patch Changes
