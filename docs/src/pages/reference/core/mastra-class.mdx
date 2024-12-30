@@ -1,0 +1,139 @@
+# The Mastra Class
+
+The Mastra class is the core entry point for your application. It manages agents, workflows, and server endpoints.
+
+## Constructor Options
+
+<PropertiesTable
+  content={[
+    {
+      name: 'agents',
+      type: 'Agent[]',
+      description: 'Array of Agent instances to register',
+      isOptional: true,
+      defaultValue: '[]',
+    },
+    {
+      name: 'tools',
+      type: 'Record<string, ToolApi>',
+      description:
+        'Custom tools to register. Structured as a key-value pair, with keys being the tool name and values being the tool function.',
+      isOptional: true,
+      defaultValue: '{}',
+    },
+    {
+      name: 'integrations',
+      type: 'Integration[]',
+      description: 'Array of Mastra integrations to register. Will be used by agents, workflows, and tools.',
+      isOptional: true,
+      defaultValue: '[]',
+    },
+    {
+      name: 'engine',
+      type: 'MastraEngine',
+      description: 'Database engine instance',
+      isOptional: true,
+    },
+    {
+      name: 'vectors',
+      type: 'Record<string, MastraVector>',
+      description:
+        'Vector store instance, used for semantic search and vector-based tools (eg Pinecone, PgVector or Qdrant)',
+      isOptional: true,
+    },
+    {
+      name: 'logger',
+      type: 'Logger',
+      description: 'Logger instance created with createLogger()',
+      isOptional: true,
+      defaultValue: 'Console logger with INFO level',
+    },
+    {
+      name: 'workflows',
+      type: 'Workflow[]',
+      description: 'Array of Workflow instances to register',
+      isOptional: true,
+      defaultValue: '[]',
+    },
+    {
+      name: 'syncs',
+      type: 'Record<string, SyncConfig>',
+      description: 'Sync configurations (requires engine)',
+      isOptional: true,
+      defaultValue: '{}',
+    },
+  ]}
+/>
+
+## Initialization
+
+The Mastra class is typically initialized in your `src/mastra/index.ts` file:
+
+```typescript copy filename=src/mastra/index.ts
+import { Mastra, createLogger } from '@mastra/core'
+
+// Basic initialization
+export const mastra = new Mastra({})
+
+// Full initialization with all options
+export const mastra = new Mastra({
+  agents: {},
+  workflows: [],
+  integrations: [],
+  logger: createLogger({
+    type: 'CONSOLE',
+    level: 'INFO',
+  }),
+  engine: {},
+  syncs: {},
+  tools: {},
+  vectors: {},
+})
+```
+
+You can think of the `Mastra` class as a top-level registry. When you register tools with Mastra, your registered agents and workflows can use them. When you register integrations with Mastra, agents, workflows, and tools can use them.
+
+## Methods
+
+<PropertiesTable
+  content={[
+    {
+      name: 'getAgent(name)',
+      type: 'Agent',
+      description: 'Returns an agent instance by id. Throws if agent not found.',
+      example: 'const agent = mastra.getAgent("agentOne");',
+    },
+    {
+      name: 'sync<K>(key, params)',
+      type: 'Promise<void>',
+      description: 'Executes a sync operation. Requires engine to be configured. Throws if sync not found.',
+      example: 'await mastra.sync("googleDocs", { folder: "123" });',
+    },
+    {
+      name: 'setLogger({ key, logger })',
+      type: 'void',
+      description: 'Sets a logger for a specific component (AGENT | WORKFLOW). Advanced use case.',
+      example: 'mastra.setLogger({ key: "AGENT", logger });',
+    },
+    {
+      name: 'getLogger(key)',
+      type: 'Logger | undefined',
+      description: 'Gets the logger for a specific component. Advanced use case.',
+      example: 'const logger = mastra.getLogger("AGENT");',
+    },
+  ]}
+/>
+
+## Error Handling
+
+The Mastra class methods throw typed errors that can be caught:
+
+```typescript copy
+try {
+  const tool = mastra.getTool('nonexistentTool');
+} catch (error) {
+  if (error instanceof Error) {
+    console.log(error.message); // "Tool with name nonexistentTool not found"
+  }
+}
+```
