@@ -43,6 +43,7 @@
     "travel-app": "0.1.0"
   },
   "changesets": [
+    "afraid-papayas-shake",
     "big-goats-try",
     "blue-bags-hang",
     "brave-flowers-cheer",
