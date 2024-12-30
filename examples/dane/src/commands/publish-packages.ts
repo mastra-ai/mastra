@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { readFileSync } from 'fs';
 import path from 'path';
 import { z } from 'zod';
 
@@ -15,9 +16,9 @@ export async function publishPackages() {
 
   const resultObj = await agent.generate(
     `
+        ONLY RETURN DATA IF WE HAVE PACKAGES TO PUBLISH. If we do not, return empty arrays.
         Can you format this for me ${result.text}? 
-        @mastra/core must be first. 
-        @mastra/dane should be listed after packages and integrations.
+        @mastra/core must be first. @mastra/dane should be listed after packages and integrations.
         `,
     {
       schema: z.object({
@@ -30,11 +31,11 @@ export async function publishPackages() {
 
   console.log(resultObj.object);
 
-  let packagesToBuild: string[] = [];
+  const packagesToBuild: Set<string> = new Set();
 
   if (resultObj?.object?.packages) {
     const packages = resultObj.object.packages;
-    const packagesMapped = packages.map((pkg: string) => {
+    packages.forEach((pkg: string) => {
       let pkgName = pkg.replace('@mastra/', '');
 
       if (pkgName === 'mastra') {
@@ -42,37 +43,45 @@ export async function publishPackages() {
       }
 
       const pkgPath = path.join(process.cwd(), 'packages', pkgName);
-      return pkgPath;
+      packagesToBuild.add(pkgPath);
     });
-    packagesToBuild = [...packagesMapped];
   }
 
   if (resultObj?.object?.integrations) {
     const integrations = resultObj.object.integrations;
-    const integrationsMapped = integrations.map((integration: string) => {
+    integrations.forEach((integration: string) => {
       let pkgName = integration.replace('@mastra/', '');
       const integrationPath = path.join(process.cwd(), 'integrations', pkgName);
-      return integrationPath;
+
+      packagesToBuild.add(integrationPath);
     });
-    packagesToBuild = [...packagesToBuild, ...integrationsMapped];
   }
 
   if (resultObj?.object?.danePackage) {
     const danePackage = resultObj.object.danePackage;
     let pkgName = danePackage.replace('@mastra/', '');
     const danePackageMapped = path.join(process.cwd(), 'examples', pkgName);
-    packagesToBuild = [...packagesToBuild, danePackageMapped];
+    const pkgJsonPath = readFileSync(path.join(danePackageMapped, 'package.json'), 'utf-8');
+    const pkgJson = JSON.parse(pkgJsonPath);
+    const dependencies = Object.keys(pkgJson.dependencies || {}).filter((dep: string) => dep.startsWith('@mastra/'));
+    dependencies.forEach((dep: string) => {
+      const pkgName = dep.replace('@mastra/', '');
+      const pkgPath = path.join(process.cwd(), 'packages', pkgName);
+      packagesToBuild.add(pkgPath);
+    });
+
+    packagesToBuild.add(danePackage);
   }
 
-  console.log(packagesToBuild);
+  const pkgSet = Array.from(packagesToBuild.keys());
 
-  if (!packagesToBuild || !packagesToBuild.length) {
+  if (!packagesToBuild.size) {
     console.error(chalk.red('No packages to build.'));
     process.exit(1);
   }
 
   let res = await agent.generate(`
-        Here are the packages that need to be built: ${packagesToBuild.join(',')}.
+        Here are the packages that need to be built: ${pkgSet.join(',')}.
         We need to build core first. And dane last. The rest can be done in parallel.
     `);
 
