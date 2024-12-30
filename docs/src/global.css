@@ -48,20 +48,6 @@ li:is(html[class~='dark'] *) {
   color: #fff !important;
 }
 
-button._transition:not([title='Copy code']),
-a[href='/docs/guide'],
-a[href='/docs/guide/08-running-evals'] {
-  padding-inline: 0.375rem !important;
-  color: #000 !important;
-}
-
-a[href='/docs/guide']:is(html[class~='dark'] *),
-a[href='/docs/guide/08-running-evals']:is(html[class~='dark'] *) {
-  color: #fff !important;
-  font-weight: 400;
-  padding-inline: 0.375rem !important;
-}
-
 div._overflow-y-auto {
   padding-inline-start: 0;
 }
@@ -105,4 +91,26 @@ ul[class*='not(:first-child)'] {
 
 .nextra-callout p {
   margin-top: 0 !important;
+}
+
+tr {
+  background: none !important;
+  border: none;
+}
+
+th {
+  border: none !important;
+  border-bottom: 0.5px solid hsl(0, 0%, 20%) !important;
+  &:is(:not(html[class~='dark'] *)) {
+    border-bottom: 0.5px solid hsl(0, 0%, 80%) !important;
+  }
+}
+
+td {
+  border: none !important;
+  border-bottom: 0.5px solid hsl(0, 0%, 20%) !important;
+
+  &:is(:not(html[class~='dark'] *)) {
+    border-bottom: 0.5px solid hsl(0, 0%, 80%) !important;
+  }
 }
