@@ -1,0 +1,145 @@
+# `generate()`
+
+The `generate()` method is used to interact with the language model to produce text or structured responses. This method accepts `messages` and an optional `options` object as parameters.
+
+## Parameters
+
+### `messages`
+
+The `messages` parameter can be:
+
+- A single string
+- An array of strings
+- An array of message objects with `role` and `content` properties
+
+#### Message Object Structure
+
+```typescript
+interface Message {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+```
+
+### `options` (Optional)
+
+An optional object that can include:
+
+- `stream`: A boolean indicating if the response should be streamed.
+- `schema`: An object defining the expected structure of the output. Can be a JSON Schema or a Zod schema.
+- Additional options such as callbacks and configurations.
+ 
+### Definition
+
+<PropertiesTable
+  content={[
+    {
+      name: 'messages',
+      type: 'string | string[] | Message[]',
+      description:
+        'The messages to be processed by the LLM. Can be a single string, an array of strings, or an array of message objects with `role` and `content`.',
+    },
+    {
+      name: 'options',
+      type: 'object',
+      isOptional: true,
+      description: 'Additional options for the `generate` method.',
+      properties: [
+        {
+          name: 'stream',
+          type: 'boolean',
+          isOptional: true,
+          default: 'false',
+          description: 'If `true`, the response will be streamed.',
+        },
+        {
+          name: 'schema',
+          type: 'object | Zod schema',
+          isOptional: true,
+          description:
+            'Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.',
+        },
+        {
+          name: 'onFinish',
+          type: '(result: string) => Promise<void> | void',
+          isOptional: true,
+          description:
+            'Callback function called when the generation is finished.',
+        },
+        {
+          name: 'onStepFinish',
+          type: '(step: string) => void',
+          isOptional: true,
+          description:
+            'Callback function called after each step during generation.',
+        },
+        {
+          name: 'maxSteps',
+          type: 'number',
+          isOptional: true,
+          default: '5',
+          description:
+            'Maximum number of steps allowed during generation.',
+        },
+        {
+          name: 'enabledTools',
+          type: 'object',
+          isOptional: true,
+          description: 'Specifies which tools are enabled for the LLM to use.',
+        },
+        {
+          name: 'runId',
+          type: 'string',
+          isOptional: true,
+          description:
+            'Unique identifier for the generation run, useful for tracing and logging.',
+        },
+      ],
+    },
+  ]}
+/>
+
+## Returns
+
+The return value of the `generate()` method depends on the `stream` and `schema` options provided. It can include one or more of the following properties:
+
+### PropertiesTable for Return Values
+
+<PropertiesTable
+  content={[
+    {
+      name: 'text',
+      type: 'string',
+      isOptional: true,
+      description:
+        'The generated text response. Present if `stream` is `false` and `schema` is not provided.',
+    },
+    {
+      name: 'object',
+      type: 'object',
+      isOptional: true,
+      description:
+        'The generated structured response based on the provided `schema`. Present if `schema` is provided and `stream` is `false`.',
+    },
+    {
+      name: 'textStream',
+      type: 'AsyncIterable<string>',
+      isOptional: true,
+      description:
+        'An async iterable stream of text chunks. Present if `stream` is `true` and `schema` is not provided.',
+    },
+    {
+      name: 'objectStream',
+      type: 'AsyncIterable<object>',
+      isOptional: true,
+      description:
+        'An async iterable stream of structured data. Present if `stream` is `true` and `schema` is provided.',
+    },
+    {
+      name: 'error',
+      type: 'string',
+      isOptional: true,
+      description: 'Error message if the generation fails.',
+    },
+  ]}
+/>

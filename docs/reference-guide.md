@@ -27,10 +27,10 @@ The MyFunction utility in Mastra allows you to transform data before passing it 
 Provide a concise usage example or code snippet that shows how to import and use this function or feature in a typical Mastra project.
 
 ```typescript
-import { MyFunction } from '@mastra/core';
+import { MyFunction } from "@mastra/core";
 
 const result = MyFunction({
-  data: 'some data',
+  data: "some data",
   options: {
     verbose: true,
   },
@@ -51,17 +51,17 @@ For example:
 <PropertiesTable
   content={[
     {
-      name: 'data',
-      type: 'string',
-      description: 'The input data to be transformed.',
+      name: "data",
+      type: "string",
+      description: "The input data to be transformed.",
       isOptional: false,
     },
     {
-      name: 'options',
-      type: 'object',
-      description: 'Additional options that modify the behavior of MyFunction.',
+      name: "options",
+      type: "object",
+      description: "Additional options that modify the behavior of MyFunction.",
       isOptional: true,
-      defaultValue: '{}',
+      defaultValue: "{}",
     },
   ]}
 />
@@ -75,11 +75,11 @@ If the `options` object has its own properties, you can create a separate <Prope
 <PropertiesTable
   content={[
     {
-      name: 'verbose',
-      type: 'boolean',
+      name: "verbose",
+      type: "boolean",
       description: "Enables detailed logging when 'true'.",
       isOptional: true,
-      defaultValue: 'false',
+      defaultValue: "false",
     },
   ]}
 />
@@ -97,14 +97,15 @@ If your function (or class method) returns a value, create a “Returns” headi
 <PropertiesTable
   content={[
     {
-      name: 'transformedData',
-      type: 'string',
-      description: 'The final transformed data after applying the function logic.',
+      name: "transformedData",
+      type: "string",
+      description:
+        "The final transformed data after applying the function logic.",
     },
     {
-      name: 'metadata',
-      type: 'object',
-      description: 'Additional information about the transformation.',
+      name: "metadata",
+      type: "object",
+      description: "Additional information about the transformation.",
     },
   ]}
 />
@@ -120,7 +121,7 @@ If there are advanced use cases, edge cases, or performance considerations, add 
 For a more advanced usage, see “transformDataSync” in the following file:
 
 ```ts filename="src/examples/advancedUsage/transformDataSync.ts"
-import { MyFunction } from '@mastra/core';
+import { MyFunction } from "@mastra/core";
 
 export async function transformDataSync(data: string) {
   const result = await MyFunction({

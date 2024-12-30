@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 
 interface Parameter {
   name: string;
@@ -24,8 +24,14 @@ interface PropertiesTableProps {
   content?: ContentItem[];
 }
 
-export const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
-  const renderType = ({ properties = [] }: { properties: Property[] | undefined }) => {
+export const PropertiesTable: React.FC<PropertiesTableProps> = ({
+  content = [],
+}) => {
+  const renderType = ({
+    properties = [],
+  }: {
+    properties: Property[] | undefined;
+  }) => {
     if (properties && properties.length > 0) {
       return (
         <div className="flex flex-col">
@@ -47,11 +53,15 @@ export const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }
                       <div className="relative flex flex-row items-start gap-2 group">
                         <h3 className="font-mono text-sm font-medium cursor-pointer">
                           {param.name}
-                          <span>{param.isOptional ? '?:' : ':'}</span>
+                          <span>{param.isOptional ? "?:" : ":"}</span>
                         </h3>
-                        <div className="font-mono text-zinc-500 text-sm w-full">{param.type}</div>
+                        <div className="font-mono text-zinc-500 text-sm w-full">
+                          {param.type}
+                        </div>
                       </div>
-                      <div className="text-sm leading-5 text-zinc-500">{param.description}</div>
+                      <div className="text-sm leading-5 text-zinc-500">
+                        {param.description}
+                      </div>
                     </div>
                   ))}
               </div>
@@ -74,11 +84,13 @@ export const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }
             <div className="flex flex-row gap-2 group items-start">
               <h3 className="font-mono text-sm font-medium cursor-pointer">
                 {item.name}
-                <span>{item.isOptional ? '?:' : ':'}</span>
+                <span>{item.isOptional ? "?:" : ":"}</span>
               </h3>
               <div className="text-sm leading-5 text-zinc-500">{item.type}</div>
             </div>
-            <div className="text-sm leading-5 text-zinc-500">{item.description}</div>
+            <div className="text-sm leading-5 text-zinc-500">
+              {item.description}
+            </div>
             {renderType({ properties: item.properties })}
           </div>
         );

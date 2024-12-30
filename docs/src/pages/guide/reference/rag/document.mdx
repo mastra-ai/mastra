@@ -1,0 +1,99 @@
+# Document Processing
+
+The `MDocument` class handles document chunking and metadata extraction.
+
+## Constructor
+
+<PropertiesTable
+  content={[
+    {
+      name: "text",
+      type: "string",
+      description: "Document text content",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Optional metadata about the document",
+    },
+  ]}
+/>
+
+## Methods
+
+### chunk()
+
+Splits document into chunks and optionally extracts metadata.
+
+<PropertiesTable
+  content={[
+    {
+      name: "strategy",
+      type: "'sentence' | 'paragraph' | 'fixed'",
+      description: "Chunking strategy to use",
+    },
+    {
+      name: "parseMarkdown",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to parse markdown syntax",
+    },
+    {
+      name: "metadataExtraction",
+      type: "object",
+      isOptional: true,
+      description: "Metadata extraction options (requires OpenAI)",
+      properties: [
+        {
+          name: "title",
+          type: "boolean | TitleExtractorsArgs",
+          description: "Extract document title",
+        },
+        {
+          name: "summary",
+          type: "boolean | SummaryExtractArgs",
+          description: "Generate document summary",
+        },
+        {
+          name: "questionsAnswered",
+          type: "boolean | QuestionAnswerExtractArgs",
+          description: "Extract potential questions document answers",
+        },
+        {
+          name: "keyword",
+          type: "boolean | KeywordExtractArgs",
+          description: "Extract key terms and concepts",
+        },
+      ],
+    },
+  ]}
+/>
+
+## Response Types
+
+The chunk method returns an array of document nodes:
+
+```typescript copy
+interface DocumentNode {
+  text: string;
+  metadata: Record<string, any>;
+  embedding?: number[];
+}
+```
+
+## Error Handling
+
+```typescript copy
+try {
+  const chunks = await doc.chunk({
+    strategy: "sentence",
+  });
+} catch (error) {
+  if (error instanceof DocumentProcessingError) {
+    console.log(error.code); // 'invalid_strategy' | 'extraction_failed' etc
+    console.log(error.details); // Additional error context
+  }
+}
+```
