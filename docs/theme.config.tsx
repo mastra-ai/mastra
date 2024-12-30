@@ -62,7 +62,7 @@ const docs: DocsThemeConfig = {
   project: {
     link: "https://github.com/mastra-ai/mastra",
   },
-  docsRepositoryBase: "https://github.com/mastra-ai/mastra",
+  docsRepositoryBase: "https://github.com/mastra-ai/mastra/blob/main/docs",
   chat: {
     link: "https://discord.gg/TpapMTnjyB",
     icon: (
