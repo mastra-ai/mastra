@@ -32,6 +32,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Prepare CLI package for publishing
+        run: cd packages/cli && rm -rf node_modules && pnpm install --shamefully-hoist --ignore-scripts && cd ../..
+
+      - name: Setup npm auth
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+
       - name: Install dane cli
         run: pnpm install -g @mastra/dane@alpha
 
