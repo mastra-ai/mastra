@@ -10,5 +10,12 @@
     "noImplicitReturns": false
   },
   "include": ["src/**/*", "postcss.config.js"],
-  "exclude": ["node_modules", "src/starter-files/**", "src/playground/**", "**/*.test.ts"]
+  "exclude": [
+    "node_modules",
+    "src/starter-files/**",
+    "src/playground/**",
+    "**/*.test.ts",
+    "src/homepage/dist",
+    "src/chat/agent/dist"
+  ]
 }

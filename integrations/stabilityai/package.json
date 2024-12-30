@@ -25,6 +25,7 @@
   },
   "scripts": {
     "analyze": "size-limit --why",
+    "prepublish": "pnpm build",
     "build": "dts build",
     "build:dev": "dts watch",
     "lint": "dts lint",

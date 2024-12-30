@@ -6,6 +6,7 @@ import { commitMessageCommand } from './commands/commit-message.js';
 import { configCommand } from './commands/config.js';
 import { issueLabelerCommand } from './commands/issue-labeler.js';
 import { message } from './commands/message.js';
+import { publishPackages } from './commands/publish-packages.js';
 
 dotenv.config();
 
@@ -20,8 +21,13 @@ program
   .description('Automatically label GitHub issues based on their content and context')
   .action(issueLabelerCommand);
 
-program.command('commit').action(commitMessageCommand);
+program
+  .command('commit')
+  .description('Create a sensible commit message based on the changes made')
+  .action(commitMessageCommand);
 
 program.addCommand(configCommand);
+
+program.command('publish').description('Publish packages to the registry').action(publishPackages);
 
 program.parse(process.argv);

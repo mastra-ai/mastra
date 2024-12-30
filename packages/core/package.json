@@ -31,7 +31,8 @@
     "size": "size-limit",
     "start": "dts watch",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "clean": "rm -rf dist && rm -rf node_modules"
+    "clean": "rm -rf dist && rm -rf node_modules",
+    "prepublish": "pnpm build"
   },
   "husky": {
     "hooks": {

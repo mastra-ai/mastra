@@ -27,7 +27,8 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "clean": "rm -rf dist && rm -rf node_modules",
     "typecheck": "tsc --noEmit --incremental",
-    "postinstall": "node src/scripts/postinstall.js"
+    "postinstall": "node src/scripts/postinstall.js",
+    "prepublish": "pnpm build"
   },
   "keywords": [
     "mastra",
