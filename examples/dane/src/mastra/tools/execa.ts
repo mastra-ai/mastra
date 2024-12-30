@@ -87,11 +87,15 @@ export const pnpmChangesetStatus = createTool({
   execute: async () => {
     try {
       console.log('Checking');
-      const { stdout } = await execa('pnpm', ['publish', '-r', '--dry-run', '--no-git-checks']);
-      const packages = stdout
-        .split('\n')
-        .filter(line => line.includes('Publishing'))
-        .map(line => line.split(' ')[1] as string);
+      const { stdout } = await execa('pnpm', ['publish', '-r', '--dry-run', '--no-git-checks'], {
+        all: true,
+        // We want to see stderr too since pnpm sometimes puts important info there
+        stderr: 'inherit',
+      });
+
+      const lines = stdout.split('\n');
+      const filteredLines = lines.filter(line => line.startsWith('+'));
+      const packages = filteredLines.map(line => line.trim().substring(2).split('@').slice(0, -1).join('@'));
 
       return { message: packages };
     } catch (e) {
