@@ -1,12 +1,13 @@
-import { ArrowUpRight } from "lucide-react";
-import React from "react";
-import Image from "next/image";
+import { ArrowUpRight } from 'lucide-react'
+import React from 'react'
+
+import Image from 'next/image'
 
 interface ShowcaseCardProps {
-  title: string;
-  description: string;
-  image: string;
-  link: string;
+  title: string
+  description: string
+  image: string
+  link: string
 }
 
 const ShowcaseCard = ({
@@ -41,36 +42,36 @@ const ShowcaseCard = ({
       </div>
     </a>
   </div>
-);
+)
 
 export const ShowcaseGrid = () => {
   const showcaseItems: ShowcaseCardProps[] = [
     {
-      title: "Audiofeed",
-      description: "Audiofeed repurposes your content into audio and video.",
-      image: "/docs/showcase/audio-feed.png",
-      link: "https://audiofeed.ai",
+      title: 'Audiofeed',
+      description: 'Audiofeed repurposes your content into audio and video.',
+      image: '/showcase/audio-feed.png',
+      link: 'https://audiofeed.ai',
     },
     {
-      title: "Bird Checker",
-      description: "Bird Checker is a bird identification app.",
-      image: "/docs/showcase/bird-checker.png",
-      link: "https://bird-checker.vercel.app",
+      title: 'Bird Checker',
+      description: 'Bird Checker is a bird identification app.',
+      image: '/showcase/bird-checker.png',
+      link: 'https://bird-checker.vercel.app',
     },
     {
-      title: "OpenAPI Spec Writer",
-      description: "Generate an open api spec from your documentation url.",
-      image: "/docs/showcase/open-api-spec-writer.png",
-      link: "https://openapi-spec-writer.vercel.app",
+      title: 'OpenAPI Spec Writer',
+      description: 'Generate an open api spec from your documentation url.',
+      image: '/showcase/open-api-spec-writer.png',
+      link: 'https://openapi-spec-writer.vercel.app',
     },
     {
-      title: "Crypto Chatbot",
+      title: 'Crypto Chatbot',
       description:
-        "You can ask about current crypto prices and trends in the cryptocurrency market.",
-      image: "/docs/showcase/crypto-chatbot.png",
-      link: "https://crypto-chatbot-xi.vercel.app/",
+        'You can ask about current crypto prices and trends in the cryptocurrency market.',
+      image: '/showcase/crypto-chatbot.png',
+      link: 'https://crypto-chatbot-xi.vercel.app/',
     },
-  ];
+  ]
 
   return (
     <div className="mx-auto max-w-7xl  px-4  py-12 sm:px-6 lg:px-8">
@@ -88,5 +89,5 @@ export const ShowcaseGrid = () => {
         ))}
       </div>
     </div>
-  );
-};
+  )
+}
