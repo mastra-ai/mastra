@@ -1,5 +1,11 @@
 # @mastra/memory
 
+## 0.0.2-alpha.25
+
+### Patch Changes
+
+- 3220d26: Fix lastStep error in agent stream
+
 ## 0.0.2-alpha.24
 
 ### Patch Changes

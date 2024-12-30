@@ -1,5 +1,12 @@
 # vnext
 
+## 0.1.1-alpha.29
+
+### Patch Changes
+
+- Updated dependencies [3220d26]
+  - @mastra/memory@0.0.2-alpha.25
+
 ## 0.1.1-alpha.28
 
 ### Patch Changes
