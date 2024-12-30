@@ -14,4 +14,7 @@ const withNextra = nextra({
   },
 });
 
-export default withNextra();
+export default withNextra({
+  basePath: '',
+  trailingSlash: false,
+});
