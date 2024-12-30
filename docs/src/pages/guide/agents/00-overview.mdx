@@ -1,0 +1,196 @@
+# Agents Overview
+
+Agents in Mastra are systems where the language model can autonomously decide on a sequence of actions to perform tasks. They have access to tools, workflows, and synced data, enabling them to perform complex tasks and interact with external systems. Agents can invoke your custom functions, utilize third-party APIs through integrations, and access knowledge bases you have built.
+
+While the `LLM` class is similar to a contractor you might hire for a one-off task, agents are like employees who can be used for ongoing projects. They have names, persistent memory, consistent model configurations, and instructions across calls, as well as a set of enabled tools.
+
+## 1. Creating an Agent
+
+To create an agent in Mastra, you use the `Agent` class and define its properties:
+
+```ts showLineNumbers filename="src/mastra/agents/index.ts" copy
+import { Agent } from "@mastra/core";
+
+const myAgent = new Agent({
+  name: "My Agent",
+  instructions: "You are a helpful assistant.",
+  model: {
+    provider: "openai",
+    name: "gpt-4", // Or "gpt-3.5-turbo"
+  },
+});
+```
+
+**Note:** Ensure that you have set the necessary environment variables, such as your OpenAI API key, in your `.env` file:
+
+```.env filename=".env" copy
+OPENAI_API_KEY=your_openai_api_key
+```
+
+Also, make sure you have the `@mastra/core` package installed:
+
+```bash npm2yarn copy
+npm install @mastra/core
+```
+
+### Registering the Agent
+
+Register your agent with Mastra to enable logging and access to configured tools and integrations:
+
+```ts showLineNumbers filename="src/mastra/index.ts" lines={3, 8} copy
+import { Mastra } from "@mastra/core";
+import { myAgent } from "./agents";
+
+export const mastra = new Mastra({
+  agents: { myAgent },
+});
+```
+
+## 2. Generating and streaming text
+
+### Generating text
+
+Use the `.generate()` method to have your agent produce text responses:
+
+```ts showLineNumbers filename="src/mastra/index.ts" copy
+const messages = [
+  { role: "user", content: "Hello, how can you assist me today?" },
+];
+const response = await myAgent.generate(messages);
+
+console.log("Agent:", response.text);
+```
+
+### Streaming responses
+
+For more real-time responses, you can stream the agent's response:
+
+```ts showLineNumbers filename="src/mastra/index.ts" lines={6} copy
+const messages = [{ role: "user", content: "Tell me a story." }];
+const stream = await myAgent.generate(messages, {
+  stream: true,
+});
+
+console.log("Agent:");
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+## **3. Structured Output**
+
+Agents can return structured data by providing a JSON Schema or using a Zod schema.
+
+### Using JSON Schema
+
+```typescript
+const schema = {
+  type: "object",
+  properties: {
+    summary: { type: "string" },
+    keywords: { type: "array", items: { type: "string" } },
+  },
+  required: ["summary", "keywords"],
+};
+
+const messages = [
+  {
+    role: "user",
+    content:
+      "Please provide a summary and keywords for the following text: ...",
+  },
+];
+const response = await myAgent.generate(messages, {
+  schema: schema,
+});
+
+console.log("Structured Output:", response.object);
+```
+
+### Using Zod
+
+You can also use Zod schemas for type-safe structured outputs.
+
+First, install Zod:
+
+```bash npm2yarn copy
+npm install zod
+```
+
+Then, define a Zod schema and use it with the agent:
+
+```ts showLineNumbers filename="src/mastra/index.ts" copy
+import { z } from "zod";
+
+// Define the Zod schema
+const schema = z.object({
+  summary: z.string(),
+  keywords: z.array(z.string()),
+});
+
+// Use the schema with the agent
+const messages = [
+  {
+    role: "user",
+    content:
+      "Please provide a summary and keywords for the following text: ...",
+  },
+];
+const response = await myAgent.generate(messages, {
+  schema: schema,
+});
+
+console.log("Structured Output:", response.object);
+```
+
+This allows you to have strong typing and validation for the structured data returned by the agent.
+
+## **4. Saving Memory**
+
+Agents have a memory that can be persisted between sessions. Memory can be accessed by the agent's `memory` property, and can be saved, retrieved, and cleared using the `save()`, `getMessages()`, and `load()` methods.
+
+### Example
+
+```typescript showLineNumbers filename="src/mastra/index.ts" copy
+const response1 = await myAgent.generate("Which LLM model are you?", {
+  threadId: "thread_1",
+});
+
+await myAgent.memory.save("thread_1");
+const memoryMessages = await myAgent.memory.getMessages({
+  threadId: "thread_1",
+});
+console.log("Agent Memory:", memoryMessages);
+```
+
+## **5. Running Agents**
+
+Mastra provides a CLI command `mastra dev` to run your agents behind an API. By default, this looks for exported agents in files in the `src/mastra/agents` directory.
+
+### Starting the Server
+
+```bash
+mastra dev
+```
+
+This will start the server and make your agent available at `http://localhost:4111/api/agents/myAgent/text`.
+
+### Interacting with the Agent
+
+You can interact with the agent using `curl` from the command line:
+
+```bash
+curl -X POST http://localhost:4111/api/agents/myAgent/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      { "role": "user", "content": "Hello, how can you assist me today?" }
+    ]
+  }'
+```
+
+## Next Steps
+
+- See more about Agent Memory in the [Agent Memory](./01-agent-memory.mdx) guide.
+- See an example agent in the [Chef Michel](./02-chef-michel.mdx) example.

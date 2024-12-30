@@ -1,0 +1,184 @@
+# Agent Memory
+
+Agents in Mastra have a memory that stores conversation history and contextual information. This memory allows agents to maintain state across interactions, enabling more coherent and context-aware responses.
+
+There are three main ways to implement agent memory in Mastra:
+
+1. **In-Memory Storage** (Default)
+2. **Using Mastra Engine**
+3. **Using External Storage (Redis or PostgreSQL)**
+
+## 1. Default In-Memory Storage
+
+Let's start by revisiting the example from the [overview](/guide/creating-agents/00-overview.mdx) page.
+
+```typescript showLineNumbers filename="src/mastra/index.ts" copy
+const response1 = await myAgent.generate("Which LLM model are you?", {
+  threadId: "thread_1",
+});
+
+await myAgent.memory.save("thread_1");
+const memoryMessages = await myAgent.memory.getMessages({
+  threadId: "thread_1",
+});
+console.log("Agent Memory:", memoryMessages);
+```
+
+This is the simplest way to use agent memory -- with the default in-memory storage. It's suitable for local development, testing, or backend processes outside the context of a user session and request/response cycle.
+
+Especially if you're using `mastra dev` or otherwise running agents behind an API, you'll want to use a more persistent memory backend.
+
+## 2. Using Mastra Engine
+
+The Mastra engine is a Postgres database that you can install locally using the Mastra CLI. It's a helpful backend for agent memory during development because you can inspect agent memory more easily.
+
+### Setting Up Mastra Engine for Agent Memory
+
+1. **Install Mastra Engine**:
+
+```bash npm2yarn copy
+npm install @mastra/engine
+```
+
+2. **Configure Mastra**:
+
+```typescript showLineNumbers
+// src/mastra/index.ts
+import { Mastra } from "@mastra/core";
+import { mastraEngine } from "@mastra/engine";
+
+import { myAgent } from "./agents";
+
+export const mastra = new Mastra({
+  engine: mastraEngine,
+  agents: { myAgent },
+});
+```
+
+3. **Run Mastra Engine**:
+
+```bash
+mastra engine up
+```
+
+This command sets up the necessary infrastructure for Mastra Engine.
+
+## 3. Using External Storage
+
+For production environments where you need persistent memory across restarts and scalability, you can use external storage backends like Redis or PostgreSQL.
+
+### Using Redis for Agent Memory
+
+First, install the necessary packages:
+
+```bash
+npm install @mastra/memory redis
+```
+
+Then, configure your agent to use Redis for memory storage:
+
+```typescript
+// src/mastra/index.ts
+import { Mastra } from "@mastra/core";
+import { RedisMemory } from "@mastra/memory";
+import { createClient } from "redis";
+
+import { myAgent } from "./agents";
+
+// Create a Redis client
+const redisClient = createClient({
+  url: process.env.REDIS_URL, // e.g., "redis://localhost:6379"
+});
+
+redisClient.connect();
+
+const redisMemory = new RedisMemory({
+  client: redisClient,
+});
+
+export const mastra = new Mastra({
+  memory: redisMemory,
+  agents: { myAgent },
+});
+```
+
+Ensure you have your Redis URL set in your environment variables:
+
+```env
+# .env
+REDIS_URL=redis://your_redis_server_url
+```
+
+### Using PostgreSQL for Agent Memory
+
+First, install the necessary packages:
+
+```bash
+npm install @mastra/memory pg
+```
+
+Then, configure your agent to use PostgreSQL for memory storage:
+
+```typescript
+// src/mastra/index.ts
+import { Mastra } from "@mastra/core";
+import { PostgresMemory } from "@mastra/memory";
+import { Pool } from "pg";
+
+import { myAgent } from "./agents";
+
+// Create a PostgreSQL pool
+const pgPool = new Pool({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING,
+});
+
+const pgMemory = new PostgresMemory({
+  pool: pgPool,
+});
+
+export const mastra = new Mastra({
+  memory: pgMemory,
+  agents: { myAgent },
+});
+```
+
+Ensure you have your PostgreSQL connection string set in your environment variables:
+
+```env
+# .env
+POSTGRES_CONNECTION_STRING=postgresql://user:password@localhost:5432/your_database
+```
+
+## Managing Agent Memory
+
+Once your agent is configured with a memory backend, you can manage its memory using the following methods.
+
+### Saving the Agent's Memory
+
+Save the agent's memory state with a unique identifier:
+
+```typescript
+await myAgent.memory.save("memory_id");
+```
+
+This persists the current memory state, allowing you to reload it later.
+
+### Loading the Agent's Memory
+
+Load a previously saved memory state:
+
+```typescript
+await myAgent.memory.load("memory_id");
+```
+
+This replaces the agent's current memory with the saved state associated with `memory_id`.
+
+### Clearing the Agent's Memory
+
+To clear the agent's memory, removing all stored messages and context:
+
+```typescript
+await myAgent.memory.clear();
+```
+
+This resets the agent's memory to an empty state.
