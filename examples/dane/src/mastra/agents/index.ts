@@ -37,6 +37,18 @@ export const daneIssueLabeler = new Agent({
   model: getBaseModelConfig(),
 });
 
+export const danePackagePublisher = new Agent({
+  name: 'DanePackagePublisher',
+  instructions: `
+    You are Dane, the ultimate node module publisher.
+    You help engineers publish their pnpm changesets.
+    `,
+  model: getBaseModelConfig(),
+  tools: {
+    execaTool,
+  },
+});
+
 export const dane = new Agent({
   name: 'Dane',
   instructions: `
