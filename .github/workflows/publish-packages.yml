@@ -35,6 +35,9 @@ jobs:
       - name: Install dane cli
         run: pnpm install -g @mastra/dane@alpha
 
+      - name: Set Anthropic Key
+        run: dane config --set ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
+
       - name: Publish packages
         run: dane publish
         env:
