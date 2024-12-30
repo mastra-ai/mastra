@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 
-import { ConfigManager } from '../config';
+import { ConfigManager } from '../config/index.js';
 
 export const configCommand = new Command('config')
   .description('Manage Dane configuration')

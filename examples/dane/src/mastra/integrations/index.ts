@@ -1,7 +1,7 @@
 import { FirecrawlIntegration } from "@mastra/firecrawl";
 import { GithubIntegration } from "@mastra/github";
 import { StabilityAiIntegration } from "@mastra/stabilityai";
-import { config } from "../../config";
+import { config } from "../../config/index.js";
 
 // Helper function to get key from config or env
 const getApiKey = (configKey: string, envKey: string): string => {
