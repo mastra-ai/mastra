@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.33
+
+### Patch Changes
+
+- a72e539: Test release
+
 ## 0.0.2-alpha.31
 
 ### Patch Changes
