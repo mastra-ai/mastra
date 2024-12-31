@@ -1,17 +1,7 @@
-import {
-  CoreMessage as AiCoreMessage,
-  CoreSystemMessage as AiCoreSystemMessage,
-  CoreAssistantMessage as AiCoreAssistantMessage,
-  CoreUserMessage as AiCoreUserMessage,
-  CoreToolMessage as AiCoreToolMessage,
-  GenerateObjectResult,
-  GenerateTextResult,
-  LanguageModelV1,
-  StreamObjectResult,
-  StreamTextResult,
-} from 'ai';
+import { CoreMessage as AiCoreMessage, CoreSystemMessage as AiCoreSystemMessage, CoreAssistantMessage as AiCoreAssistantMessage, CoreUserMessage as AiCoreUserMessage, CoreToolMessage as AiCoreToolMessage, GenerateObjectResult, GenerateTextResult, LanguageModelV1, StreamObjectResult, StreamTextResult } from 'ai';
 import { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
+
 
 export type OpenAIModel = 'gpt-4' | 'gpt-4-turbo' | 'gpt-3.5-turbo' | 'gpt-4o' | 'gpt-4o-mini';
 
@@ -546,14 +536,12 @@ export type StructuredOutput = {
       };
 };
 
-export type GenerateReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends
-  | ZodSchema
-  | JSONSchema7
-  ? GenerateObjectResult<any>
-  : GenerateTextResult<any, any>;
+export type GenerateReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends undefined
+  ? GenerateTextResult<any, any>
+  : GenerateObjectResult<any>;
 
-export type StreamReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends ZodSchema | JSONSchema7
-  ? StreamObjectResult<any, any, any>
-  : StreamTextResult<any>;
+export type StreamReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends undefined
+  ? StreamTextResult<any>
+  : StreamObjectResult<any, any, any>;
 
 export type OutputType = 'text' | StructuredOutput;
