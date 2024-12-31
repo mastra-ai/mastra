@@ -1,6 +1,6 @@
 {
   "name": "@mastra/claude",
-  "version": "1.0.1-alpha.25",
+  "version": "1.0.1-alpha.26",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/claude.esm.js",
@@ -11,7 +11,6 @@
   ],
   "scripts": {
     "analyze": "size-limit --why",
-    "prepublish": "pnpm build",
     "build": "dts build",
     "build:dev": "dts watch",
     "lint": "dts lint",

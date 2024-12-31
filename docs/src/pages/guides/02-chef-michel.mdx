@@ -1,3 +1,5 @@
+import { Steps } from "nextra/components";
+
 # Agents Guide: Building a Chef Assistant
 
 In this guide, we'll walk through creating a "Chef Assistant" agent that helps users cook meals with available ingredients.
@@ -9,20 +11,22 @@ In this guide, we'll walk through creating a "Chef Assistant" agent that helps u
 
 ---
 
-## Step 1: Create the Agent
+## Create the Agent
 
+<Steps>
 ### Define the Agent
 
 Create a new file `src/mastra/agents/chefAgent.ts` and define your agent:
 
-```typescript copy filename="src/mastra/agents/chefAgent.ts"
+```ts copy filename="src/mastra/agents/chefAgent.ts"
 // src/mastra/agents/chefAgent.ts
 import { Agent } from "@mastra/core";
 
 export const chefAgent = new Agent({
   name: "chef-agent",
-  instructions: 'You are Michel, a practical and experienced home chef' +
-  'You helps people cook with whatever ingredients they have available.',
+  instructions:
+    "You are Michel, a practical and experienced home chef" +
+    "You helps people cook with whatever ingredients they have available.",
   model: {
     provider: "OPEN_AI",
     name: "gpt-4o",
@@ -33,7 +37,7 @@ export const chefAgent = new Agent({
 
 ---
 
-## Step 2: Set Up Environment Variables
+## Set Up Environment Variables
 
 Create a `.env` file in your project root and add your OpenAI API key:
 
@@ -44,13 +48,13 @@ OPENAI_API_KEY=your_openai_api_key
 
 ---
 
-## Step 3: Register the Agent with Mastra
+## Register the Agent with Mastra
 
 In your main file, register the agent:
 
-```typescript
-// src/mastra/index.ts
+```ts filename="src/mastra/index.ts"
 import { CoreMessage, Mastra } from "@mastra/core";
+
 import { chefAgent } from "./agents/chefAgent";
 
 export const mastra = new Mastra({
@@ -60,12 +64,14 @@ export const mastra = new Mastra({
 
 ---
 
-## Step 4: Interacting with the Agent
+</Steps >
 
-### Example 1: Generating Text Responses
+## Interacting with the Agent
 
-```typescript
-// src/mastra/index.ts
+<Steps>
+### Generating Text Responses
+
+```ts filename="src/mastra/index.ts"
 async function main() {
   const query =
     "In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?";
@@ -91,20 +97,15 @@ Query: In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some
 
 ---
 
-### Example 2: Streaming Responses
+### Streaming Responses
 
-```typescript
-// src/mastra/index.ts
+```ts filename="src/mastra/index.ts"
 async function main() {
   const query =
     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
   console.log(`Query: ${query}`);
 
-  const messages = [{ role: "user", content: query }] as CoreMessage[];
-
-  const stream = await chefAgent.generate(messages, {
-    stream: true,
-  });
+  const stream = await chefAgent.stream([{ role: "user", content: query }]);
 
   console.log("\n Chef Michel: ");
 
@@ -131,16 +132,14 @@ Great! You can make a comforting chicken curry...
 
 ---
 
-## Step 5: Structured Output
+### Generating a Recipe with Structured Data
 
-### Example: Generating a Recipe with Structured Data
-
-```typescript
-// src/mastra/index.ts
+```ts filename="src/mastra/index.ts"
 import { z } from "zod";
 
 async function main() {
-  const query = "I want to make lasagna, can you generate a lasagna recipe for me?";
+  const query =
+    "I want to make lasagna, can you generate a lasagna recipe for me?";
   console.log(`Query: ${query}`);
 
   // Define the Zod schema
@@ -149,16 +148,15 @@ async function main() {
       z.object({
         name: z.string(),
         amount: z.string(),
-      })
+      }),
     ),
     steps: z.array(z.string()),
   });
 
-  const messages = [{ role: "user", content: query }] as CoreMessage[];
-
-  const response = await chefAgent.generate(messages, {
-    schema: schema,
-  });
+  const response = await chefAgent.generate(
+    [{ role: "user", content: query }],
+    { output: schema },
+  );
 
   console.log("\n👨‍🍳 Chef Michel:", response.object);
 }
@@ -187,8 +185,11 @@ Query: I want to make lasagna, can you generate a lasagna recipe for me?
 
 ---
 
-## Step 6: Saving and Displaying Agent Memory
+</Steps >
 
+## Saving and Displaying Agent Memory
+
+<Steps>
 ### Saving the Agent's Memory
 
 After interacting with the agent, save its memory state:
@@ -242,7 +243,11 @@ await chefAgent.memory.clear();
 
 This resets the agent's memory to an empty state.
 
-## Step 7: Running the Agent Server
+</Steps>
+
+## Running the Agent Server
+
+<Steps>
 
 ### Using `mastra dev`
 
@@ -286,3 +291,5 @@ curl -X POST http://localhost:4111/api/agents/chefAgent/text \
   "text": "You can make delicious pancakes! Here's a simple recipe..."
 }
 ```
+
+</Steps>

@@ -1,3 +1,4 @@
+import { Agent } from '@mastra/core';
 import express, { Request, Response } from 'express';
 import { join } from 'path';
 import serverless from 'serverless-http';
@@ -150,8 +151,7 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
       return;
     }
 
-    const streamResult = await agent.generate(messages, {
-      stream: true,
+    const streamResult = await agent.stream(messages, {
       threadId,
       resourceid,
     });
@@ -168,7 +168,7 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
 app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
-    const agent = mastra.getAgent(agentId);
+    const agent: Agent = mastra.getAgent(agentId);
     const { messages, schema, threadId, resourceid } = req.body;
 
     const { ok, errorResponse } = await validateBody({
@@ -181,7 +181,7 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
       return;
     }
 
-    const result = await agent.generate(messages, { schema, threadId, resourceid });
+    const result = await agent.generate(messages, { output: schema, threadId, resourceid });
     res.json(result);
   } catch (error) {
     const apiError = error as ApiError;
@@ -196,7 +196,7 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
 app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
-    const agent = mastra.getAgent(agentId);
+    const agent: Agent = mastra.getAgent(agentId);
     const { messages, schema, threadId, resourceid } = req.body;
 
     const { ok, errorResponse } = await validateBody({
@@ -209,7 +209,7 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
       return;
     }
 
-    const streamResult = await agent.generate(messages, { schema, stream: true, threadId, resourceid });
+    const streamResult = await agent.stream(messages, { output: schema, threadId, resourceid });
 
     streamResult.pipeTextStreamToResponse(res);
   } catch (error) {
@@ -226,7 +226,7 @@ app.post('/api/agents/:agentId/tools/:toolId/execute', async (req: Request, res:
   try {
     const agentId = req.params.agentId;
     const toolId = req.params.toolId;
-    const agent = mastra.getAgent(agentId);
+    const agent: Agent = mastra.getAgent(agentId);
     const tool = Object.values(agent?.tools || {}).find((tool: any) => tool.id === toolId) as any;
     const result = await tool.execute({
       context: {

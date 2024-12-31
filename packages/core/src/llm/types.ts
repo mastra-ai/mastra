@@ -546,10 +546,14 @@ export type StructuredOutput = {
       };
 };
 
-export type GenerateReturn<S extends boolean, Z> = S extends true
-  ? Z extends ZodSchema | JSONSchema7
-    ? StreamObjectResult<any, any, any>
-    : StreamTextResult<any>
-  : Z extends ZodSchema | JSONSchema7
-    ? GenerateObjectResult<any>
-    : GenerateTextResult<any, any>;
+export type GenerateReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends
+  | ZodSchema
+  | JSONSchema7
+  ? GenerateObjectResult<any>
+  : GenerateTextResult<any, any>;
+
+export type StreamReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends ZodSchema | JSONSchema7
+  ? StreamObjectResult<any, any, any>
+  : StreamTextResult<any>;
+
+export type OutputType = 'text' | StructuredOutput;

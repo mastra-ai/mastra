@@ -67,9 +67,7 @@ For more real-time responses, you can stream the agent's response:
 
 ```ts showLineNumbers filename="src/mastra/index.ts" lines={6} copy
 const messages = [{ role: "user", content: "Tell me a story." }];
-const stream = await myAgent.generate(messages, {
-  stream: true,
-});
+const stream = await myAgent.stream(messages);
 
 console.log("Agent:");
 
@@ -102,7 +100,7 @@ const messages = [
   },
 ];
 const response = await myAgent.generate(messages, {
-  schema: schema,
+  output: schema,
 });
 
 console.log("Structured Output:", response.object);
@@ -138,7 +136,7 @@ const messages = [
   },
 ];
 const response = await myAgent.generate(messages, {
-  schema: schema,
+  output: schema,
 });
 
 console.log("Structured Output:", response.object);

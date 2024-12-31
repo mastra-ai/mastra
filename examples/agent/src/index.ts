@@ -34,7 +34,7 @@ async function textStream() {
     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
   console.log(`Query 2: ${query2}`);
 
-  const curryResponse = await agent.generate(query2, { stream: true });
+  const curryResponse = await agent.stream(query2);
 
   console.log('\n👨‍🍳 Chef Michel: ');
 
@@ -53,7 +53,7 @@ async function generateStream() {
     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
   console.log(`Query 2: ${query2}`);
 
-  const curryResponse = await agent.generate([query2], { stream: true });
+  const curryResponse = await agent.stream([query2]);
 
   console.log('\n👨‍🍳 Chef Michel: ');
 
@@ -72,7 +72,7 @@ async function textObject() {
   console.log(`Query 3: ${query3}`);
 
   const lasagnaResponse = await agent.generate(query3, {
-    schema: z.object({
+    output: z.object({
       ingredients: z.array(
         z.object({
           name: z.string(),
@@ -92,7 +92,7 @@ async function textObjectJsonSchema() {
   console.log(`Query 3: ${query3}`);
 
   const lasagnaResponse = await agent.generate(query3, {
-    schema: {
+    output: {
       type: 'object',
       properties: {
         ingredients: {
@@ -123,7 +123,7 @@ async function generateObject() {
   console.log(`Query 3: ${query3}`);
 
   const lasagnaResponse = await agent.generate([query3], {
-    schema: z.object({
+    output: z.object({
       ingredients: z.array(
         z.object({
           name: z.string(),
@@ -142,8 +142,8 @@ async function streamObject() {
   const query4 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
   console.log(`Query 4: ${query4}`);
 
-  const lasagnaStreamResponse = await agent.generate(query4, {
-    schema: z.object({
+  const lasagnaStreamResponse = await agent.stream(query4, {
+    output: z.object({
       ingredients: z.array(
         z.object({
           name: z.string(),
@@ -152,7 +152,6 @@ async function streamObject() {
       ),
       steps: z.array(z.string()),
     }),
-    stream: true,
   });
 
   console.log('\n👨‍🍳 Chef Michel: ');
@@ -171,9 +170,8 @@ async function generateStreamObject() {
   const query4 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
   console.log(`Query 4: ${query4}`);
 
-  const lasagnaStreamResponse = await agent.generate([query4], {
-    stream: true,
-    schema: z.object({
+  const lasagnaStreamResponse = await agent.stream([query4], {
+    output: z.object({
       ingredients: z.array(
         z.object({
           name: z.string(),

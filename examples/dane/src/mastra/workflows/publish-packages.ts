@@ -29,11 +29,11 @@ const getPacakgesToPublish = new Step({
     const resultObj = await agent.generate(
       `
               ONLY RETURN DATA IF WE HAVE PACKAGES TO PUBLISH. If we do not, return empty arrays.
-              Can you format this for me ${result.text}? 
+              Can you format this for me ${result.text}?
               @mastra/core must be first. @mastra/dane should be listed after packages and integrations.
               `,
       {
-        schema: z.object({
+        output: z.object({
           packages: z.array(z.string()),
           integrations: z.array(z.string()),
           danePackage: z.string(),

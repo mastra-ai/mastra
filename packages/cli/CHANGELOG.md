@@ -1,5 +1,13 @@
 # mastra
 
+## 0.1.57-alpha.65
+
+### Patch Changes
+
+- f6ba259: simplify generate api
+- Updated dependencies [f6ba259]
+  - @mastra/core@0.1.27-alpha.47
+
 ## 0.1.57-alpha.64
 
 ### Patch Changes

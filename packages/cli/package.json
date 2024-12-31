@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.1.57-alpha.64",
+  "version": "0.1.57-alpha.65",
   "license": "MIT",
   "description": "cli for mastra",
   "type": "module",
@@ -27,8 +27,7 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "clean": "rm -rf dist && rm -rf node_modules",
     "typecheck": "tsc --noEmit --incremental",
-    "postinstall": "node src/scripts/postinstall.js",
-    "prepublish": "pnpm build"
+    "postinstall": "node src/scripts/postinstall.js"
   },
   "keywords": [
     "mastra",

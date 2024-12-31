@@ -8,8 +8,8 @@ export const maxDuration = 30;
 export async function GET() {
   const testAgent = mastra.getAgent('lasagnaAgent');
 
-  const recipe = await testAgent.generate('Generate a lasagna recipe for me', {
-    schema: z.object({
+  const recipe = await testAgent.stream('Generate a lasagna recipe for me', {
+    output: z.object({
       recipe: z.object({
         name: z.string(),
         ingredients: z.array(
@@ -24,7 +24,6 @@ export async function GET() {
     onStepFinish: step => {
       console.log({ step });
     },
-    stream: true,
   });
 
   console.log('recipe====', JSON.stringify(recipe, null, 2));
