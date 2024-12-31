@@ -60,7 +60,8 @@ describe('LLM Class Integration Tests', () => {
         explanation: z.string(),
       });
 
-      const response = await llm.generate('What is 2+2?', { schema });
+      const response = await llm.generate('What is 2+2?', { output: schema });
+
       expect(response.object).toBeDefined();
       expect(response.object.answer).toBe(4);
       expect(typeof response.object.explanation).toBe('string');
@@ -166,8 +167,7 @@ describe('LLM Class Integration Tests', () => {
 
     it('should stream text completion', async () => {
       const chunks: string[] = [];
-      const response = await llm.generate('Count from 1 to 5.', {
-        stream: true,
+      const response = await llm.stream('Count from 1 to 5.', {
         onFinish: text => {
           chunks.push(text);
           return;
