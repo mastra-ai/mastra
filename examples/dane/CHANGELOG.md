@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.34
+
+### Patch Changes
+
+- 526e2cb: Tweak build
+
 ## 0.0.2-alpha.33
 
 ### Patch Changes
