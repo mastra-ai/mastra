@@ -109,7 +109,7 @@ const assemblePackages = new Step({
         }
       });
 
-      packagesToBuild.add(danePackage);
+      packagesToBuild.add(path.join(process.cwd(), 'examples', 'dane'));
     }
 
     const pkgSet = Array.from(packagesToBuild.keys());

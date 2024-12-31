@@ -112,7 +112,7 @@ export const activeDistTag = createTool({
       const pkgJson = JSON.parse(readFileSync(path.join(context.packagePath, 'package.json'), 'utf-8'));
       const version = pkgJson.version;
       console.log(chalk.green(`Setting active tag to latest for ${pkgJson.name}@${version}`));
-      const p = execa(`npm`, ['dist-tag', `${pkgJson.name}@${version}`, `latest`], {
+      const p = execa(`npm`, ['dist-tag', `add`, `${pkgJson.name}@${version}`, `latest`], {
         stdio: 'inherit',
         reject: false,
       });
