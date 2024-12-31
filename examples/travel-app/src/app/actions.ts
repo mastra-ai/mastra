@@ -170,7 +170,7 @@ export async function runAgent(formData: FormData) {
   `;
 
   const result = await travelAnalyzer.generate(messageToAnalyze, {
-    schema: travelSchema,
+    output: travelSchema,
   });
 
   console.log("from travelAnalyzer", result.usage);
