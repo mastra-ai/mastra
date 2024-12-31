@@ -154,7 +154,7 @@ export const travelAgent = new Agent({
           <main className="flex-1 ">
             <div className="container mx-auto px-4 py-8">
               <div className="mb-12 text-center transform -rotate-1">
-                <div className="inline-block bg-black text-white px-8 py-4 text-4xl md:text-6xl font-bold shadow-[8px_8px_0px_0px_#000000] hover:shadow-none hover:translate-x-2 hover:translate-y-2 transition-all">
+                <div className="inline-block bg-black text-white px-8 py-4 text-4xl md:text-6xl font-bold shadow-[8px_8px_0px_0px_#000000] transition-all">
                   TravelAI
                 </div>
                 <div className="mt-4 bg-[var(--brut-red)] text-white px-4 py-2 text-xl inline-block rotate-2 shadow-[4px_4px_0px_0px_#000000]">

@@ -67,37 +67,37 @@ export const LOADING_MESSAGES = [
   "Just one more thing",
 ];
 
+const date = new Date();
+const tomorrowDate = new Date(new Date().setDate(new Date().getDate() + 1));
+
 export default function TravelForm({
   executor,
   sidebarContent,
 }: TravelFormProps) {
   const router = useRouter();
-  const [startDate, setStartDate] = useState<Date>(new Date("12/25/24"));
-  const [endDate, setEndDate] = useState<Date>(new Date("12/26/24"));
+  const { setContent } = useSidebar();
+  const [startDate, setStartDate] = useState<Date>(date);
+  const [endDate, setEndDate] = useState<Date>(tomorrowDate);
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [flightPriority, setFlightPriority] = useState([50]);
   const [submitting, setSubmitting] = useState(false);
   const [accommodationType, setAccommodationType] = useState<
     "hotel" | "airbnb"
   >("hotel");
-  const { setContent } = useSidebar();
+
   const [travelData, setTravelData] = useState<TravelSchemaProps | null>(null);
   const [typeOfPlace, setTypeOfPlace] = useState<string>("");
   const [status, setStatus] = useState<
     "loading" | "success" | "error" | "idle"
   >("idle");
 
+  const isDisabled = flightPriority.length < 0 || selectedInterests.length < 1;
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    setSubmitting(true);
-
-    setStatus("loading");
-
-    // Get form data and add the dates
     const formData = new FormData(e.currentTarget);
 
-    // Add the dates to formData in YYYY-MM-DD format if they exist
     if (startDate) {
       const formattedStartDate = format(startDate, "yyyy-MM-dd");
       formData.append("startDate", formattedStartDate);
@@ -115,11 +115,27 @@ export default function TravelForm({
       formData.append("typeOfPlace", typeOfPlace);
     }
 
+    const depature = formData.get("departureLocation");
+    const destination = formData.get("arrivalLocation");
+
+    console.log({
+      depature,
+      destination,
+    });
+
+    if (!depature) {
+      return toast.error("Please fill out depature");
+    }
+
+    if (!destination) {
+      return toast.error("Please fill out destination");
+    }
+
+    setSubmitting(true);
+    setStatus("loading");
     try {
       if (executor === "agent") {
         const result = await runAgent(formData);
-        console.log(result.message);
-        console.log(result.message);
         setStatus("success");
         setTravelData(result.message);
       } else {
@@ -527,7 +543,7 @@ export default function TravelForm({
 
           <Button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || isDisabled}
             size={"lg"}
             className="bg-[var(--brut-red)] text-xl text-white p-8 w-full border-4 border-black shadow-[8px_8px_0px_0px_#000000] hover:shadow-none hover:translate-x-2 hover:translate-y-2 transition-all font-mono font-bold transform rotate-1 hover:rotate-0"
           >
