@@ -1,6 +1,6 @@
 {
   "name": "@mastra/stabilityai",
-  "version": "1.0.1-alpha.20",
+  "version": "1.0.1-alpha.21",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/stabilityai.esm.js",
@@ -25,6 +25,7 @@
   },
   "scripts": {
     "analyze": "size-limit --why",
+    "prepublish": "pnpm build",
     "build": "dts build",
     "build:dev": "dts watch",
     "lint": "dts lint",

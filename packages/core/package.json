@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.1.27-alpha.45",
+  "version": "0.1.27-alpha.46",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
@@ -31,7 +31,8 @@
     "size": "size-limit",
     "start": "dts watch",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "clean": "rm -rf dist && rm -rf node_modules"
+    "clean": "rm -rf dist && rm -rf node_modules",
+    "prepublish": "pnpm build"
   },
   "husky": {
     "hooks": {

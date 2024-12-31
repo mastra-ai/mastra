@@ -1,6 +1,6 @@
 {
   "name": "@mastra/github",
-  "version": "1.0.3-alpha.29",
+  "version": "1.0.3-alpha.30",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/github.esm.js",
@@ -24,6 +24,7 @@
   },
   "scripts": {
     "analyze": "size-limit --why",
+    "prepublish": "pnpm build",
     "build": "NODE_OPTIONS=--max-old-space-size=8096 dts build",
     "build:dev": "dts watch",
     "lint": "dts lint",

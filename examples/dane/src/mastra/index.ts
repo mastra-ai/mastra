@@ -2,9 +2,10 @@ import { Mastra } from '@mastra/core';
 import { PostgresEngine } from '@mastra/engine';
 import { UpstashKVMemory } from '@mastra/memory';
 
-import { dane, daneCommitMessage, daneIssueLabeler } from './agents/index.js';
+import { dane, daneCommitMessage, daneIssueLabeler, danePackagePublisher } from './agents/index.js';
 import { firecrawl } from './integrations/index.js';
 import { messageWorkflow, githubIssueLabeler, commitMessageGenerator } from './workflows/index.js';
+import { packagePublisher } from './workflows/publish-packages.js';
 
 const engine = new PostgresEngine({
   url: 'postgres://postgres:postgres@localhost:5433/mastra',
@@ -13,6 +14,7 @@ const engine = new PostgresEngine({
 export const mastra = new Mastra({
   agents: {
     dane,
+    danePackagePublisher,
     daneIssueLabeler,
     daneCommitMessage,
   },
@@ -26,6 +28,7 @@ export const mastra = new Mastra({
     message: messageWorkflow,
     githubIssueLabeler: githubIssueLabeler,
     commitMessage: commitMessageGenerator,
+    packagePublisher: packagePublisher,
   },
   logger: false,
   syncs: {

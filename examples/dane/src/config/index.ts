@@ -62,7 +62,7 @@ export class ConfigManager {
   }
 
   public getAnthropicApiKey(): string {
-    const key = this.get('ANTHROPIC_API_KEY');
+    const key = this.get('ANTHROPIC_API_KEY') || process.env.ANTHROPIC_API_KEY;
     if (!key) {
       // Check if we're in a command that requires the API key
       const command = process.argv[2] || '';

@@ -1,5 +1,97 @@
 # @mastra/dane
 
+## 0.0.2-alpha.35
+
+### Patch Changes
+
+- 6725a1e: Test release
+
+## 0.0.2-alpha.34
+
+### Patch Changes
+
+- 526e2cb: Tweak build
+
+## 0.0.2-alpha.33
+
+### Patch Changes
+
+- a72e539: Test release
+
+## 0.0.2-alpha.31
+
+### Patch Changes
+
+- 0281d3e: Fix dane release
+
+## 0.0.2-alpha.29
+
+### Patch Changes
+
+- 650aac9: Test dane release
+
+## 0.0.2-alpha.27
+
+### Patch Changes
+
+- 618f808: Test release
+
+## 0.0.2-alpha.26
+
+### Patch Changes
+
+- 4d8ded3: Dane workflow
+
+## 0.0.2-alpha.25
+
+### Patch Changes
+
+- c82a846: Dane testing
+
+## 0.0.2-alpha.24
+
+### Patch Changes
+
+- bde630b: Test release
+
+## 0.0.2-alpha.23
+
+### Patch Changes
+
+- 91ee5df: Test release
+
+## 0.0.2-alpha.22
+
+### Patch Changes
+
+- 9045bae: Test release
+
+  Please enter a summary for your changes.
+
+## 0.0.2-alpha.20
+
+### Patch Changes
+
+- d0e7f2c: Fix anthropic env source
+
+## 0.0.2-alpha.19
+
+### Patch Changes
+
+- 8ae2bbc: Dane publishing
+- 0bd142c: Fixes learned from docs
+- ee4de15: Dane fixes
+- Updated dependencies [8ae2bbc]
+- Updated dependencies [0bd142c]
+- Updated dependencies [ee4de15]
+  - @mastra/stabilityai@1.0.1-alpha.21
+  - @mastra/firecrawl@1.0.4-alpha.32
+  - @mastra/github@1.0.3-alpha.30
+  - @mastra/engine@0.0.5-alpha.40
+  - @mastra/memory@0.0.2-alpha.26
+  - @mastra/core@0.1.27-alpha.46
+  - @mastra/rag@0.0.2-alpha.30
+
 ## 0.0.2-alpha.18
 
 ### Patch Changes
