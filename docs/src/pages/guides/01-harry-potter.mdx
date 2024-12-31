@@ -30,8 +30,8 @@ Set your API key for the LLM provider you intend to use. For OpenAI, set the `OP
 
 We'll start by creating a model configuration and initializing the Mastra instance.
 
-```ts
-import { Mastra, type ModelConfig } from '@mastra/core';
+```typescript
+import { CoreMessage, Mastra, type ModelConfig } from '@mastra/core';
 
 const mastra = new Mastra();
 
@@ -113,7 +113,7 @@ const messages = [
     role: 'user',
     content: 'What is your favorite room in Hogwarts?',
   },
-];
+] as CoreMessage[];
 
 const responseHarry = await llm.generate(messages);
 
