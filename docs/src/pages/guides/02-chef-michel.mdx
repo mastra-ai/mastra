@@ -50,7 +50,7 @@ In your main file, register the agent:
 
 ```typescript
 // src/mastra/index.ts
-import { Mastra } from "@mastra/core";
+import { CoreMessage, Mastra } from "@mastra/core";
 import { chefAgent } from "./agents/chefAgent";
 
 export const mastra = new Mastra({
@@ -71,9 +71,9 @@ async function main() {
     "In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?";
   console.log(`Query: ${query}`);
 
-  const response = await chefAgent.generate({
-    messages: [{ role: "user", content: query }],
-  });
+  const messages = [{ role: "user", content: query }] as CoreMessage[];
+
+  const response = await chefAgent.generate(messages);
 
   console.log("\n👨‍🍳 Chef Michel:", response.text);
 }
