@@ -78,7 +78,7 @@ describe('LLM Class Integration Tests', () => {
         required: ['answer', 'explanation'],
       } as JSONSchema7;
 
-      const response = await llm.generate('What is 2+2?', { schema });
+      const response = await llm.generate('What is 2+2?', { output: schema });
       expect(response.object).toBeDefined();
       expect(response.object.answer).toBe(4);
       expect(typeof response.object.explanation).toBe('string');
@@ -116,9 +116,10 @@ describe('LLM Class Integration Tests', () => {
 
       const response = await llm.generate(
         'Student Sarah Johnson (ID: 78901) is counting from 1 to 5. What are her numbers?',
-        { schema },
+        { output: schema },
       );
       expect(response.object).toBeDefined();
+      console.log('response.object', response.object);
       expect(typeof response.object.student.profile.id).toBe('number');
       expect(response.object.student.profile.id).toBe(78901);
       expect(typeof response.object.student.profile.name).toBe('string');
@@ -144,9 +145,8 @@ describe('LLM Class Integration Tests', () => {
         required: ['answer', 'explanation'],
       } as JSONSchema7;
 
-      const response = await llm.generate('What is 2+2?', {
-        schema,
-        stream: true,
+      const response = await llm.stream('What is 2+2?', {
+        output: schema,
         onFinish: text => {
           chunks.push(text);
           return;
