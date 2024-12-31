@@ -546,8 +546,10 @@ export type StructuredOutput = {
       };
 };
 
-export type GenerateReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends ZodSchema | JSONSchema7
-  ? GenerateObjectResult<z.infer<Z>>
+export type GenerateReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends
+  | ZodSchema
+  | JSONSchema7
+  ? GenerateObjectResult<any>
   : GenerateTextResult<any, any>;
 
 export type StreamReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends ZodSchema | JSONSchema7
