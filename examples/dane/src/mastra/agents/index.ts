@@ -4,10 +4,11 @@ import { config } from '../../config/index.js';
 import { browserTool, googleSearch } from '../tools/browser.js';
 import { listEvents } from '../tools/calendar.js';
 import { crawl } from '../tools/crawl.js';
-import { execaTool, pnpmBuild, pnpmChangesetPublish, pnpmChangesetStatus } from '../tools/execa.js';
+import { execaTool } from '../tools/execa.js';
 import { fsTool } from '../tools/fs.js';
 import { imageTool } from '../tools/image.js';
 import { readPDF } from '../tools/pdf.js';
+import { activeDistTag, pnpmBuild, pnpmChangesetPublish, pnpmChangesetStatus } from '../tools/pnpm.js';
 
 const getBaseModelConfig = () => ({
   provider: 'ANTHROPIC' as const,
@@ -49,6 +50,7 @@ export const danePackagePublisher = new Agent({
     pnpmBuild,
     pnpmChangesetPublish,
     pnpmChangesetStatus,
+    activeDistTag,
   },
 });
 
