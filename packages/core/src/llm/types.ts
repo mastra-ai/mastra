@@ -11,7 +11,7 @@ import {
   StreamTextResult,
 } from 'ai';
 import { JSONSchema7 } from 'json-schema';
-import { z, ZodSchema } from 'zod';
+import { ZodSchema } from 'zod';
 
 export type OpenAIModel = 'gpt-4' | 'gpt-4-turbo' | 'gpt-3.5-turbo' | 'gpt-4o' | 'gpt-4o-mini';
 
