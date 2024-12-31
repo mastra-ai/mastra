@@ -66,7 +66,8 @@ export const LOADING_MESSAGES = [
 ];
 
 const date = new Date();
-const tomorrowDate = new Date(new Date().setDate(new Date().getDate() + 1));
+const tomorrowDate = new Date();
+tomorrowDate.setDate(tomorrowDate.getDate() + 1);
 
 export default function TravelForm({
   executor,
