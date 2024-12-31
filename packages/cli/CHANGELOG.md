@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.66
+
+### Patch Changes
+
+- f2c5dfa: update endpoint path
+
 ## 0.1.57-alpha.65
 
 ### Patch Changes
