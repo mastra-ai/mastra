@@ -1,20 +1,26 @@
 /** @type {import('next').NextConfig} */
-import nextra from 'nextra';
+import nextra from "nextra";
 
 const withNextra = nextra({
-  theme: 'nextra-theme-docs',
-  themeConfig: './theme.config.tsx',
+  theme: "nextra-theme-docs",
+  themeConfig: "./theme.config.tsx",
   mdxOptions: {
     rehypePrettyCodeOptions: {
       theme: {
-        dark: 'github-dark',
-        light: 'github-light',
+        dark: "github-dark",
+        light: "github-light",
       },
     },
   },
 });
 
 export default withNextra({
-  basePath: '/docs',
+  basePath: "",
   trailingSlash: false,
+  rewrites: async () => [
+    {
+      source: "/docs",
+      destination: "/docs/root",
+    },
+  ],
 });

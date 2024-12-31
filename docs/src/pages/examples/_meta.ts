@@ -1,10 +1,9 @@
 const meta = {
   index: {
     title: "Examples",
-    type: "page",
-    theme: {
-      layout: "full",
-    },
+  },
+  llm: {
+    title: "LLM Models",
   },
 };
 
