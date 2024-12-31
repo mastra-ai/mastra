@@ -113,7 +113,7 @@ app.get('/api/agents/:agentId', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/api/agents/:agentId/text', async (req: Request, res: Response) => {
+app.post('/api/agents/:agentId/generate', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
