@@ -151,9 +151,7 @@ Response as Draco Malfoy: My favorite room in Hogwarts is the Slytherin Common R
 Finally, we'll demonstrate how to stream the response from the model. Streaming is useful for handling longer outputs or providing real-time feedback.
 
 ```typescript
-const stream = await llm.stream({
-  messages,
-});
+const stream = await llm.stream(messages);
 
 console.log('Streaming response as Draco Malfoy:');
 
