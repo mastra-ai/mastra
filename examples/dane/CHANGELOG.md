@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.27
+
+### Patch Changes
+
+- 618f808: Test release
+
 ## 0.0.2-alpha.26
 
 ### Patch Changes
