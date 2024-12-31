@@ -179,64 +179,6 @@ Query: I want to make lasagna, can you generate a lasagna recipe for me?
 
 </Steps >
 
-## Saving and Displaying Agent Memory
-
-<Steps>
-### Saving the Agent's Memory
-
-After interacting with the agent, save its memory state:
-
-```typescript
-await chefAgent.memory.save('chef_memory');
-```
-
-### Loading the Agent's Memory
-
-Later, you can load the saved memory state:
-
-```typescript
-await chefAgent.memory.load('chef_memory');
-```
-
-### Displaying the Agent's Memory
-
-To view the agent's memory, you can retrieve and log the stored messages:
-
-```typescript
-const memoryMessages = await chefAgent.memory.getMessages({
-  threadId: 'chef_memory',
-});
-
-console.log('Agent Memory:', memoryMessages);
-```
-
-This will output the stored conversation history and context associated with `chef_memory`.
-
-**Example Output:**
-
-```
-Agent Memory: {
-  threadId: "chef_memory",
-  messages: [
-    { role: "user", content: "I have eggs, flour, and milk. What can I make?" },
-    { role: "assistant", content: "You can make delicious pancakes! Here's how..." },
-    // ...other messages
-  ]
-}
-```
-
-### Clearing the Agent's Memory
-
-To clear the agent's memory:
-
-```typescript
-await chefAgent.memory.clear();
-```
-
-This resets the agent's memory to an empty state.
-
-</Steps>
-
 ## Running the Agent Server
 
 <Steps>
