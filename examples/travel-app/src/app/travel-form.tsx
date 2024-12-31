@@ -5,8 +5,6 @@ import { CalendarIcon, Frown } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { useRouter } from "next/navigation";
-
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -74,7 +72,6 @@ export default function TravelForm({
   executor,
   sidebarContent,
 }: TravelFormProps) {
-  const router = useRouter();
   const { setContent } = useSidebar();
   const [startDate, setStartDate] = useState<Date>(date);
   const [endDate, setEndDate] = useState<Date>(tomorrowDate);
@@ -118,11 +115,6 @@ export default function TravelForm({
     const depature = formData.get("departureLocation");
     const destination = formData.get("arrivalLocation");
 
-    console.log({
-      depature,
-      destination,
-    });
-
     if (!depature) {
       return toast.error("Please fill out depature");
     }
@@ -165,7 +157,6 @@ export default function TravelForm({
       }
 
       setContent(sidebarContent.submitted);
-      router.refresh();
     } catch (error) {
       toast.error("An error occured, I can't plan trip");
       setStatus("error");
