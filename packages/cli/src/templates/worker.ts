@@ -141,7 +141,7 @@ router.get('/api/agents/:agentId', ({ params }: IRequest) => {
   }
 });
 
-router.post('/api/agents/:agentId/text', async ({ params, json }: IRequest) => {
+router.post('/api/agents/:agentId/generate', async ({ params, json }: IRequest) => {
   try {
     const agentId = decodeURIComponent(params.agentId);
     const agent = mastra.getAgent(agentId);
