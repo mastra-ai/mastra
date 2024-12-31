@@ -1,5 +1,19 @@
 # @mastra/dane
 
+## 0.0.2-alpha.36
+
+### Patch Changes
+
+- f6ba259: simplify generate api
+- Updated dependencies [f6ba259]
+  - @mastra/core@0.1.27-alpha.47
+  - @mastra/firecrawl@1.0.4-alpha.33
+  - @mastra/github@1.0.3-alpha.31
+  - @mastra/stabilityai@1.0.1-alpha.22
+  - @mastra/engine@0.0.5-alpha.41
+  - @mastra/memory@0.0.2-alpha.27
+  - @mastra/rag@0.0.2-alpha.31
+
 ## 0.0.2-alpha.35
 
 ### Patch Changes
