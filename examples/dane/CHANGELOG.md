@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.29
+
+### Patch Changes
+
+- 650aac9: Test dane release
+
 ## 0.0.2-alpha.27
 
 ### Patch Changes
