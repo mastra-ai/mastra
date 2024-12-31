@@ -18,8 +18,8 @@ import { z } from "zod";
 
 const getWeatherInfo = async (city: string) => {
   // Replace with an actual API call to a weather service
-  const data = await fetch(`https://api.example.com/weather?city=${city}`).then((r) =>
-    r.json(),
+  const data = await fetch(`https://api.example.com/weather?city=${city}`).then(
+    (r) => r.json(),
   );
   return data;
 };
@@ -65,7 +65,7 @@ export const weatherAgent = new Agent<typeof tools>({
   },
   tools: {
     weatherInfo,
-  }
+  },
 });
 ```
 
@@ -108,9 +108,9 @@ import { mastra } from "./index";
 
 async function main() {
   const agent = mastra.getAgent("weatherAgent");
-  const response = await agent.generate({
-    messages: ["What's the weather like in New York City today?"],
-  });
+  const response = await agent.generate(
+    "What's the weather like in New York City today?",
+  );
 
   console.log(response.text);
 }

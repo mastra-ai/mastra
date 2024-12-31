@@ -85,7 +85,7 @@ const generateMessage = new Step({
         RETURN THE GUIDELINES YOU ARE USING AS AN ARRAY OF STRINGS ON THE GUIDELINES KEY, AND THE COMMIT MESSAGE ON THE COMMIT MESSAGE KEY
       `,
       {
-        schema: z.object({
+        output: z.object({
           commitMessage: z.string(),
           generated: z.boolean(),
           guidelines: z.array(z.string()),

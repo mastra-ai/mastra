@@ -21,7 +21,7 @@ async function main() {
   console.log(response2.text);
 
   // Streaming responses
-  const stream = await llm.generate(
+  const stream = await llm.stream(
     [
       {
         role: 'system',
@@ -33,7 +33,6 @@ async function main() {
       },
     ],
     {
-      stream: true,
       onStepFinish: step => {
         console.log('Step completed:', step);
       },

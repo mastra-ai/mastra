@@ -216,8 +216,7 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
       return;
     }
 
-    const streamResult = await agent.generate(messages, {
-      stream: true,
+    const streamResult = await agent.stream(messages, {
       threadId,
       resourceid,
     });
@@ -257,7 +256,7 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
       return;
     }
 
-    const result = await agent.generate(messages, { schema, threadId, resourceid });
+    const result = await agent.generate(messages, { output: schema, threadId, resourceid });
     res.json(result);
   } catch (error) {
     const apiError = error as ApiError;
@@ -295,7 +294,7 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
       return;
     }
 
-    const streamResult = await agent.generate(messages, { schema, stream: true, threadId, resourceid });
+    const streamResult = await agent.stream(messages, { output: schema, threadId, resourceid });
 
     streamResult.pipeTextStreamToResponse(res);
   } catch (error) {

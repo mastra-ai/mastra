@@ -11,7 +11,7 @@ const main = async () => {
 
   try {
     const result = await agentCat.generate('What is the most popular cat species?', {
-      schema: specieSchema,
+      output: specieSchema,
     });
 
     const res = specieSchema.parse(result?.object);

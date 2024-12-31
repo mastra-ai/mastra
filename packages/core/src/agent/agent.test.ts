@@ -65,9 +65,7 @@ describe('agent', () => {
 
     const agentOne = mastra.getAgent('electionAgent');
 
-    const response = await agentOne.generate('Who won the 2016 US presidential election?', {
-      stream: true,
-    });
+    const response = await agentOne.stream('Who won the 2016 US presidential election?');
 
     const { textStream } = response;
 
@@ -97,7 +95,7 @@ describe('agent', () => {
     const agentOne = mastra.getAgent('electionAgent');
 
     const response = await agentOne.generate('Who won the 2012 US presidential election?', {
-      schema: z.object({
+      output: z.object({
         winner: z.string(),
       }),
     });
@@ -121,7 +119,7 @@ describe('agent', () => {
     const agentOne = mastra.getAgent('electionAgent');
 
     const response = await agentOne.generate('Give me the winners of 2012 and 2016 US presidential elections', {
-      schema: z.array(
+      output: z.array(
         z.object({
           winner: z.string(),
           year: z.string(),
@@ -157,11 +155,10 @@ describe('agent', () => {
 
     const agentOne = mastra.getAgent('electionAgent');
 
-    const response = await agentOne.generate('Who won the 2012 US presidential election?', {
-      schema: z.object({
+    const response = await agentOne.stream('Who won the 2012 US presidential election?', {
+      output: z.object({
         winner: z.string(),
       }),
-      stream: true,
     });
 
     const { partialObjectStream } = response;
