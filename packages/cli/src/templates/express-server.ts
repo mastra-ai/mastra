@@ -159,7 +159,7 @@ app.get('/api/agents', async (_req: Request, res: Response) => {
 });
 
 /**
- * POST /api/agents/{agentId}/text
+ * POST /api/agents/{agentId}/generate
  * @summary Send text messages to agent
  * @tags Agent
  * @param {string} agentId.path.required - Agent identifier
@@ -168,7 +168,7 @@ app.get('/api/agents', async (_req: Request, res: Response) => {
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
  */
-app.post('/api/agents/:agentId/text', async (req: Request, res: Response) => {
+app.post('/api/agents/:agentId/generate', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);

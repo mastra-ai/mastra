@@ -1,4 +1,4 @@
-async function main() {
+async function withDeployed() {
   const query2 =
     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
   console.log(`Query: ${query2}`);
@@ -36,4 +36,4 @@ async function main() {
   }
 }
 
-main();
+withDeployed();
