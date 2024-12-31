@@ -9,6 +9,7 @@ import {
   UserContent,
 } from 'ai';
 import { randomUUID } from 'crypto';
+import { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
 
 import { MastraPrimitives } from '../action';
@@ -593,7 +594,7 @@ export class Agent<
     };
   }
 
-  async generate<Z extends ZodSchema | undefined = undefined>(
+  async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     {
       context,
@@ -658,21 +659,13 @@ export class Agent<
       return result as unknown as GenerateReturn<Z>;
     }
 
-    let schema: ZodSchema;
-
-    if (output instanceof ZodSchema) {
-      schema = output;
-    } else {
-      schema = this.llm.__createOutputSchema(output);
-    }
-
     this.log(LogLevel.DEBUG, `Starting agent ${this.name} llm textObject call`, {
       runId: this.name,
     });
     const result = await this.llm.__textObject({
       messages: messageObjects,
       tools: this.tools,
-      structuredOutput: schema,
+      structuredOutput: output,
       convertedTools,
       onStepFinish,
       maxSteps,
@@ -684,7 +677,7 @@ export class Agent<
     return result as unknown as GenerateReturn<Z>;
   }
 
-  async stream<Z extends ZodSchema | undefined = undefined>(
+  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     {
       context,
@@ -758,21 +751,13 @@ export class Agent<
       }) as unknown as StreamReturn<Z>;
     }
 
-    let schema: ZodSchema;
-
-    if (output instanceof ZodSchema) {
-      schema = output;
-    } else {
-      schema = this.llm.__createOutputSchema(output);
-    }
-
     this.log(LogLevel.DEBUG, `Starting agent ${this.name} llm streamObject call`, {
       runId: this.name,
     });
     return this.llm.__streamObject({
       messages: messageObjects,
       tools: this.tools,
-      structuredOutput: schema,
+      structuredOutput: output,
       convertedTools,
       onStepFinish,
       onFinish: async result => {
