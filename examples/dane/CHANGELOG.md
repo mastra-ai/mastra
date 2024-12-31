@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.31
+
+### Patch Changes
+
+- 0281d3e: Fix dane release
+
 ## 0.0.2-alpha.29
 
 ### Patch Changes
