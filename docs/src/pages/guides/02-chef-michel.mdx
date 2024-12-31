@@ -100,8 +100,9 @@ async function main() {
     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
   console.log(`Query: ${query}`);
 
-  const stream = await chefAgent.generate({
-    messages: [{ role: "user", content: query }],
+  const messages = [{ role: "user", content: query }] as CoreMessage[];
+
+  const stream = await chefAgent.generate(messages, {
     stream: true,
   });
 
@@ -153,8 +154,9 @@ async function main() {
     steps: z.array(z.string()),
   });
 
-  const response = await chefAgent.generate({
-    messages: [{ role: "user", content: query }],
+  const messages = [{ role: "user", content: query }] as CoreMessage[];
+
+  const response = await chefAgent.generate(messages, {
     schema: schema,
   });
 
