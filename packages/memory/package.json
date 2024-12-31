@@ -22,8 +22,7 @@
   "scripts": {
     "build": "dts build",
     "build:dev": "dts watch",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "prepublish": "pnpm build"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
   },
   "keywords": [],
   "author": "",
