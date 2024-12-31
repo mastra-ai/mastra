@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "0.0.2-alpha.26",
+  "version": "0.0.2-alpha.27",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -22,8 +22,7 @@
   "scripts": {
     "build": "dts build",
     "build:dev": "dts watch",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "prepublish": "pnpm build"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
   },
   "keywords": [],
   "author": "",

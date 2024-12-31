@@ -12,6 +12,10 @@ const meta = {
     title: "Docs",
     type: "page",
   },
+  examples: {
+    title: "Examples",
+    type: "page",
+  },
   guides: {
     title: "Guides",
     collapsed: false,

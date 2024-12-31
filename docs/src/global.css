@@ -129,3 +129,7 @@ td {
     border-bottom: 0.5px solid hsl(0, 0%, 80%) !important;
   }
 }
+
+button[title='Hide sidebar'] {
+  display: none;
+}

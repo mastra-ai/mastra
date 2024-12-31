@@ -1,3 +1,5 @@
+import { Steps } from 'nextra/components';
+
 # Stock Agent
 
 We're going to create a simple agent that fetches the last day's closing stock price for a given symbol. This example will show you how to create a tool, add it to an agent, and use the agent to fetch stock prices.
@@ -19,7 +21,8 @@ stock-price-agent/
 
 ---
 
-## 1. Initialize the Project and Install Dependencies
+<Steps>
+## Initialize the Project and Install Dependencies
 
 First, create a new directory for your project and navigate into it:
 
@@ -52,7 +55,7 @@ touch src/agents/stockAgent.ts src/tools/stockPrices.ts src/index.ts
 
 ---
 
-## 2. Create the Stock Price Tool
+## Create the Stock Price Tool
 
 Next, we'll create a tool that fetches the last day's closing stock price for a given symbol.
 
@@ -72,7 +75,7 @@ export const stockPrices = createTool({
   }),
   description: `Fetches the last day's closing stock price for a given symbol`,
   execute: async ({ context: { symbol } }) => {
-    console.log("Using tool to fetch stock price for", symbol);
+    console.log('Using tool to fetch stock price for', symbol);
     return {
       symbol,
       currentPrice: await getStockPrice(symbol),
@@ -83,7 +86,7 @@ export const stockPrices = createTool({
 
 ---
 
-## 3. Add the Tool to an Agent
+## Add the Tool to an Agent
 
 We'll create an agent and add the `stockPrices` tool to it.
 
@@ -109,11 +112,11 @@ export const stockAgent = new Agent<typeof tools>({
 
 ---
 
-## 4. Set Up the Mastra Instance
+## Set Up the Mastra Instance
 
 We need to initialize the Mastra instance with our agent and tool.
 
-```ts filename="src/index.ts"
+````ts filename="src/index.ts"
 import { Mastra } from '@mastra/core';
 
 ```typescript:src/index.ts
@@ -123,9 +126,9 @@ import { stockAgent } from "./agents/stockAgent";
 export const mastra = new Mastra({
   agents: { stockAgent },
 });
-```
+````
 
-## 5. Serve the Application
+## Serve the Application
 
 Instead of running the application directly, we'll use the `mastra dev` command to start the server. This will expose your agent via REST API endpoints, allowing you to interact with it over HTTP.
 
@@ -149,7 +152,7 @@ OPENAI_API_KEY=your_openai_api_key mastra dev
 
 ---
 
-## 6. Test the Agent with cURL
+## Test the Agent with cURL
 
 Now that your server is running, you can test your agent's endpoint using `curl`:
 
@@ -175,3 +178,5 @@ You should receive a JSON response similar to:
 ```
 
 This indicates that your agent successfully processed the request, used the `stockPrices` tool to fetch the stock price, and returned the result.
+
+</Steps>

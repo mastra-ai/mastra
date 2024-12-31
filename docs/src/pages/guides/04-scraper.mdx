@@ -1,52 +1,55 @@
+import { Steps } from 'nextra/components';
+
 # Workflows in Mastra
 
-Workflows in Mastra are powerful tools for orchestrating complex sequences of operations. 
+Workflows in Mastra are powerful tools for orchestrating complex sequences of operations.
 
-They support loops, branching, parallel execution, error handling, and more. 
+They support loops, branching, parallel execution, error handling, and more.
 
 ## Building a Workflow
 
 Here's an updated example of creating a workflow that uses predefined tools to crawl a website, structure the data using an LLM, and analyze the sentiment of the content.
 
-### 1. Import Necessary Modules
+<Steps>
+### Import Necessary Modules
 
-```typescript
-import { Step, Workflow, Mastra, Agent } from "@mastra/core";
-import { PostgresEngine } from "@mastra/engine";
-import { z } from "zod";
-import * as syncs from "./syncs";
+```typescript showLineNumbers
+import { Step, Workflow, Mastra, Agent } from '@mastra/core';
+import { PostgresEngine } from '@mastra/engine';
+import { z } from 'zod';
+
+import * as syncs from './syncs';
 ```
 
-### 2. Initialize Mastra Instance
+### Initialize Mastra Instance
 
-```typescript
+```ts showLineNumbers filename="src/mastra/index.ts"
 const crawlWebpage = createTool({
-    id: "Crawl Webpage",
-    description: "Crawls a webpage and extracts the text content",
-    inputSchema: z.object({
-      url: z.string().url(),
-    }),
-    outputSchema: z.object({
-        rawText: z.string(),
-    }),
-    execute: async ({ context: { url } }) => {
-      // Replace with actual crawling logic
-      someCrawlFunction(url);
-      return { rawText: "This is the text content of the webpage" };
-    },
-})
-
-const myAgent = new Agent({
-    name: "agentOne",
-    instructions: "This agent crawls a website and analyzes the sentiment of the content.",
-    tools: {
-      crawlWebpage,
-    },
+  id: 'Crawl Webpage',
+  description: 'Crawls a webpage and extracts the text content',
+  inputSchema: z.object({
+    url: z.string().url(),
+  }),
+  outputSchema: z.object({
+    rawText: z.string(),
+  }),
+  execute: async ({ context: { url } }) => {
+    // Replace with actual crawling logic
+    someCrawlFunction(url);
+    return { rawText: 'This is the text content of the webpage' };
+  },
 });
 
+const myAgent = new Agent({
+  name: 'agentOne',
+  instructions: 'This agent crawls a website and analyzes the sentiment of the content.',
+  tools: {
+    crawlWebpage,
+  },
+});
 
 const engine = new PostgresEngine({
-    url: process.env.DB_URL!,
+  url: process.env.DB_URL!,
 });
 
 // Initialize your Mastra instance with registered tools and integrations
@@ -57,41 +60,38 @@ export const mastra = new Mastra({
 });
 ```
 
-### 3. Define Steps
+### Define Steps
 
 You can define steps inline or by function reference.
 
-#### Option 1: Inline Step Creation
+<Steps>
+#### Inline Step Creation
 
 ```typescript
-const contentWorkflow = new Workflow({ name: "content-review" });
+const contentWorkflow = new Workflow({ name: 'content-review' });
 
-contentWorkflow
-  .step(
-    crawlWebpage
-  )
-  .then(
-    new Step({
-      id: "structure",
-      inputSchema: z.object({
-        rawText: z.string(),
-      }),
-      outputSchema: z.object({
-        reviews: z.array(z.string()),
-      }),
-      execute: async ({ context }) => {
-        return { reviews: ['Amazing!'] };
-      },
-    })
-  );
+contentWorkflow.step(crawlWebpage).then(
+  new Step({
+    id: 'structure',
+    inputSchema: z.object({
+      rawText: z.string(),
+    }),
+    outputSchema: z.object({
+      reviews: z.array(z.string()),
+    }),
+    execute: async ({ context }) => {
+      return { reviews: ['Amazing!'] };
+    },
+  }),
+);
 ```
 
-#### Option 2: Step by Function Reference
+#### Step by Function Reference
 
 ```typescript
 // Define steps separately
 const structureStep = new Step({
-  id: "structure",
+  id: 'structure',
   inputSchema: z.object({
     rawText: z.string(),
   }),
@@ -104,21 +104,22 @@ const structureStep = new Step({
 });
 
 // Build the workflow
-const contentWorkflow = new Workflow({ name: "content-review" });
+const contentWorkflow = new Workflow({ name: 'content-review' });
 
 contentWorkflow.step(crawlWebpage).then(structureStep);
 ```
 
-### 4. Control Flow Between Steps
+</Steps>
 
+### Control Flow Between Steps
+
+<Steps>
 #### Parallel Execution
 
 Use `.step()` to add steps that can run in parallel.
 
 ```typescript
-contentWorkflow
-  .step(fetchUserData)
-  .step(fetchOrderData); // These steps run in parallel
+contentWorkflow.step(fetchUserData).step(fetchOrderData); // These steps run in parallel
 ```
 
 #### Sequential Execution
@@ -126,10 +127,7 @@ contentWorkflow
 Use `.then()` to chain steps that depend on the previous step.
 
 ```typescript
-contentWorkflow
-  .step(fetchOrderData)
-  .then(validateData)
-  .then(processOrder);
+contentWorkflow.step(fetchOrderData).then(validateData).then(processOrder);
 ```
 
 #### Branching and Merging Paths
@@ -142,10 +140,10 @@ contentWorkflow
   .then(stepB)
   .then(stepD)
   .after(stepA)
-    .step(stepC)
-    .then(stepE)
+  .step(stepC)
+  .then(stepE)
   .after([stepD, stepE])
-    .step(stepF);
+  .step(stepF);
 ```
 
 In this example:
@@ -163,90 +161,94 @@ contentWorkflow
   .step(fetchData)
   .then(processData)
   .after(processData)
-    .step(finalizeData, {
-      when: { "processData.status": "success" },
-    })
-    .step(fetchData, {
-      when: { "processData.status": "retry" },
-    });
+  .step(finalizeData, {
+    when: { 'processData.status': 'success' },
+  })
+  .step(fetchData, {
+    when: { 'processData.status': 'retry' },
+  });
 ```
 
-### 5. Conditions and Variables
+</Steps>
+
+### Conditions and Variables
 
 Use the `when` property to define conditions under which a step should execute.
 
-#### Option 1: Function
+<Steps>
+#### Function
 
 ```typescript
 contentWorkflow.step(
   new Step({
-    id: "processData",
+    id: 'processData',
     execute: async ({ context }) => {
       // Action logic
     },
     when: async ({ context }) => {
-      return context.stepResults.fetchData.status === "success";
+      return context.stepResults.fetchData.status === 'success';
     },
-  })
+  }),
 );
 ```
 
-#### Option 2: Query Object
+#### Query Object
 
 ```typescript
 contentWorkflow.step(
   new Step({
-    id: "processData",
+    id: 'processData',
     execute: async ({ context }) => {
       // Action logic
     },
     when: {
-      ref: { stepId: "fetchData", path: "status" },
-      query: { $eq: "success" },
+      ref: { stepId: 'fetchData', path: 'status' },
+      query: { $eq: 'success' },
     },
-  })
+  }),
 );
 ```
 
-#### Option 3: Simple Path Comparison (Syntactic Sugar)
+#### Simple Path Comparison (Syntactic Sugar)
 
 ```typescript
 contentWorkflow.step(
   new Step({
-    id: "processData",
+    id: 'processData',
     execute: async ({ context }) => {
       // Action logic
     },
     when: {
-      "fetchData.status": "success",
+      'fetchData.status': 'success',
     },
-  })
+  }),
 );
 ```
 
-### 6. Defining Variables
+</Steps>
+
+### Defining Variables
 
 Variables allow you to pass data between steps.
 
 ```typescript
-contentWorkflow
-  .step(
-    new Step({
-      id: "processData",
-      inputSchema: z.object({
-        inputData: z.any(),
-      }),
-      execute: async ({ context }) => {
-        // Use context.inputData
-      },
-      variables: {
-        inputData: { stepId: "fetchData", path: "data" },
-      },
-    })
-  );
+contentWorkflow.step(
+  new Step({
+    id: 'processData',
+    inputSchema: z.object({
+      inputData: z.any(),
+    }),
+    execute: async ({ context }) => {
+      // Use context.inputData
+    },
+    variables: {
+      inputData: { stepId: 'fetchData', path: 'data' },
+    },
+  }),
+);
 ```
 
-### 7. Finalizing the Workflow
+### Finalizing the Workflow
 
 After defining all steps and their relationships, you can finalize the workflow.
 
@@ -258,8 +260,10 @@ contentWorkflow.commit();
 
 ```typescript
 // Execute the workflow with trigger data
-contentWorkflow.execute({ url: "https://example.com" });
+contentWorkflow.execute({ url: 'https://example.com' });
 ```
+
+</Steps>
 
 ## Reference Documentation
 

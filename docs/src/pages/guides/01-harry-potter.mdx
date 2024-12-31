@@ -1,4 +1,6 @@
- # Guide: Harry Potter
+import { Steps } from 'nextra/components';
+
+# Guide: Harry Potter
 
 Mastra provides direct support for Large Language Models (LLMs) through the `LLM` class. It supports a variety of LLM providers, including OpenAI, Anthropic, and Google Gemini. You can choose the specific model and provider, set system and user prompts, and decide whether to stream the response.
 
@@ -22,7 +24,9 @@ npm install @mastra/core
 
 Set your API key for the LLM provider you intend to use. For OpenAI, set the `OPENAI_API_KEY` environment variable.
 
-## 1. Create a Model
+<Steps>
+
+## Create a Model
 
 We'll start by creating a model configuration and initializing the Mastra instance.
 
@@ -39,7 +43,7 @@ const modelConfig: ModelConfig = {
 const llm = mastra.LLM(modelConfig);
 ```
 
-## 2. Give It a Prompt
+## Give It a Prompt
 
 Next, we'll prepare our prompt. We'll ask:
 
@@ -47,7 +51,7 @@ Next, we'll prepare our prompt. We'll ask:
 const prompt = 'What is your favorite room in Hogwarts?';
 ```
 
-## 3. Test the Response
+## Test the Response
 
 We'll use the `generate` method to get the response from the model.
 
@@ -59,7 +63,7 @@ console.log('Response:', response.text);
 
 We can't run top-level `await` though, so let's wrap our code in an `async` main function.
 
-```typescript filename="src/mastra/index.ts"
+```ts filename="src/mastra/index.ts"
 async function main() {
   const mastra = new Mastra();
 
@@ -85,7 +89,7 @@ Run the script:
 OPENAI_API_KEY=<your-openai-api-key> npx tsx src/mastra/index.ts
 ```
 
-**Example Output:**
+Output:
 
 ```
 Response: As an AI language model developed by OpenAI, I don't possess consciousness or experiences.
@@ -93,11 +97,11 @@ Response: As an AI language model developed by OpenAI, I don't possess conscious
 
 The model defaults to its own perspective. To get a more engaging response, we'll alter the system message.
 
-## 4. Alter the System Message
+## Alter the System Message
 
 To change the perspective, we'll add a system message to specify the persona of the model. First, we'll have the model respond as Harry Potter.
 
-### As Harry Potter
+**As Harry Potter**
 
 ```typescript
 const messages = [
@@ -116,13 +120,15 @@ const responseHarry = await llm.generate(messages);
 console.log('Response as Harry Potter:', responseHarry.text);
 ```
 
-**Example Output:**
+Output:
 
 ```
 Response as Harry Potter: My favorite room in Hogwarts is definitely the Gryffindor Common Room. It's where I feel most at home, surrounded by my friends, the warm fireplace, and the cozy chairs. It's a place filled with great memories.
 ```
 
-### As Draco Malfoy
+---
+
+**As Draco Malfoy**
 
 Now, let's change the system message to have the model respond as Draco Malfoy.
 
@@ -134,28 +140,28 @@ const responseDraco = await llm.generate(messages);
 console.log('Response as Draco Malfoy:', responseDraco.text);
 ```
 
-**Example Output:**
+Output:
 
 ```
 Response as Draco Malfoy: My favorite room in Hogwarts is the Slytherin Common Room. It's located in the dungeons, adorned with green and silver decor, and has a magnificent view of the Black Lake's depths. It's exclusive and befitting of those with true ambition.
 ```
 
-## 5. Stream the Response
+## Stream the Response
 
 Finally, we'll demonstrate how to stream the response from the model. Streaming is useful for handling longer outputs or providing real-time feedback.
 
 ```typescript
-  const stream = await llm.__stream({
-    messages,
-  });
+const stream = await llm.stream({
+  messages,
+});
 
-  console.log('Streaming response as Draco Malfoy:');
+console.log('Streaming response as Draco Malfoy:');
 
-  for await (const chunk of stream.textStream) {
-    process.stdout.write(chunk);
-  }
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
 
-  console.log('\n');
+console.log('\n');
 }
 
 main();
@@ -167,12 +173,13 @@ Run the script again:
 OPENAI_API_KEY=<your-openai-api-key> npx tsx src/mastra/index.ts
 ```
 
-**Example Output:**
+**Output:**
 
 ```
 Streaming response as Draco Malfoy: My favorite room in Hogwarts is the Slytherin Common Room. Situated in the dungeons, it's an elegant space with greenish lights and serpentine motifs...
 ```
 
+</Steps>
 ## Summary
 
 By following this guide, you've learned how to:
