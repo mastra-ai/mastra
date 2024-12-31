@@ -1,6 +1,6 @@
 import { Step, Workflow } from '@mastra/core';
 import chalk from 'chalk';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import { z } from 'zod';
 
@@ -97,7 +97,16 @@ const assemblePackages = new Step({
       dependencies.forEach((dep: string) => {
         const pkgName = dep.replace('@mastra/', '');
         const pkgPath = path.join(process.cwd(), 'packages', pkgName);
-        packagesToBuild.add(pkgPath);
+        const integrationPath = path.join(process.cwd(), 'integrations', pkgName);
+        try {
+          if (existsSync(pkgPath)) {
+            packagesToBuild.add(pkgPath);
+          } else {
+            packagesToBuild.add(integrationPath);
+          }
+        } catch (e) {
+          console.error(e);
+        }
       });
 
       packagesToBuild.add(danePackage);
