@@ -1,4 +1,4 @@
-import { Steps } from 'nextra/components';
+import { Steps } from "nextra/components";
 
 # Agents Guide: Building a Chef Assistant
 
@@ -20,17 +20,17 @@ Create a new file `src/mastra/agents/chefAgent.ts` and define your agent:
 
 ```ts copy filename="src/mastra/agents/chefAgent.ts"
 // src/mastra/agents/chefAgent.ts
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 export const chefAgent = new Agent({
-  name: 'chef-agent',
+  name: "chef-agent",
   instructions:
-    'You are Michel, a practical and experienced home chef' +
-    'You helps people cook with whatever ingredients they have available.',
+    "You are Michel, a practical and experienced home chef" +
+    "You helps people cook with whatever ingredients they have available.",
   model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o',
-    toolChoice: 'auto',
+    provider: "OPEN_AI",
+    name: "gpt-4o",
+    toolChoice: "auto",
   },
 });
 ```
@@ -53,9 +53,9 @@ OPENAI_API_KEY=your_openai_api_key
 In your main file, register the agent:
 
 ```ts filename="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
+import { Mastra } from "@mastra/core";
 
-import { chefAgent } from './agents/chefAgent';
+import { chefAgent } from "./agents/chefAgent";
 
 export const mastra = new Mastra({
   agents: { chefAgent },
@@ -74,14 +74,12 @@ export const mastra = new Mastra({
 ```ts filename="src/mastra/index.ts"
 async function main() {
   const query =
-    'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?';
+    "In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?";
   console.log(`Query: ${query}`);
 
-  const response = await chefAgent.generate({
-    messages: [{ role: 'user', content: query }],
-  });
+  const response = await chefAgent.generate([{ role: "user", content: query }]);
 
-  console.log('\n👨‍🍳 Chef Michel:', response.text);
+  console.log("\n👨‍🍳 Chef Michel:", response.text);
 }
 
 main();
@@ -105,18 +103,15 @@ async function main() {
     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
   console.log(`Query: ${query}`);
 
-  const stream = await chefAgent.generate({
-    messages: [{ role: 'user', content: query }],
-    stream: true,
-  });
+  const stream = await chefAgent.stream([{ role: "user", content: query }]);
 
-  console.log('\n Chef Michel: ');
+  console.log("\n Chef Michel: ");
 
   for await (const chunk of stream.textStream) {
     process.stdout.write(chunk);
   }
 
-  console.log('\n\n✅ Recipe complete!');
+  console.log("\n\n✅ Recipe complete!");
 }
 
 main();
@@ -138,10 +133,11 @@ Great! You can make a comforting chicken curry...
 ### Generating a Recipe with Structured Data
 
 ```ts filename="src/mastra/index.ts"
-import { z } from 'zod';
+import { z } from "zod";
 
 async function main() {
-  const query = 'I want to make lasagna, can you generate a lasagna recipe for me?';
+  const query =
+    "I want to make lasagna, can you generate a lasagna recipe for me?";
   console.log(`Query: ${query}`);
 
   // Define the Zod schema
@@ -155,12 +151,12 @@ async function main() {
     steps: z.array(z.string()),
   });
 
-  const response = await chefAgent.generate({
-    messages: [{ role: 'user', content: query }],
-    schema: schema,
-  });
+  const response = await chefAgent.generate(
+    [{ role: "user", content: query }],
+    { output: schema },
+  );
 
-  console.log('\n👨‍🍳 Chef Michel:', response.object);
+  console.log("\n👨‍🍳 Chef Michel:", response.object);
 }
 
 main();
@@ -197,7 +193,7 @@ Query: I want to make lasagna, can you generate a lasagna recipe for me?
 After interacting with the agent, save its memory state:
 
 ```typescript
-await chefAgent.memory.save('chef_memory');
+await chefAgent.memory.save("chef_memory");
 ```
 
 ### Loading the Agent's Memory
@@ -205,7 +201,7 @@ await chefAgent.memory.save('chef_memory');
 Later, you can load the saved memory state:
 
 ```typescript
-await chefAgent.memory.load('chef_memory');
+await chefAgent.memory.load("chef_memory");
 ```
 
 ### Displaying the Agent's Memory
@@ -214,10 +210,10 @@ To view the agent's memory, you can retrieve and log the stored messages:
 
 ```typescript
 const memoryMessages = await chefAgent.memory.getMessages({
-  threadId: 'chef_memory',
+  threadId: "chef_memory",
 });
 
-console.log('Agent Memory:', memoryMessages);
+console.log("Agent Memory:", memoryMessages);
 ```
 
 This will output the stored conversation history and context associated with `chef_memory`.
