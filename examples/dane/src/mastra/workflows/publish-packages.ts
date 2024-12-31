@@ -147,9 +147,9 @@ const buildPackages = new Step({
 
     let res = await agent.generate(`
               Here are the packages that need to be built: ${pkgSet.join(',')}.
-              We need to build core first. 
-              All packages in the 'packages' path get built next in parallel. 
-              The rest can be done in parallel.
+              Always build @mastra/core first.
+              Next packages found within the 'packages' directory should be built next in parallel.
+              After packages found within the 'integrations' directory should be built in parallel.
               dane should be built last.
           `);
 
