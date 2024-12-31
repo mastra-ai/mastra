@@ -36,7 +36,10 @@ import {
   GoogleGenerativeAISettings,
   LLMProvider,
   ModelConfig,
+  OutputType,
+  StreamReturn,
   StructuredOutput,
+  StructuredOutputType,
 } from './types';
 
 @InstrumentClass({
@@ -74,7 +77,6 @@ export class LLM extends MastraBase {
       COHERE: 'cohere',
       AZURE: 'azure',
       AMAZON: 'amazon',
-      //
       ANTHROPIC_VERTEX: 'anthropic-vertex',
     };
     const type = providerToType[model.provider as LLMProvider] ?? model.provider;
@@ -338,31 +340,60 @@ export class LLM extends MastraBase {
     return converted;
   }
 
-  async generate<S extends boolean = false, Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
-    {
-      schema,
-      stream,
-      maxSteps = 5,
-      onFinish,
-      onStepFinish,
-      tools,
-      convertedTools,
-      runId,
-    }: {
-      runId?: string;
-      stream?: S;
-      schema?: Z;
-      onFinish?: (result: string) => Promise<void> | void;
-      onStepFinish?: (step: string) => void;
-      maxSteps?: number;
-      tools?: ToolsInput;
-      convertedTools?: Record<string, CoreTool>;
-    } = {},
-  ): Promise<GenerateReturn<S, Z>> {
-    let msgs;
+    private isBaseOutputType(outputType: StructuredOutputType) {
+    return outputType === 'string' || outputType === 'number' || outputType === 'boolean' || outputType === 'date';
+  }
+
+  private baseOutputTypeSchema(outputType: StructuredOutputType) {
+    switch (outputType) {
+      case 'string':
+        return z.string();
+      case 'number':
+        return z.number();
+      case 'boolean':
+        return z.boolean();
+      case 'date':
+        return z.string().describe('ISO 8601 date string');
+      default:
+        return z.string();
+    }
+  }
+
+  __createOutputSchema(output: StructuredOutput) {
+    const schema = Object.entries(output).reduce(
+      (memo, [k, v]) => {
+        if (this.isBaseOutputType(v.type)) {
+          memo[k] = this.baseOutputTypeSchema(v.type);
+        }
+        if (v.type === 'object') {
+          const objectItem = v.items;
+          const objectItemSchema = this.__createOutputSchema(objectItem);
+
+          memo[k] = objectItemSchema;
+        }
+        if (v.type === 'array') {
+          const arrayItem = v.items;
+          if (this.isBaseOutputType(arrayItem.type)) {
+            const itemSchema = this.baseOutputTypeSchema(arrayItem.type);
+            memo[k] = z.array(itemSchema);
+          }
+
+          if (arrayItem.type === 'object') {
+            const objectInArrayItemSchema = this.__createOutputSchema(arrayItem.items);
+            memo[k] = z.array(objectInArrayItemSchema);
+          }
+        }
+        return memo;
+      },
+      {} as Record<string, any>,
+    );
+
+    return z.object(schema);
+  }
+
+  private convertToMessages(messages: string | string[] | CoreMessage[]): CoreMessage[] {
     if (Array.isArray(messages)) {
-      msgs = messages?.map(m => {
+      return messages.map(m => {
         if (typeof m === 'string') {
           return {
             role: 'user',
@@ -371,29 +402,90 @@ export class LLM extends MastraBase {
         }
         return m;
       });
-    } else {
-      msgs = [
-        {
-          role: 'user',
-          content: messages,
-        },
-      ];
     }
 
-    if (stream && schema) {
-      return (await this.__streamObject({
-        messages: msgs as CoreMessage[],
-        structuredOutput: schema,
+    return [
+      {
+        role: 'user',
+        content: messages,
+      },
+    ];
+  }
+
+  async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    messages: string | string[] | CoreMessage[],
+    {
+      maxSteps = 5,
+      onStepFinish,
+      tools,
+      convertedTools,
+      runId,
+      output = 'text',
+    }: {
+      runId?: string;
+      onFinish?: (result: string) => Promise<void> | void;
+      onStepFinish?: (step: string) => void;
+      maxSteps?: number;
+      tools?: ToolsInput;
+      convertedTools?: Record<string, CoreTool>;
+      output?: OutputType | Z;
+    } = {},
+  ): Promise<GenerateReturn<Z>> {
+    const msgs = this.convertToMessages(messages);
+
+    if (output === 'text') {
+      return (await this.__text({
+        messages: msgs,
         onStepFinish,
-        onFinish,
         maxSteps,
         tools,
         convertedTools,
         runId,
-      })) as unknown as GenerateReturn<S, Z>;
+      })) as unknown as GenerateReturn<Z>;
     }
 
-    if (stream) {
+    let schema: ZodSchema;
+
+    if (output instanceof ZodSchema) {
+      schema = output;
+    } else {
+      schema = this.__createOutputSchema(output);
+    }
+
+    return (await this.__textObject({
+      messages: msgs,
+      structuredOutput: schema,
+      onStepFinish,
+      maxSteps,
+      tools,
+      convertedTools,
+      runId,
+    })) as unknown as GenerateReturn<Z>;
+  }
+
+  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    messages: string | string[] | CoreMessage[],
+    {
+      maxSteps = 5,
+      onFinish,
+      onStepFinish,
+      tools,
+      convertedTools,
+      runId,
+      output = 'text',
+    }: {
+      runId?: string;
+      onFinish?: (result: string) => Promise<void> | void;
+      onStepFinish?: (step: string) => void;
+      maxSteps?: number;
+      tools?: ToolsInput;
+      convertedTools?: Record<string, CoreTool>;
+      output?: OutputType | Z;
+    } = {},
+  ): Promise<StreamReturn<Z>> {
+    const msgs = this.convertToMessages(messages);
+
+    if (output === 'text') {
       return (await this.__stream({
         messages: msgs as CoreMessage[],
         onStepFinish,
@@ -402,29 +494,27 @@ export class LLM extends MastraBase {
         tools,
         convertedTools,
         runId,
-      })) as unknown as GenerateReturn<S, Z>;
+      })) as unknown as StreamReturn<Z>;
     }
 
-    if (schema) {
-      return (await this.__textObject({
-        messages: msgs as CoreMessage[],
-        structuredOutput: schema,
-        onStepFinish,
-        maxSteps,
-        tools,
-        convertedTools,
-        runId,
-      })) as unknown as GenerateReturn<S, Z>;
+    let schema: ZodSchema;
+
+    if (output instanceof ZodSchema) {
+      schema = output;
+    } else {
+      schema = this.__createOutputSchema(output);
     }
 
-    return (await this.__text({
+    return (await this.__streamObject({
       messages: msgs as CoreMessage[],
+      structuredOutput: schema,
       onStepFinish,
+      onFinish,
       maxSteps,
       tools,
       convertedTools,
       runId,
-    })) as unknown as GenerateReturn<S, Z>;
+    })) as unknown as StreamReturn<Z>;
   }
 
   async __text({
