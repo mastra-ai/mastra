@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.26
+
+### Patch Changes
+
+- 4d8ded3: Dane workflow
+
 ## 0.0.2-alpha.25
 
 ### Patch Changes
