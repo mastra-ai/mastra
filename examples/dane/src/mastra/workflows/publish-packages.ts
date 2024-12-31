@@ -147,7 +147,10 @@ const buildPackages = new Step({
 
     let res = await agent.generate(`
               Here are the packages that need to be built: ${pkgSet.join(',')}.
-              We need to build core first. And dane last. The rest can be done in parallel.
+              We need to build core first. 
+              All packages in the 'packages' path get built next in parallel. 
+              The rest can be done in parallel.
+              dane should be built last.
           `);
 
     console.log(chalk.green(res.text));
