@@ -39,7 +39,6 @@ import {
   OutputType,
   StreamReturn,
   StructuredOutput,
-  StructuredOutputType,
 } from './types';
 
 @InstrumentClass({
