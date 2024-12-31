@@ -14,7 +14,7 @@ import { ZodSchema } from 'zod';
 import { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 import { LLM } from '../llm';
-import { GenerateReturn, ModelConfig } from '../llm/types';
+import { GenerateReturn, ModelConfig, OutputType, StreamReturn } from '../llm/types';
 import { LogLevel, RegisteredLogger } from '../logger';
 import { ThreadType } from '../memory';
 import { InstrumentClass } from '../telemetry';
@@ -593,32 +593,28 @@ export class Agent<
     };
   }
 
-  async generate<S extends boolean = false, Z extends ZodSchema | undefined = undefined>(
+  async generate<Z extends ZodSchema | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     {
-      schema,
-      stream,
       context,
       threadId: threadIdInFn,
       resourceid,
       maxSteps = 5,
-      onFinish,
       onStepFinish,
       runId,
       toolsets,
+      output = 'text',
     }: {
       toolsets?: ToolsetsInput;
       resourceid?: string;
       context?: CoreMessage[];
       threadId?: string;
       runId?: string;
-      stream?: S;
-      schema?: Z;
-      onFinish?: (result: string) => Promise<void> | void;
       onStepFinish?: (step: string) => void;
       maxSteps?: number;
+      output?: OutputType | Z;
     } = {},
-  ): Promise<GenerateReturn<S, Z>> {
+  ): Promise<GenerateReturn<Z>> {
     let messagesToUse: UserContent[] = [];
 
     if (Array.isArray(messages)) {
@@ -643,34 +639,100 @@ export class Agent<
 
     const { threadId, messageObjects, convertedTools } = await before();
 
-    if (stream && schema) {
-      this.log(LogLevel.DEBUG, `Starting agent ${this.name} llm streamObject call`, {
+    if (output === 'text') {
+      this.log(LogLevel.DEBUG, `Starting agent ${this.name} llm text call`, {
         runId: this.name,
       });
-      return this.llm.__streamObject({
+
+      const result = await this.llm.__text({
         messages: messageObjects,
         tools: this.tools,
-        structuredOutput: schema,
         convertedTools,
         onStepFinish,
-        onFinish: async result => {
-          try {
-            const res = JSON.parse(result) || {};
-            await after({ result: res, threadId });
-          } catch (e) {
-            this.log(LogLevel.ERROR, 'Error saving memory on finish', {
-              error: e,
-              runId: this.name,
-            });
-          }
-          onFinish?.(result);
-        },
         maxSteps,
         runId,
-      }) as unknown as GenerateReturn<S, Z>;
+      });
+
+      await after({ result, threadId });
+
+      return result as unknown as GenerateReturn<Z>;
     }
 
-    if (stream) {
+    let schema: ZodSchema;
+
+    if (output instanceof ZodSchema) {
+      schema = output;
+    } else {
+      schema = this.llm.__createOutputSchema(output);
+    }
+
+    this.log(LogLevel.DEBUG, `Starting agent ${this.name} llm textObject call`, {
+      runId: this.name,
+    });
+    const result = await this.llm.__textObject({
+      messages: messageObjects,
+      tools: this.tools,
+      structuredOutput: schema,
+      convertedTools,
+      onStepFinish,
+      maxSteps,
+      runId,
+    });
+
+    await after({ result, threadId });
+
+    return result as unknown as GenerateReturn<Z>;
+  }
+
+  async stream<Z extends ZodSchema | undefined = undefined>(
+    messages: string | string[] | CoreMessage[],
+    {
+      context,
+      threadId: threadIdInFn,
+      resourceid,
+      maxSteps = 5,
+      onFinish,
+      onStepFinish,
+      runId,
+      toolsets,
+      output = 'text',
+    }: {
+      toolsets?: ToolsetsInput;
+      resourceid?: string;
+      context?: CoreMessage[];
+      threadId?: string;
+      runId?: string;
+      onFinish?: (result: string) => Promise<void> | void;
+      onStepFinish?: (step: string) => void;
+      maxSteps?: number;
+      output?: OutputType | Z;
+    } = {},
+  ): Promise<StreamReturn<Z>> {
+    let messagesToUse: UserContent[] = [];
+
+    if (Array.isArray(messages)) {
+      messagesToUse = messages.map(content => {
+        if (typeof content === 'string') {
+          return content;
+        }
+        return content.content as string;
+      });
+    } else {
+      messagesToUse = [messages];
+    }
+
+    const { before, after } = this.__primitive({
+      messages: messagesToUse,
+      context,
+      threadId: threadIdInFn,
+      resourceid,
+      runId: runId || this.name,
+      toolsets,
+    });
+
+    const { threadId, messageObjects, convertedTools } = await before();
+
+    if (output === 'text') {
       this.log(LogLevel.DEBUG, `Starting agent ${this.name} llm stream call`, {
         runId: this.name,
       });
@@ -693,43 +755,40 @@ export class Agent<
         },
         maxSteps,
         runId,
-      }) as unknown as GenerateReturn<S, Z>;
+      }) as unknown as StreamReturn<Z>;
     }
 
-    if (schema) {
-      this.log(LogLevel.DEBUG, `Starting agent ${this.name} llm textObject call`, {
-        runId: this.name,
-      });
-      const result = await this.llm.__textObject({
-        messages: messageObjects,
-        tools: this.tools,
-        structuredOutput: schema,
-        convertedTools,
-        onStepFinish,
-        maxSteps,
-        runId,
-      });
+    let schema: ZodSchema;
 
-      await after({ result, threadId });
-
-      return result as unknown as GenerateReturn<S, Z>;
+    if (output instanceof ZodSchema) {
+      schema = output;
+    } else {
+      schema = this.llm.__createOutputSchema(output);
     }
 
-    this.log(LogLevel.DEBUG, `Starting agent ${this.name} llm text call`, {
+    this.log(LogLevel.DEBUG, `Starting agent ${this.name} llm streamObject call`, {
       runId: this.name,
     });
-
-    const result = await this.llm.__text({
+    return this.llm.__streamObject({
       messages: messageObjects,
       tools: this.tools,
+      structuredOutput: schema,
       convertedTools,
       onStepFinish,
+      onFinish: async result => {
+        try {
+          const res = JSON.parse(result) || {};
+          await after({ result: res, threadId });
+        } catch (e) {
+          this.log(LogLevel.ERROR, 'Error saving memory on finish', {
+            error: e,
+            runId: this.name,
+          });
+        }
+        onFinish?.(result);
+      },
       maxSteps,
       runId,
-    });
-
-    await after({ result, threadId });
-
-    return result as unknown as GenerateReturn<S, Z>;
+    }) as unknown as StreamReturn<Z>;
   }
 }
