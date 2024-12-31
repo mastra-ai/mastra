@@ -170,14 +170,14 @@ You can test the agent's endpoint using `curl` or `fetch`:
 <Tabs items={['curl', 'fetch']}>
   <Tabs.Tab>
 ```bash copy
-curl -X POST http://localhost:4111/api/agents/catOne/text \
+curl -X POST http://localhost:4111/api/agents/catOne/generate \
 -H "Content-Type: application/json" \
 -d '{"messages": ["What do cats like to eat?"]}'
 ```
   </Tabs.Tab>
   <Tabs.Tab>
 ```js copy showLineNumbers
-fetch('http://localhost:4111/api/agents/catOne/text', {
+fetch('http://localhost:4111/api/agents/catOne/generate', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
