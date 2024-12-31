@@ -1,6 +1,6 @@
 # `mastra dev` Reference
 
-The `mastra dev` command starts a development server that exposes REST endpoints for your agents, tools, and workflows, 
+The `mastra dev` command starts a development server that exposes REST endpoints for your agents, tools, and workflows,
 
 ## Parameters
 
@@ -47,7 +47,7 @@ Agents are expected to be exported from `src/mastra/agents`.
 
 • `GET /api/agents`
   - Lists the registered agents found in your Mastra folder.
-• `POST /api/agents/:agentId/text`
+• `POST /api/agents/:agentId/generate`
   - Sends a text-based prompt to the specified agent, returning the agent’s response.
 
 ### Tool Routes
@@ -84,7 +84,7 @@ Make sure you have your environment variables set up in your `.env.development` 
 To test an agent after running `mastra dev`:
 
 ```bash
-curl -X POST http://localhost:4111/api/agents/myAgent/text \
+curl -X POST http://localhost:4111/api/agents/myAgent/generate \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
@@ -95,5 +95,5 @@ curl -X POST http://localhost:4111/api/agents/myAgent/text \
 
 ## Related Docs
 
-- [REST Endpoints Overview](/guide/local-dev/00-rest-endpoints.mdx) – More detailed usage of the dev server and agent endpoints.  
+- [REST Endpoints Overview](/guide/local-dev/00-rest-endpoints.mdx) – More detailed usage of the dev server and agent endpoints.
 - [mastra deploy](/guide/deployment/deployment.mdx) – Deploy your project to Vercel or Cloudflare.
