@@ -148,25 +148,7 @@ console.log("Structured Output:", response.object);
 
 This allows you to have strong typing and validation for the structured data returned by the agent.
 
-## **4. Saving Memory**
-
-Agents have a memory that can be persisted between sessions. Memory can be accessed by the agent's `memory` property, and can be saved, retrieved, and cleared using the `save()`, `getMessages()`, and `load()` methods.
-
-### Example
-
-```typescript showLineNumbers filename="src/mastra/index.ts" copy
-const response1 = await myAgent.generate("Which LLM model are you?", {
-  threadId: "thread_1",
-});
-
-await myAgent.memory.save("thread_1");
-const memoryMessages = await myAgent.memory.getMessages({
-  threadId: "thread_1",
-});
-console.log("Agent Memory:", memoryMessages);
-```
-
-## **5. Running Agents**
+## **4. Running Agents**
 
 Mastra provides a CLI command `mastra dev` to run your agents behind an API. By default, this looks for exported agents in files in the `src/mastra/agents` directory.
 
@@ -194,5 +176,6 @@ curl -X POST http://localhost:4111/api/agents/myAgent/generate \
 
 ## Next Steps
 
-- See more about Agent Memory in the [Agent Memory](./01-agent-memory.mdx) guide.
+- Learn about Agent Memory in the [Agent Memory](./01-agent-memory.mdx) guide.
+- Learn about Agent Tools in the [Agent Tools](./02-adding-tools.mdx) guide.
 - See an example agent in the [Chef Michel](./02-chef-michel.mdx) example.
