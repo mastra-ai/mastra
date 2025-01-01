@@ -10,7 +10,7 @@ import {
 } from 'ai';
 import { randomUUID } from 'crypto';
 import { JSONSchema7 } from 'json-schema';
-import { ZodSchema } from 'zod';
+import { z, ZodSchema } from 'zod';
 
 import { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
@@ -103,11 +103,9 @@ export class Agent<
           content: JSON.stringify(message),
         },
       ],
-      structuredOutput: {
-        title: {
-          type: 'string',
-        },
-      },
+      structuredOutput: z.object({
+        title: z.string(),
+      }),
     });
 
     return object.title;
@@ -202,31 +200,31 @@ export class Agent<
           ...newMessages,
         ];
 
-        const context = await this.llm.__textObject<{ usesContext: boolean; startDate: Date; endDate: Date }>({
-          messages: contextCallMessages,
-          structuredOutput: {
-            usesContext: {
-              type: 'boolean',
-            },
-            startDate: {
-              type: 'date',
-            },
-            endDate: {
-              type: 'date',
-            },
-          },
-        });
+        let context;
 
-        // this.logger.debug('Text Object result', JSON.stringify(context.object, null, 2));
+        try {
+          context = await this.llm.__textObject<{ usesContext: boolean; startDate: Date; endDate: Date }>({
+            messages: contextCallMessages,
+            structuredOutput: z.object({
+              usesContext: z.boolean(),
+              startDate: z.date(),
+              endDate: z.date(),
+            }),
+          });
 
-        this.log(LogLevel.DEBUG, 'Text Object result', {
-          contextObject: JSON.stringify(context.object, null, 2),
-          runId: this.name,
-        });
+          this.log(LogLevel.DEBUG, 'Text Object result', {
+            contextObject: JSON.stringify(context.object, null, 2),
+            runId: this.name,
+          });
+        } catch (e) {
+          if (e instanceof Error) {
+            this.log(LogLevel.DEBUG, `No context found: ${e.message}`);
+          }
+        }
 
         let memoryMessages: CoreMessage[];
 
-        if (context.object?.usesContext) {
+        if (context?.object?.usesContext) {
           memoryMessages = await this.#mastra.memory.getContextWindow({
             threadId: thread.id,
             format: 'core_message',
