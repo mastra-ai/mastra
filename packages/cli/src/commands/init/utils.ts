@@ -253,17 +253,6 @@ export const interactivePrompt = async () => {
   return { ...rest, components: mastraComponents };
 };
 
-// mastra init
-// no package.json found - > log "no package.json found, Run 'mastra create' to create a new project"
-// package.json found - > continue
-
-// standalone app
-
-// npm create mastra
-// create a new project, ask them to cd into the project then run (or maybe we can programatically init)
-// npx mastra init
-// npx mastra dev
-
 export const createMastraProject = async () => {
   const projectName = await p.text({
     message: 'What do you want to name your project?',
