@@ -30,8 +30,7 @@ export const init = async ({
     const result = await createMastraDir(directory);
 
     if (!result.ok) {
-      p.outro(color.inverse(' Mastra already initialized '));
-      s.stop();
+      s.stop(color.inverse(' Mastra already initialized '));
       return { success: false };
     }
 
@@ -46,12 +45,11 @@ export const init = async ({
     if (addExample) {
       await Promise.all([components.map(component => writeCodeSample(dirPath, component as Components, llmProvider))]);
     }
-    s.stop();
-    p.outro(' Mastra initialized successfully');
+    s.stop('Mastra initialized successfully');
+    p.note('You are all set!');
     return { success: true };
   } catch (err) {
-    s.stop();
-    p.outro(color.inverse(' Could not initialize mastra '));
+    s.stop(color.inverse(' Mastra already initialized '));
     console.error(err);
     return { success: false };
   }
