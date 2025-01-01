@@ -15,7 +15,6 @@ stock-price-agent/
 │   │   └── stockPrices.ts
 │   └── index.ts
 ├── package.json
-├── tsconfig.json
 └── .env
 ```
 
@@ -69,8 +68,8 @@ const getStockPrice = async (symbol: string) => {
 };
 
 export const stockPrices = createTool({
-  label: 'Get Stock Price',
-  schema: z.object({
+  id: "Get Stock Price",
+  inputSchema: z.object({
     symbol: z.string(),
   }),
   description: `Fetches the last day's closing stock price for a given symbol`,
@@ -91,21 +90,20 @@ export const stockPrices = createTool({
 We'll create an agent and add the `stockPrices` tool to it.
 
 ```ts filename="src/agents/stockAgent.ts"
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
-import * as tools from '../tools';
+import * as tools from "../tools/stockPrices";
 
 export const stockAgent = new Agent<typeof tools>({
-  name: 'Stock Agent',
+  name: "Stock Agent",
   instructions:
-    'You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.',
+    "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
   model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o',
-    toolChoice: 'required',
+    provider: "OPEN_AI",
+    name: "gpt-4o",
   },
-  enabledTools: {
-    stockPrices: true,
+  tools: {
+    stockPrices: tools.stockPrices,
   },
 });
 ```
@@ -119,8 +117,6 @@ We need to initialize the Mastra instance with our agent and tool.
 ````ts filename="src/index.ts"
 import { Mastra } from '@mastra/core';
 
-```typescript:src/index.ts
-import { Mastra } from "@mastra/core";
 import { stockAgent } from "./agents/stockAgent";
 
 export const mastra = new Mastra({
@@ -135,7 +131,7 @@ Instead of running the application directly, we'll use the `mastra dev` command 
 In your terminal, start the Mastra server by running:
 
 ```bash
-mastra dev
+mastra dev --dir src 
 ```
 
 This command will start the server and make your agent available at:
