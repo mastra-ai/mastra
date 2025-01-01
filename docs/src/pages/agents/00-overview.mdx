@@ -11,11 +11,11 @@ To create an agent in Mastra, you use the `Agent` class and define its propertie
 ```ts showLineNumbers filename="src/mastra/agents/index.ts" copy
 import { Agent } from "@mastra/core";
 
-const myAgent = new Agent({
+export const myAgent = new Agent({
   name: "My Agent",
   instructions: "You are a helpful assistant.",
   model: {
-    provider: "openai",
+    provider: "OPEN_AI",
     name: "gpt-4", // Or "gpt-3.5-turbo"
   },
 });
@@ -53,10 +53,9 @@ export const mastra = new Mastra({
 Use the `.generate()` method to have your agent produce text responses:
 
 ```ts showLineNumbers filename="src/mastra/index.ts" copy
-const messages = [
+const response = await myAgent.generate([
   { role: "user", content: "Hello, how can you assist me today?" },
-];
-const response = await myAgent.generate(messages);
+]);
 
 console.log("Agent:", response.text);
 ```
@@ -66,8 +65,9 @@ console.log("Agent:", response.text);
 For more real-time responses, you can stream the agent's response:
 
 ```ts showLineNumbers filename="src/mastra/index.ts" lines={6} copy
-const messages = [{ role: "user", content: "Tell me a story." }];
-const stream = await myAgent.stream(messages);
+const stream = await myAgent.stream([
+  { role: "user", content: "Tell me a story." },
+]);
 
 console.log("Agent:");
 
@@ -92,16 +92,18 @@ const schema = {
   required: ["summary", "keywords"],
 };
 
-const messages = [
+const response = await myAgent.generate(
+  [
+    {
+      role: "user",
+      content:
+        "Please provide a summary and keywords for the following text: ...",
+    },
+  ],
   {
-    role: "user",
-    content:
-      "Please provide a summary and keywords for the following text: ...",
-  },
-];
-const response = await myAgent.generate(messages, {
-  output: schema,
-});
+    output: schema,
+  }
+);
 
 console.log("Structured Output:", response.object);
 ```
@@ -128,16 +130,18 @@ const schema = z.object({
 });
 
 // Use the schema with the agent
-const messages = [
+const response = await myAgent.generate(
+  [
+    {
+      role: "user",
+      content:
+        "Please provide a summary and keywords for the following text: ...",
+    },
+  ],
   {
-    role: "user",
-    content:
-      "Please provide a summary and keywords for the following text: ...",
-  },
-];
-const response = await myAgent.generate(messages, {
-  output: schema,
-});
+    output: schema,
+  }
+);
 
 console.log("Structured Output:", response.object);
 ```
