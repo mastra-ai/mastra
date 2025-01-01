@@ -183,7 +183,13 @@ app.post('/api/agents/:agentId/generate', async (req: Request, res: Response) =>
     }
 
     const result = await agent.generate(messages, { threadId, resourceid });
-    res.json(result);
+
+    const textResult = {
+      text: result.text,
+      agent: agent.name,
+    };
+
+    res.json(textResult);
   } catch (error) {
     const apiError = error as ApiError;
     console.error('Error texting from agent', apiError);
@@ -257,7 +263,13 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
     }
 
     const result = await agent.generate(messages, { output: schema, threadId, resourceid });
-    res.json(result);
+
+    const objectResult = {
+      object: result.object,
+      agent: result.agent,
+    };
+
+    res.json(objectResult);
   } catch (error) {
     const apiError = error as ApiError;
     console.error('Error getting structured output from agent', apiError);
