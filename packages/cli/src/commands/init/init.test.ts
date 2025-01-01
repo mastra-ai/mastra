@@ -59,7 +59,6 @@ describe('CLI', () => {
       components: ['agents', 'tools'],
       addExample: false,
       llmProvider: 'openai',
-      showSpinner: false,
     });
 
     expect(mockCreateMastraDir).toHaveBeenCalledWith('/mock');
@@ -93,7 +92,6 @@ describe('CLI', () => {
       components: ['agents'],
       addExample: true,
       llmProvider: 'openai',
-      showSpinner: false,
     });
 
     const writtenFile = fs.readFileSync('/mock/mastra/index.ts', 'utf-8');
@@ -120,7 +118,6 @@ describe('CLI', () => {
       components: ['agents'],
       addExample: false,
       llmProvider: 'openai',
-      showSpinner: false,
     });
 
     const envFileContent = fs.readFileSync('/mock/.env.development', 'utf-8');
@@ -190,7 +187,6 @@ describe('CLI', () => {
       components: ['tools'],
       addExample: false,
       llmProvider: 'anthropic',
-      showSpinner: false,
     });
 
     expect(mockWriteIndexFile).not.toHaveBeenCalled();
