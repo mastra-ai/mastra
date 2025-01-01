@@ -108,8 +108,6 @@ export class Agent<
       }),
     });
 
-    console.log(object);
-
     return object.title;
   }
 
