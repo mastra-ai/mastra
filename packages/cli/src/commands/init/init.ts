@@ -49,7 +49,7 @@ export const init = async ({
     p.note('You are all set!');
     return { success: true };
   } catch (err) {
-    s.stop(color.inverse(' Mastra already initialized '));
+    s.stop(color.inverse('An error occurred while initializing Mastra'));
     console.error(err);
     return { success: false };
   }
