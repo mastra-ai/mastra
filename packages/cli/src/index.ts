@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import color from 'picocolors';
 
 import { PosthogAnalytics } from './analytics/index.js';
+import { create } from './commands/create/create.js';
 import { cloudflareDeploy, netlifyDeploy, vercelDeploy } from './commands/deploy/index.js';
 import { dev } from './commands/dev.js';
 import { add } from './commands/engine/add.js';
@@ -11,7 +12,7 @@ import { generate } from './commands/engine/generate.js';
 import { migrate } from './commands/engine/migrate.js';
 import { up } from './commands/engine/up.js';
 import { init } from './commands/init/init.js';
-import { checkAndInstallCoreDeps, checkPkgJsonAndCreateStarter, interactivePrompt } from './commands/init/utils.js';
+import { checkAndInstallCoreDeps, checkPkgJson, interactivePrompt } from './commands/init/utils.js';
 import { DepsService } from './services/service.deps.js';
 import { findApiKeys } from './utils/find-api-keys.js';
 import { getEnv } from './utils/get-env.js';
@@ -42,23 +43,56 @@ program
   });
 
 program
+  .command('create')
+  .description('Create a new Mastra project')
+  .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
+  .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
+  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, or groq))')
+  .option('-e, --example', 'Include example code')
+  .action(async args => {
+    await analytics.trackCommandExecution({
+      command: 'create',
+      args,
+      execution: async () => {
+        if (args.default) {
+          await create({
+            components: ['agents', 'tools', 'workflows'],
+            llmProvider: 'openai',
+            addExample: false,
+          });
+        }
+        await create({
+          components: args.components,
+          llmProvider: args.llm,
+          addExample: args.example,
+        });
+      },
+    });
+  });
+
+program
   .command('init')
-  .description('Initialize a new Mastra project')
+  .description('Initialize Mastra in your project')
   .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
   .option('-d, --dir <directory>', 'Directory for Mastra files to (defaults to src/)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, or groq))')
   .option('-e, --example', 'Include example code')
-  .option('-ne, --no-example', 'Skip example code')
   .action(async args => {
     await analytics.trackCommandExecution({
       command: 'init',
       args,
       execution: async () => {
-        await checkPkgJsonAndCreateStarter();
+        await checkPkgJson();
         await checkAndInstallCoreDeps();
 
-        if (!Object.keys(args).length) return interactivePrompt();
+        if (!Object.keys(args).length) {
+          const result = await interactivePrompt();
+          await init({
+            ...result,
+          });
+          return;
+        }
 
         if (args?.default) {
           init({
@@ -66,7 +100,6 @@ program
             components: ['agents', 'tools', 'workflows'],
             llmProvider: 'openai',
             addExample: false,
-            showSpinner: true,
           });
           return;
         }
@@ -77,7 +110,6 @@ program
           components: componentsArr,
           llmProvider: args.llm,
           addExample: args.example,
-          showSpinner: true,
         });
         return;
       },

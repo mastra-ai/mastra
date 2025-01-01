@@ -3,7 +3,6 @@ import { ModelConfig } from '@mastra/core';
 import child_process from 'node:child_process';
 import util from 'node:util';
 import path from 'path';
-import color from 'picocolors';
 import prettier from 'prettier';
 import yoctoSpinner from 'yocto-spinner';
 
@@ -13,8 +12,6 @@ import fs from 'fs/promises';
 import { DepsService } from '../../services/service.deps.js';
 import { FileService } from '../../services/service.file.js';
 import { logger } from '../../utils/logger.js';
-
-import { init } from './init.js';
 
 const exec = util.promisify(child_process.exec);
 
@@ -203,8 +200,6 @@ export const writeCodeSample = async (dirPath: string, component: Components, ll
 };
 
 export const interactivePrompt = async () => {
-  p.intro(color.inverse(' Initializing Mastra '));
-
   const mastraProject = await p.group(
     {
       directory: () =>
@@ -252,49 +247,40 @@ export const interactivePrompt = async () => {
     },
   );
 
-  const s = p.spinner();
-
-  s.start('Initializing Mastra');
-
   const { shouldAddTools, components, ...rest } = mastraProject;
   const mastraComponents = shouldAddTools ? [...components, 'tools'] : components;
-  try {
-    const result = { ...rest, components: mastraComponents };
 
-    const { success } = await init(result);
-
-    if (!success) {
-      return;
-    }
-
-    s.stop('Mastra initialized successfully');
-    p.note('You are all set!');
-
-    p.outro(`Problems? ${color.underline(color.cyan('https://github.com/mastra-ai/mastra'))}`);
-  } catch (err) {
-    s.stop('Could not initialize Mastra');
-    logger.error(err as string);
-  }
+  return { ...rest, components: mastraComponents };
 };
 
-export const initializeMinimal = async () => {
-  const confirm = await p.confirm({
-    message: 'No package.json detected. Create a new project?',
-    initialValue: true,
+// mastra init
+// no package.json found - > log "no package.json found, Run 'mastra create' to create a new project"
+// package.json found - > continue
+
+// standalone app
+
+// npm create mastra
+// create a new project, ask them to cd into the project then run (or maybe we can programatically init)
+// npx mastra init
+// npx mastra dev
+
+export const createMastraProject = async () => {
+  const projectName = await p.text({
+    message: 'What do you want to name your project?',
+    placeholder: 'my-mastra-app',
+    defaultValue: 'my-mastra-app',
   });
 
-  if (p.isCancel(confirm)) {
-    p.cancel('Operation cancelled');
-    process.exit(0);
-  }
-
-  if (!confirm) {
+  if (p.isCancel(projectName)) {
     p.cancel('Operation cancelled');
     process.exit(0);
   }
 
   const s = p.spinner();
   s.start('Creating project');
+
+  await fs.mkdir(projectName);
+  process.chdir(projectName);
 
   await exec(`npm init -y`);
   await exec(`npm i zod typescript tsx @types/node --save-dev`);
@@ -307,9 +293,11 @@ export const initializeMinimal = async () => {
   await exec(`npm i @mastra/core@alpha`);
   s.stop('Project creation successful');
   logger.break();
+
+  return { projectName };
 };
 
-export const checkPkgJsonAndCreateStarter = async () => {
+export const checkPkgJson = async () => {
   const cwd = process.cwd();
   const pkgJsonPath = path.join(cwd, 'package.json');
 
@@ -326,11 +314,6 @@ export const checkPkgJsonAndCreateStarter = async () => {
     return;
   }
 
-  try {
-    await initializeMinimal();
-    return { isStarter: true };
-  } catch (err) {
-    logger.error(`Could not create project: ${err}`);
-    process.exit(0);
-  }
+  logger.info('no package.json found, create one or run "mastra create" to create a new project');
+  process.exit(0);
 };
