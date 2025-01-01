@@ -25,7 +25,7 @@ const getWeatherInfo = async (city: string) => {
 };
 
 export const weatherInfo = createTool({
-  label: "Get Weather Information",
+  id "Get Weather Information",
   inputSchema: z.object({
     city: z.string(),
   }),
@@ -39,7 +39,7 @@ export const weatherInfo = createTool({
 
 In this code:
 
-- **`label`**: A human-readable name for the tool.
+- **`id`**: A human-readable name for the tool.
 - **`inputSchema`**: A Zod schema defining the expected input parameters.
 - **`description`**: A description of what the tool does.
 - **`execute`**: An asynchronous function that performs the tool's main logic.
@@ -52,7 +52,7 @@ Now we'll add the tool to an agent. We'll create an agent that can answer questi
 
 ```typescript filename="src/mastra/agents/weatherAgent.ts"
 import { Agent } from "@mastra/core";
-import { weatherInfo } from "../tools";
+import * as tools from "../tools/weatherInfo";
 
 export const weatherAgent = new Agent<typeof tools>({
   name: "Weather Agent",
@@ -64,7 +64,7 @@ export const weatherAgent = new Agent<typeof tools>({
     toolChoice: "required",
   },
   tools: {
-    weatherInfo,
+    weatherInfo: tools.weatherInfo,
   },
 });
 ```
@@ -124,7 +124,7 @@ The agent will use the `weatherInfo` tool to get the current weather in New York
 
 A tool requires:
 
-- **`label`**: Name of the tool (e.g., "Get Weather Information").
+- **`id`**: Name of the tool (e.g., "Get Weather Information").
 - **`inputSchema`**: Zod schema for validating inputs like city names.
 - **`description`**: Clear explanation of what the tool does.
 - **`execute`**: Async function that performs the tool's logic.
