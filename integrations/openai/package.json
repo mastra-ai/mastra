@@ -1,6 +1,6 @@
 {
   "name": "@mastra/openai",
-  "version": "1.0.1-alpha.26",
+  "version": "1.0.1-alpha.27",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/openai.esm.js",

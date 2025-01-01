@@ -1,5 +1,17 @@
 # vnext
 
+## 0.1.1-alpha.32
+
+### Patch Changes
+
+- Updated dependencies [b726bf5]
+  - @mastra/core@0.1.27-alpha.48
+  - @mastra/claude@1.0.1-alpha.27
+  - @mastra/firecrawl@1.0.4-alpha.34
+  - @mastra/github@1.0.3-alpha.32
+  - @mastra/engine@0.0.5-alpha.42
+  - @mastra/memory@0.0.2-alpha.28
+
 ## 0.1.1-alpha.31
 
 ### Patch Changes
