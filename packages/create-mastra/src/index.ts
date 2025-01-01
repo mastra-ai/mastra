@@ -1,9 +1,32 @@
 #! /usr/bin/env node
 import { Command } from 'commander';
 
+import { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
 import { create } from 'mastra/dist/commands/create/create.js';
 
+import { getPackageVersion } from './utils.js';
+
+const version = await getPackageVersion();
+
+const analytics = new PosthogAnalytics({
+  apiKey: 'phc_SBLpZVAB6jmHOct9CABq3PF0Yn5FU3G2FgT4xUr2XrT',
+  host: 'https://us.posthog.com',
+  version: version!,
+});
+
 const program = new Command();
+
+program
+  .version(`${version}`, '-v, --version')
+  .description(`create-mastra ${version}`)
+  .action(async () => {
+    try {
+      analytics.trackCommand({
+        command: 'version',
+      });
+      console.log(`create-mastra ${version}`);
+    } catch (e) {}
+  });
 
 program
   .name('create-mastra')
