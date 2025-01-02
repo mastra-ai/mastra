@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { createLogger, Mastra } from '@mastra/core';
 import { PostgresEngine } from '@mastra/engine';
 
 import { attackWorkflow } from './workflows/attack.js';
@@ -12,5 +12,7 @@ export const mastra = new Mastra({
   workflows: {
     attack: attackWorkflow,
   },
-  logger: false,
+  logger: createLogger({
+    type: 'CONSOLE',
+  }),
 });
