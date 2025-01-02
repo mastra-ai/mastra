@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.70
+
+### Patch Changes
+
+- abdd42d: polish mastra create, fix create-mastra publishing
+
 ## 0.1.57-alpha.69
 
 ### Patch Changes
