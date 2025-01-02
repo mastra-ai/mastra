@@ -133,3 +133,7 @@ td {
 button[title='Hide sidebar'] {
   display: none;
 }
+
+pre > * {
+  font-size: 13px !important;
+}
