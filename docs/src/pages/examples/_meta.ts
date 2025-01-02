@@ -5,6 +5,9 @@ const meta = {
   llms: {
     title: "LLM Models",
   },
+  agents: {
+    title: "Agents",
+  },
   rag: {
     title: "RAG",
   },
