@@ -45,6 +45,8 @@ export class VercelDeployer extends Deployer {
             '@mastra/core': '0.1.27-alpha.35',
             'express-jsdoc-swagger': '^1.8.0',
             'serverless-http': '^3.2.0',
+            superjson: '^2.2.2',
+            'zod-to-json-schema': '^3.24.1',
             zod: '3.24.0',
           },
         },
