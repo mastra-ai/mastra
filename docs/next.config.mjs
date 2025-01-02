@@ -15,5 +15,16 @@ const withNextra = nextra({
 });
 
 export default withNextra({
+  assetPrefix: process.env.NODE_ENV === 'production' ? '/docs' : '',
+  async rewrites() {
+    return {
+      beforeFiles: [
+        {
+          source: '/docs/_next/:path+',
+          destination: '/_next/:path+',
+        },
+      ],
+    };
+  },
   trailingSlash: false,
 });
