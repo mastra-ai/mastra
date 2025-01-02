@@ -24,6 +24,7 @@
     "@mastra/stripe": "1.0.0",
     "@mastra/twilio": "1.0.0",
     "mastra": "0.1.57-alpha.13",
+    "create-mastra": "0.1.0-alpha.1",
     "@mastra/core": "0.1.27-alpha.20",
     "@mastra/engine": "0.0.5-alpha.12",
     "@mastra/memory": "0.0.1",
