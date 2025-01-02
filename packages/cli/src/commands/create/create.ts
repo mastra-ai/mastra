@@ -36,6 +36,6 @@ const postCreate = ({ projectName }: { projectName: string }) => {
    ${color.green('To start your project:')}
 
     ${color.cyan('cd')} ${projectName}
-    ${color.cyan('npx')} mastra dev
+    ${color.cyan('npm run dev')}
   `);
 };

@@ -101,4 +101,13 @@ export class DepsService {
     const content = (await fsExtra.readJSON(pkgJsonPath)) as PackageJson;
     return content.version;
   }
+
+  public async addScriptsToPackageJson(scripts: Record<string, string>) {
+    const packageJson = JSON.parse(await fsPromises.readFile('package.json', 'utf-8'));
+    packageJson.scripts = {
+      ...packageJson.scripts,
+      ...scripts,
+    };
+    await fsPromises.writeFile('package.json', JSON.stringify(packageJson, null, 2));
+  }
 }
