@@ -47,8 +47,8 @@ export const createMastraProject = async () => {
   await exec(`npm i zod typescript tsx @types/node --save-dev`);
   s.stop('NPM dependencies installed');
 
-  s.start('Installing @mastra/core');
-  await exec(`npm i @mastra/core@alpha`);
+  s.start('Installing mastra dependencies');
+  await exec(`npm i @mastra/core@alpha mastra`);
   s.stop('@mastra/core installed');
 
   s.start('Adding .gitignore');
