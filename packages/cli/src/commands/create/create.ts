@@ -1,4 +1,5 @@
 import * as p from '@clack/prompts';
+import color from 'picocolors';
 
 import { init } from '../init/init.js';
 import { interactivePrompt, LLMProvider } from '../init/utils.js';
@@ -31,9 +32,10 @@ export const create = async (args: { components?: string[]; llmProvider?: LLMPro
 };
 
 const postCreate = ({ projectName }: { projectName: string }) => {
-  p.note(`
-    To start your project
-    cd ${projectName}
-    npx mastra dev
-    `);
+  p.outro(`
+   ${color.green('To start your project:')}
+
+    ${color.cyan('cd')} ${projectName}
+    ${color.cyan('npx')} mastra dev
+  `);
 };

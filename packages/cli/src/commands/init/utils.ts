@@ -3,6 +3,7 @@ import { ModelConfig } from '@mastra/core';
 import child_process from 'node:child_process';
 import util from 'node:util';
 import path from 'path';
+import color from 'picocolors';
 import prettier from 'prettier';
 import yoctoSpinner from 'yocto-spinner';
 
@@ -158,18 +159,22 @@ export async function installCoreDeps() {
   }
 }
 
-export const writeAPIKey = async (provider: LLMProvider) => {
+export const getAPIKey = async (provider: LLMProvider) => {
   let key = 'OPENAI_API_KEY';
   switch (provider) {
     case 'anthropic':
       key = 'ANTHROPIC_API_KEY';
-      return;
+      return key;
     case 'groq':
       key = 'GROQ_API_KEY';
-      return;
+      return key;
     default:
-      key = 'OPENAI_API_KEY';
+      return key;
   }
+};
+
+export const writeAPIKey = async (provider: LLMProvider) => {
+  const key = await getAPIKey(provider);
   await exec(`echo ${key}= >> .env.development`);
 };
 export const createMastraDir = async (directory: string): Promise<{ ok: true; dirPath: string } | { ok: false }> => {
@@ -200,6 +205,7 @@ export const writeCodeSample = async (dirPath: string, component: Components, ll
 };
 
 export const interactivePrompt = async () => {
+  p.intro(color.inverse('Mastra Init'));
   const mastraProject = await p.group(
     {
       directory: () =>
