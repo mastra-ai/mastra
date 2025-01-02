@@ -30,7 +30,7 @@ const getPacakgesToPublish = new Step({
       `
               ONLY RETURN DATA IF WE HAVE PACKAGES TO PUBLISH. If we do not, return empty arrays.
               Can you format this for me ${result.text}?
-              @mastra/core must be first. @mastra/dane should be listed after packages and integrations.
+              @mastra/core must be first. mastra must be second. @mastra/dane should be listed after packages and integrations.
               `,
       {
         output: z.object({
