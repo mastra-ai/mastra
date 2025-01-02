@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.68
+
+### Patch Changes
+
+- c156b63: Add missing mastra deploy server deps
+
 ## 0.1.57-alpha.67
 
 ### Patch Changes
