@@ -40,7 +40,8 @@
     "@mastra/dane": "0.0.1",
     "@mastra/stabilityai": "1.0.1-alpha.17",
     "travel-app": "0.1.0",
-    "workflow": "1.0.1-alpha.5"
+    "workflow": "1.0.1-alpha.5",
+    "create-mastra": "0.1.0"
   },
   "changesets": [
     "afraid-papayas-shake",
@@ -108,6 +109,7 @@
     "nine-meals-peel",
     "ninety-bags-count",
     "ninety-mayflies-reflect",
+    "odd-buses-thank",
     "olive-oranges-flow",
     "olive-trainers-provide",
     "perfect-fishes-dream",
