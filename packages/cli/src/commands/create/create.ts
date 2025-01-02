@@ -1,4 +1,5 @@
-import { logger } from '../../utils/logger.js';
+import * as p from '@clack/prompts';
+
 import { init } from '../init/init.js';
 import { interactivePrompt, LLMProvider } from '../init/utils.js';
 
@@ -30,7 +31,9 @@ export const create = async (args: { components?: string[]; llmProvider?: LLMPro
 };
 
 const postCreate = ({ projectName }: { projectName: string }) => {
-  logger.info('To start your project');
-  logger.info(`cd ${projectName}`);
-  logger.info('npx mastra dev');
+  p.note(`
+    To start your project
+    cd ${projectName}
+    npx mastra dev
+    `);
 };
