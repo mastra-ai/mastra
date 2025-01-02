@@ -252,3 +252,6 @@ deploy
   });
 
 program.parse(process.argv);
+
+export { create } from './commands/create/create.js';
+export { PosthogAnalytics } from './analytics/index.js';
