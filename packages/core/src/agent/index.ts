@@ -202,18 +202,23 @@ export class Agent<
           ...newMessages,
         ];
 
-        const context = await this.llm.__textObject<{ usesContext: boolean; startDate: Date; endDate: Date }>({
+        const context = await this.llm.__textObject<{ usesContext: boolean; startDate: string; endDate: string }>({
           messages: contextCallMessages,
           structuredOutput: {
-            usesContext: {
-              type: 'boolean',
+            type: 'object',
+            properties: {
+              usesContext: {
+                type: 'boolean',
+              },
+              startDate: {
+                type: 'string',
+              },
+              endDate: {
+                type: 'string',
+              },
             },
-            startDate: {
-              type: 'date',
-            },
-            endDate: {
-              type: 'date',
-            },
+            additionalProperties: false,
+            required: ['usesContext', 'startDate', 'endDate'],
           },
         });
 
