@@ -107,18 +107,18 @@ const thread = await mastra.memory.createThread({
 
 This creates a new thread and assigns it a unique identifier. The `resourceId` parameter helps identify which memory context this thread belongs to.
 
-### Generating Responses
+### Save Messages when Generating a Response
 
 Generate responses while maintaining conversation context. 
 The `threadId` parameter links messages to a specific conversation thread, while `resourceId` associates the conversation with a particular memory context or resource:
 
 ```typescript
-const result = await myAgent.generate("Tell me about the project requirements.", {
+const responseOne = await myAgent.generate("Tell me about the project requirements.", {
   resourceId: "memory_id",
   threadId: thread.id,
 });
 
-const response = await myAgent.generate("What are the next steps?", {
+const responseTwo = await myAgent.generate("What are the next steps?", {
   resourceId: "memory_id",
   threadId: thread.id,
 });
@@ -182,7 +182,7 @@ const upstashKVMemory = new UpstashKVMemory({
 When maxTokens is set, messages are filtered by date range and then processed from newest to oldest until the token limit is reached. 
 This maintains the context window size while preserving the most recent conversation history.
 
-### Cleaning Up Memory
+### Deleting a Thread
 
 To remove a thread and all its associated messages:
 
