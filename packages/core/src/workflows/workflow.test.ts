@@ -571,6 +571,64 @@ describe('Workflow', () => {
     });
   });
 
+  describe('multiple chains', () => {
+    it('should run multiple chains in parallel', async () => {
+      const step1 = new Step({ id: 'step1', execute: jest.fn<any>().mockResolvedValue({ result: 'success1' }) });
+      const step2 = new Step({ id: 'step2', execute: jest.fn<any>().mockResolvedValue({ result: 'success2' }) });
+      const step3 = new Step({ id: 'step3', execute: jest.fn<any>().mockResolvedValue({ result: 'success3' }) });
+      const step4 = new Step({ id: 'step4', execute: jest.fn<any>().mockResolvedValue({ result: 'success4' }) });
+      const step5 = new Step({ id: 'step5', execute: jest.fn<any>().mockResolvedValue({ result: 'success5' }) });
+
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow.step(step1).then(step2).then(step3).step(step4).then(step5).commit();
+
+      const result = await workflow.execute();
+
+      expect(result.results.step1).toEqual({ status: 'success', payload: { result: 'success1' } });
+      expect(result.results.step2).toEqual({ status: 'success', payload: { result: 'success2' } });
+      expect(result.results.step3).toEqual({ status: 'success', payload: { result: 'success3' } });
+      expect(result.results.step4).toEqual({ status: 'success', payload: { result: 'success4' } });
+      expect(result.results.step5).toEqual({ status: 'success', payload: { result: 'success5' } });
+    });
+  });
+
+  describe('Retry', () => {
+    it('should retry a step', async () => {
+      const step1 = new Step({ id: 'step1', execute: jest.fn<any>().mockResolvedValue({ result: 'success' }) });
+      const step2 = new Step({ id: 'step2', execute: jest.fn<any>().mockResolvedValue({ result: 'success 2' }) });
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        retryConfig: { attempts: 3, delay: 500 },
+        mastra: {
+          logger: createLogger({
+            type: 'CONSOLE',
+          }),
+        },
+      });
+
+      workflow
+        .step(step1)
+        .then(step2, {
+          snapshotOnTimeout: true,
+          when: async () => {
+            console.log('runnning condition');
+            return await new Promise(resolve => {
+              setTimeout(() => {
+                resolve(false);
+              }, 100);
+            });
+          },
+        })
+        .commit();
+
+      const result = await workflow.execute();
+
+      expect(result.results.step1).toEqual({ status: 'success', payload: { result: 'success' } });
+      expect(result.results.step2).toEqual({ status: 'suspended' });
+    });
+  });
+
   describe('Subscribers (.after)', () => {
     it('should spawn subscribers for each step', async () => {
       const step1Action = jest.fn<any>().mockResolvedValue({ result: 'success1' });
