@@ -2,7 +2,7 @@ const meta = {
   index: {
     title: "Examples",
   },
-  llm: {
+  llms: {
     title: "LLM Models",
   },
 };
