@@ -1,0 +1,33 @@
+{
+  "name": "create-mastra",
+  "version": "0.1.0",
+  "description": "Create Mastra apps with one command",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "create-mastra": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist && rm -rf node_modules"
+  },
+  "keywords": [
+    "mastra",
+    "cli",
+    "ai"
+  ],
+  "dependencies": {
+    "commander": "^12.0.0",
+    "mastra": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.1.0",
+    "typescript": "^5.5.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

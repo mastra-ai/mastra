@@ -16,7 +16,7 @@ export const myAgent = new Agent({
   instructions: "You are a helpful assistant.",
   model: {
     provider: "OPEN_AI",
-    name: "gpt-4", // Or "gpt-3.5-turbo"
+    name: "gpt-4o-mini",
   },
 });
 ```
@@ -89,6 +89,7 @@ const schema = {
     summary: { type: "string" },
     keywords: { type: "array", items: { type: "string" } },
   },
+  additionalProperties: false,
   required: ["summary", "keywords"],
 };
 
