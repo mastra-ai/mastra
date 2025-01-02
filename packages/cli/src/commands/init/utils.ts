@@ -151,7 +151,7 @@ export async function installCoreDeps() {
 
     const depsService = new DepsService();
 
-    await depsService.installPackages(['@mastra/core']);
+    await depsService.installPackages(['@mastra/core@alpha']);
     spinner.success('@mastra/core installed successfully');
   } catch (err) {
     console.error(err);
@@ -251,39 +251,6 @@ export const interactivePrompt = async () => {
   const mastraComponents = shouldAddTools ? [...components, 'tools'] : components;
 
   return { ...rest, components: mastraComponents };
-};
-
-export const createMastraProject = async () => {
-  const projectName = await p.text({
-    message: 'What do you want to name your project?',
-    placeholder: 'my-mastra-app',
-    defaultValue: 'my-mastra-app',
-  });
-
-  if (p.isCancel(projectName)) {
-    p.cancel('Operation cancelled');
-    process.exit(0);
-  }
-
-  const s = p.spinner();
-  s.start('Creating project');
-
-  await fs.mkdir(projectName);
-  process.chdir(projectName);
-
-  await exec(`npm init -y`);
-  await exec(`npm i zod typescript tsx @types/node --save-dev`);
-
-  s.message('Installing dependencies');
-
-  await exec(`echo output.txt >> .gitignore`);
-  await exec(`echo node_modules >> .gitignore`);
-
-  await exec(`npm i @mastra/core@alpha`);
-  s.stop('Project creation successful');
-  logger.break();
-
-  return { projectName };
 };
 
 export const checkPkgJson = async () => {

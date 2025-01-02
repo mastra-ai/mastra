@@ -1,6 +1,8 @@
 import { logger } from '../../utils/logger.js';
 import { init } from '../init/init.js';
-import { createMastraProject, interactivePrompt, LLMProvider } from '../init/utils.js';
+import { interactivePrompt, LLMProvider } from '../init/utils.js';
+
+import { createMastraProject } from './utils.js';
 
 export const create = async (args: { components?: string[]; llmProvider?: LLMProvider; addExample?: boolean }) => {
   const { projectName } = await createMastraProject();

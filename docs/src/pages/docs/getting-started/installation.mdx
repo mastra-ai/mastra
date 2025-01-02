@@ -4,69 +4,76 @@ import { Callout, Steps, Tabs } from "nextra/components";
 
 To run Mastra, you need access to an LLM. Typically, you'll want to get an API key from an LLM provider such as [OpenAI](https://platform.openai.com/), [Anthropic](https://console.anthropic.com/settings/keys), or [Google Gemini](https://ai.google.dev/gemini-api/docs). You can also run Mastra with a local LLM using [Ollama](https://ollama.ai/).
 
-We recommend starting a new Mastra project [using the Mastra CLI](#automatic-installation) which will scaffold your project.
-
 ## Prerequisites
 
 - Node.js `v20.0` or higher
 - Access to a [supported large language model (LLM)](/guide/reference/llm/providers-and-models.mdx).
 
 ## Automatic Installation
+
 <Steps>
 
+### Create a New Project
 
-### Install the Mastra CLI
+We recommend starting a new Mastra project using `create-mastra`, which will scaffold your project. To create
+a project, run:
 
-To install the Mastra CLI globally, run:
-
-```bash copy
-npm i -g mastra
+<Tabs items={["npx", "npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+  
+```bash copy 
+npx create-mastra@latest
 ```
 
-### Initialize Your Project
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy 
+npm create mastra@latest
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy 
+yarn create mastra
+```
+</Tabs.Tab>
+  <Tabs.Tab>
+```bash copy 
+pnpm create mastra
+```
+</Tabs.Tab>
+</Tabs>
 
-Create a new project directory and navigate into it:
+On installation, you'll be guided through the following prompts:
 
-```bash copy
-mkdir hello-mastra
-cd hello-mastra
+```bash
+What do you want to name your project? my-mastra-app
+Choose components to install:
+  ◯ Agents (recommended)
+  ◯ Tools
+  ◯ Workflows
+Select default provider:
+  ◯ OpenAI (recommended)
+  ◯ Anthropic
+  ◯ Groq
+Would you like to include example code? No / Yes
 ```
 
-Run the `mastra init` command:
+After the prompts, `create-mastra` will set up your project directory with TypeScript, install dependencies, and configure your selected components and LLM provider.
 
-```bash copy
-mastra init
-```
+### Set Up your API Key
 
-On initialization, you'll be guided through the following prompts:
-
-- **Choose a directory for Mastra files**: Specify where you want the Mastra files to be placed (default is `src/mastra`).
-- **Select components to install**: Choose which components you want to include in your project:
-  - Agents
-  - Tools
-  - Workflows
-- **Select a default LLM provider**: Choose from supported providers like OpenAI, Anthropic, or Google Gemini.
-- **Include example code**: **Select `Yes` to include example code.** This will add sample agents, tools, and workflows to your project, allowing you to test and run `mastra dev` immediately.
-
-### Set Up Your API Key
-
-Create a `.env` file in your project root directory and add your API key:
+Add the API key for your configured LLM provider in your `.env` file.
 
 ```env
-OPENAI_API_KEY=your_openai_api_key
+OPENAI_API_KEY=<your-openai-key>
 ```
-
-Replace `your_openai_api_key` with your actual API key.
-
-**Note:** If you prefer to run the command with flags (non-interactive mode) and include the example code, you can use:
-
-```bash copy
-mastra init --dir src/mastra --components agents,tools --llm openai --example
-```
-
-This allows you to specify your preferences upfront without being prompted.
 
 </Steps>
+Note: If you prefer to run the command with flags (non-interactive mode) and include the example code, you can use:
+```bash copy
+npx create-mastra@latest --components agents,tools --llm openai --example
+```
+This allows you to specify your preferences upfront without being prompted.
 
 ## Manual Installation
 
@@ -93,26 +100,19 @@ npm install @mastra/core@alpha
 npx tsc --init
 ```
 
-Create directories for Mastra and add an index file in the `src` directory:
-
-```bash copy
-mkdir -p src/mastra/agents
-touch src/mastra/index.ts
-```
-
-### Set Up Your API Key
+### Set Up your API Key
 
 Create a `.env` file in your project root directory and add your API key:
 
 ```env
-OPENAI_API_KEY=your_openai_api_key
+OPENAI_API_KEY=<your-openai-key>
 ```
 
-Replace `your_openai_api_key` with your actual API key.
+Replace your_openai_api_key with your actual API key.
 
-### Create the Agent
+### Create an Agent
 
-First, create the `cat-one` agent file:
+First, create a `cat-one` agent file:
 
 ```bash copy
 touch src/mastra/agents/cat-one.ts
@@ -135,7 +135,9 @@ export const catOne = new Agent({
 });
 ```
 
-Finally, create the Mastra entry point in `src/mastra/index.ts`:
+### Register Agent
+
+Finally, create the Mastra entry point in `src/mastra/index.ts` and register agent:
 
 ```ts filename="src/mastra/index.ts" showLineNumbers
 import { Mastra } from "@mastra/core";
@@ -148,17 +150,75 @@ export const mastra = new Mastra({
 
 This registers your agent with Mastra so that `mastra dev` can discover and serve it.
 
-If you're using Anthropic, set the `ANTHROPIC_API_KEY`. If you're using Google Gemini,
-set the `GOOGLE_GENERATIVE_AI_API_KEY`.
+</Steps>
+
+## Add to Existing Project
+
+<Steps>
+
+### Install the CLI
+
+If you have an existing project and want to add Mastra, first install the mastra CLI.
+
+<Tabs items={["npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+
+```bash copy
+npm i -g mastra
+```
+
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy 
+yarn i -g mastra
+```
+</Tabs.Tab>
+  <Tabs.Tab>
+```bash copy 
+pnpm i -g mastra
+```
+</Tabs.Tab>
+</Tabs>
+
+### Initialize Mastra
+
+To then intialize mastra in your project by following out interactive setup, run:
+
+```bash copy
+mastra init
+```
+
+### Set Up your API Key
+
+Add the API key for your configured LLM provider in your `.env` file.
+
+```env
+OPENAI_API_KEY=<your-openai-key>
+```
 
 </Steps>
+Note: If you prefer to run the command with flags (non-interactive mode) and include the example code, you can use:
+```bash copy
+mastra init --dir src/mastra --components agents,tools --llm openai --example
+```
+This allows you to specify your preferences upfront without being prompted.
 
 ## Start the Mastra Server
 
-Mastra provides commands to serve your agents via REST endpoints. Run the following command to start the Mastra server:
+Mastra provides commands to serve your agents via REST endpoints
+
+### Development Server
+
+Run the following command to start the Mastra server:
 
 ```bash copy
-OPENAI_API_KEY=<your-openai-api-key> mastra dev
+npx mastra dev
+```
+
+If you have the mastra CLI installed globally, run:
+
+```bash copy
+mastra dev
 ```
 
 This command creates REST API endpoints for your agents.
@@ -207,9 +267,7 @@ import { mastra } from "./mastra";
 async function main() {
   const agent = mastra.getAgent("catOne");
 
-  const result = await agent.generate(
-    "What do cats like to eat?",
-  );
+  const result = await agent.generate("What do cats like to eat?");
 
   console.log("Agent response:", result.text);
 }
@@ -219,12 +277,10 @@ main();
 
 Then, run the script to test that everything is set up correctly:
 
-```bash
+```bash copy
 npx bun src/index.ts
 ```
 
 This should output the agent's response to your console.
 
 ---
-
-**Note:** Be sure to replace `<your-openai-api-key>` with your actual API key in the commands. If you're using a different LLM provider, replace the environment variable accordingly (e.g., `ANTHROPIC_API_KEY` or `GOOGLE_GENERATIVE_AI_API_KEY`).
