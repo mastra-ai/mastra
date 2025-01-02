@@ -54,6 +54,12 @@ export abstract class MastraEngine {
 
   abstract getRecordsByEntityId(params: { entityId: string }): Promise<BaseRecord[]>;
 
+  abstract getRecordsByEntityNameAndExternalId(params: {
+    entityName: string;
+    externalId: string;
+    connectionId: string;
+  }): Promise<BaseRecord[]>;
+
   abstract getRecordsByEntityName({
     name,
     connectionId,

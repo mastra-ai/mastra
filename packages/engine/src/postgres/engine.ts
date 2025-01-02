@@ -98,6 +98,29 @@ export class PostgresEngine extends MastraEngine {
     });
   }
 
+  async getRecordsByEntityNameAndExternalId({
+    entityName,
+    connectionId,
+    externalId,
+  }: {
+    entityName: string;
+    connectionId: string;
+    externalId: string;
+  }): Promise<BaseRecord[]> {
+    const entity = await this.traced(
+      () => this.getEntity({ name: entityName, connectionId }),
+      'getRecordsByEntityName.getEntity',
+    )();
+
+    if (!entity) {
+      throw new Error(`Entity not found with name: ${name} and connectionId: ${connectionId}`);
+    }
+    return this.db.query.records.findMany({
+      where: (records, { eq, and }) =>
+        and(eq(records.entityType, entityName), eq(records.entityId, entity.id!), eq(records.externalId, externalId)),
+    });
+  }
+
   async getRecordsByEntityName({ name, connectionId }: { name: string; connectionId: string }): Promise<BaseRecord[]> {
     const entity = await this.traced(
       () => this.getEntity({ name, connectionId }),
@@ -362,12 +385,12 @@ export class PostgresEngine extends MastraEngine {
     }
 
     const queryStr = `
-      SELECT 
+      SELECT
         "mastra"."records".*,
         row_to_json("mastra"."entity".*) AS "entity"
       FROM "mastra"."records"
       LEFT JOIN "mastra"."entity" ON "mastra"."entity"."id" = "mastra"."records"."entityId"
-      WHERE entity."connectionId" = '${connectionId}' AND entity.name = '${entityName}' 
+      WHERE entity."connectionId" = '${connectionId}' AND entity.name = '${entityName}'
       ${query}
     `;
 
