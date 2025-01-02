@@ -1,35 +1,37 @@
-## Step 4: Querying the Knowledge Base
+# Retrieve Results
 
-When a user asks a question, embed their query and retrieve relevant chunks:
+```tsx copy
+import { MDocument, embed, PgVector } from "@mastra/rag";
 
-```typescript showLineNumbers copy
-import { embed } from "@mastra/rag";
+const doc = MDocument.fromText("Your text content...");
 
-const { embedding } = await embed("What are the main points in the article?", {
-  provider: 'openai',
-  model: 'text-embedding-ada-002',
+const chunks = await doc.chunk();
+
+const { embedding } = await embed(chunks[0], {
+  provider: "OPEN_AI",
+  model: "text-embedding-ada-002",
 });
 
-const pgVector = new PgVector("postgresql://localhost:5432/mydb");
+const pgVector = new PgVector('postgresql://localhost:5432/mydb');
 
 const results = await pgVector.query("embeddings", embedding, 10);
 
-console.log(results);
 // Example structure:
 // [
 //   { text: "A chunk related to main points...", metadata: { title: "...", ... } },
 //   ...
 // ]
-
+ 
 // Incorporate these results into your LLM prompt
 const prompt = `
   Using the context below, answer the user's question.
-
+ 
   Context:
   ${results.map(r => r.text).join('\n')}
-
+ 
   User's question: What are the main points in the article?
 `;
-
+ 
 // Send `prompt` to your LLM model for a more informed and grounded response.
 ```
+

@@ -5,6 +5,9 @@ const meta = {
   llms: {
     title: "LLM Models",
   },
+  rag: {
+    title: "RAG",
+  },
 };
 
 export default meta;
