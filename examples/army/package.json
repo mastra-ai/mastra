@@ -1,0 +1,31 @@
+{
+  "name": "@mastra/army",
+  "version": "1.0.0",
+  "description": "Example demonstrating workflow suspension and resume features",
+  "main": "dist/index.js",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "army": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "npx tsc",
+    "start": "npx bun src/index.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*",
+    "@mastra/engine": "workspace:*",
+    "commander": "^11.0.0",
+    "express": "^4.21.2",
+    "lowdb": "^7.0.1",
+    "typescript": "^5.0.4",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.3"
+  }
+}
