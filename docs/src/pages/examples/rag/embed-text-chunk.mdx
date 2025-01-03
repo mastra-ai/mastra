@@ -1,0 +1,16 @@
+# Embed Text Chunk
+
+This example shows you how to embed a single text chunk. By using the `embed` method, you can embed the chunk into a vector database, which can be used for various purposes, such as search or retrieval.
+
+```tsx copy
+import { MDocument, embed } from "@mastra/rag";
+
+const doc = MDocument.fromText("Your text content...");
+
+const chunks = await doc.chunk();
+
+const { embedding } = await embed(chunks[0], {
+  provider: "OPEN_AI",
+  model: "text-embedding-ada-002",
+});
+```

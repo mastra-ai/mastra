@@ -1,0 +1,12 @@
+# Chunk Markdown
+
+This example shows you how to chunk Markdown content. By using the `chunk` method, you can split the Markdown into smaller pieces, which can be used for various purposes, such as search or retrieval.
+
+```tsx copy
+import { MDocument } from "@mastra/rag";
+
+const doc = MDocument.fromMarkdown("# Your markdown content...");
+
+const chunks = await doc.chunk();
+```
+

@@ -10,12 +10,9 @@ const { embedding } = await embed("What are the main points in the article?", {
   model: 'text-embedding-ada-002',
 });
 
-const results = await PgVector.query({
-  connectionString: "postgresql://localhost:5432/mydb",
-  tableName: "embeddings",
-  queryEmbedding: embedding,
-  topK: 5,
-});
+const pgVector = new PgVector("postgresql://localhost:5432/mydb");
+
+const results = await pgVector.query("embeddings", embedding, 10);
 
 console.log(results);
 // Example structure:

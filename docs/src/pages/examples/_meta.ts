@@ -1,12 +1,18 @@
 const meta = {
   index: {
-    title: "Examples",
+    title: "Overview",
   },
   llms: {
     title: "LLM Models",
   },
   workflows: {
     title: "Workflows",
+  },
+  agents: {
+    title: "Agents",
+  },
+  rag: {
+    title: "RAG",
   },
 };
 

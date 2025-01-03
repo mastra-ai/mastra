@@ -1,0 +1,86 @@
+# Agent system prompt
+
+### Tools file
+
+```ts filename=/src/mastra/tools.ts showLineNumbers copy
+import { createTool } from "@mastra/core";
+import { z } from "zod";
+
+const getCatFact = async () => {
+  const { text } = (await fetch(
+    "https://cat-fact.herokuapp.com/facts/random",
+  ).then((res) => res.json())) as {
+    text: string;
+  };
+  return text;
+};
+
+export const catFact = createTool({
+  id: "Get cat facts",
+  inputSchema: z.object({}),
+  description: "Fetches cat facts",
+  execute: async () => {
+    console.log("using tool to fetch cat fact");
+    return {
+      catFact: await getCatFact(),
+    };
+  },
+});
+```
+
+### Agent file
+
+```ts filename=/src/mastra/agent.ts showLineNumbers copy
+import { Agent } from "@mastra/core";
+import { catFact } from "../tools";
+
+const instructions = `You are a helpful cat expert assistant. When discussing cats, you should always include an interesting cat fact.
+
+Your main responsibilities:
+1. Answer questions about cats
+2. Use the catFact tool to provide verified cat facts
+3. Incorporate the cat facts naturally into your responses
+
+Always use the catFact tool at least once in your responses to ensure accuracy.`;
+
+export const catOne = new Agent({
+  name: "cat-one",
+  instructions: instructions,
+  model: {
+    provider: "OPEN_AI",
+    name: "gpt-4o",
+    toolChoice: "required",
+  },
+  tools: {
+    catFact,
+  },
+});
+```
+
+### Main file
+
+```ts filename=/src/mastra/index.ts showLineNumbers copy
+import { Mastra, createLogger } from "@mastra/core";
+
+import { catOne } from "./agents/index";
+
+export const mastra = new Mastra({
+  agents: { catOne },
+  logger: createLogger({
+    type: "CONSOLE",
+    level: "INFO",
+  }),
+});
+
+async function main() {
+  const agent = await mastra.getAgent("catOne");
+
+  const response = await agent.generate(
+    "What is the average lifespan of a domestic cat?",
+  );
+
+  console.log("response", response);
+}
+
+main();
+```
