@@ -3,7 +3,7 @@ const meta = {
   "generate-text-system-prompt": "Generate Text with System Prompt",
   "generate-text-from-image": "Generate Text from Image",
   // "generate-text-from-pdf": "Generate Text from PDF",
-  "generate-text-with-claude": "Generate Text with Anthropic Claude",
+  "generate-text-with-claude": "Generate Text with Claude",
   "generate-text-with-gemini": "Generate Text with Google Gemini",
   "generate-object-with-structured-output":
     "Generate Object with Structured Output",
