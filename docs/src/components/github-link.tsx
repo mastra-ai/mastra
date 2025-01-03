@@ -3,7 +3,7 @@ export const GithubLink = ({ link }: { link: string }) => {
     <a
       target="_blank"
       rel="noopener noreferrer"
-      className="flex flex-row justify-between p-3 border border-[#404040] rounded-md cursor-pointer group text-zinc-900 dark:text-zinc-50"
+      className="flex flex-row justify-between p-3 border border-gray-300 dark:border-[#404040] rounded-md cursor-pointer group text-zinc-900 dark:text-zinc-50"
       href={link}
     >
       <div className="flex flex-row gap-3">
