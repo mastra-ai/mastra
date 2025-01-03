@@ -1,8 +1,3 @@
-# Insert Embedding in Pinecone
-
-This example shows you how to insert an embedding into a Pinecone database. By using the `Pinecone` class, you can insert the embedding into a vector database, which can be used for various purposes, such as search or retrieval.
-
-```tsx copy
 import { MDocument, embed, PineconeVector } from '@mastra/rag';
 
 const doc = MDocument.fromText('Your text content...');
@@ -24,4 +19,3 @@ await pinecone.upsert(
   embeddings,
   chunks?.map(chunk => ({ text: chunk.text })),
 );
-```
