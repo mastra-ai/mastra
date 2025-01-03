@@ -1,6 +1,8 @@
+import { GithubLink } from '../../../components/github-link';
+
 # Generate Object With Structured Output
 
-This example shows you how to generate structured JSON output using a language model and the `zod` library. 
+This example shows you how to generate structured JSON output using a language model and the `zod` library.
 
 ```ts showLineNumbers copy
 import { Mastra } from '@mastra/core';
@@ -32,3 +34,10 @@ const result = await llm.generate('Generate a egusi recipe.', {
 
 console.log(JSON.stringify(result.object.recipe, null, 2));
 ```
+
+<br />
+<br />
+<hr className="border-[#404040]" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/llms/generate-object-structured.ts'} />

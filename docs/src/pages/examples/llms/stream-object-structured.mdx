@@ -1,6 +1,8 @@
+import { GithubLink } from '../../../components/github-link';
+
 # Stream Object with Structured Output
 
-This example shows you how to stream structured JSON output using a language model and the `zod` library. By defining a strict schema, you ensure that named ingredients, amounts, and step-by-step instructions follow a reliable structure. 
+This example shows you how to stream structured JSON output using a language model and the `zod` library. By defining a strict schema, you ensure that named ingredients, amounts, and step-by-step instructions follow a reliable structure.
 
 ```ts showLineNumbers copy
 import { Mastra } from '@mastra/core';
@@ -34,3 +36,10 @@ for await (const chunk of result.textStream) {
   process.stdout.write(chunk);
 }
 ```
+
+<br />
+<br />
+<hr className="border-[#404040]" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/llms/stream-object-structured.ts'} />

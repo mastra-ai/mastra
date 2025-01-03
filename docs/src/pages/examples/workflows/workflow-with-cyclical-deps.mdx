@@ -1,3 +1,5 @@
+import { GithubLink } from '../../../components/github-link';
+
 # Workflow with Cyclical dependencies
 
 Workflows can support cyclical dependencies, allowing steps to loop based on conditions.
@@ -94,3 +96,12 @@ cyclicalWorkflow.commit();
 const res = await cyclicalWorkflow.execute({ triggerData: { firstValue: 6 } });
 console.log(res.results);
 ```
+
+<br />
+<br />
+<hr className="border-[#404040]" />
+<br />
+<br />
+<GithubLink
+  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-cyclical-deps.ts'}
+/>

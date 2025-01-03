@@ -1,3 +1,5 @@
+import { GithubLink } from '../../../components/github-link';
+
 # Workflow with Parallel Steps
 
 Workflow steps can run in parallel by using the `step` method
@@ -65,3 +67,12 @@ myWorkflow.commit();
 const res = await myWorkflow.execute({ triggerData: { inputValue: 90 } });
 console.log(res.results);
 ```
+
+<br />
+<br />
+<hr className="border-[#404040]" />
+<br />
+<br />
+<GithubLink
+  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-parallel-steps.ts'}
+/>
