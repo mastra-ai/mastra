@@ -1,5 +1,5 @@
 const meta = {
-  tools: "Agent system prompt",
+  "agent-system-prompt": "Agent system prompt",
 };
 
 export default meta;
