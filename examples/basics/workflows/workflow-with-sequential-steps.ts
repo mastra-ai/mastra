@@ -1,8 +1,3 @@
-# Workflow with Sequential Steps
-
-Workflow can be chained to run one after another by using the `then` method after the first step.
-
-```ts showLineNumbers copy
 import { Step, Workflow } from '@mastra/core';
 import { z } from 'zod';
 
@@ -63,5 +58,5 @@ myWorkflow
 
 myWorkflow.commit();
 const res = await myWorkflow.execute({ triggerData: { inputValue: 90 } });
+
 console.log(res.results);
-```

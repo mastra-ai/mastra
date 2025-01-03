@@ -1,12 +1,3 @@
----
-title: Tool as a Workflow step
----
-
-# Tool as a Workflow step
-
-A custom tool can be added as a step for a workflow. Below we have a simple webpage crawler.
-
-```ts showLineNumbers copy
 import { createTool, Workflow } from '@mastra/core';
 import { z } from 'zod';
 
@@ -31,4 +22,3 @@ contentWorkflow.commit();
 const res = await contentWorkflow.execute();
 
 console.log(res.results);
-```
