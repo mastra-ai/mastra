@@ -1,8 +1,3 @@
-# Stream Text
-
-This example shows you how to stream text from a language model. The `stream` method allows you to stream the model's response in real-time to your user.
-
-```ts showLineNumbers copy
 import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra();
@@ -17,4 +12,3 @@ const response = await llm.stream('Tell me about christmas and it"s traditions')
 for await (const chunk of response.textStream) {
   process.stdout.write(chunk);
 }
-```

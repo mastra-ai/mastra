@@ -1,8 +1,3 @@
-# Generate Text with Gemini
-
-This example demonstrates how to interact with Google’s Gemini language model. After providing a prompt, the Gemini model returns a text response.
-
-```ts showLineNumbers copy
 import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra();
@@ -16,4 +11,3 @@ const llm = mastra.LLM({
 const result = await llm.generate('Who invented the submarine?');
 
 console.log(result.text);
-```
