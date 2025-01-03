@@ -5,6 +5,9 @@ const meta = {
   llms: {
     title: "LLM Models",
   },
+  workflows: {
+    title: "Workflows",
+  },
 };
 
 export default meta;
