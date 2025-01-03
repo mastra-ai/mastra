@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.39
+
+### Patch Changes
+
+- 2667e66: fix create mastra publishing
+
 ## 0.0.2-alpha.38
 
 ### Patch Changes
