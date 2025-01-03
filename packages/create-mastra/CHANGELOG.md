@@ -1,5 +1,13 @@
 # create-mastra
 
+## 0.1.0-alpha.7
+
+### Patch Changes
+
+- edd70b5: changeset
+- Updated dependencies [edd70b5]
+  - mastra@0.1.57-alpha.74
+
 ## 0.1.0-alpha.6
 
 ### Patch Changes
