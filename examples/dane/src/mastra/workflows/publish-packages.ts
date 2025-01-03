@@ -30,7 +30,9 @@ const getPacakgesToPublish = new Step({
       `
               ONLY RETURN DATA IF WE HAVE PACKAGES TO PUBLISH. If we do not, return empty arrays.
               Can you format this for me ${result.text}?
-              @mastra/core must be first. @mastra/dane should be listed after packages and integrations.
+              @mastra/core must be first. mastra must be second. 
+              create-mastra is a package (not an integration) and should be listed in packages array.
+              @mastra/dane should be listed after packages and integrations.
               `,
       {
         output: z.object({
@@ -148,6 +150,7 @@ const buildPackages = new Step({
     let res = await agent.generate(`
               Here are the packages that need to be built: ${pkgSet.join(',')}.
               Always build @mastra/core first.
+              Always build mastra second.
               Next packages found within the 'packages' directory should be built next in parallel.
               After packages found within the 'integrations' directory should be built in parallel.
               dane should be built last.

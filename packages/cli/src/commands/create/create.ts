@@ -1,6 +1,10 @@
-import { logger } from '../../utils/logger.js';
+import * as p from '@clack/prompts';
+import color from 'picocolors';
+
 import { init } from '../init/init.js';
-import { createMastraProject, interactivePrompt, LLMProvider } from '../init/utils.js';
+import { interactivePrompt, LLMProvider } from '../init/utils.js';
+
+import { createMastraProject } from './utils.js';
 
 export const create = async (args: { components?: string[]; llmProvider?: LLMProvider; addExample?: boolean }) => {
   const { projectName } = await createMastraProject();
@@ -28,7 +32,10 @@ export const create = async (args: { components?: string[]; llmProvider?: LLMPro
 };
 
 const postCreate = ({ projectName }: { projectName: string }) => {
-  logger.info('To start your project');
-  logger.info(`cd ${projectName}`);
-  logger.info('npx mastra dev');
+  p.outro(`
+   ${color.green('To start your project:')}
+
+    ${color.cyan('cd')} ${projectName}
+    ${color.cyan('npm run dev')}
+  `);
 };

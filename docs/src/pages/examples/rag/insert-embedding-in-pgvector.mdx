@@ -1,0 +1,21 @@
+# Insert Embedding in PgVector
+
+This example shows you how to insert an embedding into a PgVector database. By using the `PgVector` class, you can insert the embedding into a vector database, which can be used for various purposes, such as search or retrieval.
+
+```tsx copy
+import { MDocument, embed, PgVector } from "@mastra/rag";
+
+const doc = MDocument.fromText("Your text content...");
+
+const chunks = await doc.chunk();
+
+const { embeddings } = await embed(chunks, {
+  provider: "OPEN_AI",
+  model: "text-embedding-ada-002",
+});
+
+const pgVector = new PgVector('postgresql://localhost:5432/mydb');
+
+await pgVector.upsert("embeddings", embeddings);
+```
+

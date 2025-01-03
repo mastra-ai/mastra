@@ -1,0 +1,12 @@
+# Chunk Text
+
+This example shows you how to chunk plain text content. By using the `chunk` method, you can split the text into smaller pieces, which can be used for various purposes, such as search or retrieval.
+
+```tsx copy
+import { MDocument } from "@mastra/rag";
+
+const doc = MDocument.fromText("Your plain text content...");
+
+const chunks = await doc.chunk();
+```
+

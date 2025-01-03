@@ -24,24 +24,17 @@ You can also enable metadata extraction, which uses LLM calls behind the scenes 
 
 ```ts showLineNumbers copy
 import { MDocument } from "@mastra/rag";
-const mDoc = MDocument.fromText("Your plain text content...");
-const doc = await mDoc.extractMetadata({
-  title: true,
-  summary: true,
-  keywords: true,
-  questions: true,
-});
+const doc = MDocument.fromText("Your plain text content...");
+
 const chunks = doc.chunk({
   strategy: "recursive",
-  options: {
-    size: 512,
-    overlap: 50,
-    separator: "\n",
-  },
+  size: 512,
+  overlap: 50,
+  separator: "\n",
 });
 ```
 
-This splits the document into chunks and extracts metadata. There are a variety of chunking strategies and options, which we go into in the [chunk documentation](/docs/guide/reference/rag/chunk.mdx). Metadata is preserved in the chunks, which you can use for retrieval.
+This splits the document into chunks and extracts metadata. There are a variety of chunking strategies and options, which we go into in the [chunk documentation](/docs/reference/rag/chunk.mdx). Metadata is preserved in the chunks, which you can use for retrieval.
 
 **Note:** Metadata extraction may use LLM calls behind the scenes, so ensure `OPENAI_API_KEY` is set.
 

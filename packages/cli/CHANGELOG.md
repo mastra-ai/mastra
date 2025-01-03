@@ -1,5 +1,35 @@
 # mastra
 
+## 0.1.57-alpha.73
+
+### Patch Changes
+
+- aacfff6: publish new mastra, create-mastra
+
+## 0.1.57-alpha.72
+
+### Patch Changes
+
+- 2667e66: fix create mastra publishing
+
+## 0.1.57-alpha.71
+
+### Patch Changes
+
+- 1d68b0c: update dane publishing
+
+## 0.1.57-alpha.70
+
+### Patch Changes
+
+- abdd42d: polish mastra create, fix create-mastra publishing
+
+## 0.1.57-alpha.69
+
+### Patch Changes
+
+- 32cd966: new mastra create command, publish create-mastra a way to quickly spin up mastra apps
+
 ## 0.1.57-alpha.68
 
 ### Patch Changes

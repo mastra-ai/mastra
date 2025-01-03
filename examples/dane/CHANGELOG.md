@@ -1,5 +1,23 @@
 # @mastra/dane
 
+## 0.0.2-alpha.40
+
+### Patch Changes
+
+- fc8e7b4: fix dane building create-mastra as integration
+
+## 0.0.2-alpha.39
+
+### Patch Changes
+
+- 2667e66: fix create mastra publishing
+
+## 0.0.2-alpha.38
+
+### Patch Changes
+
+- 1d68b0c: update dane publishing
+
 ## 0.0.2-alpha.37
 
 ### Patch Changes

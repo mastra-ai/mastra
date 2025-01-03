@@ -5,6 +5,7 @@ import {
   Components,
   createComponentsDir,
   createMastraDir,
+  getAPIKey,
   LLMProvider,
   writeAPIKey,
   writeCodeSample,
@@ -45,8 +46,16 @@ export const init = async ({
     if (addExample) {
       await Promise.all([components.map(component => writeCodeSample(dirPath, component as Components, llmProvider))]);
     }
-    s.stop('Mastra initialized successfully');
-    p.note('You are all set!');
+
+    const key = await getAPIKey(llmProvider || 'openai');
+
+    s.stop();
+    p.note(`
+      ${color.green('Mastra initialized successfully!')}
+
+      Add your ${color.cyan(key)} as an environment variable
+      in your ${color.cyan('.env.development')} file
+      `);
     return { success: true };
   } catch (err) {
     s.stop(color.inverse('An error occurred while initializing Mastra'));

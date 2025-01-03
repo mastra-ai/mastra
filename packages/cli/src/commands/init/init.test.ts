@@ -12,6 +12,7 @@ jest.unstable_mockModule('./utils', () => ({
   writeIndexFile: jest.fn(),
   createComponentsDir: jest.fn(),
   writeAPIKey: jest.fn(),
+  getAPIKey: jest.fn(),
   createMastraDir: jest.fn(),
   writeCodeSample: jest.fn(),
   checkDependencies: jest.fn(),

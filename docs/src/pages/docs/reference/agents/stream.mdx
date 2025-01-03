@@ -1,0 +1,153 @@
+# `stream()`
+
+The `stream()` method enables real-time streaming of responses from an agent. This method accepts `messages` and an optional `options` object as parameters, similar to `generate()`.
+
+## Parameters
+
+### `messages`
+
+The `messages` parameter can be:
+
+- A single string
+- An array of strings
+- An array of message objects with `role` and `content` properties
+
+#### Message Object Structure
+
+```typescript
+interface Message {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+```
+
+### `options` (Optional)
+
+An optional object that can include:
+
+<PropertiesTable
+  content={[
+    {
+      name: 'output',
+      type: 'string | JSONSchema7 | ZodSchema',
+      isOptional: true,
+      default: "'text'",
+      description: 'Defines the output format. Can be "text" or a schema for structured output.',
+    },
+    {
+      name: 'context',
+      type: 'CoreMessage[]',
+      isOptional: true,
+      description: 'Additional context messages to provide to the agent.',
+    },
+    {
+      name: 'threadId',
+      type: 'string',
+      isOptional: true,
+      description: 'Identifier for the conversation thread. Allows for maintaining context across multiple interactions.',
+    },
+    {
+      name: 'resourceId',
+      type: 'string',
+      isOptional: true,
+      description: 'Identifier for the user or resource interacting with the agent.',
+    },
+    {
+      name: 'onFinish',
+      type: '(result: string) => Promise<void> | void',
+      isOptional: true,
+      description: 'Callback function called when streaming is complete.',
+    },
+    {
+      name: 'onStepFinish',
+      type: '(step: string) => void',
+      isOptional: true,
+      description: 'Callback function called after each step during streaming.',
+    },
+    {
+      name: 'maxSteps',
+      type: 'number',
+      isOptional: true,
+      default: '5',
+      description: 'Maximum number of steps allowed during streaming.',
+    },
+    {
+      name: 'toolsets',
+      type: 'ToolsetsInput',
+      isOptional: true,
+      description: 'Additional toolsets to make available to the agent during this stream.',
+    }
+  ]}
+/>
+
+## Returns
+
+The method returns a promise that resolves to an object containing one or more of the following properties:
+
+<PropertiesTable
+  content={[
+    {
+      name: 'textStream',
+      type: 'AsyncIterable<string>',
+      isOptional: true,
+      description: 'An async iterable stream of text chunks. Present when output is "text".',
+    },
+    {
+      name: 'objectStream',
+      type: 'AsyncIterable<object>',
+      isOptional: true,
+      description: 'An async iterable stream of structured data. Present when a schema is provided.',
+    },
+    {
+      name: 'object',
+      type: 'Promise<object>',
+      isOptional: true,
+      description: 'A promise that resolves to the final structured output when using a schema.',
+    }
+  ]}
+/>
+
+## Examples
+
+### Basic Text Streaming
+
+```typescript
+const stream = await myAgent.stream([
+  { role: "user", content: "Tell me a story." }
+]);
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### Structured Output Streaming with Thread Context
+
+```typescript
+const schema = {
+  type: 'object',
+  properties: {
+    summary: { type: 'string' },
+    nextSteps: { type: 'array', items: { type: 'string' } }
+  },
+  required: ['summary', 'nextSteps']
+};
+
+const response = await myAgent.stream(
+  "What should we do next?",
+  {
+    output: schema,
+    threadId: "project-123",
+    onFinish: text => console.log("Finished:", text)
+  }
+);
+
+for await (const chunk of response.textStream) {
+  console.log(chunk);
+}
+
+const result = await response.object;
+console.log("Final structured result:", result);
+```
+
+The key difference between Agent's `stream()` and LLM's `stream()` is that Agents maintain conversation context through `threadId`, can access tools, and integrate with the agent's memory system.

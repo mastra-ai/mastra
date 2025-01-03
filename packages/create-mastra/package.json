@@ -1,6 +1,6 @@
 {
   "name": "create-mastra",
-  "version": "0.1.1-alpha.0",
+  "version": "0.1.0-alpha.6",
   "description": "Create Mastra apps with one command",
   "type": "module",
   "main": "dist/index.js",
@@ -21,11 +21,13 @@
   ],
   "dependencies": {
     "commander": "^12.0.0",
-    "mastra": "workspace:*"
+    "mastra": "workspace:*",
+    "fs-extra": "^11.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.1.0",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "@types/fs-extra": "^11.0.4"
   },
   "engines": {
     "node": ">=20"
