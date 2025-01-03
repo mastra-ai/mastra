@@ -1,3 +1,5 @@
+import { GithubLink } from '../../../components/github-link';
+
 # Generate Text with System Prompt
 
 This example shows you how to generate text by providing a system prompt, which sets the overall instructions for the language model. In this case, the system role prompts the model to act as a helpful assistant.
@@ -19,3 +21,12 @@ const response = await llm.generate([
 
 console.log(response.text);
 ```
+
+<br />
+<br />
+<hr className="border-[#404040]" />
+<br />
+<br />
+<GithubLink
+  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/llms/generate-text-system-prompt.ts'}
+/>

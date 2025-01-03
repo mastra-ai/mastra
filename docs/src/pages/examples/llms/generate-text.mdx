@@ -1,6 +1,8 @@
+import { GithubLink } from '../../../components/github-link';
+
 # Generate Text
 
-This example demonstrates how to interact with OpenAI’s GPT-4 model for basic text generation. When provided a prompt, the GPT-4 returns a text response.
+This example demonstrates how to interact with OpenAI&apos;s GPT-4 model for basic text generation. When provided a prompt, the GPT-4 returns a text response.
 
 ```ts showLineNumbers copy
 import { Mastra } from '@mastra/core';
@@ -16,3 +18,10 @@ const response = await llm.generate('What is a wormhole?');
 
 console.log(response.text);
 ```
+
+<br />
+<br />
+<hr className="border-[#404040]" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/llms/generate-text.ts'} />
