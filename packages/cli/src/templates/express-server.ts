@@ -422,7 +422,7 @@ app.post('/api/workflows/:workflowId/execute', async (req: Request, res: Respons
   try {
     const workflowId = req.params.workflowId;
     const workflow = mastra.getWorkflow(workflowId);
-    const result = await workflow.execute(req.body);
+    const result = await workflow.execute({ triggerData: req.body });
     res.json(result);
   } catch (error) {
     const apiError = error as ApiError;

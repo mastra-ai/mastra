@@ -8,22 +8,7 @@ The most powerful feature of workflows is that you can log the input and output 
 
 In this overview, we'll create a workflow with dummy steps to demonstrate how workflows are structured and executed in Mastra. We'll cover options for defining steps, different kinds of control flow between steps, conditions, and variables.
 
-### 1. Import Necessary Modules
-
-```typescript
-import { Step, Workflow, Mastra } from "@mastra/core";
-import { z } from "zod";
-```
-
-### 2. Initialize Mastra Instance
-
-Initialize your Mastra instance. 
-
-```typescript
-export const mastra = new Mastra({});
-```
-
-### 3. Define Steps
+### 1. Define Steps
 
 You can define steps inline or by function reference.
 
@@ -31,8 +16,11 @@ You can define steps inline or by function reference.
 
 Define steps directly within the workflow using the `.step()` and `.then()` methods.
 
-```typescript
-const myWorkflow = new Workflow({
+```typescript showLineNumbers filename="src/mastra/workflows/workflow.ts" copy
+import { Step, Workflow } from "@mastra/core";
+import { z } from "zod";
+
+export const myWorkflow = new Workflow({
   name: "my-workflow",
   triggerSchema: z.object({
     inputValue: z.number(),
@@ -82,7 +70,10 @@ myWorkflow
 
 Define steps separately and then add them to the workflow.
 
-```typescript
+```typescript showLineNumbers filename="src/mastra/workflows/workflow.ts" copy
+import { Step, Workflow } from "@mastra/core";
+import { z } from "zod";
+
 // Define steps separately
 const stepOne = new Step({
   id: "stepOne",
@@ -113,7 +104,7 @@ const stepTwo = new Step({
 });
 
 // Build the workflow
-const myWorkflow = new Workflow({
+export const myWorkflow = new Workflow({
   name: "my-workflow",
   triggerSchema: z.object({
     inputValue: z.number(),
@@ -130,7 +121,7 @@ myWorkflow.step(stepOne).then(stepTwo, {
 });
 ```
 
-### 4. Control Flow Between Steps
+### 2. Control Flow Between Steps
 
 #### Parallel Execution
 
@@ -197,7 +188,7 @@ In this example:
 - If `processData` results in a status of `"success"`, `finalizeData` will run.
 - If `processData` results in a status of `"retry"`, the workflow loops back to `fetchData`.
 
-### 5. Conditions
+### 3. Conditions
 
 Use the `when` property to define conditions under which a step should execute.
 
@@ -250,7 +241,7 @@ myWorkflow.step(
 );
 ```
 
-### 6. Variables
+### 4. Variables
 
 Variables allow you to pass data between steps.
 
@@ -293,7 +284,7 @@ const stepTwo = new Step({
 
 In both options, the `valueToIncrement` input for `stepTwo` is fetched from the `doubledValue` output of `stepOne`.
 
-### 7. Finalize the Workflow
+### 5. Finalize the Workflow
 
 After defining all steps and their relationships, commit the workflow.
 
@@ -301,17 +292,22 @@ After defining all steps and their relationships, commit the workflow.
 myWorkflow.commit();
 ```
 
-### 8. Add Workflow to Mastra Instance
+### 6. Add Workflow to Mastra Instance
 
 Add the workflow to your Mastra instance. 
 
-```typescript
+```typescript filename="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { z } from "zod";
+
+import { myWorkflow } from "./workflows/workflow"
+
 export const mastra = new Mastra({
   workflows: { myWorkflow },
 });
 ```
 
-### 9. Serve the Workflow
+### 7. Serve the Workflow
 
 We can now serve the workflow using the `mastra dev` command.
 
@@ -329,7 +325,7 @@ This command will start the server and make your workflow available at:
 http://localhost:4111/api/workflows/myWorkflow/execute
 ```
 
-### 10. Test the Workflow with cURL
+### 8. Test the Workflow with cURL
 
 With the server running, you can test your workflow using `curl`:
 

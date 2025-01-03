@@ -29,27 +29,37 @@ export type StepGraph = {
 
 export type RetryConfig = { attempts?: number; delay?: number };
 
-export type VariableReference<TStep extends IAction<any, any, any, any> | 'trigger'> =
+export type VariableReference<TStep extends IAction<any, any, any, any> | 'trigger' | { id: string }> =
   TStep extends IAction<any, any, any, any>
     ? {
         step: TStep;
         path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '' | '.';
       }
-    : {
-        step: 'trigger';
-        path: string; // TODO: Add trigger schema types
-      };
+    : TStep extends 'trigger'
+      ? {
+          step: 'trigger';
+          path: string; // TODO: Add trigger schema types
+        }
+      : {
+          step: { id: string };
+          path: string;
+        };
 
-export interface BaseCondition<TStep extends IAction<any, any, any, any> | 'trigger'> {
+export interface BaseCondition<TStep extends IAction<any, any, any, any> | 'trigger' | { id: string }> {
   ref: TStep extends IAction<any, any, any, any>
     ? {
         step: TStep;
         path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '' | '.';
       }
-    : {
-        step: 'trigger';
-        path: string;
-      };
+    : TStep extends 'trigger'
+      ? {
+          step: 'trigger';
+          path: string;
+        }
+      : {
+          step: { id: string };
+          path: string;
+        };
   query: Query<any>;
 }
 
@@ -70,12 +80,12 @@ export type StepDef<
   }
 >;
 
-export type StepCondition<TStep extends IAction<any, any, any, any> | 'trigger'> =
+export type StepCondition<TStep extends IAction<any, any, any, any> | 'trigger' | { id: string }> =
   | BaseCondition<TStep>
   | { and: StepCondition<TStep>[] }
   | { or: StepCondition<TStep>[] };
 
-type Condition<TStep extends IAction<any, any, any, any> | 'trigger'> =
+type Condition<TStep extends IAction<any, any, any, any> | 'trigger' | { id: string }> =
   | BaseCondition<TStep>
   | { and: Condition<TStep>[] }
   | { or: Condition<TStep>[] };
@@ -83,7 +93,7 @@ type Condition<TStep extends IAction<any, any, any, any> | 'trigger'> =
 export interface StepConfig<
   TStep extends IAction<any, any, any, any>,
   CondStep extends IAction<any, any, any, any> | 'trigger',
-  VarStep extends IAction<any, any, any, any> | 'trigger',
+  VarStep extends IAction<any, any, any, any> | 'trigger' | { id: string },
 > {
   snapshotOnTimeout?: boolean;
   when?: Condition<CondStep> | ((args: { context: WorkflowContext }) => Promise<boolean>);
