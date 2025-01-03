@@ -5,9 +5,11 @@ const meta = {
   // "generate-text-from-pdf": "Generate Text from PDF",
   "generate-text-with-claude": "Generate Text with Anthropic Claude",
   "generate-text-with-gemini": "Generate Text with Google Gemini",
-  "generate-object-structured": "Generate Object (Structured Output)",
+  "generate-object-with-structured-output":
+    "Generate Object with Structured Output",
   "stream-text": "Stream Text",
-  "stream-object-structured": "Stream Object (Structured Output)",
+  "stream-object-with-structured-output":
+    "Stream Object with Structured Output",
 };
 
 export default meta;

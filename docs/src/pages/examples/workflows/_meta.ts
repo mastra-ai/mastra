@@ -1,10 +1,12 @@
 const meta = {
-  "create-workflow": "Create Workflow",
-  "tool-as-workflow-step": "Tool as a workflow step",
-  "workflow-with-parallel-steps": "Workflow with Parallel steps",
-  "workflow-with-sequential-steps": "Workflow with sequential steps",
-  "workflow-with-branching-paths": "Workflow with Branching paths",
-  "workflow-with-cyclical-deps": "Workflow with Cyclical dependencies",
+  "creating-a-workflow": "Creating a Workflow",
+  "calling-llm": "Calling an LLM",
+  "calling-agent": "Calling an Agent",
+  "sequential-steps": "Sequential Steps",
+  "parallel-steps": "Parallel Steps",
+  "branching-paths": "Branching Paths",
+  "using-a-tool-as-a-step": "Using a Tool as a Step",
+  "cyclical-dependencies": "Cyclical Dependencies",
 };
 
 export default meta;

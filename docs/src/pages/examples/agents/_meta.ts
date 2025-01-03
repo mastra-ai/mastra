@@ -1,5 +1,5 @@
 const meta = {
-  "agent-system-prompt": "Agent system prompt",
+  "system-prompt": "Giving a System Prompt",
 };
 
 export default meta;
