@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.72
+
+### Patch Changes
+
+- 2667e66: fix create mastra publishing
+
 ## 0.1.57-alpha.71
 
 ### Patch Changes

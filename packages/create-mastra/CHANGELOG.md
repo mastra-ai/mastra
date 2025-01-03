@@ -1,5 +1,13 @@
 # create-mastra
 
+## 0.1.0-alpha.5
+
+### Patch Changes
+
+- 2667e66: fix create mastra publishing
+- Updated dependencies [2667e66]
+  - mastra@0.1.57-alpha.72
+
 ## 0.1.0-alpha.4
 
 ### Patch Changes
