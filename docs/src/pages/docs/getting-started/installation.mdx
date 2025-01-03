@@ -97,6 +97,7 @@ Then, initialize a TypeScript project including the `@mastra/core` package:
 npm init -y
 npm install typescript tsx @types/node zod --save-dev
 npm install @mastra/core@alpha
+npm install -D mastra@alpha
 npx tsc --init
 ```
 
@@ -153,8 +154,8 @@ This registers your agent with Mastra so that `mastra dev` can discover and serv
 </Steps>
 
 <Callout type="info">
-  If you want to add Mastra to an existing project, check out our guide on
-  [using mastra init](/docs/local-dev/mastra-init).
+  To add Mastra to an existing project, see our Local dev docs on [mastra
+  init](/docs/local-dev/mastra-init).
 </Callout>
 
 ## Start the Mastra Server
@@ -169,7 +170,7 @@ Run the following command to start the Mastra server:
 npm run dev
 ```
 
-If you have the mastra CLI installed globally, run:
+If you have the mastra CLI installed, run:
 
 ```bash copy
 mastra dev
