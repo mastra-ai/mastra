@@ -1,0 +1,36 @@
+# Stream Object with Structured Output
+
+This example shows you how to stream structured JSON output using a language model and the `zod` library. By defining a strict schema, you ensure that named ingredients, amounts, and step-by-step instructions follow a reliable structure. 
+
+```ts showLineNumbers copy
+import { Mastra } from '@mastra/core';
+import { z } from 'zod';
+
+const mastra = new Mastra();
+
+const llm = mastra.LLM({
+  provider: 'OPEN_AI',
+  name: 'gpt-4o',
+});
+
+const recipeSchema = z.object({
+  recipe: z.object({
+    name: z.string(),
+    ingredients: z.array(
+      z.object({
+        name: z.string(),
+        amount: z.string(),
+      }),
+    ),
+    steps: z.array(z.string()),
+  }),
+});
+
+const result = await llm.stream('Generate a egusi recipe.', {
+  output: recipeSchema,
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```

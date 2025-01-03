@@ -1,0 +1,19 @@
+# Generate Text with Claude
+
+This example demonstrates how to interact with Anthropic’s Claude language model. After providing a prompt, the model returns a textual response.
+
+```ts showLineNumbers copy
+import { Mastra } from '@mastra/core';
+import { z } from 'zod';
+
+const mastra = new Mastra();
+
+const llm = mastra.LLM({
+  provider: 'ANTHROPIC',
+  name: 'claude-3-5-sonnet-20241022',
+});
+
+const result = await llm.generate('Who invented the submarine?');
+
+console.log(result.text);
+```

@@ -1,0 +1,18 @@
+# Chunk JSON
+
+This example shows you how to chunk JSON content. By using the `chunk` method, you can split the JSON into smaller pieces, which can be used for various purposes, such as search or retrieval.
+
+```tsx copy
+import { MDocument } from "@mastra/rag";
+
+const testJson = {
+  name: "John Doe",
+  age: 30,
+  email: "john.doe@example.com",
+};
+
+const doc = MDocument.fromJSON(JSON.stringify(testJson));
+
+const chunks = await doc.chunk();
+```
+

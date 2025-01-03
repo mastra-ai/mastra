@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.38
+
+### Patch Changes
+
+- 1d68b0c: update dane publishing
+
 ## 0.0.2-alpha.37
 
 ### Patch Changes

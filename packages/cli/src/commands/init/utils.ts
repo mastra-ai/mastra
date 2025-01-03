@@ -3,6 +3,7 @@ import { ModelConfig } from '@mastra/core';
 import child_process from 'node:child_process';
 import util from 'node:util';
 import path from 'path';
+import color from 'picocolors';
 import prettier from 'prettier';
 import yoctoSpinner from 'yocto-spinner';
 
@@ -151,25 +152,29 @@ export async function installCoreDeps() {
 
     const depsService = new DepsService();
 
-    await depsService.installPackages(['@mastra/core']);
+    await depsService.installPackages(['@mastra/core@alpha']);
     spinner.success('@mastra/core installed successfully');
   } catch (err) {
     console.error(err);
   }
 }
 
-export const writeAPIKey = async (provider: LLMProvider) => {
+export const getAPIKey = async (provider: LLMProvider) => {
   let key = 'OPENAI_API_KEY';
   switch (provider) {
     case 'anthropic':
       key = 'ANTHROPIC_API_KEY';
-      return;
+      return key;
     case 'groq':
       key = 'GROQ_API_KEY';
-      return;
+      return key;
     default:
-      key = 'OPENAI_API_KEY';
+      return key;
   }
+};
+
+export const writeAPIKey = async (provider: LLMProvider) => {
+  const key = await getAPIKey(provider);
   await exec(`echo ${key}= >> .env.development`);
 };
 export const createMastraDir = async (directory: string): Promise<{ ok: true; dirPath: string } | { ok: false }> => {
@@ -200,6 +205,7 @@ export const writeCodeSample = async (dirPath: string, component: Components, ll
 };
 
 export const interactivePrompt = async () => {
+  p.intro(color.inverse('Mastra Init'));
   const mastraProject = await p.group(
     {
       directory: () =>
@@ -251,39 +257,6 @@ export const interactivePrompt = async () => {
   const mastraComponents = shouldAddTools ? [...components, 'tools'] : components;
 
   return { ...rest, components: mastraComponents };
-};
-
-export const createMastraProject = async () => {
-  const projectName = await p.text({
-    message: 'What do you want to name your project?',
-    placeholder: 'my-mastra-app',
-    defaultValue: 'my-mastra-app',
-  });
-
-  if (p.isCancel(projectName)) {
-    p.cancel('Operation cancelled');
-    process.exit(0);
-  }
-
-  const s = p.spinner();
-  s.start('Creating project');
-
-  await fs.mkdir(projectName);
-  process.chdir(projectName);
-
-  await exec(`npm init -y`);
-  await exec(`npm i zod typescript tsx @types/node --save-dev`);
-
-  s.message('Installing dependencies');
-
-  await exec(`echo output.txt >> .gitignore`);
-  await exec(`echo node_modules >> .gitignore`);
-
-  await exec(`npm i @mastra/core@alpha`);
-  s.stop('Project creation successful');
-  logger.break();
-
-  return { projectName };
 };
 
 export const checkPkgJson = async () => {
