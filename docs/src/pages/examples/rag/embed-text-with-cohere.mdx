@@ -1,3 +1,5 @@
+import { GithubLink } from '../../../components/github-link';
+
 # Embed Text with Cohere
 
 This example shows you how to embed text with Cohere. By using the `embed` method, you can embed the text into a vector database, which can be used for various purposes, such as search or retrieval.
@@ -15,3 +17,10 @@ const { embeddings } = await embed(chunks, {
   maxRetries: 3,
 });
 ```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/embed-text-with-cohere.ts'} />

@@ -1,3 +1,5 @@
+import { GithubLink } from '../../../components/github-link';
+
 # Adjust Chunk Delimiters
 
 This example shows you how to adjust the chunk delimiters for a document (the character you want to split by). By default, the chunk delimiter is set to `\n`, but you can change it to any string you want.
@@ -11,4 +13,11 @@ const chunks = await doc.chunk({
   separator: "\n",
 });
 ```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/adjust-chunk-delimiters.ts'} />
 
