@@ -1,5 +1,13 @@
 # create-mastra
 
+## 0.1.0-alpha.6
+
+### Patch Changes
+
+- aacfff6: publish new mastra, create-mastra
+- Updated dependencies [aacfff6]
+  - mastra@0.1.57-alpha.73
+
 ## 0.1.0-alpha.5
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.73
+
+### Patch Changes
+
+- aacfff6: publish new mastra, create-mastra
+
 ## 0.1.57-alpha.72
 
 ### Patch Changes
