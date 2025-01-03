@@ -1,0 +1,30 @@
+# Agent System Prompt
+
+This example demonstrates how to create an AI agent with specific instructions and tool integration. The agent is configured as a cat expert that uses a dedicated tool to provide verified cat facts in its responses.
+
+```ts showLineNumbers copy
+import { Agent } from "@mastra/core";
+import { catFact } from "../tools";
+
+const instructions = `You are a helpful cat expert assistant. When discussing cats, you should always include an interesting cat fact.
+
+Your main responsibilities:
+1. Answer questions about cats
+2. Use the catFact tool to provide verified cat facts
+3. Incorporate the cat facts naturally into your responses
+
+Always use the catFact tool at least once in your responses to ensure accuracy.`;
+
+export const catOne = new Agent({
+  name: "cat-one",
+  instructions: instructions,
+  model: {
+    provider: "OPEN_AI",
+    name: "gpt-4o",
+    toolChoice: "required",
+  },
+  tools: {
+    catFact,
+  },
+});
+```
