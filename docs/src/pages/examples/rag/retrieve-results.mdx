@@ -1,3 +1,5 @@
+import { GithubLink } from '../../../components/github-link';
+
 # Retrieve Results
 
 This example shows you how to retrieve results from a vector database. By using the `PgVector` class, you can retrieve the results from a vector database, which can be used for various purposes, such as search or retrieval.
@@ -30,3 +32,9 @@ const results = await pinecone.query('test_index', embeddings[0], 10);
 console.log(results);
 ```
 
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/retrieve-results.ts'} />
