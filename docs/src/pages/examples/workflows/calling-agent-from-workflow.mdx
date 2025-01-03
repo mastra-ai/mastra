@@ -44,5 +44,6 @@ const mastra = new Mastra({
 const runResult = await mastra
   .getWorkflow('newWorkflow')
   .execute({ triggerData: { message: 'Give me a run down of the mission to save private' } });
+
 console.log(runResult.results);
 ```
