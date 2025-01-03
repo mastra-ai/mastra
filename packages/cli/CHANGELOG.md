@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.71
+
+### Patch Changes
+
+- 1d68b0c: update dane publishing
+
 ## 0.1.57-alpha.70
 
 ### Patch Changes

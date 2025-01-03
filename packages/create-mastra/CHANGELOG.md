@@ -1,5 +1,13 @@
 # create-mastra
 
+## 0.1.0-alpha.4
+
+### Patch Changes
+
+- 1d68b0c: update dane publishing
+- Updated dependencies [1d68b0c]
+  - mastra@0.1.57-alpha.71
+
 ## 0.1.0-alpha.3
 
 ### Patch Changes
