@@ -5,7 +5,6 @@ import { z } from 'zod';
 
 import { IAction, MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
-import { FilterOperators } from '../engine';
 import { LogLevel } from '../logger';
 
 import { Step } from './step';
@@ -254,11 +253,11 @@ export class Workflow<
       snapshot = JSON.parse(snapshot as unknown as string);
     }
 
-    this.log(LogLevel.INFO, 'Executing workflow', { triggerData, runId: this.#runId });
+    this.log(LogLevel.INFO, 'Executing workflow', { triggerData, runId: this.#runId, snapshot });
 
     if (this.triggerSchema) {
       try {
-        this.triggerSchema.parse(triggerData);
+        !snapshot && this.triggerSchema.parse(triggerData);
         this.log(LogLevel.DEBUG, 'Trigger schema validation passed', { runId: this.#runId });
       } catch (error) {
         this.log(LogLevel.ERROR, 'Trigger schema validation failed', {
@@ -867,13 +866,15 @@ export class Workflow<
 
     if (!engine) return;
 
-    const state = await engine.getRecords({
+    console.log({ runId, entityName: this.#entityName, connectionId: this.#connectionId });
+
+    const state = await engine.getRecordsByEntityNameAndExternalId({
       entityName: this.#entityName,
       connectionId: this.#connectionId,
-      options: {
-        filters: [{ field: 'externalId', value: runId, operator: FilterOperators.EQUAL }],
-      },
+      externalId: runId,
     });
+
+    console.log({ state });
 
     return state[0]?.data.snapshot;
   }

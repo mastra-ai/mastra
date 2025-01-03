@@ -19,6 +19,7 @@
     "@mastra/core": "workspace:*",
     "@mastra/engine": "workspace:*",
     "commander": "^11.0.0",
+    "drizzle-kit": "^0.30.1",
     "express": "^4.21.2",
     "lowdb": "^7.0.1",
     "typescript": "^5.0.4",

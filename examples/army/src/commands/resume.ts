@@ -13,6 +13,7 @@ resumeCommand
         console.error('Attack workflow not found. Make sure it is properly set up.');
         process.exit(1);
       }
+
       const result = await attackWorkflow.execute({
         loadSnapshot: { runId },
       });
