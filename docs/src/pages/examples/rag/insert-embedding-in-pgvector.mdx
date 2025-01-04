@@ -2,7 +2,7 @@ import { GithubLink } from '../../../components/github-link';
 
 # Insert Embedding in PgVector
 
-This example shows you how to insert an embedding into a PgVector database. By using the `PgVector` class, you can insert the embedding into a vector database, which can be used for various purposes, such as search or retrieval.
+After generating embeddings, you need to store them in a database that supports vector similarity search. The `PgVector` class provides methods to create indexes and insert embeddings into PostgreSQL with the pgvector extension. This example shows how to store embeddings in a PostgreSQL database for later retrieval.
 
 ```tsx copy
 import { MDocument, embed, PgVector } from '@mastra/rag';
