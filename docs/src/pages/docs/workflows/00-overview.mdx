@@ -116,7 +116,7 @@ export const myWorkflow = new Workflow({
 myWorkflow.step(stepOne).then(stepTwo, {
   variables: {
     valueToIncrement: {
-      stepId: "stepOne",
+      step: stepOne,
       path: "doubledValue",
     },
   },
@@ -252,11 +252,41 @@ myWorkflow.step(
 
 Variables allow you to pass data between steps.
 
+#### Option 1: Pass the "trigger" to access variables from the triggerSchema
+
+```typescript
+myWorkflow.step(stepOne).then(stepTwo, {
+  variables: {
+    valueToIncrement: {
+      step: "trigger",
+      path: "inputValue",
+    },
+  },
+});
+```
+
+#### Option 2: Pass the previous step to access variables from it's outputSchema
+
 ```typescript
 myWorkflow.step(stepOne).then(stepTwo, {
   variables: {
     valueToIncrement: {
       step: stepOne,
+      path: "doubledValue",
+    },
+  },
+});
+```
+
+#### Option 3: Pass the step id of the previous step to access variables from it's outputSchema
+
+```typescript
+myWorkflow.step(stepOne).then(stepTwo, {
+  variables: {
+    valueToIncrement: {
+      step: {
+        id: "stepOne",
+      },
       path: "doubledValue",
     },
   },
