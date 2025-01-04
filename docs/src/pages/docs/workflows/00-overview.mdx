@@ -58,7 +58,9 @@ myWorkflow
       },
       variables: {
         valueToIncrement: {
-          stepId: "stepOne",
+          step: {
+            id: "stepOne",
+          },
           path: "doubledValue",
         },
       },
@@ -218,7 +220,12 @@ myWorkflow.step(
       // Action logic
     },
     when: {
-      ref: { stepId: "fetchData", path: "status" },
+      ref: {
+        step: {
+          id: "fetchData",
+        },
+        path: "status",
+      },
       query: { $eq: "success" },
     },
   })
@@ -245,44 +252,18 @@ myWorkflow.step(
 
 Variables allow you to pass data between steps.
 
-**Option 1: Using `variables` in `.then()`**
-
 ```typescript
 myWorkflow.step(stepOne).then(stepTwo, {
   variables: {
     valueToIncrement: {
-      stepId: "stepOne",
+      step: stepOne,
       path: "doubledValue",
     },
   },
 });
 ```
 
-**Option 2: Define `variables` inside the `Step`**
-
-```typescript
-const stepTwo = new Step({
-  id: "stepTwo",
-  inputSchema: z.object({
-    valueToIncrement: z.number(),
-  }),
-  outputSchema: z.object({
-    incrementedValue: z.number(),
-  }),
-  execute: async ({ context }) => {
-    const incrementedValue = context.valueToIncrement + 1;
-    return { incrementedValue };
-  },
-  variables: {
-    valueToIncrement: {
-      stepId: "stepOne",
-      path: "doubledValue",
-    },
-  },
-});
-```
-
-In both options, the `valueToIncrement` input for `stepTwo` is fetched from the `doubledValue` output of `stepOne`.
+The `valueToIncrement` input for `stepTwo` is fetched from the `doubledValue` output of `stepOne`.
 
 ### 5. Finalize the Workflow
 
