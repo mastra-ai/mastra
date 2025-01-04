@@ -61,7 +61,7 @@ export interface BaseCondition<TStep extends StepVariableType<any, any, any, any
   ref: TStep extends IAction<any, any, any, any>
     ? {
         step: TStep;
-        path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '' | '.';
+        path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '' | '.' | 'status';
       }
     : TStep extends 'trigger'
       ? {

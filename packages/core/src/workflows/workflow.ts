@@ -872,18 +872,23 @@ export class Workflow<
       const [stepId, ...pathParts] = key.split('.');
       const path = pathParts.join('.');
 
-      const sourceData = context.stepResults[stepId as string];
+      const sourceData =
+        stepId === 'trigger' ? context.triggerData : getStepResult(context.stepResults[stepId as string]);
 
       this.log(LogLevel.DEBUG, `Got condition data from ${stepId}`, {
         sourceData,
         runId: this.#runId,
       });
 
-      if (!sourceData || sourceData.status !== 'success') {
+      if (!sourceData) {
         return false;
       }
 
-      const value = get(sourceData, path);
+      let value = get(sourceData, path);
+
+      if (stepId !== 'trigger' && path === 'status' && !value) {
+        value = 'success';
+      }
 
       // Handle different types of queries
       if (typeof queryValue === 'object' && queryValue !== null) {
@@ -898,18 +903,23 @@ export class Workflow<
     // Base condition
     if ('ref' in condition) {
       const { ref, query } = condition;
-      const sourceData = ref.step === 'trigger' ? context.triggerData : context.stepResults[ref.step.id];
+      const sourceData = ref.step === 'trigger' ? context.triggerData : getStepResult(context.stepResults[ref.step.id]);
 
       this.log(LogLevel.DEBUG, `Got condition data from ${ref.step === 'trigger' ? 'trigger' : ref.step.id}`, {
         sourceData,
         runId: this.#runId,
       });
 
-      if (!sourceData || sourceData.status !== 'success') {
+      if (!sourceData) {
         return false;
       }
 
-      const value = get(sourceData, ref.path);
+      let value = get(sourceData, ref.path);
+
+      if (ref.step !== 'trigger' && ref.path === 'status' && !value) {
+        value = 'success';
+      }
+
       baseResult = sift(query)(value);
     }
 
