@@ -886,6 +886,8 @@ export class Workflow<
 
       let value = get(sourceData, path);
 
+      // If path is 'status', check if value is empty and we are not referencing the trigger.
+      // Currently only successful step results get to this point, so we can safely assume that the status is 'success'
       if (stepId !== 'trigger' && path === 'status' && !value) {
         value = 'success';
       }
@@ -916,6 +918,8 @@ export class Workflow<
 
       let value = get(sourceData, ref.path);
 
+      // If path is 'status', check if value is empty and we are not referencing the trigger.
+      // Currently only successful step results get to this point, so we can safely assume that the status is 'success'
       if (ref.step !== 'trigger' && ref.path === 'status' && !value) {
         value = 'success';
       }
