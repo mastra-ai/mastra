@@ -1,8 +1,3 @@
-# Workflow with Cyclical dependencies
-
-Workflows can support cyclical dependencies, allowing steps to loop based on conditions.
-
-```ts showLineNumbers copy
 import { Workflow, Step } from '@mastra/core';
 import { z } from 'zod';
 
@@ -93,4 +88,3 @@ cyclicalWorkflow.commit();
 
 const res = await cyclicalWorkflow.execute({ triggerData: { firstValue: 6 } });
 console.log(res.results);
-```

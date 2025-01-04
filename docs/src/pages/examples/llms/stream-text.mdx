@@ -1,6 +1,8 @@
+import { GithubLink } from '../../../components/github-link';
+
 # Stream Text
 
-This example shows you how to stream text from a language model. The `stream` method allows you to stream the model's response in real-time to your user.
+Text generation can sometimes take a long time to complete, especially when you're generating a couple of paragraphs. By streaming the response, you can display partial results as they arrive, providing immediate feedback to users. This example shows how to stream text responses in real-time.
 
 ```ts showLineNumbers copy
 import { Mastra } from '@mastra/core';
@@ -18,3 +20,10 @@ for await (const chunk of response.textStream) {
   process.stdout.write(chunk);
 }
 ```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/llms/stream-text.ts'} />

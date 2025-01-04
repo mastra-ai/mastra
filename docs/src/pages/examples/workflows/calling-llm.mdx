@@ -1,4 +1,6 @@
-# Calling LLM from Workflow
+import { GithubLink } from '../../../components/github-link';
+
+# Calling an LLM from a Workflow
 
 ```ts showLineNumbers copy
 import { Mastra, Step, Workflow } from '@mastra/core';
@@ -48,3 +50,12 @@ await mastra
   .getWorkflow('newWorkflow')
   .execute({ triggerData: { message: 'Give me a speech as skipper from penguin of madagascar' } });
 ```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/calling-llm-from-workflow.ts'}
+/>

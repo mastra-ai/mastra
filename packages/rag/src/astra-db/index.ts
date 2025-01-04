@@ -36,6 +36,9 @@ export class AstraVector extends MastraVector {
     dimension: number,
     metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
   ): Promise<void> {
+    if (!Number.isInteger(dimension) || dimension <= 0) {
+      throw new Error('Dimension must be a positive integer');
+    }
     await this.#db.createCollection(indexName, {
       vector: {
         dimension,

@@ -97,6 +97,7 @@ Then, initialize a TypeScript project including the `@mastra/core` package:
 npm init -y
 npm install typescript tsx @types/node zod --save-dev
 npm install @mastra/core@alpha
+npm install -D mastra@alpha
 npx tsc --init
 ```
 
@@ -115,7 +116,7 @@ Replace your_openai_api_key with your actual API key.
 First, create a `cat-one` agent file:
 
 ```bash copy
-touch src/mastra/agents/cat-one.ts
+mkdir -p src/masta/agents && touch src/mastra/agents/cat-one.ts
 ```
 
 Then, add the following code to `src/mastra/agents/cat-one.ts`:
@@ -152,56 +153,10 @@ This registers your agent with Mastra so that `mastra dev` can discover and serv
 
 </Steps>
 
-## Add to Existing Project
-
-<Steps>
-
-### Install the CLI
-
-If you have an existing project and want to add Mastra, first install the mastra CLI.
-
-<Tabs items={["npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>
-
-```bash copy
-npm i -g mastra
-```
-
-  </Tabs.Tab>
-  <Tabs.Tab>
-```bash copy 
-yarn i -g mastra
-```
-</Tabs.Tab>
-  <Tabs.Tab>
-```bash copy 
-pnpm i -g mastra
-```
-</Tabs.Tab>
-</Tabs>
-
-### Initialize Mastra
-
-To then intialize mastra in your project by following out interactive setup, run:
-
-```bash copy
-mastra init
-```
-
-### Set Up your API Key
-
-Add the API key for your configured LLM provider in your `.env` file.
-
-```env
-OPENAI_API_KEY=<your-openai-key>
-```
-
-</Steps>
-Note: If you prefer to run the command with flags (non-interactive mode) and include the example code, you can use:
-```bash copy
-mastra init --dir src/mastra --components agents,tools --llm openai --example
-```
-This allows you to specify your preferences upfront without being prompted.
+<Callout type="info">
+  To add Mastra to an existing project, see our Local dev docs on [mastra
+  init](/docs/local-dev/mastra-init).
+</Callout>
 
 ## Start the Mastra Server
 
@@ -212,10 +167,10 @@ Mastra provides commands to serve your agents via REST endpoints
 Run the following command to start the Mastra server:
 
 ```bash copy
-npx mastra dev
+npm run dev
 ```
 
-If you have the mastra CLI installed globally, run:
+If you have the mastra CLI installed, run:
 
 ```bash copy
 mastra dev

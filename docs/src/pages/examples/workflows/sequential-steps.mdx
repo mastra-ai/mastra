@@ -1,4 +1,8 @@
-# Workflow with Parallel Steps
+import { GithubLink } from '../../../components/github-link';
+
+# Workflow with Sequential Steps
+
+Workflow can be chained to run one after another by using the `then` method after the first step.
 
 ```ts showLineNumbers copy
 import { Step, Workflow } from '@mastra/core';
@@ -40,7 +44,7 @@ const myWorkflow = new Workflow({
   }),
 });
 
-// run workflows in parallel
+// sequential steps
 myWorkflow
   .step(stepOne, {
     variables: {
@@ -50,16 +54,25 @@ myWorkflow
       },
     },
   })
-  .step(stepTwo, {
+  .then(stepTwo, {
     variables: {
       valueToIncrement: {
-        step: 'trigger',
-        path: 'inputValue',
+        step: stepOne,
+        path: 'doubledValue',
       },
     },
   });
-myWorkflow.commit();
 
+myWorkflow.commit();
 const res = await myWorkflow.execute({ triggerData: { inputValue: 90 } });
 console.log(res.results);
 ```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-sequential-steps.ts'}
+/>

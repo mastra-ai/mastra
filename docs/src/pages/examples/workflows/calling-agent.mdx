@@ -1,4 +1,6 @@
-# Calling Agent from Workflow
+import { GithubLink } from '../../../components/github-link';
+
+# Calling an Agent From a Workflow
 
 ```ts showLineNumbers copy
 import { Agent, Mastra, Step, Workflow } from '@mastra/core';
@@ -47,3 +49,12 @@ const runResult = await mastra
 
 console.log(runResult.results);
 ```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/calling-agent-from-workflow.ts'}
+/>

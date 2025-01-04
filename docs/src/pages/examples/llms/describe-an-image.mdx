@@ -1,6 +1,8 @@
-# Generate Text from Image
+import { GithubLink } from '../../../components/github-link';
 
-This example shows you how to generate text by providing an image to a language model. By combining text and images in a single prompt, you can ask the AI to interpret and describe the contents of the image. 
+# Describing an Image
+
+Vision-enabled language models can analyze both text and images, but combining them in a single prompt requires specific message formatting. This example demonstrates how to structure a multimodal request by combining a text question with an image URL in the message content array.
 
 ```ts showLineNumbers copy
 import { Mastra } from '@mastra/core';
@@ -32,3 +34,10 @@ const response = await llm.generate([
 
 console.log(response.text);
 ```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/llms/generate-text-from-image.ts'} />

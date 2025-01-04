@@ -1,6 +1,9 @@
-# Create workflow
+import { GithubLink } from '../../../components/github-link';
 
-A workflow can consist of a single step.
+# Creating a Workflow
+
+A workflow can consist of a single step. You can execute a workflow without needing to
+connect it to the `Mastra` instance.
 
 ```ts showLineNumbers copy
 import { Step, Workflow } from '@mastra/core';
@@ -34,3 +37,10 @@ const res = await myWorkflow.execute({ triggerData: { inputValue: 90 } });
 
 console.log(res.results);
 ```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/create-workflow.ts'} />

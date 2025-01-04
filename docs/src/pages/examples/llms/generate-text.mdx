@@ -1,6 +1,8 @@
+import { GithubLink } from '../../../components/github-link';
+
 # Generate Text
 
-This example demonstrates how to interact with OpenAI’s GPT-4 model for basic text generation. When provided a prompt, the GPT-4 returns a text response.
+When you need to get a quick answer from a language model, the simplest approach is to send a text prompt and receive a text response. This example shows how to initialize an LLM and generate text with a single line of code.
 
 ```ts showLineNumbers copy
 import { Mastra } from '@mastra/core';
@@ -12,7 +14,14 @@ const llm = mastra.LLM({
   name: 'gpt-4o',
 });
 
-const response = await llm.generate('What is a wormhole?');
+const response = await llm.generate('What is a wormhole? Explain briefly.');
 
 console.log(response.text);
 ```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/llms/generate-text.ts'} />

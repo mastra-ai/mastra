@@ -1,0 +1,32 @@
+import { GithubLink } from '../../../components/github-link';
+
+# Generate Text with System Prompt
+
+When interacting with language models, you can guide their behavior by providing initial instructions. A system prompt sets the overall context and behavior for the model before it processes any user messages. This example shows how to use system prompts to control model behavior.
+
+```ts showLineNumbers
+import { Mastra } from '@mastra/core';
+
+const mastra = new Mastra();
+
+const llm = mastra.LLM({
+  provider: 'OPEN_AI',
+  name: 'gpt-4',
+});
+
+const response = await llm.generate([
+  { role: 'system', content: 'You are a helpful assistant.' },
+  { role: 'user', content: 'What is the meaning of life?' },
+]);
+
+console.log(response.text);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/llms/generate-text-system-prompt.ts'}
+/>

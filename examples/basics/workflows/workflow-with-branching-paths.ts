@@ -1,9 +1,5 @@
-# Workflow with Branching Paths
-
-{/* prettier-ignore */}
-```ts showLineNumbers copy
-import { Workflow, Step } from '@mastra/core'
-import { z } from 'zod'
+import { Workflow, Step } from '@mastra/core';
+import { z } from 'zod';
 
 const doubleValue = new Step({
   id: 'stepOne',
@@ -50,7 +46,6 @@ const squareValue = new Step({
   },
 });
 
-
 export const branchedWorkflow = new Workflow({
   name: 'branched-workflow',
   triggerSchema: z.object({
@@ -83,9 +78,8 @@ branchedWorkflow
         path: 'doubledValue',
       },
     },
-  })
+  });
 
 branchedWorkflow.commit();
-const res = await branchedWorkflow.execute({triggerData: { firstValue: 20 }})
-console.log(res.results)
-```
+const res = await branchedWorkflow.execute({ triggerData: { firstValue: 20 } });
+console.log(res.results);

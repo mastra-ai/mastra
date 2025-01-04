@@ -5,11 +5,11 @@ const meta = {
   llms: {
     title: "LLM Models",
   },
-  workflows: {
-    title: "Workflows",
-  },
   agents: {
     title: "Agents",
+  },
+  workflows: {
+    title: "Workflows",
   },
   rag: {
     title: "RAG",
