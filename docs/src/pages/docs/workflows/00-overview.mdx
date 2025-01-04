@@ -356,13 +356,19 @@ You should receive a JSON response similar to:
 {
   "results": {
     "stepOne": {
-      "doubledValue": 10
+      "status": "success",
+      "payload": {
+        "doubledValue":10
+      }
     },
     "stepTwo": {
-      "incrementedValue": 11
+      "status": "success",
+      "payload": {
+        "incrementedValue":11
+      }
     }
   },
-  "workflow": "my-workflow"
+  "workflow": "myWorkflow"
 }
 ```
 
