@@ -2,7 +2,7 @@ import { GithubLink } from '../../../components/github-link';
 
 # Adjust Chunk Delimiters
 
-This example shows you how to adjust the chunk delimiters for a document (the character you want to split by). By default, the chunk delimiter is set to `\n`, but you can change it to any string you want.
+When processing large documents, you may want to control how the text is split into smaller chunks. By default, documents are split on newlines, but you can customize this behavior to better match your content structure. This example shows how to specify a custom delimiter for chunking documents.
 
 ```tsx copy
 import { MDocument } from "@mastra/rag";

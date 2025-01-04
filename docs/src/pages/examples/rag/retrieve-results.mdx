@@ -2,7 +2,7 @@ import { GithubLink } from '../../../components/github-link';
 
 # Retrieve Results
 
-This example shows you how to retrieve results from a vector database. By using the `PgVector` class, you can retrieve the results from a vector database, which can be used for various purposes, such as search or retrieval.
+After storing embeddings in a vector database, you need to query them to find similar content. The `query` method returns the most semantically similar chunks to your input embedding, ranked by relevance. This example shows how to retrieve similar chunks from a Pinecone vector database.
 
 ```tsx copy
 import { MDocument, embed, PineconeVector } from '@mastra/rag';

@@ -2,7 +2,7 @@ import { GithubLink } from '../../../components/github-link';
 
 # Stream Object with Structured Output
 
-This example shows you how to stream structured JSON output using a language model and the `zod` library. By defining a strict schema, you ensure that named ingredients, amounts, and step-by-step instructions follow a reliable structure.
+When you need structured data from a language model, waiting for the complete response can take time. By streaming the output, you can display partial results as they arrive, providing immediate feedback to users. This example shows how to stream JSON-formatted responses using a Zod schema.
 
 ```ts showLineNumbers copy
 import { Mastra } from '@mastra/core';

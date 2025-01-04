@@ -2,7 +2,7 @@ import { GithubLink } from '../../../components/github-link';
 
 # Embed Chunk Array
 
-This example shows you how to embed an array of chunks. By using the `embed` method, you can embed the chunks into a vector database, which can be used for various purposes, such as search or retrieval.
+After chunking documents, you need to convert the text chunks into numerical vectors that can be used for similarity search. The `embed` method transforms text chunks into embeddings using your chosen provider and model. This example shows how to generate embeddings for an array of text chunks.
 
 ```tsx copy
 import { MDocument, embed } from "@mastra/rag";
