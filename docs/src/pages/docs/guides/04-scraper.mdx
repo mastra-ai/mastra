@@ -11,19 +11,14 @@ They support loops, branching, parallel execution, error handling, and more.
 Here's an updated example of creating a workflow that uses predefined tools to crawl a website, structure the data using an LLM, and analyze the sentiment of the content.
 
 <Steps>
-### Import Necessary Modules
-
-```typescript showLineNumbers
-import { Step, Workflow, Mastra, Agent } from '@mastra/core';
-import { PostgresEngine } from '@mastra/engine';
-import { z } from 'zod';
-
-import * as syncs from './syncs';
-```
 
 ### Initialize Mastra Instance
 
-```ts showLineNumbers filename="src/mastra/index.ts"
+```typescript filename="src/mastra/index.ts" copy
+import { Agent, createTool, Mastra, Step, Workflow } from '@mastra/core';
+import { PostgresEngine } from '@mastra/engine';
+import { z } from 'zod';
+
 const crawlWebpage = createTool({
   id: 'Crawl Webpage',
   description: 'Crawls a webpage and extracts the text content',
@@ -43,6 +38,10 @@ const crawlWebpage = createTool({
 const myAgent = new Agent({
   name: 'agentOne',
   instructions: 'This agent crawls a website and analyzes the sentiment of the content.',
+  model: {
+    provider: "OPEN_AI",
+    name: "gpt-4o-mini",
+  },
   tools: {
     crawlWebpage,
   },
@@ -54,7 +53,6 @@ const engine = new PostgresEngine({
 
 // Initialize your Mastra instance with registered tools and integrations
 export const mastra = new Mastra({
-  syncs,
   agents: { myAgent },
   engine,
 });
@@ -202,7 +200,12 @@ contentWorkflow.step(
       // Action logic
     },
     when: {
-      ref: { stepId: 'fetchData', path: 'status' },
+      ref: { 
+        step: {
+          id: "fetchData",
+        }, 
+        path: 'status' 
+      },
       query: { $eq: 'success' },
     },
   }),
@@ -241,10 +244,17 @@ contentWorkflow.step(
     execute: async ({ context }) => {
       // Use context.inputData
     },
-    variables: {
-      inputData: { stepId: 'fetchData', path: 'data' },
-    },
   }),
+  {
+    variables: {
+      inputData: { 
+        step: {
+          id: "fetchData",
+        }, 
+        path: 'data' 
+      },
+    },
+  }
 );
 ```
 
