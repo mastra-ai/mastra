@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.1-alpha.6
+
+### Patch Changes
+
+- cefd906: cli interactive api key configuration
+
 ## 0.1.1-alpha.5
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # mastra
 
+## 0.1.57-alpha.76
+
+### Patch Changes
+
+- b6f9860: watch for changes in user mastra directory and restart server in cli dev
+- cefd906: cli interactive api key configuration
+- Updated dependencies [401a4d9]
+  - @mastra/core@0.1.27-alpha.50
+
 ## 0.1.57-alpha.75
 
 ### Patch Changes

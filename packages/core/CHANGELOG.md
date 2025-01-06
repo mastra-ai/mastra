@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.50
+
+### Patch Changes
+
+- 401a4d9: Add simple conditions test
+
 ## 0.1.27-alpha.49
 
 ### Patch Changes
