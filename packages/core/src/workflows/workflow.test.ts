@@ -186,7 +186,6 @@ describe('Workflow', () => {
 
       const workflow = new Workflow({
         name: 'test-workflow',
-        triggerSchema: z.object({ count: z.number() }),
       });
 
       workflow
