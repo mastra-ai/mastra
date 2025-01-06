@@ -1,0 +1,23 @@
+{
+  "name": "workflow-inline",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "mastra": "^0.1.57-alpha.75",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "zod": "^3.24.1"
+  },
+  "dependencies": {
+    "@mastra/core": "^0.1.27-alpha.49"
+  }
+}
