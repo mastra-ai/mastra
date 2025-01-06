@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.1.27-alpha.49
+
+### Patch Changes
+
+- 79acad0: Better type safety on trigger step
+- f5dfa20: only add logger if there is a logger
+
 ## 0.1.27-alpha.48
 
 ### Patch Changes

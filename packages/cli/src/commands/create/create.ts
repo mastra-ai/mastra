@@ -6,7 +6,12 @@ import { interactivePrompt, LLMProvider } from '../init/utils.js';
 
 import { createMastraProject } from './utils.js';
 
-export const create = async (args: { components?: string[]; llmProvider?: LLMProvider; addExample?: boolean }) => {
+export const create = async (args: {
+  components?: string[];
+  llmProvider?: LLMProvider;
+  addExample?: boolean;
+  llmApiKey?: string;
+}) => {
   const { projectName } = await createMastraProject();
   const directory = '/src';
 
@@ -14,18 +19,20 @@ export const create = async (args: { components?: string[]; llmProvider?: LLMPro
     const result = await interactivePrompt();
     await init({
       ...result,
+      llmApiKey: result?.llmApiKey as string,
     });
     postCreate({ projectName });
     return;
   }
 
-  const { components = [], llmProvider = 'openai', addExample = false } = args;
+  const { components = [], llmProvider = 'openai', addExample = false, llmApiKey } = args;
 
   await init({
     directory,
     components,
     llmProvider,
     addExample,
+    llmApiKey,
   });
 
   postCreate({ projectName });
