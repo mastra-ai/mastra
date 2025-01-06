@@ -18,6 +18,6 @@
     "zod": "^3.24.1"
   },
   "dependencies": {
-    "@mastra/core": "^0.1.27-alpha.49"
+    "@mastra/core": "workspace:^"
   }
 }
