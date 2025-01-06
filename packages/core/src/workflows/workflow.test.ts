@@ -6,6 +6,7 @@ import { createTool } from '../tools';
 
 import { Step } from './step';
 import { Workflow } from './workflow';
+import { createLogger } from '../logger';
 
 describe('Workflow', () => {
   describe('Basic Workflow Execution', () => {
