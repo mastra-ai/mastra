@@ -129,7 +129,7 @@ myWorkflow
         path: "doubledValue",
       },
     },
-});
+  });
 ```
 
 ### 2. Control Flow Between Steps
@@ -207,10 +207,12 @@ myWorkflow.step(
     execute: async ({ context }) => {
       // Action logic
     },
+  }),
+  {
     when: async ({ context }) => {
       return context.stepResults.fetchData.status === "success";
     },
-  }),
+  },
 );
 ```
 
@@ -223,6 +225,8 @@ myWorkflow.step(
     execute: async ({ context }) => {
       // Action logic
     },
+  }),
+  {
     when: {
       ref: {
         step: {
@@ -232,7 +236,7 @@ myWorkflow.step(
       },
       query: { $eq: "success" },
     },
-  }),
+  },
 );
 ```
 
@@ -245,10 +249,12 @@ myWorkflow.step(
     execute: async ({ context }) => {
       // Action logic
     },
+  }),
+  {
     when: {
       "fetchData.status": "success",
     },
-  }),
+  },
 );
 ```
 
