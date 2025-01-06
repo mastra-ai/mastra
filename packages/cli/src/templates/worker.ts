@@ -141,7 +141,7 @@ router.get('/api/agents/:agentId', ({ params }: IRequest) => {
   }
 });
 
-router.post('/api/agents/:agentId/text', async ({ params, json }: IRequest) => {
+router.post('/api/agents/:agentId/generate', async ({ params, json }: IRequest) => {
   try {
     const agentId = decodeURIComponent(params.agentId);
     const agent = mastra.getAgent(agentId);
@@ -211,7 +211,7 @@ router.post('/api/agents/:agentId/stream', async ({ params, json }: IRequest) =>
       });
     }
 
-    const streamResult = await agent.generate(messages, { stream: true, threadId, resourceid });
+    const streamResult = await agent.stream(messages, { threadId, resourceid });
 
     return streamResult.toDataStreamResponse({
       headers: {
@@ -261,7 +261,7 @@ router.post('/api/agents/:agentId/text-object', async ({ params, json }: IReques
       });
     }
 
-    const result = await agent.generate(messages, { schema, threadId, resourceid });
+    const result = await agent.generate(messages, { output: schema, threadId, resourceid });
     return new Response(JSON.stringify(result), {
       headers: {
         'Content-Type': 'application/json',
@@ -308,7 +308,7 @@ router.post('/api/agents/:agentId/stream-object', async ({ params, json }: IRequ
       });
     }
 
-    const streamResult = await agent.generate(messages, { schema, stream: true, threadId, resourceid });
+    const streamResult = await agent.stream(messages, { output: schema, threadId, resourceid });
 
     return streamResult.toTextStreamResponse({
       headers: {

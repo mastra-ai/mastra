@@ -14,8 +14,6 @@ import { DepsService } from '../../services/service.deps.js';
 import { FileService } from '../../services/service.file.js';
 import { logger } from '../../utils/logger.js';
 
-import { init } from './init.js';
-
 const exec = util.promisify(child_process.exec);
 
 export type LLMProvider = 'openai' | 'anthropic' | 'groq';
@@ -154,25 +152,29 @@ export async function installCoreDeps() {
 
     const depsService = new DepsService();
 
-    await depsService.installPackages(['@mastra/core']);
+    await depsService.installPackages(['@mastra/core@alpha']);
     spinner.success('@mastra/core installed successfully');
   } catch (err) {
     console.error(err);
   }
 }
 
-export const writeAPIKey = async (provider: LLMProvider) => {
+export const getAPIKey = async (provider: LLMProvider) => {
   let key = 'OPENAI_API_KEY';
   switch (provider) {
     case 'anthropic':
       key = 'ANTHROPIC_API_KEY';
-      return;
+      return key;
     case 'groq':
       key = 'GROQ_API_KEY';
-      return;
+      return key;
     default:
-      key = 'OPENAI_API_KEY';
+      return key;
   }
+};
+
+export const writeAPIKey = async (provider: LLMProvider) => {
+  const key = await getAPIKey(provider);
   await exec(`echo ${key}= >> .env.development`);
 };
 export const createMastraDir = async (directory: string): Promise<{ ok: true; dirPath: string } | { ok: false }> => {
@@ -203,8 +205,7 @@ export const writeCodeSample = async (dirPath: string, component: Components, ll
 };
 
 export const interactivePrompt = async () => {
-  p.intro(color.inverse(' Initializing Mastra '));
-
+  p.intro(color.inverse('Mastra Init'));
   const mastraProject = await p.group(
     {
       directory: () =>
@@ -252,64 +253,13 @@ export const interactivePrompt = async () => {
     },
   );
 
-  const s = p.spinner();
-
-  s.start('Initializing Mastra');
-
   const { shouldAddTools, components, ...rest } = mastraProject;
   const mastraComponents = shouldAddTools ? [...components, 'tools'] : components;
-  try {
-    const result = { ...rest, components: mastraComponents };
 
-    const { success } = await init(result);
-
-    if (!success) {
-      return;
-    }
-
-    s.stop('Mastra initialized successfully');
-    p.note('You are all set!');
-
-    p.outro(`Problems? ${color.underline(color.cyan('https://github.com/mastra-ai/mastra'))}`);
-  } catch (err) {
-    s.stop('Could not initialize Mastra');
-    logger.error(err as string);
-  }
+  return { ...rest, components: mastraComponents };
 };
 
-export const initializeMinimal = async () => {
-  const confirm = await p.confirm({
-    message: 'No package.json detected. Create a new project?',
-    initialValue: true,
-  });
-
-  if (p.isCancel(confirm)) {
-    p.cancel('Operation cancelled');
-    process.exit(0);
-  }
-
-  if (!confirm) {
-    p.cancel('Operation cancelled');
-    process.exit(0);
-  }
-
-  const s = p.spinner();
-  s.start('Creating project');
-
-  await exec(`npm init -y`);
-  await exec(`npm i zod typescript tsx @types/node --save-dev`);
-
-  s.message('Installing dependencies');
-
-  await exec(`echo output.txt >> .gitignore`);
-  await exec(`echo node_modules >> .gitignore`);
-
-  await exec(`npm i @mastra/core@alpha`);
-  s.stop('Project creation successful');
-  logger.break();
-};
-
-export const checkPkgJsonAndCreateStarter = async () => {
+export const checkPkgJson = async () => {
   const cwd = process.cwd();
   const pkgJsonPath = path.join(cwd, 'package.json');
 
@@ -326,11 +276,6 @@ export const checkPkgJsonAndCreateStarter = async () => {
     return;
   }
 
-  try {
-    await initializeMinimal();
-    return { isStarter: true };
-  } catch (err) {
-    logger.error(`Could not create project: ${err}`);
-    process.exit(0);
-  }
+  logger.info('no package.json found, create one or run "mastra create" to create a new project');
+  process.exit(0);
 };

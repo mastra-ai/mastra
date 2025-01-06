@@ -180,7 +180,9 @@ export class Mastra<
       llm.__setTelemetry(this.telemetry);
     }
 
-    llm.__setLogger(this.getLogger());
+    if (this.getLogger) {
+      llm.__setLogger(this.getLogger());
+    }
 
     return llm;
   }

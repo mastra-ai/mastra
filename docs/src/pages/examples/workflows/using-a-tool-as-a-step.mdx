@@ -1,0 +1,39 @@
+import { GithubLink } from '../../../components/github-link';
+
+# Tool as a Workflow step
+
+This example demonstrates how to create and integrate a custom tool as a workflow step, showing how to define input/output schemas and implement the tool's execution logic.
+
+```ts showLineNumbers copy
+import { createTool, Workflow } from '@mastra/core';
+import { z } from 'zod';
+
+const crawlWebpage = createTool({
+  id: 'Crawl Webpage',
+  description: 'Crawls a webpage and extracts the text content',
+  inputSchema: z.object({
+    url: z.string().url(),
+  }),
+  outputSchema: z.object({
+    rawText: z.string(),
+  }),
+  execute: async ({ context: { url } }) => {
+    return { rawText: 'This is the text content of the webpage' };
+  },
+});
+
+const contentWorkflow = new Workflow({ name: 'content-review' });
+
+contentWorkflow.step(crawlWebpage);
+contentWorkflow.commit();
+const res = await contentWorkflow.execute();
+
+console.log(res.results);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/tool-as-workflow-step.ts'} />

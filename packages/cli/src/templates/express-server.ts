@@ -159,7 +159,7 @@ app.get('/api/agents', async (_req: Request, res: Response) => {
 });
 
 /**
- * POST /api/agents/{agentId}/text
+ * POST /api/agents/{agentId}/generate
  * @summary Send text messages to agent
  * @tags Agent
  * @param {string} agentId.path.required - Agent identifier
@@ -168,7 +168,7 @@ app.get('/api/agents', async (_req: Request, res: Response) => {
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
  */
-app.post('/api/agents/:agentId/text', async (req: Request, res: Response) => {
+app.post('/api/agents/:agentId/generate', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
@@ -183,7 +183,13 @@ app.post('/api/agents/:agentId/text', async (req: Request, res: Response) => {
     }
 
     const result = await agent.generate(messages, { threadId, resourceid });
-    res.json(result);
+
+    const textResult = {
+      text: result.text,
+      agent: agent.name,
+    };
+
+    res.json(textResult);
   } catch (error) {
     const apiError = error as ApiError;
     console.error('Error texting from agent', apiError);
@@ -216,8 +222,7 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
       return;
     }
 
-    const streamResult = await agent.generate(messages, {
-      stream: true,
+    const streamResult = await agent.stream(messages, {
       threadId,
       resourceid,
     });
@@ -257,8 +262,14 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
       return;
     }
 
-    const result = await agent.generate(messages, { schema, threadId, resourceid });
-    res.json(result);
+    const result = await agent.generate(messages, { output: schema, threadId, resourceid });
+
+    const objectResult = {
+      object: result.object,
+      agent: result.agent,
+    };
+
+    res.json(objectResult);
   } catch (error) {
     const apiError = error as ApiError;
     console.error('Error getting structured output from agent', apiError);
@@ -295,7 +306,7 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
       return;
     }
 
-    const streamResult = await agent.generate(messages, { schema, stream: true, threadId, resourceid });
+    const streamResult = await agent.stream(messages, { output: schema, threadId, resourceid });
 
     streamResult.pipeTextStreamToResponse(res);
   } catch (error) {
@@ -411,8 +422,11 @@ app.post('/api/workflows/:workflowId/execute', async (req: Request, res: Respons
   try {
     const workflowId = req.params.workflowId;
     const workflow = mastra.getWorkflow(workflowId);
-    const result = await workflow.execute(req.body);
-    res.json(result);
+    const result = await workflow.execute({ triggerData: req.body });
+    res.json({
+      results: result?.results ?? {},
+      workflow: workflowId,
+    });
   } catch (error) {
     const apiError = error as ApiError;
     console.error('Error executing workflow', apiError);

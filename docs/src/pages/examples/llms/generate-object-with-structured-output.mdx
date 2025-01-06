@@ -1,0 +1,43 @@
+import { GithubLink } from '../../../components/github-link';
+
+# Generate Object With Structured Output
+
+Sometimes you need the language model to return data in a specific format rather than free-form text. This example shows how to use Zod schemas to get structured JSON output from the model, making it easier to work with the response in your application.
+
+```ts showLineNumbers copy
+import { Mastra } from '@mastra/core';
+import { z } from 'zod';
+
+const mastra = new Mastra();
+
+const llm = mastra.LLM({
+  provider: 'OPEN_AI',
+  name: 'gpt-4o',
+});
+
+const recipeSchema = z.object({
+  recipe: z.object({
+    name: z.string(),
+    ingredients: z.array(
+      z.object({
+        name: z.string(),
+        amount: z.string(),
+      }),
+    ),
+    steps: z.array(z.string()),
+  }),
+});
+
+const result = await llm.generate('Generate a egusi recipe.', {
+  output: recipeSchema,
+});
+
+console.log(JSON.stringify(result.object.recipe, null, 2));
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/llms/generate-object-structured.ts'} />

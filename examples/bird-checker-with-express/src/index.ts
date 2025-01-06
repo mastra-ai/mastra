@@ -68,7 +68,7 @@ app.post('/api/image-metadata', async (req: Request, res: Response) => {
         },
       ],
       {
-        schema: z.object({
+        output: z.object({
           bird: z.boolean(),
           species: z.string(),
           location: z.string(),

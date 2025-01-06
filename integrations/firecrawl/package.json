@@ -1,6 +1,6 @@
 {
   "name": "@mastra/firecrawl",
-  "version": "1.0.4-alpha.32",
+  "version": "1.0.4-alpha.34",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -24,7 +24,6 @@
   },
   "scripts": {
     "analyze": "size-limit --why",
-    "prepublish": "pnpm build",
     "build": "dts build",
     "build:dev": "dts watch",
     "lint": "dts lint",

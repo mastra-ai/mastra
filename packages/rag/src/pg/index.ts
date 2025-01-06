@@ -116,30 +116,50 @@ export class PgVector extends MastraVector {
   ): Promise<void> {
     const client = await this.pool.connect();
     try {
-      // Create the extension if it doesn't exist
+      // Validate inputs
+      if (!indexName.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
+        throw new Error('Invalid index name format');
+      }
+      if (!Number.isInteger(dimension) || dimension <= 0) {
+        throw new Error('Dimension must be a positive integer');
+      }
+
+      // First check if vector extension is available
+      const extensionCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT 1 FROM pg_available_extensions WHERE name = 'vector'
+        );
+      `);
+
+      if (!extensionCheck.rows[0].exists) {
+        throw new Error('PostgreSQL vector extension is not available. Please install it first.');
+      }
+
+      // Try to create extension
       await client.query('CREATE EXTENSION IF NOT EXISTS vector');
 
-      // Create the table
+      // Create the table with explicit schema
       await client.query(`
-                CREATE TABLE IF NOT EXISTS ${indexName} (
-                    id SERIAL PRIMARY KEY,
-                    vector_id TEXT UNIQUE NOT NULL,
-                    embedding vector(${dimension}),
-                    metadata JSONB DEFAULT '{}'::jsonb
-                );
-            `);
+        CREATE TABLE IF NOT EXISTS ${indexName} (
+          id SERIAL PRIMARY KEY,
+          vector_id TEXT UNIQUE NOT NULL,
+          embedding vector(${dimension}),
+          metadata JSONB DEFAULT '{}'::jsonb
+        );
+      `);
 
-      // Create an index for vector similarity search based on metric
+      // Create the index
       const indexMethod =
-        metric === 'cosine' ? 'vector_cosine_ops' : metric === 'euclidean' ? 'vector_l2_ops' : 'vector_ip_ops'; // for dotproduct
+        metric === 'cosine' ? 'vector_cosine_ops' : metric === 'euclidean' ? 'vector_l2_ops' : 'vector_ip_ops';
 
       await client.query(`
-                CREATE INDEX IF NOT EXISTS ${indexName}_vector_idx
-                ON ${indexName}
-                USING ivfflat (embedding ${indexMethod})
-                WITH (lists = 100);
-            `);
+        CREATE INDEX IF NOT EXISTS ${indexName}_vector_idx
+        ON public.${indexName}
+        USING ivfflat (embedding ${indexMethod})
+        WITH (lists = 100);
+      `);
     } catch (error: any) {
+      console.error('Failed to create vector table:', error);
       throw error;
     } finally {
       client.release();

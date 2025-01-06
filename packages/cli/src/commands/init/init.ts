@@ -1,33 +1,37 @@
-import { logger } from '../../utils/logger.js';
+import * as p from '@clack/prompts';
+import color from 'picocolors';
 
 import {
   Components,
   createComponentsDir,
   createMastraDir,
+  getAPIKey,
   LLMProvider,
   writeAPIKey,
   writeCodeSample,
   writeIndexFile,
 } from './utils.js';
 
+const s = p.spinner();
+
 export const init = async ({
   directory,
   addExample = false,
   components,
   llmProvider = 'openai',
-  showSpinner = false,
 }: {
   directory: string;
   components: string[];
   llmProvider: LLMProvider;
   addExample: boolean;
-  showSpinner?: boolean;
 }) => {
+  s.start('Initializing Mastra');
+
   try {
     const result = await createMastraDir(directory);
 
     if (!result.ok) {
-      logger.info('Mastra already initialized');
+      s.stop(color.inverse(' Mastra already initialized '));
       return { success: false };
     }
 
@@ -42,10 +46,19 @@ export const init = async ({
     if (addExample) {
       await Promise.all([components.map(component => writeCodeSample(dirPath, component as Components, llmProvider))]);
     }
-    showSpinner && logger.success('Mastra initialized successfully');
+
+    const key = await getAPIKey(llmProvider || 'openai');
+
+    s.stop();
+    p.note(`
+      ${color.green('Mastra initialized successfully!')}
+
+      Add your ${color.cyan(key)} as an environment variable
+      in your ${color.cyan('.env.development')} file
+      `);
     return { success: true };
   } catch (err) {
-    showSpinner && logger.error('Could not initialize mastra');
+    s.stop(color.inverse('An error occurred while initializing Mastra'));
     console.error(err);
     return { success: false };
   }

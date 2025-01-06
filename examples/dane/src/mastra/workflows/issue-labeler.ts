@@ -67,7 +67,7 @@ const labelIssue = new Step({
             What label or labels would you assign?
         `,
       {
-        schema: z.object({
+        output: z.object({
           labels: z.array(z.string()),
         }),
       },

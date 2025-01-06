@@ -23,7 +23,7 @@ export async function testStructuredOutput() {
   const lasagnaAgent = mastra.getAgent('lasagnaAgent');
 
   const recipe = await lasagnaAgent.generate('Generate a lasagna recipe for me', {
-    schema: z.object({
+    output: z.object({
       recipe: z.object({
         name: z.string(),
         ingredients: z.array(

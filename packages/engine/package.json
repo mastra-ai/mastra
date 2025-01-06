@@ -1,6 +1,6 @@
 {
   "name": "@mastra/engine",
-  "version": "0.0.5-alpha.40",
+  "version": "0.0.5-alpha.42",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/engine.esm.js",
@@ -26,8 +26,7 @@
     "generate-pg": "drizzle-kit generate --out=./dist/postgres/drizzle --dialect=postgresql --schema=./dist/postgres/db/schema.js",
     "migrate-pg": "pnpx tsx ./dist/postgres/migrate.js",
     "test-engine": "pnpx tsx ./src/postgres/engine.test.ts",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "prepublish": "pnpm build"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
   },
   "files": [
     "dist",

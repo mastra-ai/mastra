@@ -1,0 +1,26 @@
+import { GithubLink } from '../../../components/github-link';
+
+# Embed Text Chunk
+
+When working with individual text chunks, you need to convert them into numerical vectors for similarity search. The `embed` method transforms a single text chunk into an embedding using your chosen provider and model. 
+
+```tsx copy
+import { MDocument, embed } from "@mastra/rag";
+
+const doc = MDocument.fromText("Your text content...");
+
+const chunks = await doc.chunk();
+
+const { embedding } = await embed(chunks[0], {
+  provider: "OPEN_AI",
+  model: "text-embedding-ada-002",
+  maxRetries: 3,
+});
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/embed-text-chunk.ts'} />

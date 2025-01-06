@@ -1,0 +1,26 @@
+import { GithubLink } from '../../../components/github-link';
+
+# Embed Chunk Array
+
+After chunking documents, you need to convert the text chunks into numerical vectors that can be used for similarity search. The `embed` method transforms text chunks into embeddings using your chosen provider and model. This example shows how to generate embeddings for an array of text chunks.
+
+```tsx copy
+import { MDocument, embed } from "@mastra/rag";
+
+const doc = MDocument.fromText("Your text content...");
+
+const chunks = await doc.chunk();
+
+const { embeddings } = await embed(chunks, {
+  provider: "OPEN_AI",
+  model: "text-embedding-ada-002",
+  maxRetries: 3,
+});
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/embed-chunk-array.ts'} />

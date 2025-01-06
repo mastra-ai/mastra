@@ -1,0 +1,40 @@
+import { GithubLink } from '../../../components/github-link';
+
+# Retrieve Results
+
+After storing embeddings in a vector database, you need to query them to find similar content. The `query` method returns the most semantically similar chunks to your input embedding, ranked by relevance. This example shows how to retrieve similar chunks from a Pinecone vector database.
+
+```tsx copy
+import { MDocument, embed, PineconeVector } from '@mastra/rag';
+
+const doc = MDocument.fromText('Your text content...');
+
+const chunks = await doc.chunk();
+
+const { embeddings } = await embed(chunks, {
+  provider: 'OPEN_AI',
+  model: 'text-embedding-ada-002',
+  maxRetries: 3,
+});
+
+const pinecone = new PineconeVector('your-api-key');
+
+await pinecone.createIndex('test_index', 1536);
+
+await pinecone.upsert(
+  'test_index',
+  embeddings,
+  chunks?.map((chunk: any) => ({ text: chunk.text })),
+);
+
+const results = await pinecone.query('test_index', embeddings[0], 10);
+
+console.log(results);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/retrieve-results.ts'} />

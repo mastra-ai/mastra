@@ -40,6 +40,8 @@ export class NetlifyDeployer extends Deployer {
             '@mastra/core': '0.1.27-alpha.18',
             'serverless-http': 'latest',
             '@netlify/functions': 'latest',
+            superjson: '^2.2.2',
+            'zod-to-json-schema': '^3.24.1',
             express: '^4.21.1',
           },
         },

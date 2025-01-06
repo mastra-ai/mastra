@@ -1,7 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { z } from 'zod';
 
-import { createLogger } from '../logger';
 import { createSync } from '../sync';
 import { createTool } from '../tools';
 
@@ -115,10 +114,17 @@ describe('Workflow', () => {
 
       const workflow = new Workflow({
         name: 'test-workflow',
+        triggerSchema: z.object({
+          status: z.enum(['pending', 'success', 'failed']),
+        }),
       });
 
       workflow
-        .step(step1)
+        .step(step1, {
+          variables: {
+            status: { step: 'trigger', path: 'status' },
+          },
+        })
         .then(step2, {
           when: {
             ref: { step: step1, path: 'status' },
@@ -133,7 +139,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.execute();
+      const result = await workflow.execute({ triggerData: { status: 'pending' } });
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
@@ -208,6 +214,32 @@ describe('Workflow', () => {
 
   describe('Variable Resolution', () => {
     it('should resolve trigger data', async () => {
+      const execute = jest.fn<any>().mockResolvedValue({ result: 'success' });
+      const triggerSchema = z.object({
+        inputData: z.string(),
+      });
+
+      const step1 = new Step({ id: 'step1', execute });
+      const step2 = new Step({ id: 'step2', execute });
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        triggerSchema,
+      });
+
+      workflow.step(step1, {
+        variables: {
+          inputData: { step: 'trigger', path: 'inputData' },
+        },
+      }).then(step2).commit();
+
+      const result = await workflow.execute({ triggerData: { inputData: 'test-input' } });
+
+      expect(result.results.step1).toEqual({ status: 'success', payload: { result: 'success' } });
+      expect(result.results.step2).toEqual({ status: 'success', payload: { result: 'success' } });
+    });
+
+    it('should resolve trigger data from context', async () => {
       const execute = jest.fn<any>().mockResolvedValue({ result: 'success' });
       const triggerSchema = z.object({
         inputData: z.string(),
@@ -680,7 +712,7 @@ describe('Workflow', () => {
         .step(step3, {
           when: {
             ref: { step: step1, path: 'status' },
-            query: { $eq: 'success' },
+            query: { $eq: 'failed' },
           },
         })
         .then(step4)

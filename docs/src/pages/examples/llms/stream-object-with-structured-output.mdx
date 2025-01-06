@@ -1,0 +1,45 @@
+import { GithubLink } from '../../../components/github-link';
+
+# Stream Object with Structured Output
+
+When you need structured data from a language model, waiting for the complete response can take time. By streaming the output, you can display partial results as they arrive, providing immediate feedback to users. This example shows how to stream JSON-formatted responses using a Zod schema.
+
+```ts showLineNumbers copy
+import { Mastra } from '@mastra/core';
+import { z } from 'zod';
+
+const mastra = new Mastra();
+
+const llm = mastra.LLM({
+  provider: 'OPEN_AI',
+  name: 'gpt-4o',
+});
+
+const recipeSchema = z.object({
+  recipe: z.object({
+    name: z.string(),
+    ingredients: z.array(
+      z.object({
+        name: z.string(),
+        amount: z.string(),
+      }),
+    ),
+    steps: z.array(z.string()),
+  }),
+});
+
+const result = await llm.stream('Generate a egusi recipe.', {
+  output: recipeSchema,
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/llms/stream-object-structured.ts'} />

@@ -1,0 +1,138 @@
+# Adding Tools
+
+Tools are typed functions that can be executed by agents or workflows, with built-in integration access and parameter validation. Each tool has a schema that defines its inputs, an executor function that implements its logic, and access to configured integrations.
+
+## Creating Tools
+
+In this section, we'll walk through the process of creating a tool that can be used by your agents. Let's create a simple tool that fetches current weather information for a given city.
+
+### **Example Tool: Weather Information**
+
+First, let's define a tool that retrieves weather data using a public API.
+
+#### Adding a Weather Tool
+
+```typescript filename="src/mastra/tools/weatherInfo.ts"
+import { createTool } from "@mastra/core";
+import { z } from "zod";
+
+const getWeatherInfo = async (city: string) => {
+  // Replace with an actual API call to a weather service
+  const data = await fetch(`https://api.example.com/weather?city=${city}`).then(
+    (r) => r.json(),
+  );
+  return data;
+};
+
+export const weatherInfo = createTool({
+  id "Get Weather Information",
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  description: `Fetches the current weather information for a given city`,
+  execute: async ({ context: { city } }) => {
+    console.log("Using tool to fetch weather information for", city);
+    return await getWeatherInfo(city);
+  },
+});
+```
+
+In this code:
+
+- **`id`**: A human-readable name for the tool.
+- **`inputSchema`**: A Zod schema defining the expected input parameters.
+- **`description`**: A description of what the tool does.
+- **`execute`**: An asynchronous function that performs the tool's main logic.
+
+## Adding Tools to an Agent
+
+Now we'll add the tool to an agent. We'll create an agent that can answer questions about the weather and configure it to use our `weatherInfo` tool.
+
+#### Adding the Weather Tool to an Agent
+
+```typescript filename="src/mastra/agents/weatherAgent.ts"
+import { Agent } from "@mastra/core";
+import * as tools from "../tools/weatherInfo";
+
+export const weatherAgent = new Agent<typeof tools>({
+  name: "Weather Agent",
+  instructions:
+    "You are a helpful assistant that provides current weather information. When asked about the weather, use the weather information tool to fetch the data.",
+  model: {
+    provider: "OPEN_AI",
+    name: "gpt-4",
+    toolChoice: "required",
+  },
+  tools: {
+    weatherInfo: tools.weatherInfo,
+  },
+});
+```
+
+In this agent configuration:
+
+- **`name`**: A unique name for the agent.
+- **`instructions`**: Guidance provided to the agent to define its behavior.
+- **`model`**: Specifies the AI model to use.
+- **`tools`**: Specifies which tools the agent has access to.
+
+## Setting Up Mastra
+
+We need to initialize Mastra with our agent.
+
+#### Registering the Agent
+
+```typescript filename="src/index.ts"
+import { Mastra } from "@mastra/core";
+import { weatherAgent } from "./agents/weatherAgent";
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+});
+```
+
+This registers your agent with Mastra, making it available for use.
+
+## Debugging Tools
+
+You can test tools using Jest or any other testing framework. Writing unit tests for your tools ensures they behave as expected and helps catch errors early.
+
+## Calling an Agent with a Tool
+
+Now we can call the agent, and it will use the tool to fetch the weather information.
+
+#### Example: Interacting with the Agent
+
+```typescript filename="src/index.ts"
+import { mastra } from "./index";
+
+async function main() {
+  const agent = mastra.getAgent("weatherAgent");
+  const response = await agent.generate(
+    "What's the weather like in New York City today?",
+  );
+
+  console.log(response.text);
+}
+
+main();
+```
+
+The agent will use the `weatherInfo` tool to get the current weather in New York City and respond accordingly.
+
+## Tool Configuration
+
+A tool requires:
+
+- **`id`**: Name of the tool (e.g., "Get Weather Information").
+- **`inputSchema`**: Zod schema for validating inputs like city names.
+- **`description`**: Clear explanation of what the tool does.
+- **`execute`**: Async function that performs the tool's logic.
+
+The executor receives:
+
+- **`data`**: Contains the validated input parameters for your tool.
+- **`runId`**: Unique identifier for the current execution (optional).
+- **`agents`**: Access to all registered agents in the system.
+- **`engine`**: Reference to the Mastra engine instance (optional).
+- **`llm`**: Access to the Language Model instance.

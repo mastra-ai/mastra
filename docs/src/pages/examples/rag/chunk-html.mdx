@@ -1,0 +1,20 @@
+import { GithubLink } from '../../../components/github-link';
+
+# Chunk HTML
+
+When working with HTML content, you often need to break it down into smaller, manageable pieces while preserving the document structure. The chunk method splits HTML content intelligently, maintaining the integrity of HTML tags and elements. This example shows how to chunk HTML documents for search or retrieval purposes.
+
+```tsx copy
+import { MDocument } from "@mastra/rag";
+
+const doc = MDocument.fromHTML("<p>Your HTML content...</p>");
+
+const chunks = await doc.chunk();
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/chunk-html.ts'} />

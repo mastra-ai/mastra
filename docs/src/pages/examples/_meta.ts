@@ -1,10 +1,18 @@
 const meta = {
   index: {
-    title: "Examples",
-    type: "page",
-    theme: {
-      layout: "full",
-    },
+    title: "Overview",
+  },
+  llms: {
+    title: "LLM Models",
+  },
+  agents: {
+    title: "Agents",
+  },
+  workflows: {
+    title: "Workflows",
+  },
+  rag: {
+    title: "RAG",
   },
 };
 

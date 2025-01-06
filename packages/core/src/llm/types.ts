@@ -4,6 +4,8 @@ import {
   CoreAssistantMessage as AiCoreAssistantMessage,
   CoreUserMessage as AiCoreUserMessage,
   CoreToolMessage as AiCoreToolMessage,
+  EmbedManyResult as AiEmbedManyResult,
+  EmbedResult as AiEmbedResult,
   GenerateObjectResult,
   GenerateTextResult,
   LanguageModelV1,
@@ -24,6 +26,10 @@ export type CoreAssistantMessage = AiCoreAssistantMessage;
 export type CoreUserMessage = AiCoreUserMessage;
 
 export type CoreToolMessage = AiCoreToolMessage;
+
+export type EmbedResult<T> = AiEmbedResult<T>;
+
+export type EmbedManyResult<T> = AiEmbedManyResult<T>;
 
 export type OpenAIConfig = {
   provider: 'OPEN_AI';
@@ -546,10 +552,12 @@ export type StructuredOutput = {
       };
 };
 
-export type GenerateReturn<S extends boolean, Z> = S extends true
-  ? Z extends ZodSchema | JSONSchema7
-    ? StreamObjectResult<any, any, any>
-    : StreamTextResult<any>
-  : Z extends ZodSchema | JSONSchema7
-    ? GenerateObjectResult<any>
-    : GenerateTextResult<any, any>;
+export type GenerateReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends undefined
+  ? GenerateTextResult<any, any>
+  : GenerateObjectResult<any>;
+
+export type StreamReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends undefined
+  ? StreamTextResult<any>
+  : StreamObjectResult<any, any, any>;
+
+export type OutputType = 'text' | StructuredOutput;

@@ -32,6 +32,8 @@ export class CloudflareDeployer extends Deployer {
           dependencies: {
             '@mastra/core': '0.1.27-alpha.18',
             'itty-router': '5.0.18',
+            superjson: '^2.2.2',
+            'zod-to-json-schema': '^3.24.1',
           },
         },
         null,

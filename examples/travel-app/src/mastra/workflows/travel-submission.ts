@@ -118,7 +118,7 @@ function createArrangementStep({
           runId,
           threadId: sessionId,
           resourceid: `travel-workflow-${userId}`,
-          schema: z.object({
+          output: z.object({
             ids: z.array(z.string()),
             reasoning: z.string(),
           }),

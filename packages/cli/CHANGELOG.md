@@ -1,5 +1,68 @@
 # mastra
 
+## 0.1.57-alpha.74
+
+### Patch Changes
+
+- edd70b5: changeset
+
+## 0.1.57-alpha.73
+
+### Patch Changes
+
+- aacfff6: publish new mastra, create-mastra
+
+## 0.1.57-alpha.72
+
+### Patch Changes
+
+- 2667e66: fix create mastra publishing
+
+## 0.1.57-alpha.71
+
+### Patch Changes
+
+- 1d68b0c: update dane publishing
+
+## 0.1.57-alpha.70
+
+### Patch Changes
+
+- abdd42d: polish mastra create, fix create-mastra publishing
+
+## 0.1.57-alpha.69
+
+### Patch Changes
+
+- 32cd966: new mastra create command, publish create-mastra a way to quickly spin up mastra apps
+
+## 0.1.57-alpha.68
+
+### Patch Changes
+
+- c156b63: Add missing mastra deploy server deps
+
+## 0.1.57-alpha.67
+
+### Patch Changes
+
+- Updated dependencies [b726bf5]
+  - @mastra/core@0.1.27-alpha.48
+
+## 0.1.57-alpha.66
+
+### Patch Changes
+
+- f2c5dfa: update endpoint path
+
+## 0.1.57-alpha.65
+
+### Patch Changes
+
+- f6ba259: simplify generate api
+- Updated dependencies [f6ba259]
+  - @mastra/core@0.1.27-alpha.47
+
 ## 0.1.57-alpha.64
 
 ### Patch Changes
