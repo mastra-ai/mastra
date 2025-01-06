@@ -2,7 +2,7 @@ import { GithubLink } from '../../../components/github-link';
 
 # Workflow with Parallel Steps
 
-Workflow steps can run in parallel by using the `step` method
+Workflow steps can run in parallel for better performance. You can create parallel workflow steps with `step` that process the same input concurrently.
 
 ```ts showLineNumbers copy
 import { Step, Workflow } from '@mastra/core';

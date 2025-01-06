@@ -37,7 +37,7 @@ npm install @mastra/core
 
 Register your agent with Mastra to enable logging and access to configured tools and integrations:
 
-```ts showLineNumbers filename="src/mastra/index.ts" lines={3, 8} copy
+```ts showLineNumbers filename="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { myAgent } from "./agents";
 
@@ -64,7 +64,7 @@ console.log("Agent:", response.text);
 
 For more real-time responses, you can stream the agent's response:
 
-```ts showLineNumbers filename="src/mastra/index.ts" lines={6} copy
+```ts showLineNumbers filename="src/mastra/index.ts" copy
 const stream = await myAgent.stream([
   { role: "user", content: "Tell me a story." },
 ]);

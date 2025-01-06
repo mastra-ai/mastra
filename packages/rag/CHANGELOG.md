@@ -1,5 +1,14 @@
 # @mastra/rag
 
+## 0.0.2-alpha.33
+
+### Patch Changes
+
+- a621c34: Add validation for indexName in pgVector and dimension for all vector dbs
+- Updated dependencies [79acad0]
+- Updated dependencies [f5dfa20]
+  - @mastra/core@0.1.27-alpha.49
+
 ## 0.0.2-alpha.32
 
 ### Patch Changes

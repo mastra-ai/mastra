@@ -21,6 +21,7 @@ import {
   StepGraph,
   StepNode,
   StepResult,
+  StepVariableType,
   WorkflowActionParams,
   WorkflowActions,
   WorkflowActors,
@@ -117,9 +118,9 @@ export class Workflow<
 
   step<
     TStep extends IAction<any, any, any, any>,
-    CondStep extends IAction<any, any, any, any> | 'trigger',
-    VarStep extends IAction<any, any, any, any> | 'trigger',
-  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep>) {
+    CondStep extends StepVariableType<any, any, any, any>,
+    VarStep extends StepVariableType<any, any, any, any>,
+  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>) {
     const { variables = {} } = config || {};
 
     const requiredData: Record<string, any> = {};
@@ -167,9 +168,9 @@ export class Workflow<
 
   then<
     TStep extends IAction<any, any, any, any>,
-    CondStep extends IAction<any, any, any, any> | 'trigger',
-    VarStep extends IAction<any, any, any, any> | 'trigger',
-  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep>) {
+    CondStep extends StepVariableType<any, any, any, any>,
+    VarStep extends StepVariableType<any, any, any, any>,
+  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>) {
     const { variables = {} } = config || {};
 
     const requiredData: Record<string, any> = {};
@@ -859,10 +860,50 @@ export class Workflow<
   /**
    * Evaluates a single condition against workflow context
    */
-  #evaluateCondition(condition: StepCondition<any>, context: WorkflowContext): boolean {
+  #evaluateCondition<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodType<any>>(
+    condition: StepCondition<TStep, TTriggerSchema>,
+    context: WorkflowContext,
+  ): boolean {
     let andBranchResult = true;
     let baseResult = true;
     let orBranchResult = true;
+
+    // Base condition simplified format
+    const simpleCondition = Object.entries(condition).find(([key]) => key.includes('.'));
+    if (simpleCondition) {
+      const [key, queryValue] = simpleCondition;
+      const [stepId, ...pathParts] = key.split('.');
+      const path = pathParts.join('.');
+
+      const sourceData =
+        stepId === 'trigger' ? context.triggerData : getStepResult(context.stepResults[stepId as string]);
+
+      this.log(LogLevel.DEBUG, `Got condition data from ${stepId}`, {
+        sourceData,
+        runId: this.#runId,
+      });
+
+      if (!sourceData) {
+        return false;
+      }
+
+      let value = get(sourceData, path);
+
+      // If path is 'status', check if value is empty and we are not referencing the trigger.
+      // Currently only successful step results get to this point, so we can safely assume that the status is 'success'
+      if (stepId !== 'trigger' && path === 'status' && !value) {
+        value = 'success';
+      }
+
+      // Handle different types of queries
+      if (typeof queryValue === 'object' && queryValue !== null) {
+        // If it's an object, treat it as a query object
+        baseResult = sift(queryValue)(value);
+      } else {
+        // For simple values, do an equality check
+        baseResult = value === queryValue;
+      }
+    }
 
     // Base condition
     if ('ref' in condition) {
@@ -878,7 +919,14 @@ export class Workflow<
         return false;
       }
 
-      const value = get(sourceData, ref.path);
+      let value = get(sourceData, ref.path);
+
+      // If path is 'status', check if value is empty and we are not referencing the trigger.
+      // Currently only successful step results get to this point, so we can safely assume that the status is 'success'
+      if (ref.step !== 'trigger' && ref.path === 'status' && !value) {
+        value = 'success';
+      }
+
       baseResult = sift(query)(value);
     }
 
