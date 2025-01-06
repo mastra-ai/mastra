@@ -1,5 +1,5 @@
 {
-  "name": "workflow-inline",
+  "name": "workflow-with-inline-steps",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
