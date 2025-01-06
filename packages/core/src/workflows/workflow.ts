@@ -622,6 +622,11 @@ export class Workflow<
           },
         },
         suspended: {
+          on: {
+            RESUME: {
+              target: 'pending',
+            },
+          },
           entry: () => {
             this.log(LogLevel.INFO, `Step ${stepNode.step.id} suspended ${new Date().toISOString()}`);
           },
@@ -630,7 +635,7 @@ export class Workflow<
           },
           after: {
             [stepNode.step.id]: {
-              target: 'pending',
+              target: 'suspended',
             },
           },
         },
