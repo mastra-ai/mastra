@@ -119,7 +119,8 @@ candidateWorkflow
       },
     },
   })
-  .then(askAboutRole, {
+  .after(gatherCandidateInfo)
+  .step(askAboutRole, {
     when: { 'gatherCandidateInfo.isTechnical': false },
     variables: {
       candidateInfo: {
