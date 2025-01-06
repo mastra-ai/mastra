@@ -1,3 +1,5 @@
+import Image from 'next/image';
+
 # Logging and Tracing
 
 Effective logging and tracing are crucial for understanding the behavior of your application.
@@ -79,12 +81,14 @@ This gives you visibility into your application's behavior without any additiona
 
 Here's what a traced agent interaction looks like in [Signoz](https://signoz.io):
 
-<img
+<Image
   src="/signoz-telemetry-demo.png"
   alt="Agent interaction trace showing spans, LLM calls, and tool executions"
   style={{ maxWidth: '800px', width: '100%', margin: '8px 0' }}
-  className="nextra-image"
+  className="nextra-image rounded-md"
   data-zoom
+  width={800}
+  height={400}
 />
 
 ### Configuration Options
