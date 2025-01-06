@@ -111,7 +111,7 @@ export interface StepConfig<
   TTriggerSchema extends z.ZodType<any>,
 > {
   snapshotOnTimeout?: boolean;
-  when?: Condition<CondStep, TTriggerSchema> | ((args: { context: WorkflowContext }) => Promise<boolean>);
+  when?: Condition<CondStep, TTriggerSchema> | ((args: { context: WorkflowContext<TTriggerSchema> }) => Promise<boolean>);
   variables?: StepInputType<TStep, 'inputSchema'> extends never
     ? Record<string, VariableReference<VarStep, TTriggerSchema>>
     : {
@@ -136,9 +136,9 @@ type StepFailure = {
 export type StepResult<T> = StepSuccess<T> | StepFailure | StepSuspended;
 
 // Update WorkflowContext
-export interface WorkflowContext<TTrigger = any> {
+export interface WorkflowContext<TTrigger extends z.ZodType<any> = any> {
   stepResults: Record<string, StepResult<any>>;
-  triggerData: TTrigger;
+  triggerData: z.infer<TTrigger>;
   attempts: Record<string, number>;
 }
 
