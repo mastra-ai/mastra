@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.52
+
+### Patch Changes
+
+- eedb829: Better types, and correct payload resolution
+
 ## 0.1.27-alpha.51
 
 ### Patch Changes

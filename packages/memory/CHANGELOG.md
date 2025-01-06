@@ -1,5 +1,12 @@
 # @mastra/memory
 
+## 0.0.2-alpha.32
+
+### Patch Changes
+
+- Updated dependencies [eedb829]
+  - @mastra/core@0.1.27-alpha.52
+
 ## 0.0.2-alpha.31
 
 ### Patch Changes

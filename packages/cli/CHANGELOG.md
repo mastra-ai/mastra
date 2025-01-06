@@ -1,5 +1,13 @@
 # mastra
 
+## 0.1.57-alpha.78
+
+### Patch Changes
+
+- f79a9ff: Fix example tool execution not workin in dev, add example tool to example agent, add example workflow to main Mastra export
+- Updated dependencies [eedb829]
+  - @mastra/core@0.1.27-alpha.52
+
 ## 0.1.57-alpha.77
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @mastra/github
 
+## 1.0.3-alpha.36
+
+### Patch Changes
+
+- Updated dependencies [eedb829]
+  - @mastra/core@0.1.27-alpha.52
+
 ## 1.0.3-alpha.35
 
 ### Patch Changes
