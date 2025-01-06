@@ -1,5 +1,5 @@
 {
-  "name": "workflow-with-variables",
+  "name": "workflow-with-separate-steps",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
