@@ -1,6 +1,5 @@
+import { MastraEngine, DatabaseConfig } from './engine';
 import { BaseEntity, BaseRecord, QueryOptions } from './types';
-
-import { MastraEngine, DatabaseConfig } from '.';
 
 export class MockMastraEngine extends MastraEngine {
   private entities: BaseEntity[] = [];
