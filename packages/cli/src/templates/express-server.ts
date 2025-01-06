@@ -414,7 +414,7 @@ app.get('/api/workflows/:workflowId', async (req: Request, res: Response) => {
  * @summary Execute a workflow
  * @tags Workflow
  * @param {string} workflowId.path.required - Workflow identifier
- * @param {object} request.body.required - Workflow input data
+ * @param {object} request.body.required - Workflow trigger data
  * @return {object} 200 - Workflow execution result
  * @return {Error} 500 - Server error
  */

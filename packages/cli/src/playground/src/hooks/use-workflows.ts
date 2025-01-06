@@ -84,7 +84,7 @@ export const useExecuteWorkflow = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ triggerData: input }),
+        body: JSON.stringify(input),
       });
 
       if (!response.ok) {
