@@ -262,11 +262,14 @@ describe('Workflow', () => {
         triggerSchema,
       });
 
-      workflow.step(step1, {
-        variables: {
-          inputData: { step: 'trigger', path: 'inputData' },
-        },
-      }).then(step2).commit();
+      workflow
+        .step(step1, {
+          variables: {
+            inputData: { step: 'trigger', path: 'inputData' },
+          },
+        })
+        .then(step2)
+        .commit();
 
       const result = await workflow.execute({ triggerData: { inputData: 'test-input' } });
 
