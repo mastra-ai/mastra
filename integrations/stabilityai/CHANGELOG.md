@@ -1,5 +1,12 @@
 # @mastra/stabilityai
 
+## 1.0.1-alpha.25
+
+### Patch Changes
+
+- Updated dependencies [401a4d9]
+  - @mastra/core@0.1.27-alpha.50
+
 ## 1.0.1-alpha.24
 
 ### Patch Changes

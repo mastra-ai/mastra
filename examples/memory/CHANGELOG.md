@@ -1,5 +1,13 @@
 # llm
 
+## 1.0.1-alpha.29
+
+### Patch Changes
+
+- Updated dependencies [401a4d9]
+  - @mastra/core@0.1.27-alpha.50
+  - @mastra/memory@0.0.2-alpha.30
+
 ## 1.0.1-alpha.28
 
 ### Patch Changes

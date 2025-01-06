@@ -1,5 +1,13 @@
 # examples-vnext-playground
 
+## 1.0.1-alpha.26
+
+### Patch Changes
+
+- Updated dependencies [401a4d9]
+  - @mastra/core@0.1.27-alpha.50
+  - @mastra/engine@0.0.5-alpha.44
+
 ## 1.0.1-alpha.25
 
 ### Patch Changes
