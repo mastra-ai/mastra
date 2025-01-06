@@ -312,6 +312,51 @@ describe('Workflow', () => {
       });
     });
 
+    it('should resolve variables from trigger data', async () => {
+      const execute = jest.fn<any>().mockResolvedValue({ result: 'success' });
+      const triggerSchema = z.object({
+        inputData: z.object({
+          nested: z.object({
+            value: z.string(),
+          }),
+        }),
+      });
+
+      const step1 = new Step({ id: 'step1', execute });
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        triggerSchema,
+      });
+
+      workflow
+        .step(step1, {
+          variables: {
+            tData: { step: 'trigger', path: '.' },
+          },
+        })
+        .commit();
+
+      const baseContext = {
+        attempts: { step1: 3 },
+        stepResults: {},
+        triggerData: { inputData: { nested: { value: 'test' } } },
+      };
+
+      await workflow.execute({ triggerData: { inputData: { nested: { value: 'test' } } } });
+
+      expect(execute).toHaveBeenCalledWith({
+        context: {
+          machineContext: {
+            ...baseContext,
+            triggerData: { inputData: { nested: { value: 'test' } } },
+          },
+          tData: { inputData: { nested: { value: 'test' } } },
+        },
+        runId: expect.any(String),
+      });
+    });
+
     it('should resolve variables from previous steps', async () => {
       const step1Action = jest.fn<any>().mockResolvedValue({
         nested: { value: 'step1-data' },

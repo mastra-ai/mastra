@@ -844,7 +844,7 @@ export class Workflow<
       }
 
       // If path is empty or '.', return the entire source data
-      const value = variable.path === '' || variable.path === '.' ? sourceData[key] : get(sourceData, variable.path);
+      const value = variable.path === '' || variable.path === '.' ? sourceData : get(sourceData, variable.path);
 
       this.log(LogLevel.DEBUG, `Resolved variable ${key}`, {
         value,
