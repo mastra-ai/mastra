@@ -622,7 +622,7 @@ describe('Workflow', () => {
         .step(step3, {
           when: {
             ref: { step: step1, path: 'status' },
-            query: { $eq: 'success' },
+            query: { $eq: 'failed' },
           },
         })
         .then(step4)

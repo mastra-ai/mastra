@@ -20,6 +20,18 @@ export interface StepAction<
   retryConfig?: RetryConfig;
 }
 
+// For the simple key-value condition
+interface SimpleConditionalType {
+  [key: `${string}.${string}`]: string | Query<any>;
+}
+
+export type StepVariableType<
+  TId extends string,
+  TSchemaIn extends z.ZodSchema | undefined,
+  TSchemaOut extends z.ZodSchema | undefined,
+  TContext extends IExecutionContext<TSchemaIn>,
+> = IAction<TId, TSchemaIn, TSchemaOut, TContext> | 'trigger' | { id: string };
+
 export type StepNode = { step: IAction<any, any, any, any>; config: StepDef<any, any, any, any>[any] };
 
 export type StepGraph = {
@@ -29,27 +41,37 @@ export type StepGraph = {
 
 export type RetryConfig = { attempts?: number; delay?: number };
 
-export type VariableReference<TStep extends IAction<any, any, any, any> | 'trigger'> =
+export type VariableReference<TStep extends StepVariableType<any, any, any, any>> =
   TStep extends IAction<any, any, any, any>
     ? {
         step: TStep;
         path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '' | '.';
       }
-    : {
-        step: 'trigger';
-        path: string; // TODO: Add trigger schema types
-      };
+    : TStep extends 'trigger'
+      ? {
+          step: 'trigger';
+          path: string; // TODO: Add trigger schema types
+        }
+      : {
+          step: { id: string };
+          path: string;
+        };
 
-export interface BaseCondition<TStep extends IAction<any, any, any, any> | 'trigger'> {
+export interface BaseCondition<TStep extends StepVariableType<any, any, any, any>> {
   ref: TStep extends IAction<any, any, any, any>
     ? {
         step: TStep;
-        path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '' | '.';
+        path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '' | '.' | 'status';
       }
-    : {
-        step: 'trigger';
-        path: string;
-      };
+    : TStep extends 'trigger'
+      ? {
+          step: 'trigger';
+          path: string;
+        }
+      : {
+          step: { id: string };
+          path: string;
+        };
   query: Query<any>;
 }
 
@@ -70,20 +92,22 @@ export type StepDef<
   }
 >;
 
-export type StepCondition<TStep extends IAction<any, any, any, any> | 'trigger'> =
+export type StepCondition<TStep extends StepVariableType<any, any, any, any>> =
   | BaseCondition<TStep>
+  | SimpleConditionalType
   | { and: StepCondition<TStep>[] }
   | { or: StepCondition<TStep>[] };
 
-type Condition<TStep extends IAction<any, any, any, any> | 'trigger'> =
+type Condition<TStep extends StepVariableType<any, any, any, any>> =
   | BaseCondition<TStep>
+  | SimpleConditionalType
   | { and: Condition<TStep>[] }
   | { or: Condition<TStep>[] };
 
 export interface StepConfig<
   TStep extends IAction<any, any, any, any>,
-  CondStep extends IAction<any, any, any, any> | 'trigger',
-  VarStep extends IAction<any, any, any, any> | 'trigger',
+  CondStep extends StepVariableType<any, any, any, any>,
+  VarStep extends StepVariableType<any, any, any, any>,
 > {
   snapshotOnTimeout?: boolean;
   when?: Condition<CondStep> | ((args: { context: WorkflowContext }) => Promise<boolean>);
