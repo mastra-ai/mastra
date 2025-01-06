@@ -1,0 +1,80 @@
+---
+title: Observability Providers
+description: Learn about the available observability and tracing providers for Mastra
+---
+
+# Observability Providers
+
+Mastra uses OpenTelemetry Protocol (OTLP) for telemetry data, making it compatible with any observability platform that supports OTLP.
+
+## Braintrust
+
+[Braintrust](https://www.braintrustdata.com/) provides comprehensive LLM observability and evaluation.
+
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=https://api.braintrust.dev/otel
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <Your API Key>, x-bt-parent=project_id:<Your Project ID>"
+```
+
+## Traceloop
+
+[Traceloop](https://traceloop.com/) offers OpenTelemetry-based observability specifically designed for LLM applications.
+
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=https://api.traceloop.com/v1/traces
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <Your API Key>"
+```
+
+## LangSmith
+
+[LangSmith](https://smith.langchain.com/) by LangChain provides debugging, testing, and monitoring capabilities for LLM applications.
+
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=https://api.smith.langchain.com/otel
+OTEL_EXPORTER_OTLP_HEADERS="x-api-key=<your langsmith api key>"
+```
+
+## Langfuse
+
+[Langfuse](https://langfuse.com) is an open-source observability and analytics platform for LLM applications.
+
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.langfuse.com
+OTEL_EXPORTER_OTLP_HEADERS="x-api-key=<your langfuse secret key>"
+```
+
+## LangWatch
+
+[LangWatch](https://langwatch.ai/) offers monitoring and analytics for LLM applications.
+
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.langwatch.ai
+OTEL_EXPORTER_OTLP_HEADERS="x-api-key=<your langwatch api key>"
+```
+
+## HoneyHive
+
+[HoneyHive](https://honeyhive.ai/) provides monitoring and evaluation tools for LLM applications.
+
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=https://app.honeyhive.ai/otel
+OTEL_EXPORTER_OTLP_HEADERS="x-api-key=<your honeyhive api key>"
+```
+
+## Laminar
+
+[Laminar](https://www.laminar.dev/) helps you monitor and optimize your AI applications.
+
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.laminar.dev/v1/traces
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <your laminar api key>"
+```
+
+## Custom OTLP Endpoint
+
+You can also use any other OpenTelemetry collector or platform that supports OTLP:
+
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=<your-otlp-endpoint>
+OTEL_EXPORTER_OTLP_HEADERS=<your-headers>  # if required
+```

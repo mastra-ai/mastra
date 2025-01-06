@@ -1,4 +1,4 @@
-import Image from 'next/image';
+import Image from "next/image";
 
 # Logging and Tracing
 
@@ -6,24 +6,22 @@ Effective logging and tracing are crucial for understanding the behavior of your
 
 Tracing is especially important for AI engineering. Teams building AI products find that visibility into inputs and outputs of every step of every run is crucial to improving accuracy. You get this with Mastra's telemetry.
 
-You can log to console or send log drains to third party services like Upstash. You can send traces to your favorite observability service like Datadog, Honeycomb, as well as AI-specific observability services like Braintrust or Langfuse.
-
 ## Logging
 
 In Mastra, logs can detail when certain functions run, what input data they receive, and how they respond.
 
 ### Basic Setup
 
-Here’s a minimal example that sets up a **console logger** at the `INFO` level. This will print out informational messages and above (i.e., `INFO`, `WARN`, `ERROR`) to the console.
+Here's a minimal example that sets up a **console logger** at the `INFO` level. This will print out informational messages and above (i.e., `INFO`, `WARN`, `ERROR`) to the console.
 
 ```typescript filename="mastra.config.ts" showLineNumbers copy
-import { Mastra, createLogger } from '@mastra/core';
+import { Mastra, createLogger } from "@mastra/core";
 
 export const mastra = new Mastra({
   // Other Mastra configuration...
   logger: createLogger({
-    type: 'CONSOLE',
-    level: 'INFO',
+    type: "CONSOLE",
+    level: "INFO",
   }),
 });
 ```
@@ -42,7 +40,7 @@ In this configuration:
 
 ## Telemetry
 
-Mastra supports OpenTelemetry for tracing and monitoring your application. You can enable telemetry by adding the `telemetry` property to your Mastra configuration.
+Mastra supports OpenTelemetry Protocol (OTLP) for tracing and monitoring your application. When telemetry is enabled, Mastra automatically traces all core primitives including agent operations, LLM interactions, tool executions, integration calls, workflow runs, and database operations.
 
 ### Basic Configuration
 
@@ -52,44 +50,18 @@ Here's a simple example of enabling telemetry:
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: 'my-app',
+    serviceName: "my-app",
     enabled: true,
     sampling: {
-      type: 'always_on',
+      type: "always_on",
     },
     export: {
-      type: 'console',
+      type: "otlp",
+      endpoint: "http://localhost:4318", // SigNoz local endpoint
     },
   },
 });
 ```
-
-### Automatic Instrumentation
-
-When telemetry is enabled, Mastra automatically traces all core primitives including:
-
-- Agent operations and steps
-- LLM interactions
-- Tool executions
-- Integration calls
-- Workflow runs
-- Database operations
-
-This gives you visibility into your application's behavior without any additional configuration.
-
-### Example: Tracing an Agent Interaction
-
-Here's what a traced agent interaction looks like in [Signoz](https://signoz.io):
-
-<Image
-  src="/signoz-telemetry-demo.png"
-  alt="Agent interaction trace showing spans, LLM calls, and tool executions"
-  style={{ maxWidth: '800px', width: '100%', margin: '8px 0' }}
-  className="nextra-image rounded-md"
-  data-zoom
-  width={800}
-  height={400}
-/>
 
 ### Configuration Options
 
@@ -105,7 +77,7 @@ type OtelConfig = {
 
   // Control how many traces are sampled
   sampling?: {
-    type: 'ratio' | 'always_on' | 'always_off' | 'parent_based';
+    type: "ratio" | "always_on" | "always_off" | "parent_based";
     probability?: number; // For ratio sampling
     root?: {
       probability: number; // For parent_based sampling
@@ -114,7 +86,7 @@ type OtelConfig = {
 
   // Where to send telemetry data
   export?: {
-    type: 'otlp' | 'console';
+    type: "otlp" | "console";
     endpoint?: string;
     headers?: Record<string, string>;
   };
@@ -123,13 +95,13 @@ type OtelConfig = {
 
 See the [OtelConfig reference documentation](/docs/reference/observability/otel-config.mdx) for more details.
 
-### Using Environment Variables
+### Environment Variables
 
 You can configure the OTLP endpoint and headers through environment variables:
 
 ```env filename=".env" copy
-OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io
-OTEL_EXPORTER_OTLP_HEADERS=x-honeycomb-team=your-api-key
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+OTEL_EXPORTER_OTLP_HEADERS=x-api-key=your-api-key
 ```
 
 Then in your config:
@@ -138,15 +110,33 @@ Then in your config:
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: 'my-app',
+    serviceName: "my-app",
     enabled: true,
     export: {
-      type: 'otlp',
+      type: "otlp",
       // endpoint and headers will be picked up from env vars
     },
   },
 });
 ```
+
+### Example: SigNoz Integration
+
+Here's what a traced agent interaction looks like in [SigNoz](https://signoz.io):
+
+<Image
+  src="/signoz-telemetry-demo.png"
+  alt="Agent interaction trace showing spans, LLM calls, and tool executions"
+  style={{ maxWidth: "800px", width: "100%", margin: "8px 0" }}
+  className="nextra-image rounded-md"
+  data-zoom
+  width={800}
+  height={400}
+/>
+
+### Other Supported Providers
+
+For a complete list of supported observability providers and their configuration details, see the [Observability Providers reference](/docs/reference/observability/providers.mdx).
 
 ### Next.js Configuration
 
@@ -161,10 +151,10 @@ npm install import-in-the-middle # or require-in-the-middle for CJS
 2. Add it as an external dependency in your Next.js config:
 
 ```ts filename="next.config.ts" showLineNumbers copy
-import type { NextConfig } from 'next';
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['import-in-the-middle'],
+  serverExternalPackages: ["import-in-the-middle"],
 };
 
 export default nextConfig;
