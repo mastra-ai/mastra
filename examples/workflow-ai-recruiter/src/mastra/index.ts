@@ -1,5 +1,8 @@
 import { Step, Workflow, Mastra } from '@mastra/core';
+import dotenv from 'dotenv';
 import { z } from 'zod';
+
+dotenv.config();
 
 const gatherCandidateInfo = new Step({
   id: 'gatherCandidateInfo',
