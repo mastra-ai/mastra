@@ -33,10 +33,10 @@ In this configuration:
 
 ### Configuration
 
-- For more details on the options you can pass to `createLogger()`, see the [createLogger reference documentation](/guide/reference/observability/createLogger.mdx).
-- Once you have a `Logger` instance, you can call its methods (e.g., `.info()`, `.warn()`, `.error()`) in the [Logger instance reference documentation](/guide/reference/observability/logger.mdx).
-- If you need to direct logs to multiple destinations—like both console and an external logging service—see the [combineLoggers reference documentation](/guide/reference/observability/create-combinnedlogger.mdx).
-- If you want to send your logs to an external service for centralized collection, analysis, or storage, you can configure other logger types such as Upstash Redis. Consult the [createLogger reference documentation](/guide/reference/observability/createLogger.mdx) for details on parameters like `url`, `token`, and `key` when using the `UPSTASH` logger type.
+- For more details on the options you can pass to `createLogger()`, see the [createLogger reference documentation](/docs/reference/observability/create-logger.mdx).
+- Once you have a `Logger` instance, you can call its methods (e.g., `.info()`, `.warn()`, `.error()`) in the [Logger instance reference documentation](/docs/reference/observability/logger.mdx).
+- If you need to direct logs to multiple destinations—like both console and an external logging service—see the [combineLoggers reference documentation](/docs/reference/observability/combine-loggers.mdx).
+- If you want to send your logs to an external service for centralized collection, analysis, or storage, you can configure other logger types such as Upstash Redis. Consult the [createLogger reference documentation](/docs/reference/observability/create-logger.mdx) for details on parameters like `url`, `token`, and `key` when using the `UPSTASH` logger type.
 
 ## Telemetry
 
@@ -80,7 +80,7 @@ This gives you visibility into your application's behavior without any additiona
 Here's what a traced agent interaction looks like in [Signoz](https://signoz.io):
 
 <img
-  src="/docs/signoz-telemetry-demo.png"
+  src="/signoz-telemetry-demo.png"
   alt="Agent interaction trace showing spans, LLM calls, and tool executions"
   style={{ maxWidth: '800px', width: '100%', margin: '8px 0' }}
   className="nextra-image"
@@ -117,7 +117,7 @@ type OtelConfig = {
 };
 ```
 
-See the [OtelConfig reference documentation](/guide/reference/observability/otel-config.mdx) for more details.
+See the [OtelConfig reference documentation](/docs/reference/observability/otel-config.mdx) for more details.
 
 ### Using Environment Variables
 

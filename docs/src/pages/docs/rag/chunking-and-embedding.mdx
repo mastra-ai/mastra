@@ -26,7 +26,7 @@ You can also enable metadata extraction, which uses LLM calls behind the scenes 
 import { MDocument } from "@mastra/rag";
 const doc = MDocument.fromText("Your plain text content...");
 
-const chunks = doc.chunk({
+const chunks = await doc.chunk({
   strategy: "recursive",
   size: 512,
   overlap: 50,
@@ -43,20 +43,21 @@ This splits the document into chunks and extracts metadata. There are a variety 
 Transform chunks into embeddings using an embedding model:
 
 ```ts showLineNumbers copy
+import { EmbedManyResult, EmbedResult } from "@mastra/core";
 import { embed } from "@mastra/rag";
 
-const embeddings = await embed(chunks, {
+const manyEmbeddings = (await embed(chunks, {
   provider: "OPEN_AI",
   model: "text-embedding-ada-002",
   maxRetries: 3,
-});
+})) as EmbedManyResult<string>;
 
 // Embed a single chunk if needed:
-const singleEmbedding = await embed(chunks[0], {
+const singleEmbedding = (await embed(chunks[0], {
   provider: "OPEN_AI",
   model: "text-embedding-ada-002",
   maxRetries: 3,
-});
+})) as EmbedResult<string>;
 ```
 
 Embeddings are arrays of numbers representing the semantic meaning of the text. They enable similarity searches in a vector database.
