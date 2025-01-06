@@ -40,13 +40,17 @@ export const init = async ({
     const dirPath = result.dirPath;
 
     await Promise.all([
-      writeIndexFile(dirPath, addExample),
+      writeIndexFile(dirPath, addExample, components.includes('workflows')),
       ...components.map(component => createComponentsDir(dirPath, component)),
       writeAPIKey({ provider: llmProvider, apiKey: llmApiKey }),
     ]);
 
     if (addExample) {
-      await Promise.all([components.map(component => writeCodeSample(dirPath, component as Components, llmProvider))]);
+      await Promise.all([
+        components.map(component =>
+          writeCodeSample(dirPath, component as Components, llmProvider, components as Components[]),
+        ),
+      ]);
     }
 
     const key = await getAPIKey(llmProvider || 'openai');
