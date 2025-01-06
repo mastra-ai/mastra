@@ -1,4 +1,3 @@
-// import { watch } from 'fs/promises';
 import { watch } from 'chokidar';
 import { config } from 'dotenv';
 import { execa } from 'execa';
@@ -18,7 +17,7 @@ import { EXPRESS_SERVER } from './deploy/server.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-let currentServerProcess: any | null = null;
+let currentServerProcess: any;
 
 async function rebundleAndRestart(dirPath: string, dotMastraPath: string, port: number, toolsDirs?: string) {
   if (currentServerProcess) {
