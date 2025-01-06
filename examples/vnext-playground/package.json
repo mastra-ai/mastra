@@ -1,7 +1,7 @@
 {
   "name": "examples-vnext-playground",
   "type": "module",
-  "version": "1.0.1-alpha.24",
+  "version": "1.0.1-alpha.25",
   "description": "",
   "main": "index.js",
   "private": true,
