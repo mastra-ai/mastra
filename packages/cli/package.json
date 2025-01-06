@@ -59,6 +59,7 @@
     "@tanstack/react-virtual": "^3.10.4",
     "@types/figlet": "^1.7.0",
     "@xyflow/react": "^12.3.6",
+    "chokidar": "^4.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
