@@ -1,5 +1,15 @@
 # mastra
 
+## 0.1.57-alpha.77
+
+### Patch Changes
+
+- 538a136: Added Simple Condition for workflows, updated /api/workflows/{workflowId}/execute endpoint and docs
+- Updated dependencies [a7b016d]
+- Updated dependencies [da2e8d3]
+- Updated dependencies [538a136]
+  - @mastra/core@0.1.27-alpha.51
+
 ## 0.1.57-alpha.76
 
 ### Patch Changes

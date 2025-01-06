@@ -1,5 +1,14 @@
 # examples-agent
 
+## 1.0.1-alpha.29
+
+### Patch Changes
+
+- Updated dependencies [a7b016d]
+- Updated dependencies [da2e8d3]
+- Updated dependencies [538a136]
+  - @mastra/core@0.1.27-alpha.51
+
 ## 1.0.1-alpha.28
 
 ### Patch Changes
