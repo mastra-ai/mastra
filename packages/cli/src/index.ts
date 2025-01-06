@@ -60,7 +60,6 @@ program
             components: ['agents', 'tools', 'workflows'],
             llmProvider: 'openai',
             addExample: false,
-            llmApiKey: args['llm-api-key'],
           });
         }
         await create({
@@ -105,7 +104,6 @@ program
             components: ['agents', 'tools', 'workflows'],
             llmProvider: 'openai',
             addExample: false,
-            llmApiKey: args['llm-api-key'],
           });
           return;
         }
