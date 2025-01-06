@@ -311,11 +311,11 @@ myWorkflow.commit();
 
 Add the workflow to your Mastra instance.
 
-```typescript filename="src/mastra/index.ts"
+```typescript filename="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { z } from "zod";
 
-import { myWorkflow } from "./workflows/workflow";
+import { myWorkflow } from "./workflows";
 
 export const mastra = new Mastra({
   workflows: { myWorkflow },
@@ -330,7 +330,7 @@ We can now serve the workflow using the `mastra dev` command.
 
 Open your terminal and run:
 
-```bash
+```bash copy
 mastra dev
 ```
 
@@ -344,7 +344,7 @@ http://localhost:4111/api/workflows/myWorkflow/execute
 
 With the server running, you can test your workflow using `curl`:
 
-```bash
+```bash copy
 curl -X POST http://localhost:4111/api/workflows/myWorkflow/execute \
   -H "Content-Type: application/json" \
   -d '{
