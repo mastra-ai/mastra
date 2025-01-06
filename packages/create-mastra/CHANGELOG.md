@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.1.0-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [f79a9ff]
+  - mastra@0.1.57-alpha.78
+
 ## 0.1.0-alpha.10
 
 ### Patch Changes

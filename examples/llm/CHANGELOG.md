@@ -1,5 +1,12 @@
 # llm
 
+## 1.0.1-alpha.30
+
+### Patch Changes
+
+- Updated dependencies [eedb829]
+  - @mastra/core@0.1.27-alpha.52
+
 ## 1.0.1-alpha.29
 
 ### Patch Changes

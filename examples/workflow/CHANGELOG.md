@@ -1,5 +1,13 @@
 # workflow
 
+## 1.0.1-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [eedb829]
+  - @mastra/core@0.1.27-alpha.52
+  - @mastra/memory@0.0.2-alpha.32
+
 ## 1.0.1-alpha.11
 
 ### Patch Changes
