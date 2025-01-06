@@ -1,6 +1,6 @@
 {
   "name": "bird-checker-with-express",
-  "version": "1.0.1-alpha.29",
+  "version": "1.0.1-alpha.30",
   "description": "",
   "type": "module",
   "main": "index.js",
