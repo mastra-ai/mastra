@@ -1,5 +1,40 @@
 # mastra
 
+## 0.1.57-alpha.78
+
+### Patch Changes
+
+- f79a9ff: Fix example tool execution not workin in dev, add example tool to example agent, add example workflow to main Mastra export
+- Updated dependencies [eedb829]
+  - @mastra/core@0.1.27-alpha.52
+
+## 0.1.57-alpha.77
+
+### Patch Changes
+
+- 538a136: Added Simple Condition for workflows, updated /api/workflows/{workflowId}/execute endpoint and docs
+- Updated dependencies [a7b016d]
+- Updated dependencies [da2e8d3]
+- Updated dependencies [538a136]
+  - @mastra/core@0.1.27-alpha.51
+
+## 0.1.57-alpha.76
+
+### Patch Changes
+
+- b6f9860: watch for changes in user mastra directory and restart server in cli dev
+- cefd906: cli interactive api key configuration
+- Updated dependencies [401a4d9]
+  - @mastra/core@0.1.27-alpha.50
+
+## 0.1.57-alpha.75
+
+### Patch Changes
+
+- Updated dependencies [79acad0]
+- Updated dependencies [f5dfa20]
+  - @mastra/core@0.1.27-alpha.49
+
 ## 0.1.57-alpha.74
 
 ### Patch Changes

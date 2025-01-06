@@ -41,7 +41,7 @@ import {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-import { runAgent, runWorkflow } from "./actions";
+import { runAgent } from "./actions";
 import { LoadingChecklist } from "./loading-checklist";
 import { TravelResults } from "./travel-results";
 import { TravelSchemaProps } from "./utils";
@@ -131,30 +131,6 @@ export default function TravelForm({
         const result = await runAgent(formData);
         setStatus("success");
         setTravelData(result.message);
-      } else {
-        const { results } = await runWorkflow({ userId: "SYSTEM", formData });
-        // console.log(result)
-        // Need polling or some kind of way to get the workflow result
-        // console.log(result.message);
-        // setTravelData(result.message);
-        console.log("results---workflow", results);
-        setStatus("success");
-        // setTravelData({
-        //   flights: {
-        //     outbound:
-        //       results?.outboundFlight?.payload?.outboundFlightSelection
-        //         ?.typeSelection?.[0],
-        //     return:
-        //       results?.returnFlight?.payload?.returnFlightSelection
-        //         ?.typeSelection?.[0],
-        //   },
-        //   attractions:
-        //     results?.attraction?.payload?.attractionSelection?.typeSelection ||
-        //     [],
-        //   accommodation:
-        //     results?.accommodation?.payload?.accommodationSelection
-        //       ?.typeSelection?.[0],
-        // });
       }
 
       setContent(sidebarContent.submitted);
@@ -176,7 +152,9 @@ export default function TravelForm({
   }
 
   if (status === "success" && travelData) {
-    return <TravelResults travelData={travelData} />;
+    return (
+      <TravelResults goBack={() => setStatus("idle")} travelData={travelData} />
+    );
   }
 
   if (status === "error") {

@@ -4,6 +4,7 @@ import { UpstashKVMemory } from '@mastra/memory';
 
 import { dane, daneCommitMessage, daneIssueLabeler, danePackagePublisher } from './agents/index.js';
 import { firecrawl } from './integrations/index.js';
+import { deleteFileWorkflow } from './workflows/delete-file.js';
 import { messageWorkflow, githubIssueLabeler, commitMessageGenerator } from './workflows/index.js';
 import { packagePublisher } from './workflows/publish-packages.js';
 
@@ -29,6 +30,7 @@ export const mastra = new Mastra({
     githubIssueLabeler: githubIssueLabeler,
     commitMessage: commitMessageGenerator,
     packagePublisher: packagePublisher,
+    deleteFile: deleteFileWorkflow,
   },
   logger: false,
   syncs: {

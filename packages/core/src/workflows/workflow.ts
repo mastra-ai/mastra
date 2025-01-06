@@ -7,6 +7,7 @@ import { IAction, MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 import { LogLevel } from '../logger';
 
+import { WorkflowSnapshot } from './snapshot';
 import { Step } from './step';
 import {
   ActionContext,
@@ -35,6 +36,7 @@ export class Workflow<
   TTriggerSchema extends z.ZodType<any> = any,
 > extends MastraBase {
   name: string;
+  snapshot?: WorkflowSnapshot;
   triggerSchema?: TTriggerSchema;
   /** XState machine instance that orchestrates the workflow execution */
   #machine!: ReturnType<typeof this.initializeMachine>;
@@ -77,6 +79,11 @@ export class Workflow<
     this.triggerSchema = triggerSchema;
     this.#runId = crypto.randomUUID();
     this.#mastra = mastra;
+
+    if (this.#mastra?.engine) {
+      this.snapshot = new WorkflowSnapshot(this.#mastra.engine);
+    }
+
     if (mastra?.logger) {
       this.logger = mastra?.logger;
     }
@@ -929,27 +936,29 @@ export class Workflow<
    * Persists the workflow state to the database
    */
   async #persistWorkflowSnapshot() {
-    const snapshot = this.#actor?.getPersistedSnapshot();
+    const snapshotFromActor = this.#actor?.getPersistedSnapshot();
+    if (!this.snapshot) {
+      this.log(LogLevel.ERROR, 'Snapshot cannot be persisted. Mastra engine is not initialized', {
+        runId: this.#runId,
+      });
+      return;
+    }
+
+    if (!snapshotFromActor) {
+      this.log(LogLevel.ERROR, 'Snapshot cannot be persisted. No snapshot received.', { runId: this.#runId });
+      return;
+    }
+
     this.log(LogLevel.INFO, 'Persisting workflow snapshot', {
-      snapshot,
+      snapshot: snapshotFromActor,
       runId: this.#runId,
     });
 
-    if (!this.#mastra) return;
-
-    const engine = this.#mastra.engine;
-
-    if (!engine || !snapshot) return;
-
-    await engine.syncRecords({
-      name: this.#entityName,
+    await this.snapshot.persist({
+      runId: this.#runId,
+      snapshot: snapshotFromActor,
+      entityName: this.#entityName,
       connectionId: this.#connectionId,
-      records: [
-        {
-          externalId: this.#runId,
-          data: { snapshot: JSON.stringify(snapshot) },
-        },
-      ],
     });
 
     this.log(LogLevel.INFO, 'Successfully persisted workflow snapshot', { runId: this.#runId });
@@ -957,11 +966,10 @@ export class Workflow<
   }
 
   async #loadWorkflowSnapshot(runId: string) {
-    if (!this.#mastra) return;
-
-    const engine = this.#mastra.engine;
-
-    if (!engine) return;
+    if (!this.snapshot) {
+      this.log(LogLevel.ERROR, 'Snapshot cannot be loaded. Mastra engine is not initialized', { runId });
+      return;
+    }
 
     this.log(LogLevel.INFO, 'Loading workflow snapshot', {
       runId,
@@ -969,19 +977,18 @@ export class Workflow<
       connectionId: this.#connectionId,
     });
 
-    const state = await engine.getRecordsByEntityNameAndExternalId({
+    const snapshotData = await this.snapshot.load({
+      runId,
       entityName: this.#entityName,
       connectionId: this.#connectionId,
-      externalId: runId,
     });
 
     this.log(LogLevel.INFO, 'Retrieved workflow state from storage', {
-      state,
-      snapshot: state[0]?.data.snapshot,
+      snapshot: snapshotData,
       runId,
     });
 
-    return state[0]?.data.snapshot;
+    return snapshotData;
   }
 
   /**
@@ -1030,7 +1037,7 @@ export class Workflow<
       }
 
       // If path is empty or '.', return the entire source data
-      const value = variable.path === '' || variable.path === '.' ? sourceData[key] : get(sourceData, variable.path);
+      const value = variable.path === '' || variable.path === '.' ? sourceData : get(sourceData, variable.path);
 
       this.log(LogLevel.DEBUG, `Resolved variable ${key}`, {
         value,
@@ -1216,6 +1223,10 @@ export class Workflow<
 
     if (p.logger) {
       this.__setLogger(p.logger);
+    }
+
+    if (p?.engine) {
+      this.snapshot = new WorkflowSnapshot(p.engine);
     }
 
     this.#mastra = p;

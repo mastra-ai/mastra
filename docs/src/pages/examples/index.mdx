@@ -3,47 +3,90 @@ title: "Examples Overview"
 description: "Explore practical examples of AI development with Mastra, including text generation, RAG implementations, structured outputs, and multi-modal interactions. Learn how to build AI applications using OpenAI, Anthropic, and Google Gemini."
 ---
 
+import { CardItems, CardItem } from "../../components/example-cards";
+
 # Overview
 
 The Examples section is a short list of example projects demonstrating basic AI engineering with Mastra, including text generation, structured output, streaming responses, and retrieval‐augmented generation (RAG).
 
-## LLM Examples
-
-- [Generate Text](./llms/generate-text.mdx)
-- [Use a System Prompt](./llms/use-a-system-prompt.mdx)
-- [Describe an Image](./llms/describe-an-image.mdx)
-- [Call Claude](./llms/call-claude.mdx)
-- [Call Google Gemini](./llms/call-google-gemini.mdx)
-- [Generate Objects with Structured Output](./llms/generate-object-with-structured-output.mdx)
-- [Stream Text](./llms/stream-text.mdx)
-- [Stream Objects with Structured Output](./llms/stream-object-with-structured-output.mdx)
-
-## Agent Examples
-
-- [Agent with System Prompt](./agents/agent-system-prompt.mdx)
-
-## Workflow Examples
-
-- [Creating a Workflow](./workflows/creating-a-workflow.mdx)
-- [Using a Tool as a Step](./workflows/using-a-tool-as-a-step.mdx)
-- [Parallel Steps](./workflows/parallel-steps.mdx)
-- [Sequential Steps](./workflows/sequential-steps.mdx)
-- [Branching Paths](./workflows/branching-paths.mdx)
-- [Cyclical Dependencies](./workflows/cyclical-dependencies.mdx)
-- [Calling an LLM](./workflows/calling-llm.mdx)
-- [Calling an Agent](./workflows/calling-agent.mdx)
-
-## RAG Examples
-
-- [Chunk Text](./rag/chunk-text.mdx)
-- [Chunk Markdown](./rag/chunk-markdown.mdx)
-- [Chunk HTML](./rag/chunk-html.mdx)
-- [Chunk JSON](./rag/chunk-json.mdx)
-- [Embed Text Chunk](./rag/embed-text-chunk.mdx)
-- [Embed Chunk Array](./rag/embed-chunk-array.mdx)
-- [Adjust Chunk Size](./rag/adjust-chunk-size.mdx)
-- [Adjust Chunk Delimiters](./rag/adjust-chunk-delimiters.mdx)
-- [Embed Text with Cohere](./rag/embed-text-with-cohere.mdx)
-- [Insert Embedding in Pinecone](./rag/insert-embedding-in-pinecone.mdx)
-- [Insert Embedding in PgVector](./rag/insert-embedding-in-pgvector.mdx)
-- [Retrieve Results](./rag/retrieve-results.mdx)
+<CardItems>
+  <CardItem
+    title="LLM"
+    links={[
+      { title: "Generate Text", href: "examples/llms/generate-text" },
+      { title: "Use a System Prompt", href: "/examples/llms/use-a-system-prompt" },
+      { title: "Describe an Image", href: "/examples/llms/describe-an-image" },
+      { title: "Call Claude", href: "/examples/llms/call-claude" },
+      { title: "Call Google Gemini", href: "/examples/llms/call-google-gemini" },
+      {
+        title: "Generate Objects with Structured Output",
+        href: "/examples/llms/generate-object-with-structured-output",
+      },
+      { title: "Stream Text", href: "/examples/llms/stream-text" },
+      {
+        title: "Stream Objects with Structured Output",
+        href: "/examples/llms/stream-object-with-structured-output",
+      },
+    ]}
+  />
+  <CardItem
+    title="Agent"
+    links={[
+      {
+        title: "Agent with System Prompt",
+        href: "/examples/agents/agent-system-prompt",
+      },
+    ]}
+  />
+  <CardItem
+    title="Workflow"
+    links={[
+      {
+        title: "Creating a Workflow",
+        href: "/examples/workflows/creating-a-workflow",
+      },
+      {
+        title: "Using a Tool as a Step",
+        href: "/examples/workflows/using-a-tool-as-a-step",
+      },
+      { title: "Parallel Steps", href: "/examples/workflows/parallel-steps" },
+      { title: "Sequential Steps", href: "/examples/workflows/sequential-steps" },
+      { title: "Branching Paths", href: "/examples/workflows/branching-paths" },
+      {
+        title: "Cyclical Dependencies",
+        href: "/examples/workflows/cyclical-dependencies",
+      },
+      { title: "Calling an LLM", href: "/examples/workflows/calling-llm" },
+      { title: "Calling an Agent", href: "/examples/workflows/calling-agent" },
+    ]}
+  />
+  <CardItem
+    title="RAG"
+    links={[
+      { title: "Chunk Text", href: "/examples/rag/chunk-text" },
+      { title: "Chunk Markdown", href: "/examples/rag/chunk-markdown" },
+      { title: "Chunk HTML", href: "/examples/rag/chunk-html" },
+      { title: "Chunk JSON", href: "/examples/rag/chunk-json" },
+      { title: "Embed Text Chunk", href: "/examples/rag/embed-text-chunk" },
+      { title: "Embed Chunk Array", href: "/examples/rag/embed-chunk-array" },
+      { title: "Adjust Chunk Size", href: "/examples/rag/adjust-chunk-size" },
+      {
+        title: "Adjust Chunk Delimiters",
+        href: "/examples/rag/adjust-chunk-delimiters",
+      },
+      {
+        title: "Embed Text with Cohere",
+        href: "/examples/rag/embed-text-with-cohere",
+      },
+      {
+        title: "Insert Embedding in Pinecone",
+        href: "/examples/rag/insert-embedding-in-pinecone",
+      },
+      {
+        title: "Insert Embedding in PgVector",
+        href: "/examples/rag/insert-embedding-in-pgvector",
+      },
+      { title: "Retrieve Results", href: "/examples/rag/retrieve-results" },
+    ]}
+  />
+</CardItems>

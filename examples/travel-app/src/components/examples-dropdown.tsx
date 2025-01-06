@@ -15,12 +15,7 @@ type MenuItem = {
   href: string;
 };
 
-const MENU_ITEMS: MenuItem[] = [
-  { title: "Agent Example", href: "/" },
-  // TODO: fix and add the workflow example
-  // { title: 'Workflow Example', href: '/workflow' },
-  // { title: 'Agent with Memory Example', href: '/agent-memory' }, // TODO: add this back in when we have a memory example
-];
+const MENU_ITEMS: MenuItem[] = [{ title: "Agent Example", href: "/" }];
 
 export default function ExamplesDropdown() {
   const pathname = usePathname();
@@ -32,7 +27,7 @@ export default function ExamplesDropdown() {
   return (
     <Select
       onValueChange={(href) => {
-        router.push(href); // Use `router.push` to programmatically navigate
+        router.push(href);
       }}
       value={activeItem.href}
     >

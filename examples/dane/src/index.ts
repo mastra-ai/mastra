@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 
 import { commitMessageCommand } from './commands/commit-message.js';
 import { configCommand } from './commands/config.js';
+import { deleteFile } from './commands/delete-file.js';
 import { issueLabelerCommand } from './commands/issue-labeler.js';
 import { message } from './commands/message.js';
 import { publishPackages } from './commands/publish-packages.js';
@@ -29,5 +30,7 @@ program
 program.addCommand(configCommand);
 
 program.command('publish').description('Publish packages to the registry').action(publishPackages);
+
+program.command('delete-file').description('Delete a file').action(deleteFile);
 
 program.parse(process.argv);

@@ -1,12 +1,12 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { z } from 'zod';
 
+import { createLogger } from '../logger';
 import { createSync } from '../sync';
 import { createTool } from '../tools';
 
 import { Step } from './step';
 import { Workflow } from './workflow';
-import { createLogger } from '../logger';
 
 describe('Workflow', () => {
   describe('Basic Workflow Execution', () => {
@@ -87,8 +87,8 @@ describe('Workflow', () => {
     });
   });
 
-  describe('Dependency Conditions', () => {
-    it('should follow conditional dependencies', async () => {
+  describe('Simple Conditions', () => {
+    it('should follow conditional chains', async () => {
       const step1Action = jest.fn<any>().mockImplementation(() => {
         console.log('step1Action');
         return Promise.resolve({ status: 'success' });
@@ -174,6 +174,41 @@ describe('Workflow', () => {
       });
     });
 
+    it.only('should support simple string conditions', async () => {
+      const step1Action = jest.fn<any>().mockResolvedValue({ status: 'success' });
+      const step2Action = jest.fn<any>().mockResolvedValue({ result: 'step2' });
+      const step3Action = jest.fn<any>().mockResolvedValue({ result: 'step3' });
+      const step1 = new Step({ id: 'step1', execute: step1Action });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
+      const step3 = new Step({ id: 'step3', execute: step3Action });
+
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow
+        .step(step1)
+        .then(step2, {
+          when: {
+            'step1.status': 'success',
+          },
+        })
+        .then(step3, {
+          when: {
+            'step2.status': 'unexpected value',
+          },
+        })
+        .commit();
+
+      const result = await workflow.execute();
+
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).toHaveBeenCalled();
+      expect(step3Action).not.toHaveBeenCalled();
+      expect(result.results).toEqual({
+        step1: { status: 'success', payload: { status: 'success' } },
+        step2: { status: 'success', payload: { result: 'step2' } },
+        step3: { status: 'failed', error: 'Step:step3 condition check failed' },
+      });
+    });
+
     it('should support custom condition functions', async () => {
       const step1Action = jest.fn<any>().mockResolvedValue({ count: 5 });
       const step2Action = jest.fn<any>();
@@ -228,11 +263,14 @@ describe('Workflow', () => {
         triggerSchema,
       });
 
-      workflow.step(step1, {
-        variables: {
-          inputData: { step: 'trigger', path: 'inputData' },
-        },
-      }).then(step2).commit();
+      workflow
+        .step(step1, {
+          variables: {
+            inputData: { step: 'trigger', path: 'inputData' },
+          },
+        })
+        .then(step2)
+        .commit();
 
       const result = await workflow.execute({ triggerData: { inputData: 'test-input' } });
 
@@ -272,6 +310,51 @@ describe('Workflow', () => {
           },
         },
         runId: results.runId,
+      });
+    });
+
+    it('should resolve variables from trigger data', async () => {
+      const execute = jest.fn<any>().mockResolvedValue({ result: 'success' });
+      const triggerSchema = z.object({
+        inputData: z.object({
+          nested: z.object({
+            value: z.string(),
+          }),
+        }),
+      });
+
+      const step1 = new Step({ id: 'step1', execute });
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        triggerSchema,
+      });
+
+      workflow
+        .step(step1, {
+          variables: {
+            tData: { step: 'trigger', path: '.' },
+          },
+        })
+        .commit();
+
+      const baseContext = {
+        attempts: { step1: 3 },
+        stepResults: {},
+        triggerData: { inputData: { nested: { value: 'test' } } },
+      };
+
+      await workflow.execute({ triggerData: { inputData: { nested: { value: 'test' } } } });
+
+      expect(execute).toHaveBeenCalledWith({
+        context: {
+          machineContext: {
+            ...baseContext,
+            triggerData: { inputData: { nested: { value: 'test' } } },
+          },
+          tData: { inputData: { nested: { value: 'test' } } },
+        },
+        runId: expect.any(String),
       });
     });
 

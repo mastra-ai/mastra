@@ -1,5 +1,19 @@
 # docs
 
+## 0.1.1-alpha.7
+
+### Patch Changes
+
+- a7b016d: Added export for MockMastraEngine from @mastra/core
+- da2e8d3: Export EmbedManyResult and EmbedResult from ai sdk and update docs
+- 538a136: Added Simple Condition for workflows, updated /api/workflows/{workflowId}/execute endpoint and docs
+
+## 0.1.1-alpha.6
+
+### Patch Changes
+
+- cefd906: cli interactive api key configuration
+
 ## 0.1.1-alpha.5
 
 ### Patch Changes

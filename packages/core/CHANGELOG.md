@@ -1,5 +1,32 @@
 # @mastra/core
 
+## 0.1.27-alpha.52
+
+### Patch Changes
+
+- eedb829: Better types, and correct payload resolution
+
+## 0.1.27-alpha.51
+
+### Patch Changes
+
+- a7b016d: Added export for MockMastraEngine from @mastra/core
+- da2e8d3: Export EmbedManyResult and EmbedResult from ai sdk and update docs
+- 538a136: Added Simple Condition for workflows, updated /api/workflows/{workflowId}/execute endpoint and docs
+
+## 0.1.27-alpha.50
+
+### Patch Changes
+
+- 401a4d9: Add simple conditions test
+
+## 0.1.27-alpha.49
+
+### Patch Changes
+
+- 79acad0: Better type safety on trigger step
+- f5dfa20: only add logger if there is a logger
+
 ## 0.1.27-alpha.48
 
 ### Patch Changes

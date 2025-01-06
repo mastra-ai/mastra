@@ -2,10 +2,10 @@ import { createTool } from '@mastra/core';
 import { z } from 'zod';
 
 const getCatFact = async () => {
-  const { text } = (await fetch('https://cat-fact.herokuapp.com/facts/random').then(res => res.json())) as {
-    text: string;
+  const { fact } = (await fetch('https://catfact.ninja/fact').then(res => res.json())) as {
+    fact: string;
   };
-  return text;
+  return fact;
 };
 
 export const catFact = createTool({
