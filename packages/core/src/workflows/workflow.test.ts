@@ -275,7 +275,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should resolve variables from trigger data', async () => {
+    it('should resolve variables from trigger data', async () => {
       const execute = jest.fn<any>().mockResolvedValue({ result: 'success' });
       const triggerSchema = z.object({
         inputData: z.object({
