@@ -173,9 +173,15 @@ export const getAPIKey = async (provider: LLMProvider) => {
   }
 };
 
-export const writeAPIKey = async (provider: LLMProvider) => {
+export const writeAPIKey = async ({
+  provider,
+  apiKey = 'your-api-key',
+}: {
+  provider: LLMProvider;
+  apiKey?: string;
+}) => {
   const key = await getAPIKey(provider);
-  await exec(`echo ${key}= >> .env.development`);
+  await exec(`echo ${key}=${apiKey} >> .env.development`);
 };
 export const createMastraDir = async (directory: string): Promise<{ ok: true; dirPath: string } | { ok: false }> => {
   let dir = directory
@@ -239,6 +245,24 @@ export const interactivePrompt = async () => {
             { value: 'groq', label: 'Groq' },
           ],
         }),
+      llmApiKey: async ({ results: { llmProvider } }) => {
+        const keyChoice = await p.select({
+          message: `Enter your ${llmProvider} API key?`,
+          options: [
+            { value: 'skip', label: 'Skip for now', hint: 'default' },
+            { value: 'enter', label: 'Enter API key' },
+          ],
+          initialValue: 'skip',
+        });
+
+        if (keyChoice === 'enter') {
+          return p.text({
+            message: 'Enter your API key:',
+            placeholder: 'sk-...',
+          });
+        }
+        return undefined;
+      },
       addExample: () =>
         p.confirm({
           message: 'Add example',

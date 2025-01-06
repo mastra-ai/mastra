@@ -19,11 +19,13 @@ export const init = async ({
   addExample = false,
   components,
   llmProvider = 'openai',
+  llmApiKey,
 }: {
   directory: string;
   components: string[];
   llmProvider: LLMProvider;
   addExample: boolean;
+  llmApiKey?: string;
 }) => {
   s.start('Initializing Mastra');
 
@@ -40,7 +42,7 @@ export const init = async ({
     await Promise.all([
       writeIndexFile(dirPath, addExample),
       ...components.map(component => createComponentsDir(dirPath, component)),
-      writeAPIKey(llmProvider),
+      writeAPIKey({ provider: llmProvider, apiKey: llmApiKey }),
     ]);
 
     if (addExample) {
@@ -50,12 +52,18 @@ export const init = async ({
     const key = await getAPIKey(llmProvider || 'openai');
 
     s.stop();
-    p.note(`
+    if (!llmApiKey) {
+      p.note(`
       ${color.green('Mastra initialized successfully!')}
 
       Add your ${color.cyan(key)} as an environment variable
       in your ${color.cyan('.env.development')} file
       `);
+    } else {
+      p.note(`
+      ${color.green('Mastra initialized successfully!')}
+      `);
+    }
     return { success: true };
   } catch (err) {
     s.stop(color.inverse('An error occurred while initializing Mastra'));
