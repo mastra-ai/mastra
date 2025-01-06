@@ -241,9 +241,12 @@ export class Workflow<
   async execute({
     triggerData,
     loadSnapshot,
+    onStep,
   }: {
     triggerData?: z.infer<TTriggerSchema>;
     loadSnapshot?: { runId: string };
+    //TODO: TYPE
+    onStep?: (stepResults: any) => void;
   } = {}): Promise<{
     triggerData?: z.infer<TTriggerSchema>;
     results: Record<string, StepResult<any>>;
@@ -378,13 +381,16 @@ export class Workflow<
 
       const suspendedPaths: Set<string> = new Set();
 
-      console.log({ suspendedPaths }, '=======================');
-
       this.#actor.subscribe(state => {
         this.log(LogLevel.DEBUG, 'State update', {
           value: state.value,
           context: state.context,
           runId: this.#runId,
+        });
+
+        onStep?.({
+          step: state.value,
+          suspendedPaths,
         });
 
         this.#getSuspendedPaths({
@@ -415,6 +421,7 @@ export class Workflow<
 
         // Check if any steps failed
         const allStepsFailed = Object.values(state.context.stepResults).every(result => result.status === 'failed');
+
         const hasSuspended =
           Object.values(state.context.stepResults).some(result => result.status === 'suspended') ||
           suspendedPaths.size > 0;
@@ -646,6 +653,21 @@ export class Workflow<
                 { type: 'spawnSubscribers', params: { stepId: stepNode.step.id } },
               ],
             },
+            on: {
+              SUSPENDED: {
+                target: 'suspended',
+                actions: [
+                  assign({
+                    stepResults: ({ context }) => ({
+                      ...context.stepResults,
+                      [stepNode.step.id]: {
+                        status: 'suspended',
+                      },
+                    }),
+                  }),
+                ],
+              },
+            },
             onError: {
               target: 'failed',
               actions: [{ type: 'setStepError', params: { stepId: stepNode.step.id } }],
@@ -805,6 +827,10 @@ export class Workflow<
           context: {
             machineContext: context,
             ...resolvedData,
+          },
+          suspend: () => {
+            console.log('Calling SUSPEND');
+            this.#actor?.send({ type: 'SUSPENDED', stepId: stepNode.step.id });
           },
           ...injectables,
         });
