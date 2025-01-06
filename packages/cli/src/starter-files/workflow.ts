@@ -26,7 +26,7 @@ logCatWorkflow.step(logCatName, {
   variables: {
     name: {
       step: 'trigger',
-      path: '', // passes in entire payload
+      path: 'name',
     },
   },
 });

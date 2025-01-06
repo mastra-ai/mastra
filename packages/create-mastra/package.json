@@ -1,6 +1,6 @@
 {
   "name": "create-mastra",
-  "version": "0.1.0-alpha.8",
+  "version": "0.1.0-alpha.11",
   "description": "Create Mastra apps with one command",
   "type": "module",
   "main": "dist/index.js",

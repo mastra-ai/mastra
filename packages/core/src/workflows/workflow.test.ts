@@ -1,12 +1,12 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { z } from 'zod';
 
+import { createLogger } from '../logger';
 import { createSync } from '../sync';
 import { createTool } from '../tools';
 
 import { Step } from './step';
 import { Workflow } from './workflow';
-import { createLogger } from '../logger';
 
 describe('Workflow', () => {
   describe('Basic Workflow Execution', () => {
@@ -263,11 +263,14 @@ describe('Workflow', () => {
         triggerSchema,
       });
 
-      workflow.step(step1, {
-        variables: {
-          inputData: { step: 'trigger', path: 'inputData' },
-        },
-      }).then(step2).commit();
+      workflow
+        .step(step1, {
+          variables: {
+            inputData: { step: 'trigger', path: 'inputData' },
+          },
+        })
+        .then(step2)
+        .commit();
 
       const result = await workflow.execute({ triggerData: { inputData: 'test-input' } });
 
@@ -307,6 +310,51 @@ describe('Workflow', () => {
           },
         },
         runId: results.runId,
+      });
+    });
+
+    it('should resolve variables from trigger data', async () => {
+      const execute = jest.fn<any>().mockResolvedValue({ result: 'success' });
+      const triggerSchema = z.object({
+        inputData: z.object({
+          nested: z.object({
+            value: z.string(),
+          }),
+        }),
+      });
+
+      const step1 = new Step({ id: 'step1', execute });
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        triggerSchema,
+      });
+
+      workflow
+        .step(step1, {
+          variables: {
+            tData: { step: 'trigger', path: '.' },
+          },
+        })
+        .commit();
+
+      const baseContext = {
+        attempts: { step1: 3 },
+        stepResults: {},
+        triggerData: { inputData: { nested: { value: 'test' } } },
+      };
+
+      await workflow.execute({ triggerData: { inputData: { nested: { value: 'test' } } } });
+
+      expect(execute).toHaveBeenCalledWith({
+        context: {
+          machineContext: {
+            ...baseContext,
+            triggerData: { inputData: { nested: { value: 'test' } } },
+          },
+          tData: { inputData: { nested: { value: 'test' } } },
+        },
+        runId: expect.any(String),
       });
     });
 

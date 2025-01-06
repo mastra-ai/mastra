@@ -11,6 +11,7 @@ Other dependencies will be installed as part of the setup
 
 From the project root, run the following commands
 
+- **Setup corepack** by running `corepack enable` - allows you to use the correct pnpm version by default
 - **Install the project dependencies** by running `pnpm setup`
 
 ## ADDING A NEW INTEGRATION

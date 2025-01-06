@@ -25,15 +25,17 @@ export const modelToConfigMap: Record<LLMProvider, ModelConfig> = {
   groq: { provider: 'GROQ', name: 'llama3-groq-70b-8192-tool-use-preview', toolChoice: 'auto' },
 };
 
-export async function writeAgentSample(llmProvider: LLMProvider, destPath: string) {
+export async function writeAgentSample(llmProvider: LLMProvider, destPath: string, addExampleTool: boolean) {
   const model = modelToConfigMap[llmProvider];
   const content = `
 import { Agent } from '@mastra/core';
+${addExampleTool ? `import { catFact } from '../tools/index';` : ''}
 
 export const catOne = new Agent({
   name: 'cat-one',
   instructions: 'You are a feline expert with comprehensive knowledge of all cat species, from domestic breeds to wild big cats. As a lifelong cat specialist, you understand their behavior, biology, social structures, and evolutionary history in great depth.',
   model: ${JSON.stringify(model, null, 2)},
+  ${addExampleTool ? 'tools: { catFact },' : ''}
 });
     `;
   const formattedContent = await prettier.format(content, {
@@ -55,13 +57,18 @@ export async function writeToolSample(destPath: string) {
   await fileService.copyStarterFile('tools.ts', destPath);
 }
 
-export async function writeCodeSampleForComponents(llmprovider: LLMProvider, component: Components, destPath: string) {
-  switch (true) {
-    case component === 'agents':
-      return writeAgentSample(llmprovider, destPath);
-    case component === 'tools':
+export async function writeCodeSampleForComponents(
+  llmprovider: LLMProvider,
+  component: Components,
+  destPath: string,
+  components: Components[],
+) {
+  switch (component) {
+    case 'agents':
+      return writeAgentSample(llmprovider, destPath, components.includes('tools'));
+    case 'tools':
       return writeToolSample(destPath);
-    case component === 'workflows':
+    case 'workflows':
       return writeWorkflowSample(destPath);
     default:
       return '';
@@ -74,7 +81,7 @@ export const createComponentsDir = async (dirPath: string, component: string) =>
   await fsExtra.ensureDir(componentPath);
 };
 
-export const writeIndexFile = async (dirPath: string, addExample: boolean) => {
+export const writeIndexFile = async (dirPath: string, addExample: boolean, addWorkflow: boolean) => {
   const indexPath = dirPath + '/index.ts';
   const destPath = path.join(indexPath);
   try {
@@ -95,11 +102,13 @@ export const mastra = new Mastra({})
       destPath,
       `
 import { Mastra, createLogger } from '@mastra/core';
+${addWorkflow ? `import { logCatWorkflow } from './workflows/index';` : ''}
 
 import { catOne } from './agents/index';
 
 export const mastra = new Mastra({
   agents: { catOne },
+  ${addWorkflow ? `workflows: { logCatWorkflow },` : ''}
   logger: createLogger({
     type: 'CONSOLE',
     level: 'INFO',
@@ -200,11 +209,16 @@ export const createMastraDir = async (directory: string): Promise<{ ok: true; di
   }
 };
 
-export const writeCodeSample = async (dirPath: string, component: Components, llmProvider: LLMProvider) => {
+export const writeCodeSample = async (
+  dirPath: string,
+  component: Components,
+  llmProvider: LLMProvider,
+  components: Components[],
+) => {
   const destPath = dirPath + `/${component}/index.ts`;
 
   try {
-    await writeCodeSampleForComponents(llmProvider, component, destPath);
+    await writeCodeSampleForComponents(llmProvider, component, destPath, components);
   } catch (err) {
     throw err;
   }
