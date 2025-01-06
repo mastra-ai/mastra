@@ -1,4 +1,4 @@
-import { Step, Workflow, Mastra } from '@mastra/core';
+import { Step, Workflow } from '@mastra/core';
 import { z } from 'zod';
 
 const gatherCandidateInfo = new Step({
