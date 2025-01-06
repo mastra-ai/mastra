@@ -86,8 +86,8 @@ describe('Workflow', () => {
     });
   });
 
-  describe('Dependency Conditions', () => {
-    it('should follow conditional dependencies', async () => {
+  describe('Simple Conditions', () => {
+    it('should follow conditional chains', async () => {
       const step1Action = jest.fn<any>().mockImplementation(() => {
         console.log('step1Action');
         return Promise.resolve({ status: 'success' });
@@ -170,6 +170,41 @@ describe('Workflow', () => {
       expect(step2Action).not.toHaveBeenCalled();
       expect(result.results).toEqual({
         step1: { status: 'failed', error: 'Failed' },
+      });
+    });
+
+    it.only('should support simple string conditions', async () => {
+      const step1Action = jest.fn<any>().mockResolvedValue({ status: 'success' });
+      const step2Action = jest.fn<any>().mockResolvedValue({ result: 'step2' });
+      const step3Action = jest.fn<any>().mockResolvedValue({ result: 'step3' });
+      const step1 = new Step({ id: 'step1', execute: step1Action });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
+      const step3 = new Step({ id: 'step3', execute: step3Action });
+
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow
+        .step(step1)
+        .then(step2, {
+          when: {
+            'step1.status': 'success',
+          },
+        })
+        .then(step3, {
+          when: {
+            'step2.status': 'unexpected value',
+          },
+        })
+        .commit();
+
+      const result = await workflow.execute();
+
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).toHaveBeenCalled();
+      expect(step3Action).not.toHaveBeenCalled();
+      expect(result.results).toEqual({
+        step1: { status: 'success', payload: { status: 'success' } },
+        step2: { status: 'success', payload: { result: 'step2' } },
+        step3: { status: 'failed', error: 'Step:step3 condition check failed' },
       });
     });
 
