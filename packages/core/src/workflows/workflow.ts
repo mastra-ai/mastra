@@ -120,7 +120,7 @@ export class Workflow<
     TStep extends IAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
-  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep>) {
+  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>) {
     const { variables = {} } = config || {};
 
     const requiredData: Record<string, any> = {};
@@ -170,7 +170,7 @@ export class Workflow<
     TStep extends IAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
-  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep>) {
+  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>) {
     const { variables = {} } = config || {};
 
     const requiredData: Record<string, any> = {};
@@ -860,7 +860,10 @@ export class Workflow<
   /**
    * Evaluates a single condition against workflow context
    */
-  #evaluateCondition(condition: StepCondition<any>, context: WorkflowContext): boolean {
+  #evaluateCondition<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodType<any>>(
+    condition: StepCondition<TStep, TTriggerSchema>,
+    context: WorkflowContext,
+  ): boolean {
     let andBranchResult = true;
     let baseResult = true;
     let orBranchResult = true;

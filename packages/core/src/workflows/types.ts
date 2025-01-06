@@ -41,7 +41,7 @@ export type StepGraph = {
 
 export type RetryConfig = { attempts?: number; delay?: number };
 
-export type VariableReference<TStep extends StepVariableType<any, any, any, any>> =
+export type VariableReference<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodType<any>> =
   TStep extends IAction<any, any, any, any>
     ? {
         step: TStep;
@@ -50,14 +50,14 @@ export type VariableReference<TStep extends StepVariableType<any, any, any, any>
     : TStep extends 'trigger'
       ? {
           step: 'trigger';
-          path: string; // TODO: Add trigger schema types
+          path: PathsToStringProps<ExtractSchemaType<TTriggerSchema>>;
         }
       : {
           step: { id: string };
           path: string;
         };
 
-export interface BaseCondition<TStep extends StepVariableType<any, any, any, any>> {
+export interface BaseCondition<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodType<any>> {
   ref: TStep extends IAction<any, any, any, any>
     ? {
         step: TStep;
@@ -66,7 +66,7 @@ export interface BaseCondition<TStep extends StepVariableType<any, any, any, any
     : TStep extends 'trigger'
       ? {
           step: 'trigger';
-          path: string;
+          path: PathsToStringProps<ExtractSchemaType<TTriggerSchema>>;
         }
       : {
           step: { id: string };
@@ -86,35 +86,36 @@ export type StepDef<
   TStepId,
   {
     snapshotOnTimeout?: boolean;
-    when?: Condition<any> | ((args: { context: WorkflowContext }) => Promise<boolean>);
+    when?: Condition<any, any> | ((args: { context: WorkflowContext }) => Promise<boolean>);
     data: TSchemaIn;
     handler: (args: ActionContext<TSchemaIn>) => Promise<z.infer<TSchemaOut>>;
   }
 >;
 
-export type StepCondition<TStep extends StepVariableType<any, any, any, any>> =
-  | BaseCondition<TStep>
+export type StepCondition<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodType<any>> =
+  | BaseCondition<TStep, TTriggerSchema>
   | SimpleConditionalType
-  | { and: StepCondition<TStep>[] }
-  | { or: StepCondition<TStep>[] };
+  | { and: StepCondition<TStep, TTriggerSchema>[] }
+  | { or: StepCondition<TStep, TTriggerSchema>[] };
 
-type Condition<TStep extends StepVariableType<any, any, any, any>> =
-  | BaseCondition<TStep>
+type Condition<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodType<any>> =
+  | BaseCondition<TStep, TTriggerSchema>
   | SimpleConditionalType
-  | { and: Condition<TStep>[] }
-  | { or: Condition<TStep>[] };
+  | { and: Condition<TStep, TTriggerSchema>[] }
+  | { or: Condition<TStep, TTriggerSchema>[] };
 
 export interface StepConfig<
   TStep extends IAction<any, any, any, any>,
   CondStep extends StepVariableType<any, any, any, any>,
   VarStep extends StepVariableType<any, any, any, any>,
+  TTriggerSchema extends z.ZodType<any>,
 > {
   snapshotOnTimeout?: boolean;
-  when?: Condition<CondStep> | ((args: { context: WorkflowContext }) => Promise<boolean>);
+  when?: Condition<CondStep, TTriggerSchema> | ((args: { context: WorkflowContext }) => Promise<boolean>);
   variables?: StepInputType<TStep, 'inputSchema'> extends never
-    ? Record<string, VariableReference<VarStep>>
+    ? Record<string, VariableReference<VarStep, TTriggerSchema>>
     : {
-        [K in keyof StepInputType<TStep, 'inputSchema'>]?: VariableReference<VarStep>;
+        [K in keyof StepInputType<TStep, 'inputSchema'>]?: VariableReference<VarStep, TTriggerSchema>;
       };
 }
 
