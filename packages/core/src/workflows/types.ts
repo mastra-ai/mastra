@@ -50,7 +50,7 @@ export type VariableReference<TStep extends StepVariableType<any, any, any, any>
     : TStep extends 'trigger'
       ? {
           step: 'trigger';
-          path: PathsToStringProps<ExtractSchemaType<TTriggerSchema>>;
+          path: PathsToStringProps<ExtractSchemaType<TTriggerSchema>> | '.' | '';
         }
       : {
           step: { id: string };
@@ -66,7 +66,7 @@ export interface BaseCondition<TStep extends StepVariableType<any, any, any, any
     : TStep extends 'trigger'
       ? {
           step: 'trigger';
-          path: PathsToStringProps<ExtractSchemaType<TTriggerSchema>>;
+          path: PathsToStringProps<ExtractSchemaType<TTriggerSchema>> | '.' | '';
         }
       : {
           step: { id: string };
