@@ -1,8 +1,8 @@
 # Introduction
 
-In this guide, you’ll learn how Mastra helps you build workflows with LLMs. 
+In this guide, you’ll learn how Mastra helps you build workflows with LLMs.
 
-We’ll walk through creating a workflow that gathers information from a candidate’s resume, then branches to either a technical or behavioral question based on the candidate’s profile. Along the way, you’ll see how to structure workflow steps, handle branching, and integrate LLM calls.  
+We’ll walk through creating a workflow that gathers information from a candidate’s resume, then branches to either a technical or behavioral question based on the candidate’s profile. Along the way, you’ll see how to structure workflow steps, handle branching, and integrate LLM calls.
 
 Below is a concise version of the workflow. It starts by importing the necessary modules, sets up Mastra, defines steps to extract and classify candidate data, and then asks suitable follow-up questions. Each code block is followed by a short explanation of what it does and why it’s useful.
 
@@ -11,19 +11,21 @@ Below is a concise version of the workflow. It starts by importing the necessary
 You need to import Mastra tools and Zod to handle workflow definitions and data validation. This snippet also creates a Mastra instance for managing LLM interactions and orchestrating steps.
 
 ```typescript
-import { Step, Workflow, Mastra } from '@mastra/core';
-import { z } from 'zod';
+import { Step, Workflow, Mastra } from "@mastra/core";
+import { z } from "zod";
 
 const mastra = new Mastra({});
+
+const llm = mastra.LLM({ provider: "OPEN_AI", name: "gpt-4o" });
 ```
 
 ## 2. Step One: Gather Candidate Info
 
 You want to extract candidate details from the resume text and classify them as technical or non-technical. This step calls an LLM to parse the resume and return structured JSON, including the name, technical status, specialty, and the original resume text. The code reads resumeText from trigger data, prompts the LLM, and returns organized fields for use in subsequent steps.
 
-```typescript
+```typescript copy
 const gatherCandidateInfo = new Step({
-  id: 'gatherCandidateInfo',
+  id: "gatherCandidateInfo",
   inputSchema: z.object({
     resumeText: z.string(),
   }),
@@ -33,28 +35,22 @@ const gatherCandidateInfo = new Step({
     specialty: z.string().optional(),
     resumeText: z.string(),
   }),
-  execute: async ({ context, mastra }) => {
+  execute: async ({ context }) => {
     const resumeText = context.resumeText;
-    const llm = mastra.llm({ provider: 'OPEN_AI', name: 'gpt-4o' });
     const prompt = `
-      You are given this resume text:
-      "${resumeText}"
-      Return valid JSON with fields:
-      {
-        "candidateName": "Candidate's Name",
-        "isTechnical": true or false,
-        "specialty": "candidate’s specialty (if technical)",
-        "resumeText": "full text used for reference"
-      }
-    `;
-    const res = await llm.generate(prompt);
-    const parsed = JSON.parse(res?.text ?? '{}');
-    return {
-      candidateName: parsed.candidateName ?? 'Unknown',
-      isTechnical: parsed.isTechnical ?? false,
-      specialty: parsed.specialty ?? '',
-      resumeText: parsed.resumeText ?? resumeText,
-    };
+        You are given this resume text:
+        "${resumeText}"
+      `;
+    const res = await llm.generate(prompt, {
+      output: z.object({
+        candidateName: z.string(),
+        isTechnical: z.boolean(),
+        specialty: z.string(),
+        resumeText: z.string(),
+      }),
+    });
+
+    return res.object;
   },
 });
 ```
@@ -63,27 +59,29 @@ const gatherCandidateInfo = new Step({
 
 This step prompts a candidate who is identified as technical for more information about how they got into their specialty. It uses the entire resume text so the LLM can craft a relevant follow-up question. The code generates a question about the candidate’s specialty.
 
-```typescript
+```typescript copy
 const askAboutSpecialty = new Step({
-  id: 'askAboutSpecialty',
+  id: "askAboutSpecialty",
   inputSchema: z.object({
-    candidateName: z.string(),
-    isTechnical: z.boolean(),
-    specialty: z.string().optional(),
-    resumeText: z.string(),
+    candidateInfo: z.object({
+      candidateName: z.string(),
+      isTechnical: z.boolean(),
+      specialty: z.string().optional(),
+      resumeText: z.string(),
+    }),
   }),
   outputSchema: z.object({
     question: z.string(),
   }),
-  execute: async ({ context, mastra }) => {
-    const llm = mastra.llm({ provider: 'OPEN_AI', name: 'gpt-4o' });
+  execute: async ({ context }) => {
+    console.log("context", context);
     const prompt = `
-      You are a recruiter. Given the resume below, craft a short question
-      for ${context.candidateName} about how they got into "${context.specialty}".
-      Resume: ${context.resumeText}
-    `;
+        You are a recruiter. Given the resume below, craft a short question
+        for ${context.candidateInfo.candidateName} about how they got into "${context.candidateInfo.specialty}".
+        Resume: ${context.candidateInfo.resumeText}
+      `;
     const res = await llm.generate(prompt);
-    return { question: res?.text?.trim() || '' };
+    return { question: res?.text?.trim() || "" };
   },
 });
 ```
@@ -92,27 +90,28 @@ const askAboutSpecialty = new Step({
 
 If the candidate is non-technical, you want a different follow-up question. This step asks what interests them most about the role, again referencing their complete resume text. The code solicits a role-focused query from the LLM.
 
-```typescript
+```typescript copy
 const askAboutRole = new Step({
-  id: 'askAboutRole',
+  id: "askAboutRole",
   inputSchema: z.object({
-    candidateName: z.string(),
-    isTechnical: z.boolean(),
-    specialty: z.string().optional(),
-    resumeText: z.string(),
+    candidateInfo: z.object({
+      candidateName: z.string(),
+      isTechnical: z.boolean(),
+      specialty: z.string().optional(),
+      resumeText: z.string(),
+    }),
   }),
   outputSchema: z.object({
     question: z.string(),
   }),
-  execute: async ({ context, mastra }) => {
-    const llm = mastra.llm({ provider: 'OPEN_AI', name: 'gpt-4o' });
+  execute: async ({ context }) => {
     const prompt = `
-      You are a recruiter. Given the resume below, craft a short question
-      for ${context.candidateName} asking what interests them most about this role.
-      Resume: ${context.resumeText}
-    `;
+        You are a recruiter. Given the resume below, craft a short question
+        for ${context.candidateInfo.candidateName} asking what interests them most about this role.
+        Resume: ${context.candidateInfo.resumeText}
+      `;
     const res = await llm.generate(prompt);
-    return { question: res?.text?.trim() || '' };
+    return { question: res?.text?.trim() || "" };
   },
 });
 ```
@@ -123,28 +122,47 @@ You now combine the steps to implement branching logic based on the candidate’
 
 ```typescript
 const candidateWorkflow = new Workflow({
-  name: 'candidate-workflow',
+  name: "candidate-workflow",
   triggerSchema: z.object({
     resumeText: z.string(),
   }),
 });
 
 candidateWorkflow
-  .step(gatherCandidateInfo)
+  .step(gatherCandidateInfo, {
+    variables: {
+      resumeText: {
+        step: "trigger",
+        path: "resumeText",
+      },
+    },
+  })
   .then(askAboutSpecialty, {
-    when: { 'gatherCandidateInfo.isTechnical': true },
+    when: { "gatherCandidateInfo.isTechnical": true },
+    variables: {
+      candidateInfo: {
+        step: gatherCandidateInfo,
+        path: ".",
+      },
+    },
   })
   .then(askAboutRole, {
-    when: { 'gatherCandidateInfo.isTechnical': false },
+    when: { "gatherCandidateInfo.isTechnical": false },
+    variables: {
+      candidateInfo: {
+        step: gatherCandidateInfo,
+        path: ".",
+      },
+    },
   });
 
 candidateWorkflow.commit();
 
 (async () => {
   const runResult = await candidateWorkflow.execute({
-    triggerData: { resumeText: 'Simulated resume content...' },
+    triggerData: { resumeText: "Simulated resume content..." },
   });
-  console.log('Final output:', runResult.results);
+  console.log("Final output:", runResult.results);
 })();
 ```
 
