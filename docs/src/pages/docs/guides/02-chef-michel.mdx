@@ -19,7 +19,6 @@ In this guide, we'll walk through creating a "Chef Assistant" agent that helps u
 Create a new file `src/mastra/agents/chefAgent.ts` and define your agent:
 
 ```ts copy filename="src/mastra/agents/chefAgent.ts"
-// src/mastra/agents/chefAgent.ts
 import { Agent } from '@mastra/core';
 
 export const chefAgent = new Agent({
@@ -41,8 +40,7 @@ export const chefAgent = new Agent({
 
 Create a `.env` file in your project root and add your OpenAI API key:
 
-```env
-# .env
+```bash filename=".env" copy
 OPENAI_API_KEY=your_openai_api_key
 ```
 
