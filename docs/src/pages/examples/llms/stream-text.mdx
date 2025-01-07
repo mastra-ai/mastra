@@ -6,6 +6,9 @@ Text generation can sometimes take a long time to complete, especially when you'
 
 ```ts showLineNumbers copy
 import { Mastra } from '@mastra/core';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const mastra = new Mastra();
 
@@ -26,4 +29,4 @@ for await (const chunk of response.textStream) {
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/llms/stream-text.ts'} />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/llms/stream-text'} />
