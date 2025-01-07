@@ -583,31 +583,40 @@ export class Workflow<
           },
         },
         suspended: {
-          entry: [
-            () => {
-              this.log(LogLevel.INFO, `Step ${stepNode.step.id} suspended`);
-            },
-            assign({
-              stepResults: ({ context }) => ({
-                ...context.stepResults,
-                [stepNode.step.id]: {
-                  ...(context?.stepResults?.[stepNode.step.id] || {}),
-                  status: 'suspended',
-                },
-              }),
-            }),
-          ],
+          // entry: [
+          //   () => {
+          //     this.log(LogLevel.INFO, `Step ${stepNode.step.id} suspended`);
+          //   },
+          //   assign({
+          //     stepResults: ({ context }) => ({
+          //       ...context.stepResults,
+          //       [stepNode.step.id]: {
+          //         ...(context?.stepResults?.[stepNode.step.id] || {}),
+          //         status: 'suspended',
+          //       },
+          //     }),
+          //   }),
+          // ],
+          // after: {
+          //   [stepNode.step.id]: {
+          //     target: 'pending',
+          //     actions: [
+          //       assign({
+          //         attempts: ({ context }) => ({
+          //           ...context.attempts,
+          //           [stepNode.step.id]: this.#steps[stepNode.step.id]?.retryConfig?.attempts || 3,
+          //         }),
+          //       }),
+          //     ],
+          entry: () => {
+            this.log(LogLevel.INFO, `Step ${stepNode.step.id} suspended ${new Date().toISOString()}`);
+          },
+          exit: () => {
+            this.log(LogLevel.INFO, `Step ${stepNode.step.id} finished suspended ${new Date().toISOString()}`);
+          },
           after: {
             [stepNode.step.id]: {
-              target: 'pending',
-              actions: [
-                assign({
-                  attempts: ({ context }) => ({
-                    ...context.attempts,
-                    [stepNode.step.id]: this.#steps[stepNode.step.id]?.retryConfig?.attempts || 3,
-                  }),
-                }),
-              ],
+              target: 'suspended',
             },
           },
         },
