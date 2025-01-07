@@ -64,7 +64,7 @@ After the prompts, `create-mastra` will set up your project directory with TypeS
 
 Add the API key for your configured LLM provider in your `.env` file.
 
-```env
+```bash filename=".env" copy
 OPENAI_API_KEY=<your-openai-key>
 ```
 
@@ -105,7 +105,7 @@ npx tsc --init
 
 Create a `.env` file in your project root directory and add your API key:
 
-```env
+```bash filename=".env" copy
 OPENAI_API_KEY=<your-openai-key>
 ```
 
@@ -235,7 +235,7 @@ main();
 Then, run the script to test that everything is set up correctly:
 
 ```bash copy
-npx bun src/index.ts
+npx tsx src/index.ts
 ```
 
 This should output the agent's response to your console.
