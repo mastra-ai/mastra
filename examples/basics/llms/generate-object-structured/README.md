@@ -13,7 +13,7 @@ A simple example showing how to generate structured objects using Mastra and Ope
 1. Clone the repository and navigate to the project directory:
 
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/mastra-ai/mastra
    cd examples/basics/llms/generate-object-structured
    ```
 

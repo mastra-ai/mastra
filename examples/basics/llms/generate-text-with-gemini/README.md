@@ -13,7 +13,7 @@ A simple example showing how to generate text using Mastra and Google's Gemini m
 1. Clone the repository and navigate to the project directory:
 
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/mastra-ai/mastra
    cd examples/basics/llms/generate-text-with-gemini
    ```
 

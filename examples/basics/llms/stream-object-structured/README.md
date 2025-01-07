@@ -13,7 +13,7 @@ A simple example showing how to stream structured objects using Mastra and OpenA
 1. Clone the repository and navigate to the project directory:
 
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/mastra-ai/mastra
    cd examples/basics/llms/stream-object-structured
    ```
 
