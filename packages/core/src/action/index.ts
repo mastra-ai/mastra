@@ -30,7 +30,7 @@ export interface IExecutionContext<
     : { machineContext?: TContext };
   runId?: string;
   mastra?: MastraPrimitives;
-  suspend: () => void;
+  suspend: () => Promise<void>;
 }
 export interface IAction<
   TId extends string,

@@ -240,11 +240,13 @@ export class Workflow<
    */
   async execute({
     triggerData,
-    loadSnapshot,
+    snapshot,
     onStep,
+    runId,
   }: {
     triggerData?: z.infer<TTriggerSchema>;
-    loadSnapshot?: { runId: string };
+    runId?: string;
+    snapshot?: Snapshot<any>;
     //TODO: TYPE
     onStep?: (stepResults: any) => void;
   } = {}): Promise<{
@@ -252,64 +254,20 @@ export class Workflow<
     results: Record<string, StepResult<any>>;
     runId: string;
   }> {
-    let snapshot: Snapshot<any> | undefined;
-
-    if (loadSnapshot && loadSnapshot.runId) {
-      this.#runId = loadSnapshot.runId;
-      snapshot = await this.#loadWorkflowSnapshot(loadSnapshot.runId);
-      this.log(LogLevel.INFO, 'Attempting to load snapshot', { runId: loadSnapshot.runId, rawSnapshot: snapshot });
+    if (snapshot && runId) {
+      this.#runId = runId;
+      // First, let's log the incoming snapshot for debugging
+      this.log(LogLevel.DEBUG, 'Incoming snapshot', {
+        snapshot: snapshot,
+        runId: this.#runId,
+      });
     } else {
       this.#runId = crypto.randomUUID();
     }
 
-    if (snapshot) {
-      try {
-        snapshot = JSON.parse(snapshot as unknown as string);
-        this.log(LogLevel.INFO, 'Successfully parsed snapshot', {
-          parsedSnapshot: snapshot,
-          value: (snapshot as any).value,
-          context: (snapshot as any).context,
-          runId: this.#runId,
-        });
-      } catch (error) {
-        this.log(LogLevel.ERROR, 'Failed to parse workflow snapshot', { error, runId: this.#runId });
-        throw new Error('Failed to parse workflow snapshot');
-      }
-    }
-
-    this.log(LogLevel.INFO, 'Executing workflow', { triggerData, runId: this.#runId, snapshot });
-
-    if (this.triggerSchema && !snapshot) {
-      try {
-        this.triggerSchema.parse(triggerData);
-        this.log(LogLevel.DEBUG, 'Trigger schema validation passed', { runId: this.#runId });
-      } catch (error) {
-        this.log(LogLevel.ERROR, 'Trigger schema validation failed', {
-          error,
-          runId: this.#runId,
-        });
-        throw error;
-      }
-    }
-
     const machineInput = {
-      stepResults: snapshot
-        ? Object.entries((snapshot as any).context.stepResults).reduce(
-            (acc, [key, value]) => {
-              // Reset suspended steps back to their previous successful state to allow re-evaluation
-              if ((value as any).status === 'suspended') {
-                acc[key] = {
-                  status: 'waiting',
-                  payload: (value as any).payload,
-                };
-              } else {
-                acc[key] = value;
-              }
-              return acc;
-            },
-            {} as Record<string, any>,
-          )
-        : {},
+      // Maintain the original step results and their payloads
+      stepResults: snapshot ? (snapshot as any).context.stepResults : {},
       triggerData: snapshot ? (snapshot as any).context.triggerData : triggerData || {},
       attempts: Object.keys(this.#steps).reduce(
         (acc, stepKey) => {
@@ -320,41 +278,25 @@ export class Workflow<
       ),
     };
 
+    console.log(`Machine input`, JSON.stringify(machineInput, null, 2));
+
+    this.log(LogLevel.DEBUG, 'Machine input prepared', {
+      machineInput,
+      runId: this.#runId,
+    });
+
+    // Create properly formatted actor snapshot
     const actorSnapshot = snapshot
       ? {
           ...(snapshot as any),
-          value: Object.keys((snapshot as any).value).reduce(
-            (acc, key) => {
-              const stepValue = (snapshot as any).value[key];
-              // Convert any suspended states back to pending for re-evaluation
-              acc[key] = Object.keys(stepValue).reduce(
-                (stepAcc, stepKey) => {
-                  stepAcc[stepKey] = stepValue[stepKey] === 'suspended' ? 'pending' : stepValue[stepKey];
-                  return stepAcc;
-                },
-                {} as Record<string, string>,
-              );
-              return acc;
-            },
-            {} as Record<string, Record<string, string>>,
-          ),
-          context: {
-            ...(snapshot as any).context,
-            triggerData: (snapshot as any).context.triggerData,
-            attempts: Object.keys(this.#steps).reduce(
-              (acc, stepKey) => {
-                acc[stepKey] = this.#steps[stepKey]?.retryConfig?.attempts || this.#retryConfig?.attempts || 3;
-                return acc;
-              },
-              {} as Record<string, number>,
-            ),
-          },
+          context: machineInput, // Use the machine input directly as context
         }
       : undefined;
 
-    this.log(LogLevel.INFO, 'Creating actor with configuration', {
+    this.log(LogLevel.DEBUG, 'Creating actor with configuration', {
       machineInput,
       actorSnapshot,
+      machineStates: this.#machine.config.states,
       runId: this.#runId,
     });
 
@@ -370,6 +312,8 @@ export class Workflow<
       snapshot: actorSnapshot,
     });
 
+    console.log(actorSnapshot, 'JSON');
+
     this.#actor.start();
     this.log(LogLevel.INFO, 'Actor started', { runId: this.#runId });
 
@@ -381,17 +325,27 @@ export class Workflow<
 
       const suspendedPaths: Set<string> = new Set();
 
-      this.#actor.subscribe(state => {
+      this.#actor.subscribe(async state => {
         this.log(LogLevel.DEBUG, 'State update', {
           value: state.value,
           context: state.context,
           runId: this.#runId,
         });
 
-        onStep?.({
-          step: state.value,
-          suspendedPaths,
-        });
+        const stepId = Object.keys(state?.value)?.[0];
+
+        if (onStep && typeof onStep === 'function') {
+          await Promise.resolve(
+            onStep?.({
+              runId: this.#runId,
+              context: state.context,
+              stepId: stepId,
+              status: stepId ? state.value[stepId] : 'unknown',
+              state: state.value,
+              suspendedPaths,
+            }),
+          );
+        }
 
         this.#getSuspendedPaths({
           value: state.value as Record<string, string>,
@@ -422,13 +376,13 @@ export class Workflow<
         // Check if any steps failed
         const allStepsFailed = Object.values(state.context.stepResults).every(result => result.status === 'failed');
 
-        const hasSuspended =
-          Object.values(state.context.stepResults).some(result => result.status === 'suspended') ||
-          suspendedPaths.size > 0;
+        // const hasSuspended =
+        //   Object.values(state.context.stepResults).some(result => result.status === 'suspended') ||
+        //   suspendedPaths.size > 0;
 
-        if (hasSuspended) {
-          this.#persistWorkflowSnapshot();
-        }
+        // if (hasSuspended) {
+        //   this.#persistWorkflowSnapshot();
+        // }
 
         if (allStepsFailed) {
           this.log(LogLevel.ERROR, 'Workflow failed', {
@@ -526,24 +480,29 @@ export class Workflow<
           },
           invoke: {
             src: 'conditionCheck',
-            input: ({ context }: { context: WorkflowContext }) => ({
-              context,
-              stepNode,
-            }),
+            input: ({ context }: { context: WorkflowContext }) => {
+              return {
+                context,
+                stepNode,
+              };
+            },
             onDone: [
               {
                 guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
+                  console.log(event, 'SUH DUDE');
                   return event.output.type === 'SUSPENDED';
                 },
                 target: 'suspended',
                 actions: [
                   assign({
                     stepResults: ({ context, event }) => {
+                      console.log(context, event, 'SUH DUDE');
                       if (event.output.type !== 'SUSPENDED') return context.stepResults;
                       return {
                         ...context.stepResults,
                         [stepNode.step.id]: {
                           status: 'suspended',
+                          ...(context.stepResults?.[stepNode.step.id] || {}),
                         },
                       };
                     },
@@ -557,6 +516,7 @@ export class Workflow<
               },
               {
                 guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
+                  console.log(event, 'WAITING SUH DUDE');
                   return event.output.type === 'WAITING';
                 },
                 target: 'waiting',
@@ -564,6 +524,7 @@ export class Workflow<
                   { type: 'decrementAttemptCount', params: { stepId: stepNode.step.id } },
                   assign({
                     stepResults: ({ context, event }) => {
+                      console.log(context, event, 'SUH DUDE WAITING');
                       if (event.output.type !== 'WAITING') return context.stepResults;
                       return {
                         ...context.stepResults,
@@ -622,21 +583,52 @@ export class Workflow<
           },
         },
         suspended: {
-          entry: () => {
-            this.log(LogLevel.INFO, `Step ${stepNode.step.id} suspended ${new Date().toISOString()}`);
-          },
-          exit: () => {
-            this.log(LogLevel.INFO, `Step ${stepNode.step.id} finished suspended ${new Date().toISOString()}`);
-          },
+          entry: [
+            () => {
+              this.log(LogLevel.INFO, `Step ${stepNode.step.id} suspended`);
+            },
+            assign({
+              stepResults: ({ context }) => ({
+                ...context.stepResults,
+                [stepNode.step.id]: {
+                  ...(context?.stepResults?.[stepNode.step.id] || {}),
+                  status: 'suspended',
+                },
+              }),
+            }),
+          ],
           after: {
             [stepNode.step.id]: {
               target: 'pending',
+              actions: [
+                assign({
+                  attempts: ({ context }) => ({
+                    ...context.attempts,
+                    [stepNode.step.id]: this.#steps[stepNode.step.id]?.retryConfig?.attempts || 3,
+                  }),
+                }),
+              ],
             },
           },
         },
         executing: {
           entry: () => {
             this.log(LogLevel.INFO, `Step ${stepNode.step.id} executing`);
+          },
+          on: {
+            SUSPENDED: {
+              target: 'suspended',
+              actions: [
+                assign({
+                  stepResults: ({ context }) => ({
+                    ...context.stepResults,
+                    [stepNode.step.id]: {
+                      status: 'suspended',
+                    },
+                  }),
+                }),
+              ],
+            },
           },
           invoke: {
             src: 'resolverFunction',
@@ -652,21 +644,6 @@ export class Workflow<
                 { type: 'updateStepResult', params: { stepId: stepNode.step.id } },
                 { type: 'spawnSubscribers', params: { stepId: stepNode.step.id } },
               ],
-            },
-            on: {
-              SUSPENDED: {
-                target: 'suspended',
-                actions: [
-                  assign({
-                    stepResults: ({ context }) => ({
-                      ...context.stepResults,
-                      [stepNode.step.id]: {
-                        status: 'suspended',
-                      },
-                    }),
-                  }),
-                ],
-              },
             },
             onError: {
               target: 'failed',
@@ -828,9 +805,14 @@ export class Workflow<
             machineContext: context,
             ...resolvedData,
           },
-          suspend: () => {
-            console.log('Calling SUSPEND');
-            this.#actor?.send({ type: 'SUSPENDED', stepId: stepNode.step.id });
+          suspend: async () => {
+            if (this.#actor) {
+              await this.#persistWorkflowSnapshot();
+              this.log(LogLevel.INFO, `Sending SUSPENDED event for step ${stepNode.step.id}`);
+              this.#actor?.send({ type: 'SUSPENDED', stepId: stepNode.step.id });
+            } else {
+              this.log(LogLevel.ERROR, `Actor not available for step ${stepNode.step.id}`);
+            }
           },
           ...injectables,
         });
@@ -1242,6 +1224,68 @@ export class Workflow<
     }
   }
 
+  async resume({
+    runId,
+    stepId,
+    context: resumeContext,
+  }: {
+    runId: string;
+    stepId: string;
+    context?: Record<string, any>;
+  }) {
+    const snapshot = await this.#loadWorkflowSnapshot(runId);
+
+    if (!snapshot) {
+      throw new Error(`No snapshot found for workflow run ${runId}`);
+    }
+
+    let parsedSnapshot;
+    try {
+      parsedSnapshot = JSON.parse(snapshot as unknown as string);
+    } catch (error) {
+      this.log(LogLevel.ERROR, 'Failed to parse workflow snapshot for resume', { error, runId });
+      throw new Error('Failed to parse workflow snapshot');
+    }
+
+    // Update context if provided
+    if (resumeContext) {
+      // Update stepResults with resume context
+      parsedSnapshot.context.stepResults[stepId] = {
+        status: 'success',
+        payload: {
+          ...(parsedSnapshot?.context?.stepResults?.[stepId]?.payload || {}),
+          ...resumeContext,
+        },
+      };
+    }
+
+    // Set a simple state structure
+    parsedSnapshot.value = {
+      [stepId]: 'pending',
+    };
+
+    // Clean up children property
+    parsedSnapshot.children = {};
+
+    // Reset attempt count
+    if (parsedSnapshot.context?.attempts) {
+      parsedSnapshot.context.attempts[stepId] =
+        this.#steps[stepId]?.retryConfig?.attempts || this.#retryConfig?.attempts || 3;
+    }
+
+    this.log(LogLevel.INFO, 'Resuming workflow with updated snapshot', {
+      updatedSnapshot: parsedSnapshot,
+      runId,
+      stepId,
+    });
+
+    console.log(parsedSnapshot, 'PARSED');
+
+    return this.execute({
+      snapshot: parsedSnapshot,
+      runId,
+    });
+  }
   __registerPrimitives(p: MastraPrimitives) {
     if (p.telemetry) {
       this.__setTelemetry(p.telemetry);

@@ -49,16 +49,15 @@ const deletionStep = new Step({
   outputSchema: z.object({
     deleted: z.boolean(),
   }),
-  execute: async ({ suspend }) => {
-    if (true) {
-      console.log('I am suspending');
-      suspend();
-      console.log('I am suspending');
-      return { deleted: false };
+  execute: async ({ suspend, context }) => {
+    console.log(JSON.stringify(context, null, 2));
+    if (context?.machineContext?.stepResults.deletion?.status === 'success') {
+      console.log(context.machineContext.stepResults.deletion.payload);
+      return { deleted: true };
     }
-    // return {
-    //     deleted: true,
-    // }
+
+    await suspend();
+    return { deleted: false };
   },
 });
 
