@@ -1,0 +1,14 @@
+{
+  "name": "generate-object-structured",
+  "type": "module",
+  "scripts": {
+    "start": "pnpx tsx index.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.7"
+  }
+}

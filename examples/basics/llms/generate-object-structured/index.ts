@@ -1,5 +1,8 @@
 import { Mastra } from '@mastra/core';
+import dotenv from 'dotenv';
 import { z } from 'zod';
+
+dotenv.config();
 
 const mastra = new Mastra();
 
@@ -21,10 +24,8 @@ const recipeSchema = z.object({
   }),
 });
 
-const result = await llm.stream('Generate a egusi recipe.', {
+const result = await llm.generate('Generate a egusi recipe.', {
   output: recipeSchema,
 });
 
-for await (const chunk of result.textStream) {
-  process.stdout.write(chunk);
-}
+console.log(JSON.stringify(result.object.recipe, null, 2));
