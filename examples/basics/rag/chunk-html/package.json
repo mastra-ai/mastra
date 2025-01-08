@@ -1,0 +1,10 @@
+{
+  "name": "chunk-html",
+  "type": "module",
+  "scripts": {
+    "start": "pnpx tsx index.ts"
+  },
+  "dependencies": {
+    "@mastra/rag": "workspace:*"
+  }
+}

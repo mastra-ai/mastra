@@ -8,6 +8,8 @@ const testJson = {
 
 const doc = MDocument.fromJSON(JSON.stringify(testJson));
 
-const chunks = await doc.chunk();
+const chunks = await doc.chunk({
+  maxSize: 100,
+});
 
 console.log(chunks);

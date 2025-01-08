@@ -1,4 +1,4 @@
-import { MDocument, embed, PgVector } from '@mastra/rag';
+import { MDocument, embed, PineconeVector } from '@mastra/rag';
 
 const doc = MDocument.fromText('Your text content...');
 
@@ -10,12 +10,12 @@ const { embeddings } = await embed(chunks, {
   maxRetries: 3,
 });
 
-const pgVector = new PgVector('postgresql://localhost:5432/mydb');
+const pinecone = new PineconeVector(process.env.PINECONE_API_KEY!);
 
-await pgVector.createIndex('test_index', 1536);
+await pinecone.createIndex('test_index', 1536);
 
-await pgVector.upsert(
+await pinecone.upsert(
   'test_index',
   embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text })),
+  chunks?.map(chunk => ({ text: chunk.text })),
 );

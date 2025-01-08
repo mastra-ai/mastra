@@ -1,4 +1,7 @@
 import { MDocument, embed, PineconeVector } from '@mastra/rag';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const doc = MDocument.fromText('Your text content...');
 
@@ -10,7 +13,7 @@ const { embeddings } = await embed(chunks, {
   maxRetries: 3,
 });
 
-const pinecone = new PineconeVector('your-api-key');
+const pinecone = new PineconeVector(process.env.PINECONE_API_KEY!);
 
 await pinecone.createIndex('test_index', 1536);
 
@@ -20,6 +23,6 @@ await pinecone.upsert(
   chunks?.map((chunk: any) => ({ text: chunk.text })),
 );
 
-const results = await pinecone.query('test-index', embeddings[0], 10);
+const results = await pinecone.query('test_index', embeddings[0], 10);
 
 console.log(results);
