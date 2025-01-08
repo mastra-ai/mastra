@@ -174,7 +174,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should support simple string conditions', async () => {
+    it('should support simple string conditions', async () => {
       const step1Action = jest.fn<any>().mockResolvedValue({ status: 'success' });
       const step2Action = jest.fn<any>().mockResolvedValue({ result: 'step2' });
       const step3Action = jest.fn<any>().mockResolvedValue({ result: 'step3' });
