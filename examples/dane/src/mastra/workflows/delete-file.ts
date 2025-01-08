@@ -50,12 +50,10 @@ const deletionStep = new Step({
     deleted: z.boolean(),
   }),
   execute: async ({ suspend, context }) => {
-    console.log(JSON.stringify(context, null, 2));
+    console.log('STEP STATUS', context?.machineContext?.stepResults.deletion);
     if (context?.machineContext?.stepResults.deletion?.status === 'success') {
-      console.log(context.machineContext.stepResults.deletion.payload);
       return { deleted: true };
     }
-
     await suspend();
     return { deleted: false };
   },

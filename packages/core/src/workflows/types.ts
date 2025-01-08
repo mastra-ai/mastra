@@ -162,6 +162,7 @@ export interface WorkflowLogMessage extends BaseLogMessage {
 }
 
 export type WorkflowEvent =
+  | { type: 'RESET_TO_PENDING'; stepId: string }
   | { type: 'CONDITIONS_MET'; stepId: string }
   | { type: 'CONDITION_FAILED'; stepId: string; error: string }
   | { type: 'SUSPENDED'; stepId: string }

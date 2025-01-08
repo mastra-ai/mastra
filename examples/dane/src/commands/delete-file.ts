@@ -1,4 +1,4 @@
-import { input } from '@inquirer/prompts';
+import { confirm, input } from '@inquirer/prompts';
 import chalk from 'chalk';
 
 import { mastra } from '../mastra/index.js';
@@ -13,26 +13,32 @@ export async function deleteFile() {
     const result = await workflow.execute({
       onStep: async ({ stepId, status, runId }) => {
         console.log('STEP', stepId, status, runId);
-        if (stepId === 'deletion' && status === 'suspended') {
-          console.log('RESUMING');
-          await workflow.resume({
-            stepId,
-            runId,
-            context: {
-              confirm: true,
-            },
-          });
-        }
-        // if suspended
-        // do something
-        // call resume
+        // if (stepId === 'deletion' && status === 'suspended') {
+        //   await workflow.resume({
+        //     stepId: `deletion`,
+        //     runId: runId,
+        //     context: {
+        //       confirm: true,
+        //     },
+        //   });
+        // }
       },
     });
-    // watch the workflow, if stepResults X are certain status im gonna do something
-    // inquirer on the cli
-    // resume the state machine with the input from the user
 
-    console.log(JSON.stringify(result, null, 2));
+    console.log(result);
+
+    if (result.results.deletion?.status === 'suspended') {
+      console.log('Resuming...');
+      const result2 = await workflow.resume({
+        stepId: `deletion`,
+        runId: result.runId,
+        context: {
+          confirm: true,
+        },
+      });
+
+      console.log('RESULT', result2);
+    }
   } catch (e) {
     console.log(e);
   }

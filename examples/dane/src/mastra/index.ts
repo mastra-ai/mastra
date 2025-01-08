@@ -32,7 +32,6 @@ export const mastra = new Mastra({
     packagePublisher: packagePublisher,
     deleteFile: deleteFileWorkflow,
   },
-  logger: false,
   syncs: {
     ...firecrawl.getSyncs(),
   },
