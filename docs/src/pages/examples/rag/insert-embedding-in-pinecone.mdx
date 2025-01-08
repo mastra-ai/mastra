@@ -6,6 +6,9 @@ After generating embeddings, you need to store them in a vector database for sim
 
 ```tsx copy
 import { MDocument, embed, PineconeVector } from '@mastra/rag';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const doc = MDocument.fromText('Your text content...');
 
@@ -33,4 +36,4 @@ await pinecone.upsert(
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pinecone.ts'} />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pinecone'} />
