@@ -31,21 +31,6 @@ const incrementByOne = new Step({
   },
 });
 
-const squareValue = new Step({
-  id: 'stepThree',
-  description: 'Squares the input value',
-  inputSchema: z.object({
-    valueToSquare: z.number(),
-  }),
-  outputSchema: z.object({
-    squaredValue: z.number(),
-  }),
-  execute: async ({ context }) => {
-    const squaredValue = context.valueToSquare * context.valueToSquare;
-    return { squaredValue };
-  },
-});
-
 export const cyclicalWorkflow = new Workflow({
   name: 'cyclical-workflow',
   triggerSchema: z.object({
