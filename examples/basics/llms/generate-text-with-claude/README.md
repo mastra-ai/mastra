@@ -17,13 +17,13 @@ A simple example showing how to generate text using Mastra and claude.
    cd examples/basics/llms/generate-text-claude
    ```
 
-2. Copy the environment variables file and add your OpenAI API key:
+2. Copy the environment variables file and add your Anthropic API key:
 
    ```bash
    cp .env.example .env
    ```
 
-   Then edit `.env` and add your OpenAI API key:
+   Then edit `.env` and add your Anthropic API key:
 
    ```env
    ANTHROPIC_API_KEY=your-api-key-here
