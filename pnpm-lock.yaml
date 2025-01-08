@@ -118,11 +118,11 @@ importers:
         specifier: ^3.24.0
         version: 3.24.1
 
-  examples/basics/llms/stream-text:
+  examples/basics/rag/embed-chunk-array:
     dependencies:
-      '@mastra/core':
+      '@mastra/rag':
         specifier: workspace:*
-        version: link:../../../../packages/core
+        version: link:../../../../packages/rag
     devDependencies:
       dotenv:
         specifier: ^16.4.7
