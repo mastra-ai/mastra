@@ -6,6 +6,9 @@ When interacting with language models, you can guide their behavior by providing
 
 ```ts showLineNumbers
 import { Mastra } from '@mastra/core';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const mastra = new Mastra();
 
@@ -28,5 +31,5 @@ console.log(response.text);
 <br />
 <br />
 <GithubLink
-  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/llms/generate-text-system-prompt.ts'}
+  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/llms/generate-text-system-prompt'}
 />

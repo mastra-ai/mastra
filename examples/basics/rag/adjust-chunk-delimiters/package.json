@@ -1,0 +1,10 @@
+{
+  "name": "adjust-chunk-delimiters",
+  "type": "module",
+  "scripts": {
+    "start": "pnpx tsx index.ts"
+  },
+  "dependencies": {
+    "@mastra/rag": "workspace:*"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "tool-as-workflow-step",
+  "type": "module",
+  "scripts": {
+    "start": "pnpx tsx index.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*",
+    "zod": "^3.24.1"
+  }
+}
