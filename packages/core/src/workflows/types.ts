@@ -41,7 +41,10 @@ export type StepGraph = {
 
 export type RetryConfig = { attempts?: number; delay?: number };
 
-export type VariableReference<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodType<any>> =
+export type VariableReference<
+  TStep extends StepVariableType<any, any, any, any>,
+  TTriggerSchema extends z.ZodType<any>,
+> =
   TStep extends IAction<any, any, any, any>
     ? {
         step: TStep;
@@ -57,7 +60,10 @@ export type VariableReference<TStep extends StepVariableType<any, any, any, any>
           path: string;
         };
 
-export interface BaseCondition<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodType<any>> {
+export interface BaseCondition<
+  TStep extends StepVariableType<any, any, any, any>,
+  TTriggerSchema extends z.ZodType<any>,
+> {
   ref: TStep extends IAction<any, any, any, any>
     ? {
         step: TStep;
@@ -111,7 +117,9 @@ export interface StepConfig<
   TTriggerSchema extends z.ZodType<any>,
 > {
   snapshotOnTimeout?: boolean;
-  when?: Condition<CondStep, TTriggerSchema> | ((args: { context: WorkflowContext<TTriggerSchema> }) => Promise<boolean>);
+  when?:
+    | Condition<CondStep, TTriggerSchema>
+    | ((args: { context: WorkflowContext<TTriggerSchema> }) => Promise<boolean>);
   variables?: StepInputType<TStep, 'inputSchema'> extends never
     ? Record<string, VariableReference<VarStep, TTriggerSchema>>
     : {
@@ -140,7 +148,10 @@ export interface WorkflowContext<TTrigger extends z.ZodType<any> = any> {
   stepResults: Record<string, StepResult<any>>;
   triggerData: z.infer<TTrigger>;
   attempts: Record<string, number>;
-  getStepPayload: (stepId: string) => z.infer<TTrigger> | WorkflowContext<TTrigger>['stepResults'][string] extends StepSuccess<infer T> ? T : unknown;
+  getStepPayload: {
+    (stepId: 'trigger'): z.infer<TTrigger>;
+    <T = unknown>(stepId: string): T | undefined;
+  };
 }
 
 export interface WorkflowLogMessage extends BaseLogMessage {

@@ -108,7 +108,7 @@ export class Workflow<
       type: 'parallel',
       context: ({ input }) => ({
         ...input,
-        getStepPayload: (stepId: string) => {
+        getStepPayload: ((stepId: string) => {
           if (stepId === 'trigger') {
             return input.triggerData;
           }
@@ -117,7 +117,7 @@ export class Workflow<
             return result.payload;
           }
           return undefined;
-        },
+        }) as WorkflowContext<TTriggerSchema>['getStepPayload'],
       }),
       states: this.#buildStateHierarchy(this.#stepGraph) as any,
     });
@@ -291,12 +291,12 @@ export class Workflow<
           },
           {} as Record<string, number>,
         ),
-        getStepPayload: (stepId: string) => {
+        getStepPayload: ((stepId: string) => {
           if (stepId === 'trigger') {
-            return triggerData as any;
+            return triggerData;
           }
           return undefined;
-        },
+        }) as WorkflowContext<TTriggerSchema>['getStepPayload'],
       },
       snapshot,
     });
@@ -842,7 +842,7 @@ export class Workflow<
     // Add machineContext with getStepPayload helper
     resolvedData.machineContext = {
       ...context,
-      getStepPayload: (stepId: string) => {
+      getStepPayload: ((stepId: string) => {
         if (stepId === 'trigger') {
           return context.triggerData;
         }
@@ -851,7 +851,7 @@ export class Workflow<
           return result.payload;
         }
         return undefined;
-      },
+      }) as WorkflowContext<TTriggerSchema>['getStepPayload'],
     };
 
     for (const [key, variable] of Object.entries(stepConfig.data)) {

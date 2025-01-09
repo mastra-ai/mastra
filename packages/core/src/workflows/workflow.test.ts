@@ -5,6 +5,7 @@ import { createSync } from '../sync';
 import { createTool } from '../tools';
 
 import { Step } from './step';
+import { WorkflowContext } from './types';
 import { Workflow } from './workflow';
 
 describe('Workflow', () => {
@@ -278,24 +279,43 @@ describe('Workflow', () => {
     });
 
     it('should provide access to step results and trigger data via getStepPayload helper', async () => {
-      const step1Action = jest.fn<any>().mockImplementation(async ({ context }) => {
-        // Test accessing trigger data
-        const triggerData = context.machineContext?.getStepPayload('trigger');
-        expect(triggerData).toEqual({ inputValue: 'test-input' });
-        return { value: 'step1-result' };
-      });
+      type TestTriggerSchema = z.ZodObject<{ inputValue: z.ZodString }>;
 
-      const step2Action = jest.fn<any>().mockImplementation(async ({ context }) => {
-        // Test accessing previous step result
-        const step1Result = context.machineContext?.getStepPayload('step1');
-        expect(step1Result).toEqual({ value: 'step1-result' });
+      const step1Action = jest.fn<any>().mockImplementation(
+        async ({
+          context,
+        }: {
+          context: {
+            machineContext?: WorkflowContext<TestTriggerSchema>;
+          };
+        }) => {
+          // Test accessing trigger data with correct type
+          const triggerData = context.machineContext?.getStepPayload('trigger');
+          expect(triggerData).toEqual({ inputValue: 'test-input' });
+          return { value: 'step1-result' };
+        },
+      );
 
-        // Verify that failed steps return undefined
-        const failedStep = context.machineContext?.getStepPayload('non-existent-step');
-        expect(failedStep).toBeUndefined();
+      const step2Action = jest.fn<any>().mockImplementation(
+        async ({
+          context,
+        }: {
+          context: {
+            machineContext?: WorkflowContext<TestTriggerSchema>;
+          };
+        }) => {
+          // Test accessing previous step result with type
+          type Step1Result = { value: string };
+          const step1Result = context.machineContext?.getStepPayload<Step1Result>('step1');
+          expect(step1Result).toEqual({ value: 'step1-result' });
 
-        return { value: 'step2-result' };
-      });
+          // Verify that failed steps return undefined
+          const failedStep = context.machineContext?.getStepPayload<never>('non-existent-step');
+          expect(failedStep).toBeUndefined();
+
+          return { value: 'step2-result' };
+        },
+      );
 
       const step1 = new Step({ id: 'step1', execute: step1Action });
       const step2 = new Step({ id: 'step2', execute: step2Action });
