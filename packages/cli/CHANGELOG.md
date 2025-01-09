@@ -1,5 +1,12 @@
 # mastra
 
+## 0.1.57-alpha.79
+
+### Patch Changes
+
+- Updated dependencies [8e7814f]
+  - @mastra/core@0.1.27-alpha.53
+
 ## 0.1.57-alpha.78
 
 ### Patch Changes

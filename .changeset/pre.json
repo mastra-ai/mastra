@@ -41,7 +41,10 @@
     "@mastra/dane": "0.0.1",
     "@mastra/stabilityai": "1.0.1-alpha.17",
     "travel-app": "0.1.0",
-    "workflow": "1.0.1-alpha.5"
+    "workflow": "1.0.1-alpha.5",
+    "workflow-ai-recruiter": "1.0.0",
+    "workflow-with-inline-steps": "1.0.0",
+    "workflow-with-separate-steps": "1.0.0"
   },
   "changesets": [
     "afraid-papayas-shake",
@@ -73,6 +76,7 @@
     "eleven-llamas-warn",
     "fair-colts-know",
     "fair-houses-joke",
+    "five-moles-hunt",
     "flat-points-behave",
     "fluffy-rings-shake",
     "fresh-lions-work",

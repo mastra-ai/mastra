@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.53
+
+### Patch Changes
+
+- 8e7814f: Add payload getter on machine context
+
 ## 0.1.27-alpha.52
 
 ### Patch Changes
