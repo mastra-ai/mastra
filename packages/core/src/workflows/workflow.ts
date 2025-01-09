@@ -94,8 +94,8 @@ export class Workflow<
   private initializeMachine() {
     const machine = setup({
       types: {} as {
-        context: WorkflowContext;
-        input: WorkflowContext;
+        context: Omit<WorkflowContext, 'getStepPayload'>;
+        input: Omit<WorkflowContext, 'getStepPayload'>;
         events: WorkflowEvent;
         actions: WorkflowActions;
         actors: WorkflowActors;
@@ -822,6 +822,21 @@ export class Workflow<
     this.log(LogLevel.DEBUG, `Resolving variables for ${stepId}`, {
       runId: this.#runId,
     });
+
+    // Add machineContext with getStepPayload helper
+    resolvedData.machineContext = {
+      ...context,
+      getStepPayload: ((stepId: string) => {
+        if (stepId === 'trigger') {
+          return context.triggerData;
+        }
+        const result = context.stepResults[stepId];
+        if (result && result.status === 'success') {
+          return result.payload;
+        }
+        return undefined;
+      }) as WorkflowContext<TTriggerSchema>['getStepPayload'],
+    };
 
     for (const [key, variable] of Object.entries(stepConfig.data)) {
       // Check if variable comes from trigger data or a previous step's result

@@ -19,7 +19,7 @@ const getDiff = new Step({
     diff: z.string(),
   }),
   execute: async ({ context }) => {
-    const repoPath = context?.machineContext?.triggerData?.repoPath;
+    const repoPath = context?.machineContext?.getStepPayload<{ repoPath: string }>('trigger')?.repoPath;
 
     // Get the git diff of staged changes
     const diff = execSync('git diff --staged', {
@@ -53,9 +53,10 @@ const generateMessage = new Step({
     guidelines: z.array(z.string()),
   }),
   execute: async ({ context, mastra }) => {
-    const diffStep = context?.machineContext?.stepResults?.getDiff;
-    const fileDataStep = context?.machineContext?.stepResults?.readConventionalCommitSpec;
-    if (!diffStep || diffStep.status !== 'success') {
+    const diffData = context?.machineContext?.getStepPayload<{ diff: string }>('getDiff');
+    const fileData = context?.machineContext?.getStepPayload<{ fileData: any }>('readConventionalCommitSpec');
+
+    if (!diffData) {
       return { commitMessage: '', generated: false, guidelines: [] };
     }
 
@@ -64,14 +65,14 @@ const generateMessage = new Step({
     const res = await daneCommitGenerator?.generate(
       `
         Given this git diff:
-        ${diffStep.payload.diff}
+        ${diffData.diff}
 
         IF THE DIFF IS EMPTY, RETURN "No staged changes found", AND SET GENERATED TO FALSE,
         OTHERWISE, SET GENERATED TO TRUE
 
         ${
-          fileDataStep?.status === 'success' && fileDataStep?.payload?.fileData?.message
-            ? `USE THE FOLLOWING GUIDELINES: ${fileDataStep?.payload?.fileData?.message}`
+          fileData && fileData.fileData?.message
+            ? `USE THE FOLLOWING GUIDELINES: ${fileData.fileData?.message}`
             : `USE THE FOLLOWING GUIDELINES:
         - Start with a verb in the present tense
         - Be specific but concise
