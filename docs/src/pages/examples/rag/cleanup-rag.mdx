@@ -1,0 +1,244 @@
+import { GithubLink } from '../../../components/github-link';
+
+# Building a RAG System with Mastra: Optimizing Information Density
+
+This example demonstrates how to implement a Retrieval-Augmented Generation (RAG) system using Mastra, OpenAI embeddings, and PGVector for vector storage. 
+The system uses an agent to clean the initial chunks to optimize information density and deduplicate data.
+
+## Overview
+
+The system implements RAG using Mastra and OpenAI, this time optimizing information density through LLM-based processing. Here's what it does:
+1. Sets up a Mastra agent with GPT-4o-mini for response generation
+2. Sets up another Mastra agent to handle cleaning up chunk data before vector storage
+3. Creates a custom context tool for managing vector store interactions
+4. Chunks text documents into smaller segments
+5. Takes those chunks and filters them to remove irrelevant or duplicate information
+4. Creates embeddings for both the initial chunks and the updated chunks
+5. Stores them both in a PostgreSQL vector database
+6. Retrieves relevant chunks based on queries using context tool
+7. Generates context-aware responses using the Mastra agent
+
+## Setup 
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash
+POSTGRES_CONNECTION_STRING=your_connection_string_here
+```
+
+### Dependencies
+
+Then, import the necessary dependencies:
+
+```typescript copy
+import { Mastra, Agent, EmbedResult, EmbedManyResult } from '@mastra/core'
+import { embed, MDocument, PgVector } from '@mastra/rag'
+```
+
+## Tool Creation
+
+### Context Tool
+```typescript
+export const contextTool = createTool({
+  id: 'Use Context',
+  inputSchema: z.object({
+    queryText: z.string(),
+    index: z.string(),
+  }),
+  outputSchema: z.object({
+    context: z.string(),
+  }),
+  description: `Fetches the retrieved chunks from the vector store and combines them into a single context string`,
+  execute: async ({ context: { queryText, index } }) => {
+    const { embedding } = (await embed(queryText, {
+      provider: 'OPEN_AI',
+      model: 'text-embedding-ada-002',
+      maxRetries: 3,
+    })) as EmbedResult<string>;
+
+    const results = await pgVector.query(index, embedding);
+    const relevantChunks = results.map(result => result?.metadata?.text);
+    console.log('Chunks used:', relevantChunks);
+    
+    return {
+      context: relevantChunks.join('\n\n'),
+    };
+  },
+});
+```
+
+### Chunk Tool
+```typescript
+export const chunkTool = createTool({
+  id: 'Chunk Tool',
+  inputSchema: z.object({}),
+  description: `Does initial chunking and returns chunks`,
+  execute: async () => {
+    const chunks = await doc.chunk({
+      strategy: 'recursive',
+      size: 512,
+      overlap: 50,
+      separator: '\n',
+    });
+
+    return {
+      chunks,
+    };
+  },
+});
+```
+
+## Agent Configuration
+
+Set up two Mastra agents:
+
+```typescript
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  instructions:
+    'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
+  model: {
+    provider: 'OPEN_AI',
+    name: 'gpt-4o-mini',
+  },
+  tools: { contextTool },
+});
+
+export const densityAgent = new Agent({
+  name: 'Density Agent',
+  instructions: 'You are a helpful assistant that processes, cleans, and labels data before storage.',
+  model: {
+    provider: 'OPEN_AI',
+    name: 'gpt-4o-mini',
+  },
+  tools: { chunkTool },
+});
+
+export const mastra = new Mastra({
+  agents: { ragAgent, densityAgent },
+});
+```
+
+## Document Processing
+
+### Initial Chunking
+```typescript
+const doc = MDocument.fromText(yourText);
+
+const chunks = await doc.chunk({
+  strategy: 'recursive',
+  size: 256,
+  overlap: 50,
+  separator: '\n',
+});
+```
+
+### Data Cleaning
+```typescript
+const chunkPrompt = `Take the chunks returned from the tool and clean them up according to the instructions provided. Make sure to filter out irrelevant information and remove duplicates.`;
+
+const newChunks = await densityAgent.generate(chunkPrompt);
+const updatedDoc = MDocument.fromText(newChunks.text);
+
+const updatedChunks = await updatedDoc.chunk({
+  strategy: 'recursive',
+  size: 256,
+  overlap: 50,
+  separator: '\n',
+});
+```
+
+## Creating and Storing Embeddings
+
+Generate and store both raw and cleaned embeddings:
+
+```typescript
+const { embeddings } = await embed(chunks, {
+  provider: 'OPEN_AI',
+  model: 'text-embedding-ada-002',
+  maxRetries: 3,
+}) as EmbedManyResult<string>;
+
+const { embeddings: cleanedEmbeddings } = await embed(updatedChunks, {
+  provider: 'OPEN_AI',
+  model: 'text-embedding-ada-002',
+  maxRetries: 3,
+}) as EmbedManyResult<string>;
+
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+await pgVector.createIndex('embeddings', 1536);
+await pgVector.createIndex('cleanedEmbeddings', 1536);
+
+await pgVector.upsert(
+  'embeddings',
+  embeddings,
+  chunks?.map((chunk: any) => ({ text: chunk.text })),
+);
+
+await pgVector.upsert(
+  'cleanedEmbeddings',
+  cleanedEmbeddings,
+  updatedChunks?.map((chunk: any) => ({ text: chunk.text })),
+);
+```
+
+## Response Generation
+
+Function to generate responses with index selection:
+
+```typescript
+async function generateResponse(query: string, index: string) {
+  const prompt = `
+      Please answer the following question:
+      ${query}
+
+      Please base your answer only on the context provided in the tool with this index ${index}. 
+      If the context doesn't contain enough information to fully answer the question, 
+      please state that explicitly. 
+      `;
+
+  const completion = await ragAgent.generate(prompt);
+  return completion.text;
+}
+```
+
+## Query Processing
+
+```typescript
+async function answerQueries(queries: string[], index: string) {
+  for (const query of queries) {
+    try {
+      const answer = await generateResponse(query, index);
+      console.log('\nQuery:', query);
+      console.log('Response:', answer);
+    } catch (error) {
+      console.error(`Error processing query "${query}":`, error);
+    }
+  }
+}
+```
+
+## Example Usage
+
+```typescript
+const queries = [
+  'What is the average temperature on Mars?',
+  'What technologies are used in modern spacecraft?',
+  'What are all the requirements for space settlements?',
+  'What are all the dates mentioned related to space stations?',
+  'What are all the mentions of sustainability in space settlements?',
+];
+
+// Compare responses between raw and cleaned embeddings
+await answerQueries(queries, 'embeddings');
+await answerQueries(queries, 'cleanedEmbeddings');
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cleanup-rag.ts'} />

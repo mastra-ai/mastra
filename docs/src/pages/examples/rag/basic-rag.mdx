@@ -1,0 +1,195 @@
+import { GithubLink } from '../../../components/github-link';
+
+# Building a RAG System with Mastra
+
+This example demonstrates how to implement a Retrieval-Augmented Generation (RAG) system using Mastra, OpenAI embeddings, and PGVector for vector storage.
+
+## Overview
+
+The system implements RAG using Mastra and OpenAI. Here's what it does:
+1. Sets up a Mastra agent with GPT-4o-mini for response generation
+2. Creates a custom context tool for managing vector store interactions
+3. Chunks text documents into smaller segments
+4. Creates embeddings for these chunks
+5. Stores them in a PostgreSQL vector database
+6. Retrieves relevant chunks based on queries using context tool
+7. Generates context-aware responses using the Mastra agent
+
+## Setup 
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash
+POSTGRES_CONNECTION_STRING=your_connection_string_here
+```
+
+### Dependencies
+
+Then, import the necessary dependencies:
+
+```typescript copy
+import { Mastra, Agent, EmbedResult, EmbedManyResult } from '@mastra/core'
+import { embed, MDocument, PgVector } from '@mastra/rag'
+```
+
+## Context Tool Creation
+Define a custom tool for handling context retrieval:
+```typescript copy
+export const contextTool = createTool({
+  id: 'Use Context',
+  inputSchema: z.object({
+    queryText: z.string(),
+  }),
+  outputSchema: z.object({
+    context: z.string(),
+  }),
+  description: `Fetches the retrieved chunks from the vector store and combines them into a single context string`,
+  execute: async ({ context: { queryText } }) => {
+    const { embedding } = (await embed(queryText, {
+      provider: 'OPEN_AI',
+      model: 'text-embedding-ada-002',
+      maxRetries: 3,
+    })) as EmbedResult<string>
+
+    // Get relevant chunks from the vector database
+    const results = await pgVector.query('embeddings', embedding, 3)
+    const relevantChunks = results.map(result => result?.metadata?.text)
+
+    // Combine the chunks into a context string
+    const context = relevantChunks.join('\n\n')
+
+    return {
+      context,
+    }
+  },
+})
+```
+
+## Agent Configuration
+
+Set up the Mastra agent that will handle the responses:
+
+```typescript copy
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  instructions:
+    'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
+  model: {
+    provider: 'OPEN_AI',
+    name: 'gpt-4o-mini',
+  },
+})
+
+export const mastra = new Mastra({
+  agents: { ragAgent },
+})
+
+const agent = mastra.getAgent('ragAgent')
+```
+
+## Document Processing
+
+Create a document and process it into chunks:
+
+```typescript copy
+const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`) // Your text here
+
+const chunks = await doc.chunk({
+  strategy: 'recursive',
+  size: 512,
+  overlap: 50,
+  separator: '\n',
+})
+```
+
+## Creating and Storing Embeddings
+
+Generate embeddings for the chunks and store them in the vector database:
+
+```typescript copy
+const { embeddings } = await embed(chunks, {
+  provider: "OPEN_AI",
+  model: "text-embedding-ada-002",
+  maxRetries: 3,
+}) as EmbedManyResult<string>
+
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!)
+await pgVector.createIndex("embeddings", 1536)
+await pgVector.upsert(
+  "embeddings",
+  embeddings,
+  chunks?.map((chunk: any) => ({ text: chunk.text }))
+)
+```
+
+## Response Generation
+
+Function to generate responses based on retrieved context:
+
+```typescript copy
+async function generateResponse(query: string) {
+  const prompt = `
+      Please answer the following question:
+      ${query}
+
+      Please base your answer only on the context provided in the tool. If the context doesn't 
+      contain enough information to fully answer the question, please state that explicitly.
+      `
+
+  const completion = await agent.generate(prompt)
+  return completion.text
+}
+```
+
+
+## Single Query Processing
+
+Example of processing a single query:
+
+```typescript copy
+const queryText = 'What are the main adaptation strategies for farmers?'
+const response = await generateResponse(queryText)
+console.log('Query:', queryText)
+console.log('Response:', response)
+```
+
+## Multiple Query Processing
+
+Example of processing multiple queries:
+
+```typescript copy
+async function answerQueries(queries: string[]) {
+  for (const query of queries) {
+    try {
+      const answer = await generateResponse(query)
+      console.log('\nQuery:', query)
+      console.log('Response:', answer)
+    } catch (error) {
+      console.error(`Error processing query "${query}":`, error)
+    }
+  }
+}
+```
+
+## Example Usage
+
+```typescript copy
+const queries = [
+  "What are the main points in the article?",
+  "How does temperature affect crop yields?",
+  "What solutions are farmers implementing?",
+  "What are the future challenges mentioned in the text?",
+];
+
+await answerQueries(queries)
+```
+
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/basic-rag.ts'} />

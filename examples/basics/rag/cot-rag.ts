@@ -1,0 +1,148 @@
+import { Mastra, Agent, EmbedResult, EmbedManyResult, createTool } from '@mastra/core';
+import { embed, MDocument, PgVector } from '@mastra/rag';
+import { z } from 'zod';
+
+export const contextTool = createTool({
+  id: 'Use Context',
+  inputSchema: z.object({
+    queryText: z.string(),
+  }),
+  outputSchema: z.object({
+    context: z.string(),
+  }),
+  description: `Fetches the retrieved chunks from the vector store and combines them into a single context string`,
+  execute: async ({ context: { queryText } }) => {
+    const { embedding } = (await embed(queryText, {
+      provider: 'OPEN_AI',
+      model: 'text-embedding-ada-002',
+      maxRetries: 3,
+    })) as EmbedResult<string>;
+
+    // Get relevant chunks from the vector database
+    const results = await pgVector.query('embeddings', embedding, 3);
+    const relevantChunks = results.map(result => result?.metadata?.text);
+
+    // Combine the chunks into a context string
+    const context = relevantChunks.join('\n\n');
+
+    return {
+      context,
+    };
+  },
+});
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  instructions: `You are a helpful assistant that answers questions based on the provided context.
+Follow these steps for each response:
+
+1. First, carefully analyze the retrieved context chunks and identify key information.
+2. Break down your thinking process about how the retrieved information relates to the query.
+3. Explain how you're connecting different pieces from the retrieved chunks.
+4. Draw conclusions based only on the evidence in the retrieved context.
+5. If the retrieved chunks don't contain enough information, explicitly state what's missing.
+
+Format your response as:
+THOUGHT PROCESS:
+- Step 1: [Initial analysis of retrieved chunks]
+- Step 2: [Connections between chunks]
+- Step 3: [Reasoning based on chunks]
+
+FINAL ANSWER:
+[Your concise answer based on the retrieved context]`,
+  model: {
+    provider: 'OPEN_AI',
+    name: 'gpt-4o-mini',
+  },
+  tools: { contextTool },
+});
+
+export const mastra = new Mastra({
+  agents: { ragAgent },
+});
+const agent = mastra.getAgent('ragAgent');
+
+const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture
+
+Climate change poses significant challenges to global agriculture and food security. Rising temperatures, changing precipitation patterns, and increased frequency of extreme weather events are affecting crop yields worldwide.
+
+Temperature Effects
+Global warming has led to shifts in growing seasons and altered crop development cycles. Many regions are experiencing longer periods of drought, while others face excessive rainfall. These changes directly impact plant growth and development.
+
+Crop Yield Impact
+Studies show that major staple crops like wheat, rice, and maize are particularly vulnerable to temperature increases. For every degree Celsius increase in global mean temperature, wheat yields are expected to decrease by 6%.
+
+Adaptation Strategies
+Farmers are implementing various adaptation strategies:
+1. Developing drought-resistant crop varieties
+2. Adjusting planting dates to match new seasonal patterns
+3. Implementing improved irrigation systems
+4. Diversifying crop selections to reduce risk
+
+Future Implications
+The agricultural sector must continue to innovate and adapt to ensure food security for a growing global population. This includes developing new technologies, improving water management, and enhancing soil conservation practices.`);
+
+const chunks = await doc.chunk({
+  strategy: 'recursive',
+  size: 512,
+  overlap: 50,
+  separator: '\n',
+});
+
+const { embeddings } = (await embed(chunks, {
+  provider: 'OPEN_AI',
+  model: 'text-embedding-ada-002',
+  maxRetries: 3,
+})) as EmbedManyResult<string>;
+
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+await pgVector.createIndex('embeddings', 1536);
+await pgVector.upsert(
+  'embeddings',
+  embeddings,
+  chunks?.map((chunk: any) => ({ text: chunk.text })),
+);
+
+async function generateResponse(query: string) {
+  const prompt = `
+    Please answer the following question using chain-of-thought reasoning:
+    ${query}
+
+    Important Instructions:
+    1. First, analyze the context retrieved from the vector store
+    2. Show your step-by-step reasoning about how the retrieved chunks help answer the query
+    3. Base your answer ONLY on the retrieved context chunks
+    4. If the retrieved chunks lack necessary information, explicitly state that
+    5. Structure your response with "THOUGHT PROCESS" and "FINAL ANSWER" sections
+
+    Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
+    Remember: Explain how you're using the retrieved information to reach your conclusions.
+    `;
+
+  const completion = await agent.generate(prompt);
+  return completion.text;
+}
+
+async function answerQueries(queries: string[]) {
+  for (const query of queries) {
+    try {
+      const answer = await generateResponse(query);
+      console.log('\nQuery:', query);
+      console.log('\nReasoning Chain + Retrieved Context Response:');
+      console.log(answer);
+      console.log('\n-------------------');
+    } catch (error) {
+      console.error(`Error processing query "${query}":`, error);
+    }
+  }
+}
+
+const queries = [
+  'What are the main adaptation strategies for farmers?',
+  'Analyze how temperature affects crop yields.',
+  'What connections can you draw between climate change and food security?',
+  'How are farmers implementing solutions to address climate challenges?',
+  'What future implications are discussed for agriculture?',
+];
+
+await answerQueries(queries);

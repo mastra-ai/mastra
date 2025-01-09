@@ -158,6 +158,199 @@ describe('PgVector', () => {
     });
   });
 
+  describe('query with advanced filters', () => {
+    const indexName = 'test_query_filters';
+
+    beforeAll(async () => {
+      // Drop if exists first
+      try {
+        await pgVector.deleteIndex(indexName);
+      } catch (e) {
+        // Ignore if doesn't exist
+      }
+
+      // Create fresh
+      await pgVector.createIndex(indexName, 3);
+    });
+
+    beforeEach(async () => {
+      // Clear the table first
+      await pgVector.truncateIndex(indexName);
+
+      const vectors = [
+        [1, 0.1, 0],
+        [0.9, 0.2, 0],
+        [0.95, 0.1, 0],
+        [0.85, 0.2, 0],
+        [0.9, 0.1, 0],
+      ];
+
+      const metadata = [
+        { category: 'electronics', price: 100, tags: ['new', 'premium'], active: true },
+        { category: 'books', price: 50, tags: ['used'], active: true },
+        { category: 'electronics', price: 75, tags: ['refurbished'], active: false },
+        { category: 'books', price: 25, tags: ['used', 'sale'], active: true },
+        { category: 'clothing', price: 60, tags: ['new'], active: true },
+      ];
+
+      await pgVector.upsert(indexName, vectors, metadata);
+    });
+
+    afterAll(async () => {
+      await pgVector.deleteIndex(indexName);
+    });
+
+    // Test numeric comparisons
+    it('should filter with gt operator', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        price: { operator: 'gt', value: 75 },
+      });
+      expect(results).toHaveLength(1);
+      expect(results[0]?.metadata?.price).toBe(100);
+    });
+
+    it('should filter with lte operator', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        price: { operator: 'lte', value: 50 },
+      });
+      expect(results).toHaveLength(2);
+      results.forEach(result => {
+        expect(result.metadata?.price).toBeLessThanOrEqual(50);
+      });
+    });
+
+    // Test string operations
+    it('should filter with like operator', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        category: { operator: 'like', value: 'elect%' },
+      });
+      expect(results).toHaveLength(2);
+      results.forEach(result => {
+        expect(result.metadata?.category).toBe('electronics');
+      });
+    });
+
+    it('should filter with ilike operator for case-insensitive search', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        category: { operator: 'ilike', value: 'BOOKS' },
+      });
+      expect(results).toHaveLength(2);
+      results.forEach(result => {
+        expect(result.metadata?.category.toLowerCase()).toBe('books');
+      });
+    });
+
+    // Test array operations
+    it('should filter with in operator', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        category: { operator: 'in', value: ['electronics', 'clothing'] },
+      });
+      expect(results).toHaveLength(3);
+      results.forEach(result => {
+        expect(['electronics', 'clothing']).toContain(result.metadata?.category);
+      });
+    });
+
+    // Test contains operator with different types
+    it('should filter with contains operator for array values', async () => {
+      const results = await pgVector.query(indexName, [1, 0.1, 0], 10, {
+        tags: { operator: 'contains', value: ['new'] },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.tags).toContain('new');
+      });
+    });
+
+    it('should filter with contains operator for exact field match', async () => {
+      const results = await pgVector.query(indexName, [1, 0.1, 0], 10, {
+        category: { operator: 'contains', value: 'electronics' },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.category).toBe('electronics');
+      });
+    });
+
+    it('should filter with contains operator for nested objects', async () => {
+      // First insert a record with nested object
+      await pgVector.upsert(
+        indexName,
+        [[1, 0.1, 0]],
+        [
+          {
+            details: { color: 'red', size: 'large' },
+            category: 'clothing',
+          },
+        ],
+      );
+
+      const results = await pgVector.query(indexName, [1, 0.1, 0], 10, {
+        details: { operator: 'contains', value: { color: 'red' } },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.details.color).toBe('red');
+      });
+    });
+
+    // Test exists operator
+    it('should filter with exists operator', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        active: { operator: 'exists', value: null },
+      });
+      expect(results).toHaveLength(5);
+    });
+
+    // Test multiple conditions
+    it('should handle multiple filter conditions', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        category: 'electronics',
+        price: { operator: 'gt', value: 75 },
+        active: true,
+      });
+      expect(results).toHaveLength(1);
+      expect(results[0]?.metadata).toEqual(
+        expect.objectContaining({
+          category: 'electronics',
+          price: 100,
+          active: true,
+        }),
+      );
+    });
+
+    // Test edge cases
+    it('should handle empty result sets with valid filters', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        price: { operator: 'gt', value: 1000 },
+      });
+      expect(results).toHaveLength(0);
+    });
+
+    it('should throw error for invalid operator', async () => {
+      await expect(
+        pgVector.query(indexName, [1, 0, 0], 10, {
+          price: { operator: 'invalid' as any, value: 100 },
+        }),
+      ).rejects.toThrow('Unsupported operator: invalid');
+    });
+
+    // Test score threshold
+    it('should respect minimum score threshold', async () => {
+      const results = await pgVector.query(
+        indexName,
+        [1, 0, 0],
+        10,
+        { category: 'electronics' },
+        0.9, // minScore
+      );
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.score).toBeGreaterThan(0.9);
+      });
+    });
+  });
+
   describe('listIndexes', () => {
     const indexName = 'test_query_3';
     beforeAll(async () => {
@@ -173,10 +366,10 @@ describe('PgVector', () => {
       expect(indexes).toContain(indexName);
     });
 
-    it('should return empty array when no indexes exist', async () => {
+    it('should not return created index in list if it is deleted', async () => {
       await pgVector.deleteIndex(indexName);
       const indexes = await pgVector.listIndexes();
-      expect(indexes).toEqual([]);
+      expect(indexes).not.toContain(indexName);
     });
   });
 

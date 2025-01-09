@@ -118,16 +118,6 @@ importers:
         specifier: ^3.24.0
         version: 3.24.1
 
-  examples/basics/rag/embed-chunk-array:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-    devDependencies:
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.4.7
-
   examples/bird-checker-with-express:
     dependencies:
       '@mastra/core':
@@ -1016,8 +1006,8 @@ importers:
         specifier: ^22.10.5
         version: 22.10.5
       mastra:
-        specifier: ^0.1.57-alpha.75
-        version: 0.1.57-alpha.75(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/helpers@0.5.15)(@types/node@22.10.5)(@types/react-dom@19.0.2(@types/react@19.0.2))(@types/react@19.0.2)(babel-jest@29.7.0(@babel/core@7.26.0))(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.2)(typescript@5.7.2))
+        specifier: ^0.1.57-alpha.79
+        version: 0.1.57-unstable.57(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/helpers@0.5.15)(@types/node@22.10.5)(@types/react-dom@19.0.2(@types/react@19.0.2))(@types/react@19.0.2)(babel-jest@29.7.0(@babel/core@7.26.0))(babel-plugin-macros@3.1.0)(encoding@0.1.13)(ts-node@10.9.2(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.2)(typescript@5.7.2))
       tsx:
         specifier: ^4.19.2
         version: 4.19.2
@@ -1038,8 +1028,8 @@ importers:
         specifier: ^22.10.5
         version: 22.10.5
       mastra:
-        specifier: ^0.1.57-alpha.75
-        version: 0.1.57-alpha.75(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/helpers@0.5.15)(@types/node@22.10.5)(@types/react-dom@19.0.2(@types/react@19.0.2))(@types/react@19.0.2)(babel-jest@29.7.0(@babel/core@7.26.0))(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.2)(typescript@5.7.2))
+        specifier: ^0.1.57-alpha.79
+        version: 0.1.57-unstable.57(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/helpers@0.5.15)(@types/node@22.10.5)(@types/react-dom@19.0.2(@types/react@19.0.2))(@types/react@19.0.2)(babel-jest@29.7.0(@babel/core@7.26.0))(babel-plugin-macros@3.1.0)(encoding@0.1.13)(ts-node@10.9.2(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.2)(typescript@5.7.2))
       tsx:
         specifier: ^4.19.2
         version: 4.19.2
@@ -1082,8 +1072,8 @@ importers:
         specifier: ^22.10.5
         version: 22.10.5
       mastra:
-        specifier: ^0.1.57-alpha.75
-        version: 0.1.57-alpha.75(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/helpers@0.5.15)(@types/node@22.10.5)(@types/react-dom@19.0.2(@types/react@19.0.2))(@types/react@19.0.2)(babel-jest@29.7.0(@babel/core@7.26.0))(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.2)(typescript@5.7.2))
+        specifier: ^0.1.57-alpha.79
+        version: 0.1.57-unstable.57(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/helpers@0.5.15)(@types/node@22.10.5)(@types/react-dom@19.0.2(@types/react@19.0.2))(@types/react@19.0.2)(babel-jest@29.7.0(@babel/core@7.26.0))(babel-plugin-macros@3.1.0)(encoding@0.1.13)(ts-node@10.9.2(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.2)(typescript@5.7.2))
       tsx:
         specifier: ^4.19.2
         version: 4.19.2
@@ -5196,8 +5186,8 @@ packages:
     resolution: {integrity: sha512-Yhlar6v9WQgUp/He7BdgzOz8lqMQ8sU+jkCq7Wx8Myc5YFJLbEe7lgui/V7G1qB1DJykHSGwreceSaD60Y0PUQ==}
     hasBin: true
 
-  '@mastra/core@0.1.27-alpha.49':
-    resolution: {integrity: sha512-VvPJKh6bCiiNr05w/1Ae19oQzNWTjXdg7lp1Fb5HsbExb+rW7oqAsLFXYcW4zDDzqKJezqlzKExfpvSJyls5dA==}
+  '@mastra/core@0.1.27-alpha.44':
+    resolution: {integrity: sha512-W8uV/H4hFG4IB3xQN37jiZt1CVMYoIkWDjNNr8Jwz0aSx95/OBoeTvSEySV5KA9+IuLJusgaTszOPqXljr2raQ==}
     engines: {node: '>=20'}
 
   '@mdx-js/mdx@3.1.0':
@@ -11969,8 +11959,8 @@ packages:
     engines: {node: '>= 18'}
     hasBin: true
 
-  mastra@0.1.57-alpha.75:
-    resolution: {integrity: sha512-9A5KdjW3Jim96ZQY36It30Ndq3HZonussqltK54GNqEhKs6BzzHXJ1QrQGvYLZddv7MGBAS2R0qVrcc9r4i6Bw==}
+  mastra@0.1.57-unstable.57:
+    resolution: {integrity: sha512-qirVIK3m7KRwrWNH8hLtGuTmo5U8HxSiqpU8aDjiWXFxW3923MiA32rCKADuyH9NmjaVu9R3uX9/xdqD/YHDYA==}
     hasBin: true
 
   math-intrinsics@1.1.0:
@@ -19144,7 +19134,7 @@ snapshots:
       - supports-color
     optional: true
 
-  '@mastra/core@0.1.27-alpha.49(react@18.3.1)':
+  '@mastra/core@0.1.27-alpha.44(encoding@0.1.13)(react@18.3.1)':
     dependencies:
       '@ai-sdk/amazon-bedrock': 1.0.6(zod@3.24.1)
       '@ai-sdk/anthropic': 0.0.51(zod@3.24.1)
@@ -19172,7 +19162,6 @@ snapshots:
       anthropic-vertex-ai: 1.0.2(encoding@0.1.13)(zod@3.24.1)
       date-fns: 3.6.0
       express: 4.21.2
-      json-schema: 0.4.0
       radash: 12.1.0
       sift: 17.1.3
       voyage-ai-provider: 1.0.0(zod@3.24.1)
@@ -29201,12 +29190,12 @@ snapshots:
 
   marked@13.0.3: {}
 
-  mastra@0.1.57-alpha.75(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/helpers@0.5.15)(@types/node@22.10.5)(@types/react-dom@19.0.2(@types/react@19.0.2))(@types/react@19.0.2)(babel-jest@29.7.0(@babel/core@7.26.0))(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.2)(typescript@5.7.2)):
+  mastra@0.1.57-unstable.57(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/helpers@0.5.15)(@types/node@22.10.5)(@types/react-dom@19.0.2(@types/react@19.0.2))(@types/react@19.0.2)(babel-jest@29.7.0(@babel/core@7.26.0))(babel-plugin-macros@3.1.0)(encoding@0.1.13)(ts-node@10.9.2(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.2)(typescript@5.7.2)):
     dependencies:
       '@clack/prompts': 0.8.2
       '@dagrejs/dagre': 1.1.4
       '@hookform/resolvers': 3.9.1(react-hook-form@7.54.2(react@18.3.1))
-      '@mastra/core': 0.1.27-alpha.49(react@18.3.1)
+      '@mastra/core': 0.1.27-alpha.44(encoding@0.1.13)(react@18.3.1)
       '@radix-ui/react-alert-dialog': 1.1.4(@types/react-dom@19.0.2(@types/react@19.0.2))(@types/react@19.0.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-checkbox': 1.1.3(@types/react-dom@19.0.2(@types/react@19.0.2))(@types/react@19.0.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-collapsible': 1.1.2(@types/react-dom@19.0.2(@types/react@19.0.2))(@types/react@19.0.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
