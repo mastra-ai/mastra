@@ -6,13 +6,13 @@ export const contextTool = createTool({
   id: 'Use Context',
   inputSchema: z.object({
     queryText: z.string(),
-    topic: z.string(),
+    keyword: z.string(),
   }),
   outputSchema: z.object({
     context: z.string(),
   }),
   description: `Fetches the retrieved chunks from the vector store and combines them into a single context string`,
-  execute: async ({ context: { queryText, topic } }) => {
+  execute: async ({ context: { queryText, keyword } }) => {
     const { embedding } = (await embed(queryText, {
       provider: 'OPEN_AI',
       model: 'text-embedding-ada-002',
@@ -21,7 +21,7 @@ export const contextTool = createTool({
 
     // Get relevant chunks from the vector database
     const results = await pgVector.query('embeddings', embedding, 3, {
-      topic,
+      excerptKeywords: { operator: 'ilike', value: `%${keyword}%` },
     });
     const relevantChunks = results.map(result => result?.metadata?.text);
     console.log('Number of chunks:', relevantChunks);
@@ -76,28 +76,9 @@ const chunks = await doc.chunk({
   size: 512,
   overlap: 50,
   separator: '\n',
-});
-
-const chunksWithMetadata = chunks.map((chunk, index) => {
-  const text = chunk.text;
-  let metadata: Record<string, any> = {
-    text,
-  };
-
-  if (text.includes('Temperature Effects')) {
-    metadata.topic = 'Temperature';
-  } else if (text.includes('Adaptation Strategies')) {
-    metadata.topic = 'Adaptation';
-  } else if (text.includes('Future Implications')) {
-    metadata.topic = 'Challenges';
-  } else {
-    metadata.topic = 'General';
-  }
-
-  return {
-    ...chunk,
-    metadata,
-  };
+  extract: {
+    keywords: true,
+  },
 });
 
 const { embeddings } = (await embed(chunks, {
@@ -111,17 +92,18 @@ await pgVector.createIndex('embeddings', 1536);
 await pgVector.upsert(
   'embeddings',
   embeddings,
-  chunksWithMetadata?.map((chunk: any) => ({
+  chunks?.map((chunk: any) => ({
+    text: chunk.text,
     ...chunk.metadata,
   })),
 );
 
-async function generateResponse(query: string, topic: string) {
+async function generateResponse(query: string, keyword: string) {
   const prompt = `
       Please answer the following question:
       ${query}
 
-      Please base your answer only on the context provided in the tool and use the topic ${topic}. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
+      Please base your answer only on the context provided in the tool and use this keyword ${keyword}. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
       `;
 
   // Call the agent to generate a response
@@ -150,20 +132,16 @@ async function answerQueries(
 
 const queries = [
   {
-    query: 'What are the temperature-related effects on agriculture?',
-    filter: 'Temperature',
-  },
-  {
     query: 'What adaptation strategies are mentioned?',
-    filter: 'Adaptation',
+    filter: 'adaptation',
   },
   {
     query: 'How do temperatures affect crop yields specifically?',
-    filter: 'Temperature',
+    filter: 'crop',
   },
   {
     query: 'What are the future challenges?',
-    filter: 'Challenges',
+    filter: 'technologies',
   },
 ];
 
