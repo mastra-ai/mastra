@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.54
+
+### Patch Changes
+
+- d2cd535: configure dotenv in core
+
 ## 0.1.27-alpha.53
 
 ### Patch Changes

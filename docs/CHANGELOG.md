@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.1-alpha.8
+
+### Patch Changes
+
+- eb45d76: Updated PG Vector filter and added rag examples in docs
+
 ## 0.1.1-alpha.7
 
 ### Patch Changes

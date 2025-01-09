@@ -1,5 +1,13 @@
 # @mastra/rag
 
+## 0.0.2-alpha.38
+
+### Patch Changes
+
+- eb45d76: Updated PG Vector filter and added rag examples in docs
+- Updated dependencies [d2cd535]
+  - @mastra/core@0.1.27-alpha.54
+
 ## 0.0.2-alpha.37
 
 ### Patch Changes
