@@ -5,6 +5,7 @@ import { createSync } from '../sync';
 import { createTool } from '../tools';
 
 import { Step } from './step';
+import { WorkflowContext } from './types';
 import { Workflow } from './workflow';
 
 describe('Workflow', () => {
@@ -173,7 +174,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should support simple string conditions', async () => {
+    it('should support simple string conditions', async () => {
       const step1Action = jest.fn<any>().mockResolvedValue({ status: 'success' });
       const step2Action = jest.fn<any>().mockResolvedValue({ result: 'step2' });
       const step3Action = jest.fn<any>().mockResolvedValue({ result: 'step3' });
@@ -277,6 +278,69 @@ describe('Workflow', () => {
       expect(result.results.step2).toEqual({ status: 'success', payload: { result: 'success' } });
     });
 
+    it('should provide access to step results and trigger data via getStepPayload helper', async () => {
+      type TestTriggerSchema = z.ZodObject<{ inputValue: z.ZodString }>;
+
+      const step1Action = jest.fn<any>().mockImplementation(
+        async ({
+          context,
+        }: {
+          context: {
+            machineContext?: WorkflowContext<TestTriggerSchema>;
+          };
+        }) => {
+          // Test accessing trigger data with correct type
+          const triggerData = context.machineContext?.getStepPayload<{ inputValue: string }>('trigger');
+          expect(triggerData).toEqual({ inputValue: 'test-input' });
+          return { value: 'step1-result' };
+        },
+      );
+
+      const step2Action = jest.fn<any>().mockImplementation(
+        async ({
+          context,
+        }: {
+          context: {
+            machineContext?: WorkflowContext<TestTriggerSchema>;
+          };
+        }) => {
+          // Test accessing previous step result with type
+          type Step1Result = { value: string };
+          const step1Result = context.machineContext?.getStepPayload<Step1Result>('step1');
+          expect(step1Result).toEqual({ value: 'step1-result' });
+
+          // Verify that failed steps return undefined
+          const failedStep = context.machineContext?.getStepPayload<never>('non-existent-step');
+          expect(failedStep).toBeUndefined();
+
+          return { value: 'step2-result' };
+        },
+      );
+
+      const step1 = new Step({ id: 'step1', execute: step1Action });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        triggerSchema: z.object({
+          inputValue: z.string(),
+        }),
+      });
+
+      workflow.step(step1).then(step2).commit();
+
+      const result = await workflow.execute({
+        triggerData: { inputValue: 'test-input' },
+      });
+
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).toHaveBeenCalled();
+      expect(result.results).toEqual({
+        step1: { status: 'success', payload: { value: 'step1-result' } },
+        step2: { status: 'success', payload: { value: 'step2-result' } },
+      });
+    });
+
     it('should resolve trigger data from context', async () => {
       const execute = jest.fn<any>().mockResolvedValue({ result: 'success' });
       const triggerSchema = z.object({
@@ -300,13 +364,12 @@ describe('Workflow', () => {
         attempts: { step1: 3 },
         stepResults: {},
         triggerData: { inputData: 'test-input' },
+        getStepPayload: expect.any(Function),
       };
 
       expect(execute).toHaveBeenCalledWith({
         context: {
-          machineContext: {
-            ...baseContext,
-          },
+          machineContext: baseContext,
         },
         runId: results.runId,
       });
@@ -341,6 +404,7 @@ describe('Workflow', () => {
         attempts: { step1: 3 },
         stepResults: {},
         triggerData: { inputData: { nested: { value: 'test' } } },
+        getStepPayload: expect.any(Function),
       };
 
       await workflow.execute({ triggerData: { inputData: { nested: { value: 'test' } } } });
@@ -393,6 +457,7 @@ describe('Workflow', () => {
         attempts: { step1: 3, step2: 3 },
         stepResults: {},
         triggerData: {},
+        getStepPayload: expect.any(Function),
       };
 
       expect(step2Action).toHaveBeenCalledWith({
@@ -628,6 +693,7 @@ describe('Workflow', () => {
         attempts: { step1: 3, step2: 3, step3: 3, step4: 3, step5: 3 },
         stepResults: {},
         triggerData: {},
+        getStepPayload: expect.any(Function),
       };
 
       const workflow = new Workflow({

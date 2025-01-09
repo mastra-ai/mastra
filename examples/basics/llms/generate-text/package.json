@@ -1,0 +1,13 @@
+{
+  "name": "generate-text",
+  "type": "module",
+  "scripts": {
+    "start": "pnpx tsx index.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.7"
+  }
+}

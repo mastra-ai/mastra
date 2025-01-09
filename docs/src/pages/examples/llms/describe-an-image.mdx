@@ -6,6 +6,9 @@ Vision-enabled language models can analyze both text and images, but combining t
 
 ```ts showLineNumbers copy
 import { Mastra } from '@mastra/core';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const mastra = new Mastra();
 
@@ -40,4 +43,4 @@ console.log(response.text);
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/llms/generate-text-from-image.ts'} />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/llms/generate-text-from-image'} />

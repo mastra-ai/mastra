@@ -1,6 +1,6 @@
 {
   "name": "@mastra/resend",
-  "version": "1.0.1-alpha.31",
+  "version": "1.0.1-alpha.32",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/resend.esm.js",

@@ -1,4 +1,4 @@
-import { GithubLink } from '../../../components/github-link';
+import { GithubLink } from "../../../components/github-link";
 
 # Embed Chunk Array
 
@@ -6,6 +6,10 @@ After chunking documents, you need to convert the text chunks into numerical vec
 
 ```tsx copy
 import { MDocument, embed } from "@mastra/rag";
+
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const doc = MDocument.fromText("Your text content...");
 
@@ -23,4 +27,8 @@ const { embeddings } = await embed(chunks, {
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/embed-chunk-array.ts'} />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/embed-chunk-array"
+  }
+/>
