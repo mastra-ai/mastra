@@ -108,6 +108,16 @@ export class Workflow<
       type: 'parallel',
       context: ({ input }) => ({
         ...input,
+        getStepPayload: (stepId: string) => {
+          if (stepId === 'trigger') {
+            return input.triggerData;
+          }
+          const result = input.stepResults[stepId];
+          if (result && result.status === 'success') {
+            return result.payload;
+          }
+          return undefined;
+        },
       }),
       states: this.#buildStateHierarchy(this.#stepGraph) as any,
     });
@@ -281,6 +291,12 @@ export class Workflow<
           },
           {} as Record<string, number>,
         ),
+        getStepPayload: (stepId: string) => {
+          if (stepId === 'trigger') {
+            return triggerData as any;
+          }
+          return undefined;
+        },
       },
       snapshot,
     });
@@ -822,6 +838,21 @@ export class Workflow<
     this.log(LogLevel.DEBUG, `Resolving variables for ${stepId}`, {
       runId: this.#runId,
     });
+
+    // Add machineContext with getStepPayload helper
+    resolvedData.machineContext = {
+      ...context,
+      getStepPayload: (stepId: string) => {
+        if (stepId === 'trigger') {
+          return context.triggerData;
+        }
+        const result = context.stepResults[stepId];
+        if (result && result.status === 'success') {
+          return result.payload;
+        }
+        return undefined;
+      },
+    };
 
     for (const [key, variable] of Object.entries(stepConfig.data)) {
       // Check if variable comes from trigger data or a previous step's result
