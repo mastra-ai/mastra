@@ -79,7 +79,7 @@ describe('CLI', () => {
       return { ok: true, dirPath };
     });
 
-    jest.spyOn(utils, 'writeIndexFile').mockImplementation(async (dirPath, addExample) => {
+    jest.spyOn(utils, 'writeIndexFile').mockImplementation(async ({dirPath, addExample }) => {
       const content = addExample
         ? `
         import { Mastra } from '@mastra/core';
