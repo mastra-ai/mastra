@@ -94,8 +94,8 @@ export class Workflow<
   private initializeMachine() {
     const machine = setup({
       types: {} as {
-        context: WorkflowContext;
-        input: WorkflowContext;
+        context: Omit<WorkflowContext, 'getStepPayload'>;
+        input: Omit<WorkflowContext, 'getStepPayload'>;
         events: WorkflowEvent;
         actions: WorkflowActions;
         actors: WorkflowActors;
@@ -108,16 +108,6 @@ export class Workflow<
       type: 'parallel',
       context: ({ input }) => ({
         ...input,
-        getStepPayload: ((stepId: string) => {
-          if (stepId === 'trigger') {
-            return input.triggerData;
-          }
-          const result = input.stepResults[stepId];
-          if (result && result.status === 'success') {
-            return result.payload;
-          }
-          return undefined;
-        }) as WorkflowContext<TTriggerSchema>['getStepPayload'],
       }),
       states: this.#buildStateHierarchy(this.#stepGraph) as any,
     });
@@ -291,12 +281,6 @@ export class Workflow<
           },
           {} as Record<string, number>,
         ),
-        getStepPayload: ((stepId: string) => {
-          if (stepId === 'trigger') {
-            return triggerData;
-          }
-          return undefined;
-        }) as WorkflowContext<TTriggerSchema>['getStepPayload'],
       },
       snapshot,
     });
