@@ -1,9 +1,6 @@
 import { Mastra } from '@mastra/core';
-import dotenv from 'dotenv';
 
 import { weatherAgent } from './agents';
-
-dotenv.config();
 
 const mastra = new Mastra({
   agents: { weatherAgent },
