@@ -50,7 +50,6 @@ const deletionStep = new Step({
     deleted: z.boolean(),
   }),
   execute: async ({ suspend, context }) => {
-    console.log('STEP STATUS', context?.machineContext?.stepResults.deletion);
     if (context?.machineContext?.stepResults.deletion?.status === 'success') {
       return { deleted: true };
     }
@@ -59,10 +58,4 @@ const deletionStep = new Step({
   },
 });
 
-deleteFileWorkflow
-  // .step(receiveFileStep)
-  // .then(
-  //     checkFileStep
-  // )
-  .step(deletionStep)
-  .commit();
+deleteFileWorkflow.step(receiveFileStep).then(checkFileStep).then(deletionStep).commit();

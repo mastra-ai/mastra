@@ -1,4 +1,4 @@
-import { confirm, input } from '@inquirer/prompts';
+import { confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 
 import { mastra } from '../mastra/index.js';
@@ -9,37 +9,29 @@ export async function deleteFile() {
 
   const workflow = mastra.getWorkflow('deleteFile');
 
-  try {
-    const result = await workflow.execute({
-      onStep: async ({ stepId, status, runId }) => {
-        console.log('STEP', stepId, status, runId);
-        // if (stepId === 'deletion' && status === 'suspended') {
-        //   await workflow.resume({
-        //     stepId: `deletion`,
-        //     runId: runId,
-        //     context: {
-        //       confirm: true,
-        //     },
-        //   });
-        // }
-      },
-    });
+  const { runId, start } = await workflow.createRun();
 
-    console.log(result);
+  const res1 = await start();
 
-    if (result.results.deletion?.status === 'suspended') {
-      console.log('Resuming...');
-      const result2 = await workflow.resume({
-        stepId: `deletion`,
-        runId: result.runId,
-        context: {
-          confirm: true,
-        },
-      });
+  console.log(res1);
 
-      console.log('RESULT', result2);
-    }
-  } catch (e) {
-    console.log(e);
-  }
+  console.log('RUN ID', runId);
+
+  await workflow.watch(runId, {
+    onTransition: async ({ stepId, context }) => {
+      console.log('Tranisitoning', stepId, context.stepResults?.[stepId]?.status);
+      if (stepId === 'deletion' && context.stepResults?.[stepId]?.status === 'suspended') {
+        const confirmed = await confirm({ message: 'Do you want to delete the file?' });
+        if (confirmed) {
+          await workflow.resume({
+            stepId,
+            runId,
+            context: {
+              confirm: true,
+            },
+          });
+        }
+      }
+    },
+  });
 }

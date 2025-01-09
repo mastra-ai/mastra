@@ -31,6 +31,40 @@ import {
 } from './types';
 import { getStepResult, isErrorEvent, isTransitionEvent, isVariableReference } from './utils';
 
+interface WorkflowResultReturn<T extends z.ZodType<any>> {
+  runId: string;
+  start: () => Promise<{
+    triggerData?: z.infer<T>;
+    results: Record<string, StepResult<any>>;
+    runId: string;
+  }>;
+}
+
+interface WorkflowRunState {
+  // Core state info
+  value: Record<string, string>;
+  context: {
+    stepResults: Record<
+      string,
+      {
+        status: 'success' | 'failed' | 'suspended' | 'waiting';
+        payload?: any;
+        error?: string;
+      }
+    >;
+    triggerData: Record<string, any>;
+    attempts: Record<string, number>;
+  };
+
+  // Current step info
+  stepId: string;
+  status: string;
+
+  // Metadata
+  runId: string;
+  timestamp: number;
+}
+
 export class Workflow<
   TSteps extends Step<any, any, any>[] = any,
   TTriggerSchema extends z.ZodType<any> = any,
@@ -238,10 +272,20 @@ export class Workflow<
    * @returns Promise resolving to workflow results or rejecting with error
    * @throws Error if trigger schema validation fails
    */
+
+  async createRun(): Promise<WorkflowResultReturn<TTriggerSchema>> {
+    const runId = crypto.randomUUID();
+    this.#runId = runId;
+
+    return {
+      runId,
+      start: this.execute.bind(this),
+    };
+  }
+
   async execute({
     triggerData,
     snapshot,
-    onStep,
     runId,
     stepId,
   }: {
@@ -249,22 +293,18 @@ export class Workflow<
     triggerData?: z.infer<TTriggerSchema>;
     runId?: string;
     snapshot?: Snapshot<any>;
-    //TODO: TYPE
-    onStep?: (stepResults: any) => void;
   } = {}): Promise<{
     triggerData?: z.infer<TTriggerSchema>;
     results: Record<string, StepResult<any>>;
     runId: string;
   }> {
-    if (snapshot && runId) {
+    if (runId) {
       this.#runId = runId;
       // First, let's log the incoming snapshot for debugging
       this.log(LogLevel.DEBUG, 'Incoming snapshot', {
         snapshot: snapshot,
         runId: this.#runId,
       });
-    } else {
-      this.#runId = crypto.randomUUID();
     }
 
     const machineInput = snapshot
@@ -328,33 +368,12 @@ export class Workflow<
       }
 
       const suspendedPaths: Set<string> = new Set();
-
       this.#actor.subscribe(async state => {
-        const stepId = Object.keys(state?.value || {})?.[0];
-        if (onStep && typeof onStep === 'function') {
-          try {
-            await Promise.resolve(
-              onStep?.({
-                runId: this.#runId,
-                context: state.context,
-                stepId: stepId,
-                status: stepId ? state.value[stepId] : 'unknown',
-                state: state.value,
-                suspendedPaths,
-              }),
-            );
-          } catch (e) {
-            console.error(e);
-          }
-        }
-
         this.#getSuspendedPaths({
           value: state.value as Record<string, string>,
           path: '',
           suspendedPaths,
         });
-
-        console.log('cool runnings', stepId, suspendedPaths.values());
 
         const allStatesValue = state.value as Record<string, string>;
 
@@ -363,8 +382,6 @@ export class Workflow<
           suspendedPaths,
           path: '',
         });
-
-        console.log('cool runnings', stepId, allStatesComplete);
 
         this.log(LogLevel.DEBUG, 'State completion check', {
           allStatesComplete,
@@ -376,25 +393,21 @@ export class Workflow<
 
         if (!allStatesComplete) return;
 
-        // Check if any steps failed
-        const allStepsFailed = Object.values(state.context.stepResults).every(result => result.status === 'failed');
+        // console.log({ allStatesComplete, snapshot: this.#actor?.getSnapshot().value })
 
-        if (allStepsFailed) {
-          this.log(LogLevel.ERROR, 'Workflow failed', {
-            results: state.context.stepResults,
-            runId: this.#runId,
-          });
+        try {
+          // Then cleanup and resolve
           this.#cleanup();
           resolve({
             triggerData,
             results: state.context.stepResults,
             runId: this.#runId,
           });
-        } else {
-          this.log(LogLevel.INFO, 'Workflow completed', {
-            results: state.context.stepResults,
-            runId: this.#runId,
-          });
+        } catch (error) {
+          // If snapshot persistence fails, we should still resolve
+          // but maybe log the error
+          this.log(LogLevel.ERROR, 'Failed to persist final snapshot', { error });
+
           this.#cleanup();
           resolve({
             triggerData,
@@ -441,6 +454,10 @@ export class Workflow<
     }
   }
 
+  #isFinalState(status: string): boolean {
+    return ['completed', 'failed'].includes(status);
+  }
+
   #recursivelyCheckForFinalState({
     value,
     suspendedPaths,
@@ -452,7 +469,7 @@ export class Workflow<
   }): boolean {
     if (typeof value === 'string') {
       // if the value is a final state or it has previouslyreached a suspended state, return true
-      return ['completed', 'failed'].includes(value) || suspendedPaths.has(path);
+      return this.#isFinalState(value) || suspendedPaths.has(path);
     }
     return Object.keys(value).every(key =>
       this.#recursivelyCheckForFinalState({ value: value[key]!, suspendedPaths, path: path ? `${path}.${key}` : key }),
@@ -481,7 +498,6 @@ export class Workflow<
           invoke: {
             src: 'conditionCheck',
             input: ({ context }: { context: WorkflowContext }) => {
-              console.log('Pending', context);
               return {
                 context,
                 stepNode,
@@ -767,9 +783,13 @@ export class Workflow<
           };
         },
       }),
-      notifyStepCompletion: (_: any, params: WorkflowActionParams) => {
+      notifyStepCompletion: async (_: any, params: WorkflowActionParams) => {
         const { stepId } = params;
         this.log(LogLevel.INFO, `Step ${stepId} completed`);
+
+        if (this.snapshot) {
+          await this.#persistWorkflowSnapshot();
+        }
       },
       decrementAttemptCount: assign({
         attempts: ({ context, event }, params: WorkflowActionParams) => {
@@ -816,6 +836,10 @@ export class Workflow<
           },
           suspend: async () => {
             if (this.#actor) {
+              // Update context with current result
+              context.stepResults[stepNode.step.id] = {
+                status: 'suspended',
+              };
               await this.#persistWorkflowSnapshot();
               this.log(LogLevel.INFO, `Sending SUSPENDED event for step ${stepNode.step.id}`);
               this.#actor?.send({ type: 'SUSPENDED', stepId: stepNode.step.id });
@@ -831,8 +855,6 @@ export class Workflow<
           runId: this.#runId,
         });
 
-        console.log('Resolver function completed with result:', result);
-
         return {
           stepId: stepNode.step.id,
           result,
@@ -840,11 +862,6 @@ export class Workflow<
       }),
       conditionCheck: fromPromise(async ({ input }: { input: { context: WorkflowContext; stepNode: StepNode } }) => {
         const { context, stepNode } = input;
-        console.log('Condition Check Running:', {
-          stepId: stepNode.step.id,
-          context,
-          attempts: context.attempts[stepNode.step.id],
-        });
         const stepConfig = stepNode.config;
         const attemptCount = context.attempts[stepNode.step.id];
 
@@ -1240,6 +1257,104 @@ export class Workflow<
     }
   }
 
+  async getState(runId: string): Promise<WorkflowRunState | null> {
+    // If this is the currently running workflow
+    if (this.#runId === runId && this.#actor) {
+      const snapshot = this.#actor.getSnapshot();
+      return {
+        runId,
+        value: snapshot.value as Record<string, string>,
+        context: snapshot.context,
+        stepId: Object.keys(snapshot.value)[0]!,
+        status: Object.values(snapshot.value)[0] as string,
+        timestamp: Date.now(),
+      };
+    }
+
+    console.log('Getting state from storage');
+    // If workflow is suspended/stored, get from storage
+    const storedSnapshot = await this.snapshot?.load({
+      runId,
+      entityName: this.#entityName,
+      connectionId: this.#connectionId,
+    });
+
+    if (storedSnapshot) {
+      const parsed = JSON.parse(storedSnapshot as string);
+
+      return {
+        runId,
+        value: parsed.value,
+        context: parsed.context,
+        stepId: Object.keys(parsed.value)[0]!,
+        status: Object.values(parsed.value)[0] as string,
+        timestamp: Date.now(),
+      };
+    }
+
+    return null;
+  }
+
+  #hasStateChanged(previous: WorkflowRunState | null, current: WorkflowRunState): boolean {
+    if (!previous) return true;
+
+    return (
+      previous.status !== current.status ||
+      previous.stepId !== current.stepId ||
+      JSON.stringify(previous.context.stepResults) !== JSON.stringify(current.context.stepResults)
+    );
+  }
+
+  async watch(
+    runId: string,
+    options: {
+      onTransition?: (state: WorkflowRunState) => void | Promise<void>;
+      pollInterval?: number;
+    } = {},
+  ): Promise<WorkflowRunState> {
+    const { onTransition, pollInterval = 1000 } = options;
+
+    return new Promise((resolve, reject) => {
+      let timeoutId: NodeJS.Timeout;
+      let previousState: WorkflowRunState | null = null;
+
+      const poll = async () => {
+        try {
+          const currentState = await this.getState(runId);
+
+          if (!currentState) {
+            reject(new Error(`No workflow found for runId: ${runId}`));
+            return;
+          }
+
+          // Only call onTransition if state has changed
+          if (onTransition && this.#hasStateChanged(previousState, currentState)) {
+            await onTransition(currentState);
+          }
+
+          previousState = currentState;
+
+          if (this.#isFinalState(currentState.status)) {
+            resolve(currentState);
+            return;
+          }
+
+          timeoutId = setTimeout(poll, pollInterval);
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      poll();
+
+      return () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      };
+    });
+  }
+
   async resume({
     runId,
     stepId,
@@ -1309,8 +1424,6 @@ export class Workflow<
       runId,
       stepId,
     });
-
-    console.log(parsedSnapshot);
 
     return this.execute({
       snapshot: parsedSnapshot,
