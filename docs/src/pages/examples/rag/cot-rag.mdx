@@ -1,19 +1,19 @@
 import { GithubLink } from '../../../components/github-link';
 
-# Building a RAG System with Mastra
+# Building a RAG System with Mastra: Chain of Thought Prompting
 
-This example demonstrates how to implement a Retrieval-Augmented Generation (RAG) system using Mastra, OpenAI embeddings, and PGVector for vector storage.
+This example demonstrates how to implement a Retrieval-Augmented Generation (RAG) system using Mastra, OpenAI embeddings, and PGVector for vector storage, with an emphasis on chain-of-thought reasoning.
 
 ## Overview
 
-The system implements RAG using Mastra and OpenAI. Here's what it does:
+The system implements RAG using Mastra and OpenAI with chain-of-thought prompting. Here's what it does:
 1. Sets up a Mastra agent with GPT-4o-mini for response generation
 2. Creates a custom context tool for managing vector store interactions
 3. Chunks text documents into smaller segments
 4. Creates embeddings for these chunks
 5. Stores them in a PostgreSQL vector database
 6. Retrieves relevant chunks based on queries using context tool
-7. Generates context-aware responses using the Mastra agent
+7. Generates context-aware responses using chain-of-thought reasoning
 
 ## Setup 
 
@@ -30,11 +30,13 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy
-import { Mastra, Agent, EmbedResult, EmbedManyResult } from '@mastra/core'
+import { Mastra, Agent, EmbedResult, EmbedManyResult, createTool } from '@mastra/core'
 import { embed, MDocument, PgVector } from '@mastra/rag'
+import { z } from 'zod'
 ```
 
 ## Context Tool Creation
+
 Define a custom tool for handling context retrieval:
 ```typescript copy
 export const contextTool = createTool({
@@ -69,29 +71,42 @@ export const contextTool = createTool({
 
 ## Agent Configuration
 
-Set up the Mastra agent that will handle the responses:
+Set up the Mastra agent with chain-of-thought prompting instructions:
 
 ```typescript copy
 export const ragAgent = new Agent({
   name: 'RAG Agent',
-  instructions:
-    'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
+  instructions: `You are a helpful assistant that answers questions based on the provided context.
+Follow these steps for each response:
+
+1. First, carefully analyze the retrieved context chunks and identify key information.
+2. Break down your thinking process about how the retrieved information relates to the query.
+3. Explain how you're connecting different pieces from the retrieved chunks.
+4. Draw conclusions based only on the evidence in the retrieved context.
+5. If the retrieved chunks don't contain enough information, explicitly state what's missing.
+
+Format your response as:
+THOUGHT PROCESS:
+- Step 1: [Initial analysis of retrieved chunks]
+- Step 2: [Connections between chunks]
+- Step 3: [Reasoning based on chunks]
+
+FINAL ANSWER:
+[Your concise answer based on the retrieved context]`,
   model: {
     provider: 'OPEN_AI',
     name: 'gpt-4o-mini',
   },
+  tools: { contextTool },
 })
 
 export const mastra = new Mastra({
   agents: { ragAgent },
 })
-
 const agent = mastra.getAgent('ragAgent')
 ```
 
 ## Document Processing
-
-Create a document and process it into chunks:
 
 ```typescript copy
 const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`) // Your text here
@@ -109,11 +124,11 @@ const chunks = await doc.chunk({
 Generate embeddings for the chunks and store them in the vector database:
 
 ```typescript copy
-const { embeddings } = await embed(chunks, {
+const { embeddings } = (await embed(chunks, {
   provider: "OPEN_AI",
   model: "text-embedding-ada-002",
   maxRetries: 3,
-}) as EmbedManyResult<string>
+})) as EmbedManyResult<string>
 
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!)
 await pgVector.createIndex("embeddings", 1536)
@@ -124,40 +139,36 @@ await pgVector.upsert(
 )
 ```
 
-## Response Generation
+## Response Generation with Chain-of-Thought
 
-Function to generate responses based on retrieved context:
+Function to generate responses using chain-of-thought reasoning:
 
 ```typescript copy
 async function generateResponse(query: string) {
   const prompt = `
-      Please answer the following question:
-      ${query}
+    Please answer the following question using chain-of-thought reasoning:
+    ${query}
 
-      Please base your answer only on the context provided in the tool. If the context doesn't 
-      contain enough information to fully answer the question, please state that explicitly.
-      `
+    Important Instructions:
+    1. First, analyze the context retrieved from the vector store
+    2. Show your step-by-step reasoning about how the retrieved chunks help answer the query
+    3. Base your answer ONLY on the retrieved context chunks
+    4. If the retrieved chunks lack necessary information, explicitly state that
+    5. Structure your response with "THOUGHT PROCESS" and "FINAL ANSWER" sections
+
+    Please base your answer only on the context provided in the tool. If the context doesn't 
+    contain enough information to fully answer the question, please state that explicitly.
+    Remember: Explain how you're using the retrieved information to reach your conclusions.
+    `
 
   const completion = await agent.generate(prompt)
   return completion.text
 }
 ```
 
+## Query Processing
 
-## Single Query Processing
-
-Example of processing a single query:
-
-```typescript copy
-const queryText = 'What are the main adaptation strategies for farmers?'
-const response = await generateResponse(queryText)
-console.log('Query:', queryText)
-console.log('Response:', response)
-```
-
-## Multiple Query Processing
-
-Example of processing multiple queries:
+Example of processing multiple queries with chain-of-thought reasoning:
 
 ```typescript copy
 async function answerQueries(queries: string[]) {
@@ -165,7 +176,9 @@ async function answerQueries(queries: string[]) {
     try {
       const answer = await generateResponse(query)
       console.log('\nQuery:', query)
-      console.log('Response:', answer)
+      console.log('\nReasoning Chain + Retrieved Context Response:')
+      console.log(answer)
+      console.log('\n-------------------')
     } catch (error) {
       console.error(`Error processing query "${query}":`, error)
     }
@@ -177,19 +190,19 @@ async function answerQueries(queries: string[]) {
 
 ```typescript copy
 const queries = [
-  "What are the main points in the article?",
-  "How does temperature affect crop yields?",
-  "What solutions are farmers implementing?",
-  "What are the future challenges mentioned in the text?",
+  "What are the main adaptation strategies for farmers?",
+  "Analyze how temperature affects crop yields.",
+  "What connections can you draw between climate change and food security?",
+  "How are farmers implementing solutions to address climate challenges?",
+  "What future implications are discussed for agriculture?",
 ];
 
 await answerQueries(queries)
 ```
-
 
 <br />
 <br />
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/basic-rag.ts'} />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cot-rag.ts'} />

@@ -13,9 +13,9 @@ const meta = {
   "retrieve-results": "Retrieve Results",
   "basic-rag": "Building a RAG System with Mastra",
   "cleanup-rag":
-    "Building an Enhanced RAG System with Mastra: Optimizing Information Density",
-  "filter-rag":
-    "Building an Enhanced RAG System with Mastra: Filtering Context",
+    "Building a RAG System with Mastra: Optimizing Information Density",
+  "filter-rag": "Building a RAG System with Mastra: Metadata Filtering",
+  "cot-rag": "Building a RAG System with Mastra: Chain of Thought Prompting",
 };
 
 export default meta;
