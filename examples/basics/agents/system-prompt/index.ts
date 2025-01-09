@@ -1,8 +1,5 @@
 import { Agent, createTool } from '@mastra/core';
-import dotenv from 'dotenv';
 import { z } from 'zod';
-
-dotenv.config();
 
 const instructions = `You are a helpful cat expert assistant. When discussing cats, you should always include an interesting cat fact.
 

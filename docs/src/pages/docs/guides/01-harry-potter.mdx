@@ -22,12 +22,6 @@ Ensure you have the Mastra core package installed:
 npm install @mastra/core
 ```
 
-Also we need to install dotenv to load the environment variables from the `.env` file.
-
-```bash
-npm install dotenv
-```
-
 Set your API key for the LLM provider you intend to use. For OpenAI, set the `OPENAI_API_KEY` environment variable.
 
 ```bash filename=".env" copy
@@ -42,9 +36,6 @@ We'll start by creating a model configuration and initializing the Mastra instan
 
 ```typescript
 import { CoreMessage, Mastra, type ModelConfig } from "@mastra/core";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 const mastra = new Mastra();
 

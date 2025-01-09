@@ -6,9 +6,6 @@ After storing embeddings in a vector database, you need to query them to find si
 
 ```tsx copy
 import { MDocument, embed, PineconeVector } from "@mastra/rag";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 const doc = MDocument.fromText("Your text content...");
 

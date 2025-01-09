@@ -1,8 +1,5 @@
 import { Mastra, Step, Workflow } from '@mastra/core';
-import dotenv from 'dotenv';
 import { z } from 'zod';
-
-dotenv.config();
 
 const newWorkflow = new Workflow({
   name: 'pass message to the workflow',
