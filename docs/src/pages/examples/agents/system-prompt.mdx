@@ -6,10 +6,8 @@ This example demonstrates how to create an AI agent with specific instructions a
 
 ```ts showLineNumbers copy
 import { Agent, createTool } from "@mastra/core";
-import dotenv from "dotenv";
-import { z } from "zod";
 
-dotenv.config();
+import { z } from "zod";
 
 const instructions = `You are a helpful cat expert assistant. When discussing cats, you should always include an interesting cat fact.
 

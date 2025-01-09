@@ -6,8 +6,5 @@
   },
   "dependencies": {
     "@mastra/rag": "workspace:*"
-  },
-  "devDependencies": {
-    "dotenv": "^16.4.7"
   }
 }

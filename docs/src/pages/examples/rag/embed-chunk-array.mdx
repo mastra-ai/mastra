@@ -7,10 +7,6 @@ After chunking documents, you need to convert the text chunks into numerical vec
 ```tsx copy
 import { MDocument, embed } from "@mastra/rag";
 
-import dotenv from "dotenv";
-
-dotenv.config();
-
 const doc = MDocument.fromText("Your text content...");
 
 const chunks = await doc.chunk();

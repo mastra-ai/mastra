@@ -34,7 +34,7 @@ Initialize a new Node.js project and install the required dependencies:
 
 ```bash
 npm init -y
-npm install @mastra/core zod dotenv
+npm install @mastra/core zod
 ```
 
 Set Up Environment Variables
@@ -118,11 +118,8 @@ We need to initialize the Mastra instance with our agent and tool.
 
 ```ts filename="src/index.ts"
 import { Mastra } from "@mastra/core";
-import dotenv from "dotenv";
 
 import { stockAgent } from "./agents/stockAgent";
-
-dotenv.config();
 
 export const mastra = new Mastra({
   agents: { stockAgent },

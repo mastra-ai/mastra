@@ -95,7 +95,7 @@ Then, initialize a TypeScript project including the `@mastra/core` package:
 
 ```bash copy npm2yarn
 npm init -y
-npm install typescript tsx @types/node zod dotenv --save-dev
+npm install typescript tsx @types/node zod --save-dev
 npm install @mastra/core@alpha
 npm install -D mastra@alpha
 npx tsc --init
@@ -123,9 +123,6 @@ Then, add the following code to `src/mastra/agents/cat-one.ts`:
 
 ```ts filename="src/mastra/agents/cat-one.ts" showLineNumbers
 import { Agent } from "@mastra/core";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 export const catOne = new Agent({
   name: "cat-one",

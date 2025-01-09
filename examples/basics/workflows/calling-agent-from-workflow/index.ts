@@ -1,8 +1,5 @@
 import { Agent, Mastra, Step, Workflow } from '@mastra/core';
-import dotenv from 'dotenv';
 import { z } from 'zod';
-
-dotenv.config();
 
 const penguin = new Agent({
   name: 'agent skipper',

@@ -1,8 +1,5 @@
 import { Mastra } from '@mastra/core';
-import dotenv from 'dotenv';
 import { z } from 'zod';
-
-dotenv.config();
 
 const mastra = new Mastra();
 
