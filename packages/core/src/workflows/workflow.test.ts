@@ -290,7 +290,7 @@ describe('Workflow', () => {
           };
         }) => {
           // Test accessing trigger data with correct type
-          const triggerData = context.machineContext?.getStepPayload('trigger');
+          const triggerData = context.machineContext?.getStepPayload<{ inputValue: string }>('trigger');
           expect(triggerData).toEqual({ inputValue: 'test-input' });
           return { value: 'step1-result' };
         },

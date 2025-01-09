@@ -19,7 +19,7 @@ const getDiff = new Step({
     diff: z.string(),
   }),
   execute: async ({ context }) => {
-    const repoPath = context?.machineContext?.getStepPayload('trigger')?.repoPath;
+    const repoPath = context?.machineContext?.getStepPayload<{ repoPath: string }>('trigger')?.repoPath;
 
     // Get the git diff of staged changes
     const diff = execSync('git diff --staged', {

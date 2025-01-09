@@ -148,10 +148,7 @@ export interface WorkflowContext<TTrigger extends z.ZodType<any> = any> {
   stepResults: Record<string, StepResult<any>>;
   triggerData: z.infer<TTrigger>;
   attempts: Record<string, number>;
-  getStepPayload: {
-    (stepId: 'trigger'): z.infer<TTrigger>;
-    <T = unknown>(stepId: string): T | undefined;
-  };
+  getStepPayload: <T = unknown>(stepId: string) => T | undefined;
 }
 
 export interface WorkflowLogMessage extends BaseLogMessage {
