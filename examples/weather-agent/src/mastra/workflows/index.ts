@@ -1,7 +1,7 @@
 import { Step, Workflow } from '@mastra/core';
 import { z } from 'zod';
 
-const fetchWeatherTool = new Step({
+const fetchWeather = new Step({
   id: 'fetch-weather',
   description: 'Fetches weather forecast for a given city',
   inputSchema: z.object({
@@ -165,7 +165,7 @@ const weatherWorkflow = new Workflow({
     city: z.string().describe('The city to get the weather for'),
   }),
 })
-  .step(fetchWeatherTool)
+  .step(fetchWeather)
   .then(planActivities);
 
 weatherWorkflow.commit();
