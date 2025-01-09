@@ -14,12 +14,12 @@ type FilterOperator =
   | 'contains' // JSONB contains
   | 'exists'; // Key exists
 
-interface FilterCondition {
-  operator: FilterOperator;
-  value: any;
-}
+// interface FilterCondition {
+//   operator: FilterOperator;
+//   value: any;
+// }
 
-type Filter = Record<string, FilterCondition | any>;
+// type Filter = Record<string, FilterCondition | any>;
 
 export class PgVector extends MastraVector {
   private pool: pg.Pool;
@@ -48,7 +48,7 @@ export class PgVector extends MastraVector {
     indexName: string,
     queryVector: number[],
     topK: number = 10,
-    filter?: Filter,
+    filter?: Record<string, any>,
     minScore: number = 0, // Optional minimum score threshold
   ): Promise<QueryResult[]> {
     const client = await this.pool.connect();
