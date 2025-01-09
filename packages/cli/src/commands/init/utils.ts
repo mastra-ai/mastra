@@ -29,13 +29,20 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
   const model = modelToConfigMap[llmProvider];
   const content = `
 import { Agent } from '@mastra/core';
-${addExampleTool ? `import { catFact } from '../tools/index';` : ''}
+${addExampleTool ? `import { weatherAgent } from '../tools/index';` : ''}
 
-export const catOne = new Agent({
-  name: 'cat-one',
-  instructions: 'You are a feline expert with comprehensive knowledge of all cat species, from domestic breeds to wild big cats. As a lifelong cat specialist, you understand their behavior, biology, social structures, and evolutionary history in great depth.',
+export const weatherAgent = new Agent({
+  name: 'Weather Agent',
+  instructions: 'You are a helpful weather assistant that provides accurate weather information.
+
+Your primary function is to help users get weather details for specific locations. When responding:
+- Always ask for a location if none is provided
+- Include relevant details like humidity, wind conditions, and precipitation
+- Keep responses concise but informative
+
+${addExampleTool ? 'Use the weatherTool to fetch current weather data.' : ''}',
   model: ${JSON.stringify(model, null, 2)},
-  ${addExampleTool ? 'tools: { catFact },' : ''}
+  ${addExampleTool ? 'tools: { weatherTool },' : ''}
 });
     `;
   const formattedContent = await prettier.format(content, {
@@ -92,7 +99,7 @@ export const writeIndexFile = async (dirPath: string, addExample: boolean, addWo
         `
 import { Mastra } from '@mastra/core';
 
-export const mastra = new Mastra({})
+export const mastra = new Mastra()
         `,
       );
 
@@ -102,13 +109,13 @@ export const mastra = new Mastra({})
       destPath,
       `
 import { Mastra, createLogger } from '@mastra/core';
-${addWorkflow ? `import { logCatWorkflow } from './workflows/index';` : ''}
+${addWorkflow ? `import { weatherWorkflow } from './workflows/index';` : ''}
 
-import { catOne } from './agents/index';
+import { weatherAgent } from './agents/index';
 
 export const mastra = new Mastra({
-  agents: { catOne },
-  ${addWorkflow ? `workflows: { logCatWorkflow },` : ''}
+  agents: { weatherAgent },
+  ${addWorkflow ? `workflows: { weatherWorkflow },` : ''}
   logger: createLogger({
     type: 'CONSOLE',
     level: 'INFO',
