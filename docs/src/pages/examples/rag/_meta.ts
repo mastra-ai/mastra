@@ -11,6 +11,11 @@ const meta = {
   "insert-embedding-in-pinecone": "Insert Embedding in Pinecone",
   "insert-embedding-in-pgvector": "Insert Embedding in PgVector",
   "retrieve-results": "Retrieve Results",
+  "basic-rag": "Building a RAG System with Mastra",
+  "cleanup-rag":
+    "Building an Enhanced RAG System with Mastra: Optimizing Information Density",
+  "filter-rag":
+    "Building an Enhanced RAG System with Mastra: Filtering Context",
 };
 
 export default meta;
