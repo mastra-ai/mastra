@@ -159,7 +159,7 @@ function getWeatherCondition(code: number): string {
   return conditions[code] || 'Unknown';
 }
 
-export const weatherWorkflow = new Workflow({
+const weatherWorkflow = new Workflow({
   name: 'weather-workflow',
   triggerSchema: z.object({
     city: z.string().describe('The city to get the weather for'),
@@ -169,3 +169,5 @@ export const weatherWorkflow = new Workflow({
   .then(planActivities);
 
 weatherWorkflow.commit();
+
+export { weatherWorkflow };
