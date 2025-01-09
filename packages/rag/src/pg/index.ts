@@ -1,6 +1,26 @@
 import { IndexStats, QueryResult, MastraVector } from '@mastra/core';
 import pg from 'pg';
 
+type FilterOperator =
+  | 'eq' // Equal
+  | 'neq' // Not equal
+  | 'gt' // Greater than
+  | 'gte' // Greater than or equal
+  | 'lt' // Less than
+  | 'lte' // Less than or equal
+  | 'like' // Pattern matching (LIKE)
+  | 'ilike' // Case-insensitive pattern matching (ILIKE)
+  | 'in' // IN array of values
+  | 'contains' // JSONB contains
+  | 'exists'; // Key exists
+
+interface FilterCondition {
+  operator: FilterOperator;
+  value: any;
+}
+
+type Filter = Record<string, FilterCondition | any>;
+
 export class PgVector extends MastraVector {
   private pool: pg.Pool;
 
@@ -28,7 +48,7 @@ export class PgVector extends MastraVector {
     indexName: string,
     queryVector: number[],
     topK: number = 10,
-    filter?: Record<string, any>,
+    filter?: Filter,
     minScore: number = 0, // Optional minimum score threshold
   ): Promise<QueryResult[]> {
     const client = await this.pool.connect();
@@ -38,9 +58,43 @@ export class PgVector extends MastraVector {
       const vectorStr = `[${queryVector.join(',')}]`;
 
       if (filter) {
-        const conditions = Object.entries(filter).map(([key, value], index) => {
+        const conditions = Object.entries(filter).map(([key, condition]) => {
+          // If condition is not a FilterCondition object, assume it's an equality check
+          if (!condition || typeof condition !== 'object' || !('operator' in condition)) {
+            filterValues.push(condition);
+            return `metadata->>'${key}' = $${filterValues.length}`;
+          }
+
+          const { operator, value } = condition;
           filterValues.push(value);
-          return `metadata->>'${key}' = $${index + 2}`; // +2 because $1 is minScore
+          const paramIndex = filterValues.length;
+
+          switch (operator) {
+            case 'eq':
+              return `metadata->>'${key}' = $${paramIndex}`;
+            case 'neq':
+              return `metadata->>'${key}' != $${paramIndex}`;
+            case 'gt':
+              return `(metadata->>'${key}')::numeric > $${paramIndex}`;
+            case 'gte':
+              return `(metadata->>'${key}')::numeric >= $${paramIndex}`;
+            case 'lt':
+              return `(metadata->>'${key}')::numeric < $${paramIndex}`;
+            case 'lte':
+              return `(metadata->>'${key}')::numeric <= $${paramIndex}`;
+            case 'like':
+              return `metadata->>'${key}' LIKE $${paramIndex}`;
+            case 'ilike':
+              return `metadata->>'${key}' ILIKE $${paramIndex}`;
+            case 'in':
+              return `metadata->>'${key}' = ANY($${paramIndex})`; // value should be an array
+            case 'contains':
+              return `metadata @> jsonb_build_object('${key}', $${paramIndex})`;
+            case 'exists':
+              return `metadata ? '${key}'`;
+            default:
+              throw new Error(`Unsupported operator: ${operator}`);
+          }
         });
         if (conditions.length > 0) {
           filterQuery = 'AND ' + conditions.join(' AND ');
