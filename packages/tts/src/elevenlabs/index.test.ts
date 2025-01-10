@@ -28,7 +28,7 @@ describe('TTS Integration Tests', () => {
     // Create a longer text to ensure we get multiple chunks
     const longText = 'This is a longer text that will be streamed. '.repeat(5);
 
-    const audioStream = await tts.stream({
+    const { audioResult } = await tts.stream({
       text: longText,
       voice: voiceId,
     });
@@ -42,7 +42,7 @@ describe('TTS Integration Tests', () => {
     let totalChunks = 0;
 
     // Process chunks as they arrive
-    for await (const chunk of audioStream) {
+    for await (const chunk of audioResult) {
       if (!firstChunkTime) {
         firstChunkTime = Date.now();
       }
@@ -66,13 +66,13 @@ describe('TTS Integration Tests', () => {
   }, 30000);
 
   it('should test generate method', async () => {
-    const audioStream = await tts.generate({
+    const { audioResult } = await tts.generate({
       text: 'Goodbye!',
       voice: voiceId,
     });
 
     const chunks: Buffer[] = [];
-    for await (const chunk of audioStream) {
+    for await (const chunk of audioResult) {
       chunks.push(Buffer.from(chunk));
     }
 
