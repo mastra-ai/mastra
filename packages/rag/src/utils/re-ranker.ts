@@ -1,12 +1,43 @@
-import { AgentCompletionProvider, CohereCompletionProvider, CompletionProvider } from '@mastra/core';
+import { AgentCompletionProvider, CohereCompletionProvider, CompletionProvider, QueryResult } from '@mastra/core';
+
+const DEFAULT_WEIGHTS = {
+  semantic: 0.4,
+  vector: 0.4,
+  position: 0.2,
+} as const;
+
+type WeightConfig = {
+  semantic?: number;
+  vector?: number;
+  position?: number;
+};
+
+interface RerankParams {
+  query: string;
+  vectorStoreResults: QueryResult[];
+  queryEmbedding?: number[];
+  topK?: number;
+}
+
+interface RerankDetails {
+  semantic: number;
+  vector: number;
+  position: number;
+  queryAnalysis?: {
+    magnitude: number;
+    dominantFeatures: number[];
+  };
+}
+
+interface RerankResult {
+  result: QueryResult;
+  score: number;
+  details: RerankDetails;
+}
 
 interface RerankerOptions {
   semanticProvider: 'cohere' | 'agent';
-  weights: {
-    semantic?: number;
-    vector?: number;
-    position?: number;
-  };
+  weights?: WeightConfig;
   cohereApiKey?: string;
   cohereModel?: string;
   agentProvider?: {
@@ -17,14 +48,13 @@ interface RerankerOptions {
 
 export class RagReranker {
   private semanticProvider: CompletionProvider;
-  private weights: Required<RerankerOptions['weights']>;
+  private weights: Required<WeightConfig>;
 
   constructor(options: RerankerOptions) {
     // Set up weights with defaults
     this.weights = {
-      semantic: options.weights?.semantic ?? 0.4,
-      vector: options.weights?.vector ?? 0.4,
-      position: options.weights?.position ?? 0.2,
+      ...DEFAULT_WEIGHTS,
+      ...options.weights,
     };
 
     // Initialize semantic provider
@@ -44,69 +74,85 @@ export class RagReranker {
     }
   }
 
-  private cosineSimilarity(vec1: number[], vec2: number[]): number {
-    // Check if vectors exist and have length
-    if (!vec1?.length || !vec2?.length) return 0;
-
-    //use shorter length for faster calculation
-    const minLength = Math.min(vec1.length, vec2.length);
-
-    // Calculate dot product, if vector is undefined at index, use 0
-    const dotProduct = Array.from({ length: minLength }).reduce(
-      (sum: number, _, i) => sum + (vec1[i] || 0) * (vec2[i] || 0),
-      0,
-    );
-    const mag1 = Math.sqrt(vec1.reduce((sum, val) => sum + val * val, 0));
-    const mag2 = Math.sqrt(vec2.reduce((sum, val) => sum + val * val, 0));
-
-    // Avoid division by zero
-    const mags = mag1 * mag2;
-    return mags ? dotProduct / mags : 0;
-  }
-
   private calculatePositionScore(position: number, totalChunks: number): number {
     return 1 - position / totalChunks;
   }
 
-  async rerank(params: {
-    query: string;
-    queryEmbedding: number[];
-    chunks: any[];
-    topK?: number;
-  }): Promise<{ chunk: any; score: number; details: any }[]> {
-    const { query, queryEmbedding, chunks, topK = 3 } = params;
+  // Analyze query embedding features if needed
+  private analyzeQueryEmbedding(embedding: number[]): {
+    magnitude: number;
+    dominantFeatures: number[];
+  } {
+    // Calculate embedding magnitude (could indicate query complexity)
+    const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
 
-    // Get scores for each chunk
-    const scoredChunks = await Promise.all(
-      chunks.map(async (chunk, index) => {
+    // Find dominant features (highest absolute values)
+    const dominantFeatures = embedding
+      .map((value, index) => ({ value: Math.abs(value), index }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5)
+      .map(item => item.index);
+
+    return { magnitude, dominantFeatures };
+  }
+
+  // Adjust scores based on query characteristics
+  private adjustScores(score: number, queryAnalysis: { magnitude: number; dominantFeatures: number[] }): number {
+    // 1. Complex queries (high magnitude) might need more emphasis on semantic scoring
+    const magnitudeAdjustment = queryAnalysis.magnitude > 10 ? 1.1 : 1;
+
+    // 2. Strong feature presence might indicate more reliable vector scores
+    const featureStrengthAdjustment = queryAnalysis.magnitude > 5 ? 1.05 : 1;
+
+    return score * magnitudeAdjustment * featureStrengthAdjustment;
+  }
+
+  async rerank({ query, vectorStoreResults, queryEmbedding, topK = 3 }: RerankParams): Promise<RerankResult[]> {
+    const resultLength = vectorStoreResults.length;
+
+    const queryAnalysis = queryEmbedding ? this.analyzeQueryEmbedding(queryEmbedding) : null;
+
+    // Get scores for each result
+    const scoredResults = await Promise.all(
+      vectorStoreResults.map(async (result, index) => {
         // 1. Semantic relevance
-        const semanticScore = await this.semanticProvider.getRelevanceScore(query, chunk.text);
+        const semanticScore = await this.semanticProvider.getRelevanceScore(query, result?.metadata?.text);
 
         // 2. Vector similarity
-        const vectorScore = this.cosineSimilarity(queryEmbedding, chunk.embedding);
+        const vectorScore = result.score;
 
         // 3. Position score
-        const positionScore = this.calculatePositionScore(index, chunks.length);
+        const positionScore = this.calculatePositionScore(index, resultLength);
 
         // Combined weighted score
-        const finalScore =
+        let finalScore =
           this.weights.semantic * semanticScore +
           this.weights.vector * vectorScore +
           this.weights.position * positionScore;
 
+        if (queryAnalysis) {
+          finalScore = this.adjustScores(finalScore, queryAnalysis);
+        }
+
         return {
-          chunk,
+          result,
           score: finalScore,
           details: {
             semantic: semanticScore,
             vector: vectorScore,
             position: positionScore,
+            ...(queryAnalysis && {
+              queryAnalysis: {
+                magnitude: queryAnalysis.magnitude,
+                dominantFeatures: queryAnalysis.dominantFeatures,
+              },
+            }),
           },
         };
       }),
     );
 
     // Sort by score and take top K
-    return scoredChunks.sort((a, b) => b.score - a.score).slice(0, topK);
+    return scoredResults.sort((a, b) => b.score - a.score).slice(0, topK);
   }
 }

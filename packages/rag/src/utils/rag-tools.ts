@@ -16,7 +16,7 @@ export const vectorQuerySearch = async ({
   vectorStore: MastraVector;
   queryText: string;
   options: EmbeddingOptions;
-  queryFilter: any;
+  queryFilter?: any;
   topK: number;
 }) => {
   const { embedding } = (await embed(queryText, options)) as EmbedResult<string>;
@@ -43,13 +43,11 @@ export const createVectorQueryTool = ({
     id: `VectorQuery ${vectorStoreName} ${indexName} Tool`,
     inputSchema: z.object({
       queryText: z.string(),
-      filter: z
-        .object({
-          keyword: z.string().min(1),
-          operator: z.string().min(1),
-          value: z.string().min(1),
-        })
-        .optional(),
+      filter: z.object({
+        keyword: z.string(),
+        operator: z.string(),
+        value: z.string(),
+      }),
     }),
     outputSchema: z.object({
       context: z.string(),

@@ -6,19 +6,19 @@ import { CompletionProvider } from '../completion-provider';
 export class CohereCompletionProvider implements CompletionProvider {
   private client: any;
   private model: string;
-  constructor(apiKey: string, model: string) {
+  constructor(apiKey: string, model?: string) {
     this.client = new CohereClient({
       token: apiKey,
     });
 
-    this.model = model;
+    this.model = model || 'rerank-v3.5';
   }
 
   async getRelevanceScore(query: string, text: string): Promise<number> {
     const response = await this.client.rerank({
       query,
       documents: [text],
-      model: this.model || 'rerank-english-v2.0',
+      model: this.model,
       topN: 1,
     });
 
