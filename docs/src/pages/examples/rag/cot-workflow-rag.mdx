@@ -1,0 +1,365 @@
+import { GithubLink } from '../../../components/github-link';
+
+# Chain of Thought Workflow RAG
+
+This example demonstrates how to implement a Retrieval-Augmented Generation (RAG) system using Mastra, OpenAI embeddings, and PGVector for vector storage, with an emphasis on chain-of-thought reasoning using a step-by-step workflow.
+
+## Overview
+
+The system implements RAG using Mastra and OpenAI with chain-of-thought prompting through a defined workflow. Here's what it does:
+1. Sets up a Mastra agent with GPT-4o-mini for response generation
+2. Creates a vector query tool to manage vector store interactions
+3. Defines a workflow with multiple steps for chain-of-thought reasoning
+4. Processes and chunks text documents
+5. Creates and stores embeddings in PostgreSQL
+6. Generates responses through the workflow steps
+
+## Setup 
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+POSTGRES_CONNECTION_STRING=your_connection_string_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/mastra/index.ts"
+import { Mastra, Agent, EmbedManyResult, Step, Workflow } from '@mastra/core';
+import { createVectorQueryTool, embed, MDocument, PgVector } from '@mastra/rag';
+import { z } from 'zod';
+```
+
+## Workflow Definition
+
+First, define the workflow with its trigger schema:
+
+```typescript copy showLineNumbers{5} filename="src/mastra/index.ts"
+export const ragWorkflow = new Workflow({
+  name: 'rag-workflow',
+  triggerSchema: z.object({
+    query: z.string(),
+  }),
+});
+```
+
+## Vector Query Tool Creation
+
+Create a tool for querying the vector database:
+
+```typescript copy showLineNumbers{12} filename="src/mastra/index.ts"
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  options: {
+    provider: 'OPEN_AI',
+    model: 'text-embedding-ada-002',
+    maxRetries: 3,
+  },
+  topK: 3,
+});
+```
+
+## Agent Configuration
+
+Set up the Mastra agent:
+
+```typescript copy showLineNumbers{23} filename="src/mastra/index.ts"
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  instructions: `You are a helpful assistant that answers questions based on the provided context.`,
+  model: {
+    provider: 'OPEN_AI',
+    name: 'gpt-4o-mini',
+  },
+  tools: {
+    vectorQueryTool,
+  },
+});
+```
+
+## Workflow Steps
+
+The workflow is divided into multiple steps for chain-of-thought reasoning:
+
+### 1. Context Analysis Step
+
+```typescript copy showLineNumbers{35} filename="src/mastra/index.ts"
+const analyzeContext = new Step({
+  id: 'analyzeContext',
+  inputSchema: z.object({
+    query: z.string(),
+  }),
+  outputSchema: z.object({
+    initialAnalysis: z.string(),
+  }),
+  execute: async ({ context: { query }, mastra }) => {
+    console.log('---------------------------');
+    const ragAgent = mastra?.agents?.ragAgent;
+    const analysisPrompt = `${query} 1. First, carefully analyze the retrieved context chunks and identify key information.`;
+    const analysis = await ragAgent?.generate(analysisPrompt);
+    console.log(analysis?.text);
+    return {
+      initialAnalysis: analysis?.text ?? '',
+    };
+  },
+});
+```
+
+### 2. Thought Breakdown Step
+
+```typescript copy showLineNumbers{55} filename="src/mastra/index.ts"
+const breakdownThoughts = new Step({
+  id: 'breakdownThoughts',
+  inputSchema: z.object({
+    analysis: z.string(),
+  }),
+  outputSchema: z.object({
+    breakdown: z.string(),
+  }),
+  execute: async ({ context: { analysis }, mastra }) => {
+    console.log('---------------------------');
+    const ragAgent = mastra?.agents?.ragAgent;
+    const connectionPrompt = `
+      Based on the initial analysis: ${analysis}
+      2. Break down your thinking process about how the retrieved information relates to the query.
+    `;
+    const connectionAnalysis = await ragAgent?.generate(connectionPrompt);
+    console.log(connectionAnalysis?.text);
+    return {
+      breakdown: connectionAnalysis?.text ?? '',
+    };
+  },
+});
+```
+
+### 3. Connection Step
+
+```typescript copy showLineNumbers{78} filename="src/mastra/index.ts"
+const connectPieces = new Step({
+  id: 'connectPieces',
+  inputSchema: z.object({
+    process: z.string(),
+  }),
+  outputSchema: z.object({
+    connections: z.string(),
+  }),
+  execute: async ({ context: { process }, mastra }) => {
+    console.log('---------------------------');
+    const ragAgent = mastra?.agents?.ragAgent;
+    const connectionPrompt = `
+      Based on the breakdown: ${process}
+      3. Explain how you're connecting different pieces from the retrieved chunks.
+    `;
+    const connections = await ragAgent?.generate(connectionPrompt);
+    console.log(connections?.text);
+    return {
+      connections: connections?.text ?? '',
+    };
+  },
+});
+```
+
+### 4. Conclusion Step
+
+```typescript copy showLineNumbers{101} filename="src/mastra/index.ts"
+const drawConclusions = new Step({
+  id: 'drawConclusions',
+  inputSchema: z.object({
+    evidence: z.string(),
+  }),
+  outputSchema: z.object({
+    conclusions: z.string(),
+  }),
+  execute: async ({ context: { evidence }, mastra }) => {
+    console.log('---------------------------');
+    const ragAgent = mastra?.agents?.ragAgent;
+    const conclusionPrompt = `
+      Based on the connections: ${evidence}
+      4. Draw conclusions based only on the evidence in the retrieved context.
+    `;
+    const conclusions = await ragAgent?.generate(conclusionPrompt);
+    console.log(conclusions?.text);
+    return {
+      conclusions: conclusions?.text ?? '',
+    };
+  },
+});
+```
+
+### 5. Final Answer Step
+
+```typescript copy showLineNumbers{124} filename="src/mastra/index.ts"
+const finalAnswer = new Step({
+  id: 'finalAnswer',
+  inputSchema: z.object({
+    conclusions: z.string(),
+  }),
+  outputSchema: z.object({
+    finalAnswer: z.string(),
+  }),
+  execute: async ({ context: { conclusions }, mastra }) => {
+    console.log('---------------------------');
+    const ragAgent = mastra?.agents?.ragAgent;
+    const answerPrompt = `
+      Based on the conclusions: ${conclusions}
+      Format your response as:
+      THOUGHT PROCESS:
+      - Step 1: [Initial analysis of retrieved chunks]
+      - Step 2: [Connections between chunks]
+      - Step 3: [Reasoning based on chunks]
+
+      FINAL ANSWER:
+      [Your concise answer based on the retrieved context]`;
+
+    const finalAnswer = await ragAgent?.generate(answerPrompt);
+    console.log(finalAnswer?.text);
+    return {
+      finalAnswer: finalAnswer?.text ?? '',
+    };
+  },
+});
+```
+
+## Workflow Configuration
+
+Connect all the steps in the workflow:
+
+```typescript copy showLineNumbers{154} filename="src/mastra/index.ts"
+ragWorkflow
+  .step(analyzeContext, {
+    variables: {
+      query: {
+        step: 'trigger',
+        path: 'query',
+      },
+    },
+  })
+  .then(breakdownThoughts, {
+    variables: {
+      analysis: {
+        step: analyzeContext,
+        path: 'initialAnalysis',
+      },
+    },
+  })
+  .then(connectPieces, {
+    variables: {
+      process: {
+        step: breakdownThoughts,
+        path: 'breakdown',
+      },
+    },
+  })
+  .then(drawConclusions, {
+    variables: {
+      evidence: {
+        step: connectPieces,
+        path: 'connections',
+      },
+    },
+  })
+  .then(finalAnswer, {
+    variables: {
+      conclusions: {
+        step: drawConclusions,
+        path: 'conclusions',
+      },
+    },
+  });
+
+ragWorkflow.commit();
+```
+
+## Mastra Instance Creation
+
+Initialize Mastra with all components:
+
+```typescript copy showLineNumbers{198} filename="src/mastra/index.ts"
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+
+export const mastra = new Mastra({
+  agents: { ragAgent },
+  vectors: { pgVector },
+  workflows: { ragWorkflow },
+});
+```
+
+## Document Processing
+
+Process and chunk the document:
+
+```typescript copy showLineNumbers{206} filename="src/mastra/index.ts"
+const doc = MDocument.fromText(`Your document text here...`);
+
+const chunks = await doc.chunk({
+  strategy: 'recursive',
+  size: 512,
+  overlap: 50,
+  separator: '\n',
+});
+```
+
+## Embedding Creation and Storage
+
+Generate and store embeddings:
+
+```typescript copy showLineNumbers{215} filename="src/mastra/index.ts"
+const { embeddings } = (await embed(chunks, {
+  provider: 'OPEN_AI',
+  model: 'text-embedding-ada-002',
+  maxRetries: 3,
+})) as EmbedManyResult<string>;
+
+const vectorStore = mastra.getVector('pgVector');
+await vectorStore.createIndex('embeddings', 1536);
+await vectorStore.upsert(
+  'embeddings',
+  embeddings,
+  chunks?.map((chunk: any) => ({ text: chunk.text })),
+);
+```
+
+## Response Generation
+
+Function to generate responses using the workflow:
+
+```typescript copy showLineNumbers{229} filename="src/mastra/index.ts"
+async function generateResponse(query: string) {
+  const prompt = `
+    Please answer the following question:
+    ${query}
+
+    Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
+    `;
+
+  const workflowResult = await ragWorkflow.execute({
+    triggerData: {
+      query: prompt,
+    },
+  });
+
+  return workflowResult;
+}
+```
+
+## Example Usage
+
+```typescript copy showLineNumbers{246} filename="src/mastra/index.ts"
+const query = 'What are the main benefits of telemedicine?';
+console.log('\nQuery:', query);
+const result = await generateResponse(query);
+console.log('\nThought Process:');
+console.log(result.results);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cot-workflow-rag'} />
