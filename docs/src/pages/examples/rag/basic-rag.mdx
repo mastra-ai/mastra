@@ -1,6 +1,6 @@
 import { GithubLink } from '../../../components/github-link';
 
-# Building a RAG System with Mastra
+# Basic RAG
 
 This example demonstrates how to implement a Retrieval-Augmented Generation (RAG) system using Mastra, OpenAI embeddings, and PGVector for vector storage.
 
@@ -8,11 +8,11 @@ This example demonstrates how to implement a Retrieval-Augmented Generation (RAG
 
 The system implements RAG using Mastra and OpenAI. Here's what it does:
 1. Sets up a Mastra agent with GPT-4o-mini for response generation
-2. Creates a custom context tool for managing vector store interactions
+2. Creates a vector query tool to manage vector store interactions
 3. Chunks text documents into smaller segments
 4. Creates embeddings for these chunks
 5. Stores them in a PostgreSQL vector database
-6. Retrieves relevant chunks based on queries using context tool
+6. Retrieves relevant chunks based on queries using vector query tool
 7. Generates context-aware responses using the Mastra agent
 
 ## Setup 
@@ -21,7 +21,7 @@ The system implements RAG using Mastra and OpenAI. Here's what it does:
 
 Make sure to set up your environment variables:
 
-```bash
+```bash filename=".env"
 POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
@@ -29,49 +29,31 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 
 Then, import the necessary dependencies:
 
-```typescript copy
-import { Mastra, Agent, EmbedResult, EmbedManyResult } from '@mastra/core'
-import { embed, MDocument, PgVector } from '@mastra/rag'
+```typescript copy showLineNumbers filename="src/mastra/index.ts"
+import { Mastra, Agent, EmbedManyResult } from '@mastra/core';
+import { embed, MDocument, PgVector, createVectorQueryTool } from '@mastra/rag';
 ```
 
-## Context Tool Creation
-Define a custom tool for handling context retrieval:
-```typescript copy
-export const contextTool = createTool({
-  id: 'Use Context',
-  inputSchema: z.object({
-    queryText: z.string(),
-  }),
-  outputSchema: z.object({
-    context: z.string(),
-  }),
-  description: `Fetches the retrieved chunks from the vector store and combines them into a single context string`,
-  execute: async ({ context: { queryText } }) => {
-    const { embedding } = (await embed(queryText, {
-      provider: 'OPEN_AI',
-      model: 'text-embedding-ada-002',
-      maxRetries: 3,
-    })) as EmbedResult<string>
-
-    // Get relevant chunks from the vector database
-    const results = await pgVector.query('embeddings', embedding, 3)
-    const relevantChunks = results.map(result => result?.metadata?.text)
-
-    // Combine the chunks into a context string
-    const context = relevantChunks.join('\n\n')
-
-    return {
-      context,
-    }
+## Vectory Query Tool Creation
+Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
+```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  options: {
+    provider: 'OPEN_AI',
+    model: 'text-embedding-ada-002',
+    maxRetries: 3,
   },
-})
+  topK: 3,
+});
 ```
 
 ## Agent Configuration
 
 Set up the Mastra agent that will handle the responses:
 
-```typescript copy
+```typescript copy showLineNumbers{15} filename="src/mastra/index.ts"
 export const ragAgent = new Agent({
   name: 'RAG Agent',
   instructions:
@@ -80,10 +62,22 @@ export const ragAgent = new Agent({
     provider: 'OPEN_AI',
     name: 'gpt-4o-mini',
   },
+  tools: {
+    vectorQueryTool,
+  },
 })
+```
+
+## Instantiate PgVector and Mastra
+
+Instantiate PgVector and Mastra with all components:
+
+```typescript copy showLineNumbers{28} filename="src/mastra/index.ts"
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
   agents: { ragAgent },
+  vectors: { pgVector },
 })
 
 const agent = mastra.getAgent('ragAgent')
@@ -93,7 +87,7 @@ const agent = mastra.getAgent('ragAgent')
 
 Create a document and process it into chunks:
 
-```typescript copy
+```typescript copy showLineNumbers{37} filename="src/mastra/index.ts"
 const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`) // Your text here
 
 const chunks = await doc.chunk({
@@ -108,16 +102,16 @@ const chunks = await doc.chunk({
 
 Generate embeddings for the chunks and store them in the vector database:
 
-```typescript copy
+```typescript copy showLineNumbers{46} filename="src/mastra/index.ts"
 const { embeddings } = await embed(chunks, {
   provider: "OPEN_AI",
   model: "text-embedding-ada-002",
   maxRetries: 3,
 }) as EmbedManyResult<string>
 
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!)
-await pgVector.createIndex("embeddings", 1536)
-await pgVector.upsert(
+const vectorStore = mastra.getVector('pgVector');
+await vectorStore.createIndex("embeddings", 1536)
+await vectorStore.upsert(
   "embeddings",
   embeddings,
   chunks?.map((chunk: any) => ({ text: chunk.text }))
@@ -128,7 +122,7 @@ await pgVector.upsert(
 
 Function to generate responses based on retrieved context:
 
-```typescript copy
+```typescript copy showLineNumbers{60} filename="src/mastra/index.ts"
 async function generateResponse(query: string) {
   const prompt = `
       Please answer the following question:
@@ -143,23 +137,9 @@ async function generateResponse(query: string) {
 }
 ```
 
+## Example Usage
 
-## Single Query Processing
-
-Example of processing a single query:
-
-```typescript copy
-const queryText = 'What are the main adaptation strategies for farmers?'
-const response = await generateResponse(queryText)
-console.log('Query:', queryText)
-console.log('Response:', response)
-```
-
-## Multiple Query Processing
-
-Example of processing multiple queries:
-
-```typescript copy
+```typescript copy showLineNumbers{73} filename="src/mastra/index.ts"
 async function answerQueries(queries: string[]) {
   for (const query of queries) {
     try {
@@ -171,11 +151,7 @@ async function answerQueries(queries: string[]) {
     }
   }
 }
-```
 
-## Example Usage
-
-```typescript copy
 const queries = [
   "What are the main points in the article?",
   "How does temperature affect crop yields?",
@@ -192,4 +168,4 @@ await answerQueries(queries)
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/basic-rag.ts'} />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/basic-rag'} />

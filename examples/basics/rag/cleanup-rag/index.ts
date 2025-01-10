@@ -1,82 +1,25 @@
-import { Mastra, Agent, EmbedResult, EmbedManyResult, createTool } from '@mastra/core';
-import { embed, MDocument, PgVector } from '@mastra/rag';
-import { z } from 'zod';
+import { Mastra, Agent, EmbedManyResult } from '@mastra/core';
+import { embed, MDocument, PgVector, createVectorQueryTool, createDocumentChunker } from '@mastra/rag';
 
-export const contextTool = createTool({
-  id: 'Use Context',
-  inputSchema: z.object({
-    queryText: z.string(),
-    index: z.string(),
-  }),
-  outputSchema: z.object({
-    context: z.string(),
-  }),
-  description: `Fetches the retrieved chunks from the vector store and combines them into a single context string`,
-  execute: async ({ context: { queryText, index } }) => {
-    const { embedding } = (await embed(queryText, {
-      provider: 'OPEN_AI',
-      model: 'text-embedding-ada-002',
-      maxRetries: 3,
-    })) as EmbedResult<string>;
-
-    // Get relevant chunks from the vector database
-    const results = await pgVector.query(index, embedding);
-    const relevantChunks = results.map(result => result?.metadata?.text);
-    console.log('Chunks used:', relevantChunks);
-
-    // Combine the chunks into a context string
-    const context = relevantChunks.join('\n\n');
-
-    return {
-      context,
-    };
-  },
-});
-
-export const chunkTool = createTool({
-  id: 'Chunk Tool',
-  inputSchema: z.object({}),
-  description: `Does initial chunking and returns chunks`,
-  execute: async () => {
-    const chunks = await doc.chunk({
-      strategy: 'recursive',
-      size: 512,
-      overlap: 50,
-      separator: '\n',
-    });
-
-    return {
-      chunks,
-    };
-  },
-});
-
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  instructions:
-    'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
-  model: {
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  options: {
     provider: 'OPEN_AI',
-    name: 'gpt-4o-mini',
+    model: 'text-embedding-ada-002',
+    maxRetries: 3,
   },
-  tools: { contextTool },
 });
 
-export const densityAgent = new Agent({
-  name: 'Density Agent',
-  instructions: 'You are a helpful assistant that processes, cleans, and labels data before storage.',
-  model: {
+const cleanedVectorQueryTool = createVectorQueryTool({
+  vectorStoreName: 'pgVector',
+  indexName: 'cleanedEmbeddings',
+  options: {
     provider: 'OPEN_AI',
-    name: 'gpt-4o-mini',
+    model: 'text-embedding-ada-002',
+    maxRetries: 3,
   },
-  tools: { chunkTool },
 });
-
-export const mastra = new Mastra({
-  agents: { ragAgent, densityAgent },
-});
-const agentOne = mastra.getAgent('ragAgent');
-const agentTwo = mastra.getAgent('densityAgent');
 
 const doc =
   MDocument.fromText(`The Future of Space Exploration and Human Settlement in the Modern Era of Technology and Innovation
@@ -130,6 +73,62 @@ The first submarine was invented in 1620. Space-based economies, which we discus
 The Empire State Building was built in just 410 days. Multi-planetary species survival, as previously stated, is a key goal of space settlement. Did you know that the first pizza was made in Naples, Italy?
 `);
 
+const documentChunkerTool = createDocumentChunker({
+  doc,
+  params: {
+    strategy: 'recursive',
+    size: 256,
+    overlap: 50,
+    separator: '\n',
+  },
+});
+
+export const ragAgentOne = new Agent({
+  name: 'RAG Agent One',
+  instructions:
+    'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
+  model: {
+    provider: 'OPEN_AI',
+    name: 'gpt-4o-mini',
+  },
+  tools: {
+    vectorQueryTool,
+  },
+});
+
+export const ragAgentTwo = new Agent({
+  name: 'RAG Agent Two',
+  instructions:
+    'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
+  model: {
+    provider: 'OPEN_AI',
+    name: 'gpt-4o-mini',
+  },
+  tools: {
+    cleanedVectorQueryTool,
+  },
+});
+
+export const ragAgentThree = new Agent({
+  name: 'RAG Agent Three',
+  instructions: 'You are a helpful assistant that processes, cleans, and labels data before storage.',
+  model: {
+    provider: 'OPEN_AI',
+    name: 'gpt-4o-mini',
+  },
+  tools: { documentChunkerTool },
+});
+
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+
+export const mastra = new Mastra({
+  agents: { ragAgentOne, ragAgentTwo, ragAgentThree },
+  vectors: { pgVector },
+});
+const dataAgentOne = mastra.getAgent('ragAgentOne');
+const dataAgentTwo = mastra.getAgent('ragAgentTwo');
+const processAgent = mastra.getAgent('ragAgentThree');
+
 // Set to 256 to get more chunks
 const chunks = await doc.chunk({
   strategy: 'recursive',
@@ -138,11 +137,9 @@ const chunks = await doc.chunk({
   separator: '\n',
 });
 
-console.log(chunks.length);
-
 const chunkPrompt = `Take the chunks returned from the tool and clean them up according to the instructions provided. Make sure to filter out irrelevant information that is not space related and remove duplicates.`;
 
-const newChunks = await agentTwo.generate(chunkPrompt);
+const newChunks = await processAgent.generate(chunkPrompt);
 
 const updatedDoc = MDocument.fromText(newChunks.text);
 
@@ -152,8 +149,6 @@ const updatedChunks = await updatedDoc.chunk({
   overlap: 50,
   separator: '\n',
 });
-
-console.log(updatedChunks.length);
 
 const { embeddings } = (await embed(chunks, {
   provider: 'OPEN_AI',
@@ -167,41 +162,40 @@ const { embeddings: cleanedEmbeddings } = (await embed(updatedChunks, {
   maxRetries: 3,
 })) as EmbedManyResult<string>;
 
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
-await pgVector.createIndex('embeddings', 1536);
-await pgVector.createIndex('cleanedEmbeddings', 1536);
-await pgVector.upsert(
+const vectorStore = mastra.getVector('pgVector');
+await vectorStore.createIndex('embeddings', 1536);
+await vectorStore.createIndex('cleanedEmbeddings', 1536);
+await vectorStore.upsert(
   'embeddings',
   embeddings,
   chunks?.map((chunk: any) => ({ text: chunk.text })),
 );
-await pgVector.upsert(
+await vectorStore.upsert(
   'cleanedEmbeddings',
   cleanedEmbeddings,
   updatedChunks?.map((chunk: any) => ({ text: chunk.text })),
 );
 
-async function generateResponse(query: string, index: string) {
+async function generateResponse(query: string, agent: Agent) {
   // Create a prompt that includes both context and query
   const prompt = `
       Please answer the following question:
       ${query}
 
-      Please base your answer only on the context provided in the tool with this index ${index}. If the context doesn't contain enough information to fully answer the question, please state that explicitly. 
+      Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly. 
       `;
 
   // Call the agent to generate a response
-  const completion = await agentOne.generate(prompt);
+  const completion = await agent.generate(prompt);
 
   return completion.text;
 }
 
-// Example with multiple queries and error handling
-async function answerQueries(queries: string[], index: string) {
+async function answerQueries(queries: string[], agent: Agent) {
   for (const query of queries) {
     try {
       // Generate and log the response
-      const answer = await generateResponse(query, index);
+      const answer = await generateResponse(query, agent);
       console.log('\nQuery:', query);
       console.log('Response:', answer);
     } catch (error) {
@@ -218,6 +212,6 @@ const queries = [
   'What are all the mentions of sustainability in space settlements?',
 ];
 
-// Compare responses between raw and cleaned embeddings
-await answerQueries(queries, 'embeddings');
-await answerQueries(queries, 'cleanedEmbeddings');
+await answerQueries(queries, dataAgentOne);
+
+await answerQueries(queries, dataAgentTwo);

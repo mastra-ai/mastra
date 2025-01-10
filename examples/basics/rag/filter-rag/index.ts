@@ -1,34 +1,16 @@
-import { Mastra, Agent, EmbedResult, EmbedManyResult, createTool } from '@mastra/core';
-import { embed, MDocument, PgVector } from '@mastra/rag';
-import { z } from 'zod';
+import { Mastra, Agent, EmbedManyResult } from '@mastra/core';
+import { createVectorQueryTool, embed, MDocument, PgVector } from '@mastra/rag';
 
-export const contextTool = createTool({
-  id: 'Use Context',
-  inputSchema: z.object({
-    queryText: z.string(),
-  }),
-  outputSchema: z.object({
-    context: z.string(),
-  }),
-  description: `Fetches the retrieved chunks from the vector store and combines them into a single context string`,
-  execute: async ({ context: { queryText } }) => {
-    const { embedding } = (await embed(queryText, {
-      provider: 'OPEN_AI',
-      model: 'text-embedding-ada-002',
-      maxRetries: 3,
-    })) as EmbedResult<string>;
-
-    // Get relevant chunks from the vector database
-    const results = await pgVector.query('embeddings', embedding, 3);
-    const relevantChunks = results.map(result => result?.metadata?.text);
-
-    // Combine the chunks into a context string
-    const context = relevantChunks.join('\n\n');
-
-    return {
-      context,
-    };
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  options: {
+    provider: 'OPEN_AI',
+    model: 'text-embedding-ada-002',
+    maxRetries: 3,
   },
+  topK: 3,
+  useFilter: true,
 });
 
 export const ragAgent = new Agent({
@@ -39,11 +21,14 @@ export const ragAgent = new Agent({
     provider: 'OPEN_AI',
     name: 'gpt-4o-mini',
   },
-  tools: { contextTool },
+  tools: { vectorQueryTool },
 });
+
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
   agents: { ragAgent },
+  vectors: { pgVector },
 });
 const agent = mastra.getAgent('ragAgent');
 
@@ -72,6 +57,9 @@ const chunks = await doc.chunk({
   size: 512,
   overlap: 50,
   separator: '\n',
+  extract: {
+    keywords: true,
+  },
 });
 
 const { embeddings } = (await embed(chunks, {
@@ -80,20 +68,31 @@ const { embeddings } = (await embed(chunks, {
   maxRetries: 3,
 })) as EmbedManyResult<string>;
 
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
-await pgVector.createIndex('embeddings', 1536);
-await pgVector.upsert(
+const vectorStore = mastra.getVector('pgVector');
+await vectorStore.createIndex('embeddings', 1536);
+await vectorStore.upsert(
   'embeddings',
   embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text })),
+  chunks?.map((chunk: any) => ({
+    text: chunk.text,
+    ...chunk.metadata,
+  })),
 );
 
-async function generateResponse(query: string) {
+async function generateResponse(
+  query: string,
+  filter: {
+    keyword: string;
+    operator: string;
+    value: string;
+  },
+) {
   const prompt = `
       Please answer the following question:
       ${query}
 
-      Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
+      Please base your answer only on the context provided in the tool using this filter ${filter}. 
+      If the context doesn't contain enough information to fully answer the question, please state that explicitly.
       `;
 
   // Call the agent to generate a response
@@ -102,18 +101,20 @@ async function generateResponse(query: string) {
   return completion.text;
 }
 
-const queryText = 'What are the main adaptation strategies for farmers?';
-
-// Generate the LLM response
-const response = await generateResponse(queryText);
-console.log('Query:', queryText);
-console.log('Response:', response);
-
-async function answerQueries(queries: string[]) {
-  for (const query of queries) {
+async function answerQueries(
+  queries: {
+    query: string;
+    filter: {
+      keyword: string;
+      operator: string;
+      value: string;
+    };
+  }[],
+) {
+  for (const { query, filter } of queries) {
     try {
       // Generate and log the response
-      const answer = await generateResponse(query);
+      const answer = await generateResponse(query, filter);
       console.log('\nQuery:', query);
       console.log('Response:', answer);
     } catch (error) {
@@ -123,10 +124,26 @@ async function answerQueries(queries: string[]) {
 }
 
 const queries = [
-  'What are the main points in the article?',
-  'How does temperature affect crop yields?',
-  'What solutions are farmers implementing?',
-  'What are the future challenges mentioned in the text?',
+  {
+    query: 'What adaptation strategies are mentioned?',
+    filter: {
+      keyword: 'excerptKeywords',
+      operator: 'ilike',
+      value: `%adaptation%`,
+    },
+  },
+  {
+    query: 'How do temperatures affect crop yields specifically?',
+    filter: { keyword: 'excerptKeywords', operator: 'ilike', value: `%crop%` },
+  },
+  {
+    query: 'What are the future challenges?',
+    filter: {
+      keyword: 'excerptKeywords',
+      operator: 'ilike',
+      value: `%technologies%`,
+    },
+  },
 ];
 
 await answerQueries(queries);
