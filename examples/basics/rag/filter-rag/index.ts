@@ -10,7 +10,7 @@ const vectorQueryTool = createVectorQueryTool({
     maxRetries: 3,
   },
   topK: 3,
-  useFilter: true,
+  vectorFilterType: 'pg',
 });
 
 export const ragAgent = new Agent({
@@ -87,11 +87,12 @@ async function generateResponse(
     value: string;
   },
 ) {
+  const { keyword, operator, value } = filter;
   const prompt = `
       Please answer the following question:
       ${query}
 
-      Please base your answer only on the context provided in the tool using this filter ${filter}. 
+      Please base your answer only on the context provided in the tool using this keyword: ${keyword}, this operator: ${operator}, and this value: ${value}.
       If the context doesn't contain enough information to fully answer the question, please state that explicitly.
       `;
 
