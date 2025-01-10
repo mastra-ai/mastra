@@ -3,13 +3,11 @@ import { z } from 'zod';
 
 const logCatName = new Step({
   id: 'logCatName',
-  inputSchema: z.object({
-    name: z.string(),
-  }),
   outputSchema: z.object({
     rawText: z.string(),
   }),
-  execute: async ({ context: { name } }) => {
+  execute: async ({ context }) => {
+    const name = context?.machineContext?.getStepPayload<{ name: string }>('trigger')?.name;
     console.log(`Hello, ${name} 🐈`);
     return { rawText: `Hello ${name}` };
   },
@@ -22,13 +20,4 @@ export const logCatWorkflow = new Workflow({
   }),
 });
 
-logCatWorkflow
-  .step(logCatName, {
-    variables: {
-      name: {
-        step: 'trigger',
-        path: '', // passes in entire payload
-      },
-    },
-  })
-  .commit();
+logCatWorkflow.step(logCatName).commit();
