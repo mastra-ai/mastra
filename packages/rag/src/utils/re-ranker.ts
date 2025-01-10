@@ -35,7 +35,7 @@ interface RerankResult {
   details: RerankDetails;
 }
 
-interface RerankerOptions {
+export interface RerankerOptions {
   semanticProvider: 'cohere' | 'agent';
   weights?: WeightConfig;
   cohereApiKey?: string;

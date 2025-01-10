@@ -42,12 +42,15 @@ export class PgVector extends MastraVector {
       if (filter) {
         const conditions = Object.entries(filter).map(([key, condition]) => {
           // If condition is not a FilterCondition object, assume it's an equality check
-          if (!condition || typeof condition !== 'object' || !('operator' in condition)) {
+          if (!condition || typeof condition !== 'object') {
             filterValues.push(condition);
             return `metadata->>'${key}' = $${filterValues.length}`;
           }
 
-          const { operator, value } = condition;
+          const [[operator, value] = []] = Object.entries(condition ?? {});
+          if (!operator || value === undefined) {
+            throw new Error(`Invalid operator or value for key: ${key}`);
+          }
           if (!isValidOperator(operator)) {
             throw new Error(`Unsupported operator: ${operator}`);
           }
