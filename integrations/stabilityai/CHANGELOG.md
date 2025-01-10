@@ -1,5 +1,15 @@
 # @mastra/stabilityai
 
+## 1.0.1-alpha.30
+
+### Patch Changes
+
+- 0b74006: Workflow updates
+- Updated dependencies [592e3cf]
+- Updated dependencies [837a288]
+- Updated dependencies [0b74006]
+  - @mastra/core@0.1.27-alpha.55
+
 ## 1.0.1-alpha.29
 
 ### Patch Changes

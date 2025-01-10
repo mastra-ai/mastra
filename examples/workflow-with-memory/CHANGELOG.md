@@ -1,5 +1,16 @@
 # workflow
 
+## 1.0.1-alpha.15
+
+### Patch Changes
+
+- 0b74006: Workflow updates
+- Updated dependencies [592e3cf]
+- Updated dependencies [837a288]
+- Updated dependencies [0b74006]
+  - @mastra/core@0.1.27-alpha.55
+  - @mastra/memory@0.0.2-alpha.35
+
 ## 1.0.1-alpha.14
 
 ### Patch Changes

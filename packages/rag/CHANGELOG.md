@@ -1,5 +1,17 @@
 # @mastra/rag
 
+## 0.0.2-alpha.39
+
+### Patch Changes
+
+- 592e3cf: Add custom rag tools, add vector retrieval, and update docs
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- 0b74006: Workflow updates
+- Updated dependencies [592e3cf]
+- Updated dependencies [837a288]
+- Updated dependencies [0b74006]
+  - @mastra/core@0.1.27-alpha.55
+
 ## 0.0.2-alpha.38
 
 ### Patch Changes
