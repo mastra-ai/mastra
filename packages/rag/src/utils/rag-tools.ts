@@ -4,53 +4,73 @@ import { z } from 'zod';
 import { ChunkParams, MDocument } from '../document';
 import { embed } from '../embeddings';
 
+type VectorFilterType = 'pg' | 'astra' | 'qdrant' | 'upstash' | 'pinecone' | 'chroma' | '';
+
+const createFilter = (filter: any, vectorFilterType: VectorFilterType) => {
+  if (['pg', 'astra', 'pinecone'].includes(vectorFilterType)) {
+    return { [filter.keyword]: { [filter.operator]: filter.value } };
+  } else if (vectorFilterType === 'chroma') {
+    return { [filter.keyword]: filter.value };
+  } else if (vectorFilterType === 'qdrant') {
+    return {
+      must: [
+        {
+          key: filter.keyword,
+          match: {
+            value: filter.value,
+          },
+        },
+      ],
+    };
+  } else {
+    return { filter };
+  }
+};
+
 export const createVectorQueryTool = ({
   vectorStoreName,
   indexName,
   topK = 10,
   options,
-  useFilter = false,
+  vectorFilterType = '',
 }: {
   vectorStoreName: string;
   indexName: string;
   options: EmbeddingOptions;
   topK?: number;
-  useFilter?: boolean;
+  vectorFilterType?: VectorFilterType;
 }) => {
   return createTool({
     id: `VectorQuery ${vectorStoreName} ${indexName} Tool`,
     inputSchema: z.object({
       queryText: z.string(),
-      filter: z
-        .object({
-          keyword: z.string().min(1),
-          operator: z.string().min(1),
-          value: z.string().min(1),
-        })
-        .optional(),
+      filter: z.object({
+        keyword: z.string(),
+        operator: z.string(),
+        value: z.string(),
+      }),
     }),
     outputSchema: z.object({
-      context: z.string(),
+      relevantContext: z.string(),
     }),
     description: `Fetches and combines the top ${topK} relevant chunks from the ${vectorStoreName} vector store using the ${indexName} index`,
     execute: async ({ context: { queryText, filter }, mastra }) => {
-      let context = '';
+      let relevantContext = '';
       const vectorStore = mastra?.vectors?.[vectorStoreName];
-      console.log({ vectorStore, vectorStoreName });
       const { embedding } = (await embed(queryText, options)) as EmbedResult<string>;
 
       // Get relevant chunks from the vector database
       if (vectorStore) {
-        const queryFilter = useFilter && filter ? { [filter.keyword]: { [filter.operator]: filter.value } } : {};
+        const queryFilter = vectorFilterType && filter ? createFilter(filter, vectorFilterType) : {};
         const results = await vectorStore.query(indexName, embedding, topK, queryFilter);
         const relevantChunks = results.map(result => result?.metadata?.text);
 
         // Combine the chunks into a context string
-        context = relevantChunks.join('\n\n');
+        relevantContext = relevantChunks.join('\n\n');
       }
 
       return {
-        context,
+        relevantContext,
       };
     },
   });
