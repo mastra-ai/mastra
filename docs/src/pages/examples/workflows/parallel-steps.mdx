@@ -1,75 +1,69 @@
-import { GithubLink } from '../../../components/github-link';
+import { GithubLink } from "../../../components/github-link";
 
 # Workflow with Parallel Steps
 
 Workflow steps can run in parallel for better performance. You can create parallel workflow steps with `step` that process the same input concurrently.
 
 ```ts showLineNumbers copy
-import { Step, Workflow } from '@mastra/core';
-import { z } from 'zod';
+import { Step, Workflow } from "@mastra/core";
+import { z } from "zod";
 
-const stepOne = new Step({
-  id: 'stepOne',
-  inputSchema: z.object({
-    inputValue: z.number(),
-  }),
-  outputSchema: z.object({
-    doubledValue: z.number(),
-  }),
-  execute: async ({ context }) => {
-    const doubledValue = context.inputValue * 2;
-    return { doubledValue };
-  },
-});
-
-const stepTwo = new Step({
-  id: 'stepTwo',
-  inputSchema: z.object({
-    valueToIncrement: z.number(),
-  }),
-  outputSchema: z.object({
-    incrementedValue: z.number(),
-  }),
-  execute: async ({ context }) => {
-    const incrementedValue = context.valueToIncrement + 1;
-    return { incrementedValue };
-  },
-});
-
-// Build the workflow
-const myWorkflow = new Workflow({
-  name: 'my-workflow',
-  triggerSchema: z.object({
-    inputValue: z.number(),
-  }),
-});
-
-// run workflows in parallel
-myWorkflow
-  .step(stepOne, {
-    variables: {
-      inputValue: {
-        step: 'trigger',
-        path: 'inputValue',
-      },
-    },
-  })
-  .step(stepTwo, {
-    variables: {
-      valueToIncrement: {
-        step: 'trigger',
-        path: 'inputValue',
-      },
+async function main() {
+  const stepOne = new Step({
+    id: "stepOne",
+    outputSchema: z.object({
+      doubledValue: z.number(),
+    }),
+    execute: async ({ context }) => {
+      const inputValue = context?.machineContext?.getStepPayload<{
+        inputValue: number;
+      }>("trigger")?.inputValue;
+      if (!inputValue) throw new Error("No input value provided");
+      const doubledValue = inputValue * 2;
+      return { doubledValue };
     },
   });
 
-myWorkflow.commit();
+  const stepTwo = new Step({
+    id: "stepTwo",
+    outputSchema: z.object({
+      incrementedValue: z.number(),
+    }),
+    execute: async ({ context }) => {
+      const valueToIncrement = context?.machineContext?.getStepPayload<{
+        inputValue: number;
+      }>("trigger")?.inputValue;
+      if (!valueToIncrement) throw new Error("No value to increment provided");
+      const incrementedValue = valueToIncrement + 1;
+      return { incrementedValue };
+    },
+  });
 
-const { runId, start } = myWorkflow.createRun();
+  // Build the workflow
+  const myWorkflow = new Workflow({
+    name: "my-workflow",
+    triggerSchema: z.object({
+      inputValue: z.number(),
+    }),
+  });
 
-const res = await start({ triggerData: { inputValue: 90 } });
+  // run workflows in parallel
+  myWorkflow
+    .step(stepOne)
+    .step(stepTwo);
 
-console.log(res.results);
+  myWorkflow.commit();
+
+  const { runId, start } = myWorkflow.createRun();
+
+  console.log("Run", runId);
+
+  const res = await start({ triggerData: { inputValue: 90 } });
+
+  console.log(res.results);
+}
+
+main();
 ```
 
 <br />
@@ -78,5 +72,7 @@ console.log(res.results);
 <br />
 <br />
 <GithubLink
-  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-parallel-steps'}
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-parallel-steps"
+  }
 />
