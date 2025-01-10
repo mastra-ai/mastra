@@ -40,7 +40,12 @@ export const init = async ({
     const dirPath = result.dirPath;
 
     await Promise.all([
-      writeIndexFile(dirPath, addExample, components.includes('workflows')),
+      writeIndexFile({
+        dirPath,
+        addExample,
+        addWorkflow: components.includes('workflows'),
+        addAgent: components.includes('agents'),
+      }),
       ...components.map(component => createComponentsDir(dirPath, component)),
       writeAPIKey({ provider: llmProvider, apiKey: llmApiKey }),
     ]);
