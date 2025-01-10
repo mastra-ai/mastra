@@ -31,6 +31,6 @@ program.addCommand(configCommand);
 
 program.command('publish').description('Publish packages to the registry').action(publishPackages);
 
-program.command('delete-file').description('Delete a file').action(telephone);
+program.command('telephone-game').description('Play a classic game of telephone').action(telephone);
 
 program.parse(process.argv);
