@@ -4,28 +4,26 @@ import { z } from 'zod';
 async function main() {
   const stepOne = new Step({
     id: 'stepOne',
-    inputSchema: z.object({
-      inputValue: z.number(),
-    }),
     outputSchema: z.object({
       doubledValue: z.number(),
     }),
     execute: async ({ context }) => {
-      const doubledValue = context.inputValue * 2;
+      const inputValue = context?.machineContext?.getStepPayload<{ inputValue: number }>('trigger')?.inputValue;
+      if (!inputValue) throw new Error('No input value provided');
+      const doubledValue = inputValue * 2;
       return { doubledValue };
     },
   });
 
   const stepTwo = new Step({
     id: 'stepTwo',
-    inputSchema: z.object({
-      valueToIncrement: z.number(),
-    }),
     outputSchema: z.object({
       incrementedValue: z.number(),
     }),
     execute: async ({ context }) => {
-      const incrementedValue = context.valueToIncrement + 1;
+      const valueToIncrement = context?.machineContext?.getStepPayload<{ inputValue: number }>('trigger')?.inputValue;
+      if (!valueToIncrement) throw new Error('No value to increment provided');
+      const incrementedValue = valueToIncrement + 1;
       return { incrementedValue };
     },
   });
@@ -39,23 +37,7 @@ async function main() {
   });
 
   // run workflows in parallel
-  myWorkflow
-    .step(stepOne, {
-      variables: {
-        inputValue: {
-          step: 'trigger',
-          path: 'inputValue',
-        },
-      },
-    })
-    .step(stepTwo, {
-      variables: {
-        valueToIncrement: {
-          step: 'trigger',
-          path: 'inputValue',
-        },
-      },
-    });
+  myWorkflow.step(stepOne).step(stepTwo);
 
   myWorkflow.commit();
 

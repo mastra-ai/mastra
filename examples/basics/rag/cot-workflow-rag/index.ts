@@ -35,15 +35,13 @@ export const ragAgent = new Agent({
 // Define the workflow steps first
 const analyzeContext = new Step({
   id: 'analyzeContext',
-  inputSchema: z.object({
-    query: z.string(),
-  }),
   outputSchema: z.object({
     initialAnalysis: z.string(),
   }),
-  execute: async ({ context: { query }, mastra }) => {
+  execute: async ({ context, mastra }) => {
     console.log('---------------------------');
     const ragAgent = mastra?.agents?.ragAgent;
+    const query = context?.machineContext?.getStepPayload<{ query: string }>('trigger')?.query;
 
     const analysisPrompt = `${query} 1. First, carefully analyze the retrieved context chunks and identify key information.`;
 
@@ -57,15 +55,16 @@ const analyzeContext = new Step({
 
 const breakdownThoughts = new Step({
   id: 'breakdownThoughts',
-  inputSchema: z.object({
-    analysis: z.string(),
-  }),
   outputSchema: z.object({
     breakdown: z.string(),
   }),
-  execute: async ({ context: { analysis }, mastra }) => {
+  execute: async ({ context, mastra }) => {
     console.log('---------------------------');
     const ragAgent = mastra?.agents?.ragAgent;
+    const analysis = context?.machineContext?.getStepPayload<{ initialAnalysis: string }>(
+      'analyzeContext',
+    )?.initialAnalysis;
+
     const connectionPrompt = `
       Based on the initial analysis: ${analysis}
 
@@ -82,15 +81,13 @@ const breakdownThoughts = new Step({
 
 const connectPieces = new Step({
   id: 'connectPieces',
-  inputSchema: z.object({
-    process: z.string(),
-  }),
   outputSchema: z.object({
     connections: z.string(),
   }),
-  execute: async ({ context: { process }, mastra }) => {
+  execute: async ({ context, mastra }) => {
     console.log('---------------------------');
     const ragAgent = mastra?.agents?.ragAgent;
+    const process = context?.machineContext?.getStepPayload<{ breakdown: string }>('breakdownThoughts')?.breakdown;
     const connectionPrompt = `
         Based on the breakdown: ${process}
 
@@ -107,15 +104,13 @@ const connectPieces = new Step({
 
 const drawConclusions = new Step({
   id: 'drawConclusions',
-  inputSchema: z.object({
-    evidence: z.string(),
-  }),
   outputSchema: z.object({
     conclusions: z.string(),
   }),
-  execute: async ({ context: { evidence }, mastra }) => {
+  execute: async ({ context, mastra }) => {
     console.log('---------------------------');
     const ragAgent = mastra?.agents?.ragAgent;
+    const evidence = context?.machineContext?.getStepPayload<{ connections: string }>('connectPieces')?.connections;
     const conclusionPrompt = `
         Based on the connections: ${evidence}
 
@@ -132,15 +127,15 @@ const drawConclusions = new Step({
 
 const finalAnswer = new Step({
   id: 'finalAnswer',
-  inputSchema: z.object({
-    conclusions: z.string(),
-  }),
   outputSchema: z.object({
     finalAnswer: z.string(),
   }),
-  execute: async ({ context: { conclusions }, mastra }) => {
+  execute: async ({ context, mastra }) => {
     console.log('---------------------------');
     const ragAgent = mastra?.agents?.ragAgent;
+    const conclusions = context?.machineContext?.getStepPayload<{ conclusions: string }>(
+      'drawConclusions',
+    )?.conclusions;
     const answerPrompt = `
         Based on the conclusions: ${conclusions}
         Format your response as:
@@ -161,47 +156,7 @@ const finalAnswer = new Step({
 });
 
 // Create and configure the workflow
-ragWorkflow
-  .step(analyzeContext, {
-    variables: {
-      query: {
-        step: 'trigger',
-        path: 'query',
-      },
-    },
-  })
-  .then(breakdownThoughts, {
-    variables: {
-      analysis: {
-        step: analyzeContext,
-        path: 'initialAnalysis',
-      },
-    },
-  })
-  .then(connectPieces, {
-    variables: {
-      process: {
-        step: breakdownThoughts,
-        path: 'breakdown',
-      },
-    },
-  })
-  .then(drawConclusions, {
-    variables: {
-      evidence: {
-        step: connectPieces,
-        path: 'connections',
-      },
-    },
-  })
-  .then(finalAnswer, {
-    variables: {
-      conclusions: {
-        step: drawConclusions,
-        path: 'conclusions',
-      },
-    },
-  });
+ragWorkflow.step(analyzeContext).then(breakdownThoughts).then(connectPieces).then(drawConclusions).then(finalAnswer);
 
 ragWorkflow.commit();
 

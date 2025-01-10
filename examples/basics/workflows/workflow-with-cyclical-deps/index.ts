@@ -20,14 +20,13 @@ async function main() {
   const incrementByOne = new Step({
     id: 'incrementByOne',
     description: 'Adds 1 to the input value',
-    inputSchema: z.object({
-      valueToIncrement: z.number(),
-    }),
     outputSchema: z.object({
       incrementedValue: z.number(),
     }),
     execute: async ({ context }) => {
-      const incrementedValue = context.valueToIncrement + 1;
+      const valueToIncrement = context?.machineContext?.getStepPayload<{ firstValue: number }>('trigger')?.firstValue;
+      if (!valueToIncrement) throw new Error('No value to increment provided');
+      const incrementedValue = valueToIncrement + 1;
       return { incrementedValue };
     },
   });
@@ -48,14 +47,7 @@ async function main() {
         },
       },
     })
-    .then(incrementByOne, {
-      variables: {
-        valueToIncrement: {
-          step: 'trigger',
-          path: 'firstValue',
-        },
-      },
-    })
+    .then(incrementByOne)
     .after(doubleValue)
     .step(doubleValue, {
       when: {

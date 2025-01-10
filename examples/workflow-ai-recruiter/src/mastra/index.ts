@@ -37,18 +37,15 @@ const gatherCandidateInfo = new Step({
   },
 });
 
-const candidateInfoSchema = z.object({
-  candidateName: z.string(),
-  isTechnical: z.boolean(),
-  specialty: z.string(),
-  resumeText: z.string(),
-});
+interface CandidateInfo {
+  candidateName: string;
+  isTechnical: boolean;
+  specialty: string;
+  resumeText: string;
+}
 
 const askAboutSpecialty = new Step({
   id: 'askAboutSpecialty',
-  inputSchema: z.object({
-    candidateInfo: candidateInfoSchema,
-  }),
   outputSchema: z.object({
     question: z.string(),
   }),
@@ -57,8 +54,7 @@ const askAboutSpecialty = new Step({
       throw new Error('Mastra instance is required to run this step');
     }
 
-    const candidateInfo =
-      context.machineContext?.getStepPayload<z.infer<typeof candidateInfoSchema>>('gatherCandidateInfo');
+    const candidateInfo = context.machineContext?.getStepPayload<CandidateInfo>('gatherCandidateInfo');
 
     const llm = mastra.llm({ provider: 'OPEN_AI', name: 'gpt-4o' });
     const prompt = `
@@ -73,14 +69,6 @@ const askAboutSpecialty = new Step({
 
 const askAboutRole = new Step({
   id: 'askAboutRole',
-  inputSchema: z.object({
-    candidateInfo: z.object({
-      candidateName: z.string(),
-      isTechnical: z.boolean(),
-      specialty: z.string(),
-      resumeText: z.string(),
-    }),
-  }),
   outputSchema: z.object({
     question: z.string(),
   }),
@@ -88,8 +76,7 @@ const askAboutRole = new Step({
     if (!mastra?.llm) {
       throw new Error('Mastra instance is required to run this step');
     }
-    const candidateInfo =
-      context.machineContext?.getStepPayload<z.infer<typeof candidateInfoSchema>>('gatherCandidateInfo');
+    const candidateInfo = context.machineContext?.getStepPayload<CandidateInfo>('gatherCandidateInfo');
 
     const llm = mastra.llm({ provider: 'OPEN_AI', name: 'gpt-4o' });
     const prompt = `
