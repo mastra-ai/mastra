@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.82
+
+### Patch Changes
+
+- 6cc479d: change cat example
+
 ## 0.1.57-alpha.81
 
 ### Patch Changes
