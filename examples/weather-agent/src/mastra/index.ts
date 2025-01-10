@@ -15,12 +15,14 @@ async function agentExample() {
 }
 
 async function workflowExample() {
-  const workflow = mastra.getWorkflow('weatherWorkflow');
-  const result = await workflow.execute({
+  const { start } = mastra.getWorkflow('weatherWorkflow').createRun();
+
+  const result = await start({
     triggerData: {
       city: 'London',
     },
   });
+
   console.log('\n \n');
   console.log(result);
 }
