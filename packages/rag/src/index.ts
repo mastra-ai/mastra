@@ -5,3 +5,4 @@ export * from './astra-db';
 export * from './qdrant';
 export * from './upstash';
 export * from './embeddings';
+export * from './utils';

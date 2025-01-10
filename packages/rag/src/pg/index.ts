@@ -1,6 +1,8 @@
 import { IndexStats, QueryResult, MastraVector } from '@mastra/core';
 import pg from 'pg';
 
+import { Filter, FILTER_OPERATORS, isValidOperator } from './filter';
+
 export class PgVector extends MastraVector {
   private pool: pg.Pool;
 
@@ -28,7 +30,7 @@ export class PgVector extends MastraVector {
     indexName: string,
     queryVector: number[],
     topK: number = 10,
-    filter?: Record<string, any>,
+    filter?: Filter,
     minScore: number = 0, // Optional minimum score threshold
   ): Promise<QueryResult[]> {
     const client = await this.pool.connect();
@@ -38,9 +40,31 @@ export class PgVector extends MastraVector {
       const vectorStr = `[${queryVector.join(',')}]`;
 
       if (filter) {
-        const conditions = Object.entries(filter).map(([key, value], index) => {
-          filterValues.push(value);
-          return `metadata->>'${key}' = $${index + 2}`; // +2 because $1 is minScore
+        const conditions = Object.entries(filter).map(([key, condition]) => {
+          // If condition is not a FilterCondition object, assume it's an equality check
+          if (!condition || typeof condition !== 'object' || !('operator' in condition)) {
+            filterValues.push(condition);
+            return `metadata->>'${key}' = $${filterValues.length}`;
+          }
+
+          const { operator, value } = condition;
+          if (!isValidOperator(operator)) {
+            throw new Error(`Unsupported operator: ${operator}`);
+          }
+          // Get operation function
+          const operatorFn = FILTER_OPERATORS[operator];
+
+          const operatorResult = operatorFn(key, filterValues.length + 1);
+
+          // Handle operator cases and check if value is needed
+          if (operatorResult.needsValue) {
+            // Transform value if needed
+            const transformedValue = operatorResult.transformValue ? operatorResult.transformValue(value) : value;
+            filterValues.push(transformedValue);
+          }
+
+          // return sql condition
+          return operatorResult.sql;
         });
         if (conditions.length > 0) {
           filterQuery = 'AND ' + conditions.join(' AND ');

@@ -11,6 +11,11 @@ const meta = {
   "insert-embedding-in-pinecone": "Insert Embedding in Pinecone",
   "insert-embedding-in-pgvector": "Insert Embedding in PgVector",
   "retrieve-results": "Retrieve Results",
+  "basic-rag": "Basic RAG",
+  "cleanup-rag": "Optimizing Information Density",
+  "filter-rag": "Metadata Filtering",
+  "cot-rag": "Chain of Thought Prompting",
+  "cot-workflow-rag": "Chain of Thought Prompting w/Workflow",
 };
 
 export default meta;

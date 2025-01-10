@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "0.0.2-alpha.36",
+  "version": "0.0.2-alpha.38",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -45,7 +45,8 @@
     "jsdom": "^25.0.1",
     "llamaindex": "^0.8.15",
     "pg": "^8.13.1",
-    "postgres": "^3.4.5"
+    "postgres": "^3.4.5",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.26.0",

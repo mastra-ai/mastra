@@ -1,0 +1,10 @@
+{
+  "name": "generate-text-system-prompt",
+  "type": "module",
+  "scripts": {
+    "start": "pnpx tsx index.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*"
+  }
+}

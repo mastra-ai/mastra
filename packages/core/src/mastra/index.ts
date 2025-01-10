@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import 'dotenv/config';
+
 import { Agent } from '../agent';
 import { MastraEngine } from '../engine';
 import { LLM } from '../llm';
@@ -22,9 +24,10 @@ export class Mastra<
   TSyncs extends Record<string, SyncAction<any, any, any, any>> = Record<string, SyncAction<any, any, any, any>>,
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
+  TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TLogger extends BaseLogger = BaseLogger,
 > {
-  private vectors?: Record<string, MastraVector>;
+  private vectors?: TVectors;
   private agents: TAgents;
   private logger: TLogger;
   private syncs: TSyncs;
@@ -38,7 +41,7 @@ export class Mastra<
     syncs?: TSyncs;
     agents?: TAgents;
     engine?: MastraEngine;
-    vectors?: Record<string, MastraVector>;
+    vectors?: TVectors;
     logger?: TLogger | false;
     workflows?: TWorkflows;
     telemetry?: OtelConfig;
@@ -93,7 +96,7 @@ export class Mastra<
           vectors[key] = vector;
         }
       });
-      this.vectors = vectors;
+      this.vectors = vectors as TVectors;
     }
 
     /*
@@ -233,6 +236,18 @@ export class Mastra<
 
   public getAgents() {
     return this.agents;
+  }
+
+  public getVector<TVectorName extends keyof TVectors>(name: TVectorName): TVectors[TVectorName] {
+    const vector = this.vectors?.[name];
+    if (!vector) {
+      throw new Error(`Vector with name ${String(name)} not found`);
+    }
+    return vector;
+  }
+
+  public getVectors() {
+    return this.vectors;
   }
 
   public getWorkflow<TWorkflowId extends keyof TWorkflows>(id: TWorkflowId): TWorkflows[TWorkflowId] {

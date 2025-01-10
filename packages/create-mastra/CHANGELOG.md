@@ -1,5 +1,17 @@
 # create-mastra
 
+## 0.1.0-alpha.13
+
+### Patch Changes
+
+- mastra@0.1.57-alpha.80
+
+## 0.1.0-alpha.12
+
+### Patch Changes
+
+- mastra@0.1.57-alpha.79
+
 ## 0.1.0-alpha.11
 
 ### Patch Changes

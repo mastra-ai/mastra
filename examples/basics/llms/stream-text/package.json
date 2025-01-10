@@ -1,0 +1,10 @@
+{
+  "name": "stream-text",
+  "type": "module",
+  "scripts": {
+    "start": "pnpx tsx index.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*"
+  }
+}

@@ -16,7 +16,7 @@ You can define steps inline or by function reference.
 
 Define steps directly within the workflow using the `.step()` and `.then()` methods.
 
-```typescript showLineNumbers filename="src/mastra/workflows/workflow.ts" copy
+```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
 import { Step, Workflow } from "@mastra/core";
 import { z } from "zod";
 
@@ -41,7 +41,7 @@ myWorkflow
         const doubledValue = context.value * 2;
         return { doubledValue };
       },
-    })
+    }),
   )
   .then(
     new Step({
@@ -64,7 +64,7 @@ myWorkflow
           path: "doubledValue",
         },
       },
-    })
+    }),
   );
 ```
 
@@ -72,7 +72,7 @@ myWorkflow
 
 Define steps separately and then add them to the workflow.
 
-```typescript showLineNumbers filename="src/mastra/workflows/workflow.ts" copy
+```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
 import { Step, Workflow } from "@mastra/core";
 import { z } from "zod";
 
@@ -106,21 +106,30 @@ const stepTwo = new Step({
 });
 
 // Build the workflow
-export const myWorkflow = new Workflow({
+const myWorkflow = new Workflow({
   name: "my-workflow",
   triggerSchema: z.object({
     inputValue: z.number(),
   }),
 });
 
-myWorkflow.step(stepOne).then(stepTwo, {
-  variables: {
-    valueToIncrement: {
-      step: stepOne,
-      path: "doubledValue",
+myWorkflow
+  .step(stepOne, {
+    variables: {
+      inputValue: {
+        step: "trigger",
+        path: "inputValue",
+      },
     },
-  },
-});
+  })
+  .then(stepTwo, {
+    variables: {
+      valueToIncrement: {
+        step: stepOne,
+        path: "doubledValue",
+      },
+    },
+  });
 ```
 
 ### 2. Control Flow Between Steps
@@ -130,9 +139,7 @@ myWorkflow.step(stepOne).then(stepTwo, {
 Use `.step()` to add steps that can run in parallel.
 
 ```typescript
-myWorkflow
-  .step(fetchUserData)
-  .step(fetchOrderData); // These steps run in parallel
+myWorkflow.step(fetchUserData).step(fetchOrderData); // These steps run in parallel
 ```
 
 #### Sequential Execution
@@ -140,10 +147,7 @@ myWorkflow
 Use `.then()` to chain steps that depend on the previous step.
 
 ```typescript
-myWorkflow
-  .step(fetchOrderData)
-  .then(validateData)
-  .then(processOrder);
+myWorkflow.step(fetchOrderData).then(validateData).then(processOrder);
 ```
 
 #### Branching and Merging Paths
@@ -156,10 +160,10 @@ myWorkflow
   .then(stepB)
   .then(stepD)
   .after(stepA)
-    .step(stepC)
-    .then(stepE)
+  .step(stepC)
+  .then(stepE)
   .after([stepD, stepE])
-    .step(stepF);
+  .step(stepF);
 ```
 
 In this example:
@@ -177,12 +181,12 @@ myWorkflow
   .step(fetchData)
   .then(processData)
   .after(processData)
-    .step(finalizeData, {
-      when: { "processData.status": "success" },
-    })
-    .step(fetchData, {
-      when: { "processData.status": "retry" },
-    });
+  .step(finalizeData, {
+    when: { "processData.status": "success" },
+  })
+  .step(fetchData, {
+    when: { "processData.status": "retry" },
+  });
 ```
 
 In this example:
@@ -203,10 +207,12 @@ myWorkflow.step(
     execute: async ({ context }) => {
       // Action logic
     },
+  }),
+  {
     when: async ({ context }) => {
       return context.stepResults.fetchData.status === "success";
     },
-  })
+  },
 );
 ```
 
@@ -219,6 +225,8 @@ myWorkflow.step(
     execute: async ({ context }) => {
       // Action logic
     },
+  }),
+  {
     when: {
       ref: {
         step: {
@@ -228,7 +236,7 @@ myWorkflow.step(
       },
       query: { $eq: "success" },
     },
-  })
+  },
 );
 ```
 
@@ -241,10 +249,12 @@ myWorkflow.step(
     execute: async ({ context }) => {
       // Action logic
     },
+  }),
+  {
     when: {
       "fetchData.status": "success",
     },
-  })
+  },
 );
 ```
 
@@ -305,13 +315,13 @@ myWorkflow.commit();
 
 ### 6. Add Workflow to Mastra Instance
 
-Add the workflow to your Mastra instance. 
+Add the workflow to your Mastra instance.
 
-```typescript filename="src/mastra/index.ts"
+```typescript filename="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { z } from "zod";
 
-import { myWorkflow } from "./workflows/workflow"
+import { myWorkflow } from "./workflows";
 
 export const mastra = new Mastra({
   workflows: { myWorkflow },
@@ -326,7 +336,7 @@ We can now serve the workflow using the `mastra dev` command.
 
 Open your terminal and run:
 
-```bash
+```bash copy
 mastra dev
 ```
 
@@ -340,7 +350,7 @@ http://localhost:4111/api/workflows/myWorkflow/execute
 
 With the server running, you can test your workflow using `curl`:
 
-```bash
+```bash copy
 curl -X POST http://localhost:4111/api/workflows/myWorkflow/execute \
   -H "Content-Type: application/json" \
   -d '{
@@ -358,13 +368,13 @@ You should receive a JSON response similar to:
     "stepOne": {
       "status": "success",
       "payload": {
-        "doubledValue":10
+        "doubledValue": 10
       }
     },
     "stepTwo": {
       "status": "success",
       "payload": {
-        "incrementedValue":11
+        "incrementedValue": 11
       }
     }
   },
