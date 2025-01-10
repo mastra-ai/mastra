@@ -12,7 +12,6 @@
 '@mastra/engine': patch
 '@mastra/memory': patch
 'examples-agent': patch
-'vnext': patch
 '@mastra/dane': patch
 '@mastra/core': patch
 'mastra': patch

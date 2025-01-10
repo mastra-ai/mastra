@@ -9,7 +9,6 @@
     "ai-chatbot": "0.1.0",
     "openapi-spec-writer": "0.1.0",
     "stock-price-tool": "1.0.0",
-    "vnext": "0.1.0",
     "@mastra/apollo": "1.0.0",
     "@mastra/ashby": "1.0.0",
     "@mastra/claude": "1.0.0",

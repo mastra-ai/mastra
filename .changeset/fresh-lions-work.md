@@ -11,7 +11,6 @@
 'openapi-spec-writer': patch
 'quick-start': patch
 'stock-price-tool': patch
-'vnext': patch
 '@mastra/apollo': patch
 '@mastra/ashby': patch
 '@mastra/claude': patch
