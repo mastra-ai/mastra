@@ -1050,7 +1050,7 @@ export class Workflow<
       runId,
     });
 
-    return snapshotData;
+    return snapshotData as Snapshot<any>;
   }
 
   /**
@@ -1509,8 +1509,9 @@ export class Workflow<
     }
 
     // Reattach the step handler
+    // TODO: need types
     if (parsedSnapshot.children) {
-      Object.entries(parsedSnapshot.children).forEach(([_childId, child]: any) => {
+      Object.entries(parsedSnapshot.children).forEach(([_childId, child]: [string, any]) => {
         if (child.snapshot?.input?.stepNode) {
           // Reattach handler
           const stepDef = this.#makeStepDef(child.snapshot.input.stepNode.step.id);
