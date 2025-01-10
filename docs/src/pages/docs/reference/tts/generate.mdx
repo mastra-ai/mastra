@@ -35,7 +35,7 @@ The `generate()` method is used to interact with the TTS model to produce an aud
 
 ## Examples
 
-### Basic Audio Generation
+### Basic Audio Generation (ElevenLabs)
 
 ```typescript
 import { ElevenLabsTTS } from '@mastra/tts'
@@ -52,15 +52,28 @@ const voiceId = voices?.[0]?.voice_id!;
 
 const { audioResult } = await tts.generate({ text: "What is AI?", voice: voiceId });
 
- const chunks: Buffer[] = [];
-
-for await (const chunk of audioResult) {
-    chunks.push(Buffer.from(chunk));
-}
-
-const audioBuffer = Buffer.concat(chunks);
-
 await writeFile(path.join(process.cwd(), '/test-outputs/generate-output.mp3'), audioBuffer);
+```
+
+### Basic Audio Generation (OpenAI)
+
+```typescript
+import { OpenAITTS } from '@mastra/tts'
+
+ const tts = new OpenAITTS({
+    model: {
+      name: 'tts-1',
+      apiKey: process.env.OPENAI_API_KEY!,
+    },
+  });
+
+const voices = await tts.voices();
+const voiceId = voices?.[0]?.voice_id!;
+
+const { audioResult } = await tts.generate({ text: "What is AI?", voice: voiceId });
+
+const outputPath = path.join(process.cwd(), 'test-outputs/open-aigenerate-test.mp3');
+writeFileSync(outputPath, audioResult);
 ```
 
 ## Related Methods

@@ -71,16 +71,8 @@ describe('TTS Integration Tests', () => {
       voice: voiceId,
     });
 
-    const chunks: Buffer[] = [];
-    for await (const chunk of audioResult) {
-      chunks.push(Buffer.from(chunk));
-    }
+    await writeFile(path.join(process.cwd(), '/test-outputs/generate-output.mp3'), audioResult);
 
-    console.log(`Generate method produced ${chunks.length} chunks`);
-
-    const audioBuffer = Buffer.concat(chunks);
-    await writeFile(path.join(process.cwd(), '/test-outputs/generate-output.mp3'), audioBuffer);
-
-    expect(audioBuffer.length).toBeGreaterThan(0);
+    expect(audioResult.length).toBeGreaterThan(0);
   }, 30000);
 });

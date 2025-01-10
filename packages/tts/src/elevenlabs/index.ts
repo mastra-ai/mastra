@@ -33,15 +33,23 @@ export class ElevenLabsTTS extends MastraTTS {
   }
 
   async generate({ voice, text }: { voice: string; text: string }) {
-    const audio = await this.traced(
-      () =>
-        this.client.generate({
-          voice,
-          text,
-          model_id: this.model.name,
-        }),
-      'tts.elevenlabs.generate',
-    )();
+    const audio = await this.traced(async () => {
+      const audio = await this.client.generate({
+        voice,
+        text,
+        model_id: this.model.name,
+      });
+
+      const chunks: Buffer[] = [];
+
+      for await (const chunk of audio) {
+        chunks.push(Buffer.from(chunk));
+      }
+
+      const audioBuffer = Buffer.concat(chunks);
+
+      return audioBuffer;
+    }, 'tts.elevenlabs.generate')();
 
     return {
       audioResult: audio,

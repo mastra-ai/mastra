@@ -21,7 +21,18 @@ export class OpenAITTS extends MastraTTS {
   }
 
   async voices() {
-    const res = this.traced(() => ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'], 'tts.openai.voices')();
+    const res = this.traced(
+      () => [
+        { voice_id: 'alloy' },
+        { voice_id: 'echo' },
+        { voice_id: 'fable' },
+        { voice_id: 'onyx' },
+        { voice_id: 'nova' },
+        { voice_id: 'shimmer' },
+      ],
+      'tts.openai.voices',
+    )();
+
     return res;
   }
 
