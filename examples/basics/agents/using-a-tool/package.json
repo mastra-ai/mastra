@@ -1,0 +1,11 @@
+{
+  "name": "using-a-tool",
+  "type": "module",
+  "scripts": {
+    "start": "pnpx tsx index.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*",
+    "zod": "^3.24.1"
+  }
+}
