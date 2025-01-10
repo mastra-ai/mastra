@@ -1,5 +1,21 @@
 # @mastra/dane
 
+## 0.0.2-alpha.47
+
+### Patch Changes
+
+- 0b74006: Workflow updates
+- Updated dependencies [592e3cf]
+- Updated dependencies [837a288]
+- Updated dependencies [0b74006]
+  - @mastra/core@0.1.27-alpha.55
+  - @mastra/rag@0.0.2-alpha.39
+  - @mastra/firecrawl@1.0.4-alpha.41
+  - @mastra/github@1.0.3-alpha.39
+  - @mastra/engine@0.0.5-alpha.49
+  - @mastra/memory@0.0.2-alpha.35
+  - @mastra/stabilityai@1.0.1-alpha.30
+
 ## 0.0.2-alpha.46
 
 ### Patch Changes

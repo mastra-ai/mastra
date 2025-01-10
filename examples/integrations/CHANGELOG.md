@@ -1,5 +1,18 @@
 # composio
 
+## 1.0.1-alpha.24
+
+### Patch Changes
+
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- 0b74006: Workflow updates
+- Updated dependencies [592e3cf]
+- Updated dependencies [837a288]
+- Updated dependencies [0b74006]
+  - @mastra/core@0.1.27-alpha.55
+  - @mastra/firecrawl@1.0.4-alpha.41
+  - @mastra/composio@0.0.1-alpha.21
+
 ## 1.0.1-alpha.23
 
 ### Patch Changes
