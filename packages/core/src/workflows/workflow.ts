@@ -1,6 +1,6 @@
 import { get } from 'radash';
 import sift from 'sift';
-import { assign, createActor, fromPromise, setup, Snapshot } from 'xstate';
+import { assign, createActor, fromPromise, MachineContext, setup, Snapshot } from 'xstate';
 import { z } from 'zod';
 
 import { IAction, MastraPrimitives } from '../action';
@@ -56,9 +56,11 @@ interface WorkflowRunState {
     attempts: Record<string, number>;
   };
 
-  // Current step info
-  stepId: string;
-  status: string;
+  activePaths: Array<{
+    stepPath: string[];
+    stepId: string;
+    status: string;
+  }>;
 
   // Metadata
   runId: string;
@@ -390,12 +392,10 @@ export class Workflow<
         });
 
         // Check if all parallel states are in a final state
-
         if (!allStatesComplete) return;
 
-        // console.log({ allStatesComplete, snapshot: this.#actor?.getSnapshot().value })
-
         try {
+          await this.#persistWorkflowSnapshot();
           // Then cleanup and resolve
           this.#cleanup();
           resolve({
@@ -714,11 +714,19 @@ export class Workflow<
         },
         completed: {
           type: 'final',
-          entry: [{ type: 'notifyStepCompletion', params: { stepId: stepNode.step.id } }],
+          entry: [
+            { type: 'notifyStepCompletion', params: { stepId: stepNode.step.id } },
+            { type: 'snapshotStep', params: { stepId: stepNode.step.id } },
+            { type: 'persistSnapshot' },
+          ],
         },
         failed: {
           type: 'final',
-          entry: [{ type: 'notifyStepCompletion', params: { stepId: stepNode.step.id } }],
+          entry: [
+            { type: 'notifyStepCompletion', params: { stepId: stepNode.step.id } },
+            { type: 'snapshotStep', params: { stepId: stepNode.step.id } },
+            { type: 'persistSnapshot' },
+          ],
         },
         // build chain of next steps recursively
         ...(nextStep ? { [nextStep.step.id]: { ...this.#buildBaseState(nextStep, nextSteps) } } : {}),
@@ -786,10 +794,19 @@ export class Workflow<
       notifyStepCompletion: async (_: any, params: WorkflowActionParams) => {
         const { stepId } = params;
         this.log(LogLevel.INFO, `Step ${stepId} completed`);
-
-        if (this.snapshot) {
-          await this.#persistWorkflowSnapshot();
+      },
+      snapshotStep: assign({
+        _snapshot: ({}, params: WorkflowActionParams) => {
+          const { stepId } = params;
+          // This will run after the state update
+          return { stepId };
+        },
+      }),
+      persistSnapshot: async ({ context }: { context: MachineContext }) => {
+        if (context._snapshot) {
+          return await this.#persistWorkflowSnapshot();
         }
+        return;
       },
       decrementAttemptCount: assign({
         attempts: ({ context, event }, params: WorkflowActionParams) => {
@@ -921,7 +938,11 @@ export class Workflow<
           const { parentStepId, context } = input;
           const stepGraph = this.#stepSubscriberGraph[parentStepId];
 
-          if (!stepGraph) return { stepResults: {} };
+          if (!stepGraph) {
+            return {
+              stepResults: {},
+            };
+          }
 
           const subscriberMachine = setup({
             types: {} as {
@@ -1257,21 +1278,53 @@ export class Workflow<
     }
   }
 
+  #getActivePathsAndStatus(value: Record<string, any>): Array<{
+    stepPath: string[];
+    stepId: string;
+    status: string;
+  }> {
+    const paths: Array<{
+      stepPath: string[];
+      stepId: string;
+      status: string;
+    }> = [];
+
+    const traverse = (current: Record<string, any>, path: string[] = []) => {
+      for (const [key, value] of Object.entries(current)) {
+        const currentPath = [...path, key];
+
+        if (typeof value === 'string') {
+          // Found a leaf state
+          paths.push({
+            stepPath: currentPath,
+            stepId: key,
+            status: value,
+          });
+        } else if (typeof value === 'object' && value !== null) {
+          // Continue traversing
+          traverse(value, currentPath);
+        }
+      }
+    };
+
+    traverse(value);
+    return paths;
+  }
+
   async getState(runId: string): Promise<WorkflowRunState | null> {
     // If this is the currently running workflow
     if (this.#runId === runId && this.#actor) {
       const snapshot = this.#actor.getSnapshot();
+      const m = this.#getActivePathsAndStatus(snapshot.value as Record<string, any>);
       return {
         runId,
         value: snapshot.value as Record<string, string>,
         context: snapshot.context,
-        stepId: Object.keys(snapshot.value)[0]!,
-        status: Object.values(snapshot.value)[0] as string,
+        activePaths: m,
         timestamp: Date.now(),
       };
     }
 
-    console.log('Getting state from storage');
     // If workflow is suspended/stored, get from storage
     const storedSnapshot = await this.snapshot?.load({
       runId,
@@ -1282,12 +1335,13 @@ export class Workflow<
     if (storedSnapshot) {
       const parsed = JSON.parse(storedSnapshot as string);
 
+      const m = this.#getActivePathsAndStatus(parsed.value);
+
       return {
         runId,
         value: parsed.value,
         context: parsed.context,
-        stepId: Object.keys(parsed.value)[0]!,
-        status: Object.values(parsed.value)[0] as string,
+        activePaths: m,
         timestamp: Date.now(),
       };
     }
@@ -1298,11 +1352,73 @@ export class Workflow<
   #hasStateChanged(previous: WorkflowRunState | null, current: WorkflowRunState): boolean {
     if (!previous) return true;
 
-    return (
-      previous.status !== current.status ||
-      previous.stepId !== current.stepId ||
-      JSON.stringify(previous.context.stepResults) !== JSON.stringify(current.context.stepResults)
-    );
+    // Compare active paths
+    const previousPaths = previous.activePaths;
+    const currentPaths = current.activePaths;
+
+    // Check if number of active paths changed
+    if (previousPaths.length !== currentPaths.length) return true;
+
+    // Compare each path
+    for (let i = 0; i < currentPaths.length; i++) {
+      const prevPath = previousPaths[i];
+      const currPath = currentPaths[i];
+
+      // Check if path structure changed
+      if (JSON.stringify(prevPath?.stepPath) !== JSON.stringify(currPath?.stepPath)) return true;
+
+      // Check if status changed
+      if (prevPath?.status !== currPath?.status) return true;
+    }
+
+    // Check if step results changed
+    if (JSON.stringify(previous.context.stepResults) !== JSON.stringify(current.context.stepResults)) return true;
+
+    return false;
+  }
+
+  #getDeepestState(value: Record<string, any>): { stepId: string; status: string } {
+    type StateInfo = {
+      stepId: string;
+      status: string;
+      depth: number;
+    };
+
+    // Helper to get depth of a state branch
+    const getStateDepth = (obj: any): number => {
+      if (typeof obj !== 'object' || obj === null) return 0;
+      return 1 + Math.max(...Object.values(obj).map(getStateDepth));
+    };
+
+    // Find the deepest active branch
+    let deepestBranch: StateInfo | null = null;
+
+    const traverse = (obj: Record<string, any>, path: string[] = []) => {
+      for (const [key, value] of Object.entries(obj)) {
+        if (typeof value === 'string') {
+          // If it's a leaf state, check its depth
+          const depth = path.length;
+          if (!deepestBranch || depth > deepestBranch.depth) {
+            deepestBranch = { stepId: key, status: value, depth };
+          }
+        } else if (typeof value === 'object' && value !== null) {
+          // Keep traversing
+          traverse(value, [...path, key]);
+        }
+      }
+    };
+
+    traverse(value);
+
+    if (!deepestBranch) {
+      // Provide a default or throw an error
+      throw new Error('No valid state found');
+    }
+
+    return {
+      stepId: (deepestBranch as StateInfo)?.stepId,
+      status: (deepestBranch as StateInfo)?.status,
+    };
   }
 
   async watch(
@@ -1334,7 +1450,9 @@ export class Workflow<
 
           previousState = currentState;
 
-          if (this.#isFinalState(currentState.status)) {
+          const deepState = this.#getDeepestState(currentState.value);
+
+          if (this.#isFinalState(deepState.status)) {
             resolve(currentState);
             return;
           }
@@ -1407,11 +1525,29 @@ export class Workflow<
       });
     }
 
-    // Set a simple state structure
-    parsedSnapshot.value = {
-      ...parsedSnapshot.value, // Keep other parallel states
-      [stepId]: 'pending',
+    // Helper to find and update the step in the hierarchy
+    const updateStepInHierarchy = (value: Record<string, any>, targetStepId: string): Record<string, any> => {
+      const result: Record<string, any> = {};
+
+      for (const key of Object.keys(value)) {
+        const currentValue = value[key];
+
+        if (key === targetStepId) {
+          // Found our target step, set it to pending
+          result[key] = 'pending';
+        } else if (typeof currentValue === 'object' && currentValue !== null) {
+          // Recurse into nested states
+          result[key] = updateStepInHierarchy(currentValue, targetStepId);
+        } else {
+          // Keep other states as is
+          result[key] = currentValue;
+        }
+      }
+
+      return result;
     };
+
+    parsedSnapshot.value = updateStepInHierarchy(parsedSnapshot.value, stepId);
 
     // Reset attempt count
     if (parsedSnapshot.context?.attempts) {

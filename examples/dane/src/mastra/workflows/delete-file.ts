@@ -1,61 +1,106 @@
 import { input } from '@inquirer/prompts';
-import { Step, Workflow } from '@mastra/core';
+import { Step, Workflow, getStepResult } from '@mastra/core';
 import { z } from 'zod';
 
-export const deleteFileWorkflow = new Workflow({
-  name: 'delete-file',
+export const telephoneGameWorkflow = new Workflow({
+  name: 'telephoneGame',
 });
 
-const receiveFileStep = new Step({
-  id: 'receiveFile',
-  description: 'Ask user for file.',
+const stepA1 = new Step({
+  id: 'stepA1',
+  description: 'Starts the message',
   outputSchema: z.object({
-    file: z.string(),
+    message: z.string(),
+  }),
+  execute: async () => {
+    return {
+      message: 'Test',
+    };
+  },
+});
+
+const stepA2 = new Step({
+  id: 'stepA2',
+  description: 'Pass the message through',
+  outputSchema: z.object({
+    message: z.string(),
   }),
   execute: async () => {
     const content = await input({
-      message: 'Give me the file path :)',
+      message: 'Give me a message',
       validate: input => input.trim().length > 0 || 'Message cannot be empty',
     });
 
     return {
-      file: content,
+      message: content,
     };
   },
 });
 
-const checkFileStep = new Step({
-  id: 'newFile',
+const stepB2 = new Step({
+  id: 'stepB2',
   description: 'Checks if the file exists',
   outputSchema: z.object({
-    file: z.string(),
+    message: z.string(),
   }),
   execute: async ({ context }) => {
-    if (context.machineContext?.stepResults.receiveFile?.status !== 'success') {
-      throw new Error('File not found');
+    if (context.machineContext?.stepResults.stepA2?.status !== 'success') {
+      throw new Error('Message not found');
     }
 
-    const file = context.machineContext.stepResults.receiveFile.payload.file;
+    const msg = context.machineContext.stepResults.stepA2.payload.message;
 
     return {
-      file,
+      message: msg,
     };
   },
 });
 
-const deletionStep = new Step({
-  id: 'deletion',
-  description: 'Delete file',
+const stepC2 = new Step({
+  id: 'stepC2',
+  description: 'Ask if you should modify the message',
   outputSchema: z.object({
-    deleted: z.boolean(),
+    message: z.string(),
   }),
-  execute: async ({ suspend, context }) => {
-    if (context?.machineContext?.stepResults.deletion?.status === 'success') {
-      return { deleted: true };
+  execute: async ({ suspend, context, mastra }) => {
+    const oMsg = getStepResult(context?.machineContext?.stepResults.stepA2);
+    if (context?.machineContext?.stepResults.stepC2?.status === 'success') {
+      const msg = getStepResult(context?.machineContext?.stepResults.stepC2);
+      if (msg.confirm) {
+        if (mastra?.llm) {
+          const llm = mastra?.llm({
+            provider: 'ANTHROPIC',
+            name: 'claude-3-5-haiku-20241022',
+          });
+          const result = await llm.generate(`
+            You are playing a game of telephone.
+            Here is the message the previous person sent ${oMsg.message}. 
+            But you want to change the message. 
+            Only return the message
+            `);
+          return {
+            message: result.text,
+          };
+        }
+      }
+
+      return oMsg;
     }
     await suspend();
-    return { deleted: false };
+    return { message: 'Suspended' };
   },
 });
 
-deleteFileWorkflow.step(receiveFileStep).then(checkFileStep).then(deletionStep).commit();
+const stepD2 = new Step({
+  id: 'stepD2',
+  description: 'Pass the message',
+  outputSchema: z.object({
+    message: z.string(),
+  }),
+  execute: async ({ context }) => {
+    const msg = getStepResult(context?.machineContext?.stepResults.stepC2);
+    return msg;
+  },
+});
+
+telephoneGameWorkflow.step(stepA1).step(stepA2).then(stepB2).then(stepC2).then(stepD2).commit();
