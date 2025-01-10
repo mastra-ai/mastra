@@ -917,6 +917,15 @@ importers:
         specifier: ^5
         version: 5.7.2
 
+  examples/weather-agent:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
   examples/workflow-ai-recruiter:
     dependencies:
       '@mastra/core':

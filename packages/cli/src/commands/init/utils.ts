@@ -27,15 +27,25 @@ export const modelToConfigMap: Record<LLMProvider, ModelConfig> = {
 
 export async function writeAgentSample(llmProvider: LLMProvider, destPath: string, addExampleTool: boolean) {
   const model = modelToConfigMap[llmProvider];
+  const instructions = `
+      You are a helpful weather assistant that provides accurate weather information.
+
+      Your primary function is to help users get weather details for specific locations. When responding:
+      - Always ask for a location if none is provided
+      - Include relevant details like humidity, wind conditions, and precipitation
+      - Keep responses concise but informative
+
+      ${addExampleTool ? 'Use the weatherTool to fetch current weather data.' : ''}
+`;
   const content = `
 import { Agent } from '@mastra/core';
-${addExampleTool ? `import { catFact } from '../tools/index';` : ''}
+${addExampleTool ? `import { weatherTool } from '../tools';` : ''}
 
-export const catOne = new Agent({
-  name: 'cat-one',
-  instructions: 'You are a feline expert with comprehensive knowledge of all cat species, from domestic breeds to wild big cats. As a lifelong cat specialist, you understand their behavior, biology, social structures, and evolutionary history in great depth.',
+export const weatherAgent = new Agent({
+  name: 'Weather Agent',
+  instructions: \`${instructions}\`,
   model: ${JSON.stringify(model, null, 2)},
-  ${addExampleTool ? 'tools: { catFact },' : ''}
+  ${addExampleTool ? 'tools: { weatherTool },' : ''}
 });
     `;
   const formattedContent = await prettier.format(content, {
@@ -81,18 +91,32 @@ export const createComponentsDir = async (dirPath: string, component: string) =>
   await fsExtra.ensureDir(componentPath);
 };
 
-export const writeIndexFile = async (dirPath: string, addExample: boolean, addWorkflow: boolean) => {
+export const writeIndexFile = async ({
+  dirPath,
+  addAgent,
+  addExample,
+  addWorkflow,
+}: {
+  dirPath: string;
+  addExample: boolean;
+  addWorkflow: boolean;
+  addAgent: boolean;
+}) => {
   const indexPath = dirPath + '/index.ts';
   const destPath = path.join(indexPath);
   try {
     await fs.writeFile(destPath, '');
+    const filteredExports = [
+      addWorkflow ? `workflows: { weatherWorkflow },` : '',
+      addAgent ? `agents: { weatherAgent },` : '',
+    ].filter(Boolean);
     if (!addExample) {
       await fs.writeFile(
         destPath,
         `
 import { Mastra } from '@mastra/core';
 
-export const mastra = new Mastra({})
+export const mastra = new Mastra()
         `,
       );
 
@@ -102,13 +126,11 @@ export const mastra = new Mastra({})
       destPath,
       `
 import { Mastra, createLogger } from '@mastra/core';
-${addWorkflow ? `import { logCatWorkflow } from './workflows/index';` : ''}
-
-import { catOne } from './agents/index';
+${addWorkflow ? `import { weatherWorkflow } from './workflows';` : ''}
+${addAgent ? `import { weatherAgent } from './agents';` : ''}
 
 export const mastra = new Mastra({
-  agents: { catOne },
-  ${addWorkflow ? `workflows: { logCatWorkflow },` : ''}
+  ${filteredExports.join('\n  ')}
   logger: createLogger({
     type: 'CONSOLE',
     level: 'INFO',
