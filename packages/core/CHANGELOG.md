@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.56
+
+### Patch Changes
+
+- 9f3ab05: pass custom telemetry exporter
+
 ## 0.1.27-alpha.55
 
 ### Patch Changes

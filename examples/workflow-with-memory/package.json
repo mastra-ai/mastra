@@ -1,7 +1,7 @@
 {
   "name": "workflow",
   "private": true,
-  "version": "1.0.1-alpha.15",
+  "version": "1.0.1-alpha.16",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

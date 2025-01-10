@@ -1,5 +1,13 @@
 # @mastra/rag
 
+## 0.0.2-alpha.40
+
+### Patch Changes
+
+- ae638a4: make useFilter option optional
+- Updated dependencies [9f3ab05]
+  - @mastra/core@0.1.27-alpha.56
+
 ## 0.0.2-alpha.39
 
 ### Patch Changes
