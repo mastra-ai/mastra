@@ -92,13 +92,6 @@ async function generateResponse(query: string) {
     Please answer the following question using chain-of-thought reasoning:
     ${query}
 
-    Important Instructions:
-    1. First, analyze the context retrieved from the vector store
-    2. Show your step-by-step reasoning about how the retrieved chunks help answer the query
-    3. Base your answer ONLY on the retrieved context chunks
-    4. If the retrieved chunks lack necessary information, explicitly state that
-    5. Structure your response with "THOUGHT PROCESS" and "FINAL ANSWER" sections
-
     Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
     Remember: Explain how you're using the retrieved information to reach your conclusions.
     `;
