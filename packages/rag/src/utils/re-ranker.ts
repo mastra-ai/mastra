@@ -1,5 +1,6 @@
 import { AgentCompletionProvider, CohereCompletionProvider, CompletionProvider, QueryResult } from '@mastra/core';
 
+// Default weights for different scoring components
 const DEFAULT_WEIGHTS = {
   semantic: 0.4,
   vector: 0.4,
@@ -46,12 +47,13 @@ export interface RerankerOptions {
   };
 }
 
+// Takes in a list of results from a vector store and reranks them based on semantic, vector, and position scores
 export class RagReranker {
   private semanticProvider: CompletionProvider;
   private weights: Required<WeightConfig>;
 
   constructor(options: RerankerOptions) {
-    // Set up weights with defaults
+    // Set up different weights for scoring components. Uses default weights if not provided
     this.weights = {
       ...DEFAULT_WEIGHTS,
       ...options.weights,
@@ -74,6 +76,7 @@ export class RagReranker {
     }
   }
 
+  // Calculate position score based on position in original list
   private calculatePositionScore(position: number, totalChunks: number): number {
     return 1 - position / totalChunks;
   }
@@ -83,7 +86,7 @@ export class RagReranker {
     magnitude: number;
     dominantFeatures: number[];
   } {
-    // Calculate embedding magnitude (could indicate query complexity)
+    // Calculate embedding magnitude
     const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
 
     // Find dominant features (highest absolute values)
@@ -98,10 +101,8 @@ export class RagReranker {
 
   // Adjust scores based on query characteristics
   private adjustScores(score: number, queryAnalysis: { magnitude: number; dominantFeatures: number[] }): number {
-    // 1. Complex queries (high magnitude) might need more emphasis on semantic scoring
     const magnitudeAdjustment = queryAnalysis.magnitude > 10 ? 1.1 : 1;
 
-    // 2. Strong feature presence might indicate more reliable vector scores
     const featureStrengthAdjustment = queryAnalysis.magnitude > 5 ? 1.05 : 1;
 
     return score * magnitudeAdjustment * featureStrengthAdjustment;
@@ -115,16 +116,16 @@ export class RagReranker {
     // Get scores for each result
     const scoredResults = await Promise.all(
       vectorStoreResults.map(async (result, index) => {
-        // 1. Semantic relevance
+        // Get semantic score from chosen provider
         const semanticScore = await this.semanticProvider.getRelevanceScore(query, result?.metadata?.text);
 
-        // 2. Vector similarity
+        // Get existing vector score from result
         const vectorScore = result.score;
 
-        // 3. Position score
+        // Get score of vector based on position in original list
         const positionScore = this.calculatePositionScore(index, resultLength);
 
-        // Combined weighted score
+        // Combine scores using weights for each component
         let finalScore =
           this.weights.semantic * semanticScore +
           this.weights.vector * vectorScore +

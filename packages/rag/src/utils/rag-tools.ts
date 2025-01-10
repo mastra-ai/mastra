@@ -29,6 +29,8 @@ const createFilter = (filter: any, vectorFilterType: VectorFilterType) => {
   }
 };
 
+// Separate function to handle vector query search
+// Can be imported and used in custom tools
 export const vectorQuerySearch = async ({
   indexName,
   vectorStore,
