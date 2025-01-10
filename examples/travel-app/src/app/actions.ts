@@ -69,7 +69,9 @@ export async function runWorkflow({
   const formObject = processFormData(formData);
   console.log("formObject---runWorkflow", formObject);
 
-  const result = await workflow.execute({
+  const { start } = workflow.createRun();
+
+  const result = await start({
     triggerData: {
       userId,
       sessionId: randomUUID(),
