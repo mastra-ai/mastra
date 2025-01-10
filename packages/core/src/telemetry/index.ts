@@ -40,6 +40,10 @@ export class Telemetry {
       return new AlwaysOnSampler();
     }
 
+    if (!config.enabled) {
+      return new AlwaysOffSampler();
+    }
+
     switch (config.sampling.type) {
       case 'ratio':
         return new TraceIdRatioBasedSampler(config.sampling.probability);
@@ -74,7 +78,9 @@ export class Telemetry {
                 url: config.export.endpoint,
                 headers: config.export.headers,
               })
-            : new ConsoleSpanExporter();
+            : config.export?.type === 'custom'
+              ? config.export.exporter
+              : new ConsoleSpanExporter();
 
         const sampler = this.getSampler(config);
 

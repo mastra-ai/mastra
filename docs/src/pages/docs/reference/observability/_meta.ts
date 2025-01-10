@@ -1,9 +1,7 @@
-const meta = {
+export default {
   providers: "Providers",
-  "create-logger": "createLogger()",
-  logger: "Logger",
-  "combine-loggers": "combineLoggers()",
-  "otel-config": "OtelConfig",
+  "create-logger": "Create Logger",
+  logger: "Logger Instance",
+  "combine-loggers": "Combine Loggers",
+  "otel-config": "OpenTelemetry Config",
 };
-
-export default meta;

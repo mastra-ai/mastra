@@ -1,0 +1,35 @@
+# LangSmith
+
+LangSmith is LangChain's platform for debugging, testing, evaluating, and monitoring LLM applications.
+
+## Configuration
+
+To use LangSmith with Mastra, you'll need to configure the following environment variables:
+
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=https://api.smith.langchain.com/v1/traces
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer your_api_key, x-langsmith-project-id=your_project_id"
+```
+
+## Implementation
+
+Here's how to configure Mastra to use LangSmith:
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    serviceName: "your-service-name",
+    enabled: true,
+    export: {
+      type: "otlp",
+    },
+  },
+});
+```
+
+## Dashboard
+
+Access your traces and analytics in the LangSmith dashboard at [smith.langchain.com](https://smith.langchain.com)

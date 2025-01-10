@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 1, "column": 0}, "map": {"version":3,"sources":["turbopack://[project]/examples/vnext/src/app/geistsans_9fc57718.module.css"],"sourcesContent":["@font-face {\n    font-family: 'geistSans';\n    src: url('@vercel/turbopack-next/internal/font/local/font?{%22path%22:%22./fonts/GeistVF.woff%22,%22preload%22:true,%22has_size_adjust%22:true}') format('woff');\n    font-display: swap;\n    font-weight: 100 900;\n}\n\n@font-face {\n    font-family: 'geistSans Fallback';\n    src: local(\"Arial\");\n    ascent-override: 85.83%;\ndescent-override: 20.52%;\nline-gap-override: 9.33%;\nsize-adjust: 107.19%;\n\n}\n\n.className {\n    font-family: 'geistSans', 'geistSans Fallback';\n    \n}\n.variable {\n    --font-geist-sans: 'geistSans', 'geistSans Fallback';\n}\n\n"],"names":[],"mappings":"AAAA;;;;;;;AAOA;;;;;;;;;AAUA;;;;AAIA"}},
+    {"offset": {"line": 24, "column": 0}, "map": {"version":3,"sources":[],"names":[],"mappings":"A"}}]
+}

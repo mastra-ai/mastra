@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 12, "column": 0}, "map": {"version":3,"sources":["file:///Users/user/Desktop/code/kepler/future/examples/vnext/examples/vnext/src/app/favicon.ico.mjs%20%28structured%20image%20object%29"],"sourcesContent":["import src from \"IMAGE\";\nexport default { src, width: 256, height: 256 }\n"],"names":[],"mappings":";;;AAAA;;uCACe;IAAE,KAAA,uIAAA,CAAA,UAAG;IAAE,OAAO;IAAK,QAAQ;AAAI"}},
+    {"offset": {"line": 22, "column": 0}, "map": {"version":3,"sources":[],"names":[],"mappings":"A"}}]
+}
