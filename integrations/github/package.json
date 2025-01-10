@@ -1,6 +1,6 @@
 {
   "name": "@mastra/github",
-  "version": "1.0.3-alpha.40",
+  "version": "1.0.3-alpha.41",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/github.esm.js",

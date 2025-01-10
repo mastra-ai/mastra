@@ -1,5 +1,12 @@
 # docs
 
+## 0.1.1-alpha.10
+
+### Patch Changes
+
+- fd494a3: TTS module
+- 7de6d71: Update filter for vector query to work with more stores
+
 ## 0.1.1-alpha.9
 
 ### Patch Changes
