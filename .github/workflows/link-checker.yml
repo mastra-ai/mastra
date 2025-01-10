@@ -1,0 +1,17 @@
+name: Website link checker
+on: [deployment_status]
+
+jobs:
+  link-checker-docs:
+    name: Run link checker
+    if: github.event.deployment_status.state == 'success' && github.event.deployemnt_status.environment == 'Preview – mastra-docs'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+      - name: Check links
+        run: npx broken-link-checker ${{ github.event.deployment_status.target_url }}/ -roe
