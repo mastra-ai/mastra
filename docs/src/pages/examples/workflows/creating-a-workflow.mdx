@@ -12,28 +12,33 @@ import { z } from 'zod';
 const myWorkflow = new Workflow({
   name: 'my-workflow',
   triggerSchema: z.object({
-    inputValue: z.number(),
+    input: z.number(),
   }),
 });
 
-myWorkflow.step(
-  new Step({
-    id: 'stepOne',
-    inputSchema: z.object({
-      value: z.number(),
-    }),
-    outputSchema: z.object({
-      doubledValue: z.number(),
-    }),
-    execute: async ({ context }) => {
-      const doubledValue = context.machineContext?.triggerData?.inputValue * 2;
-      return { doubledValue };
-    },
+const stepOne = new Step({
+  id: 'stepOne',
+  inputSchema: z.object({
+    value: z.number(),
   }),
-);
+  outputSchema: z.object({
+    doubledValue: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const doubledValue = context.machineContext?.triggerData?.input * 2;
+    return { doubledValue };
+  },
+})
 
-myWorkflow.commit();
-const res = await myWorkflow.execute({ triggerData: { inputValue: 90 } });
+myWorkflow.step(
+  stepOne
+).commit();
+
+const { runId, start } = myWorkflow.createRun({ 
+  triggerData: { input: 90 } 
+});
+
+const res = await start();
 
 console.log(res.results);
 ```

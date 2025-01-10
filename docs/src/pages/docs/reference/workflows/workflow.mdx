@@ -162,15 +162,19 @@ workflow
 
 ### 2. During Execution
 
-When you call `execute()`, it validates:
+When you call `start()`, it validates:
 
 ```ts showLineNumbers copy
+const { runId, start } = workflow.createRun();
+
 // Validates trigger data against schema
-await workflow.execute({
-  orderId: "123",
-  customer: {
-    id: "cust_123",
-    email: "invalid-email", // Will fail validation
+await start({
+  triggerData: {
+    orderId: "123",
+    customer: {
+      id: "cust_123",
+      email: "invalid-email", // Will fail validation
+    },
   },
 });
 ```
@@ -184,7 +188,8 @@ await workflow.execute({
 
 ```ts showLineNumbers copy
 try {
-  await workflow.execute(data);
+  const { runId, start } = workflow.createRun();
+  await start({ triggerData: data });
 } catch (error) {
   if (error instanceof ValidationError) {
     // Handle validation errors

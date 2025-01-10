@@ -275,7 +275,7 @@ export class Workflow<
    * @throws Error if trigger schema validation fails
    */
 
-  async createRun(): Promise<WorkflowResultReturn<TTriggerSchema>> {
+  createRun(): WorkflowResultReturn<TTriggerSchema> {
     const runId = crypto.randomUUID();
     this.#runId = runId;
 

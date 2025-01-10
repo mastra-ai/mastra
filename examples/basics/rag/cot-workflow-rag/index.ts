@@ -265,7 +265,11 @@ async function generateResponse(query: string) {
     Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
     `;
 
-  const workflowResult = await ragWorkflow.execute({
+  const { runId, start } = ragWorkflow.createRun();
+
+  console.log('Run:', runId);
+
+  const workflowResult = await start({
     triggerData: {
       query: prompt,
     },

@@ -183,9 +183,13 @@ const mastra = new Mastra({
 
 (async () => {
   const workflow = mastra.getWorkflow("candidateWorkflow");
-  const runResult = await workflow.execute({
+
+  const { runId, start } = workflow.createRun();
+
+  const runResult = await workflow.start({
     triggerData: { resumeText: "Simulated resume content..." },
   });
+
   console.log("Final output:", runResult.results);
 })();
 ```

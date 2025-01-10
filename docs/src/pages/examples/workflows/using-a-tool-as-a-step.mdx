@@ -24,9 +24,11 @@ const crawlWebpage = createTool({
 
 const contentWorkflow = new Workflow({ name: 'content-review' });
 
-contentWorkflow.step(crawlWebpage);
-contentWorkflow.commit();
-const res = await contentWorkflow.execute();
+contentWorkflow.step(crawlWebpage).commit();
+
+const { runId, start } = contentWorkflow.createRun();
+
+const res = await start();
 
 console.log(res.results);
 ```

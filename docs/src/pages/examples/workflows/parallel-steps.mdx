@@ -62,9 +62,13 @@ myWorkflow
       },
     },
   });
+
 myWorkflow.commit();
 
-const res = await myWorkflow.execute({ triggerData: { inputValue: 90 } });
+const { runId, start } = myWorkflow.createRun();
+
+const res = await start({ triggerData: { inputValue: 90 } });
+
 console.log(res.results);
 ```
 

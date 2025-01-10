@@ -9,7 +9,7 @@ export async function telephone() {
 
   const workflow = mastra.getWorkflow('telephoneGame');
 
-  const { runId, start } = await workflow.createRun();
+  const { runId, start } = workflow.createRun();
 
   await start();
 

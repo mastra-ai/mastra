@@ -87,11 +87,15 @@ branchedWorkflow
         path: 'doubledValue',
       },
     },
-  })
+  });
 
 branchedWorkflow.commit();
-const res = await branchedWorkflow.execute({triggerData: { firstValue: 20 }})
-console.log(res.results)
+
+const { runId, start } = branchedWorkflow.createRun();
+
+const res = await branchedWorkflow.start({triggerData: { firstValue: 20 }});
+
+console.log(res.results);
 ```
 
 <br />
