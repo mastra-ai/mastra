@@ -5,7 +5,10 @@ import { mastra } from '../mastra/index.js';
 export async function issueLabelerCommand() {
   console.log(chalk.green("Hi! I'm Dane!"));
   console.log(chalk.green('Let me label this for you..\n'));
-  const result = await mastra.getWorkflow('githubIssueLabeler').execute({
+
+  const { start } = mastra.getWorkflow('githubIssueLabeler').createRun();
+
+  const result = await start({
     triggerData: {
       issue_number: parseInt(process.env.ISSUE_NUMBER!, 10),
       owner: process.env.OWNER!,

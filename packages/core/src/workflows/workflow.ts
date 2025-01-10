@@ -33,7 +33,7 @@ import { getStepResult, isErrorEvent, isTransitionEvent, isVariableReference } f
 
 interface WorkflowResultReturn<T extends z.ZodType<any>> {
   runId: string;
-  start: ({ triggerData }: { triggerData?: z.infer<T> }) => Promise<{
+  start: (props?: { triggerData?: z.infer<T> } | undefined) => Promise<{
     triggerData?: z.infer<T>;
     results: Record<string, StepResult<any>>;
     runId: string;
@@ -281,7 +281,7 @@ export class Workflow<
 
     return {
       runId,
-      start: this.execute.bind(this),
+      start: async ({ triggerData } = {}) => this.execute({ triggerData }),
     };
   }
 
