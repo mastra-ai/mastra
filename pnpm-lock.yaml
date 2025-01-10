@@ -1006,7 +1006,7 @@ importers:
         specifier: ^22.10.5
         version: 22.10.5
       mastra:
-        specifier: ^0.1.57-alpha.79
+        specifier: ^0.1.57-alpha.80
         version: 0.1.57-unstable.57(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/helpers@0.5.15)(@types/node@22.10.5)(@types/react-dom@19.0.2(@types/react@19.0.2))(@types/react@19.0.2)(babel-jest@29.7.0(@babel/core@7.26.0))(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.2)(typescript@5.7.2))
       tsx:
         specifier: ^4.19.2
@@ -1028,7 +1028,7 @@ importers:
         specifier: ^22.10.5
         version: 22.10.5
       mastra:
-        specifier: ^0.1.57-alpha.79
+        specifier: ^0.1.57-alpha.80
         version: 0.1.57-unstable.57(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/helpers@0.5.15)(@types/node@22.10.5)(@types/react-dom@19.0.2(@types/react@19.0.2))(@types/react@19.0.2)(babel-jest@29.7.0(@babel/core@7.26.0))(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.2)(typescript@5.7.2))
       tsx:
         specifier: ^4.19.2
@@ -1072,7 +1072,7 @@ importers:
         specifier: ^22.10.5
         version: 22.10.5
       mastra:
-        specifier: ^0.1.57-alpha.79
+        specifier: ^0.1.57-alpha.80
         version: 0.1.57-unstable.57(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/helpers@0.5.15)(@types/node@22.10.5)(@types/react-dom@19.0.2(@types/react@19.0.2))(@types/react@19.0.2)(babel-jest@29.7.0(@babel/core@7.26.0))(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.2)(typescript@5.7.2))
       tsx:
         specifier: ^4.19.2
@@ -2305,6 +2305,9 @@ importers:
       date-fns:
         specifier: ^3.0.5
         version: 3.6.0
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
       express:
         specifier: ^4.21.1
         version: 4.21.2
@@ -2360,9 +2363,6 @@ importers:
       babel-jest:
         specifier: ^29.7.0
         version: 29.7.0(@babel/core@7.26.0)
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.4.7
       dts-cli:
         specifier: ^2.0.5
         version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.10.2)(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(esbuild@0.19.12)(utf-8-validate@6.0.5)

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import 'dotenv/config';
+
 import { Agent } from '../agent';
 import { MastraEngine } from '../engine';
 import { LLM } from '../llm';

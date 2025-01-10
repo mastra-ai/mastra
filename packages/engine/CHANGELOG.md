@@ -1,5 +1,12 @@
 # @mastra/engine
 
+## 0.0.5-alpha.48
+
+### Patch Changes
+
+- Updated dependencies [d2cd535]
+  - @mastra/core@0.1.27-alpha.54
+
 ## 0.0.5-alpha.47
 
 ### Patch Changes

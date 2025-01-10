@@ -1,7 +1,4 @@
 import { MDocument, embed, PineconeVector } from '@mastra/rag';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 const doc = MDocument.fromText('Your text content...');
 
