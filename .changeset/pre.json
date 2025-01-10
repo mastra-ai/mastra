@@ -43,7 +43,8 @@
     "workflow-ai-recruiter": "1.0.0",
     "workflow-with-inline-steps": "1.0.0",
     "workflow-with-separate-steps": "1.0.0",
-    "weather-agent": "1.0.0"
+    "weather-agent": "1.0.0",
+    "@mastra/tts": "0.0.0"
   },
   "changesets": [
     "afraid-papayas-shake",
@@ -145,6 +146,7 @@
     "red-melons-cough",
     "red-zoos-happen",
     "rich-pumas-play",
+    "selfish-pandas-kick",
     "serious-bananas-rush",
     "seven-mayflies-impress",
     "seven-teachers-talk",
@@ -189,6 +191,7 @@
     "weak-elephants-chew",
     "wet-bikes-knock",
     "wild-dragons-switch",
+    "wise-swans-shout",
     "wise-taxis-wink",
     "yellow-nails-add",
     "yellow-roses-run"

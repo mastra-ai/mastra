@@ -1,5 +1,13 @@
 # @mastra/rag
 
+## 0.0.2-alpha.41
+
+### Patch Changes
+
+- 7de6d71: Update filter for vector query to work with more stores
+- Updated dependencies [fd494a3]
+  - @mastra/core@0.1.27-alpha.57
+
 ## 0.0.2-alpha.40
 
 ### Patch Changes

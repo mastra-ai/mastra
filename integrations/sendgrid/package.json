@@ -1,6 +1,6 @@
 {
   "name": "@mastra/sendgrid",
-  "version": "1.0.1-alpha.35",
+  "version": "1.0.1-alpha.36",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/sendgrid.esm.js",
