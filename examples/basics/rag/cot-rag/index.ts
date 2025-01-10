@@ -1,34 +1,15 @@
-import { Mastra, Agent, EmbedResult, EmbedManyResult, createTool } from '@mastra/core';
-import { embed, MDocument, PgVector } from '@mastra/rag';
-import { z } from 'zod';
+import { Mastra, Agent, EmbedManyResult } from '@mastra/core';
+import { createVectorQueryTool, embed, MDocument, PgVector } from '@mastra/rag';
 
-export const contextTool = createTool({
-  id: 'Use Context',
-  inputSchema: z.object({
-    queryText: z.string(),
-  }),
-  outputSchema: z.object({
-    context: z.string(),
-  }),
-  description: `Fetches the retrieved chunks from the vector store and combines them into a single context string`,
-  execute: async ({ context: { queryText } }) => {
-    const { embedding } = (await embed(queryText, {
-      provider: 'OPEN_AI',
-      model: 'text-embedding-ada-002',
-      maxRetries: 3,
-    })) as EmbedResult<string>;
-
-    // Get relevant chunks from the vector database
-    const results = await pgVector.query('embeddings', embedding, 3);
-    const relevantChunks = results.map(result => result?.metadata?.text);
-
-    // Combine the chunks into a context string
-    const context = relevantChunks.join('\n\n');
-
-    return {
-      context,
-    };
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  options: {
+    provider: 'OPEN_AI',
+    model: 'text-embedding-ada-002',
+    maxRetries: 3,
   },
+  topK: 3,
 });
 
 export const ragAgent = new Agent({
@@ -54,11 +35,14 @@ FINAL ANSWER:
     provider: 'OPEN_AI',
     name: 'gpt-4o-mini',
   },
-  tools: { contextTool },
+  tools: { vectorQueryTool },
 });
+
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
   agents: { ragAgent },
+  vectors: { pgVector },
 });
 const agent = mastra.getAgent('ragAgent');
 
@@ -95,9 +79,9 @@ const { embeddings } = (await embed(chunks, {
   maxRetries: 3,
 })) as EmbedManyResult<string>;
 
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
-await pgVector.createIndex('embeddings', 1536);
-await pgVector.upsert(
+const vectorStore = mastra.getVector('pgVector');
+await vectorStore.createIndex('embeddings', 1536);
+await vectorStore.upsert(
   'embeddings',
   embeddings,
   chunks?.map((chunk: any) => ({ text: chunk.text })),

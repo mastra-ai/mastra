@@ -1,0 +1,13 @@
+{
+  "name": "filter-rag",
+  "type": "module",
+  "scripts": {
+    "start": "pnpx tsx index.ts"
+  },
+  "dependencies": {
+    "@mastra/rag": "workspace:*"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.7"
+  }
+}

@@ -1,6 +1,6 @@
 import { GithubLink } from '../../../components/github-link';
 
-# Building a RAG System with Mastra: Metadata Filtering
+# Metadata Filtering
 
 This example demonstrates how to implement a Retrieval-Augmented Generation (RAG) system using Mastra, OpenAI embeddings, and PGVector for vector storage.
 This system uses metadata filters to search for relevant chunks in the vector store, reducing the amount of results returned.
@@ -22,7 +22,7 @@ The system implements RAG using Mastra and OpenAI. Here's what it does:
 
 Make sure to set up your environment variables:
 
-```bash
+```bash filename=".env"
 POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
@@ -30,14 +30,14 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 
 Then, import the necessary dependencies:
 
-```typescript copy
+```typescript copy showLineNumbers filename="src/mastra/index.ts"
 import { Mastra, Agent, EmbedResult, EmbedManyResult } from '@mastra/core'
 import { embed, MDocument, PgVector } from '@mastra/rag'
 ```
 
 ## Context Tool Creation
 Define a custom tool for handling context retrieval:
-```typescript copy
+```typescript copy showLineNumbers filename="src/mastra/index.ts"
 export const contextTool = createTool({
   id: 'Use Context',
   inputSchema: z.object({
@@ -76,7 +76,7 @@ export const contextTool = createTool({
 
 Set up the Mastra agent that will handle the responses:
 
-```typescript copy
+```typescript copy showLineNumbers filename="src/mastra/index.ts"
 export const ragAgent = new Agent({
   name: 'RAG Agent',
   instructions:
@@ -98,7 +98,7 @@ const agent = mastra.getAgent('ragAgent')
 
 Create a document and process it into chunks:
 
-```typescript copy
+```typescript copy showLineNumbers filename="src/mastra/index.ts"
 const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`) // Your text here
 
 const chunks = await doc.chunk({
@@ -116,7 +116,7 @@ const chunks = await doc.chunk({
 
 Generate embeddings for the chunks and store them in the vector database:
 
-```typescript copy
+```typescript copy showLineNumbers filename="src/mastra/index.ts"
 const { embeddings } = (await embed(chunks, {
   provider: 'OPEN_AI',
   model: 'text-embedding-ada-002',
@@ -139,7 +139,7 @@ await pgVector.upsert(
 
 Function to generate responses based on retrieved context:
 
-```typescript copy
+```typescript copy showLineNumbers filename="src/mastra/index.ts"
 async function generateResponse(query: string, keyword: string) {
   const prompt = `
       Please answer the following question:
@@ -156,9 +156,9 @@ async function generateResponse(query: string, keyword: string) {
 }
 ```
 
-## Query Processing
+## Example Usage
 
-```typescript copy
+```typescript copy showLineNumbers filename="src/mastra/index.ts"
 async function answerQueries(
   queries: {
     query: string;
@@ -176,11 +176,7 @@ async function answerQueries(
     }
   }
 }
-```
 
-## Example Usage
-
-```typescript copy
 const queries = [
   {
     query: 'What adaptation strategies are mentioned?',
@@ -205,4 +201,4 @@ await answerQueries(queries);
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/filter-rag.ts'} />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/filter-rag'} />
