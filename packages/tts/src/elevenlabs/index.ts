@@ -27,17 +27,21 @@ export class ElevenLabsTTS extends MastraTTS {
   }
 
   async voices() {
-    const res = await this.client.voices.getAll();
+    const res = await this.traced(() => this.client.voices.getAll(), 'tts.elevenlabs.voices')();
 
     return res?.voices ?? [];
   }
 
   async generate({ voice, text }: { voice: string; text: string }) {
-    const audio = await this.client.generate({
-      voice,
-      text,
-      model_id: this.model.name,
-    });
+    const audio = await this.traced(
+      () =>
+        this.client.generate({
+          voice,
+          text,
+          model_id: this.model.name,
+        }),
+      'tts.elevenlabs.generate',
+    )();
 
     return {
       audioResult: audio,
@@ -45,12 +49,16 @@ export class ElevenLabsTTS extends MastraTTS {
   }
 
   async stream({ voice, text }: { voice: string; text: string }) {
-    const audio = await this.client.generate({
-      voice,
-      text,
-      model_id: this.model.name,
-      stream: true,
-    });
+    const audio = await this.traced(
+      () =>
+        this.client.generate({
+          voice,
+          text,
+          model_id: this.model.name,
+          stream: true,
+        }),
+      'tts.elevenlabs.stream',
+    )();
 
     return {
       audioResult: audio,

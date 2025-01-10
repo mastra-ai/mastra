@@ -20,6 +20,17 @@ export abstract class MastraTTS extends MastraBase {
     this.model = model;
   }
 
+  traced<T extends Function>(method: T, methodName: string): T {
+    return (
+      this.telemetry?.traceMethod(method, {
+        spanName: `${this.model.name}-tts.${methodName}`,
+        attributes: {
+          'tts.type': `${this.model.name}`,
+        },
+      }) ?? method
+    );
+  }
+
   abstract generate({ text }: { text: string }): Promise<any>;
   abstract stream({ text }: { text: string }): Promise<any>;
 }
