@@ -15,7 +15,7 @@ export const createVectorQueryTool = ({
   indexName: string;
   options: EmbeddingOptions;
   topK?: number;
-  useFilter: boolean;
+  useFilter?: boolean;
 }) => {
   return createTool({
     id: `VectorQuery ${vectorStoreName} ${indexName} Tool`,
