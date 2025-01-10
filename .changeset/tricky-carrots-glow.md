@@ -4,7 +4,6 @@
 'bird-checker-with-nextjs': patch
 'openapi-spec-writer': patch
 'stock-price-tool': patch
-'examples-vnext-playground': patch
 'ai-chatbot': patch
 '@mastra/firecrawl': patch
 'mastra-examples-integrations': patch
