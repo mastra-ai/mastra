@@ -16,8 +16,8 @@ The system implements RAG using Mastra and OpenAI, this time optimizing informat
 6. Takes those chunks and filters them to remove irrelevant or duplicate information
 7. Creates embeddings for both the initial chunks and the updated chunks
 8. Stores them both in a PostgreSQL vector database
-9. Retrieves relevant chunks based on queries using context tool
-10. Generates context-aware responses using the Mastra agent
+9. Retrieves relevant chunks based on queries using vector query tool
+10. Generates context-aware responses using the Mastra agents
 
 ## Setup 
 
@@ -194,7 +194,7 @@ await vectorStore.upsert(
 Function to generate responses with index selection:
 
 ```typescript copy showLineNumbers{129} filename="src/mastra/index.ts"
-async function generateResponse(query: string, index: string) {
+async function generateResponse(query: string, agent: Agent) {
   const prompt = `
       Please answer the following question:
       ${query}
@@ -203,8 +203,8 @@ async function generateResponse(query: string, index: string) {
       If the context doesn't contain enough information to fully answer the question, 
       please state that explicitly. 
       `;
-
-  const completion = await ragAgent.generate(prompt);
+  // Call the agent to generate a response
+  const completion = await agent.generate(prompt);
   return completion.text;
 }
 ```
@@ -212,10 +212,10 @@ async function generateResponse(query: string, index: string) {
 ## Example Usage
 
 ```typescript copy showLineNumbers{143} filename="src/mastra/index.ts"
-async function answerQueries(queries: string[], index: string) {
+async function answerQueries(queries: string[], agent: Agent) {
   for (const query of queries) {
     try {
-      const answer = await generateResponse(query, index);
+      const answer = await generateResponse(query, agent);
       console.log('\nQuery:', query);
       console.log('Response:', answer);
     } catch (error) {
@@ -233,8 +233,8 @@ const queries = [
 ];
 
 // Compare responses between raw and cleaned embeddings
-await answerQueries(queries, 'embeddings');
-await answerQueries(queries, 'cleanedEmbeddings');
+await answerQueries(queries, dataAgentOne);
+await answerQueries(queries, dataAgentTwo);
 ```
 
 <br />

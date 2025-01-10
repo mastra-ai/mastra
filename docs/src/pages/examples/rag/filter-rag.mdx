@@ -9,11 +9,11 @@ This system uses metadata filters to search for relevant chunks in the vector st
 
 The system implements RAG using Mastra and OpenAI. Here's what it does:
 1. Sets up a Mastra agent with GPT-4o-mini for response generation
-2. Creates a custom context tool for managing vector store interactions and filtering
+2. Creates a vector query tool to manage vector store interactions
 3. Chunks text documents into smaller segments
 4. Creates embeddings for these chunks
 5. Stores them in a PostgreSQL vector database
-6. Retrieves relevant chunks based on queries using context tool
+6. Retrieves relevant chunks based on queries using vector query tool
 7. Generates context-aware responses using the Mastra agent
 
 ## Setup 
@@ -32,43 +32,22 @@ Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
 import { Mastra, Agent, EmbedResult, EmbedManyResult } from '@mastra/core'
-import { embed, MDocument, PgVector } from '@mastra/rag'
+import { createVectorQueryTool, embed, MDocument, PgVector } from '@mastra/rag';
 ```
 
-## Context Tool Creation
-Define a custom tool for handling context retrieval:
-```typescript copy showLineNumbers filename="src/mastra/index.ts"
-export const contextTool = createTool({
-  id: 'Use Context',
-  inputSchema: z.object({
-    queryText: z.string(),
-    keyword: z.string(),
-  }),
-  outputSchema: z.object({
-    context: z.string(),
-  }),
-  description: `Fetches the retrieved chunks from the vector store and combines them into a single context string`,
-  execute: async ({ context: { queryText, keyword } }) => {
-    const { embedding } = (await embed(queryText, {
-      provider: 'OPEN_AI',
-      model: 'text-embedding-ada-002',
-      maxRetries: 3,
-    })) as EmbedResult<string>;
-
-    // Get relevant chunks from the vector database
-    const results = await pgVector.query('embeddings', embedding, 3, {
-      excerptKeywords: { operator: 'ilike', value: `%${keyword}%` },
-    });
-    const relevantChunks = results.map(result => result?.metadata?.text);
-    console.log('Number of chunks:', relevantChunks);
-
-    // Combine the chunks into a context string
-    const context = relevantChunks.join('\n\n');
-
-    return {
-      context,
-    };
+## Vectory Query Tool Creation
+Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
+```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  options: {
+    provider: 'OPEN_AI',
+    model: 'text-embedding-ada-002',
+    maxRetries: 3,
   },
+  topK: 3,
+  useFilter: true,
 });
 ```
 
@@ -76,7 +55,7 @@ export const contextTool = createTool({
 
 Set up the Mastra agent that will handle the responses:
 
-```typescript copy showLineNumbers filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{16} filename="src/mastra/index.ts"
 export const ragAgent = new Agent({
   name: 'RAG Agent',
   instructions:
@@ -85,10 +64,18 @@ export const ragAgent = new Agent({
     provider: 'OPEN_AI',
     name: 'gpt-4o-mini',
   },
-})
+  tools: { vectorQueryTool },
+});
+```
+
+## PgVector creation and Mastra Instantiation
+
+```typescript copy showLineNumbers{27} filename="src/mastra/index.ts"
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
   agents: { ragAgent },
+  vectors: { pgVector },
 })
 
 const agent = mastra.getAgent('ragAgent')
@@ -98,7 +85,7 @@ const agent = mastra.getAgent('ragAgent')
 
 Create a document and process it into chunks:
 
-```typescript copy showLineNumbers filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{36} filename="src/mastra/index.ts"
 const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`) // Your text here
 
 const chunks = await doc.chunk({
@@ -116,16 +103,16 @@ const chunks = await doc.chunk({
 
 Generate embeddings for the chunks and store them in the vector database:
 
-```typescript copy showLineNumbers filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{48} filename="src/mastra/index.ts"
 const { embeddings } = (await embed(chunks, {
   provider: 'OPEN_AI',
   model: 'text-embedding-ada-002',
   maxRetries: 3,
 })) as EmbedManyResult<string>;
 
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
-await pgVector.createIndex('embeddings', 1536);
-await pgVector.upsert(
+const vectorStore = mastra.getVector('pgVector');
+await vectorStore.createIndex('embeddings', 1536);
+await vectorStore.upsert(
   'embeddings',
   embeddings,
   chunks?.map((chunk: any) => ({
@@ -139,13 +126,20 @@ await pgVector.upsert(
 
 Function to generate responses based on retrieved context:
 
-```typescript copy showLineNumbers filename="src/mastra/index.ts"
-async function generateResponse(query: string, keyword: string) {
+```typescript copy showLineNumbers{65} filename="src/mastra/index.ts"
+async function generateResponse(
+  query: string,
+  filter: {
+    keyword: string;
+    operator: string;
+    value: string;
+  },
+) {
   const prompt = `
       Please answer the following question:
       ${query}
 
-      Please base your answer only on the context provided in the tool and use the keyword ${keyword}. 
+      Please base your answer only on the context provided in the tool using this filter ${filter}. 
       If the context doesn't contain enough information to fully answer the question, please state that explicitly.
       `;
 
@@ -158,11 +152,15 @@ async function generateResponse(query: string, keyword: string) {
 
 ## Example Usage
 
-```typescript copy showLineNumbers filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{87} filename="src/mastra/index.ts"
 async function answerQueries(
   queries: {
     query: string;
-    filter: string;
+    filter: {
+      keyword: string;
+      operator: string;
+      value: string;
+    };
   }[],
 ) {
   for (const { query, filter } of queries) {
@@ -180,15 +178,23 @@ async function answerQueries(
 const queries = [
   {
     query: 'What adaptation strategies are mentioned?',
-    filter: 'adaptation',
+    filter: {
+      keyword: 'excerptKeywords',
+      operator: 'ilike',
+      value: `%adaptation%`,
+    },
   },
   {
     query: 'How do temperatures affect crop yields specifically?',
-    filter: 'crop',
+    filter: { keyword: 'excerptKeywords', operator: 'ilike', value: `%crop%` },
   },
   {
     query: 'What are the future challenges?',
-    filter: 'technologies',
+    filter: {
+      keyword: 'excerptKeywords',
+      operator: 'ilike',
+      value: `%technologies%`,
+    },
   },
 ];
 
