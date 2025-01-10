@@ -6,6 +6,7 @@ import { dane, daneCommitMessage, daneIssueLabeler, danePackagePublisher } from 
 import { firecrawl } from './integrations/index.js';
 import { messageWorkflow, githubIssueLabeler, commitMessageGenerator } from './workflows/index.js';
 import { packagePublisher } from './workflows/publish-packages.js';
+import { telephoneGameWorkflow } from './workflows/telephone-game.js';
 
 const engine = new PostgresEngine({
   url: 'postgres://postgres:postgres@localhost:5433/mastra',
@@ -29,8 +30,8 @@ export const mastra = new Mastra({
     githubIssueLabeler: githubIssueLabeler,
     commitMessage: commitMessageGenerator,
     packagePublisher: packagePublisher,
+    telephoneGame: telephoneGameWorkflow,
   },
-  logger: false,
   syncs: {
     ...firecrawl.getSyncs(),
   },

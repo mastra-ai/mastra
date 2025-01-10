@@ -81,6 +81,22 @@ export class MockMastraEngine extends MastraEngine {
     return this.records.filter(r => r.entityId === params.entityId);
   }
 
+  async getRecordsByEntityNameAndExternalId({
+    entityName,
+    connectionId,
+    externalId,
+  }: {
+    entityName: string;
+    connectionId: string;
+    externalId: string;
+  }): Promise<BaseRecord[]> {
+    const entity = await this.getEntity({ name: entityName, connectionId });
+    if (!entity) {
+      return [];
+    }
+    return this.records.filter(r => r.entityId === entity.id && r.externalId === externalId);
+  }
+
   async getRecordsByEntityName({ name, connectionId }: { name: string; connectionId: string }): Promise<BaseRecord[]> {
     const entity = await this.getEntity({ name, connectionId });
     if (!entity) {

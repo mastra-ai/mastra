@@ -135,13 +135,16 @@ type StepSuccess<T> = {
 type StepSuspended = {
   status: 'suspended';
 };
+type StepWaiting = {
+  status: 'waiting';
+};
 
 type StepFailure = {
   status: 'failed';
   error: string;
 };
 
-export type StepResult<T> = StepSuccess<T> | StepFailure | StepSuspended;
+export type StepResult<T> = StepSuccess<T> | StepFailure | StepSuspended | StepWaiting;
 
 // Update WorkflowContext
 export interface WorkflowContext<TTrigger extends z.ZodType<any> = any> {
@@ -159,22 +162,12 @@ export interface WorkflowLogMessage extends BaseLogMessage {
   runId?: string;
 }
 
-export type ValidationErrorType = 'circular_dependency' | 'no_terminal_path' | 'unreachable_step';
-
-export interface ValidationError {
-  type: ValidationErrorType;
-  message: string;
-  details: {
-    stepId?: StepId;
-    path?: StepId[];
-  };
-}
-
 export type WorkflowEvent =
-  | { type: 'DEPENDENCIES_MET'; stepId: string }
-  | { type: 'DEPENDENCIES_NOT_MET'; stepId: string }
+  | { type: 'RESET_TO_PENDING'; stepId: string }
+  | { type: 'CONDITIONS_MET'; stepId: string }
+  | { type: 'CONDITION_FAILED'; stepId: string; error: string }
   | { type: 'SUSPENDED'; stepId: string }
-  | { type: 'STEP_COMPLETED'; stepId: string }
+  | { type: 'WAITING'; stepId: string }
   | { type: `xstate.error.actor.${string}`; error: Error }
   | { type: `xstate.done.actor.${string}`; output: ResolverFunctionOutput };
 
@@ -194,18 +187,17 @@ export type SubscriberFunctionOutput = {
 };
 
 export type DependencyCheckOutput =
-  | { type: 'DEPENDENCIES_MET' }
-  | { type: 'DEPENDENCIES_NOT_MET' }
+  | { type: 'CONDITIONS_MET' }
   | { type: 'CONDITION_FAILED'; error: string }
-  | { type: 'TIMED_OUT'; error: string }
-  | { type: 'SUSPENDED'; missingDeps: string[] };
+  | { type: 'SUSPENDED' }
+  | { type: 'WAITING' };
 
 export type WorkflowActors = {
   resolverFunction: {
     input: ResolverFunctionInput;
     output: ResolverFunctionOutput;
   };
-  dependencyCheck: {
+  conditionCheck: {
     input: { context: WorkflowContext; stepId: string };
     output: DependencyCheckOutput;
   };
@@ -230,7 +222,7 @@ export type WorkflowState = {
     states: {
       pending: {
         invoke: {
-          src: 'dependencyCheck';
+          src: 'conditionCheck';
           input: ({ context }: { context: WorkflowContext }) => {
             context: WorkflowContext;
             stepId: string;

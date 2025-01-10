@@ -48,9 +48,11 @@ const mastra = new Mastra({
   workflows: { newWorkflow },
 });
 
-await mastra
+const { runId = start } = mastra
   .getWorkflow('newWorkflow')
-  .execute({ triggerData: { message: 'Give me a speech as skipper from penguin of madagascar' } });
+  .createRun();
+
+await start({ triggerData: { message: 'Give me a speech as skipper from penguin of madagascar' } });
 ```
 
 <br />

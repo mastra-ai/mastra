@@ -86,4 +86,14 @@ export abstract class MastraEngine {
   protected getTelemetry(): Telemetry | undefined {
     return this.#telemetry;
   }
+
+  abstract getRecordsByEntityNameAndExternalId({
+    entityName,
+    connectionId,
+    externalId,
+  }: {
+    entityName: string;
+    connectionId: string;
+    externalId: string;
+  }): Promise<BaseRecord[]>;
 }

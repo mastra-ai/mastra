@@ -79,7 +79,10 @@ cyclicalWorkflow
 
 cyclicalWorkflow.commit();
 
-const res = await cyclicalWorkflow.execute({ triggerData: { firstValue: 6 } });
+const { runId, start } = cyclicalWorkflow.createRun();
+
+const res = await start({ triggerData: { firstValue: 6 } });
+
 console.log(res.results);
 ```
 
