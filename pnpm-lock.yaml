@@ -118,6 +118,15 @@ importers:
         specifier: ^3.24.0
         version: 3.24.1
 
+  examples/basics/rag/cot-workflow-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
   examples/bird-checker-with-express:
     dependencies:
       '@mastra/core':
