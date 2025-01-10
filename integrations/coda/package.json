@@ -1,6 +1,6 @@
 {
   "name": "@mastra/coda",
-  "version": "1.0.1-alpha.33",
+  "version": "1.0.1-alpha.34",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/coda.esm.js",

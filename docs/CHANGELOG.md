@@ -1,5 +1,13 @@
 # docs
 
+## 0.1.1-alpha.9
+
+### Patch Changes
+
+- 592e3cf: Add custom rag tools, add vector retrieval, and update docs
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- 0b74006: Workflow updates
+
 ## 0.1.1-alpha.8
 
 ### Patch Changes

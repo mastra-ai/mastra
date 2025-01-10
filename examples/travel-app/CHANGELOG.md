@@ -1,5 +1,17 @@
 # travel-app
 
+## 0.1.1-alpha.11
+
+### Patch Changes
+
+- 0b74006: Workflow updates
+- Updated dependencies [592e3cf]
+- Updated dependencies [837a288]
+- Updated dependencies [0b74006]
+  - @mastra/core@0.1.27-alpha.55
+  - @mastra/engine@0.0.5-alpha.49
+  - @mastra/memory@0.0.2-alpha.35
+
 ## 0.1.1-alpha.10
 
 ### Patch Changes

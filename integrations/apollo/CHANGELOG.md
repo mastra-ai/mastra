@@ -1,5 +1,16 @@
 # @mastra/apollo
 
+## 1.0.1-alpha.34
+
+### Patch Changes
+
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- 0b74006: Workflow updates
+- Updated dependencies [592e3cf]
+- Updated dependencies [837a288]
+- Updated dependencies [0b74006]
+  - @mastra/core@0.1.27-alpha.55
+
 ## 1.0.1-alpha.33
 
 ### Patch Changes
