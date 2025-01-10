@@ -13,3 +13,4 @@ export * from './memory';
 export * from './telemetry';
 export * from './utils';
 export * from './embeddings';
+export * from './completion-provider';

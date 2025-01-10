@@ -1,8 +1,30 @@
-import { createTool, EmbeddingOptions, EmbedResult } from '@mastra/core';
+import { createTool, EmbeddingOptions, EmbedResult, MastraVector } from '@mastra/core';
 import { z } from 'zod';
 
 import { ChunkParams, MDocument } from '../document';
 import { embed } from '../embeddings';
+
+export const vectorQuerySearch = async ({
+  indexName,
+  vectorStore,
+  queryText,
+  options,
+  queryFilter = {},
+  topK,
+}: {
+  indexName: string;
+  vectorStore: MastraVector;
+  queryText: string;
+  options: EmbeddingOptions;
+  queryFilter: any;
+  topK: number;
+}) => {
+  const { embedding } = (await embed(queryText, options)) as EmbedResult<string>;
+  // Get relevant chunks from the vector database
+  const results = await vectorStore.query(indexName, embedding, topK, queryFilter);
+
+  return results;
+};
 
 export const createVectorQueryTool = ({
   vectorStoreName,
@@ -36,13 +58,19 @@ export const createVectorQueryTool = ({
     execute: async ({ context: { queryText, filter }, mastra }) => {
       let context = '';
       const vectorStore = mastra?.vectors?.[vectorStoreName];
-      console.log({ vectorStore, vectorStoreName });
-      const { embedding } = (await embed(queryText, options)) as EmbedResult<string>;
 
       // Get relevant chunks from the vector database
       if (vectorStore) {
         const queryFilter = useFilter && filter ? { [filter.keyword]: { [filter.operator]: filter.value } } : {};
-        const results = await vectorStore.query(indexName, embedding, topK, queryFilter);
+        const results = await vectorQuerySearch({
+          indexName,
+          vectorStore,
+          queryText,
+          options,
+          queryFilter,
+          topK,
+        });
+
         const relevantChunks = results.map(result => result?.metadata?.text);
 
         // Combine the chunks into a context string
