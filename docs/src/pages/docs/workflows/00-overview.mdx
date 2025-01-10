@@ -31,14 +31,17 @@ myWorkflow
   .step(
     new Step({
       id: "stepOne",
-      inputSchema: z.object({
-        value: z.number(),
-      }),
       outputSchema: z.object({
         doubledValue: z.number(),
       }),
       execute: async ({ context }) => {
-        const doubledValue = context.value * 2;
+        const inputValue = context.machineContext?.getStepPayload<{
+          inputValue: number;
+        }>("trigger")?.inputValue;
+        if (!inputValue) {
+          throw new Error("Input value does not exist");
+        }
+        const doubledValue = inputValue * 2;
         return { doubledValue };
       },
     }),
@@ -46,23 +49,20 @@ myWorkflow
   .then(
     new Step({
       id: "stepTwo",
-      inputSchema: z.object({
-        valueToIncrement: z.number(),
-      }),
       outputSchema: z.object({
         incrementedValue: z.number(),
       }),
       execute: async ({ context }) => {
-        const incrementedValue = context.valueToIncrement + 1;
+        const valueToIncrement = context.machineContext?.getStepPayload<{
+          doubledValue: number;
+        }>("stepOne")?.doubledValue;
+
+        if (!valueToIncrement) {
+          throw new Error("Value to increment does not exist");
+        }
+
+        const incrementedValue = valueToIncrement + 1;
         return { incrementedValue };
-      },
-      variables: {
-        valueToIncrement: {
-          step: {
-            id: "stepOne",
-          },
-          path: "doubledValue",
-        },
       },
     }),
   );
@@ -79,28 +79,36 @@ import { z } from "zod";
 // Define steps separately
 const stepOne = new Step({
   id: "stepOne",
-  inputSchema: z.object({
-    inputValue: z.number(),
-  }),
   outputSchema: z.object({
     doubledValue: z.number(),
   }),
   execute: async ({ context }) => {
-    const doubledValue = context.inputValue * 2;
+    const inputValue = context.machineContext?.getStepPayload<{
+      inputValue: number;
+    }>("trigger")?.inputValue;
+    if (!inputValue) {
+      throw new Error("Input value does not exist");
+    }
+    const doubledValue = inputValue * 2;
     return { doubledValue };
   },
 });
 
 const stepTwo = new Step({
   id: "stepTwo",
-  inputSchema: z.object({
-    valueToIncrement: z.number(),
-  }),
   outputSchema: z.object({
     incrementedValue: z.number(),
   }),
   execute: async ({ context }) => {
-    const incrementedValue = context.valueToIncrement + 1;
+    const valueToIncrement = context.machineContext?.getStepPayload<{
+      doubledValue: number;
+    }>("stepOne")?.doubledValue;
+
+    if (!valueToIncrement) {
+      throw new Error("Value to increment does not exist");
+    }
+
+    const incrementedValue = valueToIncrement + 1;
     return { incrementedValue };
   },
 });
@@ -113,23 +121,7 @@ const myWorkflow = new Workflow({
   }),
 });
 
-myWorkflow
-  .step(stepOne, {
-    variables: {
-      inputValue: {
-        step: "trigger",
-        path: "inputValue",
-      },
-    },
-  })
-  .then(stepTwo, {
-    variables: {
-      valueToIncrement: {
-        step: stepOne,
-        path: "doubledValue",
-      },
-    },
-  });
+myWorkflow.step(stepOne).then(stepTwo);
 ```
 
 ### 2. Control Flow Between Steps
@@ -210,7 +202,10 @@ myWorkflow.step(
   }),
   {
     when: async ({ context }) => {
-      return context.stepResults.fetchData.status === "success";
+      const fetchData = context?.getStepPayload<{
+        status: string;
+      }>("fetchData");
+      return fetchData?.status === "success";
     },
   },
 );

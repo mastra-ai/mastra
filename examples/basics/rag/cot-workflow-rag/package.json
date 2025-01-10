@@ -5,9 +5,7 @@
     "start": "pnpx tsx index.ts"
   },
   "dependencies": {
-    "@mastra/rag": "workspace:*"
-  },
-  "devDependencies": {
-    "dotenv": "^16.4.7"
+    "@mastra/rag": "workspace:*",
+    "zod": "^3.24.1"
   }
 }

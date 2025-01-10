@@ -1,3 +1,5 @@
+import { SpanExporter } from '@opentelemetry/sdk-trace-base';
+
 /** Sampling strategy configuration for OpenTelemetry */
 export type SamplingStrategy =
   | {
@@ -48,5 +50,9 @@ export type OtelConfig = {
     | {
         /** Export to console for development/debugging */
         type: 'console';
+      }
+    | {
+        type: 'custom';
+        exporter: SpanExporter;
       };
 };

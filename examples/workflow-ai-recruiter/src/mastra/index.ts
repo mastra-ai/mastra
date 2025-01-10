@@ -16,9 +16,10 @@ const gatherCandidateInfo = new Step({
     if (!mastra?.llm) {
       throw new Error('Mastra instance is required to run this step');
     }
+    const resumeText = context.machineContext?.getStepPayload<{ resumeText: string }>('trigger')?.resumeText;
 
     const llm = mastra.llm({ provider: 'OPEN_AI', name: 'gpt-4o' });
-    const resumeText = context.resumeText;
+
     const prompt = `
           You are given this resume text:
           "${resumeText}"
@@ -36,16 +37,15 @@ const gatherCandidateInfo = new Step({
   },
 });
 
+interface CandidateInfo {
+  candidateName: string;
+  isTechnical: boolean;
+  specialty: string;
+  resumeText: string;
+}
+
 const askAboutSpecialty = new Step({
   id: 'askAboutSpecialty',
-  inputSchema: z.object({
-    candidateInfo: z.object({
-      candidateName: z.string(),
-      isTechnical: z.boolean(),
-      specialty: z.string(),
-      resumeText: z.string(),
-    }),
-  }),
   outputSchema: z.object({
     question: z.string(),
   }),
@@ -54,11 +54,13 @@ const askAboutSpecialty = new Step({
       throw new Error('Mastra instance is required to run this step');
     }
 
+    const candidateInfo = context.machineContext?.getStepPayload<CandidateInfo>('gatherCandidateInfo');
+
     const llm = mastra.llm({ provider: 'OPEN_AI', name: 'gpt-4o' });
     const prompt = `
           You are a recruiter. Given the resume below, craft a short question
-          for ${context.candidateInfo.candidateName} about how they got into "${context.candidateInfo.specialty}".
-          Resume: ${context.candidateInfo.resumeText}
+          for ${candidateInfo?.candidateName} about how they got into "${candidateInfo?.specialty}".
+          Resume: ${candidateInfo?.resumeText}
         `;
     const res = await llm.generate(prompt);
     return { question: res?.text?.trim() || '' };
@@ -67,14 +69,6 @@ const askAboutSpecialty = new Step({
 
 const askAboutRole = new Step({
   id: 'askAboutRole',
-  inputSchema: z.object({
-    candidateInfo: z.object({
-      candidateName: z.string(),
-      isTechnical: z.boolean(),
-      specialty: z.string(),
-      resumeText: z.string(),
-    }),
-  }),
   outputSchema: z.object({
     question: z.string(),
   }),
@@ -82,12 +76,13 @@ const askAboutRole = new Step({
     if (!mastra?.llm) {
       throw new Error('Mastra instance is required to run this step');
     }
+    const candidateInfo = context.machineContext?.getStepPayload<CandidateInfo>('gatherCandidateInfo');
 
     const llm = mastra.llm({ provider: 'OPEN_AI', name: 'gpt-4o' });
     const prompt = `
           You are a recruiter. Given the resume below, craft a short question
-          for ${context.candidateInfo.candidateName} asking what interests them most about this role.
-          Resume: ${context.candidateInfo.resumeText}
+          for ${candidateInfo?.candidateName} asking what interests them most about this role.
+          Resume: ${candidateInfo?.resumeText}
         `;
     const res = await llm.generate(prompt);
     return { question: res?.text?.trim() || '' };
@@ -102,32 +97,13 @@ const candidateWorkflow = new Workflow({
 });
 
 candidateWorkflow
-  .step(gatherCandidateInfo, {
-    variables: {
-      resumeText: {
-        step: 'trigger',
-        path: 'resumeText',
-      },
-    },
-  })
+  .step(gatherCandidateInfo)
   .then(askAboutSpecialty, {
     when: { 'gatherCandidateInfo.isTechnical': true },
-    variables: {
-      candidateInfo: {
-        step: gatherCandidateInfo,
-        path: '.',
-      },
-    },
   })
   .after(gatherCandidateInfo)
   .step(askAboutRole, {
     when: { 'gatherCandidateInfo.isTechnical': false },
-    variables: {
-      candidateInfo: {
-        step: gatherCandidateInfo,
-        path: '.',
-      },
-    },
   });
 
 candidateWorkflow.commit();

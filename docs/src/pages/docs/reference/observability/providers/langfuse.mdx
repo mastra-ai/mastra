@@ -1,0 +1,42 @@
+# Langfuse
+
+Langfuse is an open-source observability platform designed specifically for LLM applications.
+
+## Configuration
+
+To use Langfuse with Mastra, you'll need to configure the following environment variables:
+
+```env
+LANGFUSE_PUBLIC_KEY=your_public_key
+LANGFUSE_SECRET_KEY=your_secret_key
+LANGFUSE_BASEURL=https://cloud.langfuse.com  # Optional - defaults to cloud.langfuse.com
+```
+
+## Implementation
+
+Here's how to configure Mastra to use Langfuse:
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { LangfuseExporter } from "langfuse-vercel";
+
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    serviceName: "your-service-name",
+    enabled: true,
+    export: {
+      type: "custom",
+      exporter: new LangfuseExporter({
+        publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+        secretKey: process.env.LANGFUSE_SECRET_KEY,
+        baseUrl: process.env.LANGFUSE_BASEURL,
+      }),
+    },
+  },
+});
+```
+
+## Dashboard
+
+Once configured, you can view your traces and analytics in the Langfuse dashboard at [cloud.langfuse.com](https://cloud.langfuse.com)

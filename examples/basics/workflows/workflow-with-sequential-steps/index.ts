@@ -11,7 +11,9 @@ async function main() {
       doubledValue: z.number(),
     }),
     execute: async ({ context }) => {
-      const doubledValue = context.inputValue * 2;
+      const inputValue = context?.machineContext?.getStepPayload<{ inputValue: number }>('trigger')?.inputValue;
+      if (!inputValue) throw new Error('No input value provided');
+      const doubledValue = inputValue * 2;
       return { doubledValue };
     },
   });
@@ -25,7 +27,11 @@ async function main() {
       incrementedValue: z.number(),
     }),
     execute: async ({ context }) => {
-      const incrementedValue = context.valueToIncrement + 1;
+      const valueToIncrement = context?.machineContext?.getStepPayload<{ doubledValue: number }>(
+        'stepOne',
+      )?.doubledValue;
+      if (!valueToIncrement) throw new Error('No value to increment provided');
+      const incrementedValue = valueToIncrement + 1;
       return { incrementedValue };
     },
   });
@@ -39,23 +45,7 @@ async function main() {
   });
 
   // sequential steps
-  myWorkflow
-    .step(stepOne, {
-      variables: {
-        inputValue: {
-          step: 'trigger',
-          path: 'inputValue',
-        },
-      },
-    })
-    .then(stepTwo, {
-      variables: {
-        valueToIncrement: {
-          step: stepOne,
-          path: 'doubledValue',
-        },
-      },
-    });
+  myWorkflow.step(stepOne).then(stepTwo);
 
   myWorkflow.commit();
 

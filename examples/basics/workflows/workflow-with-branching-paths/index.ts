@@ -3,46 +3,47 @@ import { z } from 'zod';
 
 async function main() {
   const doubleValue = new Step({
-    id: 'stepOne',
+    id: 'doubleValue',
     description: 'Doubles the input value',
-    inputSchema: z.object({
-      inputValue: z.number(),
-    }),
     outputSchema: z.object({
       doubledValue: z.number(),
     }),
     execute: async ({ context }) => {
-      const doubledValue = context.inputValue * 2;
+      const inputValue = context?.machineContext?.getStepPayload<{ firstValue: number }>('trigger')?.firstValue;
+      if (!inputValue) throw new Error('No input value provided');
+      const doubledValue = inputValue * 2;
       return { doubledValue };
     },
   });
 
   const incrementByOne = new Step({
-    id: 'stepTwo',
+    id: 'incrementByOne',
     description: 'Adds 1 to the input value',
-    inputSchema: z.object({
-      valueToIncrement: z.number(),
-    }),
     outputSchema: z.object({
       incrementedValue: z.number(),
     }),
     execute: async ({ context }) => {
-      const incrementedValue = context.valueToIncrement + 1;
+      const valueToIncrement = context?.machineContext?.getStepPayload<{ doubledValue: number }>(
+        'doubleValue',
+      )?.doubledValue;
+      if (!valueToIncrement) throw new Error('No value to increment provided');
+      const incrementedValue = valueToIncrement + 1;
       return { incrementedValue };
     },
   });
 
   const squareValue = new Step({
-    id: 'stepThree',
+    id: 'squareValue',
     description: 'Squares the input value',
-    inputSchema: z.object({
-      valueToSquare: z.number(),
-    }),
     outputSchema: z.object({
       squaredValue: z.number(),
     }),
     execute: async ({ context }) => {
-      const squaredValue = context.valueToSquare * context.valueToSquare;
+      const valueToSquare = context?.machineContext?.getStepPayload<{ doubledValue: number }>(
+        'doubleValue',
+      )?.doubledValue;
+      if (!valueToSquare) throw new Error('No value to square provided');
+      const squaredValue = valueToSquare * valueToSquare;
       return { squaredValue };
     },
   });
@@ -54,33 +55,7 @@ async function main() {
     }),
   });
 
-  branchedWorkflow
-    .step(doubleValue, {
-      variables: {
-        inputValue: {
-          step: 'trigger',
-          path: 'firstValue',
-        },
-      },
-    })
-    .then(incrementByOne, {
-      variables: {
-        valueToIncrement: {
-          step: doubleValue,
-          path: 'doubledValue',
-        },
-      },
-    })
-    .after(doubleValue)
-    .step(squareValue, {
-      variables: {
-        valueToSquare: {
-          step: doubleValue,
-          path: 'doubledValue',
-        },
-      },
-    })
-    .commit();
+  branchedWorkflow.step(doubleValue).then(incrementByOne).after(doubleValue).step(squareValue).commit();
 
   const { runId, start } = branchedWorkflow.createRun();
 
