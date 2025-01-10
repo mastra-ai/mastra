@@ -41,6 +41,7 @@ import { embed, MDocument, PgVector, createVectorQueryTool, createDocumentChunke
 ## Tool Creation
 
 ### Vectory Query Tool
+Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
 ```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',
@@ -64,6 +65,7 @@ const cleanedVectorQueryTool = createVectorQueryTool({
 ```
 
 ### Chunk Tool
+Using createDocumentChunker imported from @mastra/rag, you can create a tool that chunk the document and send the chunks to your agent.
 ```typescript copy showLineNumbers{24} filename="src/mastra/index.ts"
 const doc = MDocument.fromText(yourText);
 
@@ -121,6 +123,9 @@ export const ragAgentThree = new Agent({
 ```
 
 ## Instantiate PgVector and Mastra
+
+Instantiate PgVector and Mastra with all components:
+
 ```typescript copy showLineNumbers{72} filename="src/mastra/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
@@ -134,6 +139,7 @@ const processAgent = mastra.getAgent('ragAgentThree');
 ```
 
 ## Document Processing
+Chunk the initial document clean them using the processAgent.
 ```typescript copy showLineNumbers{82} filename="src/mastra/index.ts"
 const chunks = await doc.chunk({
   strategy: 'recursive',
@@ -144,7 +150,7 @@ const chunks = await doc.chunk({
 
 const chunkPrompt = `Take the chunks returned from the tool and clean them up according to the instructions provided. Make sure to filter out irrelevant information and remove duplicates.`;
 
-const newChunks = await densityAgent.generate(chunkPrompt);
+const newChunks = await processAgent.generate(chunkPrompt);
 const updatedDoc = MDocument.fromText(newChunks.text);
 
 const updatedChunks = await updatedDoc.chunk({

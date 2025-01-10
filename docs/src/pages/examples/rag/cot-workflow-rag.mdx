@@ -275,9 +275,9 @@ ragWorkflow
 ragWorkflow.commit();
 ```
 
-## Mastra Instance Creation
+## Instantiate PgVector and Mastra
 
-Initialize Mastra with all components:
+Instantiate PgVector and Mastra with all components:
 
 ```typescript copy showLineNumbers{198} filename="src/mastra/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);

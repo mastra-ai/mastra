@@ -68,7 +68,9 @@ export const ragAgent = new Agent({
 })
 ```
 
-## PgVector creation and Mastra Instantiation
+## Instantiate PgVector and Mastra
+
+Instantiate PgVector and Mastra with all components:
 
 ```typescript copy showLineNumbers{28} filename="src/mastra/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);

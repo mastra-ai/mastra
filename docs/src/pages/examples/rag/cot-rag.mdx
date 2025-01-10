@@ -82,7 +82,9 @@ FINAL ANSWER:
 })
 ```
 
-## PgVector creation and Mastra Instantiation
+## Instantiate PgVector and Mastra
+
+Instantiate PgVector and Mastra with all components:
 
 ```typescript copy showLineNumbers{41} filename="src/mastra/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
@@ -95,6 +97,8 @@ const agent = mastra.getAgent('ragAgent')
 ```
 
 ## Document Processing
+
+Create a document and process it into chunks:
 
 ```typescript copy showLineNumbers{49} filename="src/mastra/index.ts"
 const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`) // Your text here
