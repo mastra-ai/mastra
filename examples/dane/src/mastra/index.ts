@@ -4,9 +4,9 @@ import { UpstashKVMemory } from '@mastra/memory';
 
 import { dane, daneCommitMessage, daneIssueLabeler, danePackagePublisher } from './agents/index.js';
 import { firecrawl } from './integrations/index.js';
-import { telephoneGameWorkflow } from './workflows/delete-file.js';
 import { messageWorkflow, githubIssueLabeler, commitMessageGenerator } from './workflows/index.js';
 import { packagePublisher } from './workflows/publish-packages.js';
+import { telephoneGameWorkflow } from './workflows/telephone-game.js';
 
 const engine = new PostgresEngine({
   url: 'postgres://postgres:postgres@localhost:5433/mastra',
