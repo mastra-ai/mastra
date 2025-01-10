@@ -7,7 +7,7 @@ export async function telephone() {
   console.log(chalk.green("Hi! I'm Dane!"));
   console.log(chalk.green('Lets play telephone..\n'));
 
-  const workflow = mastra.getWorkflow('deleteFile');
+  const workflow = mastra.getWorkflow('telephoneGame');
 
   const { runId, start } = await workflow.createRun();
 
