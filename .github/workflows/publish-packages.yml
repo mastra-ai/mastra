@@ -54,6 +54,9 @@ jobs:
         run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
 
+      - name: Build core
+        run: pnpm build:core
+
       - name: Build engine
         run: pnpm build:engine && pnpm copy:drizzle
 
