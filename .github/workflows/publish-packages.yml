@@ -54,6 +54,11 @@ jobs:
         run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
 
+      - name: Engine generate
+        run: pnpm dlx mastra engine generate
+        env:
+          DB_URL: "postgres://postgres:postgres@localhost:5433/mastra"
+
       - name: Engine migrate
         run: pnpm dlx mastra engine migrate
         env:
