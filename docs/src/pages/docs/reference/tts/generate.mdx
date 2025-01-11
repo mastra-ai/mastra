@@ -1,0 +1,81 @@
+# `generate()`
+
+The `generate()` method is used to interact with the TTS model to produce an audio response. This method accepts `text` and `voice` as parameters.
+
+## Parameters
+
+
+<PropertiesTable
+  content={[
+    {
+      name: 'text',
+      type: 'string',
+      description: 'The messages to be processed by TTS.',
+    },
+    {
+      name: 'voice',
+      type: 'string',
+      description: 'Voice ID to be used with generation.',
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: 'audioResult',
+      type: 'Readable',
+      isOptional: true,
+      description: 'The generated audio stream',
+    },
+  ]}
+/>
+
+## Examples
+
+### Basic Audio Generation (ElevenLabs)
+
+```typescript
+import { ElevenLabsTTS } from '@mastra/tts'
+
+ const tts = new ElevenLabsTTS({
+    model: {
+      name: 'eleven_multilingual_v2',
+      apiKey: process.env.ELEVENLABS_API_KEY!,
+    },
+  });
+
+const voices = await tts.voices();
+const voiceId = voices?.[0]?.voice_id!;
+
+const { audioResult } = await tts.generate({ text: "What is AI?", voice: voiceId });
+
+await writeFile(path.join(process.cwd(), '/test-outputs/generate-output.mp3'), audioBuffer);
+```
+
+### Basic Audio Generation (OpenAI)
+
+```typescript
+import { OpenAITTS } from '@mastra/tts'
+
+ const tts = new OpenAITTS({
+    model: {
+      name: 'tts-1',
+      apiKey: process.env.OPENAI_API_KEY!,
+    },
+  });
+
+const voices = await tts.voices();
+const voiceId = voices?.[0]?.voice_id!;
+
+const { audioResult } = await tts.generate({ text: "What is AI?", voice: voiceId });
+
+const outputPath = path.join(process.cwd(), 'test-outputs/open-aigenerate-test.mp3');
+writeFileSync(outputPath, audioResult);
+```
+
+## Related Methods
+
+For streaming audio responses, see the [`stream()`](./stream.mdx) method documentation.

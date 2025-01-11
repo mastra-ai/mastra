@@ -9,6 +9,7 @@ export const RegisteredLogger = {
   AGENT: 'AGENT',
   WORKFLOW: 'WORKFLOW',
   LLM: 'LLM',
+  TTS: 'TTS',
 } as const;
 
 export type RegisteredLogger = (typeof RegisteredLogger)[keyof typeof RegisteredLogger];

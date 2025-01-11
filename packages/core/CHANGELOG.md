@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.57
+
+### Patch Changes
+
+- fd494a3: TTS module
+
 ## 0.1.27-alpha.56
 
 ### Patch Changes
