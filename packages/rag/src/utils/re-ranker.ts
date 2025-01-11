@@ -13,7 +13,7 @@ type WeightConfig = {
   position?: number;
 };
 
-interface RerankParams {
+export interface RerankParams {
   query: string;
   vectorStoreResults: QueryResult[];
   queryEmbedding?: number[];
@@ -30,7 +30,7 @@ interface RerankDetails {
   };
 }
 
-interface RerankResult {
+export interface RerankResult {
   result: QueryResult;
   score: number;
   details: RerankDetails;
