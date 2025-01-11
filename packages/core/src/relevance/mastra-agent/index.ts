@@ -1,9 +1,9 @@
 import { Agent } from '../../agent';
 import { ModelConfig } from '../../llm/types';
-import { CompletionProvider, createSimilarityPrompt } from '../completion-provider';
+import { RelevanceScoreProvider, createSimilarityPrompt } from '../relevance-score-provider';
 
 // Mastra Agent implementation
-export class AgentCompletionProvider implements CompletionProvider {
+export class MastraAgentRelevanceScorer implements RelevanceScoreProvider {
   private agent: Agent;
 
   constructor(provider: string, name: string) {

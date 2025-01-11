@@ -1,4 +1,4 @@
-import { AgentCompletionProvider, CohereCompletionProvider, CompletionProvider, QueryResult } from '@mastra/core';
+import { MastraAgentRelevanceScorer, CohereRelevanceScorer, RelevanceScoreProvider, QueryResult } from '@mastra/core';
 
 // Default weights for different scoring components
 const DEFAULT_WEIGHTS = {
@@ -49,7 +49,7 @@ export interface RerankerOptions {
 
 // Takes in a list of results from a vector store and reranks them based on semantic, vector, and position scores
 export class RagReranker {
-  private semanticProvider: CompletionProvider;
+  private semanticProvider: RelevanceScoreProvider;
   private weights: Required<WeightConfig>;
 
   constructor(options: RerankerOptions) {
@@ -64,12 +64,15 @@ export class RagReranker {
       if (!options.cohereApiKey) {
         throw new Error('Cohere API key required when using Cohere provider');
       }
-      this.semanticProvider = new CohereCompletionProvider(options.cohereApiKey, options.cohereModel ?? '');
+      this.semanticProvider = new CohereRelevanceScorer(options.cohereApiKey, options.cohereModel ?? '');
     } else {
       if (!options.agentProvider) {
         throw new Error('Agent provider options required when using Agent provider');
       }
-      this.semanticProvider = new AgentCompletionProvider(options.agentProvider.provider, options.agentProvider.name);
+      this.semanticProvider = new MastraAgentRelevanceScorer(
+        options.agentProvider.provider,
+        options.agentProvider.name,
+      );
     }
   }
 

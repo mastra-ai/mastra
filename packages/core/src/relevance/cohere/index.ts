@@ -1,9 +1,9 @@
 import { CohereClient } from 'cohere-ai';
 
-import { CompletionProvider } from '../completion-provider';
+import { RelevanceScoreProvider } from '../relevance-score-provider';
 
 // Cohere implementation
-export class CohereCompletionProvider implements CompletionProvider {
+export class CohereRelevanceScorer implements RelevanceScoreProvider {
   private client: any;
   private model: string;
   constructor(apiKey: string, model?: string) {
