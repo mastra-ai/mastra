@@ -35,49 +35,6 @@ The `stream()` method is used to interact with the TTS model to produce an audio
 
 ## Examples
 
-### Basic Audio Generation (ElevenLabs)
-
-```typescript
-import { ElevenLabsTTS } from '@mastra/tts'
-
- const tts = new ElevenLabsTTS({
-    model: {
-      name: 'eleven_multilingual_v2',
-      apiKey: process.env.ELEVENLABS_API_KEY!,
-    },
-  });
-
-const voices = await tts.voices();
-const voiceId = voices?.[0]?.voice_id!;
-
-const { audioResult } = await tts.stream({ text: "What is AI?", voice: voiceId });
-
-// Create a write stream to simulate real-time playback
-const outputPath = path.join(process.cwd(), '/test-outputs/streaming-output.mp3');
-const writeStream = createWriteStream(outputPath);
-
-let firstChunkTime: number | null = null;
-let lastChunkTime: number | null = null;
-let totalChunks = 0;
-
-// Process chunks as they arrive
-for await (const chunk of audioResult) {
-    if (!firstChunkTime) {
-    firstChunkTime = Date.now();
-    }
-    lastChunkTime = Date.now();
-    totalChunks++;
-
-    // Write chunk immediately as it arrives
-    writeStream.write(chunk);
-
-    // Log timing of chunk arrival
-    console.log(`Received chunk ${totalChunks} at ${lastChunkTime - firstChunkTime!}ms`);
-}
-
-writeStream.end()
-```
-
 ### Basic Audio Stream (ElevenLabs)
 
 ```typescript
