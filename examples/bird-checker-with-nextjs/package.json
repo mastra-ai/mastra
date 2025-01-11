@@ -9,7 +9,7 @@
     "lint": "next lint",
     "mastra:init": "pnpm dlx mastra init",
     "mastra:dev": "pnpm dlx mastra dev",
-    "mastra:migrate": "pnpm dlx mastra migrate"
+    "mastra:migrate": "pnpm dlx mastra engine migrate"
   },
   "dependencies": {
     "@mastra/core": "workspace:*",
