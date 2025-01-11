@@ -1,0 +1,66 @@
+import { GithubLink } from "../../../components/github-link";
+
+# Making a Bird Checker
+
+We will get a random image from [Unsplash](https://unsplash.com/) that matches a selected query and uses a [Mastra AI Agent](https://mastra.ai/docs/guide/creating-agents/00-overview) to determine if it is a bird or not
+
+```ts showLineNumbers copy
+import { Agent, createTool } from "@mastra/core";
+import { z } from "zod";
+
+const instructions = `
+  You can view an image and figure out if it is a bird or not. 
+  You can also figure out the species of the bird and where the picture was taken.
+`;
+
+export const birdCheckerAgent = new Agent({
+  name: 'Bird checker',
+  instructions,
+  model: {
+    provider: 'ANTHROPIC',
+    name: 'claude-3-haiku-20240307',
+    toolChoice: 'auto',
+  },
+});
+
+const imageUrl = getRandomImage();
+
+const response = await birdCheckerAgent.generate(
+  [
+    {
+        role: 'user',
+        content: [
+        {
+            type: 'image',
+            image: imageUrl,
+        },
+        {
+            type: 'text',
+            text: "view this image and let me know if it's a bird or not, and the scientific name of the bird without any explanation. Also summarize the location for this picture in one or two short sentences understandable by a high school student",
+        },
+        ],
+    },
+    ],
+    {
+    output: z.object({
+        bird: z.boolean(),
+        species: z.string(),
+        location: z.string(),
+    }),
+  },
+);
+
+console.log(result.text);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/bird-checker-with-nextjs/README.md"
+  }
+/>
