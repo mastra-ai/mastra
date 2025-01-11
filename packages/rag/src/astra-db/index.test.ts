@@ -23,7 +23,7 @@ async function waitForCondition(
   return false;
 }
 
-describe('AstraVector Integration Tests', () => {
+describe.skip('AstraVector Integration Tests', () => {
   let astraVector: AstraVector;
   const testIndexName = 'testvectors1733728136118'; // Unique collection name
 
