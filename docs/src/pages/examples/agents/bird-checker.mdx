@@ -23,6 +23,7 @@ export const birdCheckerAgent = new Agent({
   },
 });
 
+// Get the image url from Unsplash
 const imageUrl = getRandomImage();
 
 const response = await birdCheckerAgent.generate(
@@ -50,7 +51,7 @@ const response = await birdCheckerAgent.generate(
   },
 );
 
-console.log(result.text);
+console.log(response.text);
 ```
 
 <br />
