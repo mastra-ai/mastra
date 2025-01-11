@@ -54,15 +54,13 @@ jobs:
         run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
 
-      - name: Engine generate
-        run: pnpm dlx mastra engine generate
-        env:
-          DB_URL: "postgres://postgres:postgres@localhost:5433/mastra"
+      - name: Build engine
+        run: pnpm build:engine && pnpm copy:drizzle
 
-      - name: Engine migrate
-        run: pnpm dlx mastra engine migrate
+      - name: Setup database
+        run: pnpm db:setup
         env:
-          DB_URL: "postgres://postgres:postgres@localhost:5433/mastra"
+          DB_URL: "postgresql://postgres:postgres@localhost:5433/mastra"
 
       - name: Install dane cli
         run: pnpm install -g @mastra/dane@alpha
