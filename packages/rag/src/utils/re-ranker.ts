@@ -64,10 +64,7 @@ export class RagReranker {
       if (!options.cohereApiKey) {
         throw new Error('Cohere API key required when using Cohere provider');
       }
-      if (!options.cohereModel) {
-        throw new Error('Cohere model required when using Cohere provider');
-      }
-      this.semanticProvider = new CohereCompletionProvider(options.cohereApiKey, options.cohereModel);
+      this.semanticProvider = new CohereCompletionProvider(options.cohereApiKey, options.cohereModel ?? '');
     } else {
       if (!options.agentProvider) {
         throw new Error('Agent provider options required when using Agent provider');
