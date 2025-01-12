@@ -1,0 +1,19 @@
+{
+  "name": "mastra-needle-example",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Example of using Needle with Mastra for RAG",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@needle-ai/needle": "^1.0.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.12",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
