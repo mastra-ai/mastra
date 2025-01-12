@@ -203,7 +203,7 @@ describe('PgVector', () => {
     // Test numeric comparisons
     it('should filter with gt operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        price: { operator: 'gt', value: 75 },
+        price: { gt: 75 },
       });
       expect(results).toHaveLength(1);
       expect(results[0]?.metadata?.price).toBe(100);
@@ -211,7 +211,7 @@ describe('PgVector', () => {
 
     it('should filter with lte operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        price: { operator: 'lte', value: 50 },
+        price: { lte: 50 },
       });
       expect(results).toHaveLength(2);
       results.forEach(result => {
@@ -222,7 +222,7 @@ describe('PgVector', () => {
     // Test string operations
     it('should filter with like operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        category: { operator: 'like', value: 'elect%' },
+        category: { like: 'elect%' },
       });
       expect(results).toHaveLength(2);
       results.forEach(result => {
@@ -232,7 +232,7 @@ describe('PgVector', () => {
 
     it('should filter with ilike operator for case-insensitive search', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        category: { operator: 'ilike', value: 'BOOKS' },
+        category: { ilike: 'BOOKS' },
       });
       expect(results).toHaveLength(2);
       results.forEach(result => {
@@ -243,7 +243,7 @@ describe('PgVector', () => {
     // Test array operations
     it('should filter with in operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        category: { operator: 'in', value: ['electronics', 'clothing'] },
+        category: { in: ['electronics', 'clothing'] },
       });
       expect(results).toHaveLength(3);
       results.forEach(result => {
@@ -254,7 +254,7 @@ describe('PgVector', () => {
     // Test contains operator with different types
     it('should filter with contains operator for array values', async () => {
       const results = await pgVector.query(indexName, [1, 0.1, 0], 10, {
-        tags: { operator: 'contains', value: ['new'] },
+        tags: { contains: ['new'] },
       });
       expect(results.length).toBeGreaterThan(0);
       results.forEach(result => {
@@ -264,7 +264,7 @@ describe('PgVector', () => {
 
     it('should filter with contains operator for exact field match', async () => {
       const results = await pgVector.query(indexName, [1, 0.1, 0], 10, {
-        category: { operator: 'contains', value: 'electronics' },
+        category: { contains: 'electronics' },
       });
       expect(results.length).toBeGreaterThan(0);
       results.forEach(result => {
@@ -286,7 +286,7 @@ describe('PgVector', () => {
       );
 
       const results = await pgVector.query(indexName, [1, 0.1, 0], 10, {
-        details: { operator: 'contains', value: { color: 'red' } },
+        details: { contains: { color: 'red' } },
       });
       expect(results.length).toBeGreaterThan(0);
       results.forEach(result => {
@@ -297,7 +297,7 @@ describe('PgVector', () => {
     // Test exists operator
     it('should filter with exists operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        active: { operator: 'exists', value: null },
+        active: { exists: null },
       });
       expect(results).toHaveLength(5);
     });
@@ -306,7 +306,7 @@ describe('PgVector', () => {
     it('should handle multiple filter conditions', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
         category: 'electronics',
-        price: { operator: 'gt', value: 75 },
+        price: { gt: 75 },
         active: true,
       });
       expect(results).toHaveLength(1);
@@ -322,7 +322,7 @@ describe('PgVector', () => {
     // Test edge cases
     it('should handle empty result sets with valid filters', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        price: { operator: 'gt', value: 1000 },
+        price: { gt: 1000 },
       });
       expect(results).toHaveLength(0);
     });
@@ -330,7 +330,7 @@ describe('PgVector', () => {
     it('should throw error for invalid operator', async () => {
       await expect(
         pgVector.query(indexName, [1, 0, 0], 10, {
-          price: { operator: 'invalid' as any, value: 100 },
+          price: { invalid: 100 },
         }),
       ).rejects.toThrow('Unsupported operator: invalid');
     });
