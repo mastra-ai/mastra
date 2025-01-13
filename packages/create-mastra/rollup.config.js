@@ -33,44 +33,4 @@ export default defineConfig({
     commonjs(),
   ],
   external,
-  // mode: 'production',
-  // plugins: [
-  //   externalizeDeps({
-  //     nodeBuiltins: true,
-  //     nodeBuiltins: true,
-  //     except: ['mastra'],
-  //   }),
-  // ],
-  // build: {
-  //   minify: false,
-  //   sourcemap: true,
-  //   target: 'esnext',
-
-  //   lib: {
-  //     entry: resolve(__dirname, 'src/index.ts'),
-  //     // name: 'CreateMastra',
-  //     formats: ['es'],
-  //   },
-  //   rollupOptions: {
-  //     output: {
-  //       preserveModules: true,
-  //     },
-  //   },
-  // },
 });
-// target: 'node',
-// ssr: {
-//   // SSR-specific config
-//   target: 'node',
-//   noExternal: ['mastra'], // Bundle mastra dependency
-// },
-// build: {
-//   target: 'node20', // Match engine requirement from package.json
-//   minify: false, // Avoid minification for better debugging
-//   sourcemap: true,
-//   rollupOptions: {
-//     output: {
-//       format: 'esm', // Match "type": "module" from package.json
-//     },
-//   },
-// },
