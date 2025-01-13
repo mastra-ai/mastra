@@ -1,18 +1,20 @@
 import { GithubLink } from '../../../components/github-link';
 
-# Basic RAG
+# Graph RAG
 
 This example demonstrates how to implement a Retrieval-Augmented Generation (RAG) system using Mastra, OpenAI embeddings, and PGVector for vector storage.
 
 ## Overview
 
-The system implements RAG using Mastra and OpenAI. Here's what it does:
+The system implements Graph RAG using Mastra and OpenAI. Here's what it does:
 1. Sets up a Mastra agent with GPT-4o-mini for response generation
-2. Creates a vector query tool to manage vector store interactions
+2. Creates a GraphRAG tool to manage vector store interactions and knowledge graph creation/traversal
 3. Chunks text documents into smaller segments
 4. Creates embeddings for these chunks
 5. Stores them in a PostgreSQL vector database
-6. Retrieves relevant chunks based on queries using vector query tool
+6. Creates a knowledge graph of relevant chunks based on queries using GraphRAG tool
+    - Tool returns results from vector store and creates knowledge graph 
+    - Traverses knowledge graph using query
 7. Generates context-aware responses using the Mastra agent
 
 ## Setup 
@@ -31,13 +33,13 @@ Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
 import { Mastra, Agent, EmbedManyResult } from '@mastra/core';
-import { embed, MDocument, PgVector, createVectorQueryTool } from '@mastra/rag';
+import { embed, MDocument, PgVector, createGraphRAGTool } from '@mastra/rag';
 ```
 
-## Vectory Query Tool Creation
-Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
+## GraphRAG Tool Creation
+Using createGraphRAGTool imported from @mastra/rag, you can create a tool that queries the vector database and converts the results into a knowledge graph.
 ```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
-const vectorQueryTool = createVectorQueryTool({
+const graphRagTool = createGraphRAGTool({
   vectorStoreName: 'pgVector',
   indexName: 'embeddings',
   options: {
@@ -45,7 +47,11 @@ const vectorQueryTool = createVectorQueryTool({
     model: 'text-embedding-ada-002',
     maxRetries: 3,
   },
-  topK: 3,
+  graphOptions: {
+    dimension: 1536,
+    threshold: 0.7,
+  },
+  topK: 5,
 });
 ```
 
@@ -53,26 +59,31 @@ const vectorQueryTool = createVectorQueryTool({
 
 Set up the Mastra agent that will handle the responses:
 
-```typescript copy showLineNumbers{15} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{19} filename="src/mastra/index.ts"
 export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  instructions:
-    'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
+  name: 'GraphRAG Agent',
+  instructions: `You are a helpful assistant that answers questions based on the provided context. Format your answers as follows:
+
+1. DIRECT FACTS: List only the directly stated facts from the text relevant to the question (2-3 bullet points)
+2. CONNECTIONS MADE: List the relationships you found between different parts of the text (2-3 bullet points)
+3. CONCLUSION: One sentence summary that ties everything together
+
+Keep each section brief and focus on the most important points.`,
   model: {
     provider: 'OPEN_AI',
     name: 'gpt-4o-mini',
   },
   tools: {
-    vectorQueryTool,
+    graphRagTool,
   },
-})
+});
 ```
 
 ## Instantiate PgVector and Mastra
 
 Instantiate PgVector and Mastra with all components:
 
-```typescript copy showLineNumbers{28} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{37} filename="src/mastra/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
@@ -87,8 +98,8 @@ const agent = mastra.getAgent('ragAgent')
 
 Create a document and process it into chunks:
 
-```typescript copy showLineNumbers{37} filename="src/mastra/index.ts"
-const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`)
+```typescript copy showLineNumbers{46} filename="src/mastra/index.ts"
+const doc = MDocument.fromText(`Riverdale Heights: Community Development Study...`)
 
 const chunks = await doc.chunk({
   strategy: 'recursive',
@@ -102,7 +113,7 @@ const chunks = await doc.chunk({
 
 Generate embeddings for the chunks and store them in the vector database:
 
-```typescript copy showLineNumbers{46} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{55} filename="src/mastra/index.ts"
 const { embeddings } = await embed(chunks, {
   provider: "OPEN_AI",
   model: "text-embedding-ada-002",
@@ -122,15 +133,14 @@ await vectorStore.upsert(
 
 Function to generate responses based on retrieved context:
 
-```typescript copy showLineNumbers{60} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{69} filename="src/mastra/index.ts"
 async function generateResponse(query: string) {
   const prompt = `
-      Please answer the following question:
-      ${query}
+    Please answer the following question using both semantic and graph-based context:
+    ${query}
 
-      Please base your answer only on the context provided in the tool. If the context doesn't 
-      contain enough information to fully answer the question, please state that explicitly.
-      `
+    Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
+    `;
 
   const completion = await agent.generate(prompt)
   return completion.text
@@ -139,7 +149,7 @@ async function generateResponse(query: string) {
 
 ## Example Usage
 
-```typescript copy showLineNumbers{73} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{81} filename="src/mastra/index.ts"
 async function answerQueries(queries: string[]) {
   for (const query of queries) {
     try {
@@ -153,10 +163,13 @@ async function answerQueries(queries: string[]) {
 }
 
 const queries = [
-  "What are the main points in the article?",
-  "How does temperature affect crop yields?",
-  "What solutions are farmers implementing?",
-  "What are the future challenges mentioned in the text?",
+  "What are the direct and indirect effects of early railway decisions on Riverdale Heights' current state?",
+
+  'How have changes in transportation infrastructure affected different generations of local businesses and community spaces?',
+
+  'Compare how the Rossi family business and Thompson Steel Works responded to major infrastructure changes, and how their responses affected the community.',
+
+  'Trace how the transformation of the Thompson Steel Works site has influenced surrounding businesses and cultural spaces from 1932 to present.',
 ];
 
 await answerQueries(queries)

@@ -101,7 +101,7 @@ const agent = mastra.getAgent('ragAgent')
 Create a document and process it into chunks:
 
 ```typescript copy showLineNumbers{49} filename="src/mastra/index.ts"
-const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`) // Your text here
+const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`)
 
 const chunks = await doc.chunk({
   strategy: 'recursive',

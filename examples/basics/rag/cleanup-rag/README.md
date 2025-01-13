@@ -15,7 +15,7 @@ A simple example showing how to optimize information density with RAG using Mast
 
    ```bash
    git clone https://github.com/mastra-ai/mastra
-   cd examples/basics/rag/retrieve-results
+   cd examples/basics/rag/cleanup-rag
    ```
 
 2. Copy the environment variables file and add your OpenAI API key:
