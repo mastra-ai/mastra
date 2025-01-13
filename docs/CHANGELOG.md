@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.1-alpha.12
+
+### Patch Changes
+
+- 606bbbe: Adds -f option to engine commands to specify custom docker config. Updates Engine docs.
+
 ## 0.1.1-alpha.11
 
 ### Patch Changes
