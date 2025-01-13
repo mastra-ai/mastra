@@ -2,8 +2,14 @@
  * Core component configuration for prompt template sections.
  * Defines the structure and behavior of individual prompt components
  * including constraints, examples, and various thinking approaches.
+ *
  */
 interface PromptTemplateComponent {
+  /**
+   * Input data for the propmt component
+   */
+  input: string;
+
   /**
    * Response limitations/requirements
    */
@@ -16,17 +22,6 @@ interface PromptTemplateComponent {
     input: string;
     output: string;
   }[];
-
-  /**
-   * Text delimiter options for structure
-   */
-  delimiters:
-    | 'OFF'
-    | 'QUOTES'
-    | {
-        type: 'XML';
-        tag: string;
-      };
 
   /**
    * Cognitive enhancement configurations
@@ -69,11 +64,14 @@ interface PromptTemplateComponent {
      */
     verificationSteps?: string[];
   };
-
   /**
    * Emphasis configurations
    */
   emphasis: { type: 'IMPORTANT !!!' } | { type: 'CALLOUT' } | { type: 'CUSTOM'; text: string };
+  /**
+   * Contextual information
+   */
+  context: string;
 }
 
 /**
@@ -118,10 +116,9 @@ interface PromptTemplateConstructor extends Partial<PromptTemplateComponent> {
   as?: 'system' | 'user';
 }
 
-export class PromptTemplate {
-  config: PromptTemplateConstructor;
-  prompt: string[] = [];
-  components: Partial<PromptTemplateComponent>[] = [];
+export class PromptTemplate<TVariables extends Record<string, any> | undefined = undefined> {
+  private config: PromptTemplateConstructor;
+  private components: Partial<PromptTemplateComponent>[] = [];
 
   constructor(config: PromptTemplateConstructor) {
     this.config = config;
@@ -151,14 +148,28 @@ export class PromptTemplate {
     }
 
     /*
+     * Add context if specified
+     */
+    if (config.context) {
+      component.push(`[CONTEXT] \n${config.context} \n`);
+    }
+
+    /*
      * Add examples if specified
      */
     if (config.examples?.length) {
       component.push('\nEXAMPLES:');
       config.examples.forEach(example => {
         component.push(`Input: ${example.input}`);
-        component.push(`Output: ${example.output}\n`);
+        component.push(`Output: ${example.output}`);
       });
+    }
+
+    /*
+     * Add input if specified
+     */
+    if (config.input) {
+      component.push(`${config.input} \n`);
     }
 
     /*
@@ -169,7 +180,7 @@ export class PromptTemplate {
        * Add chain of thought if enabled
        */
       if (config.thinking.autoChainOfThought) {
-        component.push("Let's solve this step by step");
+        component.push("Let's solve this step by step \n");
       }
       /*
        * Add steps if specified
@@ -199,14 +210,22 @@ export class PromptTemplate {
         });
       }
 
+      /*
+       * Add self-ask if enabled
+       */
       if (config.thinking.autoSelfAsk) {
-        component.push("\nLet's self-ask and verify our solution");
+        component.push("\nLet's self-ask and verify our solution \n");
       }
-
+      /*
+       * Add verification if enabled
+       */
       if (config.thinking.autoVerification) {
-        component.push("\nLet's verify our solution");
+        component.push("\nLet's verify our solution \n");
       }
 
+      /*
+       * Add verification steps if specified
+       */
       if (config.thinking.verificationSteps?.length) {
         component.push("\nLet's verify our solution");
         config.thinking.verificationSteps.forEach((step, index) => {
@@ -271,20 +290,31 @@ export class PromptTemplate {
 
   component(config: Partial<PromptTemplateComponent>) {
     this.components.push(config);
+    return this;
   }
 
-  toString(): string {
+  toString(variables?: TVariables): string {
     const { intro, main, outro } = this.layout;
+
     const components = this.components.flatMap(component => this.buildPromptComponent(component));
 
-    const prompt = [intro, main, components, outro].join('\n');
-    return prompt;
+    const prompt = [intro.join('\n'), main.join('\n'), components.join('\n'), outro.join('\n')]
+      .filter(Boolean)
+      .join('\n\n');
+
+    let hydratedPrompt = prompt;
+
+    Object.entries(variables ?? {})?.forEach(([k, v], key) => {
+      hydratedPrompt = hydratedPrompt.replace(`{{${k}}`, `${v}`);
+    });
+
+    return hydratedPrompt;
   }
 
-  toMessage() {
+  toMessage(variables?: TVariables) {
     return {
       role: this.config.as || 'system',
-      content: this.toString(),
+      content: this.toString(variables),
     };
   }
 }
