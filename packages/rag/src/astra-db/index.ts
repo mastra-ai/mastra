@@ -85,6 +85,7 @@ export class AstraVector extends MastraVector {
    * @param {number[]} queryVector - The vector to query with.
    * @param {number} [topK] - The maximum number of results to return.
    * @param {Record<string, any>} [filter] - An optional filter to apply to the query. For more on filters in Astra DB, see the filtering reference: https://docs.datastax.com/en/astra-db-serverless/api-reference/documents.html#operators
+   * @param {boolean} [includeVectors=false] - Whether to include the vectors in the response.
    * @returns {Promise<QueryResult[]>} A promise that resolves to an array of query results.
    */
   async query(
@@ -92,6 +93,7 @@ export class AstraVector extends MastraVector {
     queryVector: number[],
     topK?: number,
     filter?: Record<string, any>,
+    includeVector: boolean = false,
   ): Promise<QueryResult[]> {
     const collection = this.#db.collection(indexName);
 
@@ -107,6 +109,7 @@ export class AstraVector extends MastraVector {
       id: result.id,
       score: result.$similarity,
       metadata: result.metadata,
+      ...(includeVector && { vector: result.$vector }),
     }));
   }
 

@@ -97,6 +97,7 @@ export class ChromaVector extends MastraVector {
     queryVector: number[],
     topK: number = 10,
     filter?: Record<string, any>,
+    includeVector: boolean = false,
   ): Promise<QueryResult[]> {
     const collection = await this.getCollection(indexName, true);
 
@@ -111,6 +112,7 @@ export class ChromaVector extends MastraVector {
       id,
       score: results.distances?.[0]?.[index] || 0,
       metadata: results.metadatas?.[0]?.[index] || {},
+      ...(includeVector && { vector: results.embeddings?.[0]?.[index] || [] }),
     }));
   }
 

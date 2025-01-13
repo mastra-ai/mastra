@@ -55,6 +55,15 @@ describe('Qdrant Integration Tests', () => {
       expect(results?.[0]?.metadata).toBeDefined();
     }, 50000);
 
+    it('should query vectors and return vector in results', async () => {
+      const queryVector = [1.0, 0.1, 0.1];
+      const results = await qdrant.query(testCollectionName, queryVector, 3, undefined, true);
+
+      expect(results).toHaveLength(3);
+      expect(results?.[0]?.vector).toBeDefined();
+      expect(results?.[0]?.vector).toHaveLength(dimension);
+    });
+
     it('should query vectors with metadata filter', async () => {
       const queryVector = [0.0, 1.0, 0.0];
       const filter = {

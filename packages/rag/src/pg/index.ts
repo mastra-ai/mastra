@@ -31,7 +31,8 @@ export class PgVector extends MastraVector {
     queryVector: number[],
     topK: number = 10,
     filter?: Filter,
-    minScore: number = 0, // Optional minimum score threshold
+    includeVector: boolean = false,
+    minScore: number = 0,
   ): Promise<QueryResult[]> {
     const client = await this.pool.connect();
     try {
@@ -80,6 +81,7 @@ export class PgVector extends MastraVector {
                     vector_id as id,
                     1 - (embedding <=> '${vectorStr}'::vector) as score,
                     metadata
+                    ${includeVector ? ', embedding' : ''}
                 FROM ${indexName}
                 WHERE true ${filterQuery}
             )
@@ -95,6 +97,7 @@ export class PgVector extends MastraVector {
         id: row.id,
         score: row.score,
         metadata: row.metadata,
+        ...(includeVector && { vector: row.embedding }),
       }));
     } finally {
       client.release();

@@ -140,7 +140,14 @@ describe('PgVector', () => {
     it('should return closest vectors', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 1);
       expect(results).toHaveLength(1);
+      expect(results[0]?.vector).toBe(undefined);
       expect(results[0]?.score).toBeCloseTo(1, 5);
+    });
+
+    it('should return vector with result', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 1, undefined, true);
+      expect(results).toHaveLength(1);
+      expect(results[0]?.vector).toBe('[1,0,0]');
     });
 
     it('should respect topK parameter', async () => {
@@ -342,6 +349,7 @@ describe('PgVector', () => {
         [1, 0, 0],
         10,
         { category: 'electronics' },
+        false,
         0.9, // minScore
       );
       expect(results.length).toBeGreaterThan(0);
