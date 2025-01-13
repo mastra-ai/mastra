@@ -1,4 +1,5 @@
 import { execa } from 'execa';
+import fs from 'fs';
 import path from 'path';
 import { check } from 'tcp-port-used';
 import { fileURLToPath } from 'url';
@@ -141,5 +142,25 @@ export class DockerService {
         { replace: `${postgresPort}`, search: 'REPLACE_DB_PORT' },
       ],
     });
+  }
+
+  getComposeFile(composePath: string) {
+    const fileService = new FileService();
+    let composeFile: string;
+    if (composePath) {
+      if (!fs.existsSync(composePath)) {
+        throw new Error(`Docker compose file not found: ${composePath}`);
+      }
+      composeFile = composePath;
+    } else {
+      composeFile = fileService.getFirstExistingFile([
+        'mastra-pg.docker-compose.yaml',
+        'mastra-pg.docker-compose.yml',
+        'docker-compose.yaml',
+        'docker-compose.yml',
+      ]);
+    }
+
+    return composeFile;
   }
 }
