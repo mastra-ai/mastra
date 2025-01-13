@@ -1,14 +1,11 @@
 "use server";
 
-import { randomUUID } from "crypto";
-
 import { PLACES } from "@/lib/types";
 
 import { mastra } from "@/mastra";
-import { workflow } from "@/mastra/workflows/travel-submission";
 
-import { travelSchema } from "./utils";
 import { z } from "zod";
+import { travelSchema } from "./utils";
 
 const tripDataSchema = z.object({
   departureLocation: z.string().min(1, "Departure location is required"),
@@ -57,44 +54,6 @@ function processFormData(formData: FormData) {
   const parsedData = tripDataSchema.parse(formObject);
 
   return parsedData;
-}
-
-export async function runWorkflow({
-  userId,
-  formData,
-}: {
-  userId: string;
-  formData: FormData;
-}) {
-  const formObject = processFormData(formData);
-  console.log("formObject---runWorkflow", formObject);
-
-  const { start } = workflow.createRun();
-
-  const result = await start({
-    triggerData: {
-      userId,
-      sessionId: randomUUID(),
-      travelForm: {
-        departureLocation: formObject.departureLocation,
-        arrivalLocation: formObject.arrivalLocation,
-        tripGoals: formObject.tripGoals,
-        preferredFlightTimes: formObject.preferredFlightTimes,
-        flightPriority: formObject.flightPriority,
-        accommodationType: formObject.accommodationType,
-        hotelPriceRange: formObject.hotelPriceRange || "",
-        interests: formObject.interests,
-        startDate: formObject.startDate,
-        endDate: formObject.endDate,
-        departureCityId: formObject.departureCityId,
-        arrivalCityId: formObject.arrivalCityId,
-        arrivalAttractionId: formObject.arrivalAttractionId,
-        typeOfPlace: formObject.typeOfPlace,
-      },
-    },
-  });
-
-  return result;
 }
 
 export async function runAgent(formData: FormData) {
