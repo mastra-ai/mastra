@@ -1,0 +1,12 @@
+{
+  "name": "generate-text",
+  "type": "module",
+  "version": "0.0.1-alpha.0",
+  "private": true,
+  "scripts": {
+    "start": "pnpx tsx index.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*"
+  }
+}
