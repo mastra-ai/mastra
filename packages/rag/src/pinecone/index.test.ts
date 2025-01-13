@@ -77,6 +77,15 @@ describe.skip('PineconeVector Integration Tests', () => {
       expect(results).toHaveLength(1);
       expect(results?.[0]?.metadata?.label).toBe('y-axis');
     }, 500000);
+
+    it('should query vectors and return vectors in retsults', async () => {
+      const queryVector = [0.0, 1.0, 0.0];
+      const results = await pineconeVector.query(testIndexName, queryVector, 1, undefined, true);
+
+      expect(results).toHaveLength(1);
+      expect(results?.[0]?.vector).toBeDefined();
+      expect(results?.[0]?.vector).toHaveLength(dimension);
+    }, 500000);
   });
 
   describe('Error Handling', () => {

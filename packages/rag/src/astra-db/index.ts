@@ -101,6 +101,9 @@ export class AstraVector extends MastraVector {
       sort: { $vector: queryVector },
       limit: topK,
       includeSimilarity: true,
+      projection: {
+        $vector: includeVector ? true : false,
+      },
     });
 
     const results = await cursor.toArray();
