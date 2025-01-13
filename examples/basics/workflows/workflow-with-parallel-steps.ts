@@ -1,61 +1,52 @@
-import { Step, Workflow } from '@mastra/core';
-import { z } from 'zod';
-
+import { Step, Workflow } from "@mastra/core";
+import { z } from "zod"
+ 
 const stepOne = new Step({
-  id: 'stepOne',
-  inputSchema: z.object({
-    inputValue: z.number(),
-  }),
-  outputSchema: z.object({
-    doubledValue: z.number(),
-  }),
+  id: "stepOne",
   execute: async ({ context }) => {
-    const doubledValue = context.inputValue * 2;
+	  const triggerData = context.machineContext.triggerData
+    const doubledValue = triggerData.inputValue * 2;
     return { doubledValue };
   },
 });
-
+ 
 const stepTwo = new Step({
-  id: 'stepTwo',
-  inputSchema: z.object({
-    valueToIncrement: z.number(),
-  }),
-  outputSchema: z.object({
-    incrementedValue: z.number(),
-  }),
+  id: "stepTwo",
   execute: async ({ context }) => {
-    const incrementedValue = context.valueToIncrement + 1;
+	  const stepOneResult = context.machineContext.stepResults.stepOne.result
+    const incrementedValue = stepOneResult.doubledValue + 1;
     return { incrementedValue };
   },
 });
+ 
+const stepThree = new Step({
+  id: "stepThree",
+  execute: async ({ context }) => {
+	  const triggerData = context.machineContext.triggerData
+    const tripledValue = triggerData.inputValue * 3;
+    return { tripledValue };
+  },
+});
+  
+const stepFour = new Step({
+  id: "stepFour",
+  execute: async ({ context }) => {
+	  cconst stepThreeResult = context.machineContext.stepResults.stepThree.result
+    const isEven = stepThreeResult.tripledValue % 2 === 0;
+    return { isEven };
+  },
+});
 
-// Build the workflow
 const myWorkflow = new Workflow({
-  name: 'my-workflow',
+  name: "my-workflow",
   triggerSchema: z.object({
     inputValue: z.number(),
   }),
 });
-
-// run workflows in parallel
+ 
 myWorkflow
-  .step(stepOne, {
-    variables: {
-      inputValue: {
-        step: 'trigger',
-        path: 'inputValue',
-      },
-    },
-  })
-  .step(stepTwo, {
-    variables: {
-      valueToIncrement: {
-        step: 'trigger',
-        path: 'inputValue',
-      },
-    },
-  });
-myWorkflow.commit();
-
-const res = await myWorkflow.execute({ triggerData: { inputValue: 90 } });
-console.log(res.results);
+  .step(stepOne).then(stepTwo)
+  .step(stepThree).then(stepfour)
+  .commit()
+  
+const result = await myWorkflow.execute({ triggerData: { inputValue: 3 }})
