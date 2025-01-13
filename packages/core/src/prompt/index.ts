@@ -6,7 +6,7 @@
  */
 interface PromptTemplateComponent {
   /**
-   * Input data for the propmt component
+   * Input data for the propmt component, add variables here like so {{variable}}
    */
   input: string;
 
@@ -214,7 +214,7 @@ export class PromptTemplate<TVariables extends Record<string, any> | undefined =
        * Add self-ask if enabled
        */
       if (config.thinking.autoSelfAsk) {
-        component.push("\nLet's self-ask and verify our solution \n");
+        component.push("\nLet's break this down by asking ourselves questions \n");
       }
       /*
        * Add verification if enabled
@@ -304,8 +304,8 @@ export class PromptTemplate<TVariables extends Record<string, any> | undefined =
 
     let hydratedPrompt = prompt;
 
-    Object.entries(variables ?? {})?.forEach(([k, v], key) => {
-      hydratedPrompt = hydratedPrompt.replace(`{{${k}}`, `${v}`);
+    Object.entries(variables ?? {})?.forEach(([k, v]) => {
+      hydratedPrompt = hydratedPrompt.replace(`{{${k}}}`, `${v}`);
     });
 
     return hydratedPrompt;
@@ -317,4 +317,10 @@ export class PromptTemplate<TVariables extends Record<string, any> | undefined =
       content: this.toString(variables),
     };
   }
+}
+
+export function createPrompt<TVariables extends Record<string, any> | undefined = undefined>(
+  config: PromptTemplateConstructor,
+) {
+  return new PromptTemplate<TVariables>(config);
 }
