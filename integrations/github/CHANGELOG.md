@@ -1,5 +1,12 @@
 # @mastra/github
 
+## 1.0.3-alpha.43
+
+### Patch Changes
+
+- Updated dependencies [b524c22]
+  - @mastra/core@0.1.27-alpha.59
+
 ## 1.0.3-alpha.42
 
 ### Patch Changes
