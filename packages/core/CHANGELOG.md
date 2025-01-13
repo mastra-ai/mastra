@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.59
+
+### Patch Changes
+
+- b524c22: Package upgrades
+
 ## 0.1.27-alpha.58
 
 ### Patch Changes

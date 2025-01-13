@@ -1,5 +1,13 @@
 # mastra
 
+## 0.1.57-alpha.86
+
+### Patch Changes
+
+- 606bbbe: Adds -f option to engine commands to specify custom docker config. Updates Engine docs.
+- Updated dependencies [b524c22]
+  - @mastra/core@0.1.27-alpha.59
+
 ## 0.1.57-alpha.85
 
 ### Patch Changes

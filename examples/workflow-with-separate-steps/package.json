@@ -1,6 +1,6 @@
 {
   "name": "workflow-with-separate-steps",
-  "version": "1.0.1-alpha.5",
+  "version": "1.0.1-alpha.6",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
