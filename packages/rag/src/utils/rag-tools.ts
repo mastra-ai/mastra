@@ -1,8 +1,10 @@
-import { createTool, EmbeddingOptions, EmbedResult } from '@mastra/core';
+import { createTool, EmbeddingOptions, EmbedResult, MastraVector } from '@mastra/core';
 import { z } from 'zod';
 
 import { ChunkParams, MDocument } from '../document';
 import { embed } from '../embeddings';
+
+import { RagReranker, RerankerOptions } from './re-ranker';
 
 type VectorFilterType = 'pg' | 'astra' | 'qdrant' | 'upstash' | 'pinecone' | 'chroma' | '';
 
@@ -27,18 +29,44 @@ const createFilter = (filter: any, vectorFilterType: VectorFilterType) => {
   }
 };
 
+// Separate function to handle vector query search
+// Can be imported and used in custom tools
+export const vectorQuerySearch = async ({
+  indexName,
+  vectorStore,
+  queryText,
+  options,
+  queryFilter = {},
+  topK,
+}: {
+  indexName: string;
+  vectorStore: MastraVector;
+  queryText: string;
+  options: EmbeddingOptions;
+  queryFilter?: any;
+  topK: number;
+}) => {
+  const { embedding } = (await embed(queryText, options)) as EmbedResult<string>;
+  // Get relevant chunks from the vector database
+  const results = await vectorStore.query(indexName, embedding, topK, queryFilter);
+
+  return results;
+};
+
 export const createVectorQueryTool = ({
   vectorStoreName,
   indexName,
   topK = 10,
   options,
   vectorFilterType = '',
+  rerankOptions,
 }: {
   vectorStoreName: string;
   indexName: string;
   options: EmbeddingOptions;
   topK?: number;
   vectorFilterType?: VectorFilterType;
+  rerankOptions?: RerankerOptions;
 }) => {
   return createTool({
     id: `VectorQuery ${vectorStoreName} ${indexName} Tool`,
@@ -57,12 +85,30 @@ export const createVectorQueryTool = ({
     execute: async ({ context: { queryText, filter }, mastra }) => {
       let relevantContext = '';
       const vectorStore = mastra?.vectors?.[vectorStoreName];
-      const { embedding } = (await embed(queryText, options)) as EmbedResult<string>;
 
       // Get relevant chunks from the vector database
       if (vectorStore) {
         const queryFilter = vectorFilterType && filter ? createFilter(filter, vectorFilterType) : {};
-        const results = await vectorStore.query(indexName, embedding, topK, queryFilter);
+        const results = await vectorQuerySearch({
+          indexName,
+          vectorStore,
+          queryText,
+          options,
+          queryFilter,
+          topK,
+        });
+        if (rerankOptions) {
+          const reranker = new RagReranker(rerankOptions);
+          const rerankedResults = await reranker.rerank({
+            query: queryText,
+            vectorStoreResults: results,
+            topK,
+          });
+          const relevantChunks = rerankedResults.map(({ result }) => result?.metadata?.text);
+          relevantContext = relevantChunks.join('\n\n');
+          return { relevantContext };
+        }
+
         const relevantChunks = results.map(result => result?.metadata?.text);
 
         // Combine the chunks into a context string

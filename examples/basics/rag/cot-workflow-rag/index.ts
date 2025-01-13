@@ -168,7 +168,6 @@ export const mastra = new Mastra({
   workflows: { ragWorkflow },
 });
 
-// Sample document remains unchanged
 const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture
 
 Climate change poses significant challenges to global agriculture and food security. Rising temperatures, changing precipitation patterns, and increased frequency of extreme weather events are affecting crop yields worldwide.
@@ -189,7 +188,6 @@ Farmers are implementing various adaptation strategies:
 Future Implications
 The agricultural sector must continue to innovate and adapt to ensure food security for a growing global population. This includes developing new technologies, improving water management, and enhancing soil conservation practices.`);
 
-// Chunking and embedding logic remains unchanged
 const chunks = await doc.chunk({
   strategy: 'recursive',
   size: 512,
