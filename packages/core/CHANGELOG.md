@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.1.27-alpha.58
+
+### Patch Changes
+
+- 1874f40: Added re ranking tool to RAG
+- 4b1ce2c: Update Google model support in documentation and type definitions to include new Gemini versions
+
 ## 0.1.27-alpha.57
 
 ### Patch Changes

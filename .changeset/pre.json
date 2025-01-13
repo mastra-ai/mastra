@@ -44,7 +44,15 @@
     "workflow-with-inline-steps": "1.0.0",
     "workflow-with-separate-steps": "1.0.0",
     "weather-agent": "1.0.0",
-    "@mastra/tts": "0.0.0"
+    "@mastra/tts": "0.0.0",
+    "generate-object-structured": "0.0.0",
+    "generate-text": "0.0.0",
+    "generate-text-from-image": "0.0.0",
+    "generate-text-system-prompt": "0.0.0",
+    "generate-text-with-claude": "0.0.0",
+    "generate-text-with-gemini": "0.0.0",
+    "stream-object-structured": "0.0.0",
+    "stream-text": "0.0.0"
   },
   "changesets": [
     "afraid-papayas-shake",
@@ -88,6 +96,7 @@
     "gorgeous-panthers-grin",
     "green-balloons-watch",
     "green-tools-cry",
+    "grumpy-beds-return",
     "grumpy-books-rush",
     "happy-bats-sing",
     "happy-hats-applaud",
@@ -173,6 +182,7 @@
     "thick-sloths-leave",
     "thin-pots-judge",
     "thirty-humans-clean",
+    "three-dryers-hide",
     "tidy-dryers-deny",
     "tiny-cheetahs-tell",
     "tiny-stingrays-confess",
