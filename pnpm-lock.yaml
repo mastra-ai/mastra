@@ -178,15 +178,6 @@ importers:
         specifier: workspace:*
         version: link:../../../../packages/core
 
-  examples/ben-and-abhi:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      zod:
-        specifier: ^3.24.1
-        version: 3.24.1
-
   examples/bird-checker-with-express:
     dependencies:
       '@mastra/core':
