@@ -97,7 +97,7 @@ export class PgVector extends MastraVector {
         id: row.id,
         score: row.score,
         metadata: row.metadata,
-        ...(includeVector && { vector: row.embedding }),
+        ...(includeVector && row.embedding && { vector: JSON.parse(row.embedding) }),
       }));
     } finally {
       client.release();

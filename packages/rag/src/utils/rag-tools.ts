@@ -139,6 +139,7 @@ export const createGraphRAGTool = ({
   options,
   vectorFilterType = '',
   graphOptions = {
+    dimension: 1536,
     randomWalkSteps: 100,
     restartProb: 0.15,
     threshold: 0.7,
@@ -164,13 +165,11 @@ export const createGraphRAGTool = ({
     id: `GraphRAG ${vectorStoreName} ${indexName} Tool`,
     inputSchema: z.object({
       queryText: z.string(),
-      filter: z
-        .object({
-          keyword: z.string(),
-          operator: z.string(),
-          value: z.string(),
-        })
-        .optional(),
+      filter: z.object({
+        keyword: z.string(),
+        operator: z.string(),
+        value: z.string(),
+      }),
     }),
     outputSchema: z.object({
       relevantContext: z.string(),

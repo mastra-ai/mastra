@@ -147,7 +147,7 @@ describe('PgVector', () => {
     it('should return vector with result', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 1, undefined, true);
       expect(results).toHaveLength(1);
-      expect(results[0]?.vector).toBe('[1,0,0]');
+      expect(results[0]?.vector).toStrictEqual([1, 0, 0]);
     });
 
     it('should respect topK parameter', async () => {
