@@ -1,12 +1,5 @@
-import { GithubLink } from "../../../components/github-link";
-
-# Making a Bird Checker
-
-We will get a random image from [Unsplash](https://unsplash.com/) that matches a selected query and uses a [Mastra AI Agent](https://mastra.ai/docs/guide/creating-agents/00-overview) to determine if it is a bird or not
-
-```ts showLineNumbers copy
-import { Agent } from "@mastra/core";
-import { z } from "zod";
+import { Agent } from '@mastra/core';
+import { z } from 'zod';
 
 export type Image = {
   alt_description: string;
@@ -32,30 +25,23 @@ export type ImageResponse<T, K> =
       error: K;
     };
 
-const getRandomImage = async ({
-  query,
-}: {
-  query: string;
-}): Promise<ImageResponse<Image, string>> => {
+const getRandomImage = async ({ query }: { query: string }): Promise<ImageResponse<Image, string>> => {
   const page = Math.floor(Math.random() * 20);
-  const order_by = Math.random() < 0.5 ? "relevant" : "latest";
+  const order_by = Math.random() < 0.5 ? 'relevant' : 'latest';
   try {
-    const res = await fetch(
-      `https://api.unsplash.com/search/photos?query=${query}&page=${page}&order_by=${order_by}`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Client-ID ${process.env.UNSPLASH_ACCESS_KEY}`,
-          "Accept-Version": "v1",
-        },
-        cache: "no-store",
+    const res = await fetch(`https://api.unsplash.com/search/photos?query=${query}&page=${page}&order_by=${order_by}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Client-ID ${process.env.UNSPLASH_ACCESS_KEY}`,
+        'Accept-Version': 'v1',
       },
-    );
+      cache: 'no-store',
+    });
 
     if (!res.ok) {
       return {
         ok: false,
-        error: "Failed to fetch image",
+        error: 'Failed to fetch image',
       };
     }
 
@@ -71,7 +57,7 @@ const getRandomImage = async ({
   } catch (err) {
     return {
       ok: false,
-      error: "Error fetching image",
+      error: 'Error fetching image',
     };
   }
 };
@@ -82,38 +68,38 @@ const instructions = `
 `;
 
 export const birdCheckerAgent = new Agent({
-  name: "Bird checker",
+  name: 'Bird checker',
   instructions,
   model: {
-    provider: "ANTHROPIC",
-    name: "claude-3-haiku-20240307",
-    toolChoice: "auto",
+    provider: 'ANTHROPIC',
+    name: 'claude-3-haiku-20240307',
+    toolChoice: 'auto',
   },
 });
 
-const queries: string[] = ["wildlife", "feathers", "flying", "birds"];
+const queries: string[] = ['wildlife', 'feathers', 'flying', 'birds'];
 const randomQuery = queries[Math.floor(Math.random() * queries.length)];
 
 // Get the image url from Unsplash with random type
 const imageResponse = await getRandomImage({ query: randomQuery });
 
 if (!imageResponse.ok) {
-  console.log("Error fetching image", imageResponse.error);
+  console.log('Error fetching image', imageResponse.error);
   process.exit(1);
 }
 
-console.log("Image URL: ", imageResponse.data.urls.regular);
+console.log('Image URL: ', imageResponse.data.urls.regular);
 const response = await birdCheckerAgent.generate(
   [
     {
-      role: "user",
+      role: 'user',
       content: [
         {
-          type: "image",
+          type: 'image',
           image: new URL(imageResponse.data.urls.regular),
         },
         {
-          type: "text",
+          type: 'text',
           text: "view this image and let me know if it's a bird or not, and the scientific name of the bird without any explanation. Also summarize the location for this picture in one or two short sentences understandable by a high school student",
         },
       ],
@@ -129,16 +115,3 @@ const response = await birdCheckerAgent.generate(
 );
 
 console.log(response.object);
-```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/bird-checker"
-  }
-/>
