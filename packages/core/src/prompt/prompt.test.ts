@@ -166,4 +166,15 @@ describe('Prompt Techniques', () => {
       expect(result).toContain('What is the capital of France?');
     });
   });
+
+  describe('Message (as) role Format', () => {
+    it('should create a message role format', () => {
+      const prompt = createPrompt({
+        intent: 'Explain quantum computing',
+        as: 'system',
+      });
+      const result = prompt.toMessage();
+      expect(result.content).toContain('Explain quantum computing');
+    });
+  });
 });
