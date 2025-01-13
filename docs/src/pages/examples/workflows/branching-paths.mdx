@@ -4,92 +4,59 @@ import { GithubLink } from '../../../components/github-link';
 
 {/* prettier-ignore */}
 ```ts showLineNumbers copy
-import { Workflow, Step } from '@mastra/core'
-import { z } from 'zod'
+    import { Step, Workflow } from "@mastra/core";
+import { z } from "zod"
 
-const doubleValue = new Step({
-  id: 'stepOne',
-  description: 'Doubles the input value',
-  inputSchema: z.object({
-    inputValue: z.number(),
-  }),
-  outputSchema: z.object({
-    doubledValue: z.number(),
-  }),
+const stepOne = new Step({
+  id: "stepOne",
   execute: async ({ context }) => {
-    const doubledValue = context.inputValue * 2;
+	  const triggerData = context.machineContext.triggerData
+    const doubledValue = triggerData.inputValue * 2;
     return { doubledValue };
   },
 });
 
-const incrementByOne = new Step({
-  id: 'stepTwo',
-  description: 'Adds 1 to the input value',
-  inputSchema: z.object({
-    valueToIncrement: z.number(),
-  }),
-  outputSchema: z.object({
-    incrementedValue: z.number(),
-  }),
+const stepTwo = new Step({
+  id: "stepTwo",
   execute: async ({ context }) => {
-    const incrementedValue = context.valueToIncrement + 1;
+	  const stepOneResult = context.machineContext.stepResults.stepOne.result
+    const incrementedValue = stepOneResult.doubledValue + 1;
     return { incrementedValue };
   },
 });
 
-const squareValue = new Step({
-  id: 'stepThree',
-  description: 'Squares the input value',
-  inputSchema: z.object({
-    valueToSquare: z.number(),
-  }),
-  outputSchema: z.object({
-    squaredValue: z.number(),
-  }),
+const stepThree = new Step({
+  id: "stepThree",
   execute: async ({ context }) => {
-    const squaredValue = context.valueToSquare * context.valueToSquare;
-    return { squaredValue };
+	  const stepTwoResult = context.machineContext.stepResults.stepOne.result
+    const isEven = stepTwoResult.incrementedValue % 2 === 0;
+    return { isEven };
   },
 });
 
-
-export const branchedWorkflow = new Workflow({
-  name: 'branched-workflow',
-  triggerSchema: z.object({
-    firstValue: z.number(),
-  }),
+const stepFour = new Step({
+  id: "stepFour",
+  execute: async ({ context }) => {
+	  cconst stepThreeResult = context.machineContext.stepResults.stepThree.result
+    const isEven = stepThreeResult.tripledValue % 2 === 0;
+    return { isEven };
+  },
 });
 
-branchedWorkflow
-  .step(doubleValue, {
-    variables: {
-      inputValue: {
-        step: 'trigger',
-        path: 'firstValue',
-      },
-    },
-  })
-  .then(incrementByOne, {
-    variables: {
-      valueToIncrement: {
-        step: doubleValue,
-        path: 'doubledValue',
-      },
-    },
-  })
-  .after(doubleValue)
-  .step(squareValue, {
-    variables: {
-      valueToSquare: {
-        step: doubleValue,
-        path: 'doubledValue',
-      },
-    },
-  })
-
-branchedWorkflow.commit();
-const res = await branchedWorkflow.execute({triggerData: { firstValue: 20 }})
-console.log(res.results)
+// Build the workflow
+const myWorkflow = new Workflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+ 
+myWorkflow
+  .step(stepOne).then(stepTwo)
+  .after(stepOne).step(stepThree).then(stepFour)
+  .commit()
+  
+const result = await myWorkflow.execute({ triggerData: { inputValue: 3 }})
 ```
 
 <br />

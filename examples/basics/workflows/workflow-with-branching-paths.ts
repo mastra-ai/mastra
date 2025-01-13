@@ -50,4 +50,4 @@ myWorkflow
   .after(stepOne).step(stepThree).then(stepFour)
   .commit()
   
-const result = await myWorkflow.execute({ triggerData: { inputValue: 3 }}) 
+const result = await myWorkflow.execute({ triggerData: { inputValue: 3 }})
