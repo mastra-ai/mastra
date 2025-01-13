@@ -253,7 +253,7 @@ export class GraphRAG {
     if (restartProb <= 0 || restartProb >= 1) {
       throw new Error('restartProb must be between 0 and 1');
     }
-    // Phase 1: Dense Retrieval
+    // Retrieve nodes and calculate similarity
     const similarities = Array.from(this.nodes.values()).map(node => ({
       node,
       similarity: this.cosineSimilarity(query, node.embedding!),
@@ -263,7 +263,7 @@ export class GraphRAG {
     similarities.sort((a, b) => b.similarity - a.similarity);
     const topNodes = similarities.slice(0, topK);
 
-    // Phase 2: Graph-based Re-ranking
+    // Re-ranks nodes using random walk with restart
     const rerankedNodes = new Map<string, { node: GraphNode; score: number }>();
 
     // For each top node, perform random walk

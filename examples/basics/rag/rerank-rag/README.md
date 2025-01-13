@@ -15,7 +15,7 @@ A simple example showing how to do result re ranking with RAG using Mastra, Open
 
    ```bash
    git clone https://github.com/mastra-ai/mastra
-   cd examples/basics/rag/retrieve-results
+   cd examples/basics/rag/rerank-rag
    ```
 
 2. Copy the environment variables file and add your OpenAI API key:

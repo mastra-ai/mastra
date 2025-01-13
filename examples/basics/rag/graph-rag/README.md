@@ -1,6 +1,6 @@
 # Retrieve results
 
-A simple example showing how to do metadata filtering with RAG using Mastra, OpenAI, and PGVector.
+A simple example showing how to work with Graph RAG using Mastra, OpenAI, and PGVector.
 
 ## Prerequisites
 
@@ -15,7 +15,7 @@ A simple example showing how to do metadata filtering with RAG using Mastra, Ope
 
    ```bash
    git clone https://github.com/mastra-ai/mastra
-   cd examples/basics/rag/filter-rag
+   cd examples/basics/rag/graph-rag
    ```
 
 2. Copy the environment variables file and add your OpenAI API key:
