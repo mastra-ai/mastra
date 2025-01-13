@@ -11,7 +11,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "rollup -c",
     "clean": "rm -rf dist && rm -rf node_modules"
   },
   "keywords": [
