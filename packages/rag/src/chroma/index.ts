@@ -101,10 +101,13 @@ export class ChromaVector extends MastraVector {
   ): Promise<QueryResult[]> {
     const collection = await this.getCollection(indexName, true);
 
+    const defaultInclude = ['documents', 'metadatas', 'distances'];
+
     const results = await collection.query({
       queryEmbeddings: [queryVector],
       nResults: topK,
       where: filter,
+      include: includeVector ? [...defaultInclude, 'embeddings'] : defaultInclude,
     });
 
     // Transform ChromaDB results to QueryResult format
