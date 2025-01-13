@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.1-alpha.11
+
+### Patch Changes
+
+- 1874f40: Added re ranking tool to RAG
+
 ## 0.1.1-alpha.10
 
 ### Patch Changes
