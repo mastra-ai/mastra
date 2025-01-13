@@ -9,7 +9,7 @@
 type SupportedEdgeType = 'semantic';
 
 // Types for graph nodes and edges
-interface GraphNode {
+export interface GraphNode {
   id: string;
   content: string;
   embedding?: number[];
@@ -20,11 +20,20 @@ interface RankedNode extends GraphNode {
   score: number;
 }
 
-interface GraphEdge {
+export interface GraphEdge {
   source: string;
   target: string;
   weight: number;
   type: SupportedEdgeType;
+}
+
+export interface GraphChunk {
+  text: string;
+  metadata: Record<string, any>;
+}
+
+export interface GraphEmbedding {
+  vector: number[];
 }
 
 export class GraphRAG {
@@ -137,24 +146,19 @@ export class GraphRAG {
     return Math.max(-1, Math.min(1, similarity));
   }
 
-  async processResults(chunks: any[], embeddings: any[]): Promise<void> {
-    await this.createGraphFromChunks(chunks, embeddings);
-  }
-
-  private async createGraphFromChunks(chunks: any[], embeddings: any[]) {
+  processResults(chunks: GraphChunk[], embeddings: GraphEmbedding[]) {
     if (!chunks?.length || !embeddings?.length) {
       throw new Error('Chunks and embeddings arrays must not be empty');
     }
     if (chunks.length !== embeddings.length) {
-      throw new Error('Chunks and embeddings arrays must have the same length');
+      throw new Error('Chunks and embeddings must have the same length');
     }
-
     // Create nodes from chunks
     chunks.forEach((chunk, index) => {
       const node: GraphNode = {
         id: index.toString(),
         content: chunk.text,
-        embedding: embeddings[index].vector,
+        embedding: embeddings[index]?.vector,
         metadata: { ...chunk.metadata },
       };
       this.addNode(node);
@@ -163,8 +167,10 @@ export class GraphRAG {
 
     // Create edges based on cosine similarity
     for (let i = 0; i < chunks.length; i++) {
+      const firstEmbedding = embeddings[i]?.vector as number[];
       for (let j = i + 1; j < chunks.length; j++) {
-        const similarity = this.cosineSimilarity(embeddings[i].vector, embeddings[j].vector);
+        const secondEmbedding = embeddings[j]?.vector as number[];
+        const similarity = this.cosineSimilarity(firstEmbedding, secondEmbedding);
 
         // Only create edges if similarity is above threshold
         if (similarity > this.threshold) {
@@ -235,23 +241,18 @@ export class GraphRAG {
   }
 
   // Retrieve relevant nodes using hybrid approach
-  async query(
-    query: number[],
-    topK: number = 5,
-    randomWalkSteps: number = 100,
-    restartProb: number = 0.15,
-  ): Promise<RankedNode[]> {
+  query(query: number[], topK: number = 5, randomWalkSteps: number = 100, restartProb: number = 0.15): RankedNode[] {
     if (!query || query.length !== this.dimension) {
       throw new Error(`Query embedding must have dimension ${this.dimension}`);
     }
     if (topK < 1) {
-      throw new Error('topK must be positive');
+      throw new Error('TopK must be greater than 0');
     }
     if (randomWalkSteps < 1) {
-      throw new Error('randomWalkSteps must be positive');
+      throw new Error('Random walk steps must be greater than 0');
     }
     if (restartProb <= 0 || restartProb >= 1) {
-      throw new Error('restartProb must be between 0 and 1');
+      throw new Error('Restart probability must be between 0 and 1');
     }
     // Retrieve nodes and calculate similarity
     const similarities = Array.from(this.nodes.values()).map(node => ({

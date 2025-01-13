@@ -196,18 +196,18 @@ export const createGraphRAGTool = ({
           // Get all chunks and embeddings for graph construction
           const chunks = results.map(result => ({
             text: result?.metadata?.text,
-            metadata: result.metadata,
+            metadata: result.metadata ?? {},
           }));
           const embeddings = results.map(result => ({
-            vector: result.vector,
+            vector: result.vector || [],
           }));
 
-          await graphRag.processResults(chunks, embeddings);
+          graphRag.processResults(chunks, embeddings);
           isInitialized = true;
         }
 
         // Get reranked results using GraphRAG
-        const rerankedResults = await graphRag.query(
+        const rerankedResults = graphRag.query(
           queryEmbedding,
           topK,
           graphOptions.randomWalkSteps,
