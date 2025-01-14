@@ -1,6 +1,6 @@
 import { GithubLink } from "../../../components/github-link";
 
-# Using a Workflow
+# Agentic Workflows
 
 When building AI applications, you often need to coordinate multiple steps that depend on each other's outputs. This example shows how to create an AI workflow that fetches weather data and uses it to suggest activities, demonstrating how to integrate external APIs with LLM-powered planning.
 
@@ -181,7 +181,7 @@ const mastra = new Mastra({
 
 async function main() {
   const { start } = mastra.getWorkflow("weatherWorkflow").createRun();
-  
+
   const result = await start({
     triggerData: {
       city: "London",
@@ -197,6 +197,6 @@ main();
 
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/using-a-workflow"
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/agentic-workflows"
   }
 />
