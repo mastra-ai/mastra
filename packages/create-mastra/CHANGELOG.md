@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.0-alpha.24
+
+### Minor Changes
+
+- 3e9f0ca: Improve package size
+
 ## 0.1.0-alpha.23
 
 ### Patch Changes
