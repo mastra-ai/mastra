@@ -120,6 +120,7 @@ export class PromptTemplate<TVariables extends Record<string, any> | undefined =
   private config: PromptTemplateConstructor;
   private components: Partial<PromptTemplateComponent>[] = [];
 
+  // constructor (intent: string, config: PromptTemplateConstructor without intent)
   constructor(config: PromptTemplateConstructor) {
     this.config = config;
   }
@@ -288,6 +289,12 @@ export class PromptTemplate<TVariables extends Record<string, any> | undefined =
     };
   }
 
+  //   constraints(constraints: string[]) {
+  //     this.config.constraints = constraints;
+  //     return this;
+  //   }
+
+  // remove component
   component(config: Partial<PromptTemplateComponent>) {
     this.components.push(config);
     return this;
@@ -324,3 +331,6 @@ export function createPrompt<TVariables extends Record<string, any> | undefined 
 ) {
   return new PromptTemplate<TVariables>(config);
 }
+
+// builder patter for config
+// return string by default
