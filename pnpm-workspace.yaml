@@ -4,6 +4,7 @@ packages:
   - "integration-generator/*"
   - "integrations/*"
   - "examples/*"
+  - "!examples/travel-app"
   - "examples/basics/llms/*"
   - "docs"
   - "packages/cli/src/shared/ui"
