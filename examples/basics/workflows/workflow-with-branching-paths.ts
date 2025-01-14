@@ -1,12 +1,4 @@
-import { GithubLink } from "../../../components/github-link";
-
-# Workflow with Branching Paths
-
-<img src="@subscribed-chains.png" alt="Diagram showing workflow with branching paths" />
-
-{/* prettier-ignore */}
-```ts showLineNumbers copy
-    import { Step, Workflow } from "@mastra/core";
+import { Step, Workflow } from "@mastra/core";
 import { z } from "zod"
 
 const stepOne = new Step({
@@ -59,15 +51,3 @@ myWorkflow
   .commit()
   
 const result = await myWorkflow.execute({ triggerData: { inputValue: 3 }})
-```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-branching-paths"
-  }
-/>
