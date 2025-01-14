@@ -8,7 +8,7 @@ interface PromptTemplateComponent {
   /**
    * Input data for the propmt component, add variables here like so {{variable}}
    */
-  input: string;
+  text: string;
 
   /**
    * Response limitations/requirements
@@ -81,11 +81,6 @@ interface PromptTemplateComponent {
  */
 interface PromptTemplateConstructor {
   /**
-   * Primary instruction/goal
-   */
-  intent: string;
-
-  /**
    * Professional role/persona to guide response style
    */
   persona?: string;
@@ -117,49 +112,42 @@ interface PromptTemplateConstructor {
 }
 
 export class PromptTemplate<TVariables extends Record<string, any> | undefined = undefined> {
+  private intent: string;
   private config: PromptTemplateConstructor;
-  private componentConfig: Partial<PromptTemplateComponent> = {};
   private components: Partial<PromptTemplateComponent>[] = [];
 
-  constructor(config: PromptTemplateConstructor) {
+  constructor(intent: string, config: PromptTemplateConstructor) {
+    this.intent = intent;
     this.config = config;
   }
 
-  text(input: string) {
-    this.componentConfig.input = input;
+  text(text: PromptTemplateComponent['text']) {
+    this.components.push({ text });
     return this;
   }
 
-  constraints(constraints: string[]) {
-    this.componentConfig.constraints = constraints;
+  constraints(constraints: PromptTemplateComponent['constraints']) {
+    this.components.push({ constraints });
     return this;
   }
 
-  examples(examples: { input: string; output: string }[]) {
-    this.componentConfig.examples = examples;
+  examples(examples: PromptTemplateComponent['examples']) {
+    this.components.push({ examples });
     return this;
   }
 
-  thinking(config: {
-    autoChainOfThought?: boolean;
-    autoTreeOfThought?: boolean;
-    autoSelfAsk?: boolean;
-    autoVerification?: boolean;
-    steps?: string[];
-    branches?: { [key: string]: string[] };
-    verificationSteps?: string[];
-  }) {
-    this.componentConfig.thinking = config;
+  thinking(config: PromptTemplateComponent['thinking']) {
+    this.components.push({ thinking: config });
     return this;
   }
 
-  emphasis(emphasis: { type: 'IMPORTANT !!!' } | { type: 'CALLOUT' } | { type: 'CUSTOM'; text: string }) {
-    this.componentConfig.emphasis = emphasis;
+  emphasis(emphasis: PromptTemplateComponent['emphasis']) {
+    this.components.push({ emphasis });
     return this;
   }
 
-  context(context: string) {
-    this.componentConfig.context = context;
+  context(context: PromptTemplateComponent['context']) {
+    this.components.push({ context });
     return this;
   }
 
@@ -207,8 +195,8 @@ export class PromptTemplate<TVariables extends Record<string, any> | undefined =
     /*
      * Add input if specified
      */
-    if (config.input) {
-      component.push(`${config.input} \n`);
+    if (config.text) {
+      component.push(`${config.text} \n`);
     }
 
     /*
@@ -306,12 +294,12 @@ export class PromptTemplate<TVariables extends Record<string, any> | undefined =
       intro.push(`From the perspective of ${this.config.perspective}: \n`);
     }
 
-    intro.push(`${this.config.intent} \n`);
+    intro.push(`${this.intent} \n`);
 
     /*
      * Main
      */
-    const main = this.buildPromptComponent(this.componentConfig);
+    const main = this.components.flatMap(component => this.buildPromptComponent(component));
 
     /*
      * Outro
@@ -354,7 +342,8 @@ export class PromptTemplate<TVariables extends Record<string, any> | undefined =
 }
 
 export function createPrompt<TVariables extends Record<string, any> | undefined = undefined>(
+  intent: string,
   config: PromptTemplateConstructor,
 ) {
-  return new PromptTemplate<TVariables>(config);
+  return new PromptTemplate<TVariables>(intent, config);
 }
