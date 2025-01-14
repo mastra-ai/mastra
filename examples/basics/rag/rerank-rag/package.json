@@ -1,5 +1,5 @@
 {
-  "name": "basic-rag",
+  "name": "rerank-rag",
   "type": "module",
   "scripts": {
     "start": "pnpx tsx index.ts"

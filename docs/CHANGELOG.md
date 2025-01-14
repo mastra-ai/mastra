@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.1-alpha.13
+
+### Patch Changes
+
+- 3967e69: Added GraphRAG implementation and updated docs
+
 ## 0.1.1-alpha.12
 
 ### Patch Changes
