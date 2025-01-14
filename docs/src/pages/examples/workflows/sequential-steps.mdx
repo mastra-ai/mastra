@@ -2,70 +2,71 @@ import { GithubLink } from '../../../components/github-link';
 
 # Workflow with Sequential Steps
 
-Workflow can be chained to run one after another in a specific sequence. This example shows how to chain workflow steps by using the `then` method demonstrating how to pass data between sequential steps and execute them in order.
+Workflow can be chained to run one after another in a specific sequence.
+
+## Control Flow Diagram
+
+This example shows how to chain workflow steps by using the `then` method demonstrating how to pass data between sequential steps and execute them in order.
+
+Here's the control flow diagram:
+
+<img src="/sequential-chains.png" alt="Diagram showing workflow with sequential steps" width={600} />
+
+## Creating the Steps
+
+Let's start by creating the steps and initializing the workflow.
 
 ```ts showLineNumbers copy
 import { Step, Workflow } from '@mastra/core';
 import { z } from 'zod';
 
-async function main() {
-  const stepOne = new Step({
-    id: 'stepOne',
-    inputSchema: z.object({
-      inputValue: z.number(),
-    }),
-    outputSchema: z.object({
-      doubledValue: z.number(),
-    }),
-    execute: async ({ context }) => {
-      const inputValue = context?.machineContext?.getStepPayload<{ inputValue: number }>('trigger')?.inputValue;
-      if (!inputValue) throw new Error('No input value provided');
-      const doubledValue = inputValue * 2;
-      return { doubledValue };
-    },
-  });
+const stepOne = new Step({
+  id: 'stepOne',
+  execute: async ({ context: { machineContext } }) => ({
+    doubledValue: machineContext.triggerData.inputValue * 2 
+  })
+});
 
-  const stepTwo = new Step({
-    id: 'stepTwo',
-    inputSchema: z.object({
-      valueToIncrement: z.number(),
-    }),
-    outputSchema: z.object({
-      incrementedValue: z.number(),
-    }),
-    execute: async ({ context }) => {
-      const valueToIncrement = context?.machineContext?.getStepPayload<{ doubledValue: number }>('stepOne')?.doubledValue;
-      if (!valueToIncrement) throw new Error('No value to increment provided');
-      const incrementedValue = valueToIncrement + 1;
-      return { incrementedValue };
-    },
-  });
+const stepTwo = new Step({
+  id: 'stepTwo',
+  execute: async ({ context: { machineContext } }) => ({
+    incrementedValue: machineContext.stepResults.stepOne.result.doubledValue + 1
+  })
+});
 
-  // Build the workflow
-  const myWorkflow = new Workflow({
-    name: 'my-workflow',
-    triggerSchema: z.object({
-      inputValue: z.number(),
-    }),
-  });
+const stepThree = new Step({
+  id: 'stepThree',
+  execute: async ({ context: { machineContext } }) => ({
+    tripledValue: machineContext.stepResults.stepTwo.result.incrementedValue * 3
+  })
+});
 
-  // sequential steps
-  myWorkflow
-    .step(stepOne)
-    .then(stepTwo);
 
-  myWorkflow.commit();
+// Build the workflow
+const myWorkflow = new Workflow({
+  name: 'my-workflow',
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+```
 
-  const { runId, start } = myWorkflow.createRun();
+## Chaining the Steps and Executing the Workflow
 
-  console.log('Run', runId);
+Now let's chain the steps together.
 
-  const res = await start({ triggerData: { inputValue: 90 } });
+```ts showLineNumbers copy
+// sequential steps
+myWorkflow
+  .step(stepOne)
+  .then(stepTwo)
+  .then(stepThree);
 
-  console.log(res.results);
-}
+myWorkflow.commit();
 
-main();
+const { runId, start } = myWorkflow.createRun();
+
+const res = await start({ triggerData: { inputValue: 90 } });
 ```
 
 <br />

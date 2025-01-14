@@ -1,8 +1,20 @@
 import { GithubLink } from "../../../components/github-link";
 
-# Workflow with Branching Paths
+# Branching Paths
 
-<img src="@subscribed-chains.png" alt="Diagram showing workflow with branching paths" />
+When processing data, you often need to take different actions based on intermediate results. This example shows how to create a workflow that splits into separate paths, where each path executes different steps based on the output of a previous step.
+
+## Control Flow Diagram
+
+This example shows how to create a workflow that splits into separate paths, where each path executes different steps based on the output of a previous step.
+
+Here's the control flow diagram:
+
+<img src="/subscribed-chains.png" alt="Diagram showing workflow with branching paths" />
+
+## Creating the Steps
+
+Let's start by creating the steps and initializing the workflow.
 
 {/* prettier-ignore */}
 ```ts showLineNumbers copy
@@ -11,38 +23,31 @@ import { z } from "zod"
 
 const stepOne = new Step({
   id: "stepOne",
-  execute: async ({ context }) => {
-	  const triggerData = context.machineContext.triggerData
-    const doubledValue = triggerData.inputValue * 2;
-    return { doubledValue };
-  },
+  execute: async ({ context: { machineContext } }) => ({ 
+    doubledValue: machineContext.triggerData.inputValue * 2
+  })
 });
 
 const stepTwo = new Step({
   id: "stepTwo",
-  execute: async ({ context }) => {
-	  const stepOneResult = context.machineContext.stepResults.stepOne.result
-    const incrementedValue = stepOneResult.doubledValue + 1;
-    return { incrementedValue };
-  },
+  execute: async ({ context: { machineContext } }) => ({ 
+    isDivisibleByFive: machineContext.stepResults.stepOne.result.doubledValue % 5 === 0
+  })
 });
+
 
 const stepThree = new Step({
   id: "stepThree",
-  execute: async ({ context }) => {
-	  const stepTwoResult = context.machineContext.stepResults.stepOne.result
-    const isEven = stepTwoResult.incrementedValue % 2 === 0;
-    return { isEven };
-  },
+  execute: async ({ context: { machineContext } }) => ({ 
+    incrementedValue: machineContext.stepResults.stepOne.result.doubledValue + 1
+  })
 });
 
 const stepFour = new Step({
   id: "stepFour",
-  execute: async ({ context }) => {
-	  cconst stepThreeResult = context.machineContext.stepResults.stepThree.result
-    const isEven = stepThreeResult.tripledValue % 2 === 0;
-    return { isEven };
-  },
+  execute: async ({ context: { machineContext } }) => ({ 
+    isDivisibleByThree: machineContext.stepResults.stepThree.result.incrementedValue % 3 === 0
+  })
 });
 
 // Build the workflow
@@ -52,7 +57,13 @@ const myWorkflow = new Workflow({
     inputValue: z.number(),
   }),
 });
- 
+```
+
+## Branching Paths and Chaining Steps
+
+Now let's execute the workflow and see the results.
+
+```ts showLineNumbers copy
 myWorkflow
   .step(stepOne).then(stepTwo)
   .after(stepOne).step(stepThree).then(stepFour)
