@@ -15,6 +15,10 @@ export class CloudflareDeployer extends Deployer {
     await depsService.installPackages(['wrangler -g']);
   }
 
+  async build({ dir }: { dir: string; useBanner: boolean }) {
+    super.build({ dir, useBanner: false });
+  }
+
   async writePkgJson() {
     let projectPkg: any = {
       dependencies: {},

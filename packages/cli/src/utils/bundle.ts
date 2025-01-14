@@ -1,4 +1,5 @@
 import * as esbuild from 'esbuild';
+import { type BuildOptions } from 'esbuild';
 import { join } from 'path';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -101,7 +102,13 @@ export async function bundleServer(entryPoint: string) {
   }
 }
 
-export async function bundle(dirPath: string, options?: { outfile?: string; entryFile?: string; buildName?: string }) {
+export async function bundle(
+  dirPath: string,
+  {
+    useBanner = true,
+    ...options
+  }: { outfile?: string; entryFile?: string; buildName?: string; useBanner?: boolean } = {},
+) {
   try {
     // Ensure .mastra directory exists
     upsertMastraDir();
@@ -110,7 +117,7 @@ export async function bundle(dirPath: string, options?: { outfile?: string; entr
     const entryPoint = fileService.getFirstExistingFile([join(dirPath, `${options?.entryFile || 'index'}.ts`)]);
     const outfile = options?.outfile || join(process.cwd(), '.mastra', 'mastra.mjs');
 
-    const result = await esbuild.build({
+    const esbuildConfig: BuildOptions = {
       entryPoints: [entryPoint],
       bundle: true,
       platform: 'node',
@@ -123,16 +130,6 @@ export async function bundle(dirPath: string, options?: { outfile?: string; entr
       logLevel: 'error',
       mainFields: ['module', 'main'],
       conditions: ['import', 'node'],
-      banner: {
-        js: `
-          import { createRequire } from "module";
-          import { fileURLToPath } from 'url';
-          import path from 'path';
-          const require = createRequire(import.meta.url);
-          const __filename = fileURLToPath(import.meta.url);
-          const __dirname = path.dirname(__filename);
-        `,
-      },
       logOverride: {
         'commonjs-variable-in-esm': 'silent',
       },
@@ -185,7 +182,21 @@ export async function bundle(dirPath: string, options?: { outfile?: string; entr
         '@mastra/rag',
         '@mastra/stabilityai',
       ],
-    });
+    };
+
+    if (useBanner) {
+      esbuildConfig.banner = {
+        js: `
+          import { createRequire } from "module";
+          import { fileURLToPath } from 'url';
+          import path from 'path';
+          const require = createRequire(String(pathToFileURL(__filename)));
+          const __dirname = path.dirname(__filename);
+        `,
+      };
+    }
+
+    const result = await esbuild.build(esbuildConfig);
 
     // Log build results
     logger.success(`${options?.buildName} Build completed successfully`);
