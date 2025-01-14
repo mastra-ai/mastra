@@ -364,8 +364,6 @@ router.get('/api/workflows', async () => {
   try {
     const workflows = mastra.getWorkflows({ serialized: true });
 
-    console.log(workflows);
-
     return new Response(JSON.stringify(workflows), {
       headers: {
         'Content-Type': 'application/json',
@@ -386,7 +384,7 @@ router.get('/api/workflows', async () => {
 router.get('/api/workflows/:workflowId', async ({ params }: IRequest) => {
   try {
     const workflowId = decodeURIComponent(params.workflowId);
-    const workflow = mastra.getWorkflow(workflowId, { serialized: true });
+    const workflow = mastra.getWorkflow(workflowId);
     const triggerSchema = workflow.triggerSchema;
     const stepGraph = workflow.stepGraph;
     const stepSubscriberGraph = workflow.stepSubscriberGraph;
@@ -401,7 +399,7 @@ router.get('/api/workflows/:workflowId', async ({ params }: IRequest) => {
     }, {});
     return new Response(
       JSON.stringify({
-        ...workflow,
+        name: workflow.name,
         triggerSchema: triggerSchema ? stringify(zodToJsonSchema(triggerSchema)) : undefined,
         steps: serializedSteps,
         stepGraph,

@@ -361,7 +361,6 @@ app.post('/api/agents/:agentId/tools/:toolId/execute', async (req: Request, res:
 app.get('/api/workflows', async (_req: Request, res: Response) => {
   try {
     const workflows = mastra.getWorkflows({ serialized: true });
-    console.log('workflows', workflows);
     res.json(workflows);
   } catch (error) {
     const apiError = error as ApiError;
