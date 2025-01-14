@@ -52,12 +52,14 @@
     "generate-text-with-claude": "0.0.0",
     "generate-text-with-gemini": "0.0.0",
     "stream-object-structured": "0.0.0",
-    "stream-text": "0.0.0"
+    "stream-text": "0.0.0",
+    "@mastra/mcp": "0.0.0"
   },
   "changesets": [
     "afraid-papayas-shake",
     "big-goats-try",
     "blue-bags-hang",
+    "blue-rules-brush",
     "brave-flowers-cheer",
     "breezy-apples-lick",
     "bright-candles-reply",
