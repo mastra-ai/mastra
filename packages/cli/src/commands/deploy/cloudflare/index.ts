@@ -69,6 +69,7 @@ name = "mastra"
 main = "index.mjs"  # Your main worker file
 compatibility_date = "2024-12-02"
 compatibility_flags = ["nodejs_compat"]
+find_additional_modules = true
 
 [build]
 command = "npm install" 
