@@ -1,119 +1,32 @@
+---
+title: Workflows in Mastra
+---
+
 # Workflows in Mastra
 
-Workflows in Mastra are powerful tools for orchestrating complex sequences of operations. They support loops, branching, parallel execution, error handling, and more.
+Workflows in Mastra help you orchestrate complex sequences of operations with features like branching, parallel execution, resource suspension, and more. 
 
-The most powerful feature of workflows is that you can log the input and output of each step of each run, and send the results to your favorite observability tools. Teams have found this to be a powerful way to monitor and debug their workflows.
+## Why Use Workflows?
 
-## Building a Workflow
+Most AI applications need more than a single call to a language model. You may want to run multiple steps, conditionally skip certain paths, or even pause execution altogether until you receive more data. 
 
-In this overview, we'll create a workflow with dummy steps to demonstrate how workflows are structured and executed in Mastra. We'll cover options for defining steps, different kinds of control flow between steps, conditions, and variables.
+Mastra’s workflow system provides:
 
-### 1. Define Steps
+• A standardized way to define steps and link them together.
+• Support for both simple (linear) and advanced (branching, parallel) paths.
+• Powerful debugging and observability features to track each workflow run.
 
-You can define steps inline or by function reference.
+## Example
 
-#### Option 1: Inline Step Creation
+To create a workflow, you define one or more steps, link them, and then commit the workflow before starting it.
 
-Define steps directly within the workflow using the `.step()` and `.then()` methods.
+Typically, you would call an LLM or other service in some way in some step. But for this example, we'll just double the input value in the first step and increment it in the second.
 
-```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
-import { Step, Workflow } from "@mastra/core";
+```typescript
+import { Workflow, Step } from "@mastra/core";
 import { z } from "zod";
 
-export const myWorkflow = new Workflow({
-  name: "my-workflow",
-  triggerSchema: z.object({
-    inputValue: z.number(),
-  }),
-});
-
-myWorkflow
-  .step(
-    new Step({
-      id: "stepOne",
-      outputSchema: z.object({
-        doubledValue: z.number(),
-      }),
-      execute: async ({ context }) => {
-        const inputValue = context.machineContext?.getStepPayload<{
-          inputValue: number;
-        }>("trigger")?.inputValue;
-        if (!inputValue) {
-          throw new Error("Input value does not exist");
-        }
-        const doubledValue = inputValue * 2;
-        return { doubledValue };
-      },
-    }),
-  )
-  .then(
-    new Step({
-      id: "stepTwo",
-      outputSchema: z.object({
-        incrementedValue: z.number(),
-      }),
-      execute: async ({ context }) => {
-        const valueToIncrement = context.machineContext?.getStepPayload<{
-          doubledValue: number;
-        }>("stepOne")?.doubledValue;
-
-        if (!valueToIncrement) {
-          throw new Error("Value to increment does not exist");
-        }
-
-        const incrementedValue = valueToIncrement + 1;
-        return { incrementedValue };
-      },
-    }),
-  );
-```
-
-#### Option 2: Define Steps Separately
-
-Define steps separately and then add them to the workflow.
-
-```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
-import { Step, Workflow } from "@mastra/core";
-import { z } from "zod";
-
-// Define steps separately
-const stepOne = new Step({
-  id: "stepOne",
-  outputSchema: z.object({
-    doubledValue: z.number(),
-  }),
-  execute: async ({ context }) => {
-    const inputValue = context.machineContext?.getStepPayload<{
-      inputValue: number;
-    }>("trigger")?.inputValue;
-    if (!inputValue) {
-      throw new Error("Input value does not exist");
-    }
-    const doubledValue = inputValue * 2;
-    return { doubledValue };
-  },
-});
-
-const stepTwo = new Step({
-  id: "stepTwo",
-  outputSchema: z.object({
-    incrementedValue: z.number(),
-  }),
-  execute: async ({ context }) => {
-    const valueToIncrement = context.machineContext?.getStepPayload<{
-      doubledValue: number;
-    }>("stepOne")?.doubledValue;
-
-    if (!valueToIncrement) {
-      throw new Error("Value to increment does not exist");
-    }
-
-    const incrementedValue = valueToIncrement + 1;
-    return { incrementedValue };
-  },
-});
-
-// Build the workflow
+// 1. Define the workflow
 const myWorkflow = new Workflow({
   name: "my-workflow",
   triggerSchema: z.object({
@@ -121,263 +34,57 @@ const myWorkflow = new Workflow({
   }),
 });
 
-myWorkflow.step(stepOne).then(stepTwo);
-```
-
-### 2. Control Flow Between Steps
-
-#### Parallel Execution
-
-Use `.step()` to add steps that can run in parallel.
-
-```typescript
-myWorkflow.step(fetchUserData).step(fetchOrderData); // These steps run in parallel
-```
-
-#### Sequential Execution
-
-Use `.then()` to chain steps that depend on the previous step.
-
-```typescript
-myWorkflow.step(fetchOrderData).then(validateData).then(processOrder);
-```
-
-#### Branching and Merging Paths
-
-Use `.after()` to specify dependencies explicitly and to manage branching.
-
-```typescript
-myWorkflow
-  .step(stepA)
-  .then(stepB)
-  .then(stepD)
-  .after(stepA)
-  .step(stepC)
-  .then(stepE)
-  .after([stepD, stepE])
-  .step(stepF);
-```
-
-In this example:
-
-- `stepA` leads to `stepB`, then to `stepD`.
-- Separately, after `stepA`, we start `stepC`, which leads to `stepE`.
-- Once both `stepD` and `stepE` complete, `stepF` runs.
-
-#### Cyclical Dependencies
-
-Workflows can support cyclical dependencies, allowing steps to loop based on conditions.
-
-```typescript
-myWorkflow
-  .step(fetchData)
-  .then(processData)
-  .after(processData)
-  .step(finalizeData, {
-    when: { "processData.status": "success" },
+// 2. Create steps
+const stepOne = new Step({
+  id: "stepOne",
+  execute: async ({ context: { machineContext } }) => ({
+    doubledValue: machineContext.triggerData.inputValue * 2
   })
-  .step(fetchData, {
-    when: { "processData.status": "retry" },
-  });
-```
-
-In this example:
-
-- If `processData` results in a status of `"success"`, `finalizeData` will run.
-- If `processData` results in a status of `"retry"`, the workflow loops back to `fetchData`.
-
-### 3. Conditions
-
-Use the `when` property to define conditions under which a step should execute.
-
-#### Option 1: Function
-
-```typescript
-myWorkflow.step(
-  new Step({
-    id: "processData",
-    execute: async ({ context }) => {
-      // Action logic
-    },
-  }),
-  {
-    when: async ({ context }) => {
-      const fetchData = context?.getStepPayload<{
-        status: string;
-      }>("fetchData");
-      return fetchData?.status === "success";
-    },
-  },
-);
-```
-
-#### Option 2: Query Object
-
-```typescript
-myWorkflow.step(
-  new Step({
-    id: "processData",
-    execute: async ({ context }) => {
-      // Action logic
-    },
-  }),
-  {
-    when: {
-      ref: {
-        step: {
-          id: "fetchData",
-        },
-        path: "status",
-      },
-      query: { $eq: "success" },
-    },
-  },
-);
-```
-
-#### Option 3: Simple Path Comparison (Syntactic Sugar)
-
-```typescript
-myWorkflow.step(
-  new Step({
-    id: "processData",
-    execute: async ({ context }) => {
-      // Action logic
-    },
-  }),
-  {
-    when: {
-      "fetchData.status": "success",
-    },
-  },
-);
-```
-
-### 4. Variables
-
-Variables allow you to pass data between steps.
-
-#### Option 1: Pass the "trigger" to access variables from the triggerSchema
-
-```typescript
-myWorkflow.step(stepOne).then(stepTwo, {
-  variables: {
-    valueToIncrement: {
-      step: "trigger",
-      path: "inputValue",
-    },
-  },
 });
-```
 
-#### Option 2: Pass the previous step to access variables from it's outputSchema
-
-```typescript
-myWorkflow.step(stepOne).then(stepTwo, {
-  variables: {
-    valueToIncrement: {
-      step: stepOne,
-      path: "doubledValue",
-    },
-  },
+const stepTwo = new Step({
+  id: "stepTwo",
+  execute: async ({ context: { machineContext } }) => ({
+    incrementedValue: machineContext.stepResults.stepOne.payload.doubledValue + 1
+  })
 });
+
+// 3. Link and commit steps
+myWorkflow.step(stepOne).then(stepTwo).commit();
+
+// 4. Run the workflow
+const { runId, start } = myWorkflow.createRun({ triggerData: { inputValue: 3 } });
+
+const result = await start();
+console.log("Workflow result:", result.results);
 ```
 
-#### Option 3: Pass the step id of the previous step to access variables from it's outputSchema
+This example shows the essentials: define your workflow, add steps, commit the workflow, then execute it. 
 
-```typescript
-myWorkflow.step(stepOne).then(stepTwo, {
-  variables: {
-    valueToIncrement: {
-      step: {
-        id: "stepOne",
-      },
-      path: "doubledValue",
-    },
-  },
-});
-```
+## Defining Steps
 
-The `valueToIncrement` input for `stepTwo` is fetched from the `doubledValue` output of `stepOne`.
+The basic building block of a workflow [is a step](./steps.mdx). Steps are defined using schemas for inputs and outputs, and can fetch prior step results.
 
-### 5. Finalize the Workflow
+## Control Flow
 
-After defining all steps and their relationships, commit the workflow.
+Workflows let you define a [control flow](./control-flow.mdx) to chain steps together in with parallel steps, branching paths, and more.
 
-```typescript
-myWorkflow.commit();
-```
+## Suspend and Resume
 
-### 6. Add Workflow to Mastra Instance
+When you need to pause execution for external data, user input, or asynchronous events, Mastra supports suspension at any step, persisting the state of the workflow so you can resume it later.
 
-Add the workflow to your Mastra instance.
+## Observability and Debugging
 
-```typescript filename="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core";
-import { z } from "zod";
+Mastra workflows automatically log the input and output of each step within a workflow run, allowing you to send this data to your preferred logging, telemetry, or observability tools. You can:
 
-import { myWorkflow } from "./workflows";
+• Track the status of each step (e.g., success, error, or suspended).
+• Store run-specific metadata for auditing and post-run analysis.
+• Integrate with third-party observability platforms like Datadog or New Relic by forwarding logs.
 
-export const mastra = new Mastra({
-  workflows: { myWorkflow },
-});
-```
+See the [OTel Configuration](../reference/observability/otel-config.mdx) page for more details.
 
-### 7. Serve the Workflow
+## More Resources
 
-We can now serve the workflow using the `mastra dev` command.
+• Check out our [Workflow Guide](../guides/04-recruiter.mdx) in the Examples section for a hands-on tutorial.
+• Explore the [Workflow Examples](../../examples/workflows/creating-a-workflow.mdx) (including parallel steps, branching paths, cyclical dependencies, calling an LLM, and more).
 
-#### Start the Mastra Server
-
-Open your terminal and run:
-
-```bash copy
-mastra dev
-```
-
-This command will start the server and make your workflow available at:
-
-```
-http://localhost:4111/api/workflows/myWorkflow/execute
-```
-
-### 8. Test the Workflow with cURL
-
-With the server running, you can test your workflow using `curl`:
-
-```bash copy
-curl -X POST http://localhost:4111/api/workflows/myWorkflow/execute \
-  -H "Content-Type: application/json" \
-  -d '{
-    "inputValue": 5
-  }'
-```
-
-Expected Response:
-
-You should receive a JSON response similar to:
-
-```json
-{
-  "results": {
-    "stepOne": {
-      "status": "success",
-      "payload": {
-        "doubledValue": 10
-      }
-    },
-    "stepTwo": {
-      "status": "success",
-      "payload": {
-        "incrementedValue": 11
-      }
-    }
-  },
-  "workflow": "myWorkflow"
-}
-```
-
-This indicates that:
-
-- `stepOne` doubled the input value `5` to `10`.
-- `stepTwo` incremented `10` by `1` to get `11`.
