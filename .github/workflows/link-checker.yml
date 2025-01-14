@@ -14,4 +14,4 @@ jobs:
         with:
           node-version: '20.x'
       - name: Check links
-        run: npx broken-link-checker ${{ github.event.deployment_status.target_url }}/ -roe
+        run: npx broken-link-checker ${{ github.event.deployment_status.target_url }}/docs -roe
