@@ -26,9 +26,7 @@ export async function bundleServer(entryPoint: string) {
       setup(build: any) {
         build.onResolve({ filter: /^.*$/ }, (args: any) => {
           if (!args.importer.endsWith('.mastra/index.mjs')) return;
-          console.log(args.importer, args.path, { import: import.meta.resolve(args.path) });
           try {
-            console.log('Resolving', args.path, { import: import.meta.resolve(args.path) });
             const resolvedPath = import.meta.resolve(args.path);
             if (!resolvedPath || resolvedPath.includes('_npx/')) {
               missingMastraDependency = true;
