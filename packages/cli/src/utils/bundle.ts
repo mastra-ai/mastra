@@ -19,6 +19,29 @@ export async function bundleServer(entryPoint: string) {
     const outfile = join(process.cwd(), '.mastra', 'server.mjs');
     const cliNodeModules = join(path.dirname(path.dirname(__dirname)), 'node_modules');
 
+    let missingMastraDependency = false;
+
+    const externalIfMissingPlugin = {
+      name: 'external-if-missing',
+      setup(build: any) {
+        build.onResolve({ filter: /^.*$/ }, (args: any) => {
+          if (!args.importer.endsWith('.mastra/index.mjs')) return;
+          console.log(args.importer, args.path, { import: import.meta.resolve(args.path) });
+          try {
+            console.log('Resolving', args.path, { import: import.meta.resolve(args.path) });
+            const resolvedPath = import.meta.resolve(args.path);
+            if (!resolvedPath || resolvedPath.includes('_npx/')) {
+              missingMastraDependency = true;
+              return { path: args.path, external: true };
+            }
+          } catch (e) {
+            missingMastraDependency = true;
+            return { path: args.path, external: true };
+          }
+        });
+      },
+    };
+
     const result = await esbuild.build({
       entryPoints: [entryPoint],
       bundle: true,
@@ -83,7 +106,13 @@ export async function bundleServer(entryPoint: string) {
       logOverride: {
         'commonjs-variable-in-esm': 'silent',
       },
+      plugins: [externalIfMissingPlugin],
     });
+
+    if (missingMastraDependency) {
+      console.error('Missing Mastra dependency. Please install it using `npm i -g mastra`');
+      process.exit(1);
+    }
 
     // Output build metadata
     await esbuild.analyzeMetafile(result.metafile);
