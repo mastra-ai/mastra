@@ -1,6 +1,6 @@
-# Using a workflow
+# Agentic Workflows
 
-A simple example showing how to create an agent with a workflow.
+A simple example showing how to create an agentic workflow.
 
 ## Prerequisites
 
