@@ -297,11 +297,6 @@ export class PromptTemplate<TVariables extends Record<string, any> | undefined =
     intro.push(`${this.intent} \n`);
 
     /*
-     * Main
-     */
-    const main = this.components.flatMap(component => this.buildPromptComponent(component));
-
-    /*
      * Outro
      */
     if (this.config.outputFormat) {
@@ -310,19 +305,16 @@ export class PromptTemplate<TVariables extends Record<string, any> | undefined =
 
     return {
       intro,
-      main,
       outro,
     };
   }
 
   toString(variables?: TVariables): string {
-    const { intro, main, outro } = this.layout;
+    const { intro, outro } = this.layout;
 
     const components = this.components.flatMap(component => this.buildPromptComponent(component));
 
-    const prompt = [intro.join('\n'), main.join('\n'), components.join('\n'), outro.join('\n')]
-      .filter(Boolean)
-      .join('\n\n');
+    const prompt = [intro.join('\n'), components.join('\n'), outro.join('\n')].filter(Boolean).join('\n\n');
 
     let hydratedPrompt = prompt;
 
