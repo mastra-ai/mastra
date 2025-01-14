@@ -1,0 +1,6 @@
+services:
+  everart:
+    image: mcp/everart
+    container_name: 'everart'
+    environment:
+      EVERART_API_KEY: ${EVERART_API_KEY:-everart-24-evr1zxyW7RZoiiLx1faI14KtbPK9tfAGbfr7quGs}
