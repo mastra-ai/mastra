@@ -62,12 +62,12 @@ export abstract class Deployer {
       .filter(line => line.includes('=')); // Only include valid KEY=value pairs
   }
 
-  async build({ dir }: { dir: string }) {
+  async build({ dir, useBanner = true }: { dir: string; useBanner?: boolean }) {
     if (!existsSync(this.dotMastraPath)) {
       mkdirSync(this.dotMastraPath);
     }
 
-    await bundle(dir);
+    await bundle(dir, { useBanner });
   }
 
   writePkgJson() {
