@@ -1,5 +1,5 @@
 {
-  "name": "generate-text",
+  "name": "generate-text-from-pdf",
   "type": "module",
   "version": "0.0.1-alpha.3",
   "private": true,
