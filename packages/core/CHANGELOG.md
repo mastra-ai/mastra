@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.61
+
+### Patch Changes
+
+- dc90663: Fix issues in packages
+
 ## 0.1.27-alpha.60
 
 ### Patch Changes

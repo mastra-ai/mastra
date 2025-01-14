@@ -1,5 +1,12 @@
 # generate-object-structured
 
+## 0.0.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [dc90663]
+  - @mastra/core@0.1.27-alpha.61
+
 ## 0.0.1-alpha.2
 
 ### Patch Changes
