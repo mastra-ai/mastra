@@ -116,9 +116,9 @@ export class PromptTemplate<TVariables extends Record<string, any> | undefined =
   private config: PromptTemplateConstructor;
   private components: Partial<PromptTemplateComponent>[] = [];
 
-  constructor(intent: string, config: PromptTemplateConstructor) {
+  constructor(intent: string, config?: PromptTemplateConstructor) {
     this.intent = intent;
-    this.config = config;
+    this.config = config ?? {};
   }
 
   text(text: PromptTemplateComponent['text']) {
@@ -335,7 +335,9 @@ export class PromptTemplate<TVariables extends Record<string, any> | undefined =
 
 export function createPrompt<TVariables extends Record<string, any> | undefined = undefined>(
   intent: string,
-  config: PromptTemplateConstructor,
+  config?: PromptTemplateConstructor,
 ) {
   return new PromptTemplate<TVariables>(intent, config);
 }
+
+const prompt = createPrompt('I want to do something').text('What do you want to do?');
