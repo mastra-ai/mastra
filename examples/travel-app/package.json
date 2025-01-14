@@ -12,9 +12,9 @@
     "generate:city-data": "npx tsx src/scripts/generate-data.ts"
   },
   "dependencies": {
-    "@mastra/core": "0.1.27-alpha.60",
-    "@mastra/engine": "0.0.5-alpha.54",
-    "@mastra/memory": "0.0.2-alpha.40",
+    "@mastra/core": "workspace:*",
+    "@mastra/engine": "workspace:*",
+    "@mastra/memory": "workspace:*",
     "@radix-ui/react-checkbox": "^1.1.2",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-dropdown-menu": "^2.1.1",
