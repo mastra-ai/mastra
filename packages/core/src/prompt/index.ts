@@ -79,7 +79,7 @@ interface PromptTemplateComponent {
  * Supports various prompting techniques and formatting options
  * that have shown to improve model performance in research.
  */
-interface PromptTemplateConstructor extends Partial<PromptTemplateComponent> {
+interface PromptTemplateConstructor {
   /**
    * Primary instruction/goal
    */
@@ -118,11 +118,49 @@ interface PromptTemplateConstructor extends Partial<PromptTemplateComponent> {
 
 export class PromptTemplate<TVariables extends Record<string, any> | undefined = undefined> {
   private config: PromptTemplateConstructor;
+  private componentConfig: Partial<PromptTemplateComponent> = {};
   private components: Partial<PromptTemplateComponent>[] = [];
 
-  // constructor (intent: string, config: PromptTemplateConstructor without intent)
   constructor(config: PromptTemplateConstructor) {
     this.config = config;
+  }
+
+  text(input: string) {
+    this.componentConfig.input = input;
+    return this;
+  }
+
+  constraints(constraints: string[]) {
+    this.componentConfig.constraints = constraints;
+    return this;
+  }
+
+  examples(examples: { input: string; output: string }[]) {
+    this.componentConfig.examples = examples;
+    return this;
+  }
+
+  thinking(config: {
+    autoChainOfThought?: boolean;
+    autoTreeOfThought?: boolean;
+    autoSelfAsk?: boolean;
+    autoVerification?: boolean;
+    steps?: string[];
+    branches?: { [key: string]: string[] };
+    verificationSteps?: string[];
+  }) {
+    this.componentConfig.thinking = config;
+    return this;
+  }
+
+  emphasis(emphasis: { type: 'IMPORTANT !!!' } | { type: 'CALLOUT' } | { type: 'CUSTOM'; text: string }) {
+    this.componentConfig.emphasis = emphasis;
+    return this;
+  }
+
+  context(context: string) {
+    this.componentConfig.context = context;
+    return this;
   }
 
   private buildPromptComponent(config: Partial<PromptTemplateComponent>) {
@@ -273,7 +311,7 @@ export class PromptTemplate<TVariables extends Record<string, any> | undefined =
     /*
      * Main
      */
-    const main = this.buildPromptComponent(this.config);
+    const main = this.buildPromptComponent(this.componentConfig);
 
     /*
      * Outro
@@ -287,17 +325,6 @@ export class PromptTemplate<TVariables extends Record<string, any> | undefined =
       main,
       outro,
     };
-  }
-
-  //   constraints(constraints: string[]) {
-  //     this.config.constraints = constraints;
-  //     return this;
-  //   }
-
-  // remove component
-  component(config: Partial<PromptTemplateComponent>) {
-    this.components.push(config);
-    return this;
   }
 
   toString(variables?: TVariables): string {
@@ -331,6 +358,3 @@ export function createPrompt<TVariables extends Record<string, any> | undefined 
 ) {
   return new PromptTemplate<TVariables>(config);
 }
-
-// builder patter for config
-// return string by default

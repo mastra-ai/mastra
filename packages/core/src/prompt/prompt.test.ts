@@ -15,10 +15,8 @@ describe('Prompt Techniques', () => {
     it('should create a chain of thought prompt', () => {
       const prompt = createPrompt({
         intent: 'If John has 5 apples and gives 2 to Mary, how many does he have left?',
-      }).component({
-        thinking: {
-          autoChainOfThought: true,
-        },
+      }).thinking({
+        autoChainOfThought: true,
       });
       const result = prompt.toString();
       expect(result).toContain("Let's solve this step by step");
@@ -30,10 +28,8 @@ describe('Prompt Techniques', () => {
     it('should create an auto tree of thought prompt', () => {
       const prompt = createPrompt({
         intent: 'What career path should a software engineer take to become a CTO?',
-      }).component({
-        thinking: {
-          autoTreeOfThought: true,
-        },
+      }).thinking({
+        autoTreeOfThought: true,
       });
       const result = prompt.toString();
       expect(result).toContain('multiple ways of solving');
@@ -51,10 +47,8 @@ describe('Prompt Techniques', () => {
       };
       const prompt = createPrompt({
         intent: 'What career path should a software engineer take to become a CTO?',
-      }).component({
-        thinking: {
-          branches,
-        },
+      }).thinking({
+        branches,
       });
       const result = prompt.toString();
       expect(result).toContain('Technical Path');
@@ -68,10 +62,8 @@ describe('Prompt Techniques', () => {
     it('should create a self ask prompt', () => {
       const prompt = createPrompt({
         intent: 'How does photosynthesis work?',
-      }).component({
-        thinking: {
-          autoSelfAsk: true,
-        },
+      }).thinking({
+        autoSelfAsk: true,
       });
       const result = prompt.toString();
       expect(result).toContain("Let's break this down by asking ourselves questions");
@@ -83,10 +75,8 @@ describe('Prompt Techniques', () => {
     it('should create an auto self verification prompt', () => {
       const prompt = createPrompt({
         intent: 'Calculate 15% of $85',
-      }).component({
-        thinking: {
-          autoVerification: true,
-        },
+      }).thinking({
+        autoVerification: true,
       });
       const result = prompt.toString();
       expect(result).toContain("Let's verify our solution");
@@ -101,10 +91,8 @@ describe('Prompt Techniques', () => {
       ];
       const prompt = createPrompt({
         intent: 'Calculate 15% of $85',
-      }).component({
-        thinking: {
-          verificationSteps,
-        },
+      }).thinking({
+        verificationSteps,
       });
       const result = prompt.toString();
       expect(result).toContain('Check if decimal placement is correct');
@@ -127,9 +115,7 @@ describe('Prompt Techniques', () => {
       ];
       const prompt = createPrompt({
         intent: 'What is 25% of $120?',
-      }).component({
-        examples,
-      });
+      }).examples(examples);
       const result = prompt.toString();
       expect(result).toContain('What is 10% of $100?');
       expect(result).toContain('$10');
@@ -158,9 +144,7 @@ describe('Prompt Techniques', () => {
 
       const prompt = createPrompt<{ country: string }>({
         intent: 'Get country capital',
-      }).component({
-        input: 'What is the capital of {{country}}?',
-      });
+      }).text('What is the capital of {{country}}?');
 
       const result = prompt.toString({ country: variables.country });
       expect(result).toContain('What is the capital of France?');
