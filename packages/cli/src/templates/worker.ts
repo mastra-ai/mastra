@@ -362,7 +362,8 @@ router.post('/api/agents/:agentId/tools/:toolId/execute', async ({ params, json 
 
 router.get('/api/workflows', async () => {
   try {
-    const workflows = mastra.getWorkflows();
+    const workflows = mastra.getWorkflows({ serialized: true });
+
     return new Response(JSON.stringify(workflows), {
       headers: {
         'Content-Type': 'application/json',
@@ -398,7 +399,7 @@ router.get('/api/workflows/:workflowId', async ({ params }: IRequest) => {
     }, {});
     return new Response(
       JSON.stringify({
-        ...workflow,
+        name: workflow.name,
         triggerSchema: triggerSchema ? stringify(zodToJsonSchema(triggerSchema)) : undefined,
         steps: serializedSteps,
         stepGraph,

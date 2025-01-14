@@ -23,7 +23,17 @@ export class Integration<ToolsParams = void, ApiClient = void> {
     this.workflows[name] = fn;
   }
 
-  getWorkflows() {
+  public getWorkflows({ serialized }: { serialized?: boolean }): Record<string, Workflow> {
+    if (serialized) {
+      return Object.entries(this.workflows).reduce((acc, [k, v]) => {
+        return {
+          ...acc,
+          [k]: {
+            name: v.name,
+          },
+        };
+      }, {});
+    }
     return this.workflows;
   }
 

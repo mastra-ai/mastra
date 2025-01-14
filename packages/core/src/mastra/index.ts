@@ -250,15 +250,31 @@ export class Mastra<
     return this.vectors;
   }
 
-  public getWorkflow<TWorkflowId extends keyof TWorkflows>(id: TWorkflowId): TWorkflows[TWorkflowId] {
+  public getWorkflow<TWorkflowId extends keyof TWorkflows>(
+    id: TWorkflowId,
+    { serialized }: { serialized?: boolean } = {},
+  ): TWorkflows[TWorkflowId] {
     const workflow = this.workflows?.[id];
     if (!workflow) {
       throw new Error(`Workflow with ID ${String(id)} not found`);
     }
+
+    if (serialized) {
+      return { name: workflow.name } as TWorkflows[TWorkflowId];
+    }
+
     return workflow;
   }
 
-  public getWorkflows() {
+  public getWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
+    if (props.serialized) {
+      return Object.entries(this.workflows).reduce((acc, [k, v]) => {
+        return {
+          ...acc,
+          [k]: { name: v.name },
+        };
+      }, {});
+    }
     return this.workflows;
   }
 
