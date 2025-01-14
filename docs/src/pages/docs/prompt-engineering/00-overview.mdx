@@ -1,3 +1,166 @@
 # Prompt Engineering
 
-Better prompts have been evaluated to lead to better results. Good Prompts
+Better prompts have been evaluated and observed to lead to better outputs. Prompt engineering is the fastest way for model behavior control,
+and can be the difference maker in guiding LLMs to produce desired outputs.
+Mastra makes prompt engineering a breeze by allowing you
+create reusable [prompt templates](/docs/prompt-engineering/01-prompt-templates) that help guide you to state of the art [prompting techniques](#prompting-techniques).
+
+## Writing Effective Prompts
+
+**1. Start Simple and Clear** \
+Begin with direct, unambiguous instructions
+
+```typescript
+// ❌ Vague and unclear
+const vague = createPrompt("fix this").text("function add(x,y) { return x+y }");
+
+// ✅ Clear and specific
+const clear = createPrompt("Add parameter type checking to this function")
+  .text("function add(x,y) { return x+y }")
+  .constraints([
+    "Check if x and y are numbers",
+    "Throw error if types are wrong",
+    "Keep the adding logic the same",
+  ]);
+```
+
+**2. Use Examples Strategically** \
+When you need consistent outputs, provide examples
+
+```typescript
+const prompt = createPrompt("Classify the bug severity")
+  .examples([
+    {
+      input: "App crashes on startup",
+      output: "Critical - P0",
+    },
+    {
+      input: "Button color is wrong",
+      output: "Low - P3",
+    },
+  ])
+  .text("Users can't log in with correct credentials");
+```
+
+**3. Add Context When Needed** \
+Provide relevant background information
+
+```typescript
+const prompt = createPrompt("Review this code")
+  .context(
+    `
+    Project: E-commerce checkout
+    Language: TypeScript
+    Current Issue: Payment processing timeouts
+    User Impact: 5% of transactions failing
+  `,
+  )
+  .text("async function processPayment(orderId: string) {...}");
+```
+
+## Prompting Techniques
+
+**1. Zero-Shot**
+
+The simplest form, useful for straightforward tasks:
+
+```typescript
+const prompt = createPrompt("Translate this text to French").text(
+  "Hello, how are you?",
+);
+```
+
+**2. Few-Shot Learning**
+
+Teach by example for consistent patterns:
+
+```typescript
+const prompt = createPrompt("Convert these requirements into user stories")
+  .examples([
+    {
+      input: "Users need to reset their password",
+      output:
+        "As a user, I want to reset my password, so that I can regain access to my account if I forget it.",
+    },
+  ])
+  .text("Customers want to save items for later purchase");
+```
+
+**3. Chain of Thought**
+
+Guide the model through complex reasoning:
+
+```typescript
+const prompt = createPrompt("Debug this performance issue")
+  .text(
+    "The API response time increased from 200ms to 2s after the last deployment",
+  )
+  .thinking({
+    autoChainOfThought: true,
+    steps: [
+      "Analyze recent changes in deployment",
+      "Check database query performance",
+      "Review caching mechanisms",
+      "Examine network latency",
+    ],
+  });
+```
+
+**4. Tree of Thought**
+
+Explore multiple solution paths:
+
+```typescript
+const prompt = createPrompt("Design a user authentication system").thinking({
+  autoTreeOfThought: true,
+  branches: {
+    Security: [
+      "Password requirements",
+      "2FA implementation",
+      "Session management",
+    ],
+    "User Experience": [
+      "Login flow",
+      "Password recovery",
+      "Remember me feature",
+    ],
+    Implementation: ["Tech stack selection", "Database schema", "API design"],
+  },
+});
+```
+
+**5. Self-Verification**
+
+Add validation steps for critical tasks:
+
+```typescript
+const prompt = createPrompt("Optimize this database query")
+  .text("SELECT * FROM orders JOIN users WHERE orders.status = 'pending'")
+  .thinking({
+    autoVerification: true,
+    verificationSteps: [
+      "Check index usage",
+      "Verify join efficiency",
+      "Validate result set size",
+      "Assess memory usage",
+    ],
+  });
+```
+
+**6. Role-Based**
+
+Specify expertise and perspective:
+
+```typescript
+const prompt = createPrompt("Review this architecture proposal", {
+  persona: "Senior Solutions Architect",
+  style: "analytical",
+  tone: "constructive",
+})
+  .context("This is a high-scale e-commerce platform migration proposal")
+  .constraints([
+    "Focus on scalability",
+    "Consider cost implications",
+    "Address security concerns",
+  ]);
+```

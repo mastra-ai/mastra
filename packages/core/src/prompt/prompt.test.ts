@@ -3,7 +3,7 @@ import { createPrompt } from './index';
 describe('Prompt Techniques', () => {
   describe('Zero Shot', () => {
     it('should create a basic zero shot prompt', () => {
-      const prompt = createPrompt('What is the capital of France?', {});
+      const prompt = createPrompt('What is the capital of France?');
       const result = prompt.toString();
       expect(result).toContain('What is the capital of France?');
     });
@@ -11,11 +11,9 @@ describe('Prompt Techniques', () => {
 
   describe('Chain of Thought', () => {
     it('should create a chain of thought prompt', () => {
-      const prompt = createPrompt('If John has 5 apples and gives 2 to Mary, how many does he have left?', {}).thinking(
-        {
-          autoChainOfThought: true,
-        },
-      );
+      const prompt = createPrompt('If John has 5 apples and gives 2 to Mary, how many does he have left?').thinking({
+        autoChainOfThought: true,
+      });
       const result = prompt.toString();
       expect(result).toContain("Let's solve this step by step");
       expect(result).toContain('If John has 5 apples');
@@ -24,7 +22,7 @@ describe('Prompt Techniques', () => {
 
   describe('Tree of Thought', () => {
     it('should create an auto tree of thought prompt', () => {
-      const prompt = createPrompt('What career path should a software engineer take to become a CTO?', {}).thinking({
+      const prompt = createPrompt('What career path should a software engineer take to become a CTO?').thinking({
         autoTreeOfThought: true,
       });
       const result = prompt.toString();
@@ -54,7 +52,7 @@ describe('Prompt Techniques', () => {
 
   describe('Self Ask', () => {
     it('should create a self ask prompt', () => {
-      const prompt = createPrompt('How does photosynthesis work?', {}).thinking({
+      const prompt = createPrompt('How does photosynthesis work?').thinking({
         autoSelfAsk: true,
       });
       const result = prompt.toString();
@@ -65,7 +63,7 @@ describe('Prompt Techniques', () => {
 
   describe('Self Verification', () => {
     it('should create an auto self verification prompt', () => {
-      const prompt = createPrompt('Calculate 15% of $85', {}).thinking({
+      const prompt = createPrompt('Calculate 15% of $85').thinking({
         autoVerification: true,
       });
       const result = prompt.toString();
@@ -79,7 +77,7 @@ describe('Prompt Techniques', () => {
         'Verify percentage calculation',
         'Ensure currency formatting is proper',
       ];
-      const prompt = createPrompt('Calculate 15% of $85', {}).thinking({
+      const prompt = createPrompt('Calculate 15% of $85').thinking({
         verificationSteps,
       });
       const result = prompt.toString();
@@ -127,7 +125,7 @@ describe('Prompt Techniques', () => {
         country: 'France',
       };
 
-      const prompt = createPrompt<{ country: string }>('Get country capital', {}).text(
+      const prompt = createPrompt<{ country: string }>('Get country capital').text(
         'What is the capital of {{country}}?',
       );
 

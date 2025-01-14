@@ -339,5 +339,3 @@ export function createPrompt<TVariables extends Record<string, any> | undefined 
 ) {
   return new PromptTemplate<TVariables>(intent, config);
 }
-
-const prompt = createPrompt('I want to do something').text('What do you want to do?');
