@@ -13,4 +13,6 @@ export async function publishPackages() {
   const result = await start();
 
   console.log(result);
+
+  process.exit(0);
 }
