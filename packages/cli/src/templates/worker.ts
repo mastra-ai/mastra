@@ -1,11 +1,14 @@
 import { Agent } from '@mastra/core';
 import { AutoRouter } from 'itty-router';
-import { join } from 'path';
 import { stringify } from 'superjson';
 import { pathToFileURL } from 'url';
 import zodToJsonSchema from 'zod-to-json-schema';
 
-const { mastra } = await import(join(process.cwd(), 'mastra.mjs'));
+// @ts-ignore
+import { mastra } from './mastra.mjs';
+
+// import { join } from 'path';
+// const { mastra } = await import(join(process.cwd(), 'mastra.mjs'));
 
 const mastraToolsPaths = process.env.MASTRA_TOOLS_PATH;
 

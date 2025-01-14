@@ -1,5 +1,5 @@
 import { execa } from 'execa';
-import { writeFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 import { DepsService } from '../../../services/service.deps.js';
@@ -16,6 +16,22 @@ export class CloudflareDeployer extends Deployer {
   }
 
   async writePkgJson() {
+    let projectPkg: any = {
+      dependencies: {},
+    };
+    try {
+      projectPkg = JSON.parse(readFileSync(join(this.dotMastraPath, '..', 'package.json'), 'utf-8'));
+    } catch (_e) {
+      // no-op
+    }
+
+    const mastraDeps = Object.entries(projectPkg.dependencies)
+      .filter(([name]) => name.startsWith('@mastra'))
+      .reduce((acc: any, [name, version]) => {
+        acc[name] = version;
+        return acc;
+      }, {});
+
     writeFileSync(
       join(this.dotMastraPath, 'package.json'),
       JSON.stringify(
@@ -30,7 +46,7 @@ export class CloudflareDeployer extends Deployer {
           author: '',
           license: 'ISC',
           dependencies: {
-            '@mastra/core': '0.1.27-alpha.18',
+            ...mastraDeps,
             'itty-router': '5.0.18',
             superjson: '^2.2.2',
             'zod-to-json-schema': '^3.24.1',
@@ -49,26 +65,26 @@ export class CloudflareDeployer extends Deployer {
     writeFileSync(
       join(this.dotMastraPath, 'wrangler.toml'),
       `
-        name = "mastra"
-        main = "index.mjs"  # Your main worker file
-        compatibility_date = "2024-12-02"
-        compatibility_flags = ["nodejs_compat"]
-        
-        [build]
-        command = "npm install" 
-        
-        [[build.upload]]
-        type = "javascript_module"
-        main = "mastra.mjs"
-        
-        [observability.logs]
-        enabled = true
-        
-        [vars]
-        ${Object.entries(envVars || {})
-          ?.map(([key, value]) => `${key} = "${value}"`)
-          .join('\n')}
-        `,
+name = "mastra"
+main = "index.mjs"  # Your main worker file
+compatibility_date = "2024-12-02"
+compatibility_flags = ["nodejs_compat"]
+
+[build]
+command = "npm install" 
+
+[[build.upload]]
+type = "javascript_module"
+main = "mastra.mjs"
+
+[observability.logs]
+enabled = true
+
+[vars]
+${Object.entries(envVars || {})
+  ?.map(([key, value]) => `${key} = "${value}"`)
+  .join('\n')}
+`,
     ),
       writeFileSync(join(this.dotMastraPath, 'index.mjs'), WORKER);
   }
