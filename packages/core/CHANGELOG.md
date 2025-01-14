@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.60
+
+### Patch Changes
+
+- 3967e69: Added GraphRAG implementation and updated docs
+
 ## 0.1.27-alpha.59
 
 ### Patch Changes
