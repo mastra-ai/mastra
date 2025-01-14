@@ -1,5 +1,13 @@
 # mastra
 
+## 0.1.57-alpha.90
+
+### Patch Changes
+
+- c4cd3ff: Catch npx mastra dev dependency issue
+- dde845f: Fix cli stater files build
+- 2b4d224: Publishing
+
 ## 0.1.57-alpha.89
 
 ### Patch Changes

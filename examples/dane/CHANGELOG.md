@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.54
+
+### Patch Changes
+
+- 2b4d224: Publishing
+
 ## 0.0.2-alpha.53
 
 ### Patch Changes
