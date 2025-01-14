@@ -1,69 +1,50 @@
-import { Workflow, Step } from '@mastra/core';
-import { z } from 'zod';
+// import { Step, Workflow } from '@mastra/core';
+// import { z } from 'zod';
 
-async function main() {
-  const doubleValue = new Step({
-    id: 'doubleValue',
-    description: 'Doubles the input value',
-    outputSchema: z.object({
-      doubledValue: z.number(),
-    }),
-    execute: async ({ context }) => {
-      const inputValue = context?.machineContext?.getStepPayload<{ firstValue: number }>('trigger')?.firstValue;
-      if (!inputValue) throw new Error('No input value provided');
-      const doubledValue = inputValue * 2;
-      return { doubledValue };
-    },
-  });
+// const stepOne = new Step({
+//   id: 'stepOne',
+//   execute: async ({ context }) => {
+//     const triggerData = context.machineContext?.triggerData;
+//     const doubledValue = triggerData.inputValue * 2;
+//     return { doubledValue };
+//   },
+// });
 
-  const incrementByOne = new Step({
-    id: 'incrementByOne',
-    description: 'Adds 1 to the input value',
-    outputSchema: z.object({
-      incrementedValue: z.number(),
-    }),
-    execute: async ({ context }) => {
-      const valueToIncrement = context?.machineContext?.getStepPayload<{ doubledValue: number }>(
-        'doubleValue',
-      )?.doubledValue;
-      if (!valueToIncrement) throw new Error('No value to increment provided');
-      const incrementedValue = valueToIncrement + 1;
-      return { incrementedValue };
-    },
-  });
+// const stepTwo = new Step({
+//   id: 'stepTwo',
+//   execute: async ({ context }) => {
+//     const stepOneResult = context.machineContext?.getStepResults.stepOne.result;
+//     const incrementedValue = stepOneResult.doubledValue + 1;
+//     return { incrementedValue };
+//   },
+// });
 
-  const squareValue = new Step({
-    id: 'squareValue',
-    description: 'Squares the input value',
-    outputSchema: z.object({
-      squaredValue: z.number(),
-    }),
-    execute: async ({ context }) => {
-      const valueToSquare = context?.machineContext?.getStepPayload<{ doubledValue: number }>(
-        'doubleValue',
-      )?.doubledValue;
-      if (!valueToSquare) throw new Error('No value to square provided');
-      const squaredValue = valueToSquare * valueToSquare;
-      return { squaredValue };
-    },
-  });
+// const stepThree = new Step({
+//   id: 'stepThree',
+//   execute: async ({ context }) => {
+//     const stepTwoResult = context.machineContext?.stepResults.stepOne.result;
+//     const isEven = stepTwoResult.incrementedValue % 2 === 0;
+//     return { isEven };
+//   },
+// });
 
-  const branchedWorkflow = new Workflow({
-    name: 'branched-workflow',
-    triggerSchema: z.object({
-      firstValue: z.number(),
-    }),
-  });
+// const stepFour = new Step({
+//   id: 'stepFour',
+//   execute: async ({ context }) => {
+//     const stepThreeResult = context.machineContext?.stepResults.stepThree.result;
+//     const isEven = stepThreeResult.tripledValue % 2 === 0;
+//     return { isEven };
+//   },
+// });
 
-  branchedWorkflow.step(doubleValue).then(incrementByOne).after(doubleValue).step(squareValue).commit();
+// // Build the workflow
+// const myWorkflow = new Workflow({
+//   name: 'my-workflow',
+//   triggerSchema: z.object({
+//     inputValue: z.number(),
+//   }),
+// });
 
-  const { runId, start } = branchedWorkflow.createRun();
+// myWorkflow.step(stepOne).then(stepTwo).after(stepOne).step(stepThree).then(stepFour).commit();
 
-  console.log('Run', runId);
-
-  const res = await start({ triggerData: { firstValue: 20 } });
-
-  console.log(res.results);
-}
-
-main();
+// const result = await myWorkflow.execute({ triggerData: { inputValue: 3 } });

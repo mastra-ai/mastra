@@ -38,7 +38,14 @@ export type OpenAIConfig = {
   apiKey?: string;
 };
 
-export type GoogleModel = 'gemini-1.5-pro-latest' | 'gemini-1.5-pro' | 'gemini-1.5-flash-latest' | 'gemini-1.5-flash';
+export type GoogleModel =
+  | 'gemini-1.5-pro-latest'
+  | 'gemini-1.5-pro'
+  | 'gemini-1.5-flash-latest'
+  | 'gemini-1.5-flash'
+  | 'gemini-2.0-flash-exp-latest'
+  | 'gemini-2.0-flash-thinking-exp-1219'
+  | 'gemini-exp-1206';
 
 export type GoogleConfig = {
   provider: 'GOOGLE';
@@ -557,7 +564,7 @@ export type GenerateReturn<Z extends ZodSchema | JSONSchema7 | undefined = undef
   : GenerateObjectResult<any>;
 
 export type StreamReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends undefined
-  ? StreamTextResult<any>
+  ? StreamTextResult<any, any>
   : StreamObjectResult<any, any, any>;
 
 export type OutputType = 'text' | StructuredOutput;

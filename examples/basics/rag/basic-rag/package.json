@@ -1,6 +1,8 @@
 {
   "name": "basic-rag",
   "type": "module",
+  "version": "0.0.0",
+  "private": true,
   "scripts": {
     "start": "pnpx tsx index.ts"
   },

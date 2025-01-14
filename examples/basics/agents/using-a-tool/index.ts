@@ -114,7 +114,7 @@ const mastra = new Mastra({
 });
 
 async function main() {
-  const agent = await mastra.getAgent('weatherAgent');
+  const agent = mastra.getAgent('weatherAgent');
   const result = await agent.generate('What is the weather in London?');
   console.log(result.text);
 }

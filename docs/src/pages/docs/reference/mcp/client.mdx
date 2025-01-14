@@ -1,0 +1,155 @@
+---
+title: MastraMCPClient
+description: API Reference for MastraMCPClient - A client implementation for the Model Context Protocol.
+---
+
+# MastraMCPClient
+
+The `MastraMCPClient` class provides a client implementation for interacting with Model Context Protocol (MCP) servers. It handles connection management, resource discovery, and tool execution through the MCP protocol.
+
+## Constructor
+
+Creates a new instance of the MastraMCPClient.
+
+```typescript
+constructor({
+    name,
+    version = '1.0.0',
+    server,
+    capabilities = {},
+}: {
+    name: string;
+    server: StdioServerParameters;
+    capabilities?: ClientCapabilities;
+    version?: string;
+})
+```
+
+### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: 'name',
+      type: 'string',
+      description: 'The name identifier for this client instance.',
+    },
+    {
+      name: 'version',
+      type: 'string',
+      isOptional: true,
+      defaultValue: '1.0.0',
+      description: 'The version of the client.',
+    },
+    {
+      name: 'server',
+      type: 'StdioServerParameters',
+      description: 'Configuration parameters for the stdio server connection.',
+    },
+    {
+      name: 'capabilities',
+      type: 'ClientCapabilities',
+      isOptional: true,
+      defaultValue: '{}',
+      description: 'Optional capabilities configuration for the client.',
+    },
+  ]}
+/>
+
+## Methods
+
+### connect()
+
+Establishes a connection with the MCP server.
+
+```typescript
+async connect(): Promise<void>
+```
+
+### disconnect()
+
+Closes the connection with the MCP server.
+
+```typescript
+async disconnect(): Promise<void>
+```
+
+### resources()
+
+Retrieves the list of available resources from the server.
+
+```typescript
+async resources(): Promise<ListResourcesResult>
+```
+
+### tools()
+
+Fetches and initializes available tools from the server, converting them into Mastra-compatible tool formats.
+
+```typescript
+async tools(): Promise<Record<string, Tool>>
+```
+
+Returns an object mapping tool names to their corresponding Mastra tool implementations.
+
+## Examples
+
+### Using with Mastra Agent
+
+```typescript
+import { Agent } from '@mastra/core';
+import { MastraMCPClient } from '@mastra/mcp-client';
+
+// Initialize the EverArt MCP client
+const everArtClient = new MastraMCPClient({
+    name: 'everart',
+    server: {
+        command: '/usr/local/bin/docker',
+        args: ['run', '-i', '--rm', '--network=host', '-e', 'EVERART_API_KEY', 'mcp/everart'],
+        env: {
+            EVERART_API_KEY: process.env.EVERART_API_KEY!,
+        },
+    },
+});
+
+// Create a Mastra Agent
+const agent = new Agent({
+    name: 'everart',
+    instructions: 'You are my artist. Include the url in your response.',
+    model: {
+        provider: 'ANTHROPIC',
+        name: 'claude-3-5-sonnet-20241022',
+        toolChoice: 'auto',
+    },
+});
+
+// Example usage in an async function
+async function main() {
+    try {
+        // Connect to the MCP server
+        await everArtClient.connect();
+        
+        // Get available tools
+        const tools = await everArtClient.tools();
+        
+        // Use the agent with the MCP tools
+        const response = await agent.generate('Can you make me a picture of a dog?', {
+            toolsets: {
+                everart: tools,
+            },
+        });
+        
+        console.log(response.text);
+        
+    } catch (error) {
+        console.error('Error:', error);
+    } finally {
+        // Always disconnect when done
+        await everArtClient.disconnect();
+    }
+}
+```
+
+## Related Information
+
+- For more details about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/sdk).

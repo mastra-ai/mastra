@@ -1,69 +1,79 @@
 import { GithubLink } from "../../../components/github-link";
 
-# Workflow with Parallel Steps
+# Parallel Steps
 
-Workflow steps can run in parallel for better performance. You can create parallel workflow steps with `step` that process the same input concurrently.
+When building AI applications, you often need to process multiple independent tasks simultaneously to improve efficiency.
+
+## Control Flow Diagram
+
+This example shows how to structure a workflow that executes steps in parallel, with each branch handling its own data flow and dependencies.
+
+Here's the control flow diagram:
+
+<img
+  src="/parallel-chains.png"
+  alt="Diagram showing workflow with parallel steps"
+  width={600}
+/>
+
+## Creating the Steps
+
+Let's start by creating the steps and initializing the workflow.
 
 ```ts showLineNumbers copy
 import { Step, Workflow } from "@mastra/core";
 import { z } from "zod";
 
-async function main() {
-  const stepOne = new Step({
-    id: "stepOne",
-    outputSchema: z.object({
-      doubledValue: z.number(),
-    }),
-    execute: async ({ context }) => {
-      const inputValue = context?.machineContext?.getStepPayload<{
-        inputValue: number;
-      }>("trigger")?.inputValue;
-      if (!inputValue) throw new Error("No input value provided");
-      const doubledValue = inputValue * 2;
-      return { doubledValue };
-    },
-  });
+const stepOne = new Step({
+  id: "stepOne",
+  execute: async ({ context: { machineContext } }) => ({
+    doubledValue: machineContext.triggerData.inputValue * 2,
+  }),
+});
 
-  const stepTwo = new Step({
-    id: "stepTwo",
-    outputSchema: z.object({
-      incrementedValue: z.number(),
-    }),
-    execute: async ({ context }) => {
-      const valueToIncrement = context?.machineContext?.getStepPayload<{
-        inputValue: number;
-      }>("trigger")?.inputValue;
-      if (!valueToIncrement) throw new Error("No value to increment provided");
-      const incrementedValue = valueToIncrement + 1;
-      return { incrementedValue };
-    },
-  });
+const stepTwo = new Step({
+  id: "stepTwo",
+  execute: async ({ context: { machineContext } }) => ({
+    incrementedValue:
+      machineContext.stepResults.stepOne.payload.doubledValue + 1,
+  }),
+});
 
-  // Build the workflow
-  const myWorkflow = new Workflow({
-    name: "my-workflow",
-    triggerSchema: z.object({
-      inputValue: z.number(),
-    }),
-  });
+const stepThree = new Step({
+  id: "stepThree",
+  execute: async ({ context: { machineContext } }) => ({
+    tripledValue: machineContext.triggerData.inputValue * 3,
+  }),
+});
 
-  // run workflows in parallel
-  myWorkflow
-    .step(stepOne)
-    .step(stepTwo);
+const stepFour = new Step({
+  id: "stepFour",
+  execute: async ({ context: { machineContext } }) => ({
+    isEven: machineContext.stepResults.stepThree.payload.tripledValue % 2 === 0,
+  }),
+});
 
-  myWorkflow.commit();
+const myWorkflow = new Workflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+```
 
-  const { runId, start } = myWorkflow.createRun();
+## Chaining and Parallelizing Steps
 
-  console.log("Run", runId);
+Now we can add the steps to the workflow. Note the `.then()` method is used to chain the steps, but the `.step()` method is used to add the steps to the workflow.
 
-  const res = await start({ triggerData: { inputValue: 90 } });
+```ts showLineNumbers copy
+myWorkflow
+  .step(stepOne)
+  .then(stepTwo) // chain one
+  .step(stepThree)
+  .then(stepFour) // chain two
+  .commit();
 
-  console.log(res.results);
-}
-
-main();
+const result = await myWorkflow.execute({ triggerData: { inputValue: 3 } });
 ```
 
 <br />

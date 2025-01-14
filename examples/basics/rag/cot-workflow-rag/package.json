@@ -1,5 +1,5 @@
 {
-  "name": "cot-rag",
+  "name": "cot-workflow-rag",
   "type": "module",
   "scripts": {
     "start": "pnpx tsx index.ts"

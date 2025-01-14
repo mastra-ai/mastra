@@ -167,12 +167,13 @@ engine
 engine
   .command('up')
   .description('Runs docker-compose up to start docker containers')
-  .action(async () => {
+  .option('-f, --file <path>', 'Path to docker-compose file')
+  .action(async args => {
     await analytics.trackCommandExecution({
       command: 'engine up',
-      args: {},
+      args,
       execution: async () => {
-        await up();
+        await up(args.file);
       },
     });
   });
@@ -180,12 +181,13 @@ engine
 engine
   .command('down')
   .description('Runs docker-compose down to shut down docker containers')
-  .action(async () => {
+  .option('-f, --file <path>', 'Path to docker-compose file')
+  .action(async args => {
     await analytics.trackCommandExecution({
       command: 'engine down',
       args: {},
       execution: async () => {
-        await down();
+        await down(args.file);
       },
     });
   });

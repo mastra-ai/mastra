@@ -4,6 +4,7 @@ const meta = {
   llm: "LLM",
   tts: "TTS",
   agents: "Agents",
+  mcp: "Model Context Protocol (MCP)",
   workflows: "Workflows",
   rag: "Knowledge",
   observability: "Observability",

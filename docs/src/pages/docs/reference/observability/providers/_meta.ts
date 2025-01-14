@@ -1,4 +1,5 @@
 export default {
+  index: "Overview",
   signoz: "SigNoz",
   braintrust: "Braintrust",
   langsmith: "LangSmith",

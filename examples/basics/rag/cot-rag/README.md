@@ -15,7 +15,7 @@ A simple example showing how to use Chain of Thought Prompting with RAG using Ma
 
    ```bash
    git clone https://github.com/mastra-ai/mastra
-   cd examples/basics/rag/retrieve-results
+   cd examples/basics/rag/cot-rag
    ```
 
 2. Copy the environment variables file and add your OpenAI API key:

@@ -1,5 +1,23 @@
 # docs
 
+## 0.1.1-alpha.13
+
+### Patch Changes
+
+- 3967e69: Added GraphRAG implementation and updated docs
+
+## 0.1.1-alpha.12
+
+### Patch Changes
+
+- 606bbbe: Adds -f option to engine commands to specify custom docker config. Updates Engine docs.
+
+## 0.1.1-alpha.11
+
+### Patch Changes
+
+- 1874f40: Added re ranking tool to RAG
+
 ## 0.1.1-alpha.10
 
 ### Patch Changes

@@ -1,7 +1,8 @@
 {
   "name": "workflow-with-separate-steps",
-  "version": "1.0.1-alpha.4",
+  "version": "1.0.1-alpha.8",
   "main": "index.js",
+  "private": true,
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "mastra dev"
@@ -12,7 +13,7 @@
   "description": "",
   "devDependencies": {
     "@types/node": "^22.10.5",
-    "mastra": "^0.1.57-alpha.84",
+    "mastra": "workspace:*",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "zod": "^3.24.1"

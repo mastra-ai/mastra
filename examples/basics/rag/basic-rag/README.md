@@ -15,7 +15,7 @@ A simple example showing how to work with RAG using Mastra, OpenAI, and PGVector
 
    ```bash
    git clone https://github.com/mastra-ai/mastra
-   cd examples/basics/rag/retrieve-results
+   cd examples/basics/rag/basic-rag
    ```
 
 2. Copy the environment variables file and add your OpenAI API key:

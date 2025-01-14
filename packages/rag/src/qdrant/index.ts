@@ -79,6 +79,7 @@ export class QdrantVector extends MastraVector {
     queryVector: number[],
     topK: number = 10,
     filter?: Record<string, any>,
+    includeVector: boolean = false,
   ): Promise<QueryResult[]> {
     const results = (
       await this.client.query(indexName, {
@@ -86,14 +87,29 @@ export class QdrantVector extends MastraVector {
         limit: topK,
         filter: filter,
         with_payload: true,
+        with_vector: includeVector,
       })
     ).points;
 
-    return results.map(match => ({
-      id: match.id as string,
-      score: match.score || 0,
-      metadata: match.payload as Record<string, any>,
-    }));
+    return results.map(match => {
+      let vector: number[] = [];
+      if (includeVector) {
+        if (Array.isArray(match.vector)) {
+          // If it's already an array of numbers
+          vector = match.vector as number[];
+        } else if (typeof match.vector === 'object' && match.vector !== null) {
+          // If it's an object with vector data
+          vector = Object.values(match.vector).filter(v => typeof v === 'number');
+        }
+      }
+
+      return {
+        id: match.id as string,
+        score: match.score || 0,
+        metadata: match.payload as Record<string, any>,
+        ...(includeVector && { vector }),
+      };
+    });
   }
 
   async listIndexes(): Promise<string[]> {

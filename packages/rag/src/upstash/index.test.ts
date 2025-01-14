@@ -64,6 +64,17 @@ describe('UpstashVector Integration Tests', () => {
         expect(results?.[0]?.metadata).toEqual({ label: 'first-dimension' });
       }
     }, 5000000);
+
+    it('should query vectors and return vector in results', async () => {
+      const results = await vectorStore.query(testIndexName, createVector(0, 0.9), 3, undefined, true);
+      expect(results).toHaveLength(3);
+      expect(results?.[0]?.vector).toBeDefined();
+      expect(results?.[0]?.vector).toHaveLength(VECTOR_DIMENSION);
+      expect(results?.[1]?.vector).toBeDefined();
+      expect(results?.[1]?.vector).toHaveLength(VECTOR_DIMENSION);
+      expect(results?.[2]?.vector).toBeDefined();
+      expect(results?.[2]?.vector).toHaveLength(VECTOR_DIMENSION);
+    });
   });
   describe('Index Operations', () => {
     it('should create and list an index', async () => {

@@ -15,7 +15,7 @@ A simple example showing how to do metadata filtering with RAG using Mastra, Ope
 
    ```bash
    git clone https://github.com/mastra-ai/mastra
-   cd examples/basics/rag/retrieve-results
+   cd examples/basics/rag/filter-rag
    ```
 
 2. Copy the environment variables file and add your OpenAI API key:

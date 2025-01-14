@@ -257,19 +257,7 @@ export class PostgresEngine extends MastraEngine {
     let entity;
 
     try {
-      entity = await this.traced(
-        () =>
-          this.getEntity({
-            connectionId,
-            name,
-          }),
-        'syncRecords.getEntity',
-      )();
-    } catch (e) {
-      console.log('Entity not found, creating');
-    }
-
-    if (!entity) {
+      // Try to create the entity first
       entity = await this.traced(
         () =>
           this.createEntity({
@@ -278,6 +266,24 @@ export class PostgresEngine extends MastraEngine {
           }),
         'syncRecords.createEntity',
       )();
+    } catch (e) {
+      if (e && typeof e === 'object' && 'code' in e && e.code === '23505') {
+        entity = await this.traced(
+          () =>
+            this.getEntity({
+              connectionId,
+              name,
+            }),
+          'syncRecords.getEntity',
+        )();
+      } else {
+        // Re-throw any other errors
+        throw e;
+      }
+    }
+
+    if (!entity) {
+      throw new Error('Failed to create or get entity');
     }
 
     await this.traced(

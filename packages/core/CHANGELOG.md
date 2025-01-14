@@ -1,5 +1,30 @@
 # @mastra/core
 
+## 0.1.27-alpha.61
+
+### Patch Changes
+
+- dc90663: Fix issues in packages
+
+## 0.1.27-alpha.60
+
+### Patch Changes
+
+- 3967e69: Added GraphRAG implementation and updated docs
+
+## 0.1.27-alpha.59
+
+### Patch Changes
+
+- b524c22: Package upgrades
+
+## 0.1.27-alpha.58
+
+### Patch Changes
+
+- 1874f40: Added re ranking tool to RAG
+- 4b1ce2c: Update Google model support in documentation and type definitions to include new Gemini versions
+
 ## 0.1.27-alpha.57
 
 ### Patch Changes

@@ -1,7 +1,8 @@
 {
   "name": "workflow-ai-recruiter",
-  "version": "1.0.1-alpha.4",
+  "version": "1.0.1-alpha.8",
   "main": "index.js",
+  "private": true,
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "mastra dev",

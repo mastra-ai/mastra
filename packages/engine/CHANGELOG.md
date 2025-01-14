@@ -1,5 +1,35 @@
 # @mastra/engine
 
+## 0.0.5-alpha.55
+
+### Patch Changes
+
+- dc90663: Fix issues in packages
+- Updated dependencies [dc90663]
+  - @mastra/core@0.1.27-alpha.61
+
+## 0.0.5-alpha.54
+
+### Patch Changes
+
+- Updated dependencies [3967e69]
+  - @mastra/core@0.1.27-alpha.60
+
+## 0.0.5-alpha.53
+
+### Patch Changes
+
+- Updated dependencies [b524c22]
+  - @mastra/core@0.1.27-alpha.59
+
+## 0.0.5-alpha.52
+
+### Patch Changes
+
+- Updated dependencies [1874f40]
+- Updated dependencies [4b1ce2c]
+  - @mastra/core@0.1.27-alpha.58
+
 ## 0.0.5-alpha.51
 
 ### Patch Changes

@@ -1,80 +1,81 @@
 import { GithubLink } from "../../../components/github-link";
 
-# Workflow with Branching Paths
+# Branching Paths
 
-This example demonstrates how to create a workflow that takes a number, doubles it, and then performs two separate operations (incrementing and squaring) on the doubled value in parallel branches.
+When processing data, you often need to take different actions based on intermediate results. This example shows how to create a workflow that splits into separate paths, where each path executes different steps based on the output of a previous step.
+
+## Control Flow Diagram
+
+This example shows how to create a workflow that splits into separate paths, where each path executes different steps based on the output of a previous step.
+
+Here's the control flow diagram:
+
+<img
+  src="/subscribed-chains.png"
+  alt="Diagram showing workflow with branching paths"
+/>
+
+## Creating the Steps
+
+Let's start by creating the steps and initializing the workflow.
+
+{/* prettier-ignore */}
+```ts showLineNumbers copy
+import { Step, Workflow } from "@mastra/core";
+import { z } from "zod"
+
+const stepOne = new Step({
+  id: "stepOne",
+  execute: async ({ context: { machineContext } }) => ({ 
+    doubledValue: machineContext.triggerData.inputValue * 2
+  })
+});
+
+const stepTwo = new Step({
+  id: "stepTwo",
+  execute: async ({ context: { machineContext } }) => ({ 
+    isDivisibleByFive: machineContext.stepResults.stepOne.payload.doubledValue % 5 === 0
+  })
+});
+
+
+const stepThree = new Step({
+  id: "stepThree",
+  execute: async ({ context: { machineContext } }) => ({ 
+    incrementedValue: machineContext.stepResults.stepOne.payload.doubledValue + 1
+  })
+});
+
+const stepFour = new Step({
+  id: "stepFour",
+  execute: async ({ context: { machineContext } }) => ({ 
+    isDivisibleByThree: machineContext.stepResults.stepThree.payload.incrementedValue % 3 === 0
+  })
+});
+
+// Build the workflow
+const myWorkflow = new Workflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+```
+
+## Branching Paths and Chaining Steps
+
+Now let's execute the workflow and see the results.
 
 ```ts showLineNumbers copy
-import { Workflow, Step } from '@mastra/core';
-import { z } from 'zod';
+myWorkflow
+  .step(stepOne)
+  .then(stepTwo)
+  .after(stepOne)
+  .step(stepThree)
+  .then(stepFour)
+  .commit();
 
-async function main() {
-  const doubleValue = new Step({
-    id: 'doubleValue',
-    description: 'Doubles the input value',
-    outputSchema: z.object({
-      doubledValue: z.number(),
-    }),
-    execute: async ({ context }) => {
-      const inputValue = context?.machineContext?.getStepPayload<{ firstValue: number }>('trigger')?.firstValue;
-      if (!inputValue) throw new Error('No input value provided');
-      const doubledValue = inputValue * 2;
-      return { doubledValue };
-    },
-  });
-
-  const incrementByOne = new Step({
-    id: 'incrementByOne',
-    description: 'Adds 1 to the input value',
-    outputSchema: z.object({
-      incrementedValue: z.number(),
-    }),
-    execute: async ({ context }) => {
-      const valueToIncrement = context?.machineContext?.getStepPayload<{ doubledValue: number }>('doubleValue')?.doubledValue;
-      if (!valueToIncrement) throw new Error('No value to increment provided');
-      const incrementedValue = valueToIncrement + 1;
-      return { incrementedValue };
-    },
-  });
-
-  const squareValue = new Step({
-    id: 'squareValue',
-    description: 'Squares the input value',
-    outputSchema: z.object({
-      squaredValue: z.number(),
-    }),
-    execute: async ({ context }) => {
-      const valueToSquare = context?.machineContext?.getStepPayload<{ doubledValue: number }>('doubleValue')?.doubledValue;
-      if (!valueToSquare) throw new Error('No value to square provided');
-      const squaredValue = valueToSquare * valueToSquare;
-      return { squaredValue };
-    },
-  });
-
-  const branchedWorkflow = new Workflow({
-    name: 'branched-workflow',
-    triggerSchema: z.object({
-      firstValue: z.number(),
-    }),
-  });
-
-  branchedWorkflow
-    .step(doubleValue)
-    .then(incrementByOne)
-    .after(doubleValue)
-    .step(squareValue)
-    .commit();
-
-  const { runId, start } = branchedWorkflow.createRun();
-
-  console.log('Run', runId);
-
-  const res = await start({ triggerData: { firstValue: 20 } });
-
-  console.log(res.results);
-}
-
-main();
+const result = await myWorkflow.execute({ triggerData: { inputValue: 3 } });
 ```
 
 <br />

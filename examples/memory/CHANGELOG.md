@@ -1,5 +1,38 @@
 # llm
 
+## 1.0.1-alpha.40
+
+### Patch Changes
+
+- Updated dependencies [dc90663]
+  - @mastra/core@0.1.27-alpha.61
+  - @mastra/memory@0.0.2-alpha.41
+
+## 1.0.1-alpha.39
+
+### Patch Changes
+
+- Updated dependencies [3967e69]
+  - @mastra/core@0.1.27-alpha.60
+  - @mastra/memory@0.0.2-alpha.40
+
+## 1.0.1-alpha.38
+
+### Patch Changes
+
+- Updated dependencies [b524c22]
+  - @mastra/core@0.1.27-alpha.59
+  - @mastra/memory@0.0.2-alpha.39
+
+## 1.0.1-alpha.37
+
+### Patch Changes
+
+- Updated dependencies [1874f40]
+- Updated dependencies [4b1ce2c]
+  - @mastra/core@0.1.27-alpha.58
+  - @mastra/memory@0.0.2-alpha.38
+
 ## 1.0.1-alpha.36
 
 ### Patch Changes

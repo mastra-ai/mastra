@@ -1,6 +1,6 @@
 {
   "name": "@mastra/stripe",
-  "version": "1.0.1-alpha.36",
+  "version": "1.0.1-alpha.40",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/stripe.esm.js",
@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "NODE_OPTIONS=--max-old-space-size=8096 dts build",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=8096 dts build",
     "build:dev": "dts watch",
     "lint": "dts lint",
     "size": "size-limit",
@@ -46,6 +46,7 @@
     "@types/jest": "^29.5.12",
     "@types/lodash": "^4.17.7",
     "@types/node": "^22.1.0",
+    "cross-env": "^7.0.3",
     "dts-cli": "^2.0.5",
     "husky": "^9.1.4",
     "jest": "^29.7.0",
@@ -60,7 +61,7 @@
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.3",
     "@mastra/core": "workspace:^",
-    "zod": "^3.24.0",
-    "ts-to-zod": "^3.13.0"
+    "ts-to-zod": "^3.13.0",
+    "zod": "^3.24.0"
   }
 }
