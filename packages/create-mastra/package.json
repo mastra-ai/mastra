@@ -1,6 +1,6 @@
 {
   "name": "create-mastra",
-  "version": "0.1.0-alpha.23",
+  "version": "0.1.0-alpha.22",
   "description": "Create Mastra apps with one command",
   "type": "module",
   "main": "dist/index.js",
@@ -37,9 +37,7 @@
     "rollup": "^4.30.1",
     "rollup-plugin-esbuild": "^6.1.1",
     "rollup-plugin-node-externals": "^8.0.0",
-    "typescript": "^5.5.4",
-    "vite": "^6.0.3",
-    "vite-plugin-externalize-deps": "^0.8.0"
+    "typescript": "^5.5.4"
   },
   "engines": {
     "node": ">=20"
