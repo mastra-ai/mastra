@@ -1000,7 +1000,7 @@ export class Workflow<
   async #persistWorkflowSnapshot() {
     const snapshotFromActor = this.#actor?.getPersistedSnapshot();
     if (!this.snapshot) {
-      this.log(LogLevel.ERROR, 'Snapshot cannot be persisted. Mastra engine is not initialized', {
+      this.log(LogLevel.DEBUG, 'Snapshot cannot be persisted. Mastra engine is not initialized', {
         runId: this.#runId,
       });
       return;
