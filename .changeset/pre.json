@@ -51,7 +51,8 @@
     "workflow-ai-recruiter": "1.0.1-alpha.8",
     "workflow-with-inline-steps": "1.0.1-alpha.8",
     "workflow": "1.0.1-alpha.21",
-    "workflow-with-separate-steps": "1.0.1-alpha.8"
+    "workflow-with-separate-steps": "1.0.1-alpha.8",
+    "generate-text-from-pdf": "0.0.1-alpha.3"
   },
   "changesets": [
     "afraid-papayas-shake",
@@ -192,6 +193,7 @@
     "three-dryers-hide",
     "tidy-dryers-deny",
     "tiny-cheetahs-tell",
+    "tiny-readers-dress",
     "tiny-stingrays-confess",
     "tough-spiders-confess",
     "tricky-carrots-glow",
