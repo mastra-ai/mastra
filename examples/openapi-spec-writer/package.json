@@ -1,6 +1,6 @@
 {
   "name": "openapi-spec-writer",
-  "version": "0.1.1-alpha.43",
+  "version": "0.1.1-alpha.44",
   "type": "module",
   "private": true,
   "scripts": {

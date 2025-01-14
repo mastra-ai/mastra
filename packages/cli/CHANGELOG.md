@@ -1,5 +1,13 @@
 # mastra
 
+## 0.1.57-alpha.88
+
+### Patch Changes
+
+- dc90663: Fix issues in packages
+- Updated dependencies [dc90663]
+  - @mastra/core@0.1.27-alpha.61
+
 ## 0.1.57-alpha.87
 
 ### Patch Changes
