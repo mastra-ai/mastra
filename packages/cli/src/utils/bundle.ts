@@ -108,7 +108,9 @@ export async function bundleServer(entryPoint: string) {
     });
 
     if (missingMastraDependency) {
-      console.error('Missing Mastra dependency. Please install it using `npm i -g mastra`');
+      console.error(
+        `Missing Mastra dependency. Please install the mastra package in your project or globally using npm i -g mastra`,
+      );
       process.exit(1);
     }
 
