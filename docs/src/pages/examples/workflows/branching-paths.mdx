@@ -10,7 +10,10 @@ This example shows how to create a workflow that splits into separate paths, whe
 
 Here's the control flow diagram:
 
-<img src="/subscribed-chains.png" alt="Diagram showing workflow with branching paths" />
+<img
+  src="/subscribed-chains.png"
+  alt="Diagram showing workflow with branching paths"
+/>
 
 ## Creating the Steps
 
@@ -31,7 +34,7 @@ const stepOne = new Step({
 const stepTwo = new Step({
   id: "stepTwo",
   execute: async ({ context: { machineContext } }) => ({ 
-    isDivisibleByFive: machineContext.stepResults.stepOne.result.doubledValue % 5 === 0
+    isDivisibleByFive: machineContext.stepResults.stepOne.payload.doubledValue % 5 === 0
   })
 });
 
@@ -39,14 +42,14 @@ const stepTwo = new Step({
 const stepThree = new Step({
   id: "stepThree",
   execute: async ({ context: { machineContext } }) => ({ 
-    incrementedValue: machineContext.stepResults.stepOne.result.doubledValue + 1
+    incrementedValue: machineContext.stepResults.stepOne.payload.doubledValue + 1
   })
 });
 
 const stepFour = new Step({
   id: "stepFour",
   execute: async ({ context: { machineContext } }) => ({ 
-    isDivisibleByThree: machineContext.stepResults.stepThree.result.incrementedValue % 3 === 0
+    isDivisibleByThree: machineContext.stepResults.stepThree.payload.incrementedValue % 3 === 0
   })
 });
 
@@ -65,11 +68,14 @@ Now let's execute the workflow and see the results.
 
 ```ts showLineNumbers copy
 myWorkflow
-  .step(stepOne).then(stepTwo)
-  .after(stepOne).step(stepThree).then(stepFour)
-  .commit()
-  
-const result = await myWorkflow.execute({ triggerData: { inputValue: 3 }})
+  .step(stepOne)
+  .then(stepTwo)
+  .after(stepOne)
+  .step(stepThree)
+  .then(stepFour)
+  .commit();
+
+const result = await myWorkflow.execute({ triggerData: { inputValue: 3 } });
 ```
 
 <br />
