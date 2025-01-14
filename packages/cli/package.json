@@ -19,7 +19,7 @@
     "build": "npm-run-all build:tsc copy-starter-files build:playground",
     "build:tsc": "tsc",
     "build:dev": "npx tsc --watch",
-    "copy-starter-files": "cpy src/starter-files dist/",
+    "copy-starter-files": "cpy 'src/starter-files/**/*' dist/starter-files",
     "build:playground": "cd src/playground && vite build",
     "dev:playground": "cd src/playground && vite",
     "init": "npx tsx src/index.ts init",
