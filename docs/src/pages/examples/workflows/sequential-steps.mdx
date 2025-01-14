@@ -1,4 +1,4 @@
-import { GithubLink } from '../../../components/github-link';
+import { GithubLink } from "../../../components/github-link";
 
 # Workflow with Sequential Steps
 
@@ -10,41 +10,46 @@ This example shows how to chain workflow steps by using the `then` method demons
 
 Here's the control flow diagram:
 
-<img src="/sequential-chains.png" alt="Diagram showing workflow with sequential steps" width={600} />
+<img
+  src="/sequential-chains.png"
+  alt="Diagram showing workflow with sequential steps"
+  width={600}
+/>
 
 ## Creating the Steps
 
 Let's start by creating the steps and initializing the workflow.
 
 ```ts showLineNumbers copy
-import { Step, Workflow } from '@mastra/core';
-import { z } from 'zod';
+import { Step, Workflow } from "@mastra/core";
+import { z } from "zod";
 
 const stepOne = new Step({
-  id: 'stepOne',
+  id: "stepOne",
   execute: async ({ context: { machineContext } }) => ({
-    doubledValue: machineContext.triggerData.inputValue * 2 
-  })
+    doubledValue: machineContext.triggerData.inputValue * 2,
+  }),
 });
 
 const stepTwo = new Step({
-  id: 'stepTwo',
+  id: "stepTwo",
   execute: async ({ context: { machineContext } }) => ({
-    incrementedValue: machineContext.stepResults.stepOne.result.doubledValue + 1
-  })
+    incrementedValue:
+      machineContext.stepResults.stepOne.payload.doubledValue + 1,
+  }),
 });
 
 const stepThree = new Step({
-  id: 'stepThree',
+  id: "stepThree",
   execute: async ({ context: { machineContext } }) => ({
-    tripledValue: machineContext.stepResults.stepTwo.result.incrementedValue * 3
-  })
+    tripledValue:
+      machineContext.stepResults.stepTwo.payload.incrementedValue * 3,
+  }),
 });
-
 
 // Build the workflow
 const myWorkflow = new Workflow({
-  name: 'my-workflow',
+  name: "my-workflow",
   triggerSchema: z.object({
     inputValue: z.number(),
   }),
@@ -57,10 +62,7 @@ Now let's chain the steps together.
 
 ```ts showLineNumbers copy
 // sequential steps
-myWorkflow
-  .step(stepOne)
-  .then(stepTwo)
-  .then(stepThree);
+myWorkflow.step(stepOne).then(stepTwo).then(stepThree);
 
 myWorkflow.commit();
 
@@ -75,5 +77,7 @@ const res = await start({ triggerData: { inputValue: 90 } });
 <br />
 <br />
 <GithubLink
-  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-sequential-steps'}
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-sequential-steps"
+  }
 />
