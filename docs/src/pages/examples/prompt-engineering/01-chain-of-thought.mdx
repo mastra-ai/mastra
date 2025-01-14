@@ -1,0 +1,61 @@
+# Chain of Thought Prompting
+
+Chain of thought prompting helps models break down complex problems into steps. Here's how to implement it in Mastra:
+
+```typescript
+import { createPrompt } from "@mastra/core";
+
+type MathProblemVars = {
+  problem: string;
+  difficulty: "basic" | "intermediate" | "advanced";
+};
+
+const mathSolverPrompt = createPrompt<MathProblemVars>("Solve math problem", {
+  persona: "Math Teacher",
+  outputFormat: "markdown",
+})
+  .text("Solve this {{difficulty}} math problem:\n\n{{problem}}")
+  .thinking({
+    autoChainOfThought: true,
+    steps: [
+      "Identify the key variables and operations",
+      "Break down the problem into smaller parts",
+      "Solve each part sequentially",
+      "Combine the results",
+      "Verify the solution",
+    ],
+  })
+  .examples([
+    {
+      input: {
+        problem:
+          "If a train travels at 60 mph for 2.5 hours, how far does it go?",
+        difficulty: "basic",
+      },
+      output: `Let me solve this step by step:
+1. Identify variables:
+   - Speed = 60 mph
+   - Time = 2.5 hours
+2. Use distance formula:
+   - Distance = Speed × Time
+3. Calculate:
+   - Distance = 60 × 2.5
+   - Distance = 150 miles
+Therefore, the train travels 150 miles.`,
+    },
+  ]);
+
+// Usage example
+const solution = mathSolverPrompt.toString({
+  problem:
+    "A rectangle has a perimeter of 24 units and its length is twice its width. Find its dimensions.",
+  difficulty: "intermediate",
+});
+```
+
+## Key Features
+
+1. **Step-by-Step Thinking**: The `thinking` property defines explicit steps for problem-solving
+2. **Auto Chain of Thought**: Enable `autoChainOfThought` to encourage step-by-step reasoning
+3. **Examples with Reasoning**: Provide examples that demonstrate the thought process
+4. **Difficulty Levels**: Adjust complexity based on the problem difficulty

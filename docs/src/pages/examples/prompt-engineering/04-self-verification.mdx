@@ -1,0 +1,62 @@
+# Self-Verification Prompting
+
+Self-verification prompting helps models validate their own outputs and catch potential errors. Here's how to implement it in Mastra:
+
+```typescript
+import { createPrompt } from "@mastra/core";
+
+type CodeGenerationVars = {
+  requirements: string;
+  language: "typescript" | "python" | "javascript";
+  testCases?: string[];
+};
+
+const codeGenPrompt = createPrompt<CodeGenerationVars>(
+  "Generate code with verification",
+  {
+    persona: "Senior Software Engineer",
+    outputFormat: "markdown",
+  },
+)
+  .text(
+    "Generate {{language}} code that meets these requirements:\n\n{{requirements}}",
+  )
+  .thinking({
+    steps: [
+      "Analyze requirements",
+      "Plan implementation approach",
+      "Write initial code",
+      "Add error handling",
+      "Implement input validation",
+    ],
+  })
+  .verificationSteps([
+    "Check if implementation meets all requirements",
+    "Run test cases: {{testCases}}",
+    "Verify edge case handling",
+    "Validate error handling",
+    "Check input validation",
+    "Assess code quality",
+    "Identify potential improvements",
+  ])
+  .constraints([
+    "Must handle all edge cases",
+    "Include input validation",
+    "Add error handling",
+    "Follow {{language}} best practices",
+  ]);
+
+// Usage example
+const implementation = codeGenPrompt.toString({
+  requirements: "Create a function that validates email addresses",
+  language: "typescript",
+  testCases: ["valid email", "missing @", "multiple @", "invalid domain"],
+});
+```
+
+## Key Features
+
+1. **Dedicated Verification**: Uses `verificationSteps` for systematic validation
+2. **Separate Concerns**: Splits thinking and verification processes
+3. **Structured Validation**: Clear steps for checking implementation
+4. **Comprehensive Testing**: Covers requirements, tests, and edge cases

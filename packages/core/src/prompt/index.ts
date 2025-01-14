@@ -19,8 +19,8 @@ interface PromptTemplateComponent {
    * Few-shot learning examples
    */
   examples: {
-    input: string;
-    output: string;
+    input: string | Record<string, any>;
+    output: string | Record<string, any>;
   }[];
 
   /**
