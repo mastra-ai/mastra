@@ -2,6 +2,8 @@ import { GithubLink } from '../../../components/github-link';
 
 # Calling an LLM from a Workflow
 
+This example demonstrates how to create a workflow that streams responses from an LLM, showing both real-time output and final text handling.
+
 ```ts showLineNumbers copy
 import { Mastra, Step, Workflow } from '@mastra/core';
 import { z } from 'zod';
@@ -46,9 +48,11 @@ const mastra = new Mastra({
   workflows: { newWorkflow },
 });
 
-await mastra
+const { runId = start } = mastra
   .getWorkflow('newWorkflow')
-  .execute({ triggerData: { message: 'Give me a speech as skipper from penguin of madagascar' } });
+  .createRun();
+
+await start({ triggerData: { message: 'Give me a speech as skipper from penguin of madagascar' } });
 ```
 
 <br />
@@ -57,5 +61,5 @@ await mastra
 <br />
 <br />
 <GithubLink
-  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/calling-llm-from-workflow.ts'}
+  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/calling-llm-from-workflow'}
 />

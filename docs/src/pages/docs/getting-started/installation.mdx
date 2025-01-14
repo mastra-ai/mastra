@@ -1,4 +1,5 @@
 import { Callout, Steps, Tabs } from "nextra/components";
+import YouTube from "../../../components/youtube";
 
 # Installation
 
@@ -11,6 +12,8 @@ To run Mastra, you need access to an LLM. Typically, you'll want to get an API k
 
 ## Automatic Installation
 
+<YouTube id="spGlcTEjuXY" />
+
 <Steps>
 
 ### Create a New Project
@@ -20,24 +23,24 @@ a project, run:
 
 <Tabs items={["npx", "npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
-  
-```bash copy 
+
+```bash copy
 npx create-mastra@latest
 ```
 
   </Tabs.Tab>
   <Tabs.Tab>
-```bash copy 
+```bash copy
 npm create mastra
 ```
   </Tabs.Tab>
   <Tabs.Tab>
-```bash copy 
+```bash copy
 yarn create mastra
 ```
 </Tabs.Tab>
   <Tabs.Tab>
-```bash copy 
+```bash copy
 pnpm create mastra
 ```
 </Tabs.Tab>
@@ -64,7 +67,7 @@ After the prompts, `create-mastra` will set up your project directory with TypeS
 
 Add the API key for your configured LLM provider in your `.env` file.
 
-```env
+```bash filename=".env" copy
 OPENAI_API_KEY=<your-openai-key>
 ```
 
@@ -95,9 +98,8 @@ Then, initialize a TypeScript project including the `@mastra/core` package:
 
 ```bash copy npm2yarn
 npm init -y
-npm install typescript tsx @types/node zod --save-dev
-npm install @mastra/core@alpha
-npm install -D mastra@alpha
+npm install typescript tsx @types/node mastra@alpha --save-dev
+npm install @mastra/core@alpha zod
 npx tsc --init
 ```
 
@@ -105,34 +107,149 @@ npx tsc --init
 
 Create a `.env` file in your project root directory and add your API key:
 
-```env
+```bash filename=".env" copy
 OPENAI_API_KEY=<your-openai-key>
 ```
 
 Replace your_openai_api_key with your actual API key.
 
-### Create an Agent
+### Create a Tool
 
-First, create a `cat-one` agent file:
+Create a `weather-tool` tool file:
 
 ```bash copy
-touch src/mastra/agents/cat-one.ts
+mkdir -p src/mastra/tools && touch src/mastra/tools/weather-tool.ts
 ```
 
-Then, add the following code to `src/mastra/agents/cat-one.ts`:
+Then, add the following code to `src/mastra/tools/weather-tool.ts`:
 
-```ts filename="src/mastra/agents/cat-one.ts" showLineNumbers
+```ts filename="src/mastra/tools/weather-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core";
+import { z } from "zod";
+
+interface WeatherResponse {
+  current: {
+    time: string;
+    temperature_2m: number;
+    apparent_temperature: number;
+    relative_humidity_2m: number;
+    wind_speed_10m: number;
+    wind_gusts_10m: number;
+    weather_code: number;
+  };
+}
+
+export const weatherTool = createTool({
+  id: "get-weather",
+  description: "Get current weather for a location",
+  inputSchema: z.object({
+    location: z.string().describe("City name"),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    feelsLike: z.number(),
+    humidity: z.number(),
+    windSpeed: z.number(),
+    windGust: z.number(),
+    conditions: z.string(),
+    location: z.string(),
+  }),
+  execute: async ({ context }) => {
+    return await getWeather(context.location);
+  },
+});
+
+const getWeather = async (location: string) => {
+  const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`;
+  const geocodingResponse = await fetch(geocodingUrl);
+  const geocodingData = await geocodingResponse.json();
+
+  if (!geocodingData.results?.[0]) {
+    throw new Error(`Location '${location}' not found`);
+  }
+
+  const { latitude, longitude, name } = geocodingData.results[0];
+
+  const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code`;
+
+  const response = await fetch(weatherUrl);
+  const data: WeatherResponse = await response.json();
+
+  return {
+    temperature: data.current.temperature_2m,
+    feelsLike: data.current.apparent_temperature,
+    humidity: data.current.relative_humidity_2m,
+    windSpeed: data.current.wind_speed_10m,
+    windGust: data.current.wind_gusts_10m,
+    conditions: getWeatherCondition(data.current.weather_code),
+    location: name,
+  };
+};
+
+function getWeatherCondition(code: number): string {
+  const conditions: Record<number, string> = {
+    0: "Clear sky",
+    1: "Mainly clear",
+    2: "Partly cloudy",
+    3: "Overcast",
+    45: "Foggy",
+    48: "Depositing rime fog",
+    51: "Light drizzle",
+    53: "Moderate drizzle",
+    55: "Dense drizzle",
+    56: "Light freezing drizzle",
+    57: "Dense freezing drizzle",
+    61: "Slight rain",
+    63: "Moderate rain",
+    65: "Heavy rain",
+    66: "Light freezing rain",
+    67: "Heavy freezing rain",
+    71: "Slight snow fall",
+    73: "Moderate snow fall",
+    75: "Heavy snow fall",
+    77: "Snow grains",
+    80: "Slight rain showers",
+    81: "Moderate rain showers",
+    82: "Violent rain showers",
+    85: "Slight snow showers",
+    86: "Heavy snow showers",
+    95: "Thunderstorm",
+    96: "Thunderstorm with slight hail",
+    99: "Thunderstorm with heavy hail",
+  };
+  return conditions[code] || "Unknown";
+}
+```
+
+### Create an Agent
+
+Create a `weather` agent file:
+
+```bash copy
+mkdir -p src/mastra/agents && touch src/mastra/agents/weather.ts
+```
+
+Then, add the following code to `src/mastra/agents/weather.ts`:
+
+```ts filename="src/mastra/agents/weather.ts" showLineNumbers
 import { Agent } from "@mastra/core";
+import { weatherTool } from "../tools/weather-tool";
 
-export const catOne = new Agent({
-  name: "cat-one",
+export const weatherAgent = new Agent({
+  name: "Weather Agent",
+  instructions: `You are a helpful weather assistant that provides accurate weather information.
+
+Your primary function is to help users get weather details for specific locations. When responding:
+- Always ask for a location if none is provided
+- Include relevant details like humidity, wind conditions, and precipitation
+- Keep responses concise but informative
+
+Use the weatherTool to fetch current weather data.`,
   model: {
     provider: "OPEN_AI",
     name: "gpt-4o",
-    toolChoice: "auto",
   },
-  instructions: `You are a feline expert with comprehensive knowledge of all cat species, from domestic breeds to wild big cats. As a lifelong cat specialist, you understand their behavior, biology, social structures, and evolutionary history in great depth.`,
-  tools: {},
+  tools: { weatherTool },
 });
 ```
 
@@ -142,10 +259,11 @@ Finally, create the Mastra entry point in `src/mastra/index.ts` and register age
 
 ```ts filename="src/mastra/index.ts" showLineNumbers
 import { Mastra } from "@mastra/core";
-import { catOne } from "./agents/cat-one";
+
+import { weatherAgent } from "./agents/weather";
 
 export const mastra = new Mastra({
-  agents: { catOne },
+  agents: { weatherAgent },
 });
 ```
 
@@ -185,20 +303,20 @@ You can test the agent's endpoint using `curl` or `fetch`:
 <Tabs items={['curl', 'fetch']}>
   <Tabs.Tab>
 ```bash copy
-curl -X POST http://localhost:4111/api/agents/catOne/generate \
+curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
 -H "Content-Type: application/json" \
--d '{"messages": ["What do cats like to eat?"]}'
+-d '{"messages": ["What is the weather in London?"]}'
 ```
   </Tabs.Tab>
   <Tabs.Tab>
 ```js copy showLineNumbers
-fetch('http://localhost:4111/api/agents/catOne/generate', {
+fetch('http://localhost:4111/api/agents/weatherAgent/generate', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
   },
   body: JSON.stringify({
-    messages: ['What do cats like to eat?'],
+    messages: ['What is the weather in London?'],
   }),
 })
   .then(response => response.json())
@@ -220,9 +338,9 @@ If you'd like to directly call agents from the command line, you can create a sc
 import { mastra } from "./mastra";
 
 async function main() {
-  const agent = mastra.getAgent("catOne");
+  const agent = await mastra.getAgent("weatherAgent");
 
-  const result = await agent.generate("What do cats like to eat?");
+  const result = await agent.generate("What is the weather in London?");
 
   console.log("Agent response:", result.text);
 }
@@ -233,7 +351,7 @@ main();
 Then, run the script to test that everything is set up correctly:
 
 ```bash copy
-npx bun src/index.ts
+npx tsx src/index.ts
 ```
 
 This should output the agent's response to your console.

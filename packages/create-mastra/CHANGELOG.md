@@ -1,5 +1,87 @@
 # create-mastra
 
+## 0.1.0-alpha.19
+
+### Patch Changes
+
+- Updated dependencies [606bbbe]
+  - mastra@0.1.57-alpha.86
+
+## 0.1.0-alpha.18
+
+### Patch Changes
+
+- mastra@0.1.57-alpha.85
+
+## 0.1.0-alpha.17
+
+### Patch Changes
+
+- mastra@0.1.57-alpha.84
+
+## 0.1.0-alpha.16
+
+### Patch Changes
+
+- mastra@0.1.57-alpha.83
+
+## 0.1.0-alpha.15
+
+### Patch Changes
+
+- Updated dependencies [6cc479d]
+  - mastra@0.1.57-alpha.82
+
+## 0.1.0-alpha.14
+
+### Patch Changes
+
+- 0b74006: Workflow updates
+- Updated dependencies [837a288]
+- Updated dependencies [0b74006]
+  - mastra@0.1.57-alpha.81
+
+## 0.1.0-alpha.13
+
+### Patch Changes
+
+- mastra@0.1.57-alpha.80
+
+## 0.1.0-alpha.12
+
+### Patch Changes
+
+- mastra@0.1.57-alpha.79
+
+## 0.1.0-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [f79a9ff]
+  - mastra@0.1.57-alpha.78
+
+## 0.1.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [538a136]
+  - mastra@0.1.57-alpha.77
+
+## 0.1.0-alpha.9
+
+### Patch Changes
+
+- cefd906: cli interactive api key configuration
+- Updated dependencies [b6f9860]
+- Updated dependencies [cefd906]
+  - mastra@0.1.57-alpha.76
+
+## 0.1.0-alpha.8
+
+### Patch Changes
+
+- mastra@0.1.57-alpha.75
+
 ## 0.1.0-alpha.7
 
 ### Patch Changes

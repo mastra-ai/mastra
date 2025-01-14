@@ -19,6 +19,19 @@ jobs:
         image: chromadb/chroma
         ports:
           - 8000:8000
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: mastra
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5433:5432
     steps:
       - uses: actions/checkout@v4
 

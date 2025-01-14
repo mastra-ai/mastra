@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+/* TODO: Better theme support by using Nextra Theme config
+https://nextra.site/docs/docs-theme/theme-configuration#theme-color
+*/
+
 .dark\:_bg-black:is(html[class~='dark'] *) {
   background-color: #141415 !important;
 }
@@ -136,4 +140,31 @@ button[title='Hide sidebar'] {
 
 pre > * {
   font-size: 13px !important;
+}
+
+input[type="search"]{
+  border-radius: 0 !important;
+}
+
+ul[role="listbox"]{
+  border-radius: 0!important;
+}
+
+button[title="Change theme"]{
+  border-radius: 0!important;
+}
+
+div.nextra-scrollbar{
+  gap: 4px;
+}
+nav a {
+  padding-block: 8px;
+  padding-inline: 16px;
+}
+nav a[aria-current="true"]{
+  background: rgba(41,41,41,.5) !important;
+  font-weight: 400;
+   &:is(:not(html[class~='dark'] *)) {
+    background: rgb(243,244,246,1)!important
+  }
 }

@@ -1,5 +1,77 @@
 # @mastra/core
 
+## 0.1.27-alpha.59
+
+### Patch Changes
+
+- b524c22: Package upgrades
+
+## 0.1.27-alpha.58
+
+### Patch Changes
+
+- 1874f40: Added re ranking tool to RAG
+- 4b1ce2c: Update Google model support in documentation and type definitions to include new Gemini versions
+
+## 0.1.27-alpha.57
+
+### Patch Changes
+
+- fd494a3: TTS module
+
+## 0.1.27-alpha.56
+
+### Patch Changes
+
+- 9f3ab05: pass custom telemetry exporter
+
+## 0.1.27-alpha.55
+
+### Patch Changes
+
+- 592e3cf: Add custom rag tools, add vector retrieval, and update docs
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- 0b74006: Workflow updates
+
+## 0.1.27-alpha.54
+
+### Patch Changes
+
+- d2cd535: configure dotenv in core
+
+## 0.1.27-alpha.53
+
+### Patch Changes
+
+- 8e7814f: Add payload getter on machine context
+
+## 0.1.27-alpha.52
+
+### Patch Changes
+
+- eedb829: Better types, and correct payload resolution
+
+## 0.1.27-alpha.51
+
+### Patch Changes
+
+- a7b016d: Added export for MockMastraEngine from @mastra/core
+- da2e8d3: Export EmbedManyResult and EmbedResult from ai sdk and update docs
+- 538a136: Added Simple Condition for workflows, updated /api/workflows/{workflowId}/execute endpoint and docs
+
+## 0.1.27-alpha.50
+
+### Patch Changes
+
+- 401a4d9: Add simple conditions test
+
+## 0.1.27-alpha.49
+
+### Patch Changes
+
+- 79acad0: Better type safety on trigger step
+- f5dfa20: only add logger if there is a logger
+
 ## 0.1.27-alpha.48
 
 ### Patch Changes

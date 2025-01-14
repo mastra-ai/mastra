@@ -47,13 +47,14 @@ export class UpstashVector extends MastraVector {
     queryVector: number[],
     topK: number = 10,
     filter?: Record<string, any>,
+    includeVector: boolean = false,
   ): Promise<QueryResult[]> {
     const ns = this.client.namespace(indexName);
 
     const results = await ns.query({
       topK,
       vector: queryVector,
-      includeVectors: false,
+      includeVectors: includeVector,
       includeMetadata: true,
       // ...(filter ? { filter } : {}),
     });
@@ -65,8 +66,10 @@ export class UpstashVector extends MastraVector {
       id: `${result.id}`,
       score: result.score,
       metadata: result.metadata,
+      ...(includeVector && { vector: result.vector || [] }),
     }));
   }
+
   async listIndexes(): Promise<string[]> {
     const indexes = await this.client.listNamespaces();
     return indexes.filter(Boolean);

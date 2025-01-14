@@ -1,0 +1,17 @@
+{
+  "name": "weather-agent",
+  "version": "1.0.1-alpha.3",
+  "description": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "dev": "npx tsx src/mastra/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@mastra/core": "workspace:^",
+    "zod": "^3.24.1"
+  }
+}

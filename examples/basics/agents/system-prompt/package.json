@@ -1,0 +1,13 @@
+{
+  "name": "system-prompt",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "pnpx tsx index.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*",
+    "zod": "^3.24.1"
+  }
+}

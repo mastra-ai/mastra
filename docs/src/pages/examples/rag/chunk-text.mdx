@@ -1,8 +1,8 @@
-import { GithubLink } from '../../../components/github-link';
+import { GithubLink } from "../../../components/github-link";
 
 # Chunk Text
 
-This example shows you how to chunk plain text content. By using the `chunk` method, you can split the text into smaller pieces, which can be used for various purposes, such as search or retrieval.
+When working with large text documents, you need to break them down into smaller, manageable pieces for processing. The chunk method splits text content into segments that can be used for search, analysis, or retrieval. This example shows how to split plain text into chunks using default settings.
 
 ```tsx copy
 import { MDocument } from "@mastra/rag";
@@ -17,4 +17,8 @@ const chunks = await doc.chunk();
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/chunk-text.ts'} />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/chunk-text"
+  }
+/>

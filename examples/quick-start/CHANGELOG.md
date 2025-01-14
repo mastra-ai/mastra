@@ -1,5 +1,90 @@
 # quick-start
 
+## 1.0.1-alpha.25
+
+### Patch Changes
+
+- Updated dependencies [b524c22]
+  - @mastra/core@0.1.27-alpha.59
+
+## 1.0.1-alpha.24
+
+### Patch Changes
+
+- Updated dependencies [1874f40]
+- Updated dependencies [4b1ce2c]
+  - @mastra/core@0.1.27-alpha.58
+
+## 1.0.1-alpha.23
+
+### Patch Changes
+
+- Updated dependencies [fd494a3]
+  - @mastra/core@0.1.27-alpha.57
+
+## 1.0.1-alpha.22
+
+### Patch Changes
+
+- Updated dependencies [9f3ab05]
+  - @mastra/core@0.1.27-alpha.56
+
+## 1.0.1-alpha.21
+
+### Patch Changes
+
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- 0b74006: Workflow updates
+- Updated dependencies [592e3cf]
+- Updated dependencies [837a288]
+- Updated dependencies [0b74006]
+  - @mastra/core@0.1.27-alpha.55
+
+## 1.0.1-alpha.20
+
+### Patch Changes
+
+- Updated dependencies [d2cd535]
+  - @mastra/core@0.1.27-alpha.54
+
+## 1.0.1-alpha.19
+
+### Patch Changes
+
+- Updated dependencies [8e7814f]
+  - @mastra/core@0.1.27-alpha.53
+
+## 1.0.1-alpha.18
+
+### Patch Changes
+
+- Updated dependencies [eedb829]
+  - @mastra/core@0.1.27-alpha.52
+
+## 1.0.1-alpha.17
+
+### Patch Changes
+
+- Updated dependencies [a7b016d]
+- Updated dependencies [da2e8d3]
+- Updated dependencies [538a136]
+  - @mastra/core@0.1.27-alpha.51
+
+## 1.0.1-alpha.16
+
+### Patch Changes
+
+- Updated dependencies [401a4d9]
+  - @mastra/core@0.1.27-alpha.50
+
+## 1.0.1-alpha.15
+
+### Patch Changes
+
+- Updated dependencies [79acad0]
+- Updated dependencies [f5dfa20]
+  - @mastra/core@0.1.27-alpha.49
+
 ## 1.0.1-alpha.14
 
 ### Patch Changes

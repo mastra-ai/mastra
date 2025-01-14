@@ -1,8 +1,8 @@
-import { GithubLink } from '../../../components/github-link';
+import { GithubLink } from "../../../components/github-link";
 
 # Embed Text with Cohere
 
-This example shows you how to embed text with Cohere. By using the `embed` method, you can embed the text into a vector database, which can be used for various purposes, such as search or retrieval.
+When working with alternative embedding providers, you need a way to generate vectors that match your chosen model's specifications. The `embed` method supports multiple providers, allowing you to switch between different embedding services. This example shows how to generate embeddings using Cohere's embedding model.
 
 ```tsx copy
 import { MDocument, embed } from "@mastra/rag";
@@ -23,4 +23,8 @@ const { embeddings } = await embed(chunks, {
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/embed-text-with-cohere.ts'} />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/embed-text-with-cohere"
+  }
+/>

@@ -1,0 +1,12 @@
+{
+  "name": "adjust-chunk-size",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "pnpx tsx index.ts"
+  },
+  "dependencies": {
+    "@mastra/rag": "workspace:*"
+  }
+}

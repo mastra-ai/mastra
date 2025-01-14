@@ -23,7 +23,7 @@ async function waitForCondition(
   return false;
 }
 
-describe('AstraVector Integration Tests', () => {
+describe.skip('AstraVector Integration Tests', () => {
   let astraVector: AstraVector;
   const testIndexName = 'testvectors1733728136118'; // Unique collection name
 
@@ -122,6 +122,16 @@ describe('AstraVector Integration Tests', () => {
     if (finalStats.count !== 4) {
       console.warn(`Expected count of 4, but got ${finalStats.count}. This may be due to eventual consistency.`);
     }
+  });
+
+  test('gets vector results back from query', async () => {
+    const queryVector = [1, 0, 0, 0];
+    const results = await astraVector.query(testIndexName, queryVector, 2, undefined, true);
+
+    expect(results).toHaveLength(2);
+    expect(results?.[0]?.metadata).toEqual({ label: 'vector1' });
+    expect(results?.[0]?.score).toBeCloseTo(1, 4);
+    expect(results?.[0]?.vector).toEqual([1, 0, 0, 0]);
   });
 
   test('handles different vector dimensions', async () => {

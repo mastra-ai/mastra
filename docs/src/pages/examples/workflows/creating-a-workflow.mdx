@@ -2,8 +2,8 @@ import { GithubLink } from '../../../components/github-link';
 
 # Creating a Workflow
 
-A workflow can consist of a single step. You can execute a workflow without needing to
-connect it to the `Mastra` instance.
+A workflow allows you to define and execute sequences of operations in a structured path. This example
+shows a workflow with a single step.
 
 ```ts showLineNumbers copy
 import { Step, Workflow } from '@mastra/core';
@@ -12,28 +12,33 @@ import { z } from 'zod';
 const myWorkflow = new Workflow({
   name: 'my-workflow',
   triggerSchema: z.object({
-    inputValue: z.number(),
+    input: z.number(),
   }),
 });
 
-myWorkflow.step(
-  new Step({
-    id: 'stepOne',
-    inputSchema: z.object({
-      value: z.number(),
-    }),
-    outputSchema: z.object({
-      doubledValue: z.number(),
-    }),
-    execute: async ({ context }) => {
-      const doubledValue = context.machineContext?.triggerData?.inputValue * 2;
-      return { doubledValue };
-    },
+const stepOne = new Step({
+  id: 'stepOne',
+  inputSchema: z.object({
+    value: z.number(),
   }),
-);
+  outputSchema: z.object({
+    doubledValue: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const doubledValue = context.machineContext?.triggerData?.input * 2;
+    return { doubledValue };
+  },
+})
 
-myWorkflow.commit();
-const res = await myWorkflow.execute({ triggerData: { inputValue: 90 } });
+myWorkflow.step(
+  stepOne
+).commit();
+
+const { runId, start } = myWorkflow.createRun({ 
+  triggerData: { input: 90 } 
+});
+
+const res = await start();
 
 console.log(res.results);
 ```
@@ -43,4 +48,4 @@ console.log(res.results);
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/create-workflow.ts'} />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/create-workflow'} />

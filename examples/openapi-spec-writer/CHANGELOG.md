@@ -1,5 +1,138 @@
 # openapi-spec-writer
 
+## 0.1.1-alpha.42
+
+### Patch Changes
+
+- Updated dependencies [b524c22]
+  - @mastra/core@0.1.27-alpha.59
+  - @mastra/firecrawl@1.0.4-alpha.45
+  - @mastra/github@1.0.3-alpha.43
+  - @mastra/engine@0.0.5-alpha.53
+  - @mastra/rag@0.0.2-alpha.43
+
+## 0.1.1-alpha.41
+
+### Patch Changes
+
+- Updated dependencies [1874f40]
+- Updated dependencies [4b1ce2c]
+  - @mastra/core@0.1.27-alpha.58
+  - @mastra/rag@0.0.2-alpha.42
+  - @mastra/firecrawl@1.0.4-alpha.44
+  - @mastra/github@1.0.3-alpha.42
+  - @mastra/engine@0.0.5-alpha.52
+
+## 0.1.1-alpha.40
+
+### Patch Changes
+
+- Updated dependencies [fd494a3]
+- Updated dependencies [7de6d71]
+  - @mastra/core@0.1.27-alpha.57
+  - @mastra/rag@0.0.2-alpha.41
+  - @mastra/firecrawl@1.0.4-alpha.43
+  - @mastra/github@1.0.3-alpha.41
+  - @mastra/engine@0.0.5-alpha.51
+
+## 0.1.1-alpha.39
+
+### Patch Changes
+
+- Updated dependencies [ae638a4]
+- Updated dependencies [9f3ab05]
+  - @mastra/rag@0.0.2-alpha.40
+  - @mastra/core@0.1.27-alpha.56
+  - @mastra/firecrawl@1.0.4-alpha.42
+  - @mastra/github@1.0.3-alpha.40
+  - @mastra/engine@0.0.5-alpha.50
+
+## 0.1.1-alpha.38
+
+### Patch Changes
+
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- 0b74006: Workflow updates
+- Updated dependencies [592e3cf]
+- Updated dependencies [837a288]
+- Updated dependencies [0b74006]
+  - @mastra/core@0.1.27-alpha.55
+  - @mastra/rag@0.0.2-alpha.39
+  - @mastra/firecrawl@1.0.4-alpha.41
+  - @mastra/github@1.0.3-alpha.39
+  - @mastra/engine@0.0.5-alpha.49
+
+## 0.1.1-alpha.37
+
+### Patch Changes
+
+- Updated dependencies [eb45d76]
+- Updated dependencies [d2cd535]
+  - @mastra/rag@0.0.2-alpha.38
+  - @mastra/core@0.1.27-alpha.54
+  - @mastra/firecrawl@1.0.4-alpha.40
+  - @mastra/github@1.0.3-alpha.38
+  - @mastra/engine@0.0.5-alpha.48
+
+## 0.1.1-alpha.36
+
+### Patch Changes
+
+- Updated dependencies [8e7814f]
+  - @mastra/core@0.1.27-alpha.53
+  - @mastra/firecrawl@1.0.4-alpha.39
+  - @mastra/github@1.0.3-alpha.37
+  - @mastra/engine@0.0.5-alpha.47
+  - @mastra/rag@0.0.2-alpha.37
+
+## 0.1.1-alpha.35
+
+### Patch Changes
+
+- Updated dependencies [eedb829]
+  - @mastra/core@0.1.27-alpha.52
+  - @mastra/firecrawl@1.0.4-alpha.38
+  - @mastra/github@1.0.3-alpha.36
+  - @mastra/engine@0.0.5-alpha.46
+  - @mastra/rag@0.0.2-alpha.36
+
+## 0.1.1-alpha.34
+
+### Patch Changes
+
+- Updated dependencies [a7b016d]
+- Updated dependencies [da2e8d3]
+- Updated dependencies [538a136]
+  - @mastra/core@0.1.27-alpha.51
+  - @mastra/firecrawl@1.0.4-alpha.37
+  - @mastra/github@1.0.3-alpha.35
+  - @mastra/engine@0.0.5-alpha.45
+  - @mastra/rag@0.0.2-alpha.35
+
+## 0.1.1-alpha.33
+
+### Patch Changes
+
+- Updated dependencies [401a4d9]
+  - @mastra/core@0.1.27-alpha.50
+  - @mastra/firecrawl@1.0.4-alpha.36
+  - @mastra/github@1.0.3-alpha.34
+  - @mastra/engine@0.0.5-alpha.44
+  - @mastra/rag@0.0.2-alpha.34
+
+## 0.1.1-alpha.32
+
+### Patch Changes
+
+- Updated dependencies [a621c34]
+- Updated dependencies [79acad0]
+- Updated dependencies [f5dfa20]
+  - @mastra/rag@0.0.2-alpha.33
+  - @mastra/core@0.1.27-alpha.49
+  - @mastra/firecrawl@1.0.4-alpha.35
+  - @mastra/github@1.0.3-alpha.33
+  - @mastra/engine@0.0.5-alpha.43
+
 ## 0.1.1-alpha.31
 
 ### Patch Changes

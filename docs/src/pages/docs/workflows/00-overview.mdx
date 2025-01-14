@@ -8,22 +8,7 @@ The most powerful feature of workflows is that you can log the input and output 
 
 In this overview, we'll create a workflow with dummy steps to demonstrate how workflows are structured and executed in Mastra. We'll cover options for defining steps, different kinds of control flow between steps, conditions, and variables.
 
-### 1. Import Necessary Modules
-
-```typescript
-import { Step, Workflow, Mastra } from "@mastra/core";
-import { z } from "zod";
-```
-
-### 2. Initialize Mastra Instance
-
-Initialize your Mastra instance. 
-
-```typescript
-export const mastra = new Mastra({});
-```
-
-### 3. Define Steps
+### 1. Define Steps
 
 You can define steps inline or by function reference.
 
@@ -31,8 +16,11 @@ You can define steps inline or by function reference.
 
 Define steps directly within the workflow using the `.step()` and `.then()` methods.
 
-```typescript
-const myWorkflow = new Workflow({
+```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
+import { Step, Workflow } from "@mastra/core";
+import { z } from "zod";
+
+export const myWorkflow = new Workflow({
   name: "my-workflow",
   triggerSchema: z.object({
     inputValue: z.number(),
@@ -43,38 +31,40 @@ myWorkflow
   .step(
     new Step({
       id: "stepOne",
-      inputSchema: z.object({
-        value: z.number(),
-      }),
       outputSchema: z.object({
         doubledValue: z.number(),
       }),
       execute: async ({ context }) => {
-        const doubledValue = context.value * 2;
+        const inputValue = context.machineContext?.getStepPayload<{
+          inputValue: number;
+        }>("trigger")?.inputValue;
+        if (!inputValue) {
+          throw new Error("Input value does not exist");
+        }
+        const doubledValue = inputValue * 2;
         return { doubledValue };
       },
-    })
+    }),
   )
   .then(
     new Step({
       id: "stepTwo",
-      inputSchema: z.object({
-        valueToIncrement: z.number(),
-      }),
       outputSchema: z.object({
         incrementedValue: z.number(),
       }),
       execute: async ({ context }) => {
-        const incrementedValue = context.valueToIncrement + 1;
+        const valueToIncrement = context.machineContext?.getStepPayload<{
+          doubledValue: number;
+        }>("stepOne")?.doubledValue;
+
+        if (!valueToIncrement) {
+          throw new Error("Value to increment does not exist");
+        }
+
+        const incrementedValue = valueToIncrement + 1;
         return { incrementedValue };
       },
-      variables: {
-        valueToIncrement: {
-          stepId: "stepOne",
-          path: "doubledValue",
-        },
-      },
-    })
+    }),
   );
 ```
 
@@ -82,32 +72,43 @@ myWorkflow
 
 Define steps separately and then add them to the workflow.
 
-```typescript
+```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
+import { Step, Workflow } from "@mastra/core";
+import { z } from "zod";
+
 // Define steps separately
 const stepOne = new Step({
   id: "stepOne",
-  inputSchema: z.object({
-    inputValue: z.number(),
-  }),
   outputSchema: z.object({
     doubledValue: z.number(),
   }),
   execute: async ({ context }) => {
-    const doubledValue = context.inputValue * 2;
+    const inputValue = context.machineContext?.getStepPayload<{
+      inputValue: number;
+    }>("trigger")?.inputValue;
+    if (!inputValue) {
+      throw new Error("Input value does not exist");
+    }
+    const doubledValue = inputValue * 2;
     return { doubledValue };
   },
 });
 
 const stepTwo = new Step({
   id: "stepTwo",
-  inputSchema: z.object({
-    valueToIncrement: z.number(),
-  }),
   outputSchema: z.object({
     incrementedValue: z.number(),
   }),
   execute: async ({ context }) => {
-    const incrementedValue = context.valueToIncrement + 1;
+    const valueToIncrement = context.machineContext?.getStepPayload<{
+      doubledValue: number;
+    }>("stepOne")?.doubledValue;
+
+    if (!valueToIncrement) {
+      throw new Error("Value to increment does not exist");
+    }
+
+    const incrementedValue = valueToIncrement + 1;
     return { incrementedValue };
   },
 });
@@ -120,26 +121,17 @@ const myWorkflow = new Workflow({
   }),
 });
 
-myWorkflow.step(stepOne).then(stepTwo, {
-  variables: {
-    valueToIncrement: {
-      stepId: "stepOne",
-      path: "doubledValue",
-    },
-  },
-});
+myWorkflow.step(stepOne).then(stepTwo);
 ```
 
-### 4. Control Flow Between Steps
+### 2. Control Flow Between Steps
 
 #### Parallel Execution
 
 Use `.step()` to add steps that can run in parallel.
 
 ```typescript
-myWorkflow
-  .step(fetchUserData)
-  .step(fetchOrderData); // These steps run in parallel
+myWorkflow.step(fetchUserData).step(fetchOrderData); // These steps run in parallel
 ```
 
 #### Sequential Execution
@@ -147,10 +139,7 @@ myWorkflow
 Use `.then()` to chain steps that depend on the previous step.
 
 ```typescript
-myWorkflow
-  .step(fetchOrderData)
-  .then(validateData)
-  .then(processOrder);
+myWorkflow.step(fetchOrderData).then(validateData).then(processOrder);
 ```
 
 #### Branching and Merging Paths
@@ -163,10 +152,10 @@ myWorkflow
   .then(stepB)
   .then(stepD)
   .after(stepA)
-    .step(stepC)
-    .then(stepE)
+  .step(stepC)
+  .then(stepE)
   .after([stepD, stepE])
-    .step(stepF);
+  .step(stepF);
 ```
 
 In this example:
@@ -184,12 +173,12 @@ myWorkflow
   .step(fetchData)
   .then(processData)
   .after(processData)
-    .step(finalizeData, {
-      when: { "processData.status": "success" },
-    })
-    .step(fetchData, {
-      when: { "processData.status": "retry" },
-    });
+  .step(finalizeData, {
+    when: { "processData.status": "success" },
+  })
+  .step(fetchData, {
+    when: { "processData.status": "retry" },
+  });
 ```
 
 In this example:
@@ -197,7 +186,7 @@ In this example:
 - If `processData` results in a status of `"success"`, `finalizeData` will run.
 - If `processData` results in a status of `"retry"`, the workflow loops back to `fetchData`.
 
-### 5. Conditions
+### 3. Conditions
 
 Use the `when` property to define conditions under which a step should execute.
 
@@ -210,10 +199,15 @@ myWorkflow.step(
     execute: async ({ context }) => {
       // Action logic
     },
+  }),
+  {
     when: async ({ context }) => {
-      return context.stepResults.fetchData.status === "success";
+      const fetchData = context?.getStepPayload<{
+        status: string;
+      }>("fetchData");
+      return fetchData?.status === "success";
     },
-  })
+  },
 );
 ```
 
@@ -226,11 +220,18 @@ myWorkflow.step(
     execute: async ({ context }) => {
       // Action logic
     },
+  }),
+  {
     when: {
-      ref: { stepId: "fetchData", path: "status" },
+      ref: {
+        step: {
+          id: "fetchData",
+        },
+        path: "status",
+      },
       query: { $eq: "success" },
     },
-  })
+  },
 );
 ```
 
@@ -243,57 +244,63 @@ myWorkflow.step(
     execute: async ({ context }) => {
       // Action logic
     },
+  }),
+  {
     when: {
       "fetchData.status": "success",
     },
-  })
+  },
 );
 ```
 
-### 6. Variables
+### 4. Variables
 
 Variables allow you to pass data between steps.
 
-**Option 1: Using `variables` in `.then()`**
+#### Option 1: Pass the "trigger" to access variables from the triggerSchema
 
 ```typescript
 myWorkflow.step(stepOne).then(stepTwo, {
   variables: {
     valueToIncrement: {
-      stepId: "stepOne",
-      path: "doubledValue",
+      step: "trigger",
+      path: "inputValue",
     },
   },
 });
 ```
 
-**Option 2: Define `variables` inside the `Step`**
+#### Option 2: Pass the previous step to access variables from it's outputSchema
 
 ```typescript
-const stepTwo = new Step({
-  id: "stepTwo",
-  inputSchema: z.object({
-    valueToIncrement: z.number(),
-  }),
-  outputSchema: z.object({
-    incrementedValue: z.number(),
-  }),
-  execute: async ({ context }) => {
-    const incrementedValue = context.valueToIncrement + 1;
-    return { incrementedValue };
-  },
+myWorkflow.step(stepOne).then(stepTwo, {
   variables: {
     valueToIncrement: {
-      stepId: "stepOne",
+      step: stepOne,
       path: "doubledValue",
     },
   },
 });
 ```
 
-In both options, the `valueToIncrement` input for `stepTwo` is fetched from the `doubledValue` output of `stepOne`.
+#### Option 3: Pass the step id of the previous step to access variables from it's outputSchema
 
-### 7. Finalize the Workflow
+```typescript
+myWorkflow.step(stepOne).then(stepTwo, {
+  variables: {
+    valueToIncrement: {
+      step: {
+        id: "stepOne",
+      },
+      path: "doubledValue",
+    },
+  },
+});
+```
+
+The `valueToIncrement` input for `stepTwo` is fetched from the `doubledValue` output of `stepOne`.
+
+### 5. Finalize the Workflow
 
 After defining all steps and their relationships, commit the workflow.
 
@@ -301,17 +308,22 @@ After defining all steps and their relationships, commit the workflow.
 myWorkflow.commit();
 ```
 
-### 8. Add Workflow to Mastra Instance
+### 6. Add Workflow to Mastra Instance
 
-Add the workflow to your Mastra instance. 
+Add the workflow to your Mastra instance.
 
-```typescript
+```typescript filename="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core";
+import { z } from "zod";
+
+import { myWorkflow } from "./workflows";
+
 export const mastra = new Mastra({
   workflows: { myWorkflow },
 });
 ```
 
-### 9. Serve the Workflow
+### 7. Serve the Workflow
 
 We can now serve the workflow using the `mastra dev` command.
 
@@ -319,7 +331,7 @@ We can now serve the workflow using the `mastra dev` command.
 
 Open your terminal and run:
 
-```bash
+```bash copy
 mastra dev
 ```
 
@@ -329,11 +341,11 @@ This command will start the server and make your workflow available at:
 http://localhost:4111/api/workflows/myWorkflow/execute
 ```
 
-### 10. Test the Workflow with cURL
+### 8. Test the Workflow with cURL
 
 With the server running, you can test your workflow using `curl`:
 
-```bash
+```bash copy
 curl -X POST http://localhost:4111/api/workflows/myWorkflow/execute \
   -H "Content-Type: application/json" \
   -d '{
@@ -349,13 +361,19 @@ You should receive a JSON response similar to:
 {
   "results": {
     "stepOne": {
-      "doubledValue": 10
+      "status": "success",
+      "payload": {
+        "doubledValue": 10
+      }
     },
     "stepTwo": {
-      "incrementedValue": 11
+      "status": "success",
+      "payload": {
+        "incrementedValue": 11
+      }
     }
   },
-  "workflow": "my-workflow"
+  "workflow": "myWorkflow"
 }
 ```
 

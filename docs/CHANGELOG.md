@@ -1,5 +1,52 @@
 # docs
 
+## 0.1.1-alpha.12
+
+### Patch Changes
+
+- 606bbbe: Adds -f option to engine commands to specify custom docker config. Updates Engine docs.
+
+## 0.1.1-alpha.11
+
+### Patch Changes
+
+- 1874f40: Added re ranking tool to RAG
+
+## 0.1.1-alpha.10
+
+### Patch Changes
+
+- fd494a3: TTS module
+- 7de6d71: Update filter for vector query to work with more stores
+
+## 0.1.1-alpha.9
+
+### Patch Changes
+
+- 592e3cf: Add custom rag tools, add vector retrieval, and update docs
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- 0b74006: Workflow updates
+
+## 0.1.1-alpha.8
+
+### Patch Changes
+
+- eb45d76: Updated PG Vector filter and added rag examples in docs
+
+## 0.1.1-alpha.7
+
+### Patch Changes
+
+- a7b016d: Added export for MockMastraEngine from @mastra/core
+- da2e8d3: Export EmbedManyResult and EmbedResult from ai sdk and update docs
+- 538a136: Added Simple Condition for workflows, updated /api/workflows/{workflowId}/execute endpoint and docs
+
+## 0.1.1-alpha.6
+
+### Patch Changes
+
+- cefd906: cli interactive api key configuration
+
 ## 0.1.1-alpha.5
 
 ### Patch Changes

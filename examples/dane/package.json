@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dane",
-  "version": "0.0.2-alpha.40",
+  "version": "0.0.2-alpha.51",
   "main": "dist/index.js",
   "type": "module",
   "files": [
@@ -40,6 +40,7 @@
     "cli-table3": "^0.6.5",
     "commander": "^12.1.0",
     "dotenv": "^16.4.7",
+    "drizzle-kit": "^0.30.1",
     "execa": "^9.3.1",
     "luxon": "^3.5.0",
     "node-ical": "^0.20.1",

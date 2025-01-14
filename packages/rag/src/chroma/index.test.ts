@@ -119,6 +119,18 @@ describe('ChromaVector Integration Tests', () => {
       expect(results?.[0]?.metadata?.label).toBe('x-axis');
     });
 
+    test('should include vector in query results', async () => {
+      await vectorDB.upsert(testIndexName, testVectors, testMetadata, testIds);
+
+      const queryVector = [1.0, 0.1, 0.1];
+      const topK = 1;
+
+      const results = await vectorDB.query(testIndexName, queryVector, topK, undefined, true);
+
+      expect(results).toHaveLength(topK);
+      expect(results?.[0]?.vector).toEqual(testVectors[0]);
+    });
+
     test('should update existing vectors', async () => {
       // Initial upsert
       await vectorDB.upsert(testIndexName, testVectors, testMetadata, testIds);

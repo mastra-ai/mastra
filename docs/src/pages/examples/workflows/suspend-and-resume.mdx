@@ -1,0 +1,79 @@
+import { GithubLink } from '../../../components/github-link';
+
+# Workflow with Suspend and Resume
+
+Workflow steps can be suspended and resumed at any point in the workflow execution. This example demonstrates how to suspend a workflow step and resume it later.
+
+```ts showLineNumbers copy
+import { Step, Workflow } from '@mastra/core';
+import { z } from 'zod';
+
+const stepOne = new Step({
+  id: 'stepOne',
+  outputSchema: z.object({
+    doubledValue: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const doubledValue = context.triggerData.inputValue * 2;
+    return { doubledValue };
+  },
+});
+
+const stepTwo = new Step({
+  id: 'stepTwo',
+  outputSchema: z.object({
+    incrementedValue: z.number(),
+  }),
+  execute: async ({ context, suspend }) => {
+    const stepValue = context.stepResults.stepTwo.payload.secondValue || 0;
+    
+    const incrementedValue = context.stepResults.stepOne.payload.doubledValue + stepValue;
+
+    if (incrementedValue < 100) {
+      await suspend();
+      return { incrementedValue: 0 };
+    }
+    return { incrementedValue };
+  },
+});
+
+// Build the workflow
+const myWorkflow = new Workflow({
+  name: 'my-workflow',
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+
+// run workflows in parallel
+myWorkflow
+  .step(stepOne)
+  .then(stepTwo)
+  .commit();
+
+const { runId, start } = myWorkflow.createRun();
+
+const res = await start({ triggerData: { inputValue: 90 } });
+
+await myWorkflow.watch(runId, async ({ activePaths }) => {
+    for (const path of activePaths) {
+        const stepTwoStatus = context.stepResults?.stepTwo?.status;
+        if (stepTwoStatus === 'suspended') {
+            await myWorkflow.resume({
+                runId,
+                stepId: 'stepTwo',
+                context: { secondValue: 100 },
+            });
+        }
+    }
+})
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-parallel-steps'}
+/>

@@ -1,6 +1,8 @@
 import { IndexStats, QueryResult, MastraVector } from '@mastra/core';
 import pg from 'pg';
 
+import { Filter, FILTER_OPERATORS, isValidOperator } from './filter';
+
 export class PgVector extends MastraVector {
   private pool: pg.Pool;
 
@@ -28,8 +30,9 @@ export class PgVector extends MastraVector {
     indexName: string,
     queryVector: number[],
     topK: number = 10,
-    filter?: Record<string, any>,
-    minScore: number = 0, // Optional minimum score threshold
+    filter?: Filter,
+    includeVector: boolean = false,
+    minScore: number = 0,
   ): Promise<QueryResult[]> {
     const client = await this.pool.connect();
     try {
@@ -38,9 +41,34 @@ export class PgVector extends MastraVector {
       const vectorStr = `[${queryVector.join(',')}]`;
 
       if (filter) {
-        const conditions = Object.entries(filter).map(([key, value], index) => {
-          filterValues.push(value);
-          return `metadata->>'${key}' = $${index + 2}`; // +2 because $1 is minScore
+        const conditions = Object.entries(filter).map(([key, condition]) => {
+          // If condition is not a FilterCondition object, assume it's an equality check
+          if (!condition || typeof condition !== 'object') {
+            filterValues.push(condition);
+            return `metadata->>'${key}' = $${filterValues.length}`;
+          }
+
+          const [[operator, value] = []] = Object.entries(condition ?? {});
+          if (!operator || value === undefined) {
+            throw new Error(`Invalid operator or value for key: ${key}`);
+          }
+          if (!isValidOperator(operator)) {
+            throw new Error(`Unsupported operator: ${operator}`);
+          }
+          // Get operation function
+          const operatorFn = FILTER_OPERATORS[operator];
+
+          const operatorResult = operatorFn(key, filterValues.length + 1);
+
+          // Handle operator cases and check if value is needed
+          if (operatorResult.needsValue) {
+            // Transform value if needed
+            const transformedValue = operatorResult.transformValue ? operatorResult.transformValue(value) : value;
+            filterValues.push(transformedValue);
+          }
+
+          // return sql condition
+          return operatorResult.sql;
         });
         if (conditions.length > 0) {
           filterQuery = 'AND ' + conditions.join(' AND ');
@@ -53,6 +81,7 @@ export class PgVector extends MastraVector {
                     vector_id as id,
                     1 - (embedding <=> '${vectorStr}'::vector) as score,
                     metadata
+                    ${includeVector ? ', embedding' : ''}
                 FROM ${indexName}
                 WHERE true ${filterQuery}
             )
@@ -68,6 +97,7 @@ export class PgVector extends MastraVector {
         id: row.id,
         score: row.score,
         metadata: row.metadata,
+        ...(includeVector && row.embedding && { vector: JSON.parse(row.embedding) }),
       }));
     } finally {
       client.release();

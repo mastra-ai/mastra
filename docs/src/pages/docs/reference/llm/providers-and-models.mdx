@@ -13,7 +13,7 @@ Mastra supports a variety of language models from different providers. There are
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | OpenAI        | `gpt-4`, `gpt-4-turbo`, `gpt-3.5-turbo`, `gpt-4o`, `gpt-4o-mini`                                                                                                         |
 | Anthropic     | `claude-3-5-sonnet-20241022`, `claude-3-5-sonnet-20240620`, `claude-3-5-haiku-20241022`, `claude-3-opus-20240229`, `claude-3-sonnet-20240229`, `claude-3-haiku-20240307` |
-| Google Gemini | `gemini-1.5-pro-latest`, `gemini-1.5-pro`, `gemini-1.5-flash-latest`, `gemini-1.5-flash`                                                                                 |
+| Google Gemini | `gemini-1.5-pro-latest`, `gemini-1.5-pro`, `gemini-1.5-flash-latest`, `gemini-1.5-flash`, `gemini-2.0-flash-exp-latest`, `gemini-2.0-flash-thinking-exp-1219`, `gemini-exp-1206` |
 
 ## Other natively supported providers
 
@@ -93,5 +93,3 @@ const response = await llm.generate(
 [Portkey](https://portkey.ai/) is an open-source AI gateway with support for 200+ providers, so if the provider you want isn't available through AI SDK, it probably is through Portkey.
 
 You can refer to the [Portkey documentation](https://docs.portkey.ai/docs/custom-models) for more details on how to implement custom models.
-
-Additionally, you can find an example implementation in the [Mastra GitHub repository](https://github.com/mastra-ai/mastra/blob/main/examples/vnext/src/mastra/agents/test.ts).

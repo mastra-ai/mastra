@@ -77,6 +77,7 @@ export class PineconeVector extends MastraVector {
     queryVector: number[],
     topK: number = 10,
     filter?: Record<string, any>,
+    includeVector: boolean = false,
   ): Promise<QueryResult[]> {
     const index = this.client.Index(indexName);
 
@@ -85,12 +86,14 @@ export class PineconeVector extends MastraVector {
       topK,
       filter,
       includeMetadata: true,
+      includeValues: includeVector,
     });
 
     return results.matches.map(match => ({
       id: match.id,
       score: match.score || 0,
       metadata: match.metadata as Record<string, any>,
+      ...(includeVector && { vector: match.values || [] }),
     }));
   }
 

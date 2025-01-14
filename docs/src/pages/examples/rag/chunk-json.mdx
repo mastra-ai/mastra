@@ -1,8 +1,8 @@
-import { GithubLink } from '../../../components/github-link';
+import { GithubLink } from "../../../components/github-link";
 
 # Chunk JSON
 
-This example shows you how to chunk JSON content. By using the `chunk` method, you can split the JSON into smaller pieces, which can be used for various purposes, such as search or retrieval.
+When working with JSON data, you need to split it into smaller pieces while preserving the object structure. The chunk method breaks down JSON content intelligently, maintaining the relationships between keys and values. This example shows how to chunk JSON documents for search or retrieval purposes.
 
 ```tsx copy
 import { MDocument } from "@mastra/rag";
@@ -15,7 +15,11 @@ const testJson = {
 
 const doc = MDocument.fromJSON(JSON.stringify(testJson));
 
-const chunks = await doc.chunk();
+const chunks = await doc.chunk({
+  maxSize: 100,
+});
+
+console.log(chunks);
 ```
 
 <br />
@@ -23,4 +27,8 @@ const chunks = await doc.chunk();
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/chunk-json.ts'} />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/chunk-json"
+  }
+/>

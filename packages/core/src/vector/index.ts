@@ -4,6 +4,7 @@ export interface QueryResult {
   id: string;
   score: number;
   metadata?: Record<string, any>;
+  vector?: number[];
 }
 
 export interface IndexStats {
@@ -50,6 +51,7 @@ export abstract class MastraVector {
     queryVector: number[],
     topK?: number,
     filter?: Record<string, any>,
+    includeVector?: boolean,
   ): Promise<QueryResult[]>;
 
   abstract listIndexes(): Promise<string[]>;

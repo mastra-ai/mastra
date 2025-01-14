@@ -1,6 +1,5 @@
+import { MastraEngine, DatabaseConfig } from './engine';
 import { BaseEntity, BaseRecord, QueryOptions } from './types';
-
-import { MastraEngine, DatabaseConfig } from '.';
 
 export class MockMastraEngine extends MastraEngine {
   private entities: BaseEntity[] = [];
@@ -80,6 +79,22 @@ export class MockMastraEngine extends MastraEngine {
 
   async getRecordsByEntityId(params: { entityId: string }): Promise<BaseRecord[]> {
     return this.records.filter(r => r.entityId === params.entityId);
+  }
+
+  async getRecordsByEntityNameAndExternalId({
+    entityName,
+    connectionId,
+    externalId,
+  }: {
+    entityName: string;
+    connectionId: string;
+    externalId: string;
+  }): Promise<BaseRecord[]> {
+    const entity = await this.getEntity({ name: entityName, connectionId });
+    if (!entity) {
+      return [];
+    }
+    return this.records.filter(r => r.entityId === entity.id && r.externalId === externalId);
   }
 
   async getRecordsByEntityName({ name, connectionId }: { name: string; connectionId: string }): Promise<BaseRecord[]> {

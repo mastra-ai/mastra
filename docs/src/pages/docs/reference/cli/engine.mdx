@@ -11,17 +11,27 @@ Installs the `@mastra/engine` dependency to your project. The Mastra engine enab
 
 While not required for basic agent interactions, the engine becomes essential when your application needs persistence, background tasks, or vector search capabilities.
 
+This command sets up your development environment by:
+
+1. Creating or updating your environment file with the correct database URL
+2. Configuring the necessary environment variables
+3. Running `docker-compose up` to start required Docker containers
+
 ## `mastra engine generate`
 
 Generates the Drizzle database client and TypeScript types based on your database schema. Requires a valid database connection.
 
 ## `mastra engine up`
 
-Sets up your development environment by:
+Runs `docker-compose up` to start required Docker containers.
 
-1. Running `docker-compose up` to start required Docker containers
-2. Creating or updating your environment file with the correct database URL
-3. Configuring the necessary environment variables
+- Accepts a `-f` or `--file` option for a custom Docker config file path.
+
+## `mastra engine down`
+
+Runs `docker-compose down` to stop required Docker containers.
+
+- Accepts a `-f` or `--file` option for a custom Docker config file path.
 
 ## `mastra engine migrate`
 

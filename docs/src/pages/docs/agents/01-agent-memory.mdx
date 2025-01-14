@@ -2,119 +2,66 @@
 
 Agents in Mastra have a memory that stores conversation history and contextual information. This memory allows agents to maintain state across interactions, enabling more coherent and context-aware responses.
 
-There are three main ways to implement agent memory in Mastra:
+There are two main ways to implement agent memory in Mastra:
 
-1. **In-Memory Storage** (Default)
-2. **Using Mastra Engine**
-3. **Using External Storage (Redis or PostgreSQL)**
+1. **Using KV Upstash**
+2. **Using External Storage (Redis or PostgreSQL)**
 
-## 1. Default In-Memory Storage
+## 1. Using KV Upstash
 
-Let's start by revisiting the example from the [overview](/guide/creating-agents/00-overview.mdx) page.
+KV Upstash provides a serverless Redis-compatible key-value store that's perfect for agent memory storage. Here's how to set it up:
 
-```typescript showLineNumbers filename="src/mastra/index.ts" copy
-const response1 = await myAgent.generate("Which LLM model are you?", {
-  threadId: "thread_1",
-});
-
-await myAgent.memory.save("thread_1");
-const memoryMessages = await myAgent.memory.getMessages({
-  threadId: "thread_1",
-});
-console.log("Agent Memory:", memoryMessages);
-```
-
-This is the simplest way to use agent memory -- with the default in-memory storage. It's suitable for local development, testing, or backend processes outside the context of a user session and request/response cycle.
-
-Especially if you're using `mastra dev` or otherwise running agents behind an API, you'll want to use a more persistent memory backend.
-
-## 2. Using Mastra Engine
-
-The Mastra engine is a Postgres database that you can install locally using the Mastra CLI. It's a helpful backend for agent memory during development because you can inspect agent memory more easily.
-
-### Setting Up Mastra Engine for Agent Memory
-
-1. **Install Mastra Engine**:
-
-```bash npm2yarn copy
-npm install @mastra/engine
-```
-
-2. **Configure Mastra**:
-
-```typescript showLineNumbers
-// src/mastra/index.ts
-import { Mastra } from "@mastra/core";
-import { mastraEngine } from "@mastra/engine";
-
-import { myAgent } from "./agents";
-
-export const mastra = new Mastra({
-  engine: mastraEngine,
-  agents: { myAgent },
-});
-```
-
-3. **Run Mastra Engine**:
+First, install the necessary package:
 
 ```bash
-mastra engine up
+npm install @mastra/memory
 ```
 
-This command sets up the necessary infrastructure for Mastra Engine.
+Create an Upstash account and database:
 
-## 3. Using External Storage
+1. Go to https://upstash.com/ and sign up for an account
+2. Create a new database in your preferred region
+3. Copy your REST URL and TOKEN from the database details page
 
-For production environments where you need persistent memory across restarts and scalability, you can use external storage backends like Redis or PostgreSQL.
-
-### Using Redis for Agent Memory
-
-First, install the necessary packages:
-
-```bash
-npm install @mastra/memory redis
-```
-
-Then, configure your agent to use Redis for memory storage:
+Then, configure your agent to use Upstash KV:
 
 ```typescript
 // src/mastra/index.ts
 import { Mastra } from "@mastra/core";
-import { RedisMemory } from "@mastra/memory";
-import { createClient } from "redis";
+import { UpstashKVMemory } from "@mastra/memory";
 
 import { myAgent } from "./agents";
 
-// Create a Redis client
-const redisClient = createClient({
-  url: process.env.REDIS_URL, // e.g., "redis://localhost:6379"
-});
-
-redisClient.connect();
-
-const redisMemory = new RedisMemory({
-  client: redisClient,
+// Create UpstashKVMemory
+const upstashKVMemory = new UpstashKVMemory({
+  url: process.env.UPSTASH_REDIS_REST_URL!,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
 });
 
 export const mastra = new Mastra({
-  memory: redisMemory,
+  memory: upstashKVMemory,
   agents: { myAgent },
 });
 ```
 
-Ensure you have your Redis URL set in your environment variables:
+Add your Upstash credentials to your environment variables:
 
 ```env
 # .env
-REDIS_URL=redis://your_redis_server_url
+UPSTASH_REDIS_REST_URL=https://your-url.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your_token
 ```
+
+## 2. Using External Storage
+
+For production environments where you need persistent memory across restarts and scalability, you can use a external storage backend like PostgreSQL.
 
 ### Using PostgreSQL for Agent Memory
 
 First, install the necessary packages:
 
-```bash
-npm install @mastra/memory pg
+```bash npm2yarn copy
+npm install @mastra/memory
 ```
 
 Then, configure your agent to use PostgreSQL for memory storage:
@@ -123,17 +70,12 @@ Then, configure your agent to use PostgreSQL for memory storage:
 // src/mastra/index.ts
 import { Mastra } from "@mastra/core";
 import { PostgresMemory } from "@mastra/memory";
-import { Pool } from "pg";
 
 import { myAgent } from "./agents";
 
-// Create a PostgreSQL pool
-const pgPool = new Pool({
-  connectionString: process.env.POSTGRES_CONNECTION_STRING,
-});
-
-const pgMemory = new PostgresMemory({
-  pool: pgPool,
+// Create a PgMemory using connectionString
+const pgMemory = new PgMemory({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
 export const mastra = new Mastra({
@@ -153,32 +95,99 @@ POSTGRES_CONNECTION_STRING=postgresql://user:password@localhost:5432/your_databa
 
 Once your agent is configured with a memory backend, you can manage its memory using the following methods.
 
-### Saving the Agent's Memory
+### Creating a Thread
 
-Save the agent's memory state with a unique identifier:
-
-```typescript
-await myAgent.memory.save("memory_id");
-```
-
-This persists the current memory state, allowing you to reload it later.
-
-### Loading the Agent's Memory
-
-Load a previously saved memory state:
+First, create a new conversation thread for your agent:
 
 ```typescript
-await myAgent.memory.load("memory_id");
+const thread = await mastra.memory.createThread({
+  resourceId: "memory_id"
+});
 ```
 
-This replaces the agent's current memory with the saved state associated with `memory_id`.
+This creates a new thread and assigns it a unique identifier. The `resourceId` parameter helps identify which memory context this thread belongs to.
 
-### Clearing the Agent's Memory
+### Save Messages on Generate
 
-To clear the agent's memory, removing all stored messages and context:
+Generate responses while maintaining conversation context. 
+The `threadId` parameter links messages to a specific conversation thread, while `resourceId` associates the conversation with a particular memory context or resource:
 
 ```typescript
-await myAgent.memory.clear();
+const responseOne = await myAgent.generate("Tell me about the project requirements.", {
+  resourceId: "memory_id",
+  threadId: thread.id,
+});
+
+const responseTwo = await myAgent.generate("What are the next steps?", {
+  resourceId: "memory_id",
+  threadId: thread.id,
+});
+```
+Each generate call automatically preserves the conversation context in memory.
+
+### Saving Messages to Memory
+
+You can explicitly save messages to the thread from the agent.
+
+```typescript
+await myAgent.saveMemory({
+  threadId: thread.id,
+  resourceId: "memory_id",
+  userMessages: [
+    {
+      role: "user",
+      content: "What are the main performance bottlenecks?",
+    },
+  ],
+});
 ```
 
-This resets the agent's memory to an empty state.
+This method enables you to manually preserve specific messages in the thread's memory. 
+
+### Retrieving Messages From Memory
+
+To check the current messages in memory at any point:
+
+```typescript
+const messages = await mastra.memory.getMessages({
+  threadId: thread.id,
+});
+```
+
+Retrieves all messages from the specified thread in chronological order.
+
+### Retrieving Context Window
+
+You can use memory to retrieve messages within a specific time range:
+
+```typescript
+const messages = await mastra.memory.getContextWindow({
+  threadId: thread.id,
+  startDate: new Date('2024-01-01'),
+  endDate: new Date('2024-01-31'),
+  format: 'raw'
+});
+```
+
+You can optionally limit the total tokens in the context window by configuring maxTokens in your memory:
+
+```typescript
+const upstashKVMemory = new UpstashKVMemory({
+  url: process.env.UPSTASH_REDIS_REST_URL!,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+  maxTokens: 4000 // Limit total tokens in context window
+});
+```
+
+When maxTokens is set, messages are filtered by date range and then processed from newest to oldest until the token limit is reached. 
+This maintains the context window size while preserving the most recent conversation history.
+
+### Deleting a Thread
+
+To remove a thread and all its associated messages:
+
+```typescript
+await mastra.memory.deleteThread(thread.id);
+```
+
+Permanently deletes the thread and its messages.

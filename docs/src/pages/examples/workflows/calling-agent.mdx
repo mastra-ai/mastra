@@ -2,6 +2,8 @@ import { GithubLink } from '../../../components/github-link';
 
 # Calling an Agent From a Workflow
 
+This example demonstrates how to create a workflow that calls an AI agent to process messages and generate responses, and execute it within a workflow step.
+
 ```ts showLineNumbers copy
 import { Agent, Mastra, Step, Workflow } from '@mastra/core';
 import { z } from 'zod';
@@ -43,9 +45,11 @@ const mastra = new Mastra({
   workflows: { newWorkflow },
 });
 
-const runResult = await mastra
+const { runId, start } = await mastra
   .getWorkflow('newWorkflow')
-  .execute({ triggerData: { message: 'Give me a run down of the mission to save private' } });
+  .createRun()
+
+const runResult = await start({ triggerData: { message: 'Give me a run down of the mission to save private' } });
 
 console.log(runResult.results);
 ```
@@ -56,5 +60,5 @@ console.log(runResult.results);
 <br />
 <br />
 <GithubLink
-  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/calling-agent-from-workflow.ts'}
+  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/calling-agent-from-workflow'}
 />

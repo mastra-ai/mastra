@@ -1,15 +1,15 @@
 const meta = {
   "generate-text": "Generate Text",
-  "generate-text-system-prompt": "Generate Text with System Prompt",
-  "generate-text-from-image": "Generate Text from Image",
-  // "generate-text-from-pdf": "Generate Text from PDF",
-  "generate-text-with-claude": "Generate Text with Claude",
-  "generate-text-with-gemini": "Generate Text with Gemini",
+  "use-a-system-prompt": "Use a System Prompt",
+  "describe-an-image": "Describe an Image",
+  "generate-text-from-pdf": "Generate Text from PDF",
+  "call-claude": "Call Claude",
+  "call-google-gemini": "Call Google Gemini",
   "generate-object-with-structured-output":
-    "Generate Object with Structured Output",
+    "Generate Objects with Structured Output",
   "stream-text": "Stream Text",
   "stream-object-with-structured-output":
-    "Stream Object with Structured Output",
+    "Stream Objects with Structured Output",
 };
 
 export default meta;

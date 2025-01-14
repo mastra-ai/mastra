@@ -1,5 +1,112 @@
 # composio
 
+## 1.0.1-alpha.28
+
+### Patch Changes
+
+- Updated dependencies [b524c22]
+  - @mastra/core@0.1.27-alpha.59
+  - @mastra/composio@0.0.1-alpha.25
+  - @mastra/firecrawl@1.0.4-alpha.45
+
+## 1.0.1-alpha.27
+
+### Patch Changes
+
+- Updated dependencies [1874f40]
+- Updated dependencies [4b1ce2c]
+  - @mastra/core@0.1.27-alpha.58
+  - @mastra/composio@0.0.1-alpha.24
+  - @mastra/firecrawl@1.0.4-alpha.44
+
+## 1.0.1-alpha.26
+
+### Patch Changes
+
+- Updated dependencies [fd494a3]
+  - @mastra/core@0.1.27-alpha.57
+  - @mastra/composio@0.0.1-alpha.23
+  - @mastra/firecrawl@1.0.4-alpha.43
+
+## 1.0.1-alpha.25
+
+### Patch Changes
+
+- Updated dependencies [9f3ab05]
+  - @mastra/core@0.1.27-alpha.56
+  - @mastra/firecrawl@1.0.4-alpha.42
+  - @mastra/composio@0.0.1-alpha.22
+
+## 1.0.1-alpha.24
+
+### Patch Changes
+
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- 0b74006: Workflow updates
+- Updated dependencies [592e3cf]
+- Updated dependencies [837a288]
+- Updated dependencies [0b74006]
+  - @mastra/core@0.1.27-alpha.55
+  - @mastra/firecrawl@1.0.4-alpha.41
+  - @mastra/composio@0.0.1-alpha.21
+
+## 1.0.1-alpha.23
+
+### Patch Changes
+
+- Updated dependencies [d2cd535]
+  - @mastra/core@0.1.27-alpha.54
+  - @mastra/firecrawl@1.0.4-alpha.40
+  - @mastra/composio@0.0.1-alpha.20
+
+## 1.0.1-alpha.22
+
+### Patch Changes
+
+- Updated dependencies [8e7814f]
+  - @mastra/core@0.1.27-alpha.53
+  - @mastra/composio@0.0.1-alpha.19
+  - @mastra/firecrawl@1.0.4-alpha.39
+
+## 1.0.1-alpha.21
+
+### Patch Changes
+
+- Updated dependencies [eedb829]
+  - @mastra/core@0.1.27-alpha.52
+  - @mastra/composio@0.0.1-alpha.18
+  - @mastra/firecrawl@1.0.4-alpha.38
+
+## 1.0.1-alpha.20
+
+### Patch Changes
+
+- Updated dependencies [a7b016d]
+- Updated dependencies [da2e8d3]
+- Updated dependencies [538a136]
+  - @mastra/core@0.1.27-alpha.51
+  - @mastra/composio@0.0.1-alpha.17
+  - @mastra/firecrawl@1.0.4-alpha.37
+
+## 1.0.1-alpha.19
+
+### Patch Changes
+
+- Updated dependencies [401a4d9]
+  - @mastra/core@0.1.27-alpha.50
+  - @mastra/composio@0.0.1-alpha.16
+  - @mastra/firecrawl@1.0.4-alpha.36
+
+## 1.0.1-alpha.18
+
+### Patch Changes
+
+- Updated dependencies [79acad0]
+- Updated dependencies [f5dfa20]
+  - @mastra/core@0.1.27-alpha.49
+  - @mastra/firecrawl@1.0.4-alpha.35
+  - @mastra/composio@0.0.1-alpha.15
+
 ## 1.0.1-alpha.17
 
 ### Patch Changes

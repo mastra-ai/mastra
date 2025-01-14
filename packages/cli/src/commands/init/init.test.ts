@@ -60,6 +60,7 @@ describe('CLI', () => {
       components: ['agents', 'tools'],
       addExample: false,
       llmProvider: 'openai',
+      llmApiKey: 'sk-...',
     });
 
     expect(mockCreateMastraDir).toHaveBeenCalledWith('/mock');
@@ -78,7 +79,7 @@ describe('CLI', () => {
       return { ok: true, dirPath };
     });
 
-    jest.spyOn(utils, 'writeIndexFile').mockImplementation(async (dirPath, addExample) => {
+    jest.spyOn(utils, 'writeIndexFile').mockImplementation(async ({dirPath, addExample }) => {
       const content = addExample
         ? `
         import { Mastra } from '@mastra/core';
@@ -93,6 +94,7 @@ describe('CLI', () => {
       components: ['agents'],
       addExample: true,
       llmProvider: 'openai',
+      llmApiKey: 'sk-...',
     });
 
     const writtenFile = fs.readFileSync('/mock/mastra/index.ts', 'utf-8');
@@ -109,8 +111,8 @@ describe('CLI', () => {
       return { ok: true, dirPath };
     });
 
-    jest.spyOn(utils, 'writeAPIKey').mockImplementation(async (llmProvider) => {
-      const key = `${llmProvider.toUpperCase()}_API_KEY=`;
+    jest.spyOn(utils, 'writeAPIKey').mockImplementation(async ({ provider: llmProvider, apiKey }) => {
+      const key = `${llmProvider.toUpperCase()}_API_KEY=${apiKey}`;
       fs.writeFileSync('/mock/.env.development', key);
     });
 
@@ -119,6 +121,7 @@ describe('CLI', () => {
       components: ['agents'],
       addExample: false,
       llmProvider: 'openai',
+      llmApiKey: 'sk-...',
     });
 
     const envFileContent = fs.readFileSync('/mock/.env.development', 'utf-8');
@@ -188,6 +191,7 @@ describe('CLI', () => {
       components: ['tools'],
       addExample: false,
       llmProvider: 'anthropic',
+      llmApiKey: 'sk-...',
     });
 
     expect(mockWriteIndexFile).not.toHaveBeenCalled();

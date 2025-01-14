@@ -1,7 +1,19 @@
-import { CoreMessage as AiCoreMessage, CoreSystemMessage as AiCoreSystemMessage, CoreAssistantMessage as AiCoreAssistantMessage, CoreUserMessage as AiCoreUserMessage, CoreToolMessage as AiCoreToolMessage, GenerateObjectResult, GenerateTextResult, LanguageModelV1, StreamObjectResult, StreamTextResult } from 'ai';
+import {
+  CoreMessage as AiCoreMessage,
+  CoreSystemMessage as AiCoreSystemMessage,
+  CoreAssistantMessage as AiCoreAssistantMessage,
+  CoreUserMessage as AiCoreUserMessage,
+  CoreToolMessage as AiCoreToolMessage,
+  EmbedManyResult as AiEmbedManyResult,
+  EmbedResult as AiEmbedResult,
+  GenerateObjectResult,
+  GenerateTextResult,
+  LanguageModelV1,
+  StreamObjectResult,
+  StreamTextResult,
+} from 'ai';
 import { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
-
 
 export type OpenAIModel = 'gpt-4' | 'gpt-4-turbo' | 'gpt-3.5-turbo' | 'gpt-4o' | 'gpt-4o-mini';
 
@@ -15,6 +27,10 @@ export type CoreUserMessage = AiCoreUserMessage;
 
 export type CoreToolMessage = AiCoreToolMessage;
 
+export type EmbedResult<T> = AiEmbedResult<T>;
+
+export type EmbedManyResult<T> = AiEmbedManyResult<T>;
+
 export type OpenAIConfig = {
   provider: 'OPEN_AI';
   name: OpenAIModel | (string & {});
@@ -22,7 +38,14 @@ export type OpenAIConfig = {
   apiKey?: string;
 };
 
-export type GoogleModel = 'gemini-1.5-pro-latest' | 'gemini-1.5-pro' | 'gemini-1.5-flash-latest' | 'gemini-1.5-flash';
+export type GoogleModel =
+  | 'gemini-1.5-pro-latest'
+  | 'gemini-1.5-pro'
+  | 'gemini-1.5-flash-latest'
+  | 'gemini-1.5-flash'
+  | 'gemini-2.0-flash-exp-latest'
+  | 'gemini-2.0-flash-thinking-exp-1219'
+  | 'gemini-exp-1206';
 
 export type GoogleConfig = {
   provider: 'GOOGLE';
@@ -541,7 +564,7 @@ export type GenerateReturn<Z extends ZodSchema | JSONSchema7 | undefined = undef
   : GenerateObjectResult<any>;
 
 export type StreamReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends undefined
-  ? StreamTextResult<any>
+  ? StreamTextResult<any, any>
   : StreamObjectResult<any, any, any>;
 
 export type OutputType = 'text' | StructuredOutput;

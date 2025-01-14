@@ -1,13 +1,13 @@
 import { get } from 'radash';
 import sift from 'sift';
-import { assign, createActor, fromPromise, setup, Snapshot } from 'xstate';
+import { assign, createActor, fromPromise, MachineContext, setup, Snapshot } from 'xstate';
 import { z } from 'zod';
 
 import { IAction, MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
-import { FilterOperators } from '../engine';
 import { LogLevel } from '../logger';
 
+import { WorkflowSnapshot } from './snapshot';
 import { Step } from './step';
 import {
   ActionContext,
@@ -21,6 +21,7 @@ import {
   StepGraph,
   StepNode,
   StepResult,
+  StepVariableType,
   WorkflowActionParams,
   WorkflowActions,
   WorkflowActors,
@@ -30,11 +31,48 @@ import {
 } from './types';
 import { getStepResult, isErrorEvent, isTransitionEvent, isVariableReference } from './utils';
 
+interface WorkflowResultReturn<T extends z.ZodType<any>> {
+  runId: string;
+  start: (props?: { triggerData?: z.infer<T> } | undefined) => Promise<{
+    triggerData?: z.infer<T>;
+    results: Record<string, StepResult<any>>;
+    runId: string;
+  }>;
+}
+
+interface WorkflowRunState {
+  // Core state info
+  value: Record<string, string>;
+  context: {
+    stepResults: Record<
+      string,
+      {
+        status: 'success' | 'failed' | 'suspended' | 'waiting';
+        payload?: any;
+        error?: string;
+      }
+    >;
+    triggerData: Record<string, any>;
+    attempts: Record<string, number>;
+  };
+
+  activePaths: Array<{
+    stepPath: string[];
+    stepId: string;
+    status: string;
+  }>;
+
+  // Metadata
+  runId: string;
+  timestamp: number;
+}
+
 export class Workflow<
   TSteps extends Step<any, any, any>[] = any,
   TTriggerSchema extends z.ZodType<any> = any,
 > extends MastraBase {
   name: string;
+  snapshot?: WorkflowSnapshot;
   triggerSchema?: TTriggerSchema;
   /** XState machine instance that orchestrates the workflow execution */
   #machine!: ReturnType<typeof this.initializeMachine>;
@@ -73,10 +111,15 @@ export class Workflow<
     super({ component: 'WORKFLOW', name });
 
     this.name = name;
-    this.#retryConfig = retryConfig || { attempts: 3, delay: 1000 };
+    this.#retryConfig = retryConfig;
     this.triggerSchema = triggerSchema;
     this.#runId = crypto.randomUUID();
     this.#mastra = mastra;
+
+    if (this.#mastra?.engine) {
+      this.snapshot = new WorkflowSnapshot(this.#mastra.engine);
+    }
+
     if (mastra?.logger) {
       this.logger = mastra?.logger;
     }
@@ -93,8 +136,8 @@ export class Workflow<
   private initializeMachine() {
     const machine = setup({
       types: {} as {
-        context: WorkflowContext;
-        input: WorkflowContext;
+        context: Omit<WorkflowContext, 'getStepPayload'>;
+        input: Omit<WorkflowContext, 'getStepPayload'>;
         events: WorkflowEvent;
         actions: WorkflowActions;
         actors: WorkflowActors;
@@ -117,9 +160,9 @@ export class Workflow<
 
   step<
     TStep extends IAction<any, any, any, any>,
-    CondStep extends IAction<any, any, any, any> | 'trigger',
-    VarStep extends IAction<any, any, any, any> | 'trigger',
-  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep>) {
+    CondStep extends StepVariableType<any, any, any, any>,
+    VarStep extends StepVariableType<any, any, any, any>,
+  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>) {
     const { variables = {} } = config || {};
 
     const requiredData: Record<string, any> = {};
@@ -167,9 +210,9 @@ export class Workflow<
 
   then<
     TStep extends IAction<any, any, any, any>,
-    CondStep extends IAction<any, any, any, any> | 'trigger',
-    VarStep extends IAction<any, any, any, any> | 'trigger',
-  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep>) {
+    CondStep extends StepVariableType<any, any, any, any>,
+    VarStep extends StepVariableType<any, any, any, any>,
+  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>) {
     const { variables = {} } = config || {};
 
     const requiredData: Record<string, any> = {};
@@ -231,60 +274,94 @@ export class Workflow<
    * @returns Promise resolving to workflow results or rejecting with error
    * @throws Error if trigger schema validation fails
    */
+
+  createRun(): WorkflowResultReturn<TTriggerSchema> {
+    const runId = crypto.randomUUID();
+    this.#runId = runId;
+
+    return {
+      runId,
+      start: async ({ triggerData } = {}) => this.execute({ triggerData }),
+    };
+  }
+
   async execute({
     triggerData,
-    loadSnapshot,
+    snapshot,
+    runId,
+    stepId,
   }: {
+    stepId?: string;
     triggerData?: z.infer<TTriggerSchema>;
-    loadSnapshot?: { runId: string };
+    runId?: string;
+    snapshot?: Snapshot<any>;
   } = {}): Promise<{
     triggerData?: z.infer<TTriggerSchema>;
     results: Record<string, StepResult<any>>;
     runId: string;
   }> {
-    let snapshot: Snapshot<any> | undefined;
-
-    if (loadSnapshot && loadSnapshot.runId) {
-      snapshot = await this.#loadWorkflowSnapshot(loadSnapshot.runId);
-    } else {
-      this.#runId = crypto.randomUUID();
+    if (runId) {
+      this.#runId = runId;
+      // First, let's log the incoming snapshot for debugging
+      this.log(LogLevel.DEBUG, 'Incoming snapshot', {
+        snapshot: snapshot,
+        runId: this.#runId,
+      });
     }
 
-    if (snapshot) {
-      snapshot = JSON.parse(snapshot as unknown as string);
-    }
+    const machineInput = snapshot
+      ? (snapshot as any).context
+      : {
+          // Maintain the original step results and their payloads
+          stepResults: {},
+          triggerData: triggerData || {},
+          attempts: Object.keys(this.#steps).reduce(
+            (acc, stepKey) => {
+              acc[stepKey] = this.#steps[stepKey]?.retryConfig?.attempts || this.#retryConfig?.attempts || 3;
+              return acc;
+            },
+            {} as Record<string, number>,
+          ),
+        };
 
-    this.log(LogLevel.INFO, 'Executing workflow', { triggerData, runId: this.#runId });
+    this.log(LogLevel.DEBUG, 'Machine input prepared', {
+      machineInput,
+      runId: this.#runId,
+    });
 
-    if (this.triggerSchema) {
-      try {
-        this.triggerSchema.parse(triggerData);
-        this.log(LogLevel.DEBUG, 'Trigger schema validation passed', { runId: this.#runId });
-      } catch (error) {
-        this.log(LogLevel.ERROR, 'Trigger schema validation failed', {
-          error,
-          runId: this.#runId,
-        });
-        throw error;
-      }
-    }
+    const actorSnapshot = snapshot
+      ? {
+          ...snapshot,
+          context: machineInput,
+        }
+      : undefined;
+
+    this.log(LogLevel.DEBUG, 'Creating actor with configuration', {
+      machineInput,
+      actorSnapshot,
+      machineStates: this.#machine.config.states,
+      runId: this.#runId,
+    });
 
     this.#actor = createActor(this.#machine, {
-      input: {
-        stepResults: {},
-        triggerData: triggerData || {},
-        attempts: Object.keys(this.#steps).reduce(
-          (acc, stepKey) => {
-            acc[stepKey] = this.#steps[stepKey]?.retryConfig?.attempts || this.#retryConfig?.attempts || 3;
-            return acc;
-          },
-          {} as Record<string, number>,
-        ),
+      inspect: (inspectionEvent: any) => {
+        this.log(LogLevel.DEBUG, 'XState inspection event', {
+          type: inspectionEvent.type,
+          event: inspectionEvent.event,
+          runId: this.#runId,
+        });
       },
-      snapshot,
+      input: machineInput,
+      snapshot: actorSnapshot,
     });
 
     this.#actor.start();
+
+    if (stepId) {
+      this.#actor.send({ type: 'RESET_TO_PENDING', stepId });
+    }
+
+    this.log(LogLevel.INFO, 'Actor started', { runId: this.#runId });
 
     return new Promise((resolve, reject) => {
       if (!this.#actor) {
@@ -292,43 +369,51 @@ export class Workflow<
         return;
       }
 
-      this.#actor.subscribe(state => {
-        // Check if all parallel states are in a final state
+      const suspendedPaths: Set<string> = new Set();
+      this.#actor.subscribe(async state => {
+        this.#getSuspendedPaths({
+          value: state.value as Record<string, string>,
+          path: '',
+          suspendedPaths,
+        });
+
         const allStatesValue = state.value as Record<string, string>;
-        const allStatesComplete = this.#recursivelyCheckForFinalState(allStatesValue);
 
-        if (allStatesComplete) {
-          // Check if any steps failed
-          const allStepsFailed = Object.values(state.context.stepResults).every(result => result.status === 'failed');
-          const hasSuspended = Object.values(state.context.stepResults).some(result => result.status === 'suspended');
+        const allStatesComplete = this.#recursivelyCheckForFinalState({
+          value: allStatesValue,
+          suspendedPaths,
+          path: '',
+        });
 
-          if (hasSuspended) {
-            this.#persistWorkflowSnapshot();
-          }
+        this.log(LogLevel.DEBUG, 'State completion check', {
+          allStatesComplete,
+          suspendedPaths: Array.from(suspendedPaths),
+          runId: this.#runId,
+        });
 
-          if (allStepsFailed) {
-            this.log(LogLevel.ERROR, 'Workflow failed', {
-              results: state.context.stepResults,
-              runId: this.#runId,
-            });
-            this.#cleanup();
-            resolve({
-              triggerData,
-              results: state.context.stepResults,
-              runId: this.#runId,
-            });
-          } else {
-            this.log(LogLevel.INFO, 'Workflow completed', {
-              results: state.context.stepResults,
-              runId: this.#runId,
-            });
-            this.#cleanup();
-            resolve({
-              triggerData,
-              results: state.context.stepResults,
-              runId: this.#runId,
-            });
-          }
+        // Check if all parallel states are in a final state
+        if (!allStatesComplete) return;
+
+        try {
+          await this.#persistWorkflowSnapshot();
+          // Then cleanup and resolve
+          this.#cleanup();
+          resolve({
+            triggerData,
+            results: state.context.stepResults,
+            runId: this.#runId,
+          });
+        } catch (error) {
+          // If snapshot persistence fails, we should still resolve
+          // but maybe log the error
+          this.log(LogLevel.ERROR, 'Failed to persist final snapshot', { error });
+
+          this.#cleanup();
+          resolve({
+            triggerData,
+            results: state.context.stepResults,
+            runId: this.#runId,
+          });
         }
       });
     });
@@ -348,11 +433,47 @@ export class Workflow<
     return this;
   }
 
-  #recursivelyCheckForFinalState(value: string | Record<string, string>): boolean {
+  // record all object paths that leads to a suspended state
+  #getSuspendedPaths({
+    value,
+    path,
+    suspendedPaths,
+  }: {
+    value: string | Record<string, string>;
+    path: string;
+    suspendedPaths: Set<string>;
+  }) {
     if (typeof value === 'string') {
-      return ['completed', 'failed', 'suspended'].includes(value);
+      if (value === 'suspended') {
+        suspendedPaths.add(path);
+      }
+    } else {
+      Object.keys(value).forEach(key =>
+        this.#getSuspendedPaths({ value: value[key]!, path: path ? `${path}.${key}` : key, suspendedPaths }),
+      );
     }
-    return Object.values(value).every(val => this.#recursivelyCheckForFinalState(val));
+  }
+
+  #isFinalState(status: string): boolean {
+    return ['completed', 'failed'].includes(status);
+  }
+
+  #recursivelyCheckForFinalState({
+    value,
+    suspendedPaths,
+    path,
+  }: {
+    value: string | Record<string, string>;
+    suspendedPaths: Set<string>;
+    path: string;
+  }): boolean {
+    if (typeof value === 'string') {
+      // if the value is a final state or it has previouslyreached a suspended state, return true
+      return this.#isFinalState(value) || suspendedPaths.has(path);
+    }
+    return Object.keys(value).every(key =>
+      this.#recursivelyCheckForFinalState({ value: value[key]!, suspendedPaths, path: path ? `${path}.${key}` : key }),
+    );
   }
 
   #buildBaseState(stepNode: StepNode, nextSteps: StepNode[] = []): any {
@@ -361,67 +482,78 @@ export class Workflow<
 
     return {
       initial: 'pending',
+      on: {
+        RESET_TO_PENDING: {
+          target: '.pending', // Note the dot to target child state
+        },
+      },
       states: {
         pending: {
+          entry: () => {
+            this.log(LogLevel.INFO, `Step ${stepNode.step.id} pending`);
+          },
+          exit: () => {
+            this.log(LogLevel.INFO, `Step ${stepNode.step.id} finished pending`);
+          },
           invoke: {
-            src: 'dependencyCheck',
-            input: ({ context }: { context: WorkflowContext }) => ({
-              context,
-              stepNode,
-            }),
+            src: 'conditionCheck',
+            input: ({ context }: { context: WorkflowContext }) => {
+              return {
+                context,
+                stepNode,
+              };
+            },
             onDone: [
               {
                 guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
                   return event.output.type === 'SUSPENDED';
                 },
                 target: 'suspended',
-                actions: assign({
-                  stepResults: ({ context, event }) => {
-                    if (event.output.type !== 'SUSPENDED') return context.stepResults;
-                    return {
-                      ...context.stepResults,
-                      [stepNode.step.id]: {
-                        status: 'suspended',
-                      },
-                    };
-                  },
-                }),
+                actions: [
+                  assign({
+                    stepResults: ({ context, event }) => {
+                      if (event.output.type !== 'SUSPENDED') return context.stepResults;
+                      return {
+                        ...context.stepResults,
+                        [stepNode.step.id]: {
+                          status: 'suspended',
+                          ...(context.stepResults?.[stepNode.step.id] || {}),
+                        },
+                      };
+                    },
+                    attempts: ({ context, event }) => {
+                      if (event.output.type !== 'SUSPENDED') return context.attempts;
+                      // if the step is suspended, reset the attempt count
+                      return { ...context.attempts, [stepNode.step.id]: stepNode.step.retryConfig?.attempts || 3 };
+                    },
+                  }),
+                ],
               },
               {
                 guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
-                  return event.output.type === 'DEPENDENCIES_MET';
-                },
-                target: 'executing',
-              },
-              {
-                guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
-                  return event.output.type === 'DEPENDENCIES_NOT_MET';
+                  return event.output.type === 'WAITING';
                 },
                 target: 'waiting',
-                actions: [{ type: 'decrementAttemptCount', params: { stepId: stepNode.step.id } }],
+                actions: [
+                  { type: 'decrementAttemptCount', params: { stepId: stepNode.step.id } },
+                  assign({
+                    stepResults: ({ context, event }) => {
+                      if (event.output.type !== 'WAITING') return context.stepResults;
+                      return {
+                        ...context.stepResults,
+                        [stepNode.step.id]: {
+                          status: 'waiting',
+                        },
+                      };
+                    },
+                  }),
+                ],
               },
               {
                 guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
-                  return event.output.type === 'TIMED_OUT';
+                  return event.output.type === 'CONDITIONS_MET';
                 },
-                target: 'failed',
-                actions: assign({
-                  stepResults: ({ context, event }) => {
-                    if (event.output.type !== 'TIMED_OUT') return context.stepResults;
-
-                    this.log(LogLevel.ERROR, `Step:${stepNode.step.id} timed out`, {
-                      error: event.output.error,
-                    });
-
-                    return {
-                      ...context.stepResults,
-                      [stepNode.step.id]: {
-                        status: 'failed',
-                        error: event.output.error,
-                      },
-                    };
-                  },
-                }),
+                target: 'executing',
               },
               {
                 guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
@@ -463,9 +595,65 @@ export class Workflow<
             },
           },
         },
+        suspended: {
+          type: 'final',
+          entry: [
+            () => {
+              this.log(LogLevel.INFO, `Step ${stepNode.step.id} suspended`);
+            },
+            assign({
+              stepResults: ({ context }) => ({
+                ...context.stepResults,
+                [stepNode.step.id]: {
+                  ...(context?.stepResults?.[stepNode.step.id] || {}),
+                  status: 'suspended',
+                },
+              }),
+            }),
+          ],
+          // after: {
+          //   [stepNode.step.id]: {
+          //     target: 'pending',
+          //     actions: [
+          //       assign({
+          //         attempts: ({ context }) => ({
+          //           ...context.attempts,
+          //           [stepNode.step.id]: this.#steps[stepNode.step.id]?.retryConfig?.attempts || 3,
+          //         }),
+          //       }),
+          //     ],
+          //   }
+          // },
+          // entry: () => {
+          //   this.log(LogLevel.INFO, `Step ${stepNode.step.id} suspended ${new Date().toISOString()}`);
+          // },
+          // exit: () => {
+          //   this.log(LogLevel.INFO, `Step ${stepNode.step.id} finished suspended ${new Date().toISOString()}`);
+          // },
+          // after: {
+          //   [stepNode.step.id]: {
+          //     target: 'suspended',
+          //   },
+          // },
+        },
         executing: {
           entry: () => {
             this.log(LogLevel.INFO, `Step ${stepNode.step.id} executing`);
+          },
+          on: {
+            SUSPENDED: {
+              target: 'suspended',
+              actions: [
+                assign({
+                  stepResults: ({ context }) => ({
+                    ...context.stepResults,
+                    [stepNode.step.id]: {
+                      status: 'suspended',
+                    },
+                  }),
+                }),
+              ],
+            },
           },
           invoke: {
             src: 'resolverFunction',
@@ -526,14 +714,19 @@ export class Workflow<
         },
         completed: {
           type: 'final',
-          entry: [{ type: 'notifyStepCompletion', params: { stepId: stepNode.step.id } }],
+          entry: [
+            { type: 'notifyStepCompletion', params: { stepId: stepNode.step.id } },
+            { type: 'snapshotStep', params: { stepId: stepNode.step.id } },
+            { type: 'persistSnapshot' },
+          ],
         },
         failed: {
           type: 'final',
-          entry: [{ type: 'notifyStepCompletion', params: { stepId: stepNode.step.id } }],
-        },
-        suspended: {
-          entry: [{ type: 'notifyStepCompletion', params: { stepId: stepNode.step.id } }],
+          entry: [
+            { type: 'notifyStepCompletion', params: { stepId: stepNode.step.id } },
+            { type: 'snapshotStep', params: { stepId: stepNode.step.id } },
+            { type: 'persistSnapshot' },
+          ],
         },
         // build chain of next steps recursively
         ...(nextStep ? { [nextStep.step.id]: { ...this.#buildBaseState(nextStep, nextSteps) } } : {}),
@@ -598,9 +791,22 @@ export class Workflow<
           };
         },
       }),
-      notifyStepCompletion: (_: any, params: WorkflowActionParams) => {
+      notifyStepCompletion: async (_: any, params: WorkflowActionParams) => {
         const { stepId } = params;
         this.log(LogLevel.INFO, `Step ${stepId} completed`);
+      },
+      snapshotStep: assign({
+        _snapshot: ({}, params: WorkflowActionParams) => {
+          const { stepId } = params;
+          // This will run after the state update
+          return { stepId };
+        },
+      }),
+      persistSnapshot: async ({ context }: { context: MachineContext }) => {
+        if (context._snapshot) {
+          return await this.#persistWorkflowSnapshot();
+        }
+        return;
       },
       decrementAttemptCount: assign({
         attempts: ({ context, event }, params: WorkflowActionParams) => {
@@ -645,6 +851,19 @@ export class Workflow<
             machineContext: context,
             ...resolvedData,
           },
+          suspend: async () => {
+            if (this.#actor) {
+              // Update context with current result
+              context.stepResults[stepNode.step.id] = {
+                status: 'suspended',
+              };
+              await this.#persistWorkflowSnapshot();
+              this.log(LogLevel.INFO, `Sending SUSPENDED event for step ${stepNode.step.id}`);
+              this.#actor?.send({ type: 'SUSPENDED', stepId: stepNode.step.id });
+            } else {
+              this.log(LogLevel.ERROR, `Actor not available for step ${stepNode.step.id}`);
+            }
+          },
           ...injectables,
         });
 
@@ -658,34 +877,44 @@ export class Workflow<
           result,
         };
       }),
-      dependencyCheck: fromPromise(async ({ input }: { input: { context: WorkflowContext; stepNode: StepNode } }) => {
+      conditionCheck: fromPromise(async ({ input }: { input: { context: WorkflowContext; stepNode: StepNode } }) => {
         const { context, stepNode } = input;
-
         const stepConfig = stepNode.config;
-
-        // TODO: Need a way to create unique ids for steps
         const attemptCount = context.attempts[stepNode.step.id];
 
+        this.log(LogLevel.INFO, `Checking conditions for ${stepNode.step.id}`);
+
+        this.log(LogLevel.INFO, `Attempt count for ${stepNode.step.id}`, {
+          attemptCount,
+          attempts: context.attempts,
+          runId: this.#runId,
+        });
+
+        // if step has no attempts left, suspend or fail
         if (!attemptCount || attemptCount < 0) {
+          // TODO: INSTEAD OF SUSPENDING, LEAVE THE STEP IN THE PENDING STATE, AND UPDATE CONTEXT TO SIGNIFY COMPLETION
           if (stepConfig?.snapshotOnTimeout) {
             return { type: 'SUSPENDED' as const, stepId: stepNode.step.id };
           }
-          return { type: 'TIMED_OUT' as const, error: `Step:${stepNode.step.id} timed out` };
+          return { type: 'CONDITION_FAILED' as const, error: `Step:${stepNode.step.id} condition check failed` };
         }
 
         if (!stepConfig?.when) {
-          return { type: 'DEPENDENCIES_MET' as const };
+          return { type: 'CONDITIONS_MET' as const };
         }
 
-        // All dependencies available, check conditions
+        this.log(LogLevel.INFO, `Checking conditions for ${stepNode.step.id}`);
+
         if (typeof stepConfig?.when === 'function') {
           const conditionMet = await stepConfig.when({ context });
-          if (!conditionMet) {
-            return {
-              type: 'CONDITION_FAILED' as const,
-              error: `Step:${stepNode.step.id} condition function check failed`,
-            };
+          if (conditionMet) {
+            this.log(LogLevel.INFO, `Condition met for ${stepNode.step.id}`);
+            return { type: 'CONDITIONS_MET' as const };
           }
+          if (!attemptCount || attemptCount < 0) {
+            return { type: 'CONDITION_FAILED' as const, error: `Step:${stepNode.step.id} condition check failed` };
+          }
+          return { type: 'WAITING' as const, stepId: stepNode.step.id };
         } else {
           const conditionMet = this.#evaluateCondition(stepConfig.when, context);
           if (!conditionMet) {
@@ -695,7 +924,7 @@ export class Workflow<
             };
           }
         }
-        return { type: 'DEPENDENCIES_MET' as const };
+        return { type: 'CONDITIONS_MET' as const };
       }),
       spawnSubscriberFunction: fromPromise(
         async ({
@@ -709,7 +938,11 @@ export class Workflow<
           const { parentStepId, context } = input;
           const stepGraph = this.#stepSubscriberGraph[parentStepId];
 
-          if (!stepGraph) return { stepResults: {} };
+          if (!stepGraph) {
+            return {
+              stepResults: {},
+            };
+          }
 
           const subscriberMachine = setup({
             types: {} as {
@@ -734,9 +967,19 @@ export class Workflow<
 
           // Create a promise that resolves when all states are final
           return new Promise(resolve => {
+            const suspendedPaths = new Set<string>();
             actor.subscribe(state => {
+              this.#getSuspendedPaths({
+                value: state.value as Record<string, string>,
+                path: '',
+                suspendedPaths,
+              });
               const allStatesValue = state.value as Record<string, string>;
-              const allStatesComplete = this.#recursivelyCheckForFinalState(allStatesValue);
+              const allStatesComplete = this.#recursivelyCheckForFinalState({
+                value: allStatesValue,
+                suspendedPaths,
+                path: '',
+              });
 
               if (allStatesComplete) {
                 actor.stop();
@@ -755,46 +998,59 @@ export class Workflow<
    * Persists the workflow state to the database
    */
   async #persistWorkflowSnapshot() {
-    if (!this.#mastra) return;
+    const snapshotFromActor = this.#actor?.getPersistedSnapshot();
+    if (!this.snapshot) {
+      this.log(LogLevel.ERROR, 'Snapshot cannot be persisted. Mastra engine is not initialized', {
+        runId: this.#runId,
+      });
+      return;
+    }
 
-    const engine = this.#mastra.engine;
+    if (!snapshotFromActor) {
+      this.log(LogLevel.ERROR, 'Snapshot cannot be persisted. No snapshot received.', { runId: this.#runId });
+      return;
+    }
 
-    if (!engine) return;
-
-    const snapshot = this.#actor?.getPersistedSnapshot();
-
-    if (!snapshot) return;
-
-    await engine.syncRecords({
-      name: this.#entityName,
-      connectionId: this.#connectionId,
-      records: [
-        {
-          externalId: this.#runId,
-          data: { snapshot: JSON.stringify(snapshot) },
-        },
-      ],
+    this.log(LogLevel.INFO, 'Persisting workflow snapshot', {
+      snapshot: snapshotFromActor,
+      runId: this.#runId,
     });
 
+    await this.snapshot.persist({
+      runId: this.#runId,
+      snapshot: snapshotFromActor,
+      entityName: this.#entityName,
+      connectionId: this.#connectionId,
+    });
+
+    this.log(LogLevel.INFO, 'Successfully persisted workflow snapshot', { runId: this.#runId });
     return this.#runId;
   }
 
   async #loadWorkflowSnapshot(runId: string) {
-    if (!this.#mastra) return;
+    if (!this.snapshot) {
+      this.log(LogLevel.ERROR, 'Snapshot cannot be loaded. Mastra engine is not initialized', { runId });
+      return;
+    }
 
-    const engine = this.#mastra.engine;
-
-    if (!engine) return;
-
-    const state = await engine.getRecords({
+    this.log(LogLevel.INFO, 'Loading workflow snapshot', {
+      runId,
       entityName: this.#entityName,
       connectionId: this.#connectionId,
-      options: {
-        filters: [{ field: 'externalId', value: runId, operator: FilterOperators.EQUAL }],
-      },
     });
 
-    return state[0]?.data.snapshot;
+    const snapshotData = await this.snapshot.load({
+      runId,
+      entityName: this.#entityName,
+      connectionId: this.#connectionId,
+    });
+
+    this.log(LogLevel.INFO, 'Retrieved workflow state from storage', {
+      snapshot: snapshotData,
+      runId,
+    });
+
+    return snapshotData as Snapshot<any>;
   }
 
   /**
@@ -822,6 +1078,21 @@ export class Workflow<
       runId: this.#runId,
     });
 
+    // Add machineContext with getStepPayload helper
+    resolvedData.machineContext = {
+      ...context,
+      getStepPayload: ((stepId: string) => {
+        if (stepId === 'trigger') {
+          return context.triggerData;
+        }
+        const result = context.stepResults[stepId];
+        if (result && result.status === 'success') {
+          return result.payload;
+        }
+        return undefined;
+      }) as WorkflowContext<TTriggerSchema>['getStepPayload'],
+    };
+
     for (const [key, variable] of Object.entries(stepConfig.data)) {
       // Check if variable comes from trigger data or a previous step's result
       const sourceData =
@@ -843,7 +1114,7 @@ export class Workflow<
       }
 
       // If path is empty or '.', return the entire source data
-      const value = variable.path === '' || variable.path === '.' ? sourceData[key] : get(sourceData, variable.path);
+      const value = variable.path === '' || variable.path === '.' ? sourceData : get(sourceData, variable.path);
 
       this.log(LogLevel.DEBUG, `Resolved variable ${key}`, {
         value,
@@ -859,10 +1130,50 @@ export class Workflow<
   /**
    * Evaluates a single condition against workflow context
    */
-  #evaluateCondition(condition: StepCondition<any>, context: WorkflowContext): boolean {
+  #evaluateCondition<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodType<any>>(
+    condition: StepCondition<TStep, TTriggerSchema>,
+    context: WorkflowContext,
+  ): boolean {
     let andBranchResult = true;
     let baseResult = true;
     let orBranchResult = true;
+
+    // Base condition simplified format
+    const simpleCondition = Object.entries(condition).find(([key]) => key.includes('.'));
+    if (simpleCondition) {
+      const [key, queryValue] = simpleCondition;
+      const [stepId, ...pathParts] = key.split('.');
+      const path = pathParts.join('.');
+
+      const sourceData =
+        stepId === 'trigger' ? context.triggerData : getStepResult(context.stepResults[stepId as string]);
+
+      this.log(LogLevel.DEBUG, `Got condition data from ${stepId}`, {
+        sourceData,
+        runId: this.#runId,
+      });
+
+      if (!sourceData) {
+        return false;
+      }
+
+      let value = get(sourceData, path);
+
+      // If path is 'status', check if value is empty and we are not referencing the trigger.
+      // Currently only successful step results get to this point, so we can safely assume that the status is 'success'
+      if (stepId !== 'trigger' && path === 'status' && !value) {
+        value = 'success';
+      }
+
+      // Handle different types of queries
+      if (typeof queryValue === 'object' && queryValue !== null) {
+        // If it's an object, treat it as a query object
+        baseResult = sift(queryValue)(value);
+      } else {
+        // For simple values, do an equality check
+        baseResult = value === queryValue;
+      }
+    }
 
     // Base condition
     if ('ref' in condition) {
@@ -878,7 +1189,14 @@ export class Workflow<
         return false;
       }
 
-      const value = get(sourceData, ref.path);
+      let value = get(sourceData, ref.path);
+
+      // If path is 'status', check if value is empty and we are not referencing the trigger.
+      // Currently only successful step results get to this point, so we can safely assume that the status is 'success'
+      if (ref.step !== 'trigger' && ref.path === 'status' && !value) {
+        value = 'success';
+      }
+
       baseResult = sift(query)(value);
     }
 
@@ -975,6 +1293,296 @@ export class Workflow<
     }
   }
 
+  #getActivePathsAndStatus(value: Record<string, any>): Array<{
+    stepPath: string[];
+    stepId: string;
+    status: string;
+  }> {
+    const paths: Array<{
+      stepPath: string[];
+      stepId: string;
+      status: string;
+    }> = [];
+
+    const traverse = (current: Record<string, any>, path: string[] = []) => {
+      for (const [key, value] of Object.entries(current)) {
+        const currentPath = [...path, key];
+
+        if (typeof value === 'string') {
+          // Found a leaf state
+          paths.push({
+            stepPath: currentPath,
+            stepId: key,
+            status: value,
+          });
+        } else if (typeof value === 'object' && value !== null) {
+          // Continue traversing
+          traverse(value, currentPath);
+        }
+      }
+    };
+
+    traverse(value);
+    return paths;
+  }
+
+  async getState(runId: string): Promise<WorkflowRunState | null> {
+    // If this is the currently running workflow
+    if (this.#runId === runId && this.#actor) {
+      const snapshot = this.#actor.getSnapshot();
+      const m = this.#getActivePathsAndStatus(snapshot.value as Record<string, any>);
+      return {
+        runId,
+        value: snapshot.value as Record<string, string>,
+        context: snapshot.context,
+        activePaths: m,
+        timestamp: Date.now(),
+      };
+    }
+
+    // If workflow is suspended/stored, get from storage
+    const storedSnapshot = await this.snapshot?.load({
+      runId,
+      entityName: this.#entityName,
+      connectionId: this.#connectionId,
+    });
+
+    if (storedSnapshot) {
+      const parsed = JSON.parse(storedSnapshot as string);
+
+      const m = this.#getActivePathsAndStatus(parsed.value);
+
+      return {
+        runId,
+        value: parsed.value,
+        context: parsed.context,
+        activePaths: m,
+        timestamp: Date.now(),
+      };
+    }
+
+    return null;
+  }
+
+  #hasStateChanged(previous: WorkflowRunState | null, current: WorkflowRunState): boolean {
+    if (!previous) return true;
+
+    // Compare active paths
+    const previousPaths = previous.activePaths;
+    const currentPaths = current.activePaths;
+
+    // Check if number of active paths changed
+    if (previousPaths.length !== currentPaths.length) return true;
+
+    // Compare each path
+    for (let i = 0; i < currentPaths.length; i++) {
+      const prevPath = previousPaths[i];
+      const currPath = currentPaths[i];
+
+      // Check if path structure changed
+      if (JSON.stringify(prevPath?.stepPath) !== JSON.stringify(currPath?.stepPath)) return true;
+
+      // Check if status changed
+      if (prevPath?.status !== currPath?.status) return true;
+    }
+
+    // Check if step results changed
+    if (JSON.stringify(previous.context.stepResults) !== JSON.stringify(current.context.stepResults)) return true;
+
+    return false;
+  }
+
+  #getDeepestState(value: Record<string, any>): { stepId: string; status: string } {
+    type StateInfo = {
+      stepId: string;
+      status: string;
+      depth: number;
+    };
+
+    // Helper to get depth of a state branch
+    const getStateDepth = (obj: any): number => {
+      if (typeof obj !== 'object' || obj === null) return 0;
+      return 1 + Math.max(...Object.values(obj).map(getStateDepth));
+    };
+
+    // Find the deepest active branch
+    let deepestBranch: StateInfo | null = null;
+
+    const traverse = (obj: Record<string, any>, path: string[] = []) => {
+      for (const [key, value] of Object.entries(obj)) {
+        if (typeof value === 'string') {
+          // If it's a leaf state, check its depth
+          const depth = path.length;
+          if (!deepestBranch || depth > deepestBranch.depth) {
+            deepestBranch = { stepId: key, status: value, depth };
+          }
+        } else if (typeof value === 'object' && value !== null) {
+          // Keep traversing
+          traverse(value, [...path, key]);
+        }
+      }
+    };
+
+    traverse(value);
+
+    if (!deepestBranch) {
+      // Provide a default or throw an error
+      throw new Error('No valid state found');
+    }
+
+    return {
+      stepId: (deepestBranch as StateInfo)?.stepId,
+      status: (deepestBranch as StateInfo)?.status,
+    };
+  }
+
+  async watch(
+    runId: string,
+    options: {
+      onTransition?: (state: WorkflowRunState) => void | Promise<void>;
+      pollInterval?: number;
+    } = {},
+  ): Promise<WorkflowRunState> {
+    const { onTransition, pollInterval = 1000 } = options;
+
+    return new Promise((resolve, reject) => {
+      let timeoutId: NodeJS.Timeout;
+      let previousState: WorkflowRunState | null = null;
+
+      const poll = async () => {
+        try {
+          const currentState = await this.getState(runId);
+
+          if (!currentState) {
+            reject(new Error(`No workflow found for runId: ${runId}`));
+            return;
+          }
+
+          // Only call onTransition if state has changed
+          if (onTransition && this.#hasStateChanged(previousState, currentState)) {
+            await onTransition(currentState);
+          }
+
+          previousState = currentState;
+
+          const deepState = this.#getDeepestState(currentState.value);
+
+          if (this.#isFinalState(deepState.status)) {
+            resolve(currentState);
+            return;
+          }
+
+          timeoutId = setTimeout(poll, pollInterval);
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      poll();
+
+      return () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      };
+    });
+  }
+
+  async resume({
+    runId,
+    stepId,
+    context: resumeContext,
+  }: {
+    runId: string;
+    stepId: string;
+    context?: Record<string, any>;
+  }) {
+    const snapshot = await this.#loadWorkflowSnapshot(runId);
+
+    if (!snapshot) {
+      throw new Error(`No snapshot found for workflow run ${runId}`);
+    }
+
+    let parsedSnapshot;
+    try {
+      parsedSnapshot = JSON.parse(snapshot as unknown as string);
+    } catch (error) {
+      this.log(LogLevel.ERROR, 'Failed to parse workflow snapshot for resume', { error, runId });
+      throw new Error('Failed to parse workflow snapshot');
+    }
+
+    // Update context if provided
+
+    if (resumeContext) {
+      parsedSnapshot.context.stepResults[stepId] = {
+        status: 'success',
+        payload: {
+          ...(parsedSnapshot?.context?.stepResults?.[stepId]?.payload || {}),
+          ...resumeContext,
+        },
+      };
+    }
+
+    // Reattach the step handler
+    // TODO: need types
+    if (parsedSnapshot.children) {
+      Object.entries(parsedSnapshot.children).forEach(([_childId, child]: [string, any]) => {
+        if (child.snapshot?.input?.stepNode) {
+          // Reattach handler
+          const stepDef = this.#makeStepDef(child.snapshot.input.stepNode.step.id);
+          child.snapshot.input.stepNode.config = {
+            ...child.snapshot.input.stepNode.config,
+            ...stepDef,
+          };
+
+          // Sync the context
+          child.snapshot.input.context = parsedSnapshot.context;
+        }
+      });
+    }
+
+    // Helper to find and update the step in the hierarchy
+    const updateStepInHierarchy = (value: Record<string, any>, targetStepId: string): Record<string, any> => {
+      const result: Record<string, any> = {};
+
+      for (const key of Object.keys(value)) {
+        const currentValue = value[key];
+
+        if (key === targetStepId) {
+          // Found our target step, set it to pending
+          result[key] = 'pending';
+        } else if (typeof currentValue === 'object' && currentValue !== null) {
+          // Recurse into nested states
+          result[key] = updateStepInHierarchy(currentValue, targetStepId);
+        } else {
+          // Keep other states as is
+          result[key] = currentValue;
+        }
+      }
+
+      return result;
+    };
+
+    parsedSnapshot.value = updateStepInHierarchy(parsedSnapshot.value, stepId);
+
+    // Reset attempt count
+    if (parsedSnapshot.context?.attempts) {
+      parsedSnapshot.context.attempts[stepId] =
+        this.#steps[stepId]?.retryConfig?.attempts || this.#retryConfig?.attempts || 3;
+    }
+
+    this.log(LogLevel.INFO, 'Resuming workflow with updated snapshot', {
+      updatedSnapshot: parsedSnapshot,
+      runId,
+      stepId,
+    });
+
+    return this.execute({
+      snapshot: parsedSnapshot,
+      runId,
+      stepId,
+    });
+  }
   __registerPrimitives(p: MastraPrimitives) {
     if (p.telemetry) {
       this.__setTelemetry(p.telemetry);
@@ -982,6 +1590,10 @@ export class Workflow<
 
     if (p.logger) {
       this.__setLogger(p.logger);
+    }
+
+    if (p?.engine) {
+      this.snapshot = new WorkflowSnapshot(p.engine);
     }
 
     this.#mastra = p;

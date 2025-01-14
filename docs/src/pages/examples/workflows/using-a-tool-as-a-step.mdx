@@ -2,7 +2,7 @@ import { GithubLink } from '../../../components/github-link';
 
 # Tool as a Workflow step
 
-A custom tool can be added as a step for a workflow. Below we have a simple webpage crawler.
+This example demonstrates how to create and integrate a custom tool as a workflow step, showing how to define input/output schemas and implement the tool's execution logic.
 
 ```ts showLineNumbers copy
 import { createTool, Workflow } from '@mastra/core';
@@ -24,9 +24,11 @@ const crawlWebpage = createTool({
 
 const contentWorkflow = new Workflow({ name: 'content-review' });
 
-contentWorkflow.step(crawlWebpage);
-contentWorkflow.commit();
-const res = await contentWorkflow.execute();
+contentWorkflow.step(crawlWebpage).commit();
+
+const { runId, start } = contentWorkflow.createRun();
+
+const res = await start();
 
 console.log(res.results);
 ```
@@ -36,4 +38,4 @@ console.log(res.results);
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/tool-as-workflow-step.ts'} />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/tool-as-workflow-step'} />

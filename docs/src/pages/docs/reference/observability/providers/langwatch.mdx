@@ -1,0 +1,40 @@
+# LangWatch
+
+LangWatch is a specialized observability platform for LLM applications.
+
+## Configuration
+
+To use LangWatch with Mastra, configure these environment variables:
+
+```env
+LANGWATCH_API_KEY=your_api_key
+LANGWATCH_PROJECT_ID=your_project_id
+```
+
+## Implementation
+
+Here's how to configure Mastra to use LangWatch:
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { LangWatchExporter } from "langwatch";
+
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    serviceName: "your-service-name",
+    enabled: true,
+    export: {
+      type: "custom",
+      exporter: new LangWatchExporter({
+        apiKey: process.env.LANGWATCH_API_KEY,
+        projectId: process.env.LANGWATCH_PROJECT_ID,
+      }),
+    },
+  },
+});
+```
+
+## Dashboard
+
+Access your LangWatch dashboard at [app.langwatch.ai](https://app.langwatch.ai)

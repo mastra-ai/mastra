@@ -25,15 +25,27 @@ export const modelToConfigMap: Record<LLMProvider, ModelConfig> = {
   groq: { provider: 'GROQ', name: 'llama3-groq-70b-8192-tool-use-preview', toolChoice: 'auto' },
 };
 
-export async function writeAgentSample(llmProvider: LLMProvider, destPath: string) {
+export async function writeAgentSample(llmProvider: LLMProvider, destPath: string, addExampleTool: boolean) {
   const model = modelToConfigMap[llmProvider];
+  const instructions = `
+      You are a helpful weather assistant that provides accurate weather information.
+
+      Your primary function is to help users get weather details for specific locations. When responding:
+      - Always ask for a location if none is provided
+      - Include relevant details like humidity, wind conditions, and precipitation
+      - Keep responses concise but informative
+
+      ${addExampleTool ? 'Use the weatherTool to fetch current weather data.' : ''}
+`;
   const content = `
 import { Agent } from '@mastra/core';
+${addExampleTool ? `import { weatherTool } from '../tools';` : ''}
 
-export const catOne = new Agent({
-  name: 'cat-one',
-  instructions: 'You are a feline expert with comprehensive knowledge of all cat species, from domestic breeds to wild big cats. As a lifelong cat specialist, you understand their behavior, biology, social structures, and evolutionary history in great depth.',
+export const weatherAgent = new Agent({
+  name: 'Weather Agent',
+  instructions: \`${instructions}\`,
   model: ${JSON.stringify(model, null, 2)},
+  ${addExampleTool ? 'tools: { weatherTool },' : ''}
 });
     `;
   const formattedContent = await prettier.format(content, {
@@ -55,13 +67,18 @@ export async function writeToolSample(destPath: string) {
   await fileService.copyStarterFile('tools.ts', destPath);
 }
 
-export async function writeCodeSampleForComponents(llmprovider: LLMProvider, component: Components, destPath: string) {
-  switch (true) {
-    case component === 'agents':
-      return writeAgentSample(llmprovider, destPath);
-    case component === 'tools':
+export async function writeCodeSampleForComponents(
+  llmprovider: LLMProvider,
+  component: Components,
+  destPath: string,
+  components: Components[],
+) {
+  switch (component) {
+    case 'agents':
+      return writeAgentSample(llmprovider, destPath, components.includes('tools'));
+    case 'tools':
       return writeToolSample(destPath);
-    case component === 'workflows':
+    case 'workflows':
       return writeWorkflowSample(destPath);
     default:
       return '';
@@ -74,18 +91,32 @@ export const createComponentsDir = async (dirPath: string, component: string) =>
   await fsExtra.ensureDir(componentPath);
 };
 
-export const writeIndexFile = async (dirPath: string, addExample: boolean) => {
+export const writeIndexFile = async ({
+  dirPath,
+  addAgent,
+  addExample,
+  addWorkflow,
+}: {
+  dirPath: string;
+  addExample: boolean;
+  addWorkflow: boolean;
+  addAgent: boolean;
+}) => {
   const indexPath = dirPath + '/index.ts';
   const destPath = path.join(indexPath);
   try {
     await fs.writeFile(destPath, '');
+    const filteredExports = [
+      addWorkflow ? `workflows: { weatherWorkflow },` : '',
+      addAgent ? `agents: { weatherAgent },` : '',
+    ].filter(Boolean);
     if (!addExample) {
       await fs.writeFile(
         destPath,
         `
 import { Mastra } from '@mastra/core';
 
-export const mastra = new Mastra({})
+export const mastra = new Mastra()
         `,
       );
 
@@ -95,11 +126,11 @@ export const mastra = new Mastra({})
       destPath,
       `
 import { Mastra, createLogger } from '@mastra/core';
-
-import { catOne } from './agents/index';
+${addWorkflow ? `import { weatherWorkflow } from './workflows';` : ''}
+${addAgent ? `import { weatherAgent } from './agents';` : ''}
 
 export const mastra = new Mastra({
-  agents: { catOne },
+  ${filteredExports.join('\n  ')}
   logger: createLogger({
     type: 'CONSOLE',
     level: 'INFO',
@@ -173,9 +204,15 @@ export const getAPIKey = async (provider: LLMProvider) => {
   }
 };
 
-export const writeAPIKey = async (provider: LLMProvider) => {
+export const writeAPIKey = async ({
+  provider,
+  apiKey = 'your-api-key',
+}: {
+  provider: LLMProvider;
+  apiKey?: string;
+}) => {
   const key = await getAPIKey(provider);
-  await exec(`echo ${key}= >> .env.development`);
+  await exec(`echo ${key}=${apiKey} >> .env.development`);
 };
 export const createMastraDir = async (directory: string): Promise<{ ok: true; dirPath: string } | { ok: false }> => {
   let dir = directory
@@ -194,11 +231,16 @@ export const createMastraDir = async (directory: string): Promise<{ ok: true; di
   }
 };
 
-export const writeCodeSample = async (dirPath: string, component: Components, llmProvider: LLMProvider) => {
+export const writeCodeSample = async (
+  dirPath: string,
+  component: Components,
+  llmProvider: LLMProvider,
+  components: Components[],
+) => {
   const destPath = dirPath + `/${component}/index.ts`;
 
   try {
-    await writeCodeSampleForComponents(llmProvider, component, destPath);
+    await writeCodeSampleForComponents(llmProvider, component, destPath, components);
   } catch (err) {
     throw err;
   }
@@ -239,6 +281,24 @@ export const interactivePrompt = async () => {
             { value: 'groq', label: 'Groq' },
           ],
         }),
+      llmApiKey: async ({ results: { llmProvider } }) => {
+        const keyChoice = await p.select({
+          message: `Enter your ${llmProvider} API key?`,
+          options: [
+            { value: 'skip', label: 'Skip for now', hint: 'default' },
+            { value: 'enter', label: 'Enter API key' },
+          ],
+          initialValue: 'skip',
+        });
+
+        if (keyChoice === 'enter') {
+          return p.text({
+            message: 'Enter your API key:',
+            placeholder: 'sk-...',
+          });
+        }
+        return undefined;
+      },
       addExample: () =>
         p.confirm({
           message: 'Add example',

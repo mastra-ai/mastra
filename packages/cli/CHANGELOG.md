@@ -1,5 +1,101 @@
 # mastra
 
+## 0.1.57-alpha.86
+
+### Patch Changes
+
+- 606bbbe: Adds -f option to engine commands to specify custom docker config. Updates Engine docs.
+- Updated dependencies [b524c22]
+  - @mastra/core@0.1.27-alpha.59
+
+## 0.1.57-alpha.85
+
+### Patch Changes
+
+- Updated dependencies [1874f40]
+- Updated dependencies [4b1ce2c]
+  - @mastra/core@0.1.27-alpha.58
+
+## 0.1.57-alpha.84
+
+### Patch Changes
+
+- Updated dependencies [fd494a3]
+  - @mastra/core@0.1.27-alpha.57
+
+## 0.1.57-alpha.83
+
+### Patch Changes
+
+- Updated dependencies [9f3ab05]
+  - @mastra/core@0.1.27-alpha.56
+
+## 0.1.57-alpha.82
+
+### Patch Changes
+
+- 6cc479d: change cat example
+
+## 0.1.57-alpha.81
+
+### Patch Changes
+
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- 0b74006: Workflow updates
+- Updated dependencies [592e3cf]
+- Updated dependencies [837a288]
+- Updated dependencies [0b74006]
+  - @mastra/core@0.1.27-alpha.55
+
+## 0.1.57-alpha.80
+
+### Patch Changes
+
+- Updated dependencies [d2cd535]
+  - @mastra/core@0.1.27-alpha.54
+
+## 0.1.57-alpha.79
+
+### Patch Changes
+
+- Updated dependencies [8e7814f]
+  - @mastra/core@0.1.27-alpha.53
+
+## 0.1.57-alpha.78
+
+### Patch Changes
+
+- f79a9ff: Fix example tool execution not workin in dev, add example tool to example agent, add example workflow to main Mastra export
+- Updated dependencies [eedb829]
+  - @mastra/core@0.1.27-alpha.52
+
+## 0.1.57-alpha.77
+
+### Patch Changes
+
+- 538a136: Added Simple Condition for workflows, updated /api/workflows/{workflowId}/execute endpoint and docs
+- Updated dependencies [a7b016d]
+- Updated dependencies [da2e8d3]
+- Updated dependencies [538a136]
+  - @mastra/core@0.1.27-alpha.51
+
+## 0.1.57-alpha.76
+
+### Patch Changes
+
+- b6f9860: watch for changes in user mastra directory and restart server in cli dev
+- cefd906: cli interactive api key configuration
+- Updated dependencies [401a4d9]
+  - @mastra/core@0.1.27-alpha.50
+
+## 0.1.57-alpha.75
+
+### Patch Changes
+
+- Updated dependencies [79acad0]
+- Updated dependencies [f5dfa20]
+  - @mastra/core@0.1.27-alpha.49
+
 ## 0.1.57-alpha.74
 
 ### Patch Changes

@@ -7,6 +7,7 @@ const meta = {
   "branching-paths": "Branching Paths",
   "using-a-tool-as-a-step": "Using a Tool as a Step",
   "cyclical-dependencies": "Cyclical Dependencies",
+  "suspend-and-resume": "Suspend and Resume",
 };
 
 export default meta;

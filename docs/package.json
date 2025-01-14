@@ -1,6 +1,6 @@
 {
   "name": "docs",
-  "version": "0.1.1-alpha.5",
+  "version": "0.1.1-alpha.12",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -10,12 +10,14 @@
   },
   "dependencies": {
     "@vercel/analytics": "^1.4.1",
+    "clsx": "^2.1.1",
     "lucide-react": "^0.436.0",
     "next": "14.2.22",
     "nextra": "^3.0.2",
     "nextra-theme-docs": "^3.0.2",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {
     "@types/node": "^20",
