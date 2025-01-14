@@ -1,6 +1,6 @@
 {
   "name": "create-mastra",
-  "version": "0.1.0-alpha.22",
+  "version": "0.1.0-unstable.22",
   "description": "Create Mastra apps with one command",
   "type": "module",
   "main": "dist/index.js",
@@ -8,7 +8,8 @@
     "create-mastra": "./dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "starter-files"
   ],
   "scripts": {
     "build": "rollup -c",

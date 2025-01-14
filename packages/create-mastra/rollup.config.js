@@ -4,6 +4,9 @@ import { defineConfig } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
 import nodeExternals from 'rollup-plugin-node-externals';
 import pkgJson from './package.json' with { type: 'json' };
+import fsExtra from 'fs-extra/esm';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const external = ['commander', 'fs-extra', 'execa', 'prettier', 'posthog-node'];
 external.forEach(pkg => {
@@ -31,6 +34,15 @@ export default defineConfig({
     }),
     nodeExternals(),
     commonjs(),
+    {
+      name: 'copy-starter-files',
+      buildEnd: async () => {
+        await fsExtra.remove('./starter-files')
+        
+        const mastraPath = path.dirname(fileURLToPath(import.meta.resolve('mastra/package.json')))
+        await fsExtra.copy(path.join(mastraPath, 'dist', 'starter-files'), './starter-files')
+      },
+    },
   ],
   external,
 });
