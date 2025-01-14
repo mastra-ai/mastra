@@ -4,13 +4,13 @@
   "description": "",
   "type": "module",
   "main": "dist/index.js",
-  "module": "dist/tts.esm.js",
+  "module": "dist/mcp.esm.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "import": {
         "types": "./dist/index.d.ts",
-        "default": "./dist/tts.esm.js"
+        "default": "./dist/mcp.esm.js"
       },
       "require": {
         "types": "./dist/index.d.ts",
