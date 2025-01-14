@@ -2,6 +2,7 @@
   "name": "weather-agent",
   "version": "1.0.1-alpha.5",
   "description": "",
+  "private": true,
   "type": "module",
   "main": "index.js",
   "scripts": {
