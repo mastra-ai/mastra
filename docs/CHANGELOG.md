@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.1-alpha.14
+
+### Patch Changes
+
+- 8e398fb: Added reference docs for RAG
+
 ## 0.1.1-alpha.13
 
 ### Patch Changes
