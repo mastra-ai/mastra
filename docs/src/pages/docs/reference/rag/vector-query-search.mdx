@@ -1,0 +1,123 @@
+# vectorQuerySearch()
+
+The `vectorQuerySearch()` function performs semantic search queries against a vector store, handling both the embedding generation and vector search process. This is a core utility used internally by Mastra's RAG tools.
+
+## Basic Usage
+
+```typescript
+import { vectorQuerySearch } from "@mastra/rag";
+
+const searchResults = await vectorQuerySearch({
+  indexName: "docs",
+  vectorStore: myVectorStore,
+  queryText: "How do I set up authentication?",
+  options: {
+    provider: "OPEN_AI",
+    model: "text-embedding-ada-002",
+    maxRetries: 3,
+  },
+  topK: 5
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the vector store index to search",
+      isOptional: false,
+    },
+    {
+      name: "vectorStore",
+      type: "MastraVector",
+      description: "Vector store instance to perform the search against",
+      isOptional: false,
+    },
+    {
+      name: "queryText",
+      type: "string",
+      description: "The text query to search for",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "EmbeddingOptions",
+      description: "Configuration options for embedding generation",
+      isOptional: false,
+    },
+    {
+      name: "queryFilter",
+      type: "any",
+      description: "Optional filter criteria for the search",
+      isOptional: true,
+      defaultValue: "{}",
+    },
+    {
+      name: "topK",
+      type: "number",
+      description: "Maximum number of results to return",
+      isOptional: false,
+    },
+    {
+      name: "includeVectors",
+      type: "boolean",
+      description: "Whether to include embedding vectors in results",
+      isOptional: true,
+      defaultValue: "false",
+    }
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "results",
+      type: "QueryResult[]",
+      description: "Array of matching documents with their metadata and scores",
+    },
+    {
+      name: "queryEmbedding",
+      type: "number[]",
+      description: "The generated embedding vector for the query text",
+    }
+  ]}
+/>
+
+## Example with Filters
+
+```typescript
+const { results, queryEmbedding } = await vectorQuerySearch({
+  indexName: "documentation",
+  vectorStore,
+  queryText: "deployment guide",
+  options: {
+    provider: "OPEN_AI",
+    model: "text-embedding-ada-002",
+    maxRetries: 3,
+  },
+  queryFilter: {
+    category : { "eq" : "technical" },
+  },
+  topK: 3,
+  includeVectors: true
+});
+
+// Process results
+results.forEach(result => {
+  console.log(`Match: ${result.metadata.text}`);
+  if (result.vector) {
+    console.log(`Vector dimensions: ${result.vector.length}`);
+  }
+});
+```
+
+## Related
+
+- [createVectorQueryTool](/reference/rag/vector-query-tool)
+- [Embeddings](./embeddings)
+- [createGraphRAGTool](./graph-rag) 
