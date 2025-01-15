@@ -1,4 +1,3 @@
-```markdown
 # Suspend and Resume in Workflows
 
 Complex workflows often need to pause execution while waiting for external input or resources. 
@@ -67,31 +66,9 @@ myWorkflow.watch(runId, async ({ context }) => {
 // Start the workflow execution
 const result = await start();
 ```
-## Best Practices
-
-1. **Clear Suspension Points**
-   - Only suspend in well-defined scenarios
-   - Document what conditions will trigger suspension
-   - Include suspension logic in step documentation
-
-2. **State Management** 
-   - Save any needed context before suspending
-   - Validate state when resuming
-   - Handle cases where resume context is missing
-
-3. **Timeouts**
-   - Consider adding timeout logic for suspended workflows
-   - Implement cleanup for workflows that timeout
-   - Log suspension durations for monitoring
-
-4. **Error Handling**
-   - Gracefully handle failed resume attempts
-   - Provide clear error messages about why resumption failed
-   - Include retry logic where appropriate
 
 ## Related Resources
 
 - See the [Suspend and Resume Example](../../examples/workflows/suspend-and-resume.mdx) for a complete working example
 - Check the [Step Class Reference](../reference/workflows/step.mdx) for suspend/resume API details
 - Review [Workflow Observability](../reference/observability/otel-config.mdx) for monitoring suspended workflows
-```
