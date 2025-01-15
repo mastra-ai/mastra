@@ -1,0 +1,131 @@
+# createVectorQueryTool()
+
+The `createVectorQueryTool()` function creates a tool for semantic search over vector stores. It supports filtering, reranking, and integrates with various vector store backends.
+
+## Basic Usage
+
+```typescript
+import { createVectorQueryTool } from "@mastra/rag";
+
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  options: {
+    provider: "OPEN_AI",
+    model: "text-embedding-ada-002",
+    maxRetries: 3
+  }
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "vectorStoreName",
+      type: "string",
+      description: "Name of the vector store to query (must be configured in Mastra)",
+      isOptional: false,
+    },
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index within the vector store",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "EmbeddingOptions",
+      description: "Configuration for embedding generation",
+      isOptional: false,
+    },
+    {
+      name: "topK",
+      type: "number",
+      description: "Maximum number of results to retrieve",
+      isOptional: true,
+      defaultValue: "10",
+    },
+    {
+      name: "vectorFilterType",
+      type: "'pg' | 'astra' | 'qdrant' | 'upstash' | 'pinecone' | 'chroma' | ''",
+      description: "Type of vector store for filter formatting",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "rerankOptions",
+      type: "RerankerOptions",
+      description: "Options for reranking results",
+      isOptional: true,
+    }
+  ]}
+/>
+
+## Returns
+
+The tool returns an object with:
+
+<PropertiesTable
+  content={[
+    {
+      name: "relevantContext",
+      type: "string",
+      description: "Combined text from the most relevant document chunks",
+    }
+  ]}
+/>
+
+## Example with Filters
+
+```typescript
+// Pinecone/PG/Astra
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  options: {
+    provider: "OPEN_AI",
+    model: "text-embedding-ada-002",
+    maxRetries: 3
+  },
+  vectorFilterType: "pinecone",
+  topK: 5
+});
+```
+
+Filter Formats:
+- Pinecone/PG/Astra: `{ category: { eq: "technical" } }`
+
+## Example with Reranking
+
+```typescript
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "milvus",
+  indexName: "documentation",
+  options: {
+    provider: "OPEN_AI",
+    model: "text-embedding-ada-002",
+    maxRetries: 3
+  },
+  topK: 5,
+  rerankOptions: {
+    model: "cross-encoder",
+    threshold: 0.7
+  }
+});
+```
+
+## Tool Details
+
+The tool is created with:
+- **ID**: `VectorQuery {vectorStoreName} {indexName} Tool`
+- **Description**: `Fetches and combines the top {topK} relevant chunks from the {vectorStoreName} vector store using the {indexName} index`
+- **Input Schema**: Requires queryText and filter objects
+- **Output Schema**: Returns relevantContext string
+
+## Related
+
+- [vectorQuerySearch](./vector-query-search)
+- [RAG Reranker](./reranker) 
+- [createGraphRAGTool](./graph-rag) 

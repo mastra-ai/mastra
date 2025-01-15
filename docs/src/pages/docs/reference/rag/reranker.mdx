@@ -1,0 +1,109 @@
+# RagReranker
+
+The `RagReranker` provides advanced reranking capabilities for vector search results by combining semantic relevance, vector similarity, and position-based scoring. It is used through the `createVectorQueryTool` to improve search result quality.
+
+## Usage with Vector Query Tool
+
+```typescript
+import { createVectorQueryTool } from "@mastra/rag";
+
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  options: {
+    provider: "OPEN_AI",
+    model: "text-embedding-ada-002",
+    maxRetries: 3
+  },
+  rerankOptions: {
+    semanticProvider: "cohere",
+    cohereApiKey: "your-api-key",
+    weights: {
+      semantic: 0.4,
+      vector: 0.4,
+      position: 0.2
+    }
+  }
+});
+```
+
+## Parameters
+
+### RerankerOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "semanticProvider",
+      type: "'cohere' | 'agent'",
+      description: "Provider to use for semantic scoring",
+      isOptional: false,
+    },
+    {
+      name: "weights",
+      type: "WeightConfig",
+      description: "Weights for different scoring components",
+      isOptional: true,
+      defaultValue: "{ semantic: 0.4, vector: 0.4, position: 0.2 }",
+    },
+    {
+      name: "cohereApiKey",
+      type: "string",
+      description: "Required when using Cohere provider",
+      isOptional: true,
+    },
+    {
+      name: "cohereModel",
+      type: "string",
+      description: "Specific Cohere model to use",
+      isOptional: true,
+    },
+    {
+      name: "agentProvider",
+      type: "{ provider: string; name: string }",
+      description: "Required when using Agent provider",
+      isOptional: true,
+    }
+  ]}
+/>
+
+## Example with Agent Provider
+
+```typescript
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  options: {
+    provider: "OPEN_AI",
+    model: "text-embedding-ada-002",
+    maxRetries: 3
+  },
+  rerankOptions: {
+    semanticProvider: "agent",
+    agentProvider: {
+      provider: "openai",
+      name: "gpt-4"
+    },
+    weights: {
+      semantic: 0.5,  // Emphasize semantic scoring
+      vector: 0.3,
+      position: 0.2
+    }
+  }
+});
+```
+
+## Scoring Components
+
+The reranker combines three types of scores:
+
+- **Semantic Score**: Measures semantic relevance using the chosen provider (Cohere or Agent)
+- **Vector Score**: Uses the original vector similarity from the search results
+- **Position Score**: Considers the original ranking position of each result
+
+The weights configuration allows you to adjust the importance of each scoring component.
+
+## Related
+
+- [createVectorQueryTool](./vector-query-tool)
+- [vectorQuerySearch](./vector-query-search) 
