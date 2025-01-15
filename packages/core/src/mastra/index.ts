@@ -11,6 +11,7 @@ import { MastraMemory } from '../memory';
 import { Run } from '../run/types';
 import { SyncAction } from '../sync';
 import { InstrumentClass, OtelConfig, Telemetry } from '../telemetry';
+import { MastraTTS } from '../tts';
 import { MastraVector } from '../vector';
 import { Workflow } from '../workflows';
 
@@ -25,6 +26,7 @@ export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
+  TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends BaseLogger = BaseLogger,
 > {
   private vectors?: TVectors;
@@ -33,6 +35,7 @@ export class Mastra<
   private syncs: TSyncs;
   private workflows: TWorkflows;
   private telemetry?: Telemetry;
+  private tts?: TTTS;
   engine?: MastraEngine;
   memory?: MastraMemory;
 
@@ -44,6 +47,7 @@ export class Mastra<
     vectors?: TVectors;
     logger?: TLogger | false;
     workflows?: TWorkflows;
+    tts?: TTTS;
     telemetry?: OtelConfig;
   }) {
     /*
@@ -124,6 +128,10 @@ export class Mastra<
 
     this.memory = config?.memory;
 
+    if (config?.tts) {
+      this.tts = config.tts;
+    }
+
     /*
     Agents
     */
@@ -141,6 +149,7 @@ export class Mastra<
           memory: this.memory,
           syncs: this.syncs,
           agents: agents,
+          tts: this.tts,
           vectors: this.vectors,
         });
 
@@ -164,6 +173,7 @@ export class Mastra<
           memory: this.memory,
           syncs: this.syncs,
           agents: this.agents,
+          tts: this.tts,
           vectors: this.vectors,
           llm: this.LLM,
         });
@@ -221,6 +231,7 @@ export class Mastra<
         agents: this.agents,
         vectors: this.vectors,
         llm: this.LLM,
+        tts: this.tts,
       },
       runId,
     });

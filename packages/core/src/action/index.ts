@@ -8,6 +8,7 @@ import { Logger } from '../logger';
 import { MastraMemory } from '../memory';
 import { SyncAction } from '../sync';
 import { Telemetry } from '../telemetry';
+import { MastraTTS } from '../tts';
 import { MastraVector } from '../vector';
 import { WorkflowContext } from '../workflows';
 
@@ -16,6 +17,7 @@ export type MastraPrimitives = {
   telemetry?: Telemetry;
   engine?: MastraEngine;
   agents?: Record<string, Agent>;
+  tts?: Record<string, MastraTTS>;
   vectors?: Record<string, MastraVector>;
   memory?: MastraMemory;
   syncs?: Record<string, SyncAction<any, any, any, any>>;
