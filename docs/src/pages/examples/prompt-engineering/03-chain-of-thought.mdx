@@ -1,0 +1,39 @@
+# Chain of Thought Prompting
+
+Chain of thought prompting helps models break down complex problems into steps. Here's how to implement it in Mastra:
+
+```typescript
+import { createPrompt } from "@mastra/core";
+
+type WordProblemVars = {
+  problem: string;
+};
+
+const mathSolver = createPrompt<WordProblemVars>("Solve word problem", {
+  persona: "Math Teacher",
+  outputFormat: "markdown",
+})
+  .text("Solve this word problem:\n\n{{problem}}")
+  .thinking({
+    autoChainOfThought: true,
+    steps: [
+      "Read and understand the problem",
+      "Identify important information",
+      "Choose the right operation",
+      "Solve step by step",
+      "Check the answer",
+    ],
+  });
+
+// Usage example
+const solution = mathSolver.toString({
+  problem:
+    "If a store sells 12 apples per hour and is open for 8 hours, how many apples do they sell in a day?",
+});
+```
+
+## Key Features
+
+1. **Step-by-Step Thinking**: The `thinking` property defines explicit steps for problem-solving
+2. **Auto Chain of Thought**: Enable `autoChainOfThought` to encourage step-by-step reasoning
+3. **Examples with Reasoning**: Provide examples that demonstrate the thought process

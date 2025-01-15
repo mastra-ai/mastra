@@ -9,6 +9,8 @@ Prompt templates in Mastra help maintain consistency and leverage proven prompti
 The primary instruction or goal of your prompt. This should be clear and specific:
 
 ```typescript
+import { createPrompt } from "@mastra/core";
+
 // ❌ Vague intent
 createPrompt("fix this");
 
@@ -21,7 +23,9 @@ createPrompt("Add type checking to this function");
 Optional settings that shape how the model approaches the task:
 
 ```typescript
-createPrompt("Explain this code", {
+import { createPrompt } from "@mastra/core";
+
+const explainPrompt = createPrompt("Explain this code", {
   // Who the model should act as
   persona: "JavaScript Teacher",
 
@@ -37,6 +41,9 @@ createPrompt("Explain this code", {
   // System or user message
   as: "system",
 });
+
+// Usage
+const explanation = explainPrompt.toString();
 ```
 
 ### 3. Components
@@ -44,7 +51,9 @@ createPrompt("Explain this code", {
 Building blocks that make up your prompt:
 
 ```typescript
-createPrompt("Debug this code")
+import { createPrompt } from "@mastra/core";
+
+const debugPrompt = createPrompt("Debug this code")
   // Main input text
   .text("function add(x,y) { retrun x + y }")
 
@@ -67,6 +76,9 @@ createPrompt("Debug this code")
     autoChainOfThought: true,
     steps: ["Identify syntax errors", "Apply corrections"],
   });
+
+// Usage
+const debug = debugPrompt.toString();
 ```
 
 ### 4. Variables
@@ -74,6 +86,8 @@ createPrompt("Debug this code")
 Dynamic values that can be injected into your prompts:
 
 ```typescript
+import { createPrompt } from "@mastra/core";
+
 // Define variable types
 type CodeReviewVars = {
   file: string;
@@ -81,7 +95,7 @@ type CodeReviewVars = {
 };
 
 // Create template with variables
-const template = createPrompt<CodeReviewVars>("Review code changes")
+const reviewTemplate = createPrompt<CodeReviewVars>("Review code changes")
   .text("Review {{changes}} changes in {{file}}")
   .constraints([
     "Focus on {{file}} specific patterns",
@@ -89,12 +103,12 @@ const template = createPrompt<CodeReviewVars>("Review code changes")
   ]);
 
 // Use the template with different values
-const review1 = template.toString({
+const review1 = reviewTemplate.toString({
   file: "auth.ts",
   changes: 3,
 });
 
-const review2 = template.toString({
+const review2 = reviewTemplate.toString({
   file: "api.ts",
   changes: 5,
 });
@@ -105,6 +119,8 @@ const review2 = template.toString({
 Here's how all elements work together:
 
 ```typescript
+import { createPrompt } from "@mastra/core";
+
 type BugReportVars = {
   severity: string;
   component: string;
@@ -124,13 +140,13 @@ const bugReportTemplate = createPrompt<BugReportVars>("Create bug report", {
   ])
   .text("Create a {{severity}} bug report for {{component}} issue");
 
-// Use the template
-const report = bugReportTemplate.toString({
+// Usage examples
+const reportString = bugReportTemplate.toString({
   severity: "high",
   component: "checkout",
 });
 
-const report = bugReportTemplate.toMessage({
+const reportMessage = bugReportTemplate.toMessage({
   severity: "high",
   component: "checkout",
 });

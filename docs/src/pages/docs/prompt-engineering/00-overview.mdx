@@ -11,6 +11,8 @@ create reusable [prompt templates](/docs/prompt-engineering/01-prompt-templates)
 Begin with direct, unambiguous instructions
 
 ```typescript
+import { createPrompt } from "@mastra/core";
+
 // ❌ Vague and unclear
 const vague = createPrompt("fix this").text("function add(x,y) { return x+y }");
 
@@ -28,7 +30,9 @@ const clear = createPrompt("Add parameter type checking to this function")
 When you need consistent outputs, provide examples
 
 ```typescript
-const prompt = createPrompt("Classify the bug severity")
+import { createPrompt } from "@mastra/core";
+
+const bugClassifier = createPrompt("Classify the bug severity")
   .examples([
     {
       input: "App crashes on startup",
@@ -46,7 +50,9 @@ const prompt = createPrompt("Classify the bug severity")
 Provide relevant background information
 
 ```typescript
-const prompt = createPrompt("Review this code")
+import { createPrompt } from "@mastra/core";
+
+const codeReviewer = createPrompt("Review this code")
   .context(
     `
     Project: E-commerce checkout
@@ -65,7 +71,9 @@ const prompt = createPrompt("Review this code")
 The simplest form, useful for straightforward tasks:
 
 ```typescript
-const prompt = createPrompt("Translate this text to French").text(
+import { createPrompt } from "@mastra/core";
+
+const translator = createPrompt("Translate this text to French").text(
   "Hello, how are you?",
 );
 ```
@@ -75,7 +83,9 @@ const prompt = createPrompt("Translate this text to French").text(
 Teach by example for consistent patterns:
 
 ```typescript
-const prompt = createPrompt("Convert these requirements into user stories")
+import { createPrompt } from "@mastra/core";
+
+const storyWriter = createPrompt("Convert these requirements into user stories")
   .examples([
     {
       input: "Users need to reset their password",
@@ -91,10 +101,10 @@ const prompt = createPrompt("Convert these requirements into user stories")
 Guide the model through complex reasoning:
 
 ```typescript
-const prompt = createPrompt("Debug this performance issue")
-  .text(
-    "The API response time increased from 200ms to 2s after the last deployment",
-  )
+import { createPrompt } from "@mastra/core";
+
+const debugger = createPrompt("Debug this performance issue")
+  .text("The API response time increased from 200ms to 2s after the last deployment")
   .thinking({
     autoChainOfThought: true,
     steps: [
@@ -104,6 +114,7 @@ const prompt = createPrompt("Debug this performance issue")
       "Examine network latency",
     ],
   });
+
 ```
 
 **4. Tree of Thought**
@@ -111,7 +122,11 @@ const prompt = createPrompt("Debug this performance issue")
 Explore multiple solution paths:
 
 ```typescript
-const prompt = createPrompt("Design a user authentication system").thinking({
+import { createPrompt } from "@mastra/core";
+
+const systemDesigner = createPrompt(
+  "Design a user authentication system",
+).thinking({
   autoTreeOfThought: true,
   branches: {
     Security: [
@@ -134,7 +149,9 @@ const prompt = createPrompt("Design a user authentication system").thinking({
 Add validation steps for critical tasks:
 
 ```typescript
-const prompt = createPrompt("Optimize this database query")
+import { createPrompt } from "@mastra/core";
+
+const queryOptimizer = createPrompt("Optimize this database query")
   .text("SELECT * FROM orders JOIN users WHERE orders.status = 'pending'")
   .thinking({
     autoVerification: true,
@@ -152,7 +169,9 @@ const prompt = createPrompt("Optimize this database query")
 Specify expertise and perspective:
 
 ```typescript
-const prompt = createPrompt("Review this architecture proposal", {
+import { createPrompt } from "@mastra/core";
+
+const architectureReviewer = createPrompt("Review this architecture proposal", {
   persona: "Senior Solutions Architect",
   style: "analytical",
   tone: "constructive",
