@@ -1,0 +1,82 @@
+# commit()
+
+The commit method finalizes a workflow definition, validating its structure and making it ready for execution. When calling `.commit()`, the workflow validates:
+
+- No circular dependencies between steps
+- All paths must have an end point
+- No unreachable steps
+- No duplicate step IDs
+- Variable references to non-existent steps
+
+## Usage
+
+```typescript
+workflow
+  .step(stepA)
+  .then(stepB)
+  .commit();
+```
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "The validated workflow instance"
+    }
+  ]}
+/>
+
+## Error Handling
+
+```typescript
+try {
+  workflow
+    .step(stepA)
+    .after(['stepB', 'stepC'])
+    .step(stepD)
+    .commit();
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.log(error.type); // 'circular_dependency' | 'no_terminal_path' | 'unreachable_step'
+    console.log(error.details);
+  }
+}
+```
+
+### Validation Error Types
+
+<PropertiesTable
+  content={[
+    {
+      name: "circular_dependency",
+      type: "string",
+      description: "Steps form a circular reference"
+    },
+    {
+      name: "no_terminal_path", 
+      type: "string",
+      description: "Path has no end point"
+    },
+    {
+      name: "unreachable_step",
+      type: "string", 
+      description: "Step cannot be reached from workflow start"
+    },
+    {
+      name: "duplicate_step_id",
+      type: "string",
+      description: "Multiple steps share the same ID"
+    }
+  ]}
+/>
+
+## Related
+
+- [Branching Paths example](../../examples/workflows/branching-paths.mdx)
+- [Workflow Class Reference](./workflow.mdx)
+- [Step Reference](./step.mdx)
+- [Control Flow Guide](../../workflows/control-flow.mdx)
+```

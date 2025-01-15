@@ -1,0 +1,67 @@
+
+
+```markdown
+# StepOptions
+
+Configuration options for workflow steps that control variable mapping, execution conditions, and other runtime behavior.
+
+## Usage
+
+```typescript
+workflow.step(processOrder, {
+  variables: {
+    orderId: { step: 'trigger', path: 'id' },
+    userId: { step: 'auth', path: 'user.id' }
+  },
+  when: {
+    ref: { step: 'auth', path: 'status' },
+    query: { $eq: 'authenticated' }
+  }
+});
+```
+
+## Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: "variables",
+      type: "Record<string, VariableRef>",
+      description: "Maps step input variables to values from other steps",
+      isOptional: true
+    },
+    {
+      name: "when",
+      type: "StepCondition",
+      description: "Condition that must be met for step execution",
+      isOptional: true
+    }
+  ]}
+/>
+
+### VariableRef
+
+<PropertiesTable
+  content={[
+    {
+      name: "step",
+      type: "string | Step | { id: string }",
+      description: "Source step for the variable value",
+      isOptional: false
+    },
+    {
+      name: "path",
+      type: "string",
+      description: "Path to the value in the step's output",
+      isOptional: false
+    }
+  ]}
+/>
+
+## Related
+- [Path Comparison](../../workflows/control-flow.mdx#path-comparison)
+- [Step Function Reference](./step-function.mdx)
+- [Step Class Reference](./step-class.mdx)
+- [Workflow Class Reference](./workflow.mdx)
+- [Control Flow Guide](../../workflows/control-flow.mdx)
+```

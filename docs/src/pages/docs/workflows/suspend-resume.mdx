@@ -1,0 +1,97 @@
+```markdown
+# Suspend and Resume in Workflows
+
+Complex workflows often need to pause execution while waiting for external input or resources. 
+
+Mastra's suspend and resume features let you pause workflow execution at any step, persist the workflow state, and continue when ready.
+
+## When to Use Suspend/Resume
+
+Common scenarios for suspending workflows include:
+- Waiting for human approval or input
+- Pausing until external API resources become available  
+- Collecting additional data needed for later steps
+- Rate limiting or throttling expensive operations
+
+## Basic Suspend Example
+
+Here's a simple workflow that suspends when a value is too low and resumes when given a higher value:
+
+```typescript
+const stepTwo = new Step({
+  id: "stepTwo",
+  outputSchema: z.object({
+    incrementedValue: z.number(), 
+  }),
+  execute: async ({ context, suspend }) => {
+    const currentValue = context.stepResults.stepOne.payload.doubledValue;
+    
+    if (currentValue < 100) {
+      await suspend();
+      return { incrementedValue: 0 };
+    }
+    return { incrementedValue: currentValue + 1 };
+  },
+});
+```
+
+## Watching and Resuming
+
+To handle suspended workflows, use the `watch` method to monitor workflow status and `resume` to continue execution:
+
+```typescript
+// Create and start the workflow
+const { runId, start } = myWorkflow.createRun({ 
+  triggerData: { inputValue: 45 } 
+});
+
+// Start watching the workflow before executing it
+myWorkflow.watch(runId, async ({ context }) => {
+  // Check each step's status
+  const stepStatus = context.stepResults?.stepTwo?.status;
+  
+  if (stepStatus === 'suspended') {
+    console.log('Workflow suspended, resuming with new value');
+    
+    // Resume the workflow with new context
+    await myWorkflow.resume({
+      runId,
+      stepId: 'stepTwo',
+      context: { 
+        secondValue: 60  // This value will be added to the original value
+      },
+    });
+  }
+});
+
+// Start the workflow execution
+const result = await start();
+```
+## Best Practices
+
+1. **Clear Suspension Points**
+   - Only suspend in well-defined scenarios
+   - Document what conditions will trigger suspension
+   - Include suspension logic in step documentation
+
+2. **State Management** 
+   - Save any needed context before suspending
+   - Validate state when resuming
+   - Handle cases where resume context is missing
+
+3. **Timeouts**
+   - Consider adding timeout logic for suspended workflows
+   - Implement cleanup for workflows that timeout
+   - Log suspension durations for monitoring
+
+4. **Error Handling**
+   - Gracefully handle failed resume attempts
+   - Provide clear error messages about why resumption failed
+   - Include retry logic where appropriate
+
+## Related Resources
+
+- See the [Suspend and Resume Example](../../examples/workflows/suspend-and-resume.mdx) for a complete working example
+- Check the [Step Class Reference](../reference/workflows/step.mdx) for suspend/resume API details
+- Review [Workflow Observability](../reference/observability/otel-config.mdx) for monitoring suspended workflows
+```

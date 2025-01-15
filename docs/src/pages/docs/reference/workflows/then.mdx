@@ -1,0 +1,69 @@
+# then()
+
+The `then` method creates a sequential dependency between workflow steps, ensuring steps execute in a specific order.
+
+## Usage
+
+```typescript
+workflow
+  .step(stepOne)
+  .then(stepTwo)
+  .then(stepThree);
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "step",
+      type: "Step | string",
+      description: "The step instance or step ID that should execute after the previous step completes",
+      isOptional: false
+    }
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "The workflow instance for method chaining"
+    }
+  ]}
+/>
+
+## Validation
+
+When using `then`:
+- The previous step must exist in the workflow
+- Steps cannot form circular dependencies
+- Each step can only appear once in a sequential chain
+
+## Error Handling
+
+```typescript
+try {
+  workflow
+    .step(stepA)
+    .then(stepB)
+    .then(stepA) // Will throw error - circular dependency
+    .commit();
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.log(error.type); // 'circular_dependency'
+    console.log(error.details);
+  }
+}
+```
+
+## Related
+
+- [step Reference](./step.mdx)
+- [after Reference](./after.mdx)
+- [Sequential Steps Example](../../examples/workflows/sequential-steps.mdx)
+- [Control Flow Guide](../../workflows/control-flow.mdx)
+```
