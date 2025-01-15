@@ -34,6 +34,10 @@ const meta = {
   },
   "08-running-evals": "Evals",
   reference: "Reference",
+  "prompt-engineering": {
+    title: "Prompt Engineering",
+    display: "hidden",
+  },
 };
 
 export default meta;
