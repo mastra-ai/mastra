@@ -1,63 +1,117 @@
 ## Chunking and Embedding Documents
 
-Before processing, create a `MDocument` instance from your content. You can initialize it from text, HTML, Markdown, or JSON:
+Before processing, create a MDocument instance from your content. You can initialize it from various formats:
 
-```ts
+```ts showLineNumbers copy
 const docFromText = MDocument.fromText("Your plain text content...");
-
 const docFromHTML = MDocument.fromHTML("<html>Your HTML content...</html>");
-
 const docFromMarkdown = MDocument.fromMarkdown("# Your Markdown content...");
-
 const docFromJSON = MDocument.fromJSON(`{ "key": "value" }`);
 ```
 
-Each method returns a `MDocument` ready for processing.
-
 ## Step 1: Document Processing
 
-Use `chunk` to split the document into manageable pieces. Mastra supports seven chunking strategies (`recursive`, `character`, `token`, `markdown`, `html`, `json`, and `latex`), each optimized for different document types and with configurable options for chunk size and overlap.
 
-You can also enable metadata extraction, which uses LLM calls behind the scenes to provide titles, summaries, keywords, and potential Q&A pairs.
+Use `chunk` to split documents into manageable pieces. Mastra supports multiple chunking strategies optimized for different document types: 
 
-**Example:**
+- `recursive`: Smart splitting based on content structure
+- `character`: Simple character-based splits
+- `token`: Token-aware splitting
+- `markdown`: Markdown-aware splitting
+- `html`: HTML structure-aware splitting
+- `json`: JSON structure-aware splitting
+- `latex`: LaTeX structure-aware splitting
 
-```ts showLineNumbers copy
-import { MDocument } from "@mastra/rag";
-const doc = MDocument.fromText("Your plain text content...");
+Here's an example of how to use the `recursive` strategy: 
 
+```ts showLineNumbers copy 
 const chunks = await doc.chunk({
   strategy: "recursive",
   size: 512,
   overlap: 50,
   separator: "\n",
+  extract: {
+    metadata: true, // Optionally extract metadata
+  }
+});
+```
+ 
+
+**Note:** Metadata extraction may use LLM calls, so ensure your API key is set.
+
+We go deeper into chunking strategies in our [chunk documentation](/docs/reference/rag/chunk.mdx). 
+
+## Step 2: Embedding Generation 
+
+Transform chunks into embeddings using your preferred provider. Mastra supports both OpenAI and Cohere embeddings out of the box.
+
+### Using OpenAI
+
+```ts showLineNumbers copy
+import { embed } from "@mastra/rag";
+
+const embeddings = await embed(chunks, {
+  provider: "OPEN_AI",
+  model: "text-embedding-ada-002",
+  maxRetries: 3
 });
 ```
 
-This splits the document into chunks and extracts metadata. There are a variety of chunking strategies and options, which we go into in the [chunk documentation](/docs/reference/rag/chunk.mdx). Metadata is preserved in the chunks, which you can use for retrieval.
-
-**Note:** Metadata extraction may use LLM calls behind the scenes, so ensure `OPENAI_API_KEY` is set.
-
-## Step 2: Embedding
-
-Transform chunks into embeddings using an embedding model:
+### Using Cohere
 
 ```ts showLineNumbers copy
-import { EmbedManyResult, EmbedResult } from "@mastra/core";
-import { embed } from "@mastra/rag";
-
-const manyEmbeddings = (await embed(chunks, {
-  provider: "OPEN_AI",
-  model: "text-embedding-ada-002",
-  maxRetries: 3,
-})) as EmbedManyResult<string>;
-
-// Embed a single chunk if needed:
-const singleEmbedding = (await embed(chunks[0], {
-  provider: "OPEN_AI",
-  model: "text-embedding-ada-002",
-  maxRetries: 3,
-})) as EmbedResult<string>;
+const embeddings = await embed(chunks, {
+  provider: "COHERE",
+  model: "embed-english-v3.0",
+  maxRetries: 3
+});
 ```
 
-Embeddings are arrays of numbers representing the semantic meaning of the text. They enable similarity searches in a vector database.
+The embedding functions return arrays of numbers representing the semantic meaning of your text, ready for similarity searches in your vector database.
+
+
+## Example: Complete Pipeline 
+
+Here's a complete example showing document processing and embedding generation with both providers:
+
+```ts showLineNumbers copy
+import { MDocument, embed } from "@mastra/rag";
+
+// Initialize document
+const doc = MDocument.fromText(`
+  Climate change poses significant challenges to global agriculture.
+  Rising temperatures and changing precipitation patterns affect crop yields.
+`);
+
+// Create chunks
+const chunks = await doc.chunk({
+  strategy: "recursive",
+  size: 256,
+  overlap: 50
+});
+
+// Generate embeddings with OpenAI
+const openAIEmbeddings = await embed(chunks, {
+  provider: "OPEN_AI",
+  model: "text-embedding-ada-002"
+});
+
+// Generate embeddings with Cohere
+const cohereEmbeddings = await embed(chunks, {
+  provider: "COHERE",
+  model: "embed-english-v3.0"
+});
+
+// Store embeddings in your vector database
+await vectorStore.upsert("embeddings", embeddings);
+```
+
+This example demonstrates how to process a document, split it into chunks, generate embeddings with both OpenAI and Cohere, and store the results in a vector database.
+
+For more examples of different chunking strategies and embedding configurations, see:
+
+- [Adjust Chunk Size](/docs/reference/rag/chunk.mdx#adjust-chunk-size)
+- [Adjust Chunk Delimiters](/docs/reference/rag/chunk.mdx#adjust-chunk-delimiters)
+- [Embed Text with Cohere](/docs/reference/rag/embed.mdx#using-cohere)
+
+

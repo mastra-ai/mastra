@@ -1,22 +1,114 @@
-## Step 4: Querying the Knowledge Base
+## Retrieval in RAG Systems
 
-When a user asks a question, embed their query and retrieve relevant chunks:
+After storing embeddings, you need to retrieve relevant chunks to answer user queries. Mastra provides flexible retrieval options with support for semantic search, filtering, and re-ranking.
 
-```typescript showLineNumbers copy
+
+## How Retrieval Works
+
+1. The user's query is converted to an embedding using the same model used for document embeddings
+2. This embedding is compared to stored embeddings using vector similarity
+3. The most similar chunks are retrieved and can be optionally:
+  - Filtered by metadata
+  - Re-ranked for better relevance
+  - Processed through a knowledge graph
+
+
+## Basic Retrieval
+
+The simplest approach is direct semantic search: 
+
+```ts showLineNumbers copy
 import { embed, EmbedResult } from "@mastra/rag";
 
-const { embedding } = (await embed(
+// Convert query to embedding
+const { embedding } = await embed(
   "What are the main points in the article?",
   {
     provider: "OPEN_AI",
     model: "text-embedding-ada-002",
     maxRetries: 3,
   }
-)) as EmbedResult<string>;
+);
 
-const pgVector = new PgVector("postgresql://localhost:5432/mydb");
-
+// Query vector store
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING);
 const results = await pgVector.query("embeddings", embedding, 10);
 
-console.log(results);
+
 ```
+
+Results look like this 
+
+``` showLineNumbers copy
+[
+  {
+    text: "Climate change poses significant challenges...",
+    score: 0.89,
+    metadata: { source: "article1.txt" }
+  },
+  {
+    text: "Rising temperatures affect crop yields...",
+    score: 0.82,
+    metadata: { source: "article1.txt" }
+  }
+  // ... more results
+]
+```
+
+
+## Advanced Retrieval options
+### Metadata Filtering
+Filter results based on metadata fields:
+
+```ts showLineNumbers copy
+const results = await pgVector.query("embeddings", embedding, {
+  topK: 10,
+  filter: {
+    source: "article1.txt",
+    date: { $gt: "2023-01-01" }
+  }
+});
+``` 
+
+### Re-ranking
+Re-rank initial results for better relevance:
+
+```ts showLineNumbers copy
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  options: {
+    provider: 'OPEN_AI',
+    model: 'text-embedding-ada-002'
+  },
+  topK: 10,
+  reranker: {
+    type: 'cross-encoder',
+    model: 'cross-encoder/ms-marco-MiniLM-L-6-v2'
+  }
+});
+```
+
+### Graph-based Retrieval
+
+For more complex relationships, use graph-based retrieval:
+
+```ts showLineNumbers copy
+const graphQueryTool = createGraphQueryTool({
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  graphOptions: {
+    relationTypes: ['references', 'similar_to'],
+    maxHops: 2
+  }
+});
+```
+
+## Example implementations
+
+For complete examples, see: 
+
+- [Basic Retrieval](/docs/examples/rag/basic-retrieval.mdx)
+- [Metadata Filtering](/docs/examples/rag/metadata-filtering.mdx)
+- [Re-ranking Results](/docs/examples/rag/re-ranking.mdx)
+- [Graph-based Retrieval](/docs/examples/rag/graph-retrieval.mdx)
