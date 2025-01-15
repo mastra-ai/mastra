@@ -1,4 +1,3 @@
-import { MissingTestCaseParamsError } from '../errors';
 import {
   LLMTestCase,
   LLMTestCaseParams,
@@ -82,13 +81,13 @@ export function checkConversationalTestCaseParams(
   if (requireChatbotRole && !testCase.chatbotRole) {
     const errorStr = `'chatbotRole' in a conversational test case cannot be empty for the '${metric.name}' metric.`;
     metric.error = errorStr;
-    throw new MissingTestCaseParamsError(errorStr);
+    throw new Error(errorStr);
   }
 
   if (testCase.turns.length === 0) {
     const errorStr = "'turns' in conversational test case cannot be empty.";
     metric.error = errorStr;
-    throw new MissingTestCaseParamsError(errorStr);
+    throw new Error(errorStr);
   }
 
   for (const turn of testCase.turns) {
@@ -111,7 +110,7 @@ export function checkConversationalTestCaseParams(
 
       const errorStr = `${missingParamsStr} for \`llmTestCase\` turns cannot be None for the '${metric.name}' metric`;
       metric.error = errorStr;
-      throw new MissingTestCaseParamsError(errorStr);
+      throw new Error(errorStr);
     }
   }
 }
@@ -146,7 +145,7 @@ export function checkLLMTestCaseParams(
 
     const errorStr = `${missingParamsStr} cannot be None for the '${metric.name}' metric`;
     metric.error = errorStr;
-    throw new MissingTestCaseParamsError(errorStr);
+    throw new Error(errorStr);
   }
 }
 
@@ -208,7 +207,7 @@ export function checkMLLMTestCaseParams(
 
     const errorStr = `${missingParamsStr} cannot be None for the '${metric.name}' metric`;
     metric.error = errorStr;
-    throw new MissingTestCaseParamsError(errorStr);
+    throw new Error(errorStr);
   }
 }
 
