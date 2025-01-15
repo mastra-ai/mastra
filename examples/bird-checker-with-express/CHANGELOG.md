@@ -1,5 +1,13 @@
 # bird-checker-with-express
 
+## 1.0.1-alpha.43
+
+### Patch Changes
+
+- Updated dependencies [93a3719]
+  - @mastra/core@0.1.27-alpha.62
+  - @mastra/engine@0.0.5-alpha.56
+
 ## 1.0.1-alpha.42
 
 ### Patch Changes

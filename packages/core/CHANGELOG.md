@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.62
+
+### Patch Changes
+
+- 93a3719: Mastra prompt template engine
+
 ## 0.1.27-alpha.61
 
 ### Patch Changes

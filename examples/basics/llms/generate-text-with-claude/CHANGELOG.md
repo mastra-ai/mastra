@@ -1,5 +1,12 @@
 # generate-text-with-claude
 
+## 0.0.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [93a3719]
+  - @mastra/core@0.1.27-alpha.62
+
 ## 0.0.1-alpha.3
 
 ### Patch Changes

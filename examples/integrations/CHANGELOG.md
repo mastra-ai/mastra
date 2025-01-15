@@ -1,5 +1,14 @@
 # composio
 
+## 1.0.1-alpha.31
+
+### Patch Changes
+
+- Updated dependencies [93a3719]
+  - @mastra/core@0.1.27-alpha.62
+  - @mastra/composio@0.0.1-alpha.28
+  - @mastra/firecrawl@1.0.4-alpha.48
+
 ## 1.0.1-alpha.30
 
 ### Patch Changes
