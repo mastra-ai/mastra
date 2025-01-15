@@ -2,15 +2,11 @@
 
 RAG in Mastra helps you enhance LLM outputs by incorporating relevant context from your own data sources, improving accuracy and grounding responses in real information.
 
-## Why Use RAG? 
-
-Most AI applications need more than raw LLM capabilities. You may want to ground responses in your documentation, provide accurate product details, or ensure compliance with company policies.
-
 Mastra's RAG system provides:
-- A standardized way to process and embed documents
-- Support for multiple vector stores (PostgreSQL, Pinecone, Qdrant)
-- Powerful chunking and embedding strategies for optimal retrieval
-- Built-in observability for tracking embedding and retrieval performance
+- Standardized APIs to process and embed documents
+- Support for multiple vector stores
+- Chunking and embedding strategies for optimal retrieval
+- Observability for tracking embedding and retrieval performance
 
 ## Example 
 
@@ -56,15 +52,11 @@ The basic building block of RAG is document processing. Documents can be chunked
 
 ## Vector Storage
 
-Mastra supports multiple vector stores for embedding persistence and similarity search, each with their own advantages:
-
-- PostgreSQL with pgvector for self-hosted solutions
-- Pinecone for managed, scalable vector search
-- Qdrant for high-performance vector similarity
+Mastra supports multiple vector stores for embedding persistence and similarity search, including pgvector, Pinecone, and Qdrant.
 
 ## Observability and Debugging
 
-Mastra's RAG system includes built-in observability features to help you monitor and optimize your retrieval pipeline:
+Mastra's RAG system includes observability features to help you optimize your retrieval pipeline:
 
 - Track embedding generation performance and costs
 - Monitor chunk quality and retrieval relevance
