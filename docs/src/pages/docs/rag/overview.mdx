@@ -14,7 +14,6 @@ Mastra's RAG system provides:
 
 ## Example 
 
-
 To implement RAG, you process your documents into chunks, create embeddings, store them in a vector database, and then retrieve relevant context at query time.
 
 ```ts showLineNumbers copy
@@ -49,12 +48,9 @@ const results = await pgVector.query("Your search query", {
 console.log("Similar chunks:", results);
 ``` 
 
-
 This example shows the essentials: initialize a document, create chunks, generate embeddings, store them, and query for similar content.
 
-
 ## Document Processing
-
 
 The basic building block of RAG is document processing. Documents can be chunked using various strategies (recursive, sliding window, etc.) and enriched with metadata.
 
@@ -66,9 +62,7 @@ Mastra supports multiple vector stores for embedding persistence and similarity 
 - Pinecone for managed, scalable vector search
 - Qdrant for high-performance vector similarity
 
-
 ## Observability and Debugging
-
 
 Mastra's RAG system includes built-in observability features to help you monitor and optimize your retrieval pipeline:
 
@@ -77,94 +71,11 @@ Mastra's RAG system includes built-in observability features to help you monitor
 - Analyze query patterns and cache hit rates
 - Export metrics to your observability platform 
 
-
 See the [OTel Configuration](../reference/observability/otel-config.mdx) page for more details. 
 
 ## More resources
-
-- Check out our [Chain of Thought RAG Example](../examples/rag/cot-workflow-rag.mdx) for a hands-on tutorial
-- I'll help you rewrite the RAG overview page following a similar structure. Here's the proposed rewrite:
-
-# Retrieval-Augmented Generation (RAG) in Mastra
-
-RAG in Mastra helps you enhance LLM outputs by incorporating relevant context from your own data sources, improving accuracy and grounding responses in real information.
-
-## Why Use RAG?
-
-Most AI applications need more than raw LLM capabilities. You may want to ground responses in your documentation, provide accurate product details, or ensure compliance with company policies.
-
-Mastra's RAG system provides:
-
-• A standardized way to process and embed documents
-• Support for multiple vector stores (PostgreSQL, Pinecone, Qdrant)
-• Powerful chunking and embedding strategies for optimal retrieval
-• Built-in observability for tracking embedding and retrieval performance
-
-## Example
-
-To implement RAG, you process your documents into chunks, create embeddings, store them in a vector database, and then retrieve relevant context at query time.
-
-```typescript
-import { MDocument, embed, PgVector } from "@mastra/rag";
-import { z } from "zod";
-
-// 1. Initialize document
-const doc = MDocument.fromText(`Your document text here...`);
-
-// 2. Create chunks
-const chunks = await doc.chunk({
-  strategy: "recursive",
-  size: 512,
-  overlap: 50
-});
-
-// 3. Generate embeddings
-const { embeddings } = await embed(chunks, {
-  provider: "OPEN_AI",
-  model: "text-embedding-ada-002"
-});
-
-// 4. Store in vector database
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING);
-await pgVector.store(embeddings);
-
-// 5. Query similar chunks
-const results = await pgVector.query("Your search query", {
-  topK: 3
-});
-
-console.log("Similar chunks:", results);
-```
-
-This example shows the essentials: initialize a document, create chunks, generate embeddings, store them, and query for similar content.
-
-## Document Processing
-
-The basic building block of RAG is document processing. Documents can be chunked using various strategies (recursive, sliding window, etc.) and enriched with metadata.
-
-## Vector Storage
-
-Mastra supports multiple vector stores for embedding persistence and similarity search, each with their own advantages:
-
-• PostgreSQL with pgvector for self-hosted solutions
-• Pinecone for managed, scalable vector search
-• Qdrant for high-performance vector similarity
-
-## Observability and Debugging
-
-Mastra's RAG system includes built-in observability features to help you monitor and optimize your retrieval pipeline:
-
-• Track embedding generation performance and costs
-• Monitor chunk quality and retrieval relevance
-• Analyze query patterns and cache hit rates
-• Export metrics to your observability platform
-
-See the [OTel Configuration](../reference/observability/otel-config.mdx) page for more details.
-
-## More Resources
-
-• Check out our [Chain of Thought RAG Example](../examples/rag/cot-workflow-rag.mdx) for a hands-on tutorial
-• Explore the [RAG Examples](../../examples/rag) (including different chunking strategies, embedding models, and vector stores)
+• [Chain of Thought RAG Example](../examples/rag/cot-workflow-rag.mdx)
+• [All RAG Examples](../../examples/rag) (including different chunking strategies, embedding models, and vector stores)
 
 
 
