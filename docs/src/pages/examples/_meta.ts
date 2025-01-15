@@ -14,6 +14,9 @@ const meta = {
   rag: {
     title: "RAG",
   },
+  "prompt-engineering": {
+    title: "Prompt Engineering",
+  },
 };
 
 export default meta;

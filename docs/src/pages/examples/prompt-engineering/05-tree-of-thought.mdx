@@ -1,0 +1,52 @@
+# Tree of Thought Prompting
+
+Tree of thought prompting helps models explore multiple solution paths simultaneously. Here's how to implement it in Mastra:
+
+```typescript
+import { createPrompt } from "@mastra/core";
+
+type ProblemSolvingVars = {
+  problem: string;
+};
+
+const problemSolver = createPrompt<ProblemSolvingVars>(
+  "Solve complex problem",
+  {
+    persona: "Problem Solver",
+    outputFormat: "markdown",
+  },
+)
+  .text("Solve this problem:\n\n{{problem}}")
+  .thinking({
+    branches: {
+      "Technical Solution": [
+        "Analyze technical requirements",
+        "Consider implementation options",
+        "Evaluate technical tradeoffs",
+      ],
+      "User Experience": [
+        "Identify user needs",
+        "Design user interactions",
+        "Consider accessibility",
+      ],
+      "Business Impact": [
+        "Assess costs",
+        "Evaluate timeline",
+        "Consider scalability",
+      ],
+    },
+  });
+
+// Usage example
+const solution = problemSolver.toString({
+  problem:
+    "Design a new feature for uploading and processing large files in a web application",
+});
+```
+
+## Key Features
+
+1. **Parallel Exploration**: Uses `branches` to explore multiple aspects simultaneously
+2. **Structured Thinking**: Each branch follows its own logical progression
+3. **Comprehensive Analysis**: Considers different perspectives (technical, UX, business)
+4. **Balanced Decision Making**: Helps evaluate tradeoffs across different solution paths

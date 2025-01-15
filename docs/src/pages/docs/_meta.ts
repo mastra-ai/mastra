@@ -32,6 +32,10 @@ const meta = {
     title: "Deployment",
     collapsed: false,
   },
+  "prompt-engineering": {
+    title: "Prompt Engineering",
+    collapsed: false,
+  },
   "08-running-evals": "Evals",
   reference: "Reference",
 };

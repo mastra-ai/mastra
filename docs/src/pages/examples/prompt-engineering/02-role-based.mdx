@@ -1,0 +1,58 @@
+# Role-Based Prompting
+
+Role-based prompting helps models adopt specific personas for specialized tasks. Here's how to implement it in Mastra:
+
+```typescript
+import { createPrompt } from "@mastra/core";
+
+type CodeReviewVars = {
+  code: string;
+  focus: "security" | "performance" | "architecture";
+};
+
+const securityReviewPrompt = createPrompt<CodeReviewVars>(
+  "Review code security",
+  {
+    persona: "Senior Security Engineer",
+    style: "thorough",
+    tone: "professional",
+    outputFormat: "markdown",
+  },
+)
+  .text("Review this code for {{focus}} concerns:\n\n{{code}}")
+  .constraints([
+    "Focus on security best practices",
+    "Identify potential vulnerabilities",
+    "Suggest secure alternatives",
+    "Reference relevant security standards",
+  ])
+  .thinking({
+    steps: [
+      "Identify sensitive operations",
+      "Check for common vulnerabilities",
+      "Evaluate security controls",
+      "Assess compliance requirements",
+      "Propose security improvements",
+    ],
+  });
+
+// Usage example
+const review = securityReviewPrompt.toString({
+  code: `
+    function authenticateUser(username, password) {
+      if (username === 'admin' && password === 'password123') {
+        return true;
+      }
+      return false;
+    }
+  `,
+  focus: "security",
+});
+```
+
+## Key Features
+
+1. **Detailed Persona**: Define expertise and background in the context
+2. **Domain-Specific Knowledge**: Include relevant standards and practices
+3. **Professional Tone**: Maintain appropriate communication style
+4. **Specialized Thinking**: Use domain-specific analysis steps
