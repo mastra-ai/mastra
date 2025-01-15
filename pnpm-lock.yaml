@@ -2512,6 +2512,15 @@ importers:
         specifier: ^11.2.0
         version: 11.2.0
     devDependencies:
+      '@babel/preset-env':
+        specifier: ^7.26.0
+        version: 7.26.0(@babel/core@7.26.0)
+      '@babel/preset-typescript':
+        specifier: ^7.26.0
+        version: 7.26.0(@babel/core@7.26.0)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.8
       '@types/fs-extra':
         specifier: ^11.0.4
         version: 11.0.4

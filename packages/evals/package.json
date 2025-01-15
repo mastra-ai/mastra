@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "0.0.1-alpha.0",
+  "version": "0.0.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -31,6 +31,9 @@
     "fs-extra": "^11.2.0"
   },
   "devDependencies": {
+    "@babel/preset-env": "^7.26.0",
+    "@babel/preset-typescript": "^7.26.0",
+    "@tsconfig/recommended": "^1.0.7",
     "@types/fs-extra": "^11.0.4",
     "dts-cli": "^2.0.5"
   }
