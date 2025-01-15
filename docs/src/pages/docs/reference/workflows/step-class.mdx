@@ -1,0 +1,91 @@
+# Step
+
+The Step class defines individual units of work within a workflow, encapsulating execution logic, data validation, and input/output handling.
+
+## Usage
+
+```typescript
+const processOrder = new Step({
+  id: "processOrder",
+  inputSchema: z.object({
+    orderId: z.string(),
+    userId: z.string()
+  }),
+  outputSchema: z.object({
+    status: z.string(),
+    orderId: z.string()
+  }),
+  execute: async ({ context, runId }) => {
+    return {
+      status: "processed",
+      orderId: context.orderId
+    };
+  }
+});
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for the step",
+      required: true
+    },
+    {
+      name: "inputSchema",
+      type: "z.ZodSchema",
+      description: "Zod schema to validate input data before execution",
+      required: false
+    },
+    {
+      name: "outputSchema", 
+      type: "z.ZodSchema",
+      description: "Zod schema to validate step output data",
+      required: false
+    },
+    {
+      name: "payload",
+      type: "Record<string, any>",
+      description: "Static data to be merged with variables",
+      required: false
+    },
+    {
+      name: "execute",
+      type: "(params: ExecuteParams) => Promise<any>",
+      description: "Async function containing step logic",
+      required: true
+    }
+  ]}
+/>
+
+### ExecuteParams
+
+<PropertiesTable
+  content={[
+    {
+      name: "context",
+      type: "StepContext",
+      description: "Access to workflow context and step results"
+    },
+    {
+      name: "runId",
+      type: "string",
+      description: "Unique identifier for current workflow run"
+    },
+    {
+      name: "suspend",
+      type: "() => Promise<void>",
+      description: "Function to suspend step execution"
+    }
+  ]}
+/>
+
+## Related
+
+- [Workflow Reference](./workflow.mdx)
+- [Step Configuration Guide](../../workflows/steps.mdx)
+- [Control Flow Guide](../../workflows/control-flow.mdx)
+```

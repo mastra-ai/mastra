@@ -1,0 +1,45 @@
+# after
+
+The `after` method defines explicit dependencies between workflow steps, enabling branching and merging paths in your workflow execution.
+
+## Usage
+
+```typescript
+workflow
+  .step(stepA)
+    .then(stepB)
+  .after(stepA)  // Create new branch after stepA completes
+    .step(stepC);
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "stepId",
+      type: "string | string[]",
+      description: "ID(s) of step(s) that must complete before continuing",
+      isOptional: false
+    }
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "The workflow instance for method chaining"
+    }
+  ]}
+/>
+
+## Related
+
+- [Branching Paths example](../../examples/workflows/branching-paths.mdx)
+- [Workflow Class Reference](./workflow.mdx)
+- [Step Reference](./step.mdx) 
+- [Control Flow Guide](../../workflows/control-flow.mdx)
