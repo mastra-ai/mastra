@@ -1,1 +1,1 @@
-export { BaseMetric, BaseConversationalMetric, BaseMultimodalMetric } from './base-metric';
+export { PromptAlignmentMetric } from './prompt-alignment';
