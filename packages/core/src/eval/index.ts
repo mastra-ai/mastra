@@ -1,3 +1,2 @@
-export { evaluate } from './evaluation';
-export { Metric } from './metric';
+export { Metric, MetricWithLLM } from './metric';
 export { type MeasureParams, type MetricResult } from './metric';

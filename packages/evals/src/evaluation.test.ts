@@ -1,8 +1,8 @@
-import { Agent } from '../agent';
-import { ModelConfig } from '../llm/types';
+import { Agent } from '@mastra/core';
+import { ModelConfig } from '@mastra/core';
+import { Metric } from '@mastra/core';
 
 import { evaluate } from './evaluation';
-import { Metric } from './metric';
 
 class TestMetric extends Metric {
   async measure() {

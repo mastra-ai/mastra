@@ -17,3 +17,4 @@ export * from './tts';
 export * from './utils';
 export * from './vector';
 export * from './workflows';
+export * from './hooks';

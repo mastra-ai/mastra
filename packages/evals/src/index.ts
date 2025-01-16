@@ -1,1 +1,1 @@
-export * from './metrics';
+export { evaluate } from './evaluation';
