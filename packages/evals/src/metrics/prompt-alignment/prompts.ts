@@ -26,7 +26,7 @@ export function generateEvaluatePrompt({
 Make sure to judge the output on each instruction independently. Do not let instructions be influenced by other instructions.
 Generate a list of verdicts in JSON format, where each verdict must have:
 - "verdict": Strictly "yes" or "no"
-- "reason": Required ONLY for "no" verdicts
+- "reason": Give a reason for the verdict
 
 Be EXTRA STRICT in your evaluation. Only give "yes" if the instruction is followed COMPLETELY.
 Evaluate the output EXACTLY as written - consider every character, space, and case

@@ -2,19 +2,26 @@ import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';
 
-import { generateEvaluatePrompt, generateReasonPrompt, PROMPT_ALIGNMENT_AGENT_INSTRUCTIONS } from './prompts';
+import {
+  generateEvaluatePrompt,
+  generateReasonPrompt,
+  ANSWER_RELEVANCY_AGENT_INSTRUCTIONS,
+  generateEvaluationStatementsPrompt,
+} from './prompts';
 
-export class PromptAlignmentJudge extends MastraAgentJudge {
+export class AnswerRelevancyJudge extends MastraAgentJudge {
   constructor(provider: string, name: string) {
-    super(provider, name, PROMPT_ALIGNMENT_AGENT_INSTRUCTIONS, 'Prompt Alignment');
+    super(provider, name, ANSWER_RELEVANCY_AGENT_INSTRUCTIONS, 'Answer Relevancy');
   }
 
-  async evaluate(
-    input: string,
-    actualOutput: string,
-    instructions: string[],
-  ): Promise<{ verdict: string; reason: string }[]> {
-    const prompt = generateEvaluatePrompt({ input, output: actualOutput, instructions });
+  async evaluate(input: string, actualOutput: string): Promise<{ verdict: string; reason: string }[]> {
+    const statementPrompt = generateEvaluationStatementsPrompt({ output: actualOutput });
+    const statements = await this.agent.generate(statementPrompt, {
+      output: z.object({
+        statements: z.array(z.string()),
+      }),
+    });
+    const prompt = generateEvaluatePrompt({ input, statements: statements.object.statements });
     const result = await this.agent.generate(prompt, {
       output: z.object({
         verdicts: z.array(

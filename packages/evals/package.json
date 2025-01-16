@@ -29,7 +29,8 @@
   "license": "ISC",
   "dependencies": {
     "@mastra/core": "workspace:*",
-    "fs-extra": "^11.2.0"
+    "fs-extra": "^11.2.0",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.26.0",

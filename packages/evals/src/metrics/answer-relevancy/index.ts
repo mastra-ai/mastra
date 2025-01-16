@@ -1,19 +1,27 @@
 import { Metric, MetricResult } from '@mastra/core';
 
-import { PromptAlignmentJudge } from './metricJudge';
+import { AnswerRelevancyJudge } from './metricJudge';
 
-export class PromptAlignmentMetric extends Metric {
-  instructions: string[];
-  judge: PromptAlignmentJudge;
-  constructor({ provider, name, instructions }: { provider: string; name: string; instructions: string[] }) {
+export class AnswerRelevancyMetric extends Metric {
+  judge: AnswerRelevancyJudge;
+  uncertaintyWeight: number;
+  constructor({
+    provider,
+    name,
+    uncertaintyWeight = 0.3,
+  }: {
+    provider: string;
+    name: string;
+    uncertaintyWeight: number;
+  }) {
     super();
-    this.instructions = instructions;
 
-    this.judge = new PromptAlignmentJudge(provider, name);
+    this.uncertaintyWeight = uncertaintyWeight;
+    this.judge = new AnswerRelevancyJudge(provider, name);
   }
 
   async measure({ input, output }: { input: string; output: string }): Promise<MetricResult> {
-    const verdicts = await this.judge.evaluate(input, output, this.instructions);
+    const verdicts = await this.judge.evaluate(input, output);
     const score = this.calculateScore(verdicts);
 
     const reason = await this.generateReason(input, output, score, verdicts);
@@ -50,14 +58,16 @@ export class PromptAlignmentMetric extends Metric {
       return 1;
     }
 
-    let alignmentCount = 0;
+    let relevancyCount = 0;
     for (const { verdict } of evaluation!) {
-      if (verdict.trim().toLowerCase() !== 'no') {
-        alignmentCount++;
+      if (verdict.trim().toLowerCase() === 'yes') {
+        relevancyCount++;
+      } else if (verdict.trim().toLowerCase() === 'unsure') {
+        relevancyCount += this.uncertaintyWeight;
       }
     }
 
-    const score = alignmentCount / numberOfVerdicts;
-    return score * 10;
+    const score = relevancyCount / numberOfVerdicts;
+    return Math.round(score * 10);
   }
 }
