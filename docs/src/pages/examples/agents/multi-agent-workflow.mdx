@@ -1,18 +1,22 @@
-import { GithubLink } from "../../../components/github-link";
-
 # Multi-Agent Workflow
 
-This example demonstrates how to create an Agentic workflow utilizing multiple agents.
+This example demonstrates how to create an agentic workflow with work product being passed between multiple agents with a worker agent and a supervisor agent.
 
 In this example, we create a sequential workflow that calls two agents in order:
 
 1. A Copywriter agent that writes the initial blog post
 2. An Editor agent that refines the content
 
-```ts showLineNumbers copy
+First, import the required dependencies:
+
+```typescript
 import { Agent, Step, Workflow } from "@mastra/core";
 import { z } from "zod";
+```
 
+Create the copywriter agent that will generate the initial blog post:
+
+```typescript
 const copywriterAgent = new Agent({
   name: "Copywriter",
   instructions: "You are a copywriter agent that writes blog post copy.",
@@ -22,7 +26,11 @@ const copywriterAgent = new Agent({
     toolChoice: "required",
   },
 });
+```
 
+Define the copywriter step that executes the agent and handles the response:
+
+```typescript
 const copywriterStep = new Step({
   id: "copywriterStep",
   execute: async ({ context: { machineContext } }) => {
@@ -38,7 +46,11 @@ const copywriterStep = new Step({
     };
   },
 });
+```
 
+Set up the editor agent to refine the copywriter's content:
+
+```typescript
 const editorAgent = new Agent({
   name: "Editor",
   instructions: "You are an editor agent that edits blog post copy.",
@@ -47,7 +59,11 @@ const editorAgent = new Agent({
     name: "gpt-4o",
   },
 });
+```
 
+Create the editor step that processes the copywriter's output:
+
+```typescript
 const editorStep = new Step({
   id: "editorStep",
   execute: async ({ context }) => {
@@ -64,7 +80,11 @@ const editorStep = new Step({
     };
   },
 });
+```
 
+Configure the workflow and execute the steps:
+
+```typescript
 const myWorkflow = new Workflow({
   name: "my-workflow",
   triggerSchema: z.object({
