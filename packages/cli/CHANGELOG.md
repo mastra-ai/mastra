@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.94
+
+### Patch Changes
+
+- b39ea1d: ability to skip wrangler cli installation
+
 ## 0.1.57-alpha.93
 
 ### Patch Changes
