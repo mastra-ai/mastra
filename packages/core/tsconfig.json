@@ -7,6 +7,6 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true
   },
-  "include": ["src/**/*", "../../explorations/prompt"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "**/*.test.ts"]
 }
