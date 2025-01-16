@@ -146,7 +146,7 @@ export class GraphRAG {
     return Math.max(-1, Math.min(1, similarity));
   }
 
-  processResults(chunks: GraphChunk[], embeddings: GraphEmbedding[]) {
+  createGraph(chunks: GraphChunk[], embeddings: GraphEmbedding[]) {
     if (!chunks?.length || !embeddings?.length) {
       throw new Error('Chunks and embeddings arrays must not be empty');
     }

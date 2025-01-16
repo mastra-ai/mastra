@@ -1,7 +1,7 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { CohereRelevanceScorer } from '@mastra/core';
 
-import { RagReranker } from './re-ranker';
+import { Reranker } from '.';
 
 jest.spyOn(CohereRelevanceScorer.prototype, 'getRelevanceScore').mockImplementation(async () => {
   return 1;
@@ -18,7 +18,7 @@ const getScoreSpreads = (results1: any, results2: any) => {
   };
 };
 
-describe('RagReranker', () => {
+describe('Reranker', () => {
   beforeEach(() => {
     jest.clearAllMocks(); // Clear any mock state before each test
   });
@@ -27,7 +27,7 @@ describe('RagReranker', () => {
     it('should throw an error if cohere API key is missing', () => {
       expect(
         () =>
-          new RagReranker({
+          new Reranker({
             semanticProvider: 'cohere',
           }),
       ).toThrow('Cohere API key required when using Cohere provider');
@@ -36,7 +36,7 @@ describe('RagReranker', () => {
     it('should throw an error if agent provider is missing for agent provider', () => {
       expect(
         () =>
-          new RagReranker({
+          new Reranker({
             semanticProvider: 'agent',
             agentProvider: undefined,
           }),
@@ -44,7 +44,7 @@ describe('RagReranker', () => {
     });
 
     it('should initialize with default weights', () => {
-      const reranker = new RagReranker({
+      const reranker = new Reranker({
         semanticProvider: 'cohere',
         cohereApiKey: 'mock-api-key',
       });
@@ -56,7 +56,7 @@ describe('RagReranker', () => {
     });
 
     it('should initialize with custom weights', () => {
-      const reranker = new RagReranker({
+      const reranker = new Reranker({
         semanticProvider: 'cohere',
         cohereApiKey: 'mock-api-key',
         weights: {
@@ -75,7 +75,7 @@ describe('RagReranker', () => {
 
   describe('rerank', () => {
     it('should rerank results based on semantic, vector, and position scores', async () => {
-      const reranker = new RagReranker({
+      const reranker = new Reranker({
         semanticProvider: 'cohere',
         cohereApiKey: 'mock-api-key',
       });
@@ -119,7 +119,7 @@ describe('RagReranker', () => {
     });
 
     it('should rerank results based on semantic, vector, and position scores with weighted values', async () => {
-      const reranker = new RagReranker({
+      const reranker = new Reranker({
         semanticProvider: 'cohere',
         cohereApiKey: 'mock-api-key',
         weights: {
@@ -167,7 +167,7 @@ describe('RagReranker', () => {
     });
 
     it('should handle the case where query embedding is provided', async () => {
-      const reranker = new RagReranker({
+      const reranker = new Reranker({
         semanticProvider: 'cohere',
         cohereApiKey: 'mock-api-key',
       });

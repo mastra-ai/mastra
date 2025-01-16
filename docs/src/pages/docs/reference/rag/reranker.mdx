@@ -1,29 +1,29 @@
-# RagReranker
+# Reranker
 
-The `RagReranker` provides advanced reranking capabilities for vector search results by combining semantic relevance, vector similarity, and position-based scoring. It is used through the `createVectorQueryTool` to improve search result quality.
+The `Reranker` class provides advanced reranking capabilities for vector search results by combining semantic relevance, vector similarity, and position-based scoring. It can also be used through the `createVectorQueryTool` for convenience.
 
-## Usage with Vector Query Tool
+## Basic Usage
 
 ```typescript
-import { createVectorQueryTool } from "@mastra/rag";
+import { Reranker } from "@mastra/rag";
 
-const queryTool = createVectorQueryTool({
-  vectorStoreName: "pinecone",
-  indexName: "docs",
-  options: {
-    provider: "OPEN_AI",
-    model: "text-embedding-ada-002",
-    maxRetries: 3
+const reranker = new Reranker({
+  semanticProvider: "agent",
+  agentProvider: {
+    provider: "openai",
+    name: "gpt-4"
   },
-  rerankOptions: {
-    semanticProvider: "cohere",
-    cohereApiKey: "your-api-key",
-    weights: {
-      semantic: 0.4,
-      vector: 0.4,
-      position: 0.2
-    }
+  weights: {
+    semantic: 0.5,
+    vector: 0.3,
+    position: 0.2
   }
+});
+
+const results = await reranker.rerank({
+  query: "How do I deploy to production?",
+  vectorStoreResults: searchResults,
+  topK: 3
 });
 ```
 
@@ -67,7 +67,83 @@ const queryTool = createVectorQueryTool({
   ]}
 />
 
-## Example with Agent Provider
+### RerankParams
+
+<PropertiesTable
+  content={[
+    {
+      name: "query",
+      type: "string",
+      description: "The search query text",
+      isOptional: false,
+    },
+    {
+      name: "vectorStoreResults",
+      type: "QueryResult[]",
+      description: "Results from vector store to rerank",
+      isOptional: false,
+    },
+    {
+      name: "queryEmbedding",
+      type: "number[]",
+      description: "Original query embedding for advanced scoring",
+      isOptional: true,
+    },
+    {
+      name: "topK",
+      type: "number",
+      description: "Number of top results to return",
+      isOptional: true,
+      defaultValue: "3",
+    }
+  ]}
+/>
+
+## Returns
+
+The rerank method returns an array of RerankResult objects:
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "QueryResult",
+      description: "The original query result",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "Combined reranking score (0-1)",
+    },
+    {
+      name: "details",
+      type: "RerankDetails",
+      description: "Detailed scoring information",
+    }
+  ]}
+/>
+
+## Example with Cohere Provider
+
+```typescript
+const reranker = new Reranker({
+  semanticProvider: "cohere",
+  cohereApiKey: "your-api-key",
+  weights: {
+    semantic: 0.4,
+    vector: 0.4,
+    position: 0.2
+  }
+});
+
+const results = await reranker.rerank({
+  query: "deployment configuration",
+  vectorStoreResults: searchResults,
+  topK: 5
+});
+```
+
+## Integration with Vector Query Tool
 
 ```typescript
 const queryTool = createVectorQueryTool({
@@ -79,14 +155,11 @@ const queryTool = createVectorQueryTool({
     maxRetries: 3
   },
   rerankOptions: {
-    semanticProvider: "agent",
-    agentProvider: {
-      provider: "openai",
-      name: "gpt-4"
-    },
+    semanticProvider: "cohere",
+    cohereApiKey: "your-api-key",
     weights: {
-      semantic: 0.5,  // Emphasize semantic scoring
-      vector: 0.3,
+      semantic: 0.4,
+      vector: 0.4,
       position: 0.2
     }
   }

@@ -1,2 +1,3 @@
 export * from './rag-tools';
-export * from './re-ranker';
+export * from './rerank';
+export { GraphRAG } from './graph-rag';

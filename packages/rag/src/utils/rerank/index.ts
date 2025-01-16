@@ -48,7 +48,7 @@ export interface RerankerOptions {
 }
 
 // Takes in a list of results from a vector store and reranks them based on semantic, vector, and position scores
-export class RagReranker {
+export class Reranker {
   private semanticProvider: RelevanceScoreProvider;
   private weights: Required<WeightConfig>;
 
