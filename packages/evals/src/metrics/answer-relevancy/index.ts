@@ -5,21 +5,26 @@ import { AnswerRelevancyJudge } from './metricJudge';
 export class AnswerRelevancyMetric extends Metric {
   private judge: AnswerRelevancyJudge;
   private uncertaintyWeight: number;
+  private scale: number;
 
   constructor(
     model: ModelConfig,
     {
       uncertaintyWeight,
+      scale,
     }: {
       uncertaintyWeight: number;
+      scale: number;
     } = {
       uncertaintyWeight: 0.3,
+      scale: 10,
     },
   ) {
     super();
 
     this.uncertaintyWeight = uncertaintyWeight;
     this.judge = new AnswerRelevancyJudge(model);
+    this.scale = scale;
   }
 
   async measure({ input, output }: { input: string; output: string }): Promise<MetricResult> {
@@ -70,6 +75,6 @@ export class AnswerRelevancyMetric extends Metric {
     }
 
     const score = relevancyCount / numberOfVerdicts;
-    return Math.round(score * 10);
+    return Math.round(score * this.scale);
   }
 }

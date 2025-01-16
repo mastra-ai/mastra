@@ -5,19 +5,14 @@ import { PromptAlignmentJudge } from './metricJudge';
 export class PromptAlignmentMetric extends Metric {
   private instructions: string[];
   private judge: PromptAlignmentJudge;
+  private scale: number;
 
-  constructor(
-    model: ModelConfig,
-    {
-      instructions,
-    }: {
-      instructions: string[];
-    },
-  ) {
+  constructor(model: ModelConfig, { instructions, scale = 10 }: { instructions: string[]; scale?: number }) {
     super();
 
     this.instructions = instructions;
     this.judge = new PromptAlignmentJudge(model);
+    this.scale = scale;
   }
 
   async measure({ input, output }: { input: string; output: string }): Promise<MetricResult> {
@@ -66,6 +61,6 @@ export class PromptAlignmentMetric extends Metric {
     }
 
     const score = alignmentCount / numberOfVerdicts;
-    return score * 10;
+    return score * this.scale;
   }
 }

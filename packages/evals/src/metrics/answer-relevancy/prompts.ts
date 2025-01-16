@@ -156,7 +156,6 @@ export function generateReasonPrompt({
   input: string;
   output: string;
 }) {
-  console.log('reasons');
   return `Explain the irrelevancy score (0-10) for the LLM's response using this context:
   Context:
   Input: ${input}

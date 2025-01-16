@@ -31,3 +31,16 @@ it('should be able to measure prompt alignment', async () => {
   expect(resultUppercase.score).toBe(10);
   expect(result.score).toBe(0);
 });
+
+it('should be able to measure prompt alignment with an array of instructions', async () => {
+  const metric = new PromptAlignmentMetric(modelConfig, {
+    instructions: ['Reply in all uppercase', 'Include baguettes in the response'],
+  });
+
+  const result = await metric.measure({
+    input: `What is the capital of France?`,
+    output: 'THE CAPITAL OF FRANCE IS BAGUETTE.',
+  });
+
+  expect(result.score).toBe(10);
+});
