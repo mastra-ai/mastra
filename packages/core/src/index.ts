@@ -15,4 +15,3 @@ export * from './utils';
 export * from './embeddings';
 export * from './relevance';
 export * from './tts';
-export * from './prompt';
