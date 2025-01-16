@@ -1,8 +1,6 @@
-Here's my suggested revision of the multi-agent workflow document:
-
 # Multi-Agent Workflow
 
-This example demonstrates how to create an Agentic workflow utilizing multiple agents.
+This example demonstrates how to create an agentic workflow with work product being passed between multiple agents with a worker agent and a supervisor agent.
 
 In this example, we create a sequential workflow that calls two agents in order:
 
@@ -16,7 +14,7 @@ import { Agent, Step, Workflow } from "@mastra/core";
 import { z } from "zod";
 ```
 
-Create the copywriter agent that will generate the initial blog post, then define the copywriter step that executes the agent and handles the response:
+Create the copywriter agent that will generate the initial blog post:
 
 ```typescript
 const copywriterAgent = new Agent({
@@ -28,7 +26,11 @@ const copywriterAgent = new Agent({
     toolChoice: "required",
   },
 });
+```
 
+Define the copywriter step that executes the agent and handles the response:
+
+```typescript
 const copywriterStep = new Step({
   id: "copywriterStep",
   execute: async ({ context: { machineContext } }) => {
@@ -46,7 +48,7 @@ const copywriterStep = new Step({
 });
 ```
 
-Set up the editor agent to refine the copywriter's content, then define the editor step that processes the copywriter's output:
+Set up the editor agent to refine the copywriter's content:
 
 ```typescript
 const editorAgent = new Agent({
@@ -57,7 +59,11 @@ const editorAgent = new Agent({
     name: "gpt-4o",
   },
 });
+```
 
+Create the editor step that processes the copywriter's output:
+
+```typescript
 const editorStep = new Step({
   id: "editorStep",
   execute: async ({ context }) => {
@@ -76,7 +82,7 @@ const editorStep = new Step({
 });
 ```
 
-Finally, configure the workflow and execute the steps:
+Configure the workflow and execute the steps:
 
 ```typescript
 const myWorkflow = new Workflow({

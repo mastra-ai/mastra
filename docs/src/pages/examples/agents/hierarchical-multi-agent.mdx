@@ -1,24 +1,24 @@
-Here's my suggested revision of the multi-agent workflow document:
+import { GithubLink } from "../../../components/github-link";
 
-# Multi-Agent Workflow
+# Hierarchical Multi-Agent System
 
-This example demonstrates how to create an agentic workflow with work product being passed between multiple agents with a worker agent and a supervisor agent.
+This example demonstrates how to create a hierarchical multi-agent system where agents can interact through tool functions.
 
-In this example, we create a sequential workflow that calls two agents in order:
+In this example, we create three agents:
 
-1. A Copywriter agent that writes the initial blog post
-2. An Editor agent that refines the content
+1. A Publisher agent (supervisor) that orchestrates the process
+2. A Copywriter agent that writes the initial blog post
+3. An Editor agent that refines the content
 
-First, import the required dependencies:
+The Publisher agent coordinates the workflow by:
 
-```typescript
-import { Agent, Step, Workflow } from "@mastra/core";
+1. First calling the Copywriter agent to generate the blog content
+2. Then passing that content to the Editor agent for refinement
+
+```ts showLineNumbers copy
+import { Agent, createTool, Mastra } from "@mastra/core";
 import { z } from "zod";
-```
 
-Create the copywriter agent that will generate the initial blog post:
-
-```typescript
 const copywriterAgent = new Agent({
   name: "Copywriter",
   instructions: "You are a copywriter agent that writes blog post copy.",
@@ -28,19 +28,19 @@ const copywriterAgent = new Agent({
     toolChoice: "required",
   },
 });
-```
 
-Define the copywriter step that executes the agent and handles the response:
-
-```typescript
-const copywriterStep = new Step({
-  id: "copywriterStep",
-  execute: async ({ context: { machineContext } }) => {
-    if (!machineContext?.triggerData?.topic) {
-      throw new Error("Topic not found in trigger data");
-    }
+const copywriterTool = createTool({
+  id: "copywriter-agent",
+  description: "Calls the copywriter agent to write blog post copy.",
+  inputSchema: z.object({
+    topic: z.string().describe("Blog post topic"),
+  }),
+  outputSchema: z.object({
+    copy: z.string().describe("Blog post copy"),
+  }),
+  execute: async ({ context }) => {
     const result = await copywriterAgent.generate(
-      `Create a blog post about ${machineContext.triggerData.topic}`,
+      `Create a blog post about ${context.topic}`,
     );
     console.log("copywriter result", result.text);
     return {
@@ -48,11 +48,7 @@ const copywriterStep = new Step({
     };
   },
 });
-```
 
-Set up the editor agent to refine the copywriter's content:
-
-```typescript
 const editorAgent = new Agent({
   name: "Editor",
   instructions: "You are an editor agent that edits blog post copy.",
@@ -61,20 +57,19 @@ const editorAgent = new Agent({
     name: "gpt-4o",
   },
 });
-```
 
-Create the editor step that processes the copywriter's output:
-
-```typescript
-const editorStep = new Step({
-  id: "editorStep",
+const editorTool = createTool({
+  id: "editor-agent",
+  description: "Calls the editor agent to edit blog post copy.",
+  inputSchema: z.object({
+    copy: z.string().describe("Blog post copy"),
+  }),
+  outputSchema: z.object({
+    copy: z.string().describe("Edited blog post copy"),
+  }),
   execute: async ({ context }) => {
-    const copy = context?.machineContext?.getStepPayload<{ copy: number }>(
-      "copywriterStep",
-    )?.copy;
-
     const result = await editorAgent.generate(
-      `Edit the following blog post only returning the edited copy: ${copy}`,
+      `Edit the following blog post only returning the edited copy: ${context.copy}`,
     );
     console.log("editor result", result.text);
     return {
@@ -82,27 +77,31 @@ const editorStep = new Step({
     };
   },
 });
-```
 
-Configure the workflow and execute the steps:
-
-```typescript
-const myWorkflow = new Workflow({
-  name: "my-workflow",
-  triggerSchema: z.object({
-    topic: z.string(),
-  }),
+const publisherAgent = new Agent({
+  name: "publisherAgent",
+  instructions:
+    "You are a publisher agent that first calls the copywriter agent to write blog post copy about a specific topic and then calls the editor agent to edit the copy. Just return the final edited copy.",
+  model: {
+    provider: "ANTHROPIC",
+    name: "claude-3-5-sonnet-20241022",
+  },
+  tools: { copywriterTool, editorTool },
 });
 
-// Run steps sequentially.
-myWorkflow.step(copywriterStep).then(editorStep).commit();
-
-const { runId, start } = myWorkflow.createRun();
-
-const res = await start({
-  triggerData: { topic: "React JavaScript frameworks" },
+const mastra = new Mastra({
+  agents: { publisherAgent },
 });
-console.log("Results: ", res.results);
+
+async function main() {
+  const agent = mastra.getAgent("publisherAgent");
+  const result = await agent.generate(
+    "Write a blog post about React JavaScript frameworks. Only return the final edited copy.",
+  );
+  console.log(result.text);
+}
+
+main();
 ```
 
 <br />
@@ -113,6 +112,6 @@ console.log("Results: ", res.results);
 
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/multi-agent-workflow"
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/hierarchical-multi-agent"
   }
 />
