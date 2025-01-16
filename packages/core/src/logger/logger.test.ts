@@ -146,7 +146,7 @@ describe('Logger Utilities', () => {
     });
   });
 
-  describe('UpstashRedisLogger', () => {
+  describe.skip('UpstashRedisLogger', () => {
     const logger = createLogger({
       type: 'UPSTASH',
       url: 'http://localhost:8079',

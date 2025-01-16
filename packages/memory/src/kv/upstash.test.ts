@@ -1,6 +1,7 @@
 import { MessageType, ThreadType } from '@mastra/core';
 import { randomUUID } from 'crypto';
 import dotenv from 'dotenv';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 
 import { UpstashKVMemory } from './upstash';
 

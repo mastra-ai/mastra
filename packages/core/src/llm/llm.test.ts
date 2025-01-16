@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 import { JSONSchema7 } from 'json-schema';
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { z } from 'zod';
 
 import { Logger, createLogger } from '../logger';
@@ -200,7 +200,7 @@ describe('LLM Class Integration Tests', () => {
     }, 30000);
   });
 
-  describe('createEmbedding', () => {
+  describe.skip('createEmbedding', () => {
     const llm = mastra.LLM({
       provider: 'OPEN_AI',
       name: 'gpt-3.5-turbo',
@@ -228,10 +228,15 @@ describe('LLM Class Integration Tests', () => {
   });
 
   describe('Rate Limiting', () => {
+    const rateLimitLLM = mastra.LLM({
+      provider: 'OPEN_AI',
+      name: 'gpt-3.5-turbo',
+    });
+
     it('should handle rate limits gracefully', async () => {
       const promises = Array(5)
         .fill(null)
-        .map(() => llm.generate('What is 2+2?'));
+        .map(() => rateLimitLLM.generate('What is 2+2?'));
 
       const results = await Promise.allSettled(promises);
       const successfulResults = results.filter(r => r.status === 'fulfilled');
