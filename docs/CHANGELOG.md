@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.1-alpha.15
+
+### Patch Changes
+
+- 5826db3: Updated reference docs and exports for Reranker and GraphRag
+
 ## 0.1.1-alpha.14
 
 ### Patch Changes

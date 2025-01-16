@@ -1,5 +1,11 @@
 # composio
 
+## 1.0.1-alpha.33
+
+### Patch Changes
+
+- @mastra/firecrawl@1.0.4-alpha.50
+
 ## 1.0.1-alpha.32
 
 ### Patch Changes
