@@ -1,15 +1,23 @@
-import { Metric, MetricResult } from '@mastra/core';
+import { Metric, MetricResult, ModelConfig } from '@mastra/core';
 
 import { PromptAlignmentJudge } from './metricJudge';
 
 export class PromptAlignmentMetric extends Metric {
-  instructions: string[];
-  judge: PromptAlignmentJudge;
-  constructor({ provider, name, instructions }: { provider: string; name: string; instructions: string[] }) {
-    super();
-    this.instructions = instructions;
+  private instructions: string[];
+  private judge: PromptAlignmentJudge;
 
-    this.judge = new PromptAlignmentJudge(provider, name);
+  constructor(
+    model: ModelConfig,
+    {
+      instructions,
+    }: {
+      instructions: string[];
+    },
+  ) {
+    super();
+
+    this.instructions = instructions;
+    this.judge = new PromptAlignmentJudge(model);
   }
 
   async measure({ input, output }: { input: string; output: string }): Promise<MetricResult> {

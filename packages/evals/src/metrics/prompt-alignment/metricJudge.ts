@@ -1,3 +1,4 @@
+import { ModelConfig } from '@mastra/core';
 import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';
@@ -5,8 +6,8 @@ import { MastraAgentJudge } from '../../judge';
 import { generateEvaluatePrompt, generateReasonPrompt, PROMPT_ALIGNMENT_AGENT_INSTRUCTIONS } from './prompts';
 
 export class PromptAlignmentJudge extends MastraAgentJudge {
-  constructor(provider: string, name: string) {
-    super(provider, name, PROMPT_ALIGNMENT_AGENT_INSTRUCTIONS, 'Prompt Alignment');
+  constructor(model: ModelConfig) {
+    super('Prompt Alignment', PROMPT_ALIGNMENT_AGENT_INSTRUCTIONS, model);
   }
 
   async evaluate(

@@ -4,7 +4,7 @@ import { type ModelConfig } from '@mastra/core';
 import { AnswerRelevancyMetric } from './index';
 
 const SECONDS = 1000;
-jest.setTimeout(70 * SECONDS);
+jest.setTimeout(15 * SECONDS);
 
 const modelConfig: ModelConfig = {
   provider: 'OPEN_AI',
