@@ -6,13 +6,7 @@ Tools are typed functions that can be executed by agents or workflows, with buil
 
 In this section, we'll walk through the process of creating a tool that can be used by your agents. Let's create a simple tool that fetches current weather information for a given city.
 
-### **Example Tool: Weather Information**
-
-First, let's define a tool that retrieves weather data using a public API.
-
-#### Adding a Weather Tool
-
-```typescript filename="src/mastra/tools/weatherInfo.ts"
+```typescript filename="src/mastra/tools/weatherInfo.ts" copy
 import { createTool } from "@mastra/core";
 import { z } from "zod";
 
@@ -37,18 +31,9 @@ export const weatherInfo = createTool({
 });
 ```
 
-In this code:
-
-- **`id`**: A human-readable name for the tool.
-- **`inputSchema`**: A Zod schema defining the expected input parameters.
-- **`description`**: A description of what the tool does.
-- **`execute`**: An asynchronous function that performs the tool's main logic.
-
 ## Adding Tools to an Agent
 
 Now we'll add the tool to an agent. We'll create an agent that can answer questions about the weather and configure it to use our `weatherInfo` tool.
-
-#### Adding the Weather Tool to an Agent
 
 ```typescript filename="src/mastra/agents/weatherAgent.ts"
 import { Agent } from "@mastra/core";
@@ -68,19 +53,9 @@ export const weatherAgent = new Agent<typeof tools>({
   },
 });
 ```
-
-In this agent configuration:
-
-- **`name`**: A unique name for the agent.
-- **`instructions`**: Guidance provided to the agent to define its behavior.
-- **`model`**: Specifies the AI model to use.
-- **`tools`**: Specifies which tools the agent has access to.
-
-## Setting Up Mastra
+## Registering the Agent
 
 We need to initialize Mastra with our agent.
-
-#### Registering the Agent
 
 ```typescript filename="src/index.ts"
 import { Mastra } from "@mastra/core";
@@ -101,7 +76,7 @@ You can test tools using Jest or any other testing framework. Writing unit tests
 
 Now we can call the agent, and it will use the tool to fetch the weather information.
 
-#### Example: Interacting with the Agent
+## Example: Interacting with the Agent
 
 ```typescript filename="src/index.ts"
 import { mastra } from "./index";
@@ -119,20 +94,3 @@ main();
 ```
 
 The agent will use the `weatherInfo` tool to get the current weather in New York City and respond accordingly.
-
-## Tool Configuration
-
-A tool requires:
-
-- **`id`**: Name of the tool (e.g., "Get Weather Information").
-- **`inputSchema`**: Zod schema for validating inputs like city names.
-- **`description`**: Clear explanation of what the tool does.
-- **`execute`**: Async function that performs the tool's logic.
-
-The executor receives:
-
-- **`data`**: Contains the validated input parameters for your tool.
-- **`runId`**: Unique identifier for the current execution (optional).
-- **`agents`**: Access to all registered agents in the system.
-- **`engine`**: Reference to the Mastra engine instance (optional).
-- **`llm`**: Access to the Language Model instance.
