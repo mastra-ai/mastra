@@ -63,6 +63,7 @@ export class CloudflareDeployer extends Deployer {
   }
 
   writeFiles(): void {
+    const cfWorkerName = process.env.CF_WORKER_NAME ?? 'mastra';
     const cfRoute = process.env.CF_ROUTE_NAME;
     const cfZone = process.env.CF_ZONE_NAME;
     const envVars = this.getEnvVars();
@@ -71,7 +72,7 @@ export class CloudflareDeployer extends Deployer {
     writeFileSync(
       join(this.dotMastraPath, 'wrangler.toml'),
       `
-name = "mastra"
+name = "${cfWorkerName}"
 main = "index.mjs"  # Your main worker file
 compatibility_date = "2024-12-02"
 compatibility_flags = ["nodejs_compat"]
