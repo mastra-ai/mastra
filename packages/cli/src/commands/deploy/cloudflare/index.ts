@@ -10,6 +10,10 @@ export class CloudflareDeployer extends Deployer {
   name = 'Cloudflare';
 
   async installCli() {
+    if (process.env.SKIP_INSTALL_CLI === 'true') {
+      console.log('Skipping Wrangler CLI installation...');
+      return;
+    }
     console.log('Installing Wrangler CLI...');
     const depsService = new DepsService();
     await depsService.installPackages(['wrangler -g']);
