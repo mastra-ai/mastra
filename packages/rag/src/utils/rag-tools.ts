@@ -5,7 +5,7 @@ import { ChunkParams, MDocument } from '../document';
 import { embed } from '../embeddings';
 
 import { GraphRAG } from './graph-rag';
-import { RagReranker, RerankerOptions } from './re-ranker';
+import { Reranker, RerankerOptions } from './rerank';
 
 type VectorFilterType = 'pg' | 'astra' | 'qdrant' | 'upstash' | 'pinecone' | 'chroma' | '';
 
@@ -108,7 +108,7 @@ export const createVectorQueryTool = ({
           topK,
         });
         if (rerankOptions) {
-          const reranker = new RagReranker(rerankOptions);
+          const reranker = new Reranker(rerankOptions);
           const rerankedResults = await reranker.rerank({
             query: queryText,
             vectorStoreResults: results,
@@ -202,7 +202,7 @@ export const createGraphRAGTool = ({
             vector: result.vector || [],
           }));
 
-          graphRag.processResults(chunks, embeddings);
+          graphRag.createGraph(chunks, embeddings);
           isInitialized = true;
         }
 

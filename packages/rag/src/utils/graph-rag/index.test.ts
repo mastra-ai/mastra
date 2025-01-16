@@ -1,6 +1,6 @@
 import { describe, it, expect, jest } from '@jest/globals';
 
-import { GraphChunk, GraphEdge, GraphEmbedding, GraphNode, GraphRAG } from './graph-rag';
+import { GraphChunk, GraphEdge, GraphEmbedding, GraphNode, GraphRAG } from './';
 
 describe('GraphRAG', () => {
   beforeEach(() => {
@@ -76,12 +76,12 @@ describe('GraphRAG', () => {
     });
   });
 
-  describe('processResults', () => {
+  describe('createGraph', () => {
     it("chunks and embeddings can't be empty", () => {
       const graph = new GraphRAG(3);
       const chunks: GraphChunk[] = [];
       const embeddings: GraphEmbedding[] = [];
-      expect(() => graph.processResults(chunks, embeddings)).toThrowError(
+      expect(() => graph.createGraph(chunks, embeddings)).toThrowError(
         'Chunks and embeddings arrays must not be empty',
       );
     });
@@ -102,7 +102,7 @@ describe('GraphRAG', () => {
           vector: [1, 2, 3],
         },
       ];
-      expect(() => graph.processResults(chunks, embeddings)).toThrowError(
+      expect(() => graph.createGraph(chunks, embeddings)).toThrowError(
         'Chunks and embeddings must have the same length',
       );
     });
@@ -137,7 +137,7 @@ describe('GraphRAG', () => {
       }));
 
       const graph = new GraphRAG(3);
-      graph.processResults(chunks, embeddings);
+      graph.createGraph(chunks, embeddings);
 
       const nodes = graph.getNodes();
       expect(nodes.length).toBe(3);
