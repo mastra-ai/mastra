@@ -8,6 +8,7 @@ async function concatenateMDXDocs(
 ): Promise<void> {
   const allContent: string[] = [];
   const processedFiles: string[] = [];
+  const outputDir = path.join(process.cwd(), "public");
 
   async function processDirectory(dirPath: string): Promise<void> {
     try {
@@ -55,7 +56,11 @@ async function concatenateMDXDocs(
         "\n" + "=".repeat(80) + "\n",
       ].join("\n");
 
-      await fs.writeFile(outputFile, header + allContent.join(""), "utf-8");
+      await fs.writeFile(
+        path.join(outputDir, outputFile),
+        header + allContent.join(""),
+        "utf-8",
+      );
 
       console.log(`Successfully created ${outputFile}`);
       console.log(`Processed ${processedFiles.length} files:`);
