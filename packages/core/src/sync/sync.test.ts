@@ -1,4 +1,4 @@
-import { describe, it, expect, jest } from '@jest/globals';
+import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 
 import { MockMastraEngine } from '../engine';
@@ -42,7 +42,7 @@ const testSync2 = createSync({
   },
 });
 
-const executorSpy = jest.fn<any>().mockResolvedValue({
+const executorSpy = vi.fn<any>().mockResolvedValue({
   message: 'Test response',
 });
 
@@ -58,7 +58,7 @@ const testSyncWithSpy = createSync({
   execute: executorSpy,
 });
 
-const syncDataSpy = jest.spyOn(mockEngine, 'syncRecords');
+const syncDataSpy = vi.spyOn(mockEngine, 'syncRecords');
 
 const syncWithData = createSync({
   id: 'syncDataTest',

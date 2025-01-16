@@ -620,7 +620,7 @@ This registers your agent with Mastra, making it available for use.
 
 ## Debugging Tools
 
-You can test tools using Jest or any other testing framework. Writing unit tests for your tools ensures they behave as expected and helps catch errors early.
+You can test tools using Vitest or any other testing framework. Writing unit tests for your tools ensures they behave as expected and helps catch errors early.
 
 ## Calling an Agent with a Tool
 

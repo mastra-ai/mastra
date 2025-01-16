@@ -1,10 +1,10 @@
-import { describe, it, expect, jest } from '@jest/globals';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 
 import { GraphChunk, GraphEdge, GraphEmbedding, GraphNode, GraphRAG } from './';
 
 describe('GraphRAG', () => {
   beforeEach(() => {
-    jest.clearAllMocks(); // Clear any mock state before each test
+    vi.clearAllMocks(); // Clear any mock state before each test
   });
 
   describe('addNode', () => {

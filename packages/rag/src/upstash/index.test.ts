@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 import { UpstashVector } from './';
 
-describe('UpstashVector Integration Tests', () => {
+describe('UpstashVector', () => {
   let vectorStore: UpstashVector;
   const VECTOR_DIMENSION = 1536;
   const testIndexName = 'default';

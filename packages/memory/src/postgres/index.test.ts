@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 import { PgMemory } from './';
 

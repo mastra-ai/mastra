@@ -1,9 +1,9 @@
-import { jest } from '@jest/globals';
+import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
 
 import { AstraVector } from './';
 
 // Give tests enough time to complete database operations
-jest.setTimeout(3000000);
+vi.setConfig({ testTimeout: 3000000 });
 
 // Helper function to wait for condition with timeout
 async function waitForCondition(

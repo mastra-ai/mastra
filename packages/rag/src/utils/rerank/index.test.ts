@@ -1,9 +1,9 @@
-import { describe, it, expect, jest } from '@jest/globals';
 import { CohereRelevanceScorer } from '@mastra/core';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 
 import { Reranker } from '.';
 
-jest.spyOn(CohereRelevanceScorer.prototype, 'getRelevanceScore').mockImplementation(async () => {
+vi.spyOn(CohereRelevanceScorer.prototype, 'getRelevanceScore').mockImplementation(async () => {
   return 1;
 });
 
@@ -20,7 +20,7 @@ const getScoreSpreads = (results1: any, results2: any) => {
 
 describe('Reranker', () => {
   beforeEach(() => {
-    jest.clearAllMocks(); // Clear any mock state before each test
+    vi.clearAllMocks(); // Clear any mock state before each test
   });
 
   describe('constructor', () => {

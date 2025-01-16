@@ -1,10 +1,10 @@
 // To setup a Qdrant server, run:
 // docker run -p 6333:6333 qdrant/qdrant
-import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 import { QdrantVector } from './index';
 
-describe('Qdrant Integration Tests', () => {
+describe('QdrantVector', () => {
   let qdrant: QdrantVector;
   const testCollectionName = 'test-collection-' + Date.now();
   const dimension = 3;

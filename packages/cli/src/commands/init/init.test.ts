@@ -1,42 +1,42 @@
-import { jest } from '@jest/globals';
+import { describe, beforeEach, expect, vi, test } from 'vitest';
 import { fs, vol } from 'memfs';
 import { DepsService } from '../../services/service.deps.js';
 
 beforeEach(() => {
   vol.reset();
-  jest.resetAllMocks();
+  vi.resetAllMocks();
 });
 
-jest.unstable_mockModule('./utils', () => ({
-  checkInitialization: jest.fn(),
-  writeIndexFile: jest.fn(),
-  createComponentsDir: jest.fn(),
-  writeAPIKey: jest.fn(),
-  getAPIKey: jest.fn(),
-  createMastraDir: jest.fn(),
-  writeCodeSample: jest.fn(),
-  checkDependencies: jest.fn(),
+vi.mock('./utils', () => ({
+  checkInitialization: vi.fn(),
+  writeIndexFile: vi.fn(),
+  createComponentsDir: vi.fn(),
+  writeAPIKey: vi.fn(),
+  getAPIKey: vi.fn(),
+  createMastraDir: vi.fn(),
+  writeCodeSample: vi.fn(),
+  checkDependencies: vi.fn(),
 }));
 
-jest.unstable_mockModule('../../utils/logger', () => ({
+vi.mock('../../utils/logger', () => ({
   logger: {
-    log: jest.fn(),
-    error: jest.fn(),
-    warn: jest.fn(),
-    info: jest.fn(),
-    success: jest.fn(),
-    break: jest.fn(),
+    log: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    success: vi.fn(),
+    break: vi.fn(),
   },
 }));
 
-const utils = await import('./utils')
-const { init } = await import('./init')
+const utils = await import('./utils');
+const { init } = await import('./init');
 
-jest.mock('../../services/service.deps.js', () => {
+vi.mock('../../services/service.deps.js', () => {
   return {
-    DepsService: jest.fn().mockImplementation(() => {
+    DepsService: vi.fn().mockImplementation(() => {
       return {
-        checkDependencies: jest.fn(() => Promise.resolve('ok')),
+        checkDependencies: vi.fn(() => Promise.resolve('ok')),
       };
     }),
   };
@@ -44,13 +44,13 @@ jest.mock('../../services/service.deps.js', () => {
 
 describe('CLI', () => {
   test('creates the mastra directory and components directories', async () => {
-    const mockCreateMastraDir = jest.spyOn(utils, 'createMastraDir').mockImplementation(async (directory) => {
+    const mockCreateMastraDir = vi.spyOn(utils, 'createMastraDir').mockImplementation(async (directory) => {
       const dirPath = `${directory}/mastra`;
       fs.mkdirSync(dirPath, { recursive: true }); // Simulate directory creation
       return { ok: true, dirPath };
     });
 
-    const mockCreateComponentsDir = jest.spyOn(utils, 'createComponentsDir').mockImplementation(async (dirPath, component) => {
+    const mockCreateComponentsDir = vi.spyOn(utils, 'createComponentsDir').mockImplementation(async (dirPath, component) => {
       const componentPath = `${dirPath}/${component}`;
       fs.mkdirSync(componentPath, { recursive: true }); // Simulate component directory creation
     });
@@ -73,13 +73,13 @@ describe('CLI', () => {
   });
 
   test('generates correct index file content', async () => {
-    jest.spyOn(utils, 'createMastraDir').mockImplementation(async (directory) => {
+    vi.spyOn(utils, 'createMastraDir').mockImplementation(async (directory) => {
       const dirPath = `${directory}/mastra`;
       fs.mkdirSync(dirPath, { recursive: true });
       return { ok: true, dirPath };
     });
 
-    jest.spyOn(utils, 'writeIndexFile').mockImplementation(async ({dirPath, addExample }) => {
+    vi.spyOn(utils, 'writeIndexFile').mockImplementation(async ({ dirPath, addExample }) => {
       const content = addExample
         ? `
         import { Mastra } from '@mastra/core';
@@ -103,15 +103,15 @@ describe('CLI', () => {
   });
 
   test('generates env file', async () => {
-    DepsService.prototype.checkDependencies = jest.fn(() => Promise.resolve('ok'));
+    DepsService.prototype.checkDependencies = vi.fn(() => Promise.resolve('ok'));
 
-    jest.spyOn(utils, 'createMastraDir').mockImplementation(async (directory) => {
+    vi.spyOn(utils, 'createMastraDir').mockImplementation(async (directory) => {
       const dirPath = `${directory}/mastra`;
       fs.mkdirSync(dirPath, { recursive: true });
       return { ok: true, dirPath };
     });
 
-    jest.spyOn(utils, 'writeAPIKey').mockImplementation(async ({ provider: llmProvider, apiKey }) => {
+    vi.spyOn(utils, 'writeAPIKey').mockImplementation(async ({ provider: llmProvider, apiKey }) => {
       const key = `${llmProvider.toUpperCase()}_API_KEY=${apiKey}`;
       fs.writeFileSync('/mock/.env.development', key);
     });
@@ -173,18 +173,18 @@ describe('CLI', () => {
   // });
 
   test('stops initialization if mastra is already setup', async () => {
-    DepsService.prototype.checkDependencies = jest.fn(() => Promise.resolve('ok'));
+    DepsService.prototype.checkDependencies = vi.fn(() => Promise.resolve('ok'));
 
     fs.mkdirSync('/mock/mastra', { recursive: true })
 
-    jest.spyOn(utils, 'createMastraDir').mockImplementation(async (directory) => {
+    vi.spyOn(utils, 'createMastraDir').mockImplementation(async (directory) => {
       const dirPath = `${directory}/mastra`;
       fs.mkdirSync(dirPath, { recursive: true });
       return { ok: false };
     });
 
-    const mockWriteIndexFile = jest.spyOn(utils, 'writeIndexFile');
-    const mockWriteAPIKey = jest.spyOn(utils, 'writeAPIKey');
+    const mockWriteIndexFile = vi.spyOn(utils, 'writeIndexFile');
+    const mockWriteAPIKey = vi.spyOn(utils, 'writeAPIKey');
 
     await init({
       directory: '/mock',
