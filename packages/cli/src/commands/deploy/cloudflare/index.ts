@@ -63,6 +63,8 @@ export class CloudflareDeployer extends Deployer {
   }
 
   writeFiles(): void {
+    const cfRoute = process.env.CF_ROUTE_NAME;
+    const cfZone = process.env.CF_ZONE_NAME;
     const envVars = this.getEnvVars();
 
     // TODO ENV KEYS
@@ -84,6 +86,15 @@ main = "mastra.mjs"
 
 [observability.logs]
 enabled = true
+
+${
+  cfRoute
+    ? `[[routes]]
+pattern = "${cfRoute}"
+zone_name = "${cfZone}"
+custom_domain = true`
+    : ``
+}
 
 [vars]
 ${Object.entries(envVars || {})
