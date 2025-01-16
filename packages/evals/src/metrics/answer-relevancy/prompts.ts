@@ -5,47 +5,17 @@ Key Principles:
 2. Consider both direct answers and related context
 3. Prioritize relevance to the input over correctness
 4. Recognize that responses can be partially relevant
-5. Empty inputs or error messages should always be marked as "no"
+5. Empty inputs or error messages should always be marked as "no"`;
 
-Verdict Guidelines:
-- "yes": Statement explicitly and directly answers the input question
-  * Contains all required components in correct relationship
-  * Can stand alone as a complete answer
-  * For "what is X" questions, explicitly states relationship
-  
-- "unsure": Statement has partial relevance when it:
-  * Discusses the correct topic but doesn't directly answer
-  * Is incorrect but shows understanding of the question
-  * Provides relevant context or background
-  * Contains mix of relevant and non-relevant information
-  * Shows understanding of question type but lacks specificity
-  
-- "no": Statement is completely off-topic or unrelated to input
-  * Discusses entirely different subjects
-  * Contains no relevant keywords or concepts
-  * Provides error messages or system responses
-  * Is empty
-
-Scoring Guidelines:
-- Each statement gets a base score:
-  * "yes" statements: 10 points
-  * "unsure" statements: 3 points
-  * "no" statements: 0 points
-- For multiple statements:
-  * Calculate weighted average based on relevance
-  * Consider overall coherence and focus
-  * Partial credit for related context
-
-Remember:
-- Verdicts must be "yes", "no", or "unsure"
-- Reasons required for all verdicts
-- Number of verdicts must match statements exactly
-- Better to mark as "unsure" when in doubt`;
-4;
 export function generateEvaluationStatementsPrompt({ output }: { output: string }) {
   return `Given the text, break it down into meaningful statements while preserving context and relationships.
-Keep statements together when they form a single coherent point.
-Don't split aggressively - maintain natural language flow.
+Don't split too aggressively.
+
+Split compound statements particularly when they:
+- Are joined by "and"
+- Contain multiple distinct facts or claims
+- Have multiple descriptive elements about the subject
+
 
 Handle special cases:
 - A single word answer should be treated as a complete statement
@@ -78,26 +48,37 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
     - "reason": Clear explanation of the verdict
     - Exact match between number of verdicts and statements
 
-    A statement is "yes" ONLY if it:
-    - Directly and explicitly states the complete answer
-    - Uses clear relationship words ("is the capital of")
-    - Makes the exact relationship unambiguous
-    - Does not require inference or context
+    Verdict Guidelines:
+    - "yes": Statement explicitly and directly answers the input question
+        * Contains specific answer to the question asked (e.g., "The color of the sky is blue")
+        * States explicit relationship between key concepts (e.g., "X is the CEO of company Y")
+        * Can stand alone as a complete answer
+        * Contains appropriate question-type response (e.g., location for "where", person for "who")
 
-    A statement is "unsure" if it:
-    - Discusses correct topic but lacks explicit answer
-    - Is incorrect but answers the right type of question
-    - Requires inference to understand the answer
-    - Contains key terms without clear relationships
-    - Makes statements about the answer subject
-    - Discusses the exact topic type being asked about
-    - Contains keywords from the input, but does not make the relationship clear
-    - Only mentions related keywords without addressing the topic type
+    - "unsure": Statement shows partial relevance when it:
+        * Contains topic-related administrative/governance terms without direct answer
+        * Mentions locations or entities related to the answer without specifying their role
+        * References functions or characteristics typically associated with the answer
+        * Is incorrect but shows understanding of the question
+        * Uses importance indicators ("main", "primary", "major") with relevant concepts
+        * Includes indirect references to the answer (e.g., "where the president works")
+        * Contains multiple relevant concepts but lacks explicit relationship between them
+        * Demonstrates understanding of question domain without providing specific answer
 
-    A statement is "no" if it:
-    - Is completely unrelated to the question
-    - Contains no relevant concepts
-    - Is empty
+    - "no": Statement lacks meaningful connection to question when it:
+        * Contains no concepts related to the question type or domain
+        * Only mentions the broader topic without relevant details (e.g., "the country has nice weather")
+        * Provides general descriptions without addressing the specific question
+        * Contains purely tangential information about the subject
+        * Consists of empty or meaningless content
+        * Discusses characteristics unrelated to the question type (e.g., describing cuisine when asked about geography)
+        * Note: Assessment is about topical relationship, not factual accuracy
+
+    REMEMBER: A statmenent does not have to be correct, it just has to be relevant.
+    If the statement contains words or phrases that are relevant to the input, it is partially relevant.
+    If the statement is a direct answer to the input, it is relevant.
+    If the statement is completely unrelated to the input or contains nothing, it is not relevant.
+    DO NOT MAKE A JUDGEMENT ON THE CORRECTNESS OF THE STATEMENT, JUST THE RELEVANCY.
 
 
     Example:
@@ -108,6 +89,8 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
       "I had breakfast today",
       "Blue is a beautiful color",
       "Many birds fly in the sky",
+      "",
+      "The sky is purple during daytime",
     ]
     JSON:
     {{
@@ -131,6 +114,14 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
             {{
                 "verdict": "unsure",
                 "reason": "This statement is about the sky but doesn't address its color"
+            }},
+            {{
+                "verdict": "no",
+                "reason": "This statement is empty"
+            }},
+            {{
+                "verdict": "unsure",
+                "reason": "This statement is incorrect but contains relevant information and still addresses the question"
             }}
         ]
     }}

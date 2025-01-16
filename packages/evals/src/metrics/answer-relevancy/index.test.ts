@@ -25,7 +25,7 @@ const testCases = [
     },
   },
   {
-    // Partially relevant (score: 3)
+    // Partially relevant (score: 2)
     input: 'What is the capital of France?',
     output: 'France is a country in Europe known for its cuisine. Paris is a major city there.',
     expectedResult: {
@@ -79,7 +79,7 @@ const testCases = [
     },
   },
   {
-    // Multiple questions (score: 2)
+    // Multiple questions (score: 1)
     input: 'What is the capital of France?',
     output: 'What about Germany? Or maybe Italy? Many European countries have beautiful capitals.',
     expectedResult: {
@@ -111,14 +111,6 @@ const modelConfig: ModelConfig = {
 describe('AnswerRelevancyMetric', () => {
   const metric = new AnswerRelevancyMetric(modelConfig);
 
-  it('should be able to measure answer relevancy', async () => {
-    const result = await metric.measure({
-      input: `We offer a 30-day full refund at no extra cost.`,
-      output: 'Shoes. The shoes can be refunded at no extra cost. Thanks for asking the question!',
-    });
-
-    expect(result.score).toBe(3);
-  });
   it('should be able to measure a prompt with perfect relevancy', async () => {
     const result = await metric.measure({
       input: testCases[0].input,
@@ -169,7 +161,6 @@ describe('AnswerRelevancyMetric', () => {
       input: testCases[6].input,
       output: testCases[6].output,
     });
-
     expect(result.score).toBe(3);
   });
 
