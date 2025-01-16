@@ -1,5 +1,4 @@
 ---
-'openapi-spec-writer': patch
 'mastra': patch
 ---
 

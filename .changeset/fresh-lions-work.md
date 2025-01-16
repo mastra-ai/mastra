@@ -1,16 +1,4 @@
 ---
-'docs': patch
-'examples-agent': patch
-'bird-checker-with-express': patch
-'bird-checker-with-nextjs': patch
-'bird-checker-with-nextjs-and-eval': patch
-'ai-chatbot': patch
-'mastra-examples-integrations': patch
-'mastra-examples-llm': patch
-'memory': patch
-'openapi-spec-writer': patch
-'quick-start': patch
-'stock-price-tool': patch
 '@mastra/apollo': patch
 '@mastra/ashby': patch
 '@mastra/claude': patch
