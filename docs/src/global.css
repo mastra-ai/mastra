@@ -153,12 +153,19 @@ div.nextra-scrollbar {
 nav a {
   padding-block: 8px;
   padding-inline: 16px;
+  font-size: 14px;
 }
 nav a[aria-current="true"] {
   background: rgba(41, 41, 41, 0.5) !important;
   font-weight: 400;
-  border-radius: 8px;
+  border-radius: 0.375rem;
   need &:is(:not(html[class~="dark"] *)) {
     background: rgb(243, 244, 246, 1) !important;
   }
+}
+
+button[title="Change theme"],
+input[type="search"],
+ul[role="listbox"] {
+  border-radius: 0.375rem !important;
 }
