@@ -1,6 +1,6 @@
-import { describe, it, expect } from '@jest/globals';
 import dotenv from 'dotenv';
 import { JSONSchema7 } from 'json-schema';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 
 import { Logger, createLogger } from '../logger';

@@ -1,6 +1,6 @@
-import { expect, describe, it, afterAll, beforeAll } from '@jest/globals';
 import { BaseEntity, FilterOperators } from '@mastra/core';
 import { config } from 'dotenv';
+import { expect, describe, it, afterAll, beforeAll } from 'vitest';
 
 import { PostgresEngine } from './engine.js';
 

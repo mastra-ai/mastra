@@ -1,4 +1,4 @@
-import { beforeEach, describe, it, expect } from '@jest/globals';
+import { beforeEach, describe, it, expect } from 'vitest';
 
 import { TestIntegration } from './openapi-toolset.mock';
 

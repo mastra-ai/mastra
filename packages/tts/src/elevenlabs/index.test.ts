@@ -1,5 +1,6 @@
 import { createWriteStream } from 'fs';
 import path from 'path';
+import { describe, it, expect, beforeEach } from 'vitest';
 
 import { writeFile } from 'fs/promises';
 

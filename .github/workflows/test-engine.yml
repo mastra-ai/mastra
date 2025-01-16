@@ -54,7 +54,7 @@ jobs:
           DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'
 
       - name: Run Engine tests
-        run: pnpm test:engine
+        run: pnpm test
         env:
           NODE_OPTIONS: '--max_old_space_size=8096'
           DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'
