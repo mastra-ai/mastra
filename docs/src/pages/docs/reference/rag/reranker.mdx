@@ -1,6 +1,12 @@
 # Reranker
 
-The `Reranker` class provides advanced reranking capabilities for vector search results by combining semantic relevance, vector similarity, and position-based scoring. It can also be used through the `createVectorQueryTool` for convenience.
+The `Reranker` class provides advanced reranking capabilities for vector search results by combining semantic relevance, vector similarity, and position-based scoring. 
+
+You initialize it with a model and a set of weights to adjust the importance of each of the three scoring components).
+
+It has one method, `rerank()`, which takes a query and a set of results, and returns a set of reranked results.
+
+If you want to have an agent running your RAG pipeline, the Reranker class can be used through the `createVectorQueryTool`.
 
 ## Basic Usage
 
@@ -27,9 +33,7 @@ const results = await reranker.rerank({
 });
 ```
 
-## Parameters
-
-### RerankOptions
+## Reranker Initialization config
 
 <PropertiesTable
   content={[
@@ -67,7 +71,7 @@ const results = await reranker.rerank({
   ]}
 />
 
-### RerankParams
+## rerank() Params
 
 <PropertiesTable
   content={[
@@ -99,9 +103,11 @@ const results = await reranker.rerank({
   ]}
 />
 
-## Returns
+## rerank() Returns
 
-The rerank method returns an array of RerankResult objects:
+The rerank method returns an array of `RerankResult` objects. 
+
+Here's the type definition of a `RerankResult`:
 
 <PropertiesTable
   content={[
@@ -122,59 +128,6 @@ The rerank method returns an array of RerankResult objects:
     }
   ]}
 />
-
-## Example with Cohere Provider
-
-```typescript
-const reranker = new Reranker({
-  semanticProvider: "cohere",
-  cohereApiKey: "your-api-key",
-  weights: {
-    semantic: 0.4,
-    vector: 0.4,
-    position: 0.2
-  }
-});
-
-const results = await reranker.rerank({
-  query: "deployment configuration",
-  vectorStoreResults: searchResults,
-  topK: 5
-});
-```
-
-## Integration with Vector Query Tool
-
-```typescript
-const queryTool = createVectorQueryTool({
-  vectorStoreName: "pinecone",
-  indexName: "docs",
-  options: {
-    provider: "OPEN_AI",
-    model: "text-embedding-ada-002",
-    maxRetries: 3
-  },
-  rerankOptions: {
-    semanticProvider: "cohere",
-    cohereApiKey: "your-api-key",
-    weights: {
-      semantic: 0.4,
-      vector: 0.4,
-      position: 0.2
-    }
-  }
-});
-```
-
-## Scoring Components
-
-The reranker combines three types of scores:
-
-- **Semantic Score**: Measures semantic relevance using the chosen provider (Cohere or Agent)
-- **Vector Score**: Uses the original vector similarity from the search results
-- **Position Score**: Considers the original ranking position of each result
-
-The weights configuration allows you to adjust the importance of each scoring component.
 
 ## Related
 
