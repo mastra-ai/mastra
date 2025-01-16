@@ -156,11 +156,11 @@ nav a {
   font-size: 14px;
 }
 nav a[aria-current="true"] {
-  background: rgba(41, 41, 41, 0.5) !important;
+  background: rgba(150, 150, 150, 0.3) !important;
   font-weight: 400;
   border-radius: 0.375rem;
   need &:is(:not(html[class~="dark"] *)) {
-    background: rgb(243, 244, 246, 1) !important;
+    background: rgb(252, 253, 254, 0.8) !important;
   }
 }
 
