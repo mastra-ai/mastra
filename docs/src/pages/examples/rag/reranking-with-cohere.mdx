@@ -1,0 +1,28 @@
+# Reranking with Cohere
+
+When retrieving documents for RAG, initial vector similarity search may miss important semantic matches. 
+
+Cohere's reranking service helps improve result relevance by reordering documents using multiple scoring factors.
+
+```typescript 
+const reranker = new Reranker({
+  semanticProvider: "cohere",
+  cohereApiKey: "your-api-key",
+  weights: {
+    semantic: 0.4,
+    vector: 0.4,
+    position: 0.2
+  }
+});
+
+const results = await reranker.rerank({
+  query: "deployment configuration",
+  vectorStoreResults: searchResults,
+  topK: 5
+});
+```
+
+## Links
+
+- [Reranker() reference](../reference/rag/reranker.mdx)
+- [Retrieval docs](../docs/rag/retrieval.mdx)

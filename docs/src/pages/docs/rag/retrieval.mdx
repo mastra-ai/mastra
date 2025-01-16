@@ -1,7 +1,8 @@
 ## Retrieval in RAG Systems
 
-After storing embeddings, you need to retrieve relevant chunks to answer user queries. Mastra provides flexible retrieval options with support for semantic search, filtering, and re-ranking.
+After storing embeddings, you need to retrieve relevant chunks to answer user queries. 
 
+Mastra provides flexible retrieval options with support for semantic search, filtering, and re-ranking.
 
 ## How Retrieval Works
 
@@ -12,10 +13,9 @@ After storing embeddings, you need to retrieve relevant chunks to answer user qu
   - Re-ranked for better relevance
   - Processed through a knowledge graph
 
-
 ## Basic Retrieval
 
-The simplest approach is direct semantic search: 
+The simplest approach is direct semantic search. This method uses vector similarity to find chunks that are semantically similar to the query:
 
 ```ts showLineNumbers copy
 import { embed, EmbedResult } from "@mastra/rag";
@@ -33,13 +33,11 @@ const { embedding } = await embed(
 // Query vector store
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING);
 const results = await pgVector.query("embeddings", embedding, 10);
-
-
 ```
 
-Results look like this 
+Results include both the text content and a similarity score:
 
-``` showLineNumbers copy
+```ts showLineNumbers copy
 [
   {
     text: "Climate change poses significant challenges...",
@@ -55,10 +53,11 @@ Results look like this
 ]
 ```
 
-
 ## Advanced Retrieval options
+
 ### Metadata Filtering
-Filter results based on metadata fields:
+
+Filter results based on metadata fields to narrow down the search space. This is useful when you have documents from different sources or time periods:
 
 ```ts showLineNumbers copy
 const results = await pgVector.query("embeddings", embedding, {
@@ -71,7 +70,14 @@ const results = await pgVector.query("embeddings", embedding, {
 ``` 
 
 ### Re-ranking
-Re-rank initial results for better relevance:
+
+Initial vector similarity search can sometimes miss nuanced relevance. Re-ranking is a more computationally expensive process, but more accurate algorithm that improves results by:
+
+- Considering word order and exact matches
+- Applying more sophisticated relevance scoring
+- Using a method called cross-attention between query and documents
+
+Here's how to set up re-ranking:
 
 ```ts showLineNumbers copy
 const vectorQueryTool = createVectorQueryTool({
@@ -91,7 +97,13 @@ const vectorQueryTool = createVectorQueryTool({
 
 ### Graph-based Retrieval
 
-For more complex relationships, use graph-based retrieval:
+For documents with complex relationships, graph-based retrieval can follow connections between chunks. This helps when:
+
+- Information is spread across multiple documents
+- Documents reference each other
+- You need to traverse relationships to find complete answers
+
+Example setup:
 
 ```ts showLineNumbers copy
 const graphQueryTool = createGraphQueryTool({
@@ -106,7 +118,7 @@ const graphQueryTool = createGraphQueryTool({
 
 ## Example implementations
 
-For complete examples, see: 
+For complete examples of these retrieval methods in action, see:
 
 - [Basic Retrieval](/docs/examples/rag/basic-retrieval.mdx)
 - [Metadata Filtering](/docs/examples/rag/metadata-filtering.mdx)
