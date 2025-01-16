@@ -1,5 +1,12 @@
 # mastra
 
+## 0.1.57-alpha.93
+
+### Patch Changes
+
+- 0e2b588: Update cloudflare deployment config
+- ec3ea2f: configurable CF worker name
+
 ## 0.1.57-alpha.92
 
 ### Patch Changes
