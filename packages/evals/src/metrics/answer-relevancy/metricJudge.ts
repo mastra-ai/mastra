@@ -1,3 +1,4 @@
+import { ModelConfig } from '@mastra/core';
 import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';
@@ -10,8 +11,8 @@ import {
 } from './prompts';
 
 export class AnswerRelevancyJudge extends MastraAgentJudge {
-  constructor(provider: string, name: string) {
-    super(provider, name, ANSWER_RELEVANCY_AGENT_INSTRUCTIONS, 'Answer Relevancy');
+  constructor(model: ModelConfig) {
+    super('Answer Relevancy', ANSWER_RELEVANCY_AGENT_INSTRUCTIONS, model);
   }
 
   async evaluate(input: string, actualOutput: string): Promise<{ verdict: string; reason: string }[]> {
@@ -32,6 +33,7 @@ export class AnswerRelevancyJudge extends MastraAgentJudge {
         ),
       }),
     });
+
     return result.object.verdicts;
   }
 

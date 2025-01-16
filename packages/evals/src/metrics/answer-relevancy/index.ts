@@ -1,23 +1,25 @@
-import { Metric, MetricResult } from '@mastra/core';
+import { Metric, MetricResult, ModelConfig } from '@mastra/core';
 
 import { AnswerRelevancyJudge } from './metricJudge';
 
 export class AnswerRelevancyMetric extends Metric {
-  judge: AnswerRelevancyJudge;
-  uncertaintyWeight: number;
-  constructor({
-    provider,
-    name,
-    uncertaintyWeight = 0.3,
-  }: {
-    provider: string;
-    name: string;
-    uncertaintyWeight: number;
-  }) {
+  private judge: AnswerRelevancyJudge;
+  private uncertaintyWeight: number;
+
+  constructor(
+    model: ModelConfig,
+    {
+      uncertaintyWeight,
+    }: {
+      uncertaintyWeight: number;
+    } = {
+      uncertaintyWeight: 0.3,
+    },
+  ) {
     super();
 
     this.uncertaintyWeight = uncertaintyWeight;
-    this.judge = new AnswerRelevancyJudge(provider, name);
+    this.judge = new AnswerRelevancyJudge(model);
   }
 
   async measure({ input, output }: { input: string; output: string }): Promise<MetricResult> {
@@ -59,7 +61,7 @@ export class AnswerRelevancyMetric extends Metric {
     }
 
     let relevancyCount = 0;
-    for (const { verdict } of evaluation!) {
+    for (const { verdict } of evaluation) {
       if (verdict.trim().toLowerCase() === 'yes') {
         relevancyCount++;
       } else if (verdict.trim().toLowerCase() === 'unsure') {

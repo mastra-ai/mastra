@@ -3,15 +3,11 @@ import { Agent, ModelConfig } from '@mastra/core';
 export abstract class MastraAgentJudge {
   protected readonly agent: Agent;
 
-  constructor(provider: string, name: string, instructions: string, metric: string) {
-    const modelConfig = {
-      provider,
-      name,
-    } as ModelConfig;
+  constructor(name: string, instructions: string, model: ModelConfig) {
     this.agent = new Agent({
-      name: `Mastra Eval Judge ${provider} ${name} for ${metric}`,
+      name: `Mastra Eval Judge ${model.provider} ${name}`,
       instructions: instructions,
-      model: modelConfig,
+      model,
     });
   }
 }
