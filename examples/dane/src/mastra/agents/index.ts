@@ -54,6 +54,22 @@ export const danePackagePublisher = new Agent({
   },
 });
 
+export const daneChangeLog = new Agent({
+  name: 'DanePackagePublisher',
+  instructions: `
+    You are Dane, the changelog writer for Mastra AI. Every week we need to write a changelog for the Mastra AI project.
+    ## Style Guide
+    - Use active voice
+    - Lead with the change, not the PR number
+    - Include PR numbers in parentheses at end of line
+    - Keep descriptions concise but informative
+    - Avoid marketing language
+    - Link to relevant documentation
+    - Use consistent formatting for code references
+    `,
+  model: getBaseModelConfig(),
+});
+
 export const dane = new Agent({
   name: 'Dane',
   instructions: `

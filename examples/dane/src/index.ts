@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 import dotenv from 'dotenv';
 
+import { changelog } from './commands/changelog.js';
 import { commitMessageCommand } from './commands/commit-message.js';
 import { configCommand } from './commands/config.js';
 import { issueLabelerCommand } from './commands/issue-labeler.js';
@@ -32,5 +33,7 @@ program.addCommand(configCommand);
 program.command('publish').description('Publish packages to the registry').action(publishPackages);
 
 program.command('telephone-game').description('Play a classic game of telephone').action(telephone);
+
+program.command('changelog').description('Mastra Changelog').action(changelog);
 
 program.parse(process.argv);
