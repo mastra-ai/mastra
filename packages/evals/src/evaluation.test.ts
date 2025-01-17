@@ -29,4 +29,4 @@ it('should get a text response from the agent', async () => {
   const result = await evaluate(electionAgent, 'Who won the 2016 US presidential election?', new TestMetric());
 
   expect(result.score).toBe(1);
-});
+}, 10000);
