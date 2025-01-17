@@ -6,6 +6,7 @@ Key Principles:
 3. Any partial compliance should be marked as "no"
 4. Provide clear, specific reasons for any "no" verdicts
 5. Focus solely on instruction compliance, not output quality
+6. Judge each instruction independently. Only check if the current instruction is followed. Do not let instructions be influenced by other instructions.
 
 Remember:
 - Each instruction must be evaluated independently
@@ -45,6 +46,24 @@ Instructions: ["Start sentences with capital letters", "Use proper English"]
     {
       "verdict": "no",
       "reason": "Improper capitalization: 'Blue' is capitalized mid-sentence"
+    }
+  ]
+}
+
+Example 2:
+Input: "describe the sky"
+Output: "The sky is blue today"
+Instructions: ["Start sentences with capital letters", "Talk about the color black"]
+
+{
+  "verdicts": [
+    {
+      "verdict": "yes",
+      "reason": "The output starts with a capital letter"
+    },
+    {
+      "verdict": "no",
+      "reason": "The output does not talk about the color black"
     }
   ]
 }

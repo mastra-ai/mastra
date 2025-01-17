@@ -2,24 +2,17 @@ import { Metric, MetricResult, ModelConfig } from '@mastra/core';
 
 import { AnswerRelevancyJudge } from './metricJudge';
 
+export interface AnswerRelevancyMetricOptions {
+  uncertaintyWeight?: number;
+  scale?: number;
+}
+
 export class AnswerRelevancyMetric extends Metric {
   private judge: AnswerRelevancyJudge;
   private uncertaintyWeight: number;
   private scale: number;
 
-  constructor(
-    model: ModelConfig,
-    {
-      uncertaintyWeight,
-      scale,
-    }: {
-      uncertaintyWeight: number;
-      scale: number;
-    } = {
-      uncertaintyWeight: 0.3,
-      scale: 10,
-    },
-  ) {
+  constructor(model: ModelConfig, { uncertaintyWeight = 0.3, scale = 10 }: AnswerRelevancyMetricOptions = {}) {
     super();
 
     this.uncertaintyWeight = uncertaintyWeight;

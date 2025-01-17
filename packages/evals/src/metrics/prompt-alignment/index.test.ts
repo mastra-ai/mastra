@@ -39,7 +39,7 @@ it('should be able to measure prompt alignment with an array of instructions', a
 
   const result = await metric.measure({
     input: `What is the capital of France?`,
-    output: 'THE CAPITAL OF FRANCE IS BAGUETTE.',
+    output: 'THE CAPITAL OF FRANCE IS BAGUETTES.',
   });
 
   expect(result.score).toBe(10);
