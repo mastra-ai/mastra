@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.59
+
+### Patch Changes
+
+- a4db688: Dane changes
+
 ## 0.0.2-alpha.58
 
 ### Patch Changes
