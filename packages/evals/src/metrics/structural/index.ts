@@ -1,10 +1,11 @@
+import { Metric } from '@mastra/core';
 import nlp from 'compromise';
 
 import { ScoringResult } from '../types';
 
-export class StructuralScorer {
-  async score(text: string): Promise<ScoringResult> {
-    const doc = nlp(text);
+export class StructuralScorer extends Metric {
+  async measure({ input }: { input: string }): Promise<ScoringResult> {
+    const doc = nlp(input);
 
     // Analyze sentence structure
     const sentences = doc.sentences().length;

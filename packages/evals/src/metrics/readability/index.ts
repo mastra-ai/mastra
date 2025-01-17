@@ -1,10 +1,11 @@
+import { Metric } from '@mastra/core';
 import nlp from 'compromise';
 
 import { ScoringResult } from '../types';
 
-export class ReadabilityScorer {
-  async score(response: string): Promise<ScoringResult> {
-    const doc = nlp(response);
+export class ReadabilityScorer extends Metric {
+  async measure({ input }: { input: string }): Promise<ScoringResult> {
+    const doc = nlp(input);
 
     // Get base metrics from compromise
     const sentences = doc.sentences().json() as Record<string, any>[];

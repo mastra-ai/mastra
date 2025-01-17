@@ -1,38 +1,41 @@
+import { Metric } from '@mastra/core';
 import nlp from 'compromise';
 
 import { ScoringResult } from '../types';
 
-export class CompletenessScorer {
-  async score(original: string, simplified: string): Promise<ScoringResult> {
+export class CompletenessScorer extends Metric {
+  async measure({ input, output }: { input: string; output: string }): Promise<ScoringResult> {
     // Handle null/undefined inputs
-    if (original === null || original === undefined || simplified === null || simplified === undefined) {
+    if (input === null || input === undefined || output === null || output === undefined) {
       throw new Error('Inputs cannot be null or undefined');
     }
 
     // Trim both inputs
-    original = original.trim();
-    simplified = simplified.trim();
+    input = input.trim();
+    output = output.trim();
 
-    const originalDoc = nlp(original);
-    const simplifiedDoc = nlp(simplified);
+    const inputDoc = nlp(input);
+    const outputDoc = nlp(output);
 
     // Extract and log elements
-    const originalElements = this.extractElements(originalDoc);
-    const simplifiedElements = this.extractElements(simplifiedDoc);
+    const inputElements = this.extractElements(inputDoc);
+    const outputElements = this.extractElements(outputDoc);
     // Maybe we need a more sophisticated matching approach
-    const coverage = this.calculateCoverage(originalElements, simplifiedElements);
+    const coverage = this.calculateCoverage(inputElements, outputElements);
+
+    console.log({ coverage, inputElements, outputElements });
 
     return {
       score: coverage,
       details: `Completeness score: ${(coverage * 100).toFixed(1)}%`,
       confidence: 0.8,
       metrics: {
-        originalElements,
-        simplifiedElements,
-        missingElements: originalElements.filter(e => !simplifiedElements.includes(e)),
+        inputElements,
+        outputElements,
+        missingElements: inputElements.filter(e => !outputElements.includes(e)),
         elementCounts: {
-          original: originalElements.length,
-          simplified: simplifiedElements.length,
+          input: inputElements.length,
+          output: outputElements.length,
         },
       },
     };

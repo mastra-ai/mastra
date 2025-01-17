@@ -1,16 +1,17 @@
+import { Metric } from '@mastra/core';
 import Sentiment from 'sentiment';
 
 import { ScoringResult } from '../types';
 
-export class ToneConsistencyScorer {
+export class ToneConsistencyScorer extends Metric {
   private sentiment = new Sentiment();
 
-  async score(response: string, reference?: string): Promise<ScoringResult> {
-    const responseSentiment = this.sentiment.analyze(response);
+  async measure({ input, output }: { input: string; output: string }): Promise<ScoringResult> {
+    const responseSentiment = this.sentiment.analyze(input);
 
-    if (reference) {
+    if (output) {
       // Compare sentiment with reference
-      const referenceSentiment = this.sentiment.analyze(reference);
+      const referenceSentiment = this.sentiment.analyze(output);
       const sentimentDiff = Math.abs(responseSentiment.comparative - referenceSentiment.comparative);
       const normalizedScore = Math.max(0, 1 - sentimentDiff);
 
@@ -27,7 +28,7 @@ export class ToneConsistencyScorer {
     }
 
     // Evaluate sentiment stability across response
-    const sentences = response.match(/[^.!?]+[.!?]+/g) || [response];
+    const sentences = input.match(/[^.!?]+[.!?]+/g) || [input];
     const sentiments = sentences.map(s => this.sentiment.analyze(s).comparative);
     const avgSentiment = sentiments.reduce((a, b) => a + b, 0) / sentiments.length;
     const variance = sentiments.reduce((sum, s) => sum + Math.pow(s - avgSentiment, 2), 0) / sentiments.length;

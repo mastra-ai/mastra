@@ -1,10 +1,11 @@
+import { Metric } from '@mastra/core';
 import { SequenceMatcher } from 'difflib';
 
 import { ScoringResult } from '../types';
 
-export class DifferenceScorer {
-  async score(text1: string, text2: string): Promise<ScoringResult> {
-    const matcher = new SequenceMatcher(null, text1, text2);
+export class DifferenceScorer extends Metric {
+  async measure({ input, output }: { input: string; output: string }): Promise<ScoringResult> {
+    const matcher = new SequenceMatcher(null, input, output);
     const ratio = matcher.ratio();
 
     // Get detailed operations
@@ -12,7 +13,7 @@ export class DifferenceScorer {
     const changes = ops.filter(([op]) => op !== 'equal').length;
 
     // Calculate confidence based on text length difference
-    const lengthDiff = Math.abs(text1.length - text2.length) / Math.max(text1.length, text2.length);
+    const lengthDiff = Math.abs(input.length - output.length) / Math.max(input.length, output.length);
     const confidence = 1 - lengthDiff;
 
     return {

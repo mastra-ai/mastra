@@ -1,9 +1,10 @@
+import { Metric } from '@mastra/core';
 import keyword_extractor from 'keyword-extractor';
 
 import { ScoringResult } from '../types';
 
-export class KeywordCoverageScorer {
-  async score(response: string, reference: string): Promise<ScoringResult> {
+export class KeywordCoverageScorer extends Metric {
+  async measure({ input, output }: { input: string; output: string }): Promise<ScoringResult> {
     const extractKeywords = (text: string) => {
       return keyword_extractor.extract(text, {
         language: 'english',
@@ -13,8 +14,8 @@ export class KeywordCoverageScorer {
       });
     };
 
-    const referenceKeywords = new Set(extractKeywords(reference));
-    const responseKeywords = new Set(extractKeywords(response));
+    const referenceKeywords = new Set(extractKeywords(input));
+    const responseKeywords = new Set(extractKeywords(output));
 
     const matchedKeywords = [...referenceKeywords].filter(k => responseKeywords.has(k));
     const coverage = matchedKeywords.length / referenceKeywords.size;
