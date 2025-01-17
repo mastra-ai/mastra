@@ -26,7 +26,7 @@ The first sentence or two should describe the problem that is being solved by th
 
 The last sentence should describe the purpose of the code.
 
-The text should be to the point, without flourishes ("shows" rather than "demonstrates"). 
+The text should be to the point, without flourishes ("shows" rather than "demonstrates").
 
 Avoid referencing a specific model unless it is part of the title of the page.
 

@@ -1,6 +1,7 @@
 The following prompt is intended to break up large code block examples into smaller code blocks:
 
-------------
+---
+
 You are a technical documentation expert. Your task is to break down long code examples into smaller, focused blocks and add clear explanations.
 
 For each code block:
@@ -87,6 +88,7 @@ const res = await start({
 });
 console.log("Results: ", res.results);
 ```
+
 Could be split into:
 
 First, set up the copywriter agent:
@@ -104,6 +106,7 @@ const copywriterAgent = new Agent({
 ```
 
 Create a step to execute the copywriter's task:
+
 ```typescript
 const copywriterStep = new Step({
   id: "copywriterStep",
@@ -125,6 +128,7 @@ const copywriterStep = new Step({
 And so on...
 
 Remember to:
+
 - Keep explanations brief and technical
 - Focus on the purpose of each code block
 - Maintain consistent formatting
