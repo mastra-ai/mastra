@@ -70,13 +70,15 @@ export function generateReasonPrompt({
   output,
   verdicts,
   score,
+  scale,
 }: {
   input: string;
   output: string;
   verdicts: Array<{ verdict: string; reason: string }>;
   score: number;
+  scale: number;
 }) {
-  return `Given the input, output, verdicts, and precision score, provide a BRIEF explanation for the score. Explain both its strengths and limitations.
+  return `Given the input, output, verdicts, and precision score, and the highest possible score is ${scale}, provide a BRIEF explanation for the score. Explain both its strengths and limitations.
 The retrieved contexts is a list containing \`verdict\` ('yes' or 'no' for relevance), \`reason\` (explaining the verdict) and \`node\` (the context text). Contexts are listed in their ranking order.
 
 **
@@ -90,7 +92,7 @@ Guidelines:
 - Don't mention 'verdict' - refer to relevant/irrelevant nodes instead
 - Use information from the \`reason\` field, not the field itself
 - Reference node positions (first, second, etc.) when explaining relevance
-- For perfect scores (10.0), emphasize both relevance and optimal ordering
+- For perfect scores (${scale}.0), emphasize both relevance and optimal ordering
 - Always reference the ranking order when discussing relevance
 **
 

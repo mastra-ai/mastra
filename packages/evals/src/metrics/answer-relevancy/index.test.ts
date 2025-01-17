@@ -126,7 +126,7 @@ describe('AnswerRelevancyMetric', () => {
       output: testCases[1].output,
     });
 
-    expect(result.score).toBe(5);
+    expect(result.score).toBeCloseTo(5.33, 1);
   });
 
   it('should be able to measure a prompt with partial relevance', async () => {
@@ -135,7 +135,7 @@ describe('AnswerRelevancyMetric', () => {
       output: testCases[2].output,
     });
 
-    expect(result.score).toBe(2);
+    expect(result.score).toBeCloseTo(1.5, 1);
   });
 
   it('should be able to measure a prompt with low relevance', async () => {
@@ -161,7 +161,7 @@ describe('AnswerRelevancyMetric', () => {
       input: testCases[6].input,
       output: testCases[6].output,
     });
-    expect(result.score).toBe(3);
+    expect(result.score).toBeCloseTo(3, 1);
   });
 
   it('should be able to measure a prompt with a single word correct answer', async () => {
@@ -179,7 +179,7 @@ describe('AnswerRelevancyMetric', () => {
       output: testCases[8].output,
     });
 
-    expect(result.score).toBe(1);
+    expect(result.score).toBeCloseTo(1, 1);
   });
 
   it('should be able to measure a prompt with technical gibberish', async () => {

@@ -1,5 +1,7 @@
 import { Metric, MetricResult, ModelConfig } from '@mastra/core';
 
+import { roundToTwoDecimals } from '../../utils';
+
 import { AnswerRelevancyJudge } from './metricJudge';
 
 export interface AnswerRelevancyMetricOptions {
@@ -48,7 +50,7 @@ export class AnswerRelevancyMetric extends Metric {
       }
     }
 
-    const reason = await this.judge.getReason(input, output, score, reasonsForVerdicts);
+    const reason = await this.judge.getReason(input, output, score, this.scale, reasonsForVerdicts);
     return reason;
   }
 
@@ -68,6 +70,6 @@ export class AnswerRelevancyMetric extends Metric {
     }
 
     const score = relevancyCount / numberOfVerdicts;
-    return Math.round(score * this.scale);
+    return roundToTwoDecimals(score * this.scale);
   }
 }

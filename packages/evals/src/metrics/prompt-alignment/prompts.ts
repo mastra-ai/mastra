@@ -85,13 +85,15 @@ export function generateReasonPrompt({
   output,
   score,
   reasons,
+  scale,
 }: {
   input: string;
   output: string;
   score: number;
   reasons: string[];
+  scale: number;
 }) {
-  return `Explain the instruction following score (0-10) for the LLM's response using this context:
+  return `Explain the instruction following score where 0 is the lowest and ${scale} is the highest for the LLM's response using this context:
   Context:
   Input: ${input}
   Output: ${output}
@@ -112,7 +114,7 @@ export function generateReasonPrompt({
     
   Example Responses:
   {
-    "reason": "The score is 10 because the output follows the instructions exactly"
+    "reason": "The score is ${scale} because the output follows the instructions exactly"
   }
   {
     "reason": "The score is 0 because the output does not follow the instructions"

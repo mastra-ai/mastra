@@ -141,13 +141,15 @@ export function generateReasonPrompt({
   reasons,
   input,
   output,
+  scale,
 }: {
   score: number;
   reasons: string[];
   input: string;
   output: string;
+  scale: number;
 }) {
-  return `Explain the irrelevancy score (0-10) for the LLM's response using this context:
+  return `Explain the irrelevancy score where 0 is the lowest and ${scale} is the highest for the LLM's response using this context:
   Context:
   Input: ${input}
   Output: ${output}
