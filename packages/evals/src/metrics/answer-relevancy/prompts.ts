@@ -71,6 +71,7 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
         * Contains measurement units or quantities relevant to the question type
         * References locations or entities in the same category as what's being asked about
         * Provides relevant information without using explicit question-type terminology
+        * Contains references to properties of the subject
 
 
     - "no": Statement lacks meaningful connection to question when it:
