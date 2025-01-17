@@ -1,11 +1,16 @@
-export const CONTEXT_PRECISION_AGENT_INSTRUCTIONS = `You are a balanced and nuanced context precision evaluator. Your job is to determine if retrieved context nodes are relevant to generating the expected output.
+export const CONTEXT_POSITION_AGENT_INSTRUCTIONS = `You are a balanced and nuanced context position evaluator. Your job is to determine if retrieved context nodes are relevant to generating the expected output, with special attention to their ordering.
 
 Key Principles:
-1. Evaluate whether each context node was useful in generating the expected output
-2. Consider both direct and indirect relevance
-3. Prioritize usefulness over completeness
-4. Recognize that some nodes may be partially relevant
-5. Empty or error nodes should be marked as not relevant`;
+1. Evaluate whether each context node contributes to understanding the expected output - both directly AND indirectly
+2. Consider all forms of relevance:
+   - Direct definitions or explanations
+   - Supporting evidence or examples
+   - Related characteristics or behaviors
+   - Real-world applications or effects
+3. Pay attention to the position of relevant information
+4. Recognize that earlier positions should contain more relevant information
+5. Be inclusive rather than exclusive in determining relevance - if the information supports or reinforces the output in any way, consider it relevant
+6. Empty or error nodes should be marked as not relevant`;
 
 export function generateEvaluatePrompt({
   input,
@@ -25,6 +30,19 @@ Example Context: ["The Sun is a star", "Stars produce their own light", "The Moo
 Example Query: "What is the Sun?"
 Example Expected Response: "The Sun is a star that produces light."
 
+Consider context relevant if it:
+- Directly addresses the input
+- Provides examples or instances that help explain the concept
+- Offers related information that helps build understanding
+- Contains partial information that contributes to the response
+- Demonstrates or validates characteristics mentioned in the output
+- Shows real-world applications or effects of the concept
+- Reinforces or provides evidence for any part of the output
+- Helps establish credibility or understanding of the subject
+- Describes the actions the subject can perform
+
+A context piece should be considered relevant if it contributes ANY supporting information or evidence, even if indirect.
+
 Example:
 {
     "verdicts": [
@@ -42,12 +60,6 @@ Example:
         }
     ]  
 }
-
-Consider context relevant if it:
-- Directly addresses the query
-- Provides examples or instances that help explain the concept
-- Offers related information that helps build understanding
-- Contains partial information that contributes to the response
 
 The number of verdicts MUST MATCH the number of context pieces exactly.
 **
@@ -76,8 +88,8 @@ export function generateReasonPrompt({
   verdicts: Array<{ verdict: string; reason: string }>;
   score: number;
 }) {
-  return `Given the input, output, verdicts, and precision score, provide a BRIEF explanation for the score. Explain both its strengths and limitations.
-The retrieved contexts is a list containing \`verdict\` ('yes' or 'no' for relevance), \`reason\` (explaining the verdict) and \`node\` (the context text). Contexts are listed in their ranking order.
+  return `Given the input, output, verdicts, and position score, provide a BRIEF explanation for the score. Focus on both relevance and positioning of the context.
+  The retrieved contexts is a list containing \`verdict\` ('yes' or 'no' for relevance), \`reason\` (explaining the verdict) and \`node\` (the context text). Contexts are listed in their ranking order.
 
 **
 IMPORTANT: Return only JSON format with a single 'reason' key explaining the score.
@@ -94,7 +106,7 @@ Guidelines:
 - Always reference the ranking order when discussing relevance
 **
 
-Precision Score:
+Position Score:
 ${score}
 
 Input:
