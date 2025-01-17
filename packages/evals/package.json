@@ -46,6 +46,7 @@
     "@types/sentiment": "^5.0.4",
     "@types/string-similarity": "^4.0.2",
     "dts-cli": "^2.0.5",
-    "jest": "^29.7.0"
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5"
   }
 }
