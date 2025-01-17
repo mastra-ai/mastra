@@ -1,5 +1,25 @@
 # mastra
 
+## 0.1.57-alpha.94
+
+### Patch Changes
+
+- b39ea1d: ability to skip wrangler cli installation
+
+## 0.1.57-alpha.93
+
+### Patch Changes
+
+- 0e2b588: Update cloudflare deployment config
+- ec3ea2f: configurable CF worker name
+
+## 0.1.57-alpha.92
+
+### Patch Changes
+
+- Updated dependencies [e097800]
+  - @mastra/core@0.1.27-alpha.63
+
 ## 0.1.57-alpha.91
 
 ### Patch Changes

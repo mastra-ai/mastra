@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { createLogger } from '../logger';
@@ -12,7 +12,7 @@ import { Workflow } from './workflow';
 describe('Workflow', () => {
   describe('Basic Workflow Execution', () => {
     it('should execute a single step workflow successfully', async () => {
-      const execute = jest.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = new Step({ id: 'step1', execute });
 
       const workflow = new Workflow({
@@ -31,10 +31,10 @@ describe('Workflow', () => {
     });
 
     it('should execute multiple steps in parallel', async () => {
-      const step1Action = jest.fn<any>().mockImplementation(async () => {
+      const step1Action = vi.fn().mockImplementation(async ({ context }: { context: any }) => {
         return { value: 'step1' };
       });
-      const step2Action = jest.fn<any>().mockImplementation(async () => {
+      const step2Action = vi.fn().mockImplementation(async ({ context }: { context: any }) => {
         return { value: 'step2' };
       });
 
@@ -60,11 +60,11 @@ describe('Workflow', () => {
     it('should execute steps sequentially', async () => {
       const executionOrder: string[] = [];
 
-      const step1Action = jest.fn<any>().mockImplementation(async () => {
+      const step1Action = vi.fn().mockImplementation(async ({ context }: { context: any }) => {
         executionOrder.push('step1');
         return { value: 'step1' };
       });
-      const step2Action = jest.fn<any>().mockImplementation(async () => {
+      const step2Action = vi.fn().mockImplementation(async ({ context }: { context: any }) => {
         executionOrder.push('step2');
         return { value: 'step2' };
       });
@@ -90,16 +90,13 @@ describe('Workflow', () => {
 
   describe('Simple Conditions', () => {
     it('should follow conditional chains', async () => {
-      const step1Action = jest.fn<any>().mockImplementation(() => {
-        console.log('step1Action');
+      const step1Action = vi.fn().mockImplementation(() => {
         return Promise.resolve({ status: 'success' });
       });
-      const step2Action = jest.fn<any>().mockImplementation(() => {
-        console.log('step2Action');
+      const step2Action = vi.fn().mockImplementation(() => {
         return Promise.resolve({ result: 'step2' });
       });
-      const step3Action = jest.fn<any>().mockImplementation(() => {
-        console.log('step3Action');
+      const step3Action = vi.fn().mockImplementation(() => {
         return Promise.resolve({ result: 'step3' });
       });
 
@@ -154,8 +151,8 @@ describe('Workflow', () => {
     });
 
     it('should handle failing dependencies', async () => {
-      const step1Action = jest.fn<any>().mockRejectedValue(new Error('Failed'));
-      const step2Action = jest.fn<any>();
+      const step1Action = vi.fn<any>().mockRejectedValue(new Error('Failed'));
+      const step2Action = vi.fn<any>();
 
       const step1 = new Step({ id: 'step1', execute: step1Action });
       const step2 = new Step({ id: 'step2', execute: step2Action });
@@ -176,9 +173,9 @@ describe('Workflow', () => {
     });
 
     it('should support simple string conditions', async () => {
-      const step1Action = jest.fn<any>().mockResolvedValue({ status: 'success' });
-      const step2Action = jest.fn<any>().mockResolvedValue({ result: 'step2' });
-      const step3Action = jest.fn<any>().mockResolvedValue({ result: 'step3' });
+      const step1Action = vi.fn<any>().mockResolvedValue({ status: 'success' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'step2' });
+      const step3Action = vi.fn<any>().mockResolvedValue({ result: 'step3' });
       const step1 = new Step({ id: 'step1', execute: step1Action });
       const step2 = new Step({ id: 'step2', execute: step2Action });
       const step3 = new Step({ id: 'step3', execute: step3Action });
@@ -211,8 +208,8 @@ describe('Workflow', () => {
     });
 
     it('should support custom condition functions', async () => {
-      const step1Action = jest.fn<any>().mockResolvedValue({ count: 5 });
-      const step2Action = jest.fn<any>();
+      const step1Action = vi.fn<any>().mockResolvedValue({ count: 5 });
+      const step2Action = vi.fn<any>();
 
       const step1 = new Step({
         id: 'step1',
@@ -251,7 +248,7 @@ describe('Workflow', () => {
 
   describe('Variable Resolution', () => {
     it('should resolve trigger data', async () => {
-      const execute = jest.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const triggerSchema = z.object({
         inputData: z.string(),
       });
@@ -282,7 +279,7 @@ describe('Workflow', () => {
     it('should provide access to step results and trigger data via getStepPayload helper', async () => {
       type TestTriggerSchema = z.ZodObject<{ inputValue: z.ZodString }>;
 
-      const step1Action = jest.fn<any>().mockImplementation(
+      const step1Action = vi.fn().mockImplementation(
         async ({
           context,
         }: {
@@ -297,7 +294,7 @@ describe('Workflow', () => {
         },
       );
 
-      const step2Action = jest.fn<any>().mockImplementation(
+      const step2Action = vi.fn().mockImplementation(
         async ({
           context,
         }: {
@@ -343,7 +340,7 @@ describe('Workflow', () => {
     });
 
     it('should resolve trigger data from context', async () => {
-      const execute = jest.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const triggerSchema = z.object({
         inputData: z.string(),
       });
@@ -379,7 +376,7 @@ describe('Workflow', () => {
     });
 
     it('should resolve variables from trigger data', async () => {
-      const execute = jest.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const triggerSchema = z.object({
         inputData: z.object({
           nested: z.object({
@@ -427,10 +424,10 @@ describe('Workflow', () => {
     });
 
     it('should resolve variables from previous steps', async () => {
-      const step1Action = jest.fn<any>().mockResolvedValue({
+      const step1Action = vi.fn<any>().mockResolvedValue({
         nested: { value: 'step1-data' },
       });
-      const step2Action = jest.fn<any>().mockResolvedValue({ result: 'success' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success' });
 
       const step1 = new Step({
         id: 'step1',
@@ -492,7 +489,7 @@ describe('Workflow', () => {
   describe('Error Handling', () => {
     it('should handle step execution errors', async () => {
       const error = new Error('Step execution failed');
-      const failingAction = jest.fn<any>().mockRejectedValue(error);
+      const failingAction = vi.fn<any>().mockRejectedValue(error);
 
       const step1 = new Step({ id: 'step1', execute: failingAction });
 
@@ -517,10 +514,10 @@ describe('Workflow', () => {
     it('should handle variable resolution errors', async () => {
       const step1 = new Step({
         id: 'step1',
-        execute: jest.fn<any>().mockResolvedValue({ data: 'success' }),
+        execute: vi.fn<any>().mockResolvedValue({ data: 'success' }),
         outputSchema: z.object({ data: z.string() }),
       });
-      const step2 = new Step({ id: 'step2', execute: jest.fn<any>() });
+      const step2 = new Step({ id: 'step2', execute: vi.fn<any>() });
 
       const workflow = new Workflow({
         name: 'test-workflow',
@@ -556,13 +553,13 @@ describe('Workflow', () => {
 
   describe('Complex Conditions', () => {
     it('should handle nested AND/OR conditions', async () => {
-      const step1Action = jest.fn<any>().mockResolvedValue({
+      const step1Action = vi.fn<any>().mockResolvedValue({
         status: 'partial',
         score: 75,
         flags: { isValid: true },
       });
-      const step2Action = jest.fn<any>().mockResolvedValue({ result: 'step2' });
-      const step3Action = jest.fn<any>().mockResolvedValue({ result: 'step3' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'step2' });
+      const step3Action = vi.fn<any>().mockResolvedValue({ result: 'step3' });
 
       const step1 = new Step({
         id: 'step1',
@@ -651,7 +648,7 @@ describe('Workflow', () => {
 
       const step1 = new Step({
         id: 'step1',
-        execute: jest.fn<any>().mockResolvedValue({ result: 'success' }),
+        execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
       });
 
       const workflow = new Workflow({
@@ -684,11 +681,11 @@ describe('Workflow', () => {
 
   describe('Action Context', () => {
     it('should pass the correct context to the action', async () => {
-      const action1 = jest.fn<any>().mockResolvedValue({ result: 'success1' });
-      const action2 = jest.fn<any>().mockResolvedValue({ result: 'success2' });
-      const action3 = jest.fn<any>().mockResolvedValue({ result: 'success3' });
-      const action4 = jest.fn<any>().mockResolvedValue({ result: 'success4' });
-      const action5 = jest.fn<any>().mockResolvedValue({ result: 'success5' });
+      const action1 = vi.fn().mockResolvedValue({ result: 'success1' });
+      const action2 = vi.fn().mockResolvedValue({ result: 'success2' });
+      const action3 = vi.fn().mockResolvedValue({ result: 'success3' });
+      const action4 = vi.fn().mockResolvedValue({ result: 'success4' });
+      const action5 = vi.fn().mockResolvedValue({ result: 'success5' });
 
       const step1 = new Step({ id: 'step1', execute: action1 });
       const step2 = new Step({ id: 'step2', execute: action2, payload: { name: 'Dero Israel' } });
@@ -777,11 +774,11 @@ describe('Workflow', () => {
 
   describe('multiple chains', () => {
     it('should run multiple chains in parallel', async () => {
-      const step1 = new Step({ id: 'step1', execute: jest.fn<any>().mockResolvedValue({ result: 'success1' }) });
-      const step2 = new Step({ id: 'step2', execute: jest.fn<any>().mockResolvedValue({ result: 'success2' }) });
-      const step3 = new Step({ id: 'step3', execute: jest.fn<any>().mockResolvedValue({ result: 'success3' }) });
-      const step4 = new Step({ id: 'step4', execute: jest.fn<any>().mockResolvedValue({ result: 'success4' }) });
-      const step5 = new Step({ id: 'step5', execute: jest.fn<any>().mockResolvedValue({ result: 'success5' }) });
+      const step1 = new Step({ id: 'step1', execute: vi.fn<any>().mockResolvedValue({ result: 'success1' }) });
+      const step2 = new Step({ id: 'step2', execute: vi.fn<any>().mockResolvedValue({ result: 'success2' }) });
+      const step3 = new Step({ id: 'step3', execute: vi.fn<any>().mockResolvedValue({ result: 'success3' }) });
+      const step4 = new Step({ id: 'step4', execute: vi.fn<any>().mockResolvedValue({ result: 'success4' }) });
+      const step5 = new Step({ id: 'step5', execute: vi.fn<any>().mockResolvedValue({ result: 'success5' }) });
 
       const workflow = new Workflow({ name: 'test-workflow' });
       workflow.step(step1).then(step2).then(step3).step(step4).then(step5).commit();
@@ -798,8 +795,8 @@ describe('Workflow', () => {
 
   describe('Retry', () => {
     it('should retry a step', async () => {
-      const step1 = new Step({ id: 'step1', execute: jest.fn<any>().mockResolvedValue({ result: 'success' }) });
-      const step2 = new Step({ id: 'step2', execute: jest.fn<any>().mockResolvedValue({ result: 'success 2' }) });
+      const step1 = new Step({ id: 'step1', execute: vi.fn<any>().mockResolvedValue({ result: 'success' }) });
+      const step2 = new Step({ id: 'step2', execute: vi.fn<any>().mockResolvedValue({ result: 'success 2' }) });
 
       const workflow = new Workflow({
         name: 'test-workflow',
@@ -816,7 +813,6 @@ describe('Workflow', () => {
         .then(step2, {
           snapshotOnTimeout: true,
           when: async () => {
-            console.log('runnning condition');
             return await new Promise(resolve => {
               setTimeout(() => {
                 resolve(false);
@@ -835,11 +831,11 @@ describe('Workflow', () => {
 
   describe('Subscribers (.after)', () => {
     it('should spawn subscribers for each step', async () => {
-      const step1Action = jest.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = jest.fn<any>().mockResolvedValue({ result: 'success2' });
-      const step3Action = jest.fn<any>().mockResolvedValue({ result: 'success3' });
-      const step4Action = jest.fn<any>().mockResolvedValue({ result: 'success4' });
-      const step5Action = jest.fn<any>().mockResolvedValue({ result: 'success5' });
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step3Action = vi.fn<any>().mockResolvedValue({ result: 'success3' });
+      const step4Action = vi.fn<any>().mockResolvedValue({ result: 'success4' });
+      const step5Action = vi.fn<any>().mockResolvedValue({ result: 'success5' });
 
       const step1 = new Step({ id: 'step1', execute: step1Action });
       const step2 = new Step({ id: 'step2', execute: step2Action });
@@ -864,11 +860,11 @@ describe('Workflow', () => {
     });
 
     it('should conditionally run subscribers', async () => {
-      const step1Action = jest.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = jest.fn<any>().mockResolvedValue({ result: 'success2' });
-      const step3Action = jest.fn<any>().mockResolvedValue({ result: 'success3' });
-      const step4Action = jest.fn<any>().mockResolvedValue({ result: 'success4' });
-      const step5Action = jest.fn<any>().mockResolvedValue({ result: 'success5' });
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step3Action = vi.fn<any>().mockResolvedValue({ result: 'success3' });
+      const step4Action = vi.fn<any>().mockResolvedValue({ result: 'success4' });
+      const step5Action = vi.fn<any>().mockResolvedValue({ result: 'success5' });
 
       const step1 = new Step({ id: 'step1', execute: step1Action, outputSchema: z.object({ status: z.string() }) });
       const step2 = new Step({ id: 'step2', execute: step2Action });
@@ -905,8 +901,8 @@ describe('Workflow', () => {
 
     // don't unskip this please.. actually unskip it 😈
     it.skip('should spawn cyclic subscribers for each step', async () => {
-      const step1Action = jest.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step3Action = jest.fn<any>().mockResolvedValue({ result: 'success3' });
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step3Action = vi.fn<any>().mockResolvedValue({ result: 'success3' });
 
       const step1 = new Step({ id: 'step1', execute: step1Action });
       const step3 = new Step({ id: 'step3', execute: step3Action });
@@ -926,10 +922,10 @@ describe('Workflow', () => {
 
   describe('Interoperability (Actions)', () => {
     it('should be able to use all action types in a workflow', async () => {
-      const step1Action = jest.fn<any>().mockResolvedValue({ name: 'step1' });
+      const step1Action = vi.fn<any>().mockResolvedValue({ name: 'step1' });
       const step1 = new Step({ id: 'step1', execute: step1Action, outputSchema: z.object({ name: z.string() }) });
 
-      const syncAction = jest.fn<any>().mockResolvedValue({ brightness: 'sync-action' });
+      const syncAction = vi.fn<any>().mockResolvedValue({ brightness: 'sync-action' });
       const randomSync = createSync({
         id: 'sync-action',
         execute: syncAction,
@@ -938,7 +934,7 @@ describe('Workflow', () => {
         outputSchema: z.object({ brightness: z.string() }),
       });
 
-      const toolAction = jest.fn<any>().mockResolvedValue({ age: 100 });
+      const toolAction = vi.fn<any>().mockResolvedValue({ age: 100 });
       const randomTool = createTool({
         id: 'random-tool',
         execute: toolAction,

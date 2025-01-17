@@ -6,15 +6,15 @@ title: Workflows in Mastra
 
 Workflows in Mastra help you orchestrate complex sequences of operations with features like branching, parallel execution, resource suspension, and more. 
 
-## Why Use Workflows?
+## When to use workflows
 
-Most AI applications need more than a single call to a language model. You may want to run multiple steps, conditionally skip certain paths, or even pause execution altogether until you receive more data. 
+Most AI applications need more than a single call to a language model. You may want to run multiple steps, conditionally skip certain paths, or even pause execution altogether until you receive user input. Sometimes your agent tool calling is not accurate enough.
 
 Mastra’s workflow system provides:
 
-• A standardized way to define steps and link them together.
-• Support for both simple (linear) and advanced (branching, parallel) paths.
-• Powerful debugging and observability features to track each workflow run.
+- A standardized way to define steps and link them together.
+- Support for both simple (linear) and advanced (branching, parallel) paths.
+- Debugging and observability features to track each workflow run.
 
 ## Example
 
@@ -22,7 +22,7 @@ To create a workflow, you define one or more steps, link them, and then commit t
 
 Typically, you would call an LLM or other service in some way in some step. But for this example, we'll just double the input value in the first step and increment it in the second.
 
-```typescript
+```typescript copy showLineNumbers
 import { Workflow, Step } from "@mastra/core";
 import { z } from "zod";
 
@@ -71,20 +71,24 @@ Workflows let you define a [control flow](./control-flow.mdx) to chain steps tog
 
 ## Suspend and Resume
 
-When you need to pause execution for external data, user input, or asynchronous events, Mastra supports suspension at any step, persisting the state of the workflow so you can resume it later.
+When you need to pause execution for external data, user input, or asynchronous events, Mastra [supports suspension at any step](./suspend-and-resume.mdx), persisting the state of the workflow so you can resume it later.
 
 ## Observability and Debugging
 
-Mastra workflows automatically log the input and output of each step within a workflow run, allowing you to send this data to your preferred logging, telemetry, or observability tools. You can:
+Mastra workflows automatically [log the input and output of each step within a workflow run](../reference/observability/otel-config.mdx), allowing you to send this data to your preferred logging, telemetry, or observability tools. 
 
-• Track the status of each step (e.g., success, error, or suspended).
-• Store run-specific metadata for auditing and post-run analysis.
-• Integrate with third-party observability platforms like Datadog or New Relic by forwarding logs.
+You can:
 
-See the [OTel Configuration](../reference/observability/otel-config.mdx) page for more details.
+- Track the status of each step (e.g., `success`, `error`, or `suspended`).
+- Store run-specific metadata for analysis.
+- Integrate with third-party observability platforms like Datadog or New Relic by forwarding logs.
 
 ## More Resources
 
-• Check out our [Workflow Guide](../guides/04-recruiter.mdx) in the Examples section for a hands-on tutorial.
-• Explore the [Workflow Examples](../../examples/workflows/creating-a-workflow.mdx) (including parallel steps, branching paths, cyclical dependencies, calling an LLM, and more).
+- The [Workflow Guide](../guides/04-recruiter.mdx) in the Guides section is a tutorial that covers the main concepts.
+- [Sequential Steps workflow example]("../examples/workflows/sequential-steps.mdx")
+- [Parallel Steps workflow example]("../examples/workflows/parallel-steps.mdx")
+- [Branching Paths workflow example]("../examples/workflows/branching-paths.mdx")
+- [Cyclical Dependencies workflow example]("../examples/workflows/cyclical-dependencies.mdx")
+- [Suspend and Resume workflow example]("../examples/workflows/suspend-and-resume.mdx")
 

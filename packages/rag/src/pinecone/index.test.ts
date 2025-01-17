@@ -1,5 +1,5 @@
-import { describe, it, expect } from '@jest/globals';
 import dotenv from 'dotenv';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 
 import { PineconeVector } from './';
 

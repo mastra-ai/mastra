@@ -20,7 +20,7 @@
 '@mastra/core': patch
 'mastra': patch
 '@mastra/rag': patch
-'docs': patch
+
 ---
 
 Fixes learned from docs

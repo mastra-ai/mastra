@@ -1,5 +1,5 @@
-import { describe, it, expect, jest } from '@jest/globals';
 import { config } from 'dotenv';
+import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 
 import { TestIntegration } from '../integration/openapi-toolset.mock';
@@ -10,7 +10,7 @@ import { Agent, type ModelConfig } from '..';
 
 config();
 
-const mockFindUser = jest.fn().mockImplementation(async data => {
+const mockFindUser = vi.fn().mockImplementation(async data => {
   const list = [
     { name: 'Dero Israel', email: 'dero@mail.com' },
     { name: 'Ife Dayo', email: 'dayo@mail.com' },

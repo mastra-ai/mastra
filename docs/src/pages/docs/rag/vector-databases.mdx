@@ -1,15 +1,113 @@
-## Step 3: Vector Storage
+## Vector Storage in Mastra
 
-Store embeddings in a vector database for efficient querying. Mastra supports PgVector, Pinecone, Qdrant, and more.
+After generating embeddings, you need to store them in a database that supports vector similarity search. Mastra provides flexible options for vector storage, supporting both embedded and dedicated vector databases.
 
-**Example with PgVector:**
+## Choosing a Vector Database
 
-```typescript showLineNumbers copy
+When selecting a vector database, consider:
+
+- **Infrastructure:** Do you want to use your existing PostgreSQL database (with PgVector) or a dedicated vector database (Pinecone, Qdrant)?
+- **Scale**: How many vectors will you store and query? Dedicated solutions like Pinecone often handle larger scales better.
+- **Query Performance**: Need sub-second queries over millions of vectors? Consider specialized databases like Qdrant.
+- **Management**: Are you comfortable managing another database, or prefer using your existing PostgreSQL setup? 
+
+## Supported databases
+
+### PostgreSQL with PgVector 
+
+Best for teams already using PostgreSQL who want to minimize infrastructure complexity: 
+
+``` ts showLineNumbers copy
+
 import { PgVector } from '@mastra/rag';
 
-const pgVector = new PgVector("postgresql://localhost:5432/mydb");
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING);
 
-await pgVector.upsert("embeddings", embeddings);
+// Create an index (dimension = 1536 for text-embedding-ada-002)
+await pgVector.createIndex("embeddings", 1536);
+
+// Store embeddings with metadata
+await pgVector.upsert(
+  "embeddings",
+  embeddings,
+  chunks.map(chunk => ({ text: chunk.text }))
+);
+``` 
+
+### Pinecone
+
+Ideal for production deployments needing scalability: 
+
+
+``` ts showLineNumbers copy
+
+import { PineconeVector } from '@mastra/rag';
+
+const pinecone = new PineconeVector(process.env.PINECONE_API_KEY);
+
+// Create an index
+await pinecone.createIndex("my-index", 1536);
+
+// Store embeddings
+await pinecone.upsert(
+  "my-index",
+  embeddings,
+  chunks.map(chunk => ({ text: chunk.text }))
+);
 ```
 
-For details on each vector store’s configuration and usage, see the reference docs for [PgVector](/docs/reference/rag/pgstore.mdx), [Pinecone](/docs/reference/rag/pinecone.mdx), and [Qdrant](/docs/reference/rag/qdrant.mdx).
+### Qdrant
+
+Best for high-performance vector search: 
+
+``` ts showLineNumbers copy
+
+import { QdrantVector } from '@mastra/rag';
+
+const qdrant = new QdrantVector({
+  url: process.env.QDRANT_URL,
+  apiKey: process.env.QDRANT_API_KEY
+});
+
+// Create collection
+await qdrant.createCollection("my-collection", 1536);
+
+// Store embeddings
+await qdrant.upsert(
+  "my-collection",
+  embeddings,
+  chunks.map(chunk => ({ text: chunk.text }))
+);
+```
+
+## Adding Metadata
+
+All vector stores support adding metadata to your vectors, which enables filtering during retrieval:
+
+``` ts showLineNumbers copy
+// Store embeddings with rich metadata
+await vectorStore.upsert(
+  "embeddings",
+  embeddings,
+  chunks.map(chunk => ({
+    text: chunk.text,
+    source: chunk.source,
+    category: chunk.category,
+    timestamp: new Date().toISOString()
+  }))
+);
+```
+
+## Performance Considerations
+
+- **Indexing:** Create appropriate indexes before bulk insertions 
+- **Batch Size:** Use bath oeprations for large insertions
+- **Metadata:** Only store metadata you'll query against
+- **Dimensions:** Match embedding dimensions to your model (eg., 1536 for text-embedding-ada-002)
+
+## Examples
+For complete examples of different vector store implementations, see:
+
+- [Insert Embedding in PgVector](/docs/examples/rag/pgstore.mdx)
+- [Insert Embedding in Pinecone](/docs/examples/rag/pinecone.mdx)
+- [Basic RAG with Vector Storage](/docs/examples/rag/basic-rag.mdx)

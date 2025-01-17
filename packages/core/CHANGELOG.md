@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.63
+
+### Patch Changes
+
+- e097800: TTS in core
+
 ## 0.1.27-alpha.62
 
 ### Patch Changes

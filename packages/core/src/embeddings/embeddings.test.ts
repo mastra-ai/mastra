@@ -1,5 +1,5 @@
-import { describe, expect, it } from '@jest/globals';
 import dotenv from 'dotenv';
+import { describe, expect, it } from 'vitest';
 
 import { embed } from './index';
 

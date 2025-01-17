@@ -1,5 +1,18 @@
 # @mastra/rag
 
+## 0.0.2-alpha.48
+
+### Patch Changes
+
+- 5826db3: Updated reference docs and exports for Reranker and GraphRag
+
+## 0.0.2-alpha.47
+
+### Patch Changes
+
+- Updated dependencies [e097800]
+  - @mastra/core@0.1.27-alpha.63
+
 ## 0.0.2-alpha.46
 
 ### Patch Changes

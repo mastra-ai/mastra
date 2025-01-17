@@ -1,5 +1,4 @@
 ---
-'openapi-spec-writer': patch
 '@mastra/firecrawl': patch
 '@mastra/github': patch
 '@mastra/core': patch

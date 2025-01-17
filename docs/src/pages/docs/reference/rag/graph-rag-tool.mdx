@@ -1,0 +1,140 @@
+# createGraphRAGTool()
+
+The `createGraphRAGTool()` creates a tool that enhances RAG by building a graph of semantic relationships between documents. It uses the `GraphRAG` system under the hood to provide graph-based retrieval, finding relevant content through both direct similarity and connected relationships.
+
+## Usage Example
+
+```typescript
+import { createGraphRAGTool } from "@mastra/rag";
+
+const graphTool = createGraphRAGTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  options: {
+    provider: "OPEN_AI",
+    model: "text-embedding-ada-002",
+    maxRetries: 3
+  },
+  topK: 5,
+  graphOptions: {
+    dimension: 1536,
+    threshold: 0.7,
+    randomWalkSteps: 100,
+    restartProb: 0.15
+  }
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "vectorStoreName",
+      type: "string",
+      description: "Name of the vector store to query",
+      isOptional: false,
+    },
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index within the vector store",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "EmbeddingOptions",
+      description: "Configuration for embedding generation",
+      isOptional: false,
+    },
+    {
+      name: "topK",
+      type: "number",
+      description: "Maximum number of results to retrieve",
+      isOptional: true,
+      defaultValue: "10",
+    },
+    {
+      name: "graphOptions",
+      type: "GraphOptions",
+      description: "Configuration for the graph-based retrieval",
+      isOptional: true,
+      defaultValue: "Default graph options",
+    }
+  ]}
+/>
+
+### GraphOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "dimension",
+      type: "number",
+      description: "Dimension of the embedding vectors",
+      isOptional: true,
+      defaultValue: "1536",
+    },
+    {
+      name: "threshold",
+      type: "number",
+      description: "Similarity threshold for creating edges between nodes (0-1)",
+      isOptional: true,
+      defaultValue: "0.7",
+    },
+    {
+      name: "randomWalkSteps",
+      type: "number",
+      description: "Number of steps in random walk for graph traversal",
+      isOptional: true,
+      defaultValue: "100",
+    },
+    {
+      name: "restartProb",
+      type: "number",
+      description: "Probability of restarting random walk from query node",
+      isOptional: true,
+      defaultValue: "0.15",
+    }
+  ]}
+/>
+
+## Returns
+The tool returns an object with:
+
+<PropertiesTable
+  content={[
+    {
+      name: "relevantContext",
+      type: "string",
+      description: "Combined text from the most relevant document chunks, retrieved using graph-based ranking",
+    }
+  ]}
+/>
+
+## Advanced Example
+
+```typescript
+const graphTool = createGraphRAGTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  options: {
+    provider: "OPEN_AI",
+    model: "text-embedding-ada-002",
+    maxRetries: 3
+  },
+  topK: 5,
+  graphOptions: {
+    dimension: 1536,
+    threshold: 0.8,        // Higher similarity threshold
+    randomWalkSteps: 200,  // More exploration steps
+    restartProb: 0.2      // Higher restart probability
+  }
+});
+```
+
+## Related
+
+- [createVectorQueryTool](./vector-query-tool)
+- [vectorQuerySearch](./vector-query-search)
+- [GraphRAG](./graph-rag) 

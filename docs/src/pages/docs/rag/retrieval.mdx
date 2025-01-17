@@ -1,22 +1,126 @@
-## Step 4: Querying the Knowledge Base
+## Retrieval in RAG Systems
 
-When a user asks a question, embed their query and retrieve relevant chunks:
+After storing embeddings, you need to retrieve relevant chunks to answer user queries. 
 
-```typescript showLineNumbers copy
+Mastra provides flexible retrieval options with support for semantic search, filtering, and re-ranking.
+
+## How Retrieval Works
+
+1. The user's query is converted to an embedding using the same model used for document embeddings
+2. This embedding is compared to stored embeddings using vector similarity
+3. The most similar chunks are retrieved and can be optionally:
+  - Filtered by metadata
+  - Re-ranked for better relevance
+  - Processed through a knowledge graph
+
+## Basic Retrieval
+
+The simplest approach is direct semantic search. This method uses vector similarity to find chunks that are semantically similar to the query:
+
+```ts showLineNumbers copy
 import { embed, EmbedResult } from "@mastra/rag";
 
-const { embedding } = (await embed(
+// Convert query to embedding
+const { embedding } = await embed(
   "What are the main points in the article?",
   {
     provider: "OPEN_AI",
     model: "text-embedding-ada-002",
     maxRetries: 3,
   }
-)) as EmbedResult<string>;
+);
 
-const pgVector = new PgVector("postgresql://localhost:5432/mydb");
-
+// Query vector store
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING);
 const results = await pgVector.query("embeddings", embedding, 10);
-
-console.log(results);
 ```
+
+Results include both the text content and a similarity score:
+
+```ts showLineNumbers copy
+[
+  {
+    text: "Climate change poses significant challenges...",
+    score: 0.89,
+    metadata: { source: "article1.txt" }
+  },
+  {
+    text: "Rising temperatures affect crop yields...",
+    score: 0.82,
+    metadata: { source: "article1.txt" }
+  }
+  // ... more results
+]
+```
+
+## Advanced Retrieval options
+
+### Metadata Filtering
+
+Filter results based on metadata fields to narrow down the search space. This is useful when you have documents from different sources or time periods:
+
+```ts showLineNumbers copy
+const results = await pgVector.query("embeddings", embedding, {
+  topK: 10,
+  filter: {
+    source: "article1.txt",
+    date: { $gt: "2023-01-01" }
+  }
+});
+``` 
+
+### Re-ranking
+
+Initial vector similarity search can sometimes miss nuanced relevance. Re-ranking is a more computationally expensive process, but more accurate algorithm that improves results by:
+
+- Considering word order and exact matches
+- Applying more sophisticated relevance scoring
+- Using a method called cross-attention between query and documents
+
+Here's how to set up re-ranking:
+
+```ts showLineNumbers copy
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  options: {
+    provider: 'OPEN_AI',
+    model: 'text-embedding-ada-002'
+  },
+  topK: 10,
+  reranker: {
+    type: 'cross-encoder',
+    model: 'cross-encoder/ms-marco-MiniLM-L-6-v2'
+  }
+});
+```
+
+### Graph-based Retrieval
+
+For documents with complex relationships, graph-based retrieval can follow connections between chunks. This helps when:
+
+- Information is spread across multiple documents
+- Documents reference each other
+- You need to traverse relationships to find complete answers
+
+Example setup:
+
+```ts showLineNumbers copy
+const graphQueryTool = createGraphQueryTool({
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  graphOptions: {
+    relationTypes: ['references', 'similar_to'],
+    maxHops: 2
+  }
+});
+```
+
+## Example implementations
+
+For complete examples of these retrieval methods in action, see:
+
+- [Basic Retrieval](/docs/examples/rag/basic-retrieval.mdx)
+- [Metadata Filtering](/docs/examples/rag/metadata-filtering.mdx)
+- [Re-ranking Results](/docs/examples/rag/re-ranking.mdx)
+- [Graph-based Retrieval](/docs/examples/rag/graph-retrieval.mdx)

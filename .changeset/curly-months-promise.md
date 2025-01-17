@@ -13,7 +13,6 @@
 '@mastra/twilio': patch
 '@mastra/ashby': patch
 '@mastra/ragie': patch
-'workflow': patch
 '@mastra/coda': patch
 '@mastra/engine': patch
 '@mastra/memory': patch
@@ -21,7 +20,6 @@
 '@mastra/core': patch
 'mastra': patch
 '@mastra/rag': patch
-'docs': patch
 ---
 
 Dane publishing
