@@ -39,7 +39,7 @@ export function TableOfContents(props: TOCProps) {
     <div className="fixed top-[4rem] w-64 hidden xl:block h-[calc(100vh-4rem)]">
       <div className="h-full overflow-y-auto px-4 py-8 flex flex-col">
         <div>
-          <h3 className="text-xs font-semibold mb-4 text-white">
+          <h3 className="text-xs font-semibold mb-2 pl-4 text-white">
             On This Page
           </h3>
           <nav className="flex flex-col space-y-0.5">
@@ -53,7 +53,7 @@ export function TableOfContents(props: TOCProps) {
                   setActiveId("");
                 }}
                 className={cn(
-                  "text-gray-200 hover:text-blue-400 transition-colors duration-200 text-sm font-semibold",
+                  "text-gray-200 py-1 hover:text-blue-400 transition-colors duration-200 text-sm font-semibold",
                   activeId === "" ? "text-blue-400" : "",
                 )}
               >
@@ -65,7 +65,7 @@ export function TableOfContents(props: TOCProps) {
                 <a
                   key={item.id + item.value}
                   href={item.id ? `#${item.id}` : undefined}
-                  className={cn("transition-colors duration-200 text-sm", {
+                  className={cn("transition-colors py-1 duration-200 text-sm", {
                     "text-gray-200 hover:text-blue-400": item.depth === 2,
                     "text-gray-400 ml-3 hover:text-gray-200": item.depth > 2,
                     "text-blue-400 hover:text-blue-400": item.id === activeId,

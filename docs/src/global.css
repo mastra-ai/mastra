@@ -7,12 +7,22 @@ https://nextra.site/docs/docs-theme/theme-configuration#theme-color
 */
 
 .dark\:_bg-black:is(html[class~="dark"] *) {
-  background-color: #141415 !important;
+  background-color:#141415 !important;
 }
 
-/* div._flex {
-  max-width: 1232px;p
-} */
+nav{
+  padding: 0!important;
+}
+
+
+div:has(aside.nextra-sidebar-container){
+  margin: 0 auto;
+}
+
+/*.nextra-nav-container + div {*/
+/*  max-width: 80rem;*/
+/*}*/
+
 
 div._transform-gpu > div > ul {
   gap: 0.15rem;
@@ -29,19 +39,22 @@ ul._inline-block {
 aside.nextra-sidebar-container {
   padding-inline-start: 1rem;
 }
+
 aside.nextra-sidebar-container,
 nav.nextra-toc {
   width: 18rem;
 }
 
 article:has(main) {
+  width: auto !important;
   justify-content: start !important;
 }
 
 main._max-w-6xl {
-  max-width: 50rem;
+  max-width: 70ch;
   margin-inline-start: 0;
 }
+
 a {
   background: transparent !important;
 }
