@@ -5,6 +5,19 @@ import { MetricScoringResult } from '../types';
 
 export class KeywordCoverageMetric extends Metric {
   async measure({ input, output }: { input: string; output: string }): Promise<MetricScoringResult> {
+    // Handle empty strings case
+    if (!input && !output) {
+      return {
+        score: 1,
+        details: 'Keyword coverage: 100.0% (0/0 keywords)',
+        confidence: 0.85,
+        metrics: {
+          totalKeywords: 0,
+          matchedKeywords: 0,
+        },
+      };
+    }
+
     const extractKeywords = (text: string) => {
       return keyword_extractor.extract(text, {
         language: 'english',
@@ -18,7 +31,8 @@ export class KeywordCoverageMetric extends Metric {
     const responseKeywords = new Set(extractKeywords(output));
 
     const matchedKeywords = [...referenceKeywords].filter(k => responseKeywords.has(k));
-    const coverage = matchedKeywords.length / referenceKeywords.size;
+    const totalKeywords = referenceKeywords.size;
+    const coverage = totalKeywords > 0 ? matchedKeywords.length / totalKeywords : 0;
 
     return {
       score: coverage,
