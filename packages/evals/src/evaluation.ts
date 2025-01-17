@@ -1,7 +1,5 @@
-import { type Agent } from '../agent';
-import { AvailableHooks, executeHook } from '../hooks';
-
-import { type Metric } from './metric';
+import { AvailableHooks, executeHook } from '@mastra/core';
+import { type Agent, type Metric } from '@mastra/core';
 
 export async function evaluate<T extends Agent>(agent: T, input: Parameters<T['generate']>[0], metric: Metric) {
   const agentOutput = await agent.generate(input);
