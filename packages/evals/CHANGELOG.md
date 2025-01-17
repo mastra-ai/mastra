@@ -1,5 +1,11 @@
 # @mastra/evals
 
+## 0.0.1-alpha.1
+
+### Patch Changes
+
+- 35764f4: Added workflow for eval tests
+
 ## 0.0.1-alpha.0
 
 ### Patch Changes
