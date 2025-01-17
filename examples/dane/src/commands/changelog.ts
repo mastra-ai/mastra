@@ -10,7 +10,11 @@ export async function changelog() {
 
   const { start } = workflow.createRun();
 
-  const res = await start();
+  const res = await start({
+    triggerData: {
+      channelId: process.env.CHANNEL_ID!,
+    },
+  });
 
   console.log(res);
 

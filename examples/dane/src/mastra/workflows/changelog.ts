@@ -93,11 +93,29 @@ const stepA2 = new Step({
     const today = new Date().toISOString().split('T')[0];
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
+    const tools = await slack.tools();
+
     if (existsSync(`changelog-${today}`)) {
+      const existing = readFileSync(`changelog-${today}`, 'utf-8');
+
+      await agent.generate(
+        `
+                Send this ${existing} to this slack channel: "${context.machineContext.triggerData.channelId}" with the tool slack_post_message.
+                Format it in markdown so it displays nicely in slack.
+                `,
+        {
+          toolsets: {
+            slack: tools,
+          },
+        },
+      );
+
       return {
-        message: readFileSync(`changelog-${today}`, 'utf-8'),
+        message: existing,
       };
     }
+
+    const channelId = context.machineContext.triggerData.channelId;
 
     const prompt = `
             Time: ${weekAgo} - ${today}
@@ -133,10 +151,17 @@ const stepA2 = new Step({
             - Notable bug fixes
             - Build/deployment improvements
             - Performance optimizations
+
+
+            Finally send this to this slack channel: "${channelId}" with the tool slack_post_message
         `;
 
     console.log(chalk.green(`Generating...`));
-    const result = await agent.generate(prompt);
+    const result = await agent.generate(prompt, {
+      toolsets: {
+        slack: tools,
+      },
+    });
 
     console.log(chalk.green(result.text));
 
@@ -148,43 +173,4 @@ const stepA2 = new Step({
   },
 });
 
-const stepA3 = new Step({
-  id: 'stepA3',
-  description: 'Send to slack',
-  execute: async ({ context, mastra }) => {
-    if (context.machineContext?.stepResults.stepA2?.status !== 'success') {
-      throw new Error('Message not found');
-    }
-
-    const agent = mastra?.agents?.daneChangeLog;
-
-    if (!agent) {
-      throw new Error('LLM not found');
-    }
-
-    const message = context.machineContext.stepResults.stepA2.payload.message;
-
-    try {
-      const tools = await slack.tools();
-
-      const channelId = context.machineContext.triggerData.channelId;
-
-      await agent.generate(
-        `
-                Send this ${message} to this slack channel: "${channelId}" with the tool slack_post_message
-            `,
-        {
-          toolsets: {
-            slack: tools,
-          },
-        },
-      );
-
-      await slack.disconnect();
-    } catch (e) {
-      console.error(e);
-    }
-  },
-});
-
-changelogWorkflow.step(stepA1).then(stepA2).then(stepA3).commit();
+changelogWorkflow.step(stepA1).then(stepA2).commit();
