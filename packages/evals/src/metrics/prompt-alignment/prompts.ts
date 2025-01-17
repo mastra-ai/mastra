@@ -68,8 +68,10 @@ Instructions: ["Start sentences with capital letters", "Talk about the color bla
   ]
 }
 
+Number of instructions: ${instructions.length}
+
 Prompt Instructions:
-${instructions.join('\n')}
+${instructions}
 
 Input:
 ${input}

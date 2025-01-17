@@ -54,23 +54,28 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
         * States explicit relationship between key concepts (e.g., "X is the CEO of company Y")
         * Can stand alone as a complete answer
         * Contains appropriate question-type response (e.g., location for "where", person for "who")
+        * Should not be incorrect. If it is incorrect but relevant, it should be marked as "unsure"
 
     - "unsure": Statement shows partial relevance when it:
+        * Mentions key terms or entities from the question domain
+        * References concepts directly related to the answer
+        * Contains information about the answer without explicit statement
+        * Is incorrect but shows understanding of the question
         * Contains topic-related administrative/governance terms without direct answer
         * Mentions locations or entities related to the answer without specifying their role
         * References functions or characteristics typically associated with the answer
-        * Is incorrect but shows understanding of the question
         * Uses importance indicators ("main", "primary", "major") with relevant concepts
         * Includes indirect references to the answer (e.g., "where the president works")
         * Contains multiple relevant concepts but lacks explicit relationship between them
         * Demonstrates understanding of question domain without providing specific answer
 
     - "no": Statement lacks meaningful connection to question when it:
-        * Contains no concepts related to the question type or domain
-        * Only mentions the broader topic without relevant details (e.g., "the country has nice weather")
+        * Contains no concepts directly related to the question type or domain
+        * Provides only background or contextual information
+        * Consists of empty or meaningless content
+        * Only mentions the broader topic without relevant details
         * Provides general descriptions without addressing the specific question
         * Contains purely tangential information about the subject
-        * Consists of empty or meaningless content
         * Discusses characteristics unrelated to the question type (e.g., describing cuisine when asked about geography)
         * Note: Assessment is about topical relationship, not factual accuracy
 
@@ -91,6 +96,7 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
       "Many birds fly in the sky",
       "",
       "The sky is purple during daytime",
+      "Daytime is when the sun is up",
     ]
     JSON:
     {{
@@ -122,6 +128,10 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
             {{
                 "verdict": "unsure",
                 "reason": "This statement is incorrect but contains relevant information and still addresses the question"
+            }},
+            {{
+                "verdict": "no",
+                "reason": "This statement is about daytime but doesn't address the sky"
             }}
         ]
     }}
@@ -129,8 +139,10 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
   Input:
   ${input}
 
+  Number of statements: ${statements.length === 0 ? '1' : statements.length}
+
   Statements:
-  ${statements.join('\n')}
+  ${statements}
 
   JSON:
   `;
