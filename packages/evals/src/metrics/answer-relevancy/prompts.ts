@@ -5,7 +5,8 @@ Key Principles:
 2. Consider both direct answers and related context
 3. Prioritize relevance to the input over correctness
 4. Recognize that responses can be partially relevant
-5. Empty inputs or error messages should always be marked as "no"`;
+5. Empty inputs or error messages should always be marked as "no"
+6. Responses that discuss the type of information being asked show partial relevance`;
 
 export function generateEvaluationStatementsPrompt({ output }: { output: string }) {
   return `Given the text, break it down into meaningful statements while preserving context and relationships.
@@ -49,37 +50,61 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
     - Exact match between number of verdicts and statements
 
     Verdict Guidelines:
-    - "yes": Statement explicitly and directly answers the input question
+    - "yes": Statement explicitly and directly answers the input question when it:
         * Contains specific answer to the question asked (e.g., "The color of the sky is blue")
         * States explicit relationship between key concepts (e.g., "X is the CEO of company Y")
         * Can stand alone as a complete answer
         * Contains appropriate question-type response (e.g., location for "where", person for "who")
+        * Note: If statement is incorrect but directly addresses the question, mark as "unsure"
 
     - "unsure": Statement shows partial relevance when it:
-        * Contains topic-related administrative/governance terms without direct answer
-        * Mentions locations or entities related to the answer without specifying their role
-        * References functions or characteristics typically associated with the answer
-        * Is incorrect but shows understanding of the question
+        * Discusses the type of information being asked about (e.g., mentions temperatures when asked about temperature)
+        * Contains information about the answer without explicit statement
         * Uses importance indicators ("main", "primary", "major") with relevant concepts
         * Includes indirect references to the answer (e.g., "where the president works")
-        * Contains multiple relevant concepts but lacks explicit relationship between them
-        * Demonstrates understanding of question domain without providing specific answer
+        * Contains topic-related administrative/governance terms without direct answer
+        * References functions or characteristics typically associated with the answer
+        * Uses terms that match what's being asked about
+        * Mentions related entities without specifying their relationship to the answer
+        * Is incorrect but shows understanding of the question
+        * Contains the answer term but needs more context to be complete
+        * Contains measurement units or quantities relevant to the question type
+        * References locations or entities in the same category as what's being asked about
+        * Provides relevant information without using explicit question-type terminology
+        * Contains references to properties of the subject
+
 
     - "no": Statement lacks meaningful connection to question when it:
-        * Contains no concepts related to the question type or domain
-        * Only mentions the broader topic without relevant details (e.g., "the country has nice weather")
-        * Provides general descriptions without addressing the specific question
-        * Contains purely tangential information about the subject
+        * Contains neither the subject nor the type of information being requested
+        * Contains no terms related to what's being asked about
+        * Contains only general subject information without relating to what's being asked
         * Consists of empty or meaningless content
-        * Discusses characteristics unrelated to the question type (e.g., describing cuisine when asked about geography)
-        * Note: Assessment is about topical relationship, not factual accuracy
+        * Contains purely tangential information with no mention of the subject or question type
+        * Note: Assessment is about connection to what's being asked, not factual accuracy
+        * Contains no connection to what's being asked about (neither the subject nor the type of information requested)
 
-    REMEMBER: A statmenent does not have to be correct, it just has to be relevant.
-    If the statement contains words or phrases that are relevant to the input, it is partially relevant.
-    If the statement is a direct answer to the input, it is relevant.
-    If the statement is completely unrelated to the input or contains nothing, it is not relevant.
-    DO NOT MAKE A JUDGEMENT ON THE CORRECTNESS OF THE STATEMENT, JUST THE RELEVANCY.
+    REMEMBER: 
+    - If the statement contains words or phrases that are relevant to the input, it is partially relevant.
+    - If the statement is a direct answer to the input, it is relevant.
+    - If the statement is completely unrelated to the input or contains nothing, it is not relevant.
+    - DO NOT MAKE A JUDGEMENT ON THE CORRECTNESS OF THE STATEMENT, JUST THE RELEVANCY.
 
+    STRICT RULES:
+    - If a statement mentions the type of information being requested, it should be marked as "unsure" ONLY if it's discussing that type meaningfully (not just mentioning it)
+    - Subject mentions alone are NOT enough for relevance - they must connect to what's being asked about
+    - Empty or meaningless statements are always "no"
+    - General facts about the subject without connection to the question type should be marked as "no"
+    - ALWAYS mark a statement as "no" if it discusses the topic without any connection to the question type
+    - Statements that mention neither the subject nor the type of information are always "no"
+    - Type-level relevance overrides topic-only content
+    - Measurement/quantity relevance counts as type-level relevance
+    - Administrative/governance terms are only relevant if they relate to the question type
+
+
+    Examples of "no" statements:
+        * "Japan has beautiful seasons" for "What is Japan's largest city?"
+        * "Trees grow tall" for "How tall is Mount Everest?"
+        * "The weather is nice" for "Who is the president?"
 
     Example:
     Input: "What color is the sky during daytime?"
@@ -91,6 +116,7 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
       "Many birds fly in the sky",
       "",
       "The sky is purple during daytime",
+      "Daytime is when the sun is up",
     ]
     JSON:
     {{
@@ -122,6 +148,10 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
             {{
                 "verdict": "unsure",
                 "reason": "This statement is incorrect but contains relevant information and still addresses the question"
+            }},
+            {{
+                "verdict": "no",
+                "reason": "This statement is about daytime but doesn't address the sky"
             }}
         ]
     }}
@@ -129,8 +159,10 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
   Input:
   ${input}
 
+  Number of statements: ${statements.length === 0 ? '1' : statements.length}
+
   Statements:
-  ${statements.join('\n')}
+  ${statements}
 
   JSON:
   `;
@@ -141,13 +173,15 @@ export function generateReasonPrompt({
   reasons,
   input,
   output,
+  scale,
 }: {
   score: number;
   reasons: string[];
   input: string;
   output: string;
+  scale: number;
 }) {
-  return `Explain the irrelevancy score (0-10) for the LLM's response using this context:
+  return `Explain the irrelevancy score where 0 is the lowest and ${scale} is the highest for the LLM's response using this context:
   Context:
   Input: ${input}
   Output: ${output}

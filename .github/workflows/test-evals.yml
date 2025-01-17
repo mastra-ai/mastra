@@ -1,0 +1,40 @@
+name: Evals Tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "packages/evals/**"
+      - ".github/workflows/test-evals.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build core
+        run: pnpm build:core
+
+      - name: Build evals
+        run: pnpm build:evals
+
+      - name: Run Evals tests
+        run: pnpm test:evals
+        env:
+          NODE_OPTIONS: "--max_old_space_size=8096"
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
