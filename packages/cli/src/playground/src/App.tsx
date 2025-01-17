@@ -22,7 +22,6 @@ function App() {
             </Layout>
           }
         >
-          <Route path="/" element={<Navigate to="/agents" />} />
           <Route path="/agents" element={<Agents />} />
           <Route path="/agents/:agentId" element={<Agent />} />
           <Route path="/agents/:agentId/:threadId" element={<Agent />} />
@@ -31,6 +30,7 @@ function App() {
           <Route path="/tools/all/:toolId" element={<Tool />} />
           <Route path="/workflows" element={<Workflows />} />
           <Route path="/workflows/:workflowId" element={<Workflow />} />
+          <Route path="/" element={<Navigate to="/agents" />} />
         </Route>
       </Routes>
     </BrowserRouter>
