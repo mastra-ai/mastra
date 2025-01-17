@@ -1,0 +1,5 @@
+---
+'@mastra/dane': patch
+---
+
+Iteration
