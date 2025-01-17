@@ -1,4 +1,4 @@
-name: RAG Tests
+name: Evals Tests
 
 on:
   pull_request:
