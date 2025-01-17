@@ -102,7 +102,7 @@ const Tool = () => {
               content={JSON.stringify(result ?? {}, null, 2)}
             />
           </div>
-          <ScrollArea className="h-[calc(100vh-100px)] w-full ">
+          <ScrollArea className="h-[calc(100vh-120px)] w-full ">
             <CodeBlockDemo code={JSON.stringify(result ?? {}, null, 2)} language="json" />
           </ScrollArea>
         </div>
