@@ -17,7 +17,17 @@ export function WorkflowLogs({ runId }: { runId: string }) {
       </div>
       <div className="space-y-4">
         {logs.length === 0 ? (
-          <p className="text-mastra-el-5">No logs yet</p>
+          <p className="text-gray-300/60">
+            No log drains. By default, logs are sent to the console. To configure log drains see{' '}
+            <a
+              href="https://mastra.ai/docs/reference/observability/create-logger#upstash-logger-remote-log-drain"
+              target="_blank"
+              rel="noopener"
+              className=" hover:text-gray-100 underline"
+            >
+              docs.
+            </a>
+          </p>
         ) : (
           logs.map(log => {
             const parsedLogMessage = JSON.parse(log.message);
