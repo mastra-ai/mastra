@@ -13,7 +13,8 @@ export class DifferenceMetric extends Metric {
     const changes = ops.filter(([op]) => op !== 'equal').length;
 
     // Calculate confidence based on text length difference
-    const lengthDiff = Math.abs(input.length - output.length) / Math.max(input.length, output.length);
+    const maxLength = Math.max(input.length, output.length);
+    const lengthDiff = maxLength > 0 ? Math.abs(input.length - output.length) / maxLength : 0;
     const confidence = 1 - lengthDiff;
 
     return {
