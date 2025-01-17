@@ -5,7 +5,8 @@ Key Principles:
 2. Consider both direct answers and related context
 3. Prioritize relevance to the input over correctness
 4. Recognize that responses can be partially relevant
-5. Empty inputs or error messages should always be marked as "no"`;
+5. Empty inputs or error messages should always be marked as "no"
+6. Responses that discuss the type of information being asked show partial relevance`;
 
 export function generateEvaluationStatementsPrompt({ output }: { output: string }) {
   return `Given the text, break it down into meaningful statements while preserving context and relationships.
@@ -57,7 +58,7 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
         * Should not be incorrect. If it is incorrect but relevant, it should be marked as "unsure"
 
     - "unsure": Statement shows partial relevance when it:
-        * Mentions key terms or entities from the question domain
+        * References concepts directly related to the answer
         * References concepts directly related to the answer
         * Contains information about the answer without explicit statement
         * Is incorrect but shows understanding of the question
@@ -67,17 +68,21 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
         * Uses importance indicators ("main", "primary", "major") with relevant concepts
         * Includes indirect references to the answer (e.g., "where the president works")
         * Contains multiple relevant concepts but lacks explicit relationship between them
-        * Demonstrates understanding of question domain without providing specific answer
+        * Contains information related to the specific type of question being asked even if incomplete
+        * Contains the correct answer or related terms without explicitly stating the relationship
+        * Shows understanding by specifically referencing what's being asked about
+        * Shows understanding of the question type even without mentioning the specific subject
+        * Discusses the type of information being asked about (e.g., mentions temperatures when asked about temperature, even if about different locations)
+        * Contains terms or concepts that match the type of information requested
 
     - "no": Statement lacks meaningful connection to question when it:
-        * Contains no concepts directly related to the question type or domain
-        * Provides only background or contextual information
+        * Contains only general subject information without relating to what's being asked
         * Consists of empty or meaningless content
-        * Only mentions the broader topic without relevant details
-        * Provides general descriptions without addressing the specific question
-        * Contains purely tangential information about the subject
-        * Discusses characteristics unrelated to the question type (e.g., describing cuisine when asked about geography)
-        * Note: Assessment is about topical relationship, not factual accuracy
+        * Contains purely tangential information
+        * Discusses characteristics unrelated to what's being asked
+        * Provides only background information without connection to what's being asked
+        * Note: Assessment is about connection to what's being asked, not factual accuracy
+        * Contains no connection to what's being asked about (neither the subject nor the type of information requested)
 
     REMEMBER: A statmenent does not have to be correct, it just has to be relevant.
     If the statement contains words or phrases that are relevant to the input, it is partially relevant.
@@ -85,6 +90,16 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
     If the statement is completely unrelated to the input or contains nothing, it is not relevant.
     DO NOT MAKE A JUDGEMENT ON THE CORRECTNESS OF THE STATEMENT, JUST THE RELEVANCY.
 
+    STRICT RULES:
+    - NEVER mark a statement as "unsure" if it only contains general facts about the topic
+    - ALWAYS mark a statement as "no" if it discusses the topic without any connection to the question type
+    - ALWAYS mark a statement as "unsure" if it contains the answer term but requires additional context to serve as a complete answer
+    - NEVER mark as "no" if the statement contains terms directly related to what's being asked about
+
+    Examples of "no" statements:
+        * "Japan has beautiful seasons" for "What is Japan's largest city?"
+        * "Trees grow tall" for "How tall is Mount Everest?"
+        * "The weather is nice" for "Who is the president?"
 
     Example:
     Input: "What color is the sky during daytime?"

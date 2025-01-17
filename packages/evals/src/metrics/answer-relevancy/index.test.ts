@@ -5,7 +5,6 @@ import { AnswerRelevancyMetric } from './index';
 
 const testCases = [
   {
-    // Perfect relevancy (score: 10)
     input: 'What is the capital of France?',
     output: 'Paris is the capital of France.',
     expectedResult: {
@@ -14,7 +13,6 @@ const testCases = [
     },
   },
   {
-    // Mostly relevant with extra info (score: 5)
     input: 'What is the capital of France?',
     output:
       "Paris is the capital of France. It's known for the Eiffel Tower and is one of the most visited cities in the world.",
@@ -25,7 +23,6 @@ const testCases = [
     },
   },
   {
-    // Partially relevant (score: 2)
     input: 'What is the capital of France?',
     output: 'France is a country in Europe known for its cuisine. Paris is a major city there.',
     expectedResult: {
@@ -34,7 +31,6 @@ const testCases = [
     },
   },
   {
-    // Low relevancy (score: 0)
     input: 'What is the capital of France?',
     output: 'France is a beautiful country with great food and culture.',
     expectedResult: {
@@ -43,7 +39,6 @@ const testCases = [
     },
   },
   {
-    // Zero relevancy (score: 0)
     input: 'What is the capital of France?',
     output: 'The weather is nice today.',
     expectedResult: {
@@ -52,7 +47,6 @@ const testCases = [
     },
   },
   {
-    // Empty output (score: 0)
     input: 'What is the capital of France?',
     output: '',
     expectedResult: {
@@ -61,7 +55,6 @@ const testCases = [
     },
   },
   {
-    // Incorrect but relevant answer (score: 3)
     input: 'What is the capital of France?',
     output: 'Lyon is the capital of France.',
     expectedResult: {
@@ -70,7 +63,6 @@ const testCases = [
     },
   },
   {
-    // Single word correct answer (score: 10)
     input: 'What is the capital of France?',
     output: 'Paris',
     expectedResult: {
@@ -79,7 +71,6 @@ const testCases = [
     },
   },
   {
-    // Multiple questions (score: 1)
     input: 'What is the capital of France?',
     output: 'What about Germany? Or maybe Italy? Many European countries have beautiful capitals.',
     expectedResult: {
@@ -88,7 +79,6 @@ const testCases = [
     },
   },
   {
-    // Technical gibberish (score: 0)
     input: 'What is the capital of France?',
     output: 'ERROR_CODE_404: NULL_POINTER_EXCEPTION at line 42',
     expectedResult: {
