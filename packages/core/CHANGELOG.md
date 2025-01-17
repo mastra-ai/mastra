@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.1.27-alpha.64
+
+### Patch Changes
+
+- f368477: Added evals package and added evals in core
+- d5ec619: Remove promptTemplate from core
+
 ## 0.1.27-alpha.63
 
 ### Patch Changes
