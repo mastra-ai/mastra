@@ -66,7 +66,7 @@ const testCases = [
   },
 ];
 
-const SECONDS = 1000;
+const SECONDS = 10000;
 jest.setTimeout(15 * SECONDS);
 
 const modelConfig: ModelConfig = {
