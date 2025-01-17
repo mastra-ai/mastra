@@ -1,10 +1,10 @@
 import { Metric } from '@mastra/core';
 import nlp from 'compromise';
 
-import { ScoringResult } from '../types';
+import { MetricScoringResult } from '../types';
 
-export class StyleConsistencyScorer extends Metric {
-  async measure({ input }: { input: string }): Promise<ScoringResult> {
+export class StyleConsistencyMetric extends Metric {
+  async measure({ input }: { input: string }): Promise<MetricScoringResult> {
     const doc = nlp(input);
 
     // Add debugging logs

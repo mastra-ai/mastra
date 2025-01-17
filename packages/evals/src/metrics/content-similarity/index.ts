@@ -1,12 +1,12 @@
 import { Metric } from '@mastra/core';
 import stringSimilarity from 'string-similarity';
 
-import { ScorerOptions, ScoringResult } from '../types';
+import { MetricOptions, MetricScoringResult } from '../types';
 
-export class ContentSimilarityScorer extends Metric {
-  private options: ScorerOptions;
+export class ContentSimilarityMetric extends Metric {
+  private options: MetricOptions;
 
-  constructor(options: ScorerOptions = {}) {
+  constructor(options: MetricOptions = {}) {
     super();
     this.options = {
       ignoreCase: true,
@@ -15,7 +15,7 @@ export class ContentSimilarityScorer extends Metric {
     };
   }
 
-  async measure({ input, output }: { input: string; output: string }): Promise<ScoringResult> {
+  async measure({ input, output }: { input: string; output: string }): Promise<MetricScoringResult> {
     let processedInput = input;
     let processedOutput = output;
 

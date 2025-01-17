@@ -1,10 +1,10 @@
 import { Metric } from '@mastra/core';
 import { SequenceMatcher } from 'difflib';
 
-import { ScoringResult } from '../types';
+import { MetricScoringResult } from '../types';
 
-export class DifferenceScorer extends Metric {
-  async measure({ input, output }: { input: string; output: string }): Promise<ScoringResult> {
+export class DifferenceMetric extends Metric {
+  async measure({ input, output }: { input: string; output: string }): Promise<MetricScoringResult> {
     const matcher = new SequenceMatcher(null, input, output);
     const ratio = matcher.ratio();
 

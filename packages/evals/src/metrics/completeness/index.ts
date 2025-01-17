@@ -1,10 +1,10 @@
 import { Metric } from '@mastra/core';
 import nlp from 'compromise';
 
-import { ScoringResult } from '../types';
+import { MetricScoringResult } from '../types';
 
-export class CompletenessScorer extends Metric {
-  async measure({ input, output }: { input: string; output: string }): Promise<ScoringResult> {
+export class CompletenessMetric extends Metric {
+  async measure({ input, output }: { input: string; output: string }): Promise<MetricScoringResult> {
     // Handle null/undefined inputs
     if (input === null || input === undefined || output === null || output === undefined) {
       throw new Error('Inputs cannot be null or undefined');
@@ -22,8 +22,6 @@ export class CompletenessScorer extends Metric {
     const outputElements = this.extractElements(outputDoc);
     // Maybe we need a more sophisticated matching approach
     const coverage = this.calculateCoverage(inputElements, outputElements);
-
-    console.log({ coverage, inputElements, outputElements });
 
     return {
       score: coverage,

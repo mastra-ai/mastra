@@ -1,12 +1,12 @@
 import { Metric } from '@mastra/core';
 import Sentiment from 'sentiment';
 
-import { ScoringResult } from '../types';
+import { MetricScoringResult } from '../types';
 
-export class ToneConsistencyScorer extends Metric {
+export class ToneConsistencyMetric extends Metric {
   private sentiment = new Sentiment();
 
-  async measure({ input, output }: { input: string; output: string }): Promise<ScoringResult> {
+  async measure({ input, output }: { input: string; output: string }): Promise<MetricScoringResult> {
     const responseSentiment = this.sentiment.analyze(input);
 
     if (output) {

@@ -1,4 +1,4 @@
-export interface ScoringResult {
+export interface MetricScoringResult {
   score: number; // 0-1 normalized score
   weight?: number;
   details: string; // Human-readable explanation
@@ -6,7 +6,7 @@ export interface ScoringResult {
   metrics?: Record<string, number | boolean | Record<string, any>>; // Additional numerical metrics
 }
 
-export interface ScorerOptions {
+export interface MetricOptions {
   ignoreCase?: boolean;
   ignoreWhitespace?: boolean;
   // Add more options as needed
