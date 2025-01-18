@@ -8,6 +8,7 @@ const meta = {
   mcp: "Model Context Protocol (MCP)",
   workflows: "Workflows",
   observability: "Observability",
+  evals: "Evals",
 };
 
 export default meta;

@@ -1,0 +1,149 @@
+# ContextPositionMetric
+
+The `ContextPositionMetric` class evaluates how well context nodes are ordered based on their relevance to the query and output. It uses position-weighted scoring to emphasize the importance of having the most relevant context pieces appear earlier in the sequence.
+
+## Basic Usage
+
+```typescript
+import { ContextPositionMetric } from "@mastra/evals";
+
+// Configure the model for evaluation
+const model = {
+  provider: "OPEN_AI",
+  name: "gpt-4",
+  apiKey: process.env.OPENAI_API_KEY
+};
+
+const metric = new ContextPositionMetric(model, {
+  scale: 10
+});
+
+const result = await metric.measure({
+  input: "What is photosynthesis?",
+  output: "Photosynthesis is the process by which plants convert sunlight into energy.",
+  context: [
+    "Photosynthesis is a biological process used by plants to create energy from sunlight.",
+    "The process of photosynthesis produces oxygen as a byproduct.",
+    "Plants need water and nutrients from the soil to grow."
+  ]
+});
+
+console.log(result.score); // Position score from 0-10
+console.log(result.reason); // Explanation of the score
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "ModelConfig",
+      description: "Configuration for the model used to evaluate context positioning",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "{ scale?: number }",
+      description: "Configuration options for the metric",
+      isOptional: true,
+      defaultValue: "{ scale: 10 }",
+    }
+  ]}
+/>
+
+## measure() Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "The original query or prompt",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "The generated response to evaluate",
+      isOptional: false,
+    },
+    {
+      name: "context",
+      type: "string[]",
+      description: "Array of context pieces in their retrieval order",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "Position score (0 to scale, default 0-10)",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "Detailed explanation of the score and position analysis",
+    }
+  ]}
+/>
+
+## Scoring Details
+
+The metric evaluates context positioning through:
+- Individual assessment of each context piece's relevance
+- Position-based weighting (1/position)
+- Binary relevance verdicts (yes/no) with detailed reasoning
+- Normalization against optimal ordering
+
+The scoring process:
+1. Evaluates relevance of each context piece
+2. Applies position weights (earlier positions weighted more heavily)
+3. Sums weighted relevance scores
+4. Normalizes against maximum possible score
+5. Scales to configured range (default 0-10)
+
+Score interpretation:
+- 10: Most relevant context at the beginning, optimal ordering
+- 7-9: Relevant context mostly at the beginning
+- 4-6: Mixed ordering of relevant context
+- 1-3: Relevant context mostly at the end
+- 0: No relevant context or worst possible ordering
+
+## Example with Analysis
+
+```typescript
+const metric = new ContextPositionMetric(model);
+
+const result = await metric.measure({
+  input: "What are the benefits of exercise?",
+  output: "Regular exercise improves cardiovascular health and mental wellbeing.",
+  context: [
+    "A balanced diet is important for health.",
+    "Exercise strengthens the heart and improves blood circulation.",
+    "Regular physical activity reduces stress and anxiety.",
+    "Exercise equipment can be expensive."
+  ]
+});
+
+// Example output:
+// {
+//   score: 5.0,
+//   reason: "The score is 5.0 because while the second and third contexts are highly 
+//           relevant to the benefits of exercise, they are not optimally positioned at 
+//           the beginning of the sequence. The first and last contexts are not relevant 
+//           to the query, which impacts the position-weighted scoring."
+// }
+```
+
+## Related
+
+- [Context Precision Metric](./context-precision)
+- [Answer Relevancy Metric](./answer-relevancy)
+- [Completeness Metric](./completeness) 

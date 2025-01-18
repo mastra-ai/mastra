@@ -1,0 +1,154 @@
+# ContentSimilarityMetric
+
+The `ContentSimilarityMetric` class measures the textual similarity between two strings, providing a score that indicates how closely they match. It supports configurable options for case sensitivity and whitespace handling.
+
+## Basic Usage
+
+```typescript
+import { ContentSimilarityMetric } from "@mastra/evals";
+
+const metric = new ContentSimilarityMetric({
+  ignoreCase: true,
+  ignoreWhitespace: true
+});
+
+const result = await metric.measure({
+  input: "Hello, world!",
+  output: "hello world"
+});
+
+console.log(result.score); // Similarity score from 0-1
+console.log(result.details); // Explanation of similarity
+console.log(result.metrics); // Detailed similarity metrics
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "MetricOptions",
+      description: "Configuration options for similarity comparison",
+      isOptional: true,
+      defaultValue: "{ ignoreCase: true, ignoreWhitespace: true }",
+    }
+  ]}
+/>
+
+### MetricOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "ignoreCase",
+      type: "boolean",
+      description: "Whether to ignore case differences when comparing strings",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "ignoreWhitespace",
+      type: "boolean",
+      description: "Whether to normalize whitespace when comparing strings",
+      isOptional: true,
+      defaultValue: "true",
+    }
+  ]}
+/>
+
+## measure() Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "The reference text to compare against",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "The text to evaluate for similarity",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "Similarity score (0-1) where 1 indicates perfect similarity",
+    },
+    {
+      name: "details",
+      type: "string",
+      description: "Human-readable description of the similarity score",
+    },
+    {
+      name: "confidence",
+      type: "number",
+      description: "Confidence score for the evaluation (fixed at 0.9)",
+    },
+    {
+      name: "metrics",
+      type: "object",
+      description: "Additional similarity metrics",
+    }
+  ]}
+/>
+
+### metrics Object
+
+<PropertiesTable
+  content={[
+    {
+      name: "similarity",
+      type: "number",
+      description: "Raw similarity score between the two texts",
+    }
+  ]}
+/>
+
+## Text Processing Details
+
+The metric processes text in the following ways when configured:
+- Case normalization: Converts all text to lowercase if `ignoreCase` is true
+- Whitespace normalization: Replaces multiple spaces with single space and trims if `ignoreWhitespace` is true
+
+## Example with Different Options
+
+```typescript
+// Case-sensitive comparison
+const caseSensitiveMetric = new ContentSimilarityMetric({
+  ignoreCase: false,
+  ignoreWhitespace: true
+});
+
+const result1 = await caseSensitiveMetric.measure({
+  input: "Hello World",
+  output: "hello world"
+}); // Lower score due to case difference
+
+// Strict whitespace comparison
+const strictWhitespaceMetric = new ContentSimilarityMetric({
+  ignoreCase: true,
+  ignoreWhitespace: false
+});
+
+const result2 = await strictWhitespaceMetric.measure({
+  input: "Hello   World",
+  output: "Hello World"
+}); // Lower score due to whitespace difference
+```
+
+## Related
+
+- [Completeness Metric](./completeness)
+- [Difference Metric](./difference)
+- [Answer Relevancy Metric](./answer-relevancy) 
