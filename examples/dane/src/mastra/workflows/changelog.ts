@@ -4,7 +4,7 @@ import { execa } from 'execa';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { z } from 'zod';
 
-import { slack } from '../tools/mcp';
+import { slack } from '../tools/mcp.js';
 
 export const changelogWorkflow = new Workflow({
   name: 'changelog',
