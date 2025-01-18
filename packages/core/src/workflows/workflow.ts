@@ -289,9 +289,10 @@ export class Workflow<
             {
               ...options,
               triggerData: (options as WorkflowRunOptionsWithTrigger<NonNullable<TTriggerSchema>>).triggerData,
+              runId,
             },
           ]
-        : [{ ...options }]
+        : [{ ...options, runId }]
     ) as WorkflowExecuteParams<TTriggerSchema>;
 
     return {
