@@ -438,7 +438,7 @@ router.post('/workflows/:workflowId/execute', async ({ params, json, mastra }: I
     const workflowId = decodeURIComponent(params.workflowId);
     const workflow = mastra.getWorkflow(workflowId);
     const body = await json();
-    const result = await workflow.execute(body);
+    const result = await workflow.createRun(body).start();
 
     return new Response(JSON.stringify(result), {
       headers: {

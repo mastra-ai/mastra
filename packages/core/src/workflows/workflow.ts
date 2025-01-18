@@ -26,7 +26,9 @@ import {
   WorkflowActions,
   WorkflowActors,
   WorkflowContext,
+  WorkflowExecuteParams,
   WorkflowEvent,
+  WorkflowRunOptionsWithTrigger,
   WorkflowState,
 } from './types';
 import { getStepResult, isErrorEvent, isTransitionEvent, isVariableReference } from './utils';
@@ -275,31 +277,37 @@ export class Workflow<
    * @throws Error if trigger schema validation fails
    */
 
-  createRun(): WorkflowResultReturn<TTriggerSchema> {
-    const runId = crypto.randomUUID();
+  createRun(...params: WorkflowExecuteParams<TTriggerSchema>): WorkflowResultReturn<TTriggerSchema> {
+    const [options] = params;
+    const runId = options?.runId ?? crypto.randomUUID();
     this.#runId = runId;
+
+    const executeOptions: WorkflowExecuteParams<TTriggerSchema> = (
+      this.triggerSchema
+        ? // If triggerSchema is provided, require options argument
+          [
+            {
+              ...options,
+              triggerData: (options as WorkflowRunOptionsWithTrigger<NonNullable<TTriggerSchema>>).triggerData,
+            },
+          ]
+        : [{ ...options }]
+    ) as WorkflowExecuteParams<TTriggerSchema>;
 
     return {
       runId,
-      start: async ({ triggerData } = {}) => this.execute({ triggerData }),
+      start: async () => this.#execute(...executeOptions),
     };
   }
 
-  async execute({
-    triggerData,
-    snapshot,
-    runId,
-    stepId,
-  }: {
-    stepId?: string;
-    triggerData?: z.infer<TTriggerSchema>;
-    runId?: string;
-    snapshot?: Snapshot<any>;
-  } = {}): Promise<{
+  async #execute(...params: WorkflowExecuteParams<TTriggerSchema>): Promise<{
     triggerData?: z.infer<TTriggerSchema>;
     results: Record<string, StepResult<any>>;
     runId: string;
   }> {
+    const [options] = params;
+    const { runId, stepId, snapshot, triggerData } = options;
+
     if (runId) {
       this.#runId = runId;
       // First, let's log the incoming snapshot for debugging
@@ -1577,11 +1585,15 @@ export class Workflow<
       stepId,
     });
 
-    return this.execute({
-      snapshot: parsedSnapshot,
-      runId,
-      stepId,
-    });
+    const executeOptions = [
+      {
+        snapshot: parsedSnapshot,
+        runId,
+        stepId,
+      },
+    ] as WorkflowExecuteParams<TTriggerSchema>; // @hack: to get the type to work without dealing with triggerSchema
+
+    return this.#execute(...executeOptions);
   }
   __registerPrimitives(p: MastraPrimitives) {
     if (p.telemetry) {
