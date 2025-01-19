@@ -34,6 +34,41 @@ const app = express();
 
 app.use(express.json());
 
+// Store connected SSE clients
+let clients: Response[] = [];
+
+// SSE endpoint for refresh notifications
+app.get('/refresh-events', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  // Send initial connection message
+  res.write('data: connected\n\n');
+
+  // Add client to list
+  clients.push(res);
+
+  // Remove client when connection closes
+  req.on('close', () => {
+    clients = clients.filter(client => client !== res);
+  });
+});
+
+// Trigger refresh for all clients
+app.post('/__refresh', (_req: Request, res: Response) => {
+  clients.forEach(client => {
+    try {
+      client.write('data: refresh\n\n');
+    } catch (err) {
+      // Remove failed clients
+      clients = clients.filter(c => c !== client);
+    }
+  });
+  res.sendStatus(200);
+});
+
 // Swagger configuration
 const options: Options = {
   info: {
