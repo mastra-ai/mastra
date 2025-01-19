@@ -104,7 +104,15 @@ await engine.syncRecords({
 });
 ```
 
-### API Summary
+More details:
+
+- **Entities** represent a conceptual data model (like "Contacts", "Orders", or "Tickets") in your application.
+- **Records** are individual data entries within an entity.
+- **Syncs** are async functions that manage data synchronization between external systems and Mastra. For example, you can use a sync to import records from a third-party API into your local database.
+
+You can create, read, update, and delete entities and their records using the engine's methods.
+
+### Engine Sync Operations APIs
 
 **Entity Management:**
 
