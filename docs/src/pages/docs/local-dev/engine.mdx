@@ -1,62 +1,13 @@
 # Mastra Engine
 
-The Mastra Engine is a PostgreSQL-based system that provides core infrastructure for AI applications built on Mastra. It handles data persistence, background processing, and vector search capabilities to help you run your AI workflows, syncs, and agents in a production-ready environment.
+The Mastra Engine provides PostgreSQL-based storage for two core AI application needs:
+
+1. Agent Memory - Persistent storage for conversation history and agent state
+2. Vector Operations - Storage and similarity search for RAG applications
 
 Mastra Engine is not required to run Mastra, but provides a "batteries-included" local development experience and a production-ready data layer.
 
-## Key Features
-
-- **Data Persistence**: Store agent states, records, conversation history, and other data required by your AI application.
-- **Sync Infrastructure**: Run sync tasks that load and merge data from various sources in a consistent manner.
-- **Vector Search (RAG)**: Integrate vector stores for Retrieval-Augmented Generation (RAG) to build a knowledge base and query it for context.
-- **Database Migrations & Type Generation**: Automatically manage database schema and generate TypeScript types to ensure type safety.
-
-## Getting Started
-
-### Installation
-
-Ensure you have Mastra and its CLI installed. Then add the engine package:
-
-```bash
-npm install @mastra/engine
-```
-
-### Initialization
-
-Initialize the Mastra Engine by passing in a database connection URL. This can be done when you set up your main Mastra instance:
-
-```typescript
-import { Mastra } from "@mastra/core";
-import { PostgresEngine } from "@mastra/engine";
-
-export const mastra = new Mastra({
-  engine: new PostgresEngine({
-    url: process.env.DATABASE_URL!, // e.g., 'postgresql://localhost:5432/mydb'
-  }),
-  // ...other configuration
-});
-```
-
-Once initialized, the Mastra Engine becomes available to all registered agents, workflows, tools, and syncs.
-
-## Core Concepts
-
-### Entities and Records
-
-- **Entities** represent a conceptual data model (like "Contacts", "Orders", or "Tickets") in your application.
-- **Records** are individual data entries within an entity.
-
-You can create, read, update, and delete entities and their records using the engine's methods.
-
-### Sync Operations
-
-Syncs are async functions that manage data synchronization between external systems and Mastra. For example, you can use a sync to import records from a third-party API into your local database.
-
-### RAG and Vector Search
-
-With RAG (Retrieval-Augmented Generation), you can store document embeddings in the database and efficiently query them using vector search. The Mastra Engine can integrate with vector stores like PostgreSQL PgVector, Pinecone, or Qdrant. This allows your LLM to retrieve relevant context from your custom knowledge base.
-
-## CLI Commands
+## Setting up for local development
 
 The Mastra CLI includes commands to manage your engine and database:
 
@@ -66,7 +17,49 @@ The Mastra CLI includes commands to manage your engine and database:
 - `mastra engine generate`: Generates TypeScript types from your database schema.
 - `mastra engine down`: Stops your Docker containers.
 
-## Example: Using the Mock Engine in Tests
+The engine will run by default on port 5432 of `localhost`.
+
+## Configuring for Agent Memory
+
+Configure your agent to use PostgreSQL for memory storage:
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { PgMemory } from "@mastra/memory";
+
+const pgMemory = new PgMemory({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+});
+
+export const mastra = new Mastra({
+  memory: pgMemory,
+  agents: { myAgent },
+});
+```
+
+Now, agent memory operations like `saveMemory`, `getContextWindow`, and `getMemory` are available to your agent. See the [Memory](../agents/memory.mdx) reference for more details.
+
+## Vector Operations (RAG)
+
+For RAG applications, you can set up vector storage and reranking:
+
+```typescript
+import { PgVector } from "@mastra/rag";
+import { Reranker } from "@mastra/rerank";
+
+// Initialize vector store and reranker
+const vectorStore = new PgVector({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!
+});
+```
+
+## Deploying to Production
+
+To deploy to production, you'll need to set up a production Postgres database and configure your Mastra application to use it. 
+
+You can run `DB_URL=your_prod_db_url mastra engine migrate` to create a schema in a production database.
+
+## Mocking for Tests
 
 For testing or development, you can use the `MockMastraEngine`:
 
@@ -97,16 +90,29 @@ console.log(records);
 
 This mock engine mimics the behavior of the real engine without requiring a real database connection, making it ideal for unit tests.
 
-## Production Considerations
+## Using the Engine for Sync Operations
 
-When running in production:
+The engine also supports keeping external data sources up to date through sync operations:
 
-1. **Connection Pooling**: Ensure proper connection pooling and timeouts for your Postgres connection.
-2. **Migrations**: Run `mastra engine migrate` during deployment to keep the schema up to date.
-3. **Backups**: Regularly back up your Postgres database.
-4. **Observability**: Use built-in telemetry and logging features in Mastra to monitor engine queries and performance.
+```typescript showLineNumbers copy
 
-## API Summary
+await engine.syncRecords({
+  name: "external_docs",
+  connectionId: "sync_123", 
+  records: updatedRecords,
+  lastSyncId: "sync_20240315"
+});
+```
+
+More details:
+
+- **Entities** represent a conceptual data model (like "Contacts", "Orders", or "Tickets") in your application.
+- **Records** are individual data entries within an entity.
+- **Syncs** are async functions that manage data synchronization between external systems and Mastra. For example, you can use a sync to import records from a third-party API into your local database.
+
+You can create, read, update, and delete entities and their records using the engine's methods.
+
+### Engine Sync Operations APIs
 
 **Entity Management:**
 
@@ -130,6 +136,6 @@ When running in production:
 
 - Integrate with vector stores for RAG workflows.
 
-## Conclusion
+## Summary
 
-Mastra Engine is a key building block for building robust AI applications. By providing a standardized way to manage entities, records, and sync operations, it ensures a consistent and scalable data layer. Combined with Mastra’s workflows, agents, and observability tools, you can move from a prototype to a production-grade AI system with confidence.
+The Mastra Engine is a PostgreSQL instance that stores agent memory and vector embeddings. You can spin it up locally with Docker for development and deploy it to a production instance. It's a helpful starting spot for handling agent memory and vector operations -- start with Postgres + pgvector, then adapt individual components based on your needs.
