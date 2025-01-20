@@ -1,4 +1,4 @@
-import { GithubLink } from '../../../components/github-link';
+import { GithubLink } from "../../../components/github-link";
 
 # Metadata Filtering
 
@@ -8,6 +8,7 @@ This system uses metadata filters to search for relevant chunks in the vector st
 ## Overview
 
 The system implements RAG using Mastra and OpenAI. Here's what it does:
+
 1. Sets up a Mastra agent with GPT-4o-mini for response generation
 2. Creates a vector query tool to manage vector store interactions
 3. Chunks text documents into smaller segments
@@ -16,7 +17,7 @@ The system implements RAG using Mastra and OpenAI. Here's what it does:
 6. Retrieves relevant chunks based on queries using vector query tool
 7. Generates context-aware responses using the Mastra agent
 
-## Setup 
+## Setup
 
 ### Environment Setup
 
@@ -31,23 +32,25 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
-import { Mastra, Agent, EmbedResult, EmbedManyResult } from '@mastra/core'
-import { createVectorQueryTool, embed, MDocument, PgVector } from '@mastra/rag';
+import { Mastra, Agent, EmbedResult, EmbedManyResult } from "@mastra/core";
+import { createVectorQueryTool, embed, MDocument, PgVector } from "@mastra/rag";
 ```
 
-## Vectory Query Tool Creation
+## Vector Query Tool Creation
+
 Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
+
 ```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'embeddings',
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
   options: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-ada-002',
+    provider: "OPEN_AI",
+    model: "text-embedding-ada-002",
     maxRetries: 3,
   },
   topK: 3,
-  vectorFilterType: 'pg',
+  vectorFilterType: "pg",
 });
 ```
 
@@ -57,12 +60,12 @@ Set up the Mastra agent that will handle the responses:
 
 ```typescript copy showLineNumbers{16} filename="src/mastra/index.ts"
 export const ragAgent = new Agent({
-  name: 'RAG Agent',
+  name: "RAG Agent",
   instructions:
-    'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
+    "You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.",
   model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o-mini',
+    provider: "OPEN_AI",
+    name: "gpt-4o-mini",
   },
   tools: { vectorQueryTool },
 });
@@ -78,9 +81,9 @@ const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 export const mastra = new Mastra({
   agents: { ragAgent },
   vectors: { pgVector },
-})
+});
 
-const agent = mastra.getAgent('ragAgent')
+const agent = mastra.getAgent("ragAgent");
 ```
 
 ## Document Processing
@@ -88,17 +91,19 @@ const agent = mastra.getAgent('ragAgent')
 Create a document and process it into chunks:
 
 ```typescript copy showLineNumbers{36} filename="src/mastra/index.ts"
-const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`)
+const doc = MDocument.fromText(
+  `The Impact of Climate Change on Global Agriculture...`,
+);
 
 const chunks = await doc.chunk({
-  strategy: 'recursive',
+  strategy: "recursive",
   size: 512,
   overlap: 50,
-  separator: '\n',
+  separator: "\n",
   extract: {
     keywords: true,
   },
-})
+});
 ```
 
 ## Creating and Storing Embeddings
@@ -107,15 +112,15 @@ Generate embeddings for the chunks and store them in the vector database:
 
 ```typescript copy showLineNumbers{48} filename="src/mastra/index.ts"
 const { embeddings } = (await embed(chunks, {
-  provider: 'OPEN_AI',
-  model: 'text-embedding-ada-002',
+  provider: "OPEN_AI",
+  model: "text-embedding-ada-002",
   maxRetries: 3,
 })) as EmbedManyResult<string>;
 
-const vectorStore = mastra.getVector('pgVector');
-await vectorStore.createIndex('embeddings', 1536);
+const vectorStore = mastra.getVector("pgVector");
+await vectorStore.createIndex("embeddings", 1536);
 await vectorStore.upsert(
-  'embeddings',
+  "embeddings",
   embeddings,
   chunks?.map((chunk: any) => ({
     text: chunk.text,
@@ -170,8 +175,8 @@ async function answerQueries(
     try {
       // Generate and log the response
       const answer = await generateResponse(query, filter);
-      console.log('\nQuery:', query);
-      console.log('Response:', answer);
+      console.log("\nQuery:", query);
+      console.log("Response:", answer);
     } catch (error) {
       console.error(`Error processing query "${query}":`, error);
     }
@@ -180,22 +185,22 @@ async function answerQueries(
 
 const queries = [
   {
-    query: 'What adaptation strategies are mentioned?',
+    query: "What adaptation strategies are mentioned?",
     filter: {
-      keyword: 'excerptKeywords',
-      operator: 'ilike',
+      keyword: "excerptKeywords",
+      operator: "ilike",
       value: `%adaptation%`,
     },
   },
   {
-    query: 'How do temperatures affect crop yields specifically?',
-    filter: { keyword: 'excerptKeywords', operator: 'ilike', value: `%crop%` },
+    query: "How do temperatures affect crop yields specifically?",
+    filter: { keyword: "excerptKeywords", operator: "ilike", value: `%crop%` },
   },
   {
-    query: 'What are the future challenges?',
+    query: "What are the future challenges?",
     filter: {
-      keyword: 'excerptKeywords',
-      operator: 'ilike',
+      keyword: "excerptKeywords",
+      operator: "ilike",
       value: `%technologies%`,
     },
   },
@@ -204,10 +209,13 @@ const queries = [
 await answerQueries(queries);
 ```
 
-
 <br />
 <br />
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/filter-rag'} />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/filter-rag"
+  }
+/>

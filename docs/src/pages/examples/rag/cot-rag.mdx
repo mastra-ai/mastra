@@ -1,4 +1,4 @@
-import { GithubLink } from '../../../components/github-link';
+import { GithubLink } from "../../../components/github-link";
 
 # Chain of Thought Prompting
 
@@ -7,6 +7,7 @@ This example demonstrates how to implement a Retrieval-Augmented Generation (RAG
 ## Overview
 
 The system implements RAG using Mastra and OpenAI with chain-of-thought prompting. Here's what it does:
+
 1. Sets up a Mastra agent with GPT-4o-mini for response generation
 2. Creates a vector query tool to manage vector store interactions
 3. Chunks text documents into smaller segments
@@ -15,7 +16,7 @@ The system implements RAG using Mastra and OpenAI with chain-of-thought promptin
 6. Retrieves relevant chunks based on queries using vector query tool
 7. Generates context-aware responses using chain-of-thought reasoning
 
-## Setup 
+## Setup
 
 ### Environment Setup
 
@@ -30,20 +31,21 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
-import { Mastra, Agent, EmbedManyResult } from '@mastra/core';
-import { createVectorQueryTool, embed, MDocument, PgVector } from '@mastra/rag';
+import { Mastra, Agent, EmbedManyResult } from "@mastra/core";
+import { createVectorQueryTool, embed, MDocument, PgVector } from "@mastra/rag";
 ```
 
-## Vectory Query Tool Creation
+## Vector Query Tool Creation
 
 Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
+
 ```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'embeddings',
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
   options: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-ada-002',
+    provider: "OPEN_AI",
+    model: "text-embedding-ada-002",
     maxRetries: 3,
   },
   topK: 3,
@@ -56,7 +58,7 @@ Set up the Mastra agent with chain-of-thought prompting instructions:
 
 ```typescript copy showLineNumbers{15} filename="src/mastra/index.ts"
 export const ragAgent = new Agent({
-  name: 'RAG Agent',
+  name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context.
 Follow these steps for each response:
 
@@ -75,11 +77,11 @@ THOUGHT PROCESS:
 FINAL ANSWER:
 [Your concise answer based on the retrieved context]`,
   model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o-mini',
+    provider: "OPEN_AI",
+    name: "gpt-4o-mini",
   },
   tools: { contextTool },
-})
+});
 ```
 
 ## Instantiate PgVector and Mastra
@@ -92,8 +94,8 @@ const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 export const mastra = new Mastra({
   agents: { ragAgent },
   vectors: { pgVector },
-})
-const agent = mastra.getAgent('ragAgent')
+});
+const agent = mastra.getAgent("ragAgent");
 ```
 
 ## Document Processing
@@ -101,14 +103,16 @@ const agent = mastra.getAgent('ragAgent')
 Create a document and process it into chunks:
 
 ```typescript copy showLineNumbers{49} filename="src/mastra/index.ts"
-const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`)
+const doc = MDocument.fromText(
+  `The Impact of Climate Change on Global Agriculture...`,
+);
 
 const chunks = await doc.chunk({
-  strategy: 'recursive',
+  strategy: "recursive",
   size: 512,
   overlap: 50,
-  separator: '\n',
-})
+  separator: "\n",
+});
 ```
 
 ## Creating and Storing Embeddings
@@ -120,15 +124,15 @@ const { embeddings } = (await embed(chunks, {
   provider: "OPEN_AI",
   model: "text-embedding-ada-002",
   maxRetries: 3,
-})) as EmbedManyResult<string>
+})) as EmbedManyResult<string>;
 
-const vectorStore = mastra.getVector('pgVector');
-await vectorStore.createIndex("embeddings", 1536)
+const vectorStore = mastra.getVector("pgVector");
+await vectorStore.createIndex("embeddings", 1536);
 await vectorStore.upsert(
   "embeddings",
   embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text }))
-)
+  chunks?.map((chunk: any) => ({ text: chunk.text })),
+);
 ```
 
 ## Response Generation with Chain-of-Thought
@@ -144,10 +148,10 @@ async function generateResponse(query: string) {
     Please base your answer only on the context provided in the tool. If the context doesn't 
     contain enough information to fully answer the question, please state that explicitly.
     Remember: Explain how you're using the retrieved information to reach your conclusions.
-    `
+    `;
 
-  const completion = await agent.generate(prompt)
-  return completion.text
+  const completion = await agent.generate(prompt);
+  return completion.text;
 }
 ```
 
@@ -157,13 +161,13 @@ async function generateResponse(query: string) {
 async function answerQueries(queries: string[]) {
   for (const query of queries) {
     try {
-      const answer = await generateResponse(query)
-      console.log('\nQuery:', query)
-      console.log('\nReasoning Chain + Retrieved Context Response:')
-      console.log(answer)
-      console.log('\n-------------------')
+      const answer = await generateResponse(query);
+      console.log("\nQuery:", query);
+      console.log("\nReasoning Chain + Retrieved Context Response:");
+      console.log(answer);
+      console.log("\n-------------------");
     } catch (error) {
-      console.error(`Error processing query "${query}":`, error)
+      console.error(`Error processing query "${query}":`, error);
     }
   }
 }
@@ -176,7 +180,7 @@ const queries = [
   "What future implications are discussed for agriculture?",
 ];
 
-await answerQueries(queries)
+await answerQueries(queries);
 ```
 
 <br />
@@ -184,4 +188,8 @@ await answerQueries(queries)
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cot-rag'} />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cot-rag"
+  }
+/>

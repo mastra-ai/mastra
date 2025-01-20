@@ -53,7 +53,8 @@
     "workflow-with-inline-steps": "1.0.1-alpha.10",
     "workflow": "1.0.1-alpha.23",
     "workflow-with-separate-steps": "1.0.1-alpha.10",
-    "@mastra/evals": "0.0.0"
+    "@mastra/evals": "0.0.0",
+    "@mastra/playground": "0.0.1"
   },
   "changesets": [
     "afraid-papayas-shake",
@@ -93,12 +94,14 @@
     "eleven-llamas-warn",
     "fair-colts-know",
     "fair-houses-joke",
+    "fast-pigs-boil",
     "few-apes-jump",
     "five-moles-hunt",
     "flat-points-behave",
     "fluffy-rings-shake",
     "fresh-lions-work",
     "gentle-suits-complain",
+    "giant-falcons-sneeze",
     "giant-pears-taste",
     "gold-deers-peel",
     "good-days-explode",
@@ -182,6 +185,7 @@
     "silver-stingrays-learn",
     "six-keys-jump",
     "sixty-fishes-tickle",
+    "small-lions-punch",
     "smart-kings-smile",
     "smooth-queens-rhyme",
     "sour-carpets-marry",
