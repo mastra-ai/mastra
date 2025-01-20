@@ -155,7 +155,7 @@ router.post('/api/agents/:agentId/generate', async ({ params, json, mastra }: IR
   try {
     const agentId = decodeURIComponent(params.agentId);
     const agent = mastra.getAgent(agentId);
-    const { messages, threadId, resourceid } = await json();
+    const { messages, threadId, resourceid, output } = await json();
 
     const { ok, errorResponse } = await validateBody({ messages });
 
@@ -177,16 +177,22 @@ router.post('/api/agents/:agentId/generate', async ({ params, json, mastra }: IR
       });
     }
 
-    const result = await agent.generate(messages, { threadId, resourceid });
-    return new Response(JSON.stringify(result), {
-      headers: {
-        'Content-Type': 'application/json',
+    const result = await agent.generate(messages, { output, threadId, resourceid });
+
+    return new Response(
+      output
+        ? JSON.stringify({ object: result.object, agent: result.agent })
+        : JSON.stringify({ text: result.text, agent: agent.name }),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
       },
-    });
+    );
   } catch (error) {
     const apiError = error as ApiError;
-    console.error('Error texting from agent', apiError);
-    return new Response(JSON.stringify({ error: apiError.message || 'Error texting from agent' }), {
+    console.error('Error generating from agent', apiError);
+    return new Response(JSON.stringify({ error: apiError.message || 'Error generating from agent' }), {
       status: apiError.status || 500,
       headers: {
         'Content-Type': 'application/json',
@@ -198,106 +204,11 @@ router.post('/api/agents/:agentId/generate', async ({ params, json, mastra }: IR
 router.post('/api/agents/:agentId/stream', async ({ params, json, mastra }: IRequest) => {
   try {
     const agentId = decodeURIComponent(params.agentId);
-    const agent = mastra.getAgent(agentId);
-    const { messages, threadId, resourceid } = await json();
-
-    const { ok, errorResponse } = await validateBody({ messages });
-
-    if (!ok) {
-      return new Response(JSON.stringify({ error: errorResponse }), {
-        status: 400,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-    }
-
-    if (!Array.isArray(messages)) {
-      return new Response(JSON.stringify({ error: { messages: 'Messages should be an array' } }), {
-        status: 400,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-    }
-
-    const streamResult = await agent.stream(messages, { threadId, resourceid });
-
-    return streamResult.toDataStreamResponse({
-      headers: {
-        'Content-Type': 'text/x-unknown',
-        'content-encoding': 'identity',
-        'transfer-encoding': 'chunked',
-      },
-    });
-  } catch (error) {
-    const apiError = error as ApiError;
-    console.error('Error streaming from agent', apiError);
-    return new Response(JSON.stringify({ error: apiError.message || 'Error streaming from agent' }), {
-      status: apiError.status || 500,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-  }
-});
-
-router.post('/api/agents/:agentId/text-object', async ({ params, json, mastra }: IRequest) => {
-  try {
-    const agentId = decodeURIComponent(params.agentId);
-    const agent = mastra.getAgent(agentId);
-    const { messages, schema, threadId, resourceid } = await json();
-
-    const { ok, errorResponse } = await validateBody({
-      messages,
-      schema,
-    });
-
-    if (!ok) {
-      return new Response(JSON.stringify({ error: errorResponse }), {
-        status: 400,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-    }
-
-    if (!Array.isArray(messages)) {
-      return new Response(JSON.stringify({ error: { messages: 'Messages should be an array' } }), {
-        status: 400,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-    }
-
-    const result = await agent.generate(messages, { output: schema, threadId, resourceid });
-    return new Response(JSON.stringify(result), {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-  } catch (error) {
-    const apiError = error as ApiError;
-    console.error('Error getting structured output from agent', apiError);
-    return new Response(JSON.stringify({ error: apiError.message || 'Error getting structured output from agent' }), {
-      status: apiError.status || 500,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-  }
-});
-
-router.post('/api/agents/:agentId/stream-object', async ({ params, json, mastra }: IRequest) => {
-  try {
-    const agentId = decodeURIComponent(params.agentId);
     const agent: Agent = mastra.getAgent(agentId);
-    const { messages, schema, threadId, resourceid } = await json();
+    const { messages, threadId, resourceid, output } = await json();
 
     const { ok, errorResponse } = await validateBody({
       messages,
-      schema,
     });
 
     if (!ok) {
@@ -318,7 +229,7 @@ router.post('/api/agents/:agentId/stream-object', async ({ params, json, mastra 
       });
     }
 
-    const streamResult = await agent.stream(messages, { output: schema, threadId, resourceid });
+    const streamResult = await agent.stream(messages, { threadId, resourceid, output });
 
     return streamResult.toTextStreamResponse({
       headers: {
@@ -329,8 +240,8 @@ router.post('/api/agents/:agentId/stream-object', async ({ params, json, mastra 
     });
   } catch (error) {
     const apiError = error as ApiError;
-    console.error('Error streaming structured output from agent', apiError);
-    return new Response(JSON.stringify({ error: apiError.message || 'Error streaming structured output from agent' }), {
+    console.error('Error streaming from agent', apiError);
+    return new Response(JSON.stringify({ error: apiError.message || 'Error streaming from agent' }), {
       status: apiError.status || 500,
       headers: {
         'Content-Type': 'application/json',

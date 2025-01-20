@@ -117,22 +117,27 @@ app.post('/api/agents/:agentId/generate', async (req: Request, res: Response) =>
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    const { messages, threadId, resourceid } = req.body;
-    const { ok, errorResponse } = await validateBody({
-      messages,
-    });
+    const { messages, threadId, resourceid, output } = req.body;
+    const { ok, errorResponse } = await validateBody({ messages });
 
     if (!ok) {
       res.status(400).json({ error: errorResponse });
       return;
     }
 
-    const result = await agent.generate(messages, { threadId, resourceid });
-    res.json(result);
+    const result = await agent.generate(messages, { output, threadId, resourceid });
+    if (output) {
+      res.json({
+        object: result.object,
+        agent: result.agent,
+      });
+    } else {
+      res.json({ text: result.text, agent: agent.name });
+    }
   } catch (error) {
     const apiError = error as ApiError;
-    console.error('Error texting from agent', apiError);
-    res.status(apiError.status || 500).json({ error: apiError.message || 'Error texting from agent' });
+    console.error('Error generating from agent', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error generating from agent' });
     return;
   }
 });
@@ -141,7 +146,7 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    const { messages, threadId, resourceid } = req.body;
+    const { messages, threadId, resourceid, output } = req.body;
     const { ok, errorResponse } = await validateBody({
       messages,
     });
@@ -152,6 +157,7 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
     }
 
     const streamResult = await agent.stream(messages, {
+      output,
       threadId,
       resourceid,
     });
@@ -161,63 +167,6 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
     const apiError = error as ApiError;
     console.error('Error streaming from agent', apiError);
     res.status(apiError.status || 500).json({ error: apiError.message || 'Error streaming from agent' });
-    return;
-  }
-});
-
-app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response) => {
-  try {
-    const agentId = req.params.agentId;
-    const agent: Agent = mastra.getAgent(agentId);
-    const { messages, schema, threadId, resourceid } = req.body;
-
-    const { ok, errorResponse } = await validateBody({
-      messages,
-      schema,
-    });
-
-    if (!ok) {
-      res.status(400).json({ error: errorResponse });
-      return;
-    }
-
-    const result = await agent.generate(messages, { output: schema, threadId, resourceid });
-    res.json(result);
-  } catch (error) {
-    const apiError = error as ApiError;
-    console.error('Error getting structured output from agent', apiError);
-    res
-      .status(apiError.status || 500)
-      .json({ error: apiError.message || 'Error getting structured output from agent' });
-    return;
-  }
-});
-
-app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Response) => {
-  try {
-    const agentId = req.params.agentId;
-    const agent: Agent = mastra.getAgent(agentId);
-    const { messages, schema, threadId, resourceid } = req.body;
-
-    const { ok, errorResponse } = await validateBody({
-      messages,
-      schema,
-    });
-
-    if (!ok) {
-      res.status(400).json({ error: errorResponse });
-      return;
-    }
-
-    const streamResult = await agent.stream(messages, { output: schema, threadId, resourceid });
-
-    streamResult.pipeTextStreamToResponse(res);
-  } catch (error) {
-    const apiError = error as ApiError;
-    console.error('Error streaming structured output from agent', apiError);
-    res
-      .status(apiError.status || 500)
-      .json({ error: apiError.message || 'Error streaming structured output from agent' });
     return;
   }
 });
