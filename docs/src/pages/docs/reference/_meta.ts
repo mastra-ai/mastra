@@ -3,6 +3,7 @@ const meta = {
   cli: "CLI",
   llm: "LLM",
   rag: "RAG",
+  tools: "Tools",
   tts: "TTS",
   agents: "Agents",
   mcp: "Model Context Protocol (MCP)",
