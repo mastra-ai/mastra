@@ -1,0 +1,44 @@
+name: First Time Contributor
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+jobs:
+  check-first-time:
+    runs-on: ubuntu-latest
+    outputs:
+      is_first_time: ${{ steps.check-commits.outputs.is_first_time }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetch all history for accurate commit checking
+
+      - name: Check if author has previous commits
+        id: check-commits
+        run: |
+          # Get PR author's username
+          PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+
+          # Count number of commits by this author (excluding the PR commits)
+          COMMIT_COUNT=$(git log --author="$PR_AUTHOR" main --not ${{ github.event.pull_request.head.sha }} --pretty=format:"%H" | wc -l)
+
+          if [ $COMMIT_COUNT -eq 0 ]; then
+            echo "is_first_time=true" >> $GITHUB_OUTPUT
+            echo "This is the author's first contribution!"
+          else
+            echo "is_first_time=false" >> $GITHUB_OUTPUT
+            echo "Author has $COMMIT_COUNT previous commits"
+          fi
+
+  your-action:
+    needs: check-first-time
+    if: needs.check-first-time.outputs.is_first_time == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Your workflow steps
+        run: |
+          echo "This is a first-time contributor - running the workflow"
+          # Add your workflow steps here
