@@ -1,3 +1,4 @@
+import { ChildProcess } from 'child_process';
 import { watch } from 'chokidar';
 import { config } from 'dotenv';
 import { execa } from 'execa';
@@ -17,7 +18,8 @@ import { EXPRESS_SERVER } from './deploy/server.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-let currentServerProcess: any;
+let currentServerProcess: ChildProcess | undefined;
+let isRestarting = false;
 
 const bundleMastra = async (dirPath: string) => {
   await bundle(dirPath, { buildName: 'Mastra' });
@@ -95,7 +97,7 @@ const startServer = async (dotMastraPath: string, port: number, MASTRA_TOOLS_PAT
       });
     } catch (err) {
       // Retry after another second
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 1500));
       try {
         await fetch(`http://localhost:${port}/__refresh`, {
           method: 'POST',
@@ -108,7 +110,7 @@ const startServer = async (dotMastraPath: string, port: number, MASTRA_TOOLS_PAT
       }
     }
 
-    if (currentServerProcess.failed) {
+    if (currentServerProcess.exitCode !== null) {
       console.error('Server failed to start with error:', currentServerProcess.stderr);
       return;
     }
@@ -126,35 +128,44 @@ async function rebundleAndRestart(
   envFile: string,
   toolsDirs?: string,
 ) {
-  // If current server process is running, stop it
-  if (currentServerProcess) {
-    console.log('Stopping current server...');
-    currentServerProcess.kill();
-    await new Promise(resolve => setTimeout(resolve, 1000));
+  if (isRestarting) {
+    return;
   }
 
-  config({ path: envFile });
+  isRestarting = true;
+  try {
+    // If current server process is running, stop it
+    if (currentServerProcess) {
+      console.log('Stopping current server...');
+      currentServerProcess.kill();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
 
-  /*
-    Bundle mastra
-  */
-  await bundleMastra(dirPath);
+    config({ path: envFile });
 
-  /*
-    Bundle tools
-  */
-  const MASTRA_TOOLS_PATH = await bundleTools(dirPath, dotMastraPath, toolsDirs);
+    /*
+      Bundle mastra
+    */
+    await bundleMastra(dirPath);
 
-  /*
-    Bundle server
-  */
-  writeFileSync(join(dotMastraPath, 'index.mjs'), EXPRESS_SERVER);
-  await bundleServer(join(dotMastraPath, 'index.mjs'));
+    /*
+      Bundle tools
+    */
+    const MASTRA_TOOLS_PATH = await bundleTools(dirPath, dotMastraPath, toolsDirs);
 
-  /*
-    Start server
-  */
-  await startServer(dotMastraPath, port, MASTRA_TOOLS_PATH);
+    /*
+      Bundle server
+    */
+    writeFileSync(join(dotMastraPath, 'index.mjs'), EXPRESS_SERVER);
+    await bundleServer(join(dotMastraPath, 'index.mjs'));
+
+    /*
+      Start server
+    */
+    await startServer(dotMastraPath, port, MASTRA_TOOLS_PATH);
+  } finally {
+    isRestarting = false;
+  }
 }
 
 export async function dev({
