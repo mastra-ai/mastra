@@ -2534,10 +2534,6 @@ You can create, read, update, and delete entities and their records using the en
 
 - `syncRecords({ name, connectionId, records, lastSyncId })`: Sync incoming data to an entity
 
-**Vector Search (Future)**
-
-- Integrate with vector stores for RAG workflows.
-
 ## Summary
 
 The Mastra Engine is a PostgreSQL instance that stores agent memory and vector embeddings. You can spin it up locally with Docker for development and deploy it to a production instance. It's a helpful starting spot for handling agent memory and vector operations -- start with Postgres + pgvector, then adapt individual components based on your needs.
@@ -10712,7 +10708,7 @@ const cleanedVectorQueryTool = createVectorQueryTool({
 ```
 
 ### Chunk Tool
-Using createDocumentChunkerTool imported from @mastra/rag, you can create a tool that chunk the document and send the chunks to your agent.
+Using createDocumentChunkerTool imported from @mastra/rag, you can create a tool that chunks the document and sends the chunks to your agent.
 ```typescript copy showLineNumbers{24} filename="src/mastra/index.ts"
 const doc = MDocument.fromText(yourText);
 
@@ -11361,7 +11357,7 @@ export const mastra = new Mastra({
 
 ## Document Processing
 
-Process and chunk the document:
+Process and chunks the document:
 
 ```typescript copy showLineNumbers{206} filename="src/mastra/index.ts"
 const doc = MDocument.fromText(`Your document text here...`);
