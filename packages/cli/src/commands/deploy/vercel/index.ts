@@ -4,7 +4,7 @@ import { join } from 'path';
 
 import { DepsService } from '../../../services/service.deps.js';
 import { Deployer } from '../deployer.js';
-import { EXPRESS_SERVER } from '../server.js';
+import { VERCEL } from '../server.js';
 
 interface EnvVar {
   key: string;
@@ -81,7 +81,7 @@ export class VercelDeployer extends Deployer {
       ),
     );
 
-    writeFileSync(join(this.dotMastraPath, 'index.mjs'), EXPRESS_SERVER);
+    writeFileSync(join(this.dotMastraPath, 'index.mjs'), VERCEL);
   }
 
   private getProjectId(): string {

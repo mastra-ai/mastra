@@ -39,8 +39,10 @@
   "dependencies": {
     "@clack/prompts": "^0.8.2",
     "@dagrejs/dagre": "^1.1.4",
+    "@hono/node-server": "^1.13.7",
     "@hookform/resolvers": "^3.9.0",
     "@mastra/core": "workspace:*",
+    "@mastra/deployer": "workspace:*",
     "@radix-ui/react-alert-dialog": "^1.1.2",
     "@radix-ui/react-checkbox": "^1.1.1",
     "@radix-ui/react-collapsible": "^1.1.0",

@@ -1,3 +1,4 @@
+import { bundle, FileService } from '@mastra/deployer';
 import { watch } from 'chokidar';
 import { config } from 'dotenv';
 import { execa } from 'execa';
@@ -9,10 +10,7 @@ import { fileURLToPath } from 'url';
 import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
 
-import { FileService } from '../services/service.file.js';
-import { bundle, bundleServer } from '../utils/bundle.js';
-
-import { EXPRESS_SERVER } from './deploy/server.js';
+import { SERVER } from './deploy/server.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -139,13 +137,14 @@ export async function dev({
   /*
     Bundle mastra
   */
-  const dirPath = dir || path.join(process.cwd(), 'src/mastra');
-  await bundle(dirPath, { buildName: 'Mastra' });
+  const mastraDir = dir || path.join(process.cwd(), 'src/mastra');
+  const mastraPath = join(mastraDir, 'index.ts');
+  await bundle(mastraPath, { buildName: 'Mastra', devMode: true });
 
   /*
     Bundle tools
   */
-  const defaultToolsPath = path.join(dirPath, 'tools');
+  const defaultToolsPath = path.join(mastraDir, 'tools');
   const toolsPaths = [...(toolsDirs?.split(',').map(tool => path.join(process.cwd(), tool)) || []), defaultToolsPath];
 
   const toolPathsWithFileNames = (
@@ -153,6 +152,7 @@ export async function dev({
       toolsPaths.map(async toolPath => {
         try {
           const files = await fs.readdir(toolPath);
+
           return files.map(file => {
             const fullPath = path.join(toolPath, file);
             const fileName = path.parse(file).name;
@@ -160,7 +160,7 @@ export async function dev({
             return {
               path: toolPath,
               name,
-              fileName,
+              fileName: `${fileName}${path.parse(file).ext}`,
             };
           });
         } catch (err) {
@@ -174,10 +174,11 @@ export async function dev({
     )
   ).flat();
 
+  console.log(toolPathsWithFileNames);
+
   for (const { path, name, fileName } of toolPathsWithFileNames) {
-    await bundle(path, {
+    await bundle(join(path, fileName), {
       outfile: join(dotMastraPath, 'tools', `${name}.mjs`),
-      entryFile: fileName,
       buildName: `${name}`,
     });
   }
@@ -185,9 +186,14 @@ export async function dev({
   /*
     Bundle server
   */
-  writeFileSync(join(dotMastraPath, 'index.mjs'), EXPRESS_SERVER);
+  writeFileSync(join(dotMastraPath, 'index.mjs'), SERVER);
 
-  await bundleServer(join(dotMastraPath, 'index.mjs'));
+  console.log(join(__dirname, '../templates/server.js'));
+
+  await bundle(join(__dirname, '../templates/server.js'), {
+    outfile: join(dotMastraPath, 'server.mjs'),
+    buildName: 'Server',
+  });
 
   const MASTRA_TOOLS_PATH = toolPathsWithFileNames?.length
     ? toolPathsWithFileNames.map(tool => path.join(dotMastraPath, 'tools', `${tool.name}.mjs`)).join(',')
@@ -210,13 +216,13 @@ export async function dev({
       process.exit(1);
     }
 
-    const watcher = watch(dirPath, {
+    const watcher = watch(mastraDir, {
       persistent: true,
     });
 
     watcher.on('change', async () => {
       console.log(`Changes detected`);
-      await rebundleAndRestart(dirPath, dotMastraPath, port, toolsDirs);
+      await rebundleAndRestart(mastraDir, dotMastraPath, port, toolsDirs);
     });
 
     process.on('SIGINT', () => {
