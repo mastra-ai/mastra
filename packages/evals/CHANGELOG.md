@@ -1,5 +1,11 @@
 # @mastra/evals
 
+## 0.0.1-alpha.2
+
+### Patch Changes
+
+- 876b8a2: Rename difference metric to textual difference metric
+
 ## 0.0.1-alpha.1
 
 ### Patch Changes
