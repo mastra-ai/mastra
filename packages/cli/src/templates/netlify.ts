@@ -145,7 +145,7 @@ app.post('/api/agents/:agentId/generate', async (req: Request, res: Response) =>
 app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
-    const agent: Agent = mastra.getAgent(agentId);
+    const agent = mastra.getAgent(agentId);
     const { messages, threadId, resourceid, output } = req.body;
     const { ok, errorResponse } = await validateBody({
       messages,
@@ -162,7 +162,7 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
       resourceid,
     });
 
-    streamResult.pipeTextStreamToResponse(res);
+    streamResult.pipeDataStreamToResponse(res);
   } catch (error) {
     const apiError = error as ApiError;
     console.error('Error streaming from agent', apiError);

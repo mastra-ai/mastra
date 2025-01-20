@@ -271,7 +271,7 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
       resourceid,
     });
 
-    streamResult.pipeTextStreamToResponse(res);
+    streamResult.pipeDataStreamToResponse(res);
   } catch (error) {
     const apiError = error as ApiError;
     console.error('Error streaming from agent', apiError);
