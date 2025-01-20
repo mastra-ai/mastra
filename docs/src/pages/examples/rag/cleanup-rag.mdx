@@ -75,7 +75,7 @@ const cleanedVectorQueryTool = createVectorQueryTool({
 
 ### Chunk Tool
 
-Using createDocumentChunkerTool imported from @mastra/rag, you can create a tool that chunk the document and send the chunks to your agent.
+Using createDocumentChunkerTool imported from @mastra/rag, you can create a tool that chunks the document and sends the chunks to your agent.
 
 ```typescript copy showLineNumbers{24} filename="src/mastra/index.ts"
 const doc = MDocument.fromText(yourText);

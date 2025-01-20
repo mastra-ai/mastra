@@ -49,13 +49,13 @@ import { Reranker } from "@mastra/rerank";
 
 // Initialize vector store and reranker
 const vectorStore = new PgVector({
-  connectionString: process.env.POSTGRES_CONNECTION_STRING!
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 ```
 
 ## Deploying to Production
 
-To deploy to production, you'll need to set up a production Postgres database and configure your Mastra application to use it. 
+To deploy to production, you'll need to set up a production Postgres database and configure your Mastra application to use it.
 
 You can run `DB_URL=your_prod_db_url mastra engine migrate` to create a schema in a production database.
 
@@ -95,12 +95,11 @@ This mock engine mimics the behavior of the real engine without requiring a real
 The engine also supports keeping external data sources up to date through sync operations:
 
 ```typescript showLineNumbers copy
-
 await engine.syncRecords({
   name: "external_docs",
-  connectionId: "sync_123", 
+  connectionId: "sync_123",
   records: updatedRecords,
-  lastSyncId: "sync_20240315"
+  lastSyncId: "sync_20240315",
 });
 ```
 
@@ -131,10 +130,6 @@ You can create, read, update, and delete entities and their records using the en
 **Sync Operations:**
 
 - `syncRecords({ name, connectionId, records, lastSyncId })`: Sync incoming data to an entity
-
-**Vector Search (Future)**
-
-- Integrate with vector stores for RAG workflows.
 
 ## Summary
 
