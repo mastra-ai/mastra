@@ -6,4 +6,4 @@ packages:
   - "examples/*"
   - "examples/basics/llms/*"
   - "docs"
-  - "packages/cli/src/shared/ui"
+  - "packages/cli/src/playground"
