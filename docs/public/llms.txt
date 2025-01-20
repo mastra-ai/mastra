@@ -10361,7 +10361,7 @@ import { Mastra, Agent, EmbedManyResult } from '@mastra/core';
 import { embed, MDocument, PgVector, createVectorQueryTool } from '@mastra/rag';
 ```
 
-## Vectory Query Tool Creation
+## Vector Query Tool Creation
 Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
 ```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
@@ -10687,7 +10687,7 @@ import { embed, MDocument, PgVector, createVectorQueryTool, createDocumentChunke
 
 ## Tool Creation
 
-### Vectory Query Tool
+### Vector Query Tool
 Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
 ```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
@@ -10937,7 +10937,7 @@ import { Mastra, Agent, EmbedManyResult } from '@mastra/core';
 import { createVectorQueryTool, embed, MDocument, PgVector } from '@mastra/rag';
 ```
 
-## Vectory Query Tool Creation
+## Vector Query Tool Creation
 
 Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
 ```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
@@ -11590,7 +11590,7 @@ import { Mastra, Agent, EmbedResult, EmbedManyResult } from '@mastra/core'
 import { createVectorQueryTool, embed, MDocument, PgVector } from '@mastra/rag';
 ```
 
-## Vectory Query Tool Creation
+## Vector Query Tool Creation
 Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
 ```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
