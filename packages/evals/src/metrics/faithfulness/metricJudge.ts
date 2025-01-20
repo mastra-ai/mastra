@@ -34,6 +34,7 @@ export class FaithfulnessJudge extends MastraAgentJudge {
       output: z.object({
         verdicts: z.array(
           z.object({
+            claim: z.string(),
             verdict: z.string(),
             reason: z.string(),
           }),

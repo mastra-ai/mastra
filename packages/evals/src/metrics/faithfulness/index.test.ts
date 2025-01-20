@@ -5,6 +5,7 @@ import { FaithfulnessMetric } from './index';
 
 const testCases = [
   {
+    // Perfect faithfulness
     input: 'What can you tell me about the company?',
     context: [
       'The company was founded in 1995 by John Smith.',
@@ -19,6 +20,7 @@ const testCases = [
     },
   },
   {
+    // Mixed faithfulness with contradictions
     input: 'What can you tell me about the company?',
     context: [
       'The company was founded in 1995 by John Smith.',
@@ -34,6 +36,7 @@ const testCases = [
     },
   },
   {
+    // mixed claims with speculative language
     input: 'What can you tell me about the company?',
     context: ['The company was founded in 1995 by John Smith.', 'It has 500 employees and is headquartered in London.'],
     output: 'The company was founded in 1995 and may have international offices. They might be expanding to Asia soon.',
@@ -44,6 +47,7 @@ const testCases = [
     },
   },
   {
+    // empty output
     input: 'What can you tell me about the company?',
     context: ['The company was founded in 1995 by John Smith.', 'It has 500 employees and is headquartered in London.'],
     output: '',
@@ -53,6 +57,7 @@ const testCases = [
     },
   },
   {
+    // empty context
     input: 'What can you tell me about the company?',
     context: [],
     output: 'The company was founded in 1995.',
@@ -62,6 +67,7 @@ const testCases = [
     },
   },
   {
+    // subjective claims
     input: 'What can you tell me about the company?',
     context: ['The company was founded in 1995 by John Smith.', 'It has 500 employees and is headquartered in London.'],
     output: 'The company has a great work culture and amazing benefits. Their employees seem very happy.',
@@ -71,6 +77,7 @@ const testCases = [
     },
   },
   {
+    // claims with speculative language
     input: 'What can you tell me about the company?',
     context: ['The company was founded in 1995 by John Smith.', 'It has 500 employees and is headquartered in London.'],
     output: 'Founded in 1995, the company might be planning to expand. They possibly have offices in other cities.',
@@ -81,16 +88,19 @@ const testCases = [
     },
   },
   {
+    // compound statements
     input: 'What can you tell me about the company?',
     context: ['The company was founded in 1995.', 'John Smith is the CEO.', 'The headquarters has 500 employees.'],
-    output: 'John Smith founded the company in 1995 and manages 500 employees at headquarters.',
+    output:
+      'The company was founded in 1995 and has 500 employees at headquarters. John Smith is the CEO and runs global operations.',
     expectedResult: {
-      score: 0.5,
+      score: 0.75,
       reason:
-        'Only the founding year and employee count are supported, while claiming John Smith as founder is not supported by context',
+        'Three claims (founding year, employee count, CEO role) are supported by context, while the global operations claim is not supported',
     },
   },
   {
+    // precise numerical claims
     input: 'How many employees work there?',
     context: ['The company has approximately 500 employees as of 2023.'],
     output: 'The company employs 498 people.',
@@ -101,6 +111,7 @@ const testCases = [
     },
   },
   {
+    // partially supported claims
     input: 'Describe the company location.',
     context: ['The company headquarters is in London.'],
     output: 'The company headquarters is in London, in the financial district.',
@@ -110,6 +121,7 @@ const testCases = [
     },
   },
   {
+    // mixed factual and speculative claims
     input: 'Tell me about the company growth.',
     context: ['The company has grown from 100 to 500 employees since 2020.'],
     output: 'The company has grown to 500 employees and will likely continue expanding rapidly.',
@@ -120,6 +132,7 @@ const testCases = [
     },
   },
   {
+    // implicit information
     input: 'Who runs the company?',
     context: ['John Smith is the CEO of the company since 2020.'],
     output: 'John Smith has been leading the company for several years.',
@@ -141,7 +154,7 @@ const modelConfig: ModelConfig = {
 };
 
 describe('FaithfulnessMetric', () => {
-  const metric = new FaithfulnessMetric(modelConfig);
+  const metric = new FaithfulnessMetric(modelConfig, { scale: 1 });
 
   it('should handle perfect faithfulness', async () => {
     const testCase = testCases[0]!;

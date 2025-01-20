@@ -15,7 +15,7 @@ export class FaithfulnessMetric extends Metric {
   constructor(model: ModelConfig, options: FaithfulnessMetricOptions = {}) {
     super();
     this.judge = new FaithfulnessJudge(model);
-    this.scale = options.scale ?? 1;
+    this.scale = options.scale ?? 10;
   }
 
   async measure({
