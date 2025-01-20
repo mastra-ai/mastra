@@ -1,0 +1,30 @@
+{
+  "name": "senku",
+  "module": "index.ts",
+  "type": "module",
+  "dependencies": {
+    "@mastra/core": "^0.1.27-alpha.64",
+    "@mastra/engine": "^0.0.5-alpha.58",
+    "@mastra/rag": "^0.0.2-alpha.49",
+    "@mastra/tts": "^0.0.1-alpha.9",
+    "ffmpeg-static": "^5.2.0",
+    "ffprobe-static": "^3.1.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "p-limit": "^6.2.0",
+    "play-sound": "^1.1.6",
+    "zod": "^3.24.1"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/ffprobe-static": "^2.0.1",
+    "@types/fluent-ffmpeg": "^2.1.21",
+    "@types/node": "^22.10.7",
+    "@types/play-sound": "^1.1.2",
+    "mastra": "^0.1.57-alpha.95",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
