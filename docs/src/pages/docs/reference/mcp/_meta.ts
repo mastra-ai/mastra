@@ -1,5 +1,5 @@
 const meta = {
-  client: "MCP Client",
+  client: "MastraMCPClient",
 };
 
 export default meta;
