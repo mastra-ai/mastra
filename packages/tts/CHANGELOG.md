@@ -1,5 +1,11 @@
 # @mastra/tts
 
+## 0.0.1-alpha.9
+
+### Patch Changes
+
+- 2e1e2e9: include openai in tts package
+
 ## 0.0.1-alpha.8
 
 ### Patch Changes

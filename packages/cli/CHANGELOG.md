@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.97
+
+### Patch Changes
+
+- 17608e9: Fix agent generate/stream with structured output
+
 ## 0.1.57-alpha.96
 
 ### Patch Changes
