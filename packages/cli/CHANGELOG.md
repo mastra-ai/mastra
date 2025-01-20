@@ -1,5 +1,12 @@
 # mastra
 
+## 0.1.57-alpha.96
+
+### Patch Changes
+
+- 97fb0d5: Move playground dependencies out of cli
+- 245e3f7: dev playground rebuild/refresh on file changes
+
 ## 0.1.57-alpha.95
 
 ### Patch Changes
