@@ -1,12 +1,12 @@
 const meta = {
-  pgstore: "PGStore",
-  chunk: "Chunk",
-  document: "MDocument",
-  embeddings: "embed()",
-  "graph-rag": "GraphRAG",
-  pinecone: "Pinecone",
-  qdrant: "Qdrant",
+  chunk: ".chunk()",
+  embeddings: ".embed()",
   reranker: "Reranker",
+  document: "MDocument",
+  "graph-rag": "GraphRAG",
+  pgstore: "PGStore",
+  pinecone: "PineconeStore",
+  qdrant: "QdrantStore",
 };
 
 export default meta;
