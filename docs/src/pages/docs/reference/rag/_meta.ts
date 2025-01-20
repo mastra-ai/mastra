@@ -1,14 +1,12 @@
-export default {
-  pgstore: "PGStore",
-  chunk: "Chunk",
-  "document-chunker": "createDocumentChunker()",
-  document: "MDocument",
-  embeddings: "embed()",
-  "graph-rag-tool": "createGraphRAGTool()",
-  "graph-rag": "GraphRAG",
-  pinecone: "Pinecone",
-  qdrant: "Qdrant",
+const meta = {
+  chunk: ".chunk()",
+  embeddings: ".embed()",
   reranker: "Reranker",
-  "vector-query-search": "vectorQuerySearch()",
-  "vector-query-tool": "vectorQueryTool()",
+  document: "MDocument",
+  "graph-rag": "GraphRAG",
+  pgstore: "PGStore",
+  pinecone: "PineconeStore",
+  qdrant: "QdrantStore",
 };
+
+export default meta;

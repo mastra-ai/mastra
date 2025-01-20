@@ -1,7 +1,7 @@
 export default {
   providers: "Providers",
-  "create-logger": "Create Logger",
-  logger: "Logger Instance",
-  "combine-loggers": "Combine Loggers",
-  "otel-config": "OpenTelemetry Config",
+  logger: "Logger",
+  "otel-config": "OTelConfig",
+  "create-logger": ".createLogger()",
+  "combine-loggers": ".combineLoggers()",
 };

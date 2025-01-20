@@ -6,7 +6,6 @@ const meta = {
   tools: "Tools",
   tts: "TTS",
   agents: "Agents",
-  mcp: "Model Context Protocol (MCP)",
   workflows: "Workflows",
   observability: "Observability",
   evals: "Evals",
