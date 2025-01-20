@@ -1,5 +1,11 @@
 # @mastra/tts
 
+## 0.0.1-alpha.10
+
+### Patch Changes
+
+- 7ced7f9: bump version again for ci
+
 ## 0.0.1-alpha.9
 
 ### Patch Changes
