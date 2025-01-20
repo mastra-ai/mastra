@@ -1,13 +1,13 @@
 const meta = {
-  "answer-relevancy": "Answer Relevancy",
+  "answer-relevancy": "AnswerRelevancy",
   completeness: "Completeness",
-  "content-similarity": "Content Similarity",
-  "context-position": "Context Position",
-  "context-precision": "Context Precision",
-  "textual-difference": "Textual Difference",
-  "keyword-coverage": "Keyword Coverage",
-  "prompt-alignment": "Prompt Alignment",
-  "tone-consistency": "Tone Consistency",
+  "content-similarity": "ContentSimilarity",
+  "context-position": "ContextPosition",
+  "context-precision": "ContextPrecision",
+  "textual-difference": "TextualDifference",
+  "keyword-coverage": "KeywordCoverage",
+  "prompt-alignment": "PromptAlignment",
+  "tone-consistency": "ToneConsistency",
 };
 
 export default meta;

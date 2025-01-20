@@ -1,8 +1,8 @@
 const meta = {
-  init: "Init",
-  engine: "Engine",
-  dev: "Dev",
-  deploy: "Deploy",
+  init: "mastra init",
+  engine: "mastra engine",
+  dev: "mastra dev",
+  deploy: "mastra deploy",
 };
 
 export default meta;

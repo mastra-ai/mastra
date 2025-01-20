@@ -1,7 +1,8 @@
 const meta = {
   getAgent: "getAgent()",
-  generate: "generate()",
   createTool: "createTool()",
+  generate: "generate()",
+  stream: "stream()",
 };
 
 export default meta;
