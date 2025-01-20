@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { IAction, IExecutionContext } from '../action';
 import { BaseLogMessage, RegisteredLogger } from '../logger';
+import { Snapshot } from 'xstate';
 
 export interface StepExecutionContext<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
@@ -145,6 +146,23 @@ type StepFailure = {
 };
 
 export type StepResult<T> = StepSuccess<T> | StepFailure | StepSuspended | StepWaiting;
+
+interface WorkflowRunOptions {
+  runId?: string;
+  stepId?: string;
+  snapshot?: Snapshot<any>;
+}
+
+// Trigger data is required when a workflow has a trigger schema
+export interface WorkflowRunOptionsWithTrigger<TTriggerSchema extends z.ZodTypeAny>
+  extends WorkflowRunOptions {
+  triggerData: z.infer<TTriggerSchema>;
+}
+
+// Type helper using a conditional type to handle cases where a triggerSchema is present or absent
+export type WorkflowExecuteParams<TTriggerSchema extends z.ZodTypeAny> = TTriggerSchema extends z.ZodTypeAny
+  ? [options: WorkflowRunOptionsWithTrigger<TTriggerSchema>]
+  : [options?: WorkflowRunOptions];
 
 // Update WorkflowContext
 export interface WorkflowContext<TTrigger extends z.ZodType<any> = any> {

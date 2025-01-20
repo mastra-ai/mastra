@@ -21,7 +21,7 @@ describe('Workflow', () => {
 
       workflow.step(step1).commit();
 
-      const result = await workflow.execute();
+      const result = await workflow.createRun().start();
 
       expect(execute).toHaveBeenCalled();
       expect(result.results['step1']).toEqual({
@@ -47,7 +47,7 @@ describe('Workflow', () => {
 
       workflow.step(step1).step(step2).commit();
 
-      const result = await workflow.execute();
+      const result = await workflow.createRun().start();
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
@@ -78,7 +78,7 @@ describe('Workflow', () => {
 
       workflow.step(step1).then(step2).commit();
 
-      const result = await workflow.execute();
+      const result = await workflow.createRun().start();
 
       expect(executionOrder).toEqual(['step1', 'step2']);
       expect(result.results).toEqual({
@@ -138,7 +138,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.execute({ triggerData: { status: 'pending' } });
+      const result = await workflow.createRun({ triggerData: { status: 'pending' } }).start();
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
@@ -163,7 +163,7 @@ describe('Workflow', () => {
 
       workflow.step(step1).then(step2).commit();
 
-      const result = await workflow.execute().catch(err => err);
+      const result = await workflow.createRun().start().catch(err => err);
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).not.toHaveBeenCalled();
@@ -195,7 +195,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.execute();
+      const result = await workflow.createRun().start();
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
@@ -232,7 +232,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.execute();
+      const result = await workflow.createRun().start();
 
       expect(step2Action).toHaveBeenCalled();
       expect(result.results.step1).toEqual({
@@ -270,7 +270,7 @@ describe('Workflow', () => {
         .then(step2)
         .commit();
 
-      const result = await workflow.execute({ triggerData: { inputData: 'test-input' } });
+      const result = await workflow.createRun({ triggerData: { inputData: 'test-input' } }).start();
 
       expect(result.results.step1).toEqual({ status: 'success', payload: { result: 'success' } });
       expect(result.results.step2).toEqual({ status: 'success', payload: { result: 'success' } });
@@ -327,9 +327,9 @@ describe('Workflow', () => {
 
       workflow.step(step1).then(step2).commit();
 
-      const result = await workflow.execute({
+      const result = await workflow.createRun({
         triggerData: { inputValue: 'test-input' },
-      });
+      }).start();
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
@@ -354,9 +354,9 @@ describe('Workflow', () => {
 
       workflow.step(step1).commit();
 
-      const results = await workflow.execute({
+      const results = await workflow.createRun({
         triggerData: { inputData: 'test-input' },
-      });
+      }).start();
 
       const baseContext = {
         attempts: { step1: 3 },
@@ -407,7 +407,7 @@ describe('Workflow', () => {
         getStepPayload: expect.any(Function),
       };
 
-      await workflow.execute({ triggerData: { inputData: { nested: { value: 'test' } } } });
+      await workflow.createRun({ triggerData: { inputData: { nested: { value: 'test' } } } }).start();
 
       expect(execute).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -453,7 +453,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const results = await workflow.execute();
+      const results = await workflow.createRun().start();
 
       const baseContext = {
         attempts: { step1: 3, step2: 3 },
@@ -499,7 +499,7 @@ describe('Workflow', () => {
 
       workflow.step(step1).commit();
 
-      await expect(workflow.execute()).resolves.toEqual({
+      await expect(workflow.createRun().start()).resolves.toEqual({
         results: {
           step1: {
             error: 'Step execution failed',
@@ -532,7 +532,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      await expect(workflow.execute()).resolves.toEqual({
+      await expect(workflow.createRun().start()).resolves.toEqual({
         results: {
           step1: {
             status: 'success',
@@ -629,7 +629,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.execute();
+      const result = await workflow.createRun().start();
 
       expect(step2Action).toHaveBeenCalled();
       expect(step3Action).not.toHaveBeenCalled();
@@ -670,12 +670,12 @@ describe('Workflow', () => {
       // ).rejects.toThrow();
 
       // Should pass validation
-      await workflow.execute({
+      await workflow.createRun({
         triggerData: {
           required: 'test',
           nested: { value: 42 },
         },
-      });
+      }).start();
     });
   });
 
@@ -706,7 +706,7 @@ describe('Workflow', () => {
 
       workflow.step(step1).then(step2).then(step3).step(step4).then(step5).commit();
 
-      await workflow.execute();
+      await workflow.createRun().start();
 
       expect(action1).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -783,7 +783,7 @@ describe('Workflow', () => {
       const workflow = new Workflow({ name: 'test-workflow' });
       workflow.step(step1).then(step2).then(step3).step(step4).then(step5).commit();
 
-      const result = await workflow.execute();
+      const result = await workflow.createRun().start();
 
       expect(result.results.step1).toEqual({ status: 'success', payload: { result: 'success1' } });
       expect(result.results.step2).toEqual({ status: 'success', payload: { result: 'success2' } });
@@ -822,7 +822,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.execute();
+      const result = await workflow.createRun().start();
 
       expect(result.results.step1).toEqual({ status: 'success', payload: { result: 'success' } });
       expect(result.results.step2).toEqual({ status: 'suspended' });
@@ -845,7 +845,7 @@ describe('Workflow', () => {
       const workflow = new Workflow({ name: 'test-workflow' });
       workflow.step(step1).then(step2).then(step5).after(step1).step(step3).then(step4).then(step5).commit();
 
-      const result = await workflow.execute();
+      const result = await workflow.createRun().start();
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
@@ -887,7 +887,7 @@ describe('Workflow', () => {
         .then(step5)
         .commit();
 
-      const result = await workflow.execute();
+      const result = await workflow.createRun().start();
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
@@ -910,7 +910,7 @@ describe('Workflow', () => {
       const workflow = new Workflow({ name: 'test-workflow' });
       workflow.step(step1).step(step3).after(step1).step(step3).after(step3).step(step1).commit();
 
-      const result = await workflow.execute();
+      const result = await workflow.createRun().start();
 
       expect(step1Action).toHaveBeenCalled();
 
@@ -955,7 +955,7 @@ describe('Workflow', () => {
         .step(randomTool)
         .commit();
 
-      await workflow.execute();
+      await workflow.createRun().start();
 
       expect(syncAction).toHaveBeenCalled();
       expect(step1Action).toHaveBeenCalled();
