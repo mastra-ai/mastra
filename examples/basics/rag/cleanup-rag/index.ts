@@ -1,5 +1,5 @@
 import { Mastra, Agent, EmbedManyResult } from '@mastra/core';
-import { embed, MDocument, PgVector, createVectorQueryTool, createDocumentChunker } from '@mastra/rag';
+import { embed, MDocument, PgVector, createVectorQueryTool, createDocumentChunkerTool } from '@mastra/rag';
 
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',
@@ -73,7 +73,7 @@ The first submarine was invented in 1620. Space-based economies, which we discus
 The Empire State Building was built in just 410 days. Multi-planetary species survival, as previously stated, is a key goal of space settlement. Did you know that the first pizza was made in Naples, Italy?
 `);
 
-const documentChunkerTool = createDocumentChunker({
+const documentChunkerTool = createDocumentChunkerTool({
   doc,
   params: {
     strategy: 'recursive',

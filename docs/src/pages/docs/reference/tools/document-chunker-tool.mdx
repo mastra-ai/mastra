@@ -1,18 +1,18 @@
-# createDocumentChunker()
+# createDocumentChunkerTool()
 
-The `createDocumentChunker()` function creates a tool for splitting documents into smaller chunks for efficient processing and retrieval. It supports different chunking strategies and configurable parameters.
+The `createDocumentChunkerTool()` function creates a tool for splitting documents into smaller chunks for efficient processing and retrieval. It supports different chunking strategies and configurable parameters.
 
 ## Basic Usage
 
 ```typescript
-import { createDocumentChunker, MDocument } from "@mastra/rag";
+import { createDocumentChunkerTool, MDocument } from "@mastra/rag";
 
 const document = new MDocument({
   text: "Your document content here...",
   metadata: { source: "user-manual" }
 });
 
-const chunker = createDocumentChunker({
+const chunker = createDocumentChunkerTool({
   doc: document,
   params: {
     strategy: "recursive",
@@ -103,7 +103,7 @@ const technicalDoc = new MDocument({
   }
 });
 
-const chunker = createDocumentChunker({
+const chunker = createDocumentChunkerTool({
   doc: technicalDoc,
   params: {
     strategy: "recursive",
@@ -132,5 +132,5 @@ The chunker is created as a Mastra tool with the following properties:
 
 ## Related
 
-- [MDocument](./mdocument)
+- [MDocument](../rag/mdocument)
 - [createVectorQueryTool](./vector-query-tool) 
