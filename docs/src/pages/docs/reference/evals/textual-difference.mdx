@@ -1,13 +1,13 @@
-# DifferenceMetric
+# TextualDifferenceMetric
 
-The `DifferenceMetric` class measures the textual differences between two strings using sequence matching. It provides detailed information about changes, including the number of operations needed to transform one text into another.
+The `TextualDifferenceMetric` class measures the textual differences between two strings using sequence matching. It provides detailed information about changes, including the number of operations needed to transform one text into another.
 
 ## Basic Usage
 
 ```typescript
-import { DifferenceMetric } from "@mastra/evals";
+import { TextualDifferenceMetric } from "@mastra/evals";
 
-const metric = new DifferenceMetric();
+const metric = new TextualDifferenceMetric();
 
 const result = await metric.measure({
   input: "The quick brown fox",
@@ -104,7 +104,7 @@ The scoring process:
 ## Example with Analysis
 
 ```typescript
-const metric = new DifferenceMetric();
+const metric = new TextualDifferenceMetric();
 
 const result = await metric.measure({
   input: "Hello world! How are you?",

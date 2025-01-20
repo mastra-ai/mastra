@@ -3,7 +3,7 @@ import { SequenceMatcher } from 'difflib';
 
 import { MetricScoringResult } from '../types';
 
-export class DifferenceMetric extends Metric {
+export class TextualDifferenceMetric extends Metric {
   async measure({ input, output }: { input: string; output: string }): Promise<MetricScoringResult> {
     const matcher = new SequenceMatcher(null, input, output);
     const ratio = matcher.ratio();

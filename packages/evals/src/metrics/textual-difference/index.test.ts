@@ -1,9 +1,9 @@
 import { it, expect } from '@jest/globals';
 
-import { DifferenceMetric } from './index';
+import { TextualDifferenceMetric } from './index';
 
-describe('DifferenceMetric', () => {
-  const metric = new DifferenceMetric();
+describe('TextualDifferenceMetric', () => {
+  const metric = new TextualDifferenceMetric();
 
   it('should return perfect match for identical strings', async () => {
     const result = await metric.measure({

@@ -4,7 +4,7 @@ const meta = {
   "content-similarity": "Content Similarity",
   "context-position": "Context Position",
   "context-precision": "Context Precision",
-  difference: "Difference",
+  "textual-difference": "Textual Difference",
   "keyword-coverage": "Keyword Coverage",
   "prompt-alignment": "Prompt Alignment",
   "tone-consistency": "Tone Consistency",
