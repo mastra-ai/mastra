@@ -194,11 +194,14 @@ app.get('/api/agents', async (_req: Request, res: Response) => {
 });
 
 /**
- * POST /api/agents/{agentId}/generate
- * @summary Send text messages to agent
+ * POST /api/agents/:agentId/generate
+ * @summary Send messages to agent
  * @tags Agent
  * @param {string} agentId.path.required - Agent identifier
  * @param {Messages} request.body.required - Messages to send
+ * @param {string} request.body.optional - Thread ID
+ * @param {string} request.body.optional - Resource ID
+ * @param {string} request.body.optional - Output schema
  * @return {object} 200 - Agent response
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
@@ -207,7 +210,7 @@ app.post('/api/agents/:agentId/generate', async (req: Request, res: Response) =>
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    const { messages, threadId, resourceid } = req.body;
+    const { messages, threadId, resourceid, output } = req.body;
     const { ok, errorResponse } = await validateBody({
       messages,
     });
@@ -217,28 +220,33 @@ app.post('/api/agents/:agentId/generate', async (req: Request, res: Response) =>
       return;
     }
 
-    const result = await agent.generate(messages, { threadId, resourceid });
+    const result = await agent.generate(messages, { output, threadId, resourceid });
 
-    const textResult = {
-      text: result.text,
-      agent: agent.name,
-    };
-
-    res.json(textResult);
+    if (output) {
+      res.json({
+        object: result.object,
+        agent: result.agent,
+      });
+    } else {
+      res.json({ text: result.text, agent: agent.name });
+    }
   } catch (error) {
     const apiError = error as ApiError;
-    console.error('Error texting from agent', apiError);
-    res.status(apiError.status || 500).json({ error: apiError.message || 'Error texting from agent' });
+    console.error('Error generating from agent', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error generating from agent' });
     return;
   }
 });
 
 /**
- * POST /api/agents/{agentId}/stream
+ * POST /api/agents/:agentId/stream
  * @summary Stream messages to agent
  * @tags Agent
  * @param {string} agentId.path.required - Agent identifier
  * @param {Messages} request.body.required - Messages to stream
+ * @param {string} request.body.optional - Thread ID
+ * @param {string} request.body.optional - Resource ID
+ * @param {string} request.body.optional - Output schema
  * @return {stream} 200 - Agent response stream
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
@@ -247,7 +255,7 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    const { messages, threadId, resourceid } = req.body;
+    const { messages, threadId, resourceid, output } = req.body;
     const { ok, errorResponse } = await validateBody({
       messages,
     });
@@ -258,6 +266,7 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
     }
 
     const streamResult = await agent.stream(messages, {
+      output,
       threadId,
       resourceid,
     });
@@ -267,121 +276,6 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
     const apiError = error as ApiError;
     console.error('Error streaming from agent', apiError);
     res.status(apiError.status || 500).json({ error: apiError.message || 'Error streaming from agent' });
-    return;
-  }
-});
-
-/**
- * POST /api/agents/{agentId}/text-object
- * @summary Get structured output from agent
- * @tags Agent
- * @param {string} agentId.path.required - Agent identifier
- * @param {TextObjectRequest} request.body.required - Request with messages and schema spec
- * @return {object} 200 - Structured output response
- * @return {Error} 400 - Validation error
- * @return {Error} 500 - Server error
- */
-app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response) => {
-  try {
-    const agentId = req.params.agentId;
-    const agent = mastra.getAgent(agentId);
-    const { messages, schema, threadId, resourceid } = req.body;
-
-    const { ok, errorResponse } = await validateBody({
-      messages,
-      schema,
-    });
-
-    if (!ok) {
-      res.status(400).json({ error: errorResponse });
-      return;
-    }
-
-    const result = await agent.generate(messages, { output: schema, threadId, resourceid });
-
-    const objectResult = {
-      object: result.object,
-      agent: result.agent,
-    };
-
-    res.json(objectResult);
-  } catch (error) {
-    const apiError = error as ApiError;
-    console.error('Error getting structured output from agent', apiError);
-    res
-      .status(apiError.status || 500)
-      .json({ error: apiError.message || 'Error getting structured output from agent' });
-    return;
-  }
-});
-
-/**
- * POST /api/agents/{agentId}/stream-object
- * @summary Stream structured output from agent
- * @tags Agent
- * @param {string} agentId.path.required - Agent identifier
- * @param {TextObjectRequest} request.body.required - Request with messages and schema spec
- * @return {stream} 200 - Structured output stream
- * @return {Error} 400 - Validation error
- * @return {Error} 500 - Server error
- */
-app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Response) => {
-  try {
-    const agentId = req.params.agentId;
-    const agent = mastra.getAgent(agentId);
-    const { messages, schema, threadId, resourceid } = req.body;
-
-    const { ok, errorResponse } = await validateBody({
-      messages,
-      schema,
-    });
-
-    if (!ok) {
-      res.status(400).json({ error: errorResponse });
-      return;
-    }
-
-    const streamResult = await agent.stream(messages, { output: schema, threadId, resourceid });
-
-    streamResult.pipeTextStreamToResponse(res);
-  } catch (error) {
-    const apiError = error as ApiError;
-    console.error('Error streaming structured output from agent', apiError);
-    res
-      .status(apiError.status || 500)
-      .json({ error: apiError.message || 'Error streaming structured output from agent' });
-    return;
-  }
-});
-
-/**
- * POST /api/agents/{agentId}/tools/{toolId}/execute
- * @summary Execute an Agent tool
- * @tags Agent
- * @param {string} agentId.path.required - Agent identifier
- * @param {string} toolId.path.required - Tool identifier
- * @param {object} request.body.required - Tool input data
- * @return {object} 200 - Tool execution result
- * @return {Error} 500 - Server error
- */
-app.post('/api/agents/:agentId/tools/:toolId/execute', async (req: Request, res: Response) => {
-  try {
-    const agentId = req.params.agentId;
-    const toolId = req.params.toolId;
-    const agent = mastra.getAgent(agentId);
-    const tool = Object.values(agent?.tools || {}).find((tool: any) => tool.id === toolId) as any;
-    const result = await tool.execute({
-      context: {
-        ...req.body,
-      },
-      mastra,
-      runId: agentId,
-    });
-    res.json(result);
-  } catch (error) {
-    const apiError = error as ApiError;
-    console.error('Error executing tool', apiError);
-    res.status(apiError.status || 500).json({ error: apiError.message || 'Error executing tool' });
     return;
   }
 });
