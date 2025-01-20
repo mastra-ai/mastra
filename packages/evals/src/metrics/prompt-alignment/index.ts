@@ -1,5 +1,7 @@
 import { Metric, MetricResult, ModelConfig } from '@mastra/core';
 
+import { roundToTwoDecimals } from '../../utils';
+
 import { PromptAlignmentJudge } from './metricJudge';
 
 export class PromptAlignmentMetric extends Metric {
@@ -43,7 +45,7 @@ export class PromptAlignmentMetric extends Metric {
       }
     }
 
-    const reason = await this.judge.getReason(input, output, score, reasonsForVerdicts);
+    const reason = await this.judge.getReason(input, output, score, this.scale, reasonsForVerdicts);
     return reason;
   }
 
@@ -61,6 +63,6 @@ export class PromptAlignmentMetric extends Metric {
     }
 
     const score = alignmentCount / numberOfVerdicts;
-    return score * this.scale;
+    return roundToTwoDecimals(score * this.scale);
   }
 }

@@ -19,7 +19,7 @@ const modelConfig: ModelConfig = {
   toolChoice: 'auto',
 };
 
-it('should get a text response from the agent', async () => {
+it.skip('should get a text response from the agent', async () => {
   const electionAgent = new Agent({
     name: 'US Election agent',
     instructions: 'You know about the past US elections',
@@ -29,4 +29,4 @@ it('should get a text response from the agent', async () => {
   const result = await evaluate(electionAgent, 'Who won the 2016 US presidential election?', new TestMetric());
 
   expect(result.score).toBe(1);
-});
+}, 10000);

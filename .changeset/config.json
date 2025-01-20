@@ -10,6 +10,7 @@
   "ignore": [
     "!mastra",
     "!create-mastra",
-    "!@mastra/*"
+    "!@mastra/*",
+    "@mastra/playground"
   ]
 }

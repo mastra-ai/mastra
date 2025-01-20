@@ -35,7 +35,7 @@ Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
 import { Mastra, Agent, EmbedResult, EmbedManyResult } from '@mastra/core'
-import { embed, MDocument, PgVector, createVectorQueryTool, createDocumentChunker } from '@mastra/rag';
+import { embed, MDocument, PgVector, createVectorQueryTool, createDocumentChunkerTool } from '@mastra/rag';
 ```
 
 ## Tool Creation
@@ -65,11 +65,11 @@ const cleanedVectorQueryTool = createVectorQueryTool({
 ```
 
 ### Chunk Tool
-Using createDocumentChunker imported from @mastra/rag, you can create a tool that chunk the document and send the chunks to your agent.
+Using createDocumentChunkerTool imported from @mastra/rag, you can create a tool that chunk the document and send the chunks to your agent.
 ```typescript copy showLineNumbers{24} filename="src/mastra/index.ts"
 const doc = MDocument.fromText(yourText);
 
-const documentChunkerTool = createDocumentChunker({
+const documentChunkerTool = createDocumentChunkerTool({
   doc,
   params: {
     strategy: 'recursive',

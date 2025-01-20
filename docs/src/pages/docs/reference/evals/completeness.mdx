@@ -1,0 +1,138 @@
+# CompletenessMetric
+
+The `CompletenessMetric` class evaluates how thoroughly an LLM's output covers the key elements present in the input. It analyzes nouns, verbs, topics, and terms to determine coverage and provides a detailed completeness score.
+
+## Basic Usage
+
+```typescript
+import { CompletenessMetric } from "@mastra/evals";
+
+const metric = new CompletenessMetric();
+
+const result = await metric.measure({
+  input: "Explain how photosynthesis works in plants using sunlight, water, and carbon dioxide.",
+  output: "Plants use sunlight to convert water and carbon dioxide into glucose through photosynthesis."
+});
+
+console.log(result.score); // Coverage score from 0-1
+console.log(result.details); // Explanation of completeness
+console.log(result.metrics); // Detailed element analysis
+```
+
+## measure() Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "The original text containing key elements to be covered",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "The LLM's response to evaluate for completeness",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "Completeness score (0-1) representing the proportion of input elements covered in the output",
+    },
+    {
+      name: "details",
+      type: "string",
+      description: "Human-readable description of the completeness score",
+    },
+    {
+      name: "confidence",
+      type: "number",
+      description: "Confidence score for the evaluation (fixed at 0.8)",
+    },
+    {
+      name: "metrics",
+      type: "object",
+      description: "Detailed metrics about element coverage",
+    }
+  ]}
+/>
+
+### metrics Object
+
+<PropertiesTable
+  content={[
+    {
+      name: "inputElements",
+      type: "string[]",
+      description: "Array of key elements extracted from the input",
+    },
+    {
+      name: "outputElements",
+      type: "string[]",
+      description: "Array of key elements found in the output",
+    },
+    {
+      name: "missingElements",
+      type: "string[]",
+      description: "Array of input elements not found in the output",
+    },
+    {
+      name: "elementCounts",
+      type: "{ input: number, output: number }",
+      description: "Count of elements in input and output",
+    }
+  ]}
+/>
+
+## Element Extraction Details
+
+The metric extracts and analyzes several types of elements:
+- Nouns: Key objects, concepts, and entities
+- Verbs: Actions and states (converted to infinitive form)
+- Topics: Main subjects and themes
+- Terms: Individual significant words
+
+The extraction process includes:
+- Normalization of text (removing diacritics, converting to lowercase)
+- Splitting camelCase words
+- Handling of word boundaries
+- Special handling of short words (3 characters or less)
+- Deduplication of elements
+
+## Example with Analysis
+
+```typescript
+const metric = new CompletenessMetric();
+
+const result = await metric.measure({
+  input: "The quick brown fox jumps over the lazy dog",
+  output: "A brown fox jumped over a dog"
+});
+
+// Example output:
+// {
+//   score: 0.75,
+//   details: "Completeness score: 75.0%",
+//   confidence: 0.8,
+//   metrics: {
+//     inputElements: ["quick", "brown", "fox", "jump", "lazy", "dog"],
+//     outputElements: ["brown", "fox", "jump", "dog"],
+//     missingElements: ["quick", "lazy"],
+//     elementCounts: { input: 6, output: 4 }
+//   }
+// }
+```
+
+## Related
+
+- [Answer Relevancy Metric](./answer-relevancy)
+- [Content Similarity Metric](./content-similarity)
+- [Difference Metric](./difference) 

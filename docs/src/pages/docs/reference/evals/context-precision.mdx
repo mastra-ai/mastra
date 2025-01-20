@@ -1,0 +1,148 @@
+# ContextPrecisionMetric
+
+The `ContextPrecisionMetric` class evaluates how relevant and precise the retrieved context nodes are for generating the expected output. It uses a judge-based system to analyze each context piece's contribution and provides weighted scoring based on position.
+
+## Basic Usage
+
+```typescript
+import { ContextPrecisionMetric } from "@mastra/evals";
+
+// Configure the model for evaluation
+const model = {
+  provider: "OPEN_AI",
+  name: "gpt-4",
+  apiKey: process.env.OPENAI_API_KEY
+};
+
+const metric = new ContextPrecisionMetric(model, {
+  scale: 10
+});
+
+const result = await metric.measure({
+  input: "What is photosynthesis?",
+  output: "Photosynthesis is the process by which plants convert sunlight into energy.",
+  context: [
+    "Photosynthesis is a biological process used by plants to create energy from sunlight.",
+    "Plants need water and nutrients from the soil to grow.",
+    "The process of photosynthesis produces oxygen as a byproduct."
+  ]
+});
+
+console.log(result.score); // Precision score from 0-10
+console.log(result.reason); // Explanation of the score
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "ModelConfig",
+      description: "Configuration for the model used to evaluate context relevance",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "{ scale?: number }",
+      description: "Configuration options for the metric",
+      isOptional: true,
+      defaultValue: "{ scale: 10 }",
+    }
+  ]}
+/>
+
+## measure() Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "The original query or prompt",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "The generated response to evaluate",
+      isOptional: false,
+    },
+    {
+      name: "context",
+      type: "string[]",
+      description: "Array of context pieces used to generate the output",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "Precision score (0 to scale, default 0-10)",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "Detailed explanation of the score and context relevance",
+    }
+  ]}
+/>
+
+## Scoring Details
+
+The metric evaluates context precision through:
+- Individual assessment of each context piece's relevance
+- Position-weighted scoring (earlier positions weighted more heavily)
+- Binary relevance verdicts (yes/no) with detailed reasoning
+- Consideration of context ordering
+
+The final score is calculated using Mean Average Precision (MAP):
+1. Converts verdicts to binary scores (1 for relevant, 0 for not)
+2. Calculates precision at each position
+3. Weights earlier positions more heavily
+4. Normalizes to the configured scale (default 0-10)
+
+Score interpretation:
+- 10: All relevant context in optimal order
+- 7-9: Mostly relevant context with good ordering
+- 4-6: Mixed relevance or suboptimal ordering
+- 1-3: Limited relevance or poor ordering
+- 0: No relevant context
+
+## Example with Analysis
+
+```typescript
+const metric = new ContextPrecisionMetric(model);
+
+const result = await metric.measure({
+  input: "What are the benefits of exercise?",
+  output: "Regular exercise improves cardiovascular health and mental wellbeing.",
+  context: [
+    "Exercise strengthens the heart and improves blood circulation.",
+    "A balanced diet is important for health.",
+    "Regular physical activity reduces stress and anxiety.",
+    "Exercise equipment can be expensive."
+  ]
+});
+
+// Example output:
+// {
+//   score: 7.5,
+//   reason: "The score is 7.5 because the first and third contexts are highly relevant 
+//           to the benefits mentioned in the output, while the second and fourth contexts 
+//           are not directly related to exercise benefits. The relevant contexts are well-positioned 
+//           at the beginning and middle of the sequence."
+// }
+```
+
+## Related
+
+- [Answer Relevancy Metric](./answer-relevancy)
+- [Context Position Metric](./context-position)
+- [Completeness Metric](./completeness) 

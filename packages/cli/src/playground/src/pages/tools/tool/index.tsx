@@ -10,6 +10,7 @@ import Breadcrumb from '@/components/ui/breadcrumbs';
 import { CodeBlockDemo } from '@/components/ui/code-block';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Header } from '@/components/ui/header';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
@@ -101,7 +102,9 @@ const Tool = () => {
               content={JSON.stringify(result ?? {}, null, 2)}
             />
           </div>
-          <CodeBlockDemo code={JSON.stringify(result ?? {}, null, 2)} language="json" />
+          <ScrollArea className="h-[calc(100vh-120px)] w-full ">
+            <CodeBlockDemo code={JSON.stringify(result ?? {}, null, 2)} language="json" />
+          </ScrollArea>
         </div>
       </div>
     </div>

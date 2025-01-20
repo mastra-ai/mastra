@@ -39,12 +39,13 @@ export class ContextPrecisionJudge extends MastraAgentJudge {
     input: string,
     actualOutput: string,
     score: number,
+    scale: number,
     verdicts: {
       verdict: string;
       reason: string;
     }[],
   ): Promise<string> {
-    const prompt = generateReasonPrompt({ input, output: actualOutput, verdicts, score });
+    const prompt = generateReasonPrompt({ input, output: actualOutput, verdicts, score, scale });
     const result = await this.agent.generate(prompt, {
       output: z.object({
         reason: z.string(),

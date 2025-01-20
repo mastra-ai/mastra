@@ -1,5 +1,7 @@
 import { Metric, MetricResult, ModelConfig } from '@mastra/core';
 
+import { roundToTwoDecimals } from '../../utils';
+
 import { ContextPositionJudge } from './metricJudge';
 
 export class ContextPositionMetric extends Metric {
@@ -23,7 +25,7 @@ export class ContextPositionMetric extends Metric {
   }): Promise<MetricResult> {
     const verdicts = await this.judge.evaluate(input, output, context);
     const score = this.calculateScore(verdicts);
-    const reason = await this.judge.getReason(input, output, score, verdicts);
+    const reason = await this.judge.getReason(input, output, score, this.scale, verdicts);
 
     return {
       score,
@@ -58,6 +60,6 @@ export class ContextPositionMetric extends Metric {
 
     // Normalize against the maximum possible score
     const finalScore = (weightedSum / maxPossibleSum) * this.scale;
-    return finalScore;
+    return roundToTwoDecimals(finalScore);
   }
 }

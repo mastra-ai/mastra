@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
     ],
   },
   generateBuildId: async () => {
-    return process.env.VERCEL_GIT_COMMIT_SHA || String(Date.now());
+    return process.env.VERCEL_GIT_COMMIT_SHA || "stable-build";
   },
 };
 

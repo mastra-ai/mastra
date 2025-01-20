@@ -124,7 +124,7 @@ export function Chat({ agentId, initialMessages = [], agentName, threadId, memor
 
   const lastMessage = messages.at(-1);
   const isEmpty = messages.length === 0;
-  const isTyping = isLoading || (lastMessage?.role === 'assistant' && !lastMessage?.content.trim());
+  const isTyping = isLoading && lastMessage?.role === 'assistant' && !lastMessage?.content.trim();
 
   const append = useCallback(
     (message: { role: 'user'; content: string }) => {
@@ -137,8 +137,8 @@ export function Chat({ agentId, initialMessages = [], agentName, threadId, memor
   const suggestions = ['What capabilities do you have?', 'How can you help me?', 'Tell me about yourself'];
 
   return (
-    <ChatContainer className="h-full p-4 max-w-[1000px] mx-auto">
-      <div className="flex flex-col h-full py-4">
+    <ChatContainer className="h-full px-4 pb-3 pt-4 max-w-[1000px] mx-auto">
+      <div className="flex flex-col h-full">
         {isEmpty ? (
           <div className="mx-auto max-w-2xl">
             <PromptSuggestions label={`Chat with ${agentName}`} append={append} suggestions={suggestions} />
@@ -152,18 +152,51 @@ export function Chat({ agentId, initialMessages = [], agentName, threadId, memor
         )}
       </div>
 
-      <ChatForm className="mt-auto " isPending={isLoading || isTyping} handleSubmit={handleSubmit}>
-        {({ files, setFiles }) => (
-          <MessageInput
-            value={input}
-            onChange={handleInputChange}
-            files={files}
-            setFiles={setFiles}
-            isGenerating={isLoading}
-            placeholder={`Enter your message...`}
-          />
+      <div className="flex flex-col mt-auto gap-2">
+        <ChatForm isPending={isLoading || isTyping} handleSubmit={handleSubmit}>
+          {({ files, setFiles }) => (
+            <MessageInput
+              value={input}
+              onChange={handleInputChange}
+              files={files}
+              setFiles={setFiles}
+              isGenerating={isLoading}
+              placeholder={`Enter your message...`}
+            />
+          )}
+        </ChatForm>
+        {!memory && (
+          <div className="flex items-center gap-1 text-sm text-mastra-el-5">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              className="text-purple-400"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 16v-4" />
+              <path d="M12 8h.01" />
+            </svg>
+            <span className="text-xs text-gray-300/60">
+              Agent will not remember previous messages. To enable memory for agent see{' '}
+              <a
+                href="https://mastra.ai/docs/agents/01-agent-memory"
+                target="_blank"
+                rel="noopener"
+                className="text-gray-300/60 hover:text-gray-100 underline"
+              >
+                docs.
+              </a>
+            </span>
+          </div>
         )}
-      </ChatForm>
+      </div>
     </ChatContainer>
   );
 }

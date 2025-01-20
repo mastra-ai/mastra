@@ -20,7 +20,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
         </TabsTrigger>
         <TabsTrigger value="logs" className="group">
           <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
-            Logs
+            Log Drains
           </p>
         </TabsTrigger>
       </TabsList>

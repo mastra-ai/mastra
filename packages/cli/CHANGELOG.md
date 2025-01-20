@@ -1,5 +1,16 @@
 # mastra
 
+## 0.1.57-alpha.95
+
+### Patch Changes
+
+- cc9172a: Clarify functionality of logs tab in dev environment
+- 9db58b8: Update UI to clarify memory usage in agent chat interface
+- ffa0b63: Fix scrolling issue in mastra dev tools playground UI
+- Updated dependencies [f368477]
+- Updated dependencies [d5ec619]
+  - @mastra/core@0.1.27-alpha.64
+
 ## 0.1.57-alpha.94
 
 ### Patch Changes

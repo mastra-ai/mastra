@@ -1,5 +1,7 @@
 import { Metric, MetricResult, ModelConfig } from '@mastra/core';
 
+import { roundToTwoDecimals } from '../../utils';
+
 import { ContextPrecisionJudge } from './metricJudge';
 
 export class ContextPrecisionMetric extends Metric {
@@ -23,7 +25,7 @@ export class ContextPrecisionMetric extends Metric {
   }): Promise<MetricResult> {
     const verdicts = await this.judge.evaluate(input, output, context);
     const score = this.calculateScore(verdicts);
-    const reason = await this.judge.getReason(input, output, score, verdicts);
+    const reason = await this.judge.getReason(input, output, score, this.scale, verdicts);
 
     return {
       score,
@@ -57,6 +59,6 @@ export class ContextPrecisionMetric extends Metric {
     }
 
     const finalScore = weightedPrecisionSum / relevantCount;
-    return finalScore * this.scale;
+    return roundToTwoDecimals(finalScore * this.scale);
   }
 }
