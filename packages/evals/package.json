@@ -17,6 +17,26 @@
         "default": "./dist/index.js"
       }
     },
+    "./nlp": {
+      "import": {
+        "types": "./dist/metrics/nlp/index.d.ts",
+        "default": "./dist/evals.esm.js"
+      },
+      "require": {
+        "types": "./dist/metrics/nlp/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./llm": {
+      "import": {
+        "types": "./dist/metrics/llm/index.d.ts",
+        "default": "./dist/evals.esm.js"
+      },
+      "require": {
+        "types": "./dist/metrics/llm/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
