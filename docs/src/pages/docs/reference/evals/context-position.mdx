@@ -44,10 +44,24 @@ console.log(result.reason); // Explanation of the score
     },
     {
       name: "options",
-      type: "{ scale?: number }",
+      type: "ContextPositionMetricOptions",
       description: "Configuration options for the metric",
       isOptional: true,
       defaultValue: "{ scale: 1 }",
+    }
+  ]}
+/>
+
+### ContextPositionMetricOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "scale",
+      type: "number",
+      description: "Maximum score value",
+      isOptional: true,
+      defaultValue: "1",
     }
   ]}
 />
