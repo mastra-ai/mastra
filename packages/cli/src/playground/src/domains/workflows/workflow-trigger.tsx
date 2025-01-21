@@ -53,10 +53,6 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
       <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs w-[400px]">
         <div className="space-y-4">
           <div className="space-y-4 px-4">
-            <Text variant="secondary" className="text-mastra-el-3" size="xs">
-              Input
-            </Text>
-
             <Button className="w-full" disabled={isExecutingWorkflow} onClick={() => handleExecuteWorkflow(null)}>
               {isExecutingWorkflow ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Trigger'}
             </Button>
