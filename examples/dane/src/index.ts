@@ -37,5 +37,11 @@ program.command('telephone-game').description('Play a classic game of telephone'
 
 program.command('changelog').description('Mastra Changelog').action(changelog);
 
-program.command('link-checker').description('Check for broken links').action(linkChecker);
+program
+  .command('link-checker')
+  .description('Check for broken links')
+  .option('-u, --url <url>', 'URL to check')
+  .action(args => {
+    linkChecker({ url: args.url });
+  });
 program.parse(process.argv);
