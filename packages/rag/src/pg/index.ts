@@ -130,6 +130,9 @@ export class PgVector extends MastraVector {
 
         await client.query(query, [vectorIds[i], `[${vectors[i]?.join(',')}]`, JSON.stringify(metadata?.[i] || {})]);
       }
+
+      await client.query('COMMIT');
+
       return vectorIds;
     } catch (error) {
       await client.query('ROLLBACK');
