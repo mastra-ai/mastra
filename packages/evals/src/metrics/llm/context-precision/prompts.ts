@@ -105,7 +105,7 @@ export function generateReasonPrompt({
   scale: number;
 }) {
   return `Given the input, output, verdicts, and precision score, and the highest possible score is ${scale}, provide a BRIEF explanation for the score. Explain both its strengths and limitations.
-The retrieved contexts is a list containing \`verdict\` ('yes' or 'no' for relevance), \`reason\` (explaining the verdict) and \`node\` (the context text). Contexts are listed in their ranking order.
+The verdicts are a list containing \`verdict\` ('yes' or 'no' for relevance), \`reason\` (explaining the verdict) and \`node\` (the context text). Contexts are listed in their ranking order.
 
 **
 IMPORTANT: Return only JSON format with a single 'reason' key explaining the score.
@@ -131,8 +131,8 @@ ${input}
 Output:
 ${output}
 
-Context:
-${verdicts}
+Verdicts:
+${JSON.stringify(verdicts)}
 
 JSON:
 `;

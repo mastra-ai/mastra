@@ -113,14 +113,14 @@ export function generateReasonPrompt({
   context,
   score,
   scale,
-  reasons,
+  verdicts,
 }: {
   input: string;
   output: string;
   context: string[];
   score: number;
   scale: number;
-  reasons: string[];
+  verdicts: { verdict: string; reason: string }[];
 }) {
   return `Explain the faithfulness score 0 is the lowest and ${scale} is the highest for the LLM's response using this context:
 
@@ -134,8 +134,8 @@ Output:
 ${output}
 
 Score: ${score}
-Reasons for Verdicts:
-${reasons.join('\n')}
+Verdicts:
+${JSON.stringify(verdicts)}
 
 Rules:
 - Explain score based on ratio of supported claims ("yes" verdicts) to total claims

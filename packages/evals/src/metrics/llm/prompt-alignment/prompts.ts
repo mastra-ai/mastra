@@ -86,13 +86,13 @@ export function generateReasonPrompt({
   input,
   output,
   score,
-  reasons,
+  verdicts,
   scale,
 }: {
   input: string;
   output: string;
   score: number;
-  reasons: string[];
+  verdicts: { verdict: string; reason: string }[];
   scale: number;
 }) {
   return `Explain the instruction following score where 0 is the lowest and ${scale} is the highest for the LLM's response using this context:
@@ -100,13 +100,13 @@ export function generateReasonPrompt({
   Input: ${input}
   Output: ${output}
   Score: ${score}
-  Failure Reasons: ${reasons.join('\n')}
+  Verdicts: ${JSON.stringify(verdicts)}
 
   Rules (follow these rules exactly. do not deviate):
   - Keep your response concise and to the point.
   - Do not change score from what is given.
   - Do not make judgements on inputs or outputs (factual correctness, quality, etc).
-  - If there are failure reasons given, explain why the score is not higher.
+  - If there are verdicts with a "no" verdict, explain why the score is not higher.
   
 
   Output format:

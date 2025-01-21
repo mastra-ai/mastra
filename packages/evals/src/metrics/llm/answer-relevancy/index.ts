@@ -26,32 +26,12 @@ export class AnswerRelevancyMetric extends Metric {
     const verdicts = await this.judge.evaluate(input, output);
     const score = this.calculateScore(verdicts);
 
-    const reason = await this.generateReason(input, output, score, verdicts);
+    const reason = await this.judge.getReason(input, output, score, this.scale, verdicts);
 
     return {
       score,
       reason,
     };
-  }
-
-  private async generateReason(
-    input: string,
-    output: string,
-    score: number,
-    verdicts: {
-      verdict: string;
-      reason: string;
-    }[],
-  ): Promise<string> {
-    const reasonsForVerdicts: string[] = [];
-    for (const { verdict, reason } of verdicts || []) {
-      if (verdict.trim().toLowerCase() === 'no') {
-        reasonsForVerdicts.push(reason);
-      }
-    }
-
-    const reason = await this.judge.getReason(input, output, score, this.scale, reasonsForVerdicts);
-    return reason;
   }
 
   private calculateScore(evaluation: { verdict: string; reason: string }[]): number {
