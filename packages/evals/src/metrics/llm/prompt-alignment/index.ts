@@ -1,6 +1,6 @@
 import { Metric, MetricResult, ModelConfig } from '@mastra/core';
 
-import { roundToTwoDecimals } from '../../utils';
+import { roundToTwoDecimals } from '../utils';
 
 import { PromptAlignmentJudge } from './metricJudge';
 

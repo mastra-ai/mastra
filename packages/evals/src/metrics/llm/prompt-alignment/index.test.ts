@@ -1,4 +1,4 @@
-import { it, expect, jest } from '@jest/globals';
+import { describe, it, expect, jest } from '@jest/globals';
 import { type ModelConfig } from '@mastra/core';
 
 import { PromptAlignmentMetric } from './index';
