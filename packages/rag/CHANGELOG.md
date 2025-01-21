@@ -1,5 +1,11 @@
 # @mastra/rag
 
+## 0.0.2-alpha.50
+
+### Patch Changes
+
+- 1616f70: Added transaction handling to pgvector
+
 ## 0.0.2-alpha.49
 
 ### Patch Changes
