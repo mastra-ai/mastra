@@ -2,8 +2,8 @@
 const config = {
   siteUrl: process.env.NEXT_PUBLIC_APP_URL,
   generateRobotsTxt: true,
+  generateIndexSitemap: false,
   exclude: ["*/_meta"],
-  // ...other options
 };
 
 export default config;
