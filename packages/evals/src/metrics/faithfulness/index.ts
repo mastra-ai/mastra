@@ -12,10 +12,10 @@ export class FaithfulnessMetric extends Metric {
   private judge: FaithfulnessJudge;
   private scale: number;
 
-  constructor(model: ModelConfig, options: FaithfulnessMetricOptions = {}) {
+  constructor(model: ModelConfig, { scale = 1 }: FaithfulnessMetricOptions = {}) {
     super();
     this.judge = new FaithfulnessJudge(model);
-    this.scale = options.scale ?? 10;
+    this.scale = scale;
   }
 
   async measure({
