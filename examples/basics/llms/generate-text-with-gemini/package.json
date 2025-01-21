@@ -1,7 +1,7 @@
 {
   "name": "generate-text-with-gemini",
   "type": "module",
-  "version": "0.0.1-alpha.5",
+  "version": "0.0.1-alpha.6",
   "private": true,
   "scripts": {
     "start": "pnpx tsx index.ts"

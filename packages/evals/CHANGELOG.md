@@ -1,5 +1,13 @@
 # @mastra/evals
 
+## 0.0.1-alpha.3
+
+### Patch Changes
+
+- c056555: Added faithfulness and updated docs
+- Updated dependencies [e66643a]
+  - @mastra/core@0.1.27-alpha.65
+
 ## 0.0.1-alpha.2
 
 ### Patch Changes
