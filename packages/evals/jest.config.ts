@@ -3,6 +3,7 @@ import { config } from 'dotenv';
 config();
 
 export default {
+  maxWorkers: 1,
   preset: 'ts-jest',
   extensionsToTreatAsEsm: ['.ts'],
   moduleNameMapper: {
