@@ -45,9 +45,8 @@ interface VectorQuerySearchResult {
   queryEmbedding: number[];
 }
 
-// Separate function to handle vector query search
-// Can be imported and used in custom tools
-export const vectorQuerySearch = async ({
+// Helper function to handle vector query search
+const vectorQuerySearch = async ({
   indexName,
   vectorStore,
   queryText,
@@ -226,7 +225,7 @@ export const createGraphRAGTool = ({
   });
 };
 
-export const createDocumentChunker = ({
+export const createDocumentChunkerTool = ({
   doc,
   params = {
     strategy: 'recursive',

@@ -53,8 +53,8 @@ export function TableOfContents(props: TOCProps) {
                   setActiveId("");
                 }}
                 className={cn(
-                  "text-gray-200 py-1 hover:text-blue-400 transition-colors duration-200 text-sm font-semibold",
-                  activeId === "" ? "text-blue-400" : "",
+                  "dark:text-gray-200 text-black py-1 hover:text-blue-400 transition-colors duration-200 text-sm",
+                  activeId === "" ? "dark:text-[#1aa3ff] font-medium" : "",
                 )}
               >
                 {pageTitle}
@@ -66,9 +66,12 @@ export function TableOfContents(props: TOCProps) {
                   key={item.id + item.value}
                   href={item.id ? `#${item.id}` : undefined}
                   className={cn("transition-colors py-1 duration-200 text-sm", {
-                    "text-gray-200 hover:text-blue-400": item.depth === 2,
-                    "text-gray-400 ml-3 hover:text-gray-200": item.depth > 2,
-                    "text-blue-400 hover:text-blue-400": item.id === activeId,
+                    "text:black dark:text-gray-200 hover:text-[#1aa3ff]":
+                      item.depth === 2,
+                    "dark:text-gray-400 dark:hover:text-white text-gray-500 ml-3 hover:text-gray-900":
+                      item.depth > 2,
+                    "dark:text-[#1aa3ff] dark:hover:text-blue-[#1aa3ff]":
+                      item.id === activeId,
                   })}
                 >
                   {item.value}

@@ -1,0 +1,5 @@
+---
+'@mastra/tts': patch
+---
+
+PlayAI

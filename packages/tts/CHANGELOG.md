@@ -1,5 +1,24 @@
 # @mastra/tts
 
+## 0.0.1-alpha.10
+
+### Patch Changes
+
+- 7ced7f9: bump version again for ci
+
+## 0.0.1-alpha.9
+
+### Patch Changes
+
+- 95cf789: Added export for openai and playai
+- 2e1e2e9: include openai in tts package
+
+## 0.0.1-alpha.8
+
+### Patch Changes
+
+- 442f925: PlayAI
+
 ## 0.0.1-alpha.7
 
 ### Patch Changes
