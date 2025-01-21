@@ -36,7 +36,6 @@ const getBrokenLinks = new Step({
     const targetUrl = context.targetUrl;
 
     const res = await exec(`npx linkinator ${targetUrl} --format json`, {
-      cwd: process.cwd(),
       encoding: 'utf-8',
     });
 
