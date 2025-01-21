@@ -8,7 +8,7 @@ const testCases = [
     input: 'What is the capital of France?',
     output: 'Paris is the capital of France.',
     expectedResult: {
-      score: 10,
+      score: 1.0,
       reason: 'The output directly and accurately answers the input question without any irrelevant information',
     },
   },
@@ -17,7 +17,7 @@ const testCases = [
     output:
       "Paris is the capital of France. It's known for the Eiffel Tower and is one of the most visited cities in the world.",
     expectedResult: {
-      score: 5.33,
+      score: 0.43,
       reason:
         "The output correctly answers the question but includes additional information that's only partially relevant",
     },
@@ -26,7 +26,7 @@ const testCases = [
     input: 'What is the capital of France?',
     output: 'France is a country in Europe known for its cuisine. Paris is a major city there.',
     expectedResult: {
-      score: 1.5,
+      score: 0.15,
       reason: "The output provides contextually relevant information but doesn't explicitly answer the question",
     },
   },
@@ -58,7 +58,7 @@ const testCases = [
     input: 'What is the capital of France?',
     output: 'Lyon is the capital of France.',
     expectedResult: {
-      score: 3,
+      score: 0.3,
       reason: 'The output provides an incorrect answer but maintains topic relevance',
     },
   },
@@ -66,7 +66,7 @@ const testCases = [
     input: 'What is the capital of France?',
     output: 'Paris',
     expectedResult: {
-      score: 10,
+      score: 1.0,
       reason: 'The output provides the correct answer concisely',
     },
   },
@@ -74,7 +74,7 @@ const testCases = [
     input: 'What is the capital of France?',
     output: 'What about Germany? Or maybe Italy? Many European countries have beautiful capitals.',
     expectedResult: {
-      score: 1,
+      score: 0.1,
       reason: "The output discusses capital cities but doesn't answer the specific question about France",
     },
   },

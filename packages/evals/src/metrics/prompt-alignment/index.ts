@@ -4,12 +4,17 @@ import { roundToTwoDecimals } from '../../utils';
 
 import { PromptAlignmentJudge } from './metricJudge';
 
+export interface PromptAlignmentMetricOptions {
+  scale?: number;
+  instructions: string[];
+}
+
 export class PromptAlignmentMetric extends Metric {
   private instructions: string[];
   private judge: PromptAlignmentJudge;
   private scale: number;
 
-  constructor(model: ModelConfig, { instructions, scale = 10 }: { instructions: string[]; scale?: number }) {
+  constructor(model: ModelConfig, { instructions, scale = 1 }: PromptAlignmentMetricOptions) {
     super();
 
     this.instructions = instructions;

@@ -1,0 +1,156 @@
+# FaithfulnessMetric Reference
+
+The `FaithfulnessMetric` in Mastra evaluates how factually accurate an LLM's output is compared to the provided context. It extracts claims from the output and verifies them against the context, making it essential for measuring the reliability of RAG pipeline responses.
+
+## Basic Usage
+
+```typescript
+import { FaithfulnessMetric } from "@mastra/core";
+
+// Configure the model for evaluation
+const model = {
+  provider: "OPEN_AI",
+  name: "gpt-4",
+  apiKey: process.env.OPENAI_API_KEY
+};
+
+const metric = new FaithfulnessMetric(model, {
+  scale: 1
+});
+
+const result = await metric.measure({
+  input: "Tell me about the company.",
+  output: "The company was founded in 1995 and has 500 employees.",
+  context: ["The company was established in 1995.", "Currently employs around 450-550 people."]
+});
+
+console.log(result.score); // 1.0
+console.log(result.reason); // "All claims are supported by the context."
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "ModelConfig",
+      description: "Configuration for the model used to evaluate faithfulness.",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "FaithfulnessMetricOptions",
+      description: "Additional options for configuring the metric.",
+      isOptional: true,
+      defaultValue: "{ scale: 1 }",
+    },
+  ]}
+/>
+
+### FaithfulnessMetricOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "scale",
+      type: "number",
+      description: "The maximum score value. The final score will be normalized to this scale.",
+      isOptional: true,
+      defaultValue: "1",
+    },
+  ]}
+/>
+
+## measure() Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "The original query or prompt given to the LLM.",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "The LLM's response to be evaluated for faithfulness.",
+      isOptional: false,
+    },
+    {
+      name: "context",
+      type: "string[]",
+      description: "Array of context chunks against which the output's claims will be verified.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "A score between 0 and the configured scale, representing the proportion of claims that are supported by the context.",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "A detailed explanation of the score, including which claims were supported, contradicted, or marked as unsure.",
+    },
+  ]}
+/>
+
+## Scoring Details
+
+The FaithfulnessMetric evaluates the output by:
+1. Extracting all claims from the output (both factual and speculative)
+2. Verifying each claim against the provided context
+3. Calculating a score based on the proportion of supported claims
+
+Claims can receive one of three verdicts:
+- "yes" - The claim is supported by the context
+- "no" - The claim contradicts the context
+- "unsure" - The claim cannot be verified using the context (e.g., future predictions or claims outside the context scope)
+
+The final score is calculated as: `(number of supported claims / total number of claims) * scale`
+
+Score interpretation:
+- 1.0: All claims are supported by the context
+- 0.67: Two-thirds of claims are supported
+- 0.5: Half of the claims are supported
+- 0.33: One-third of claims are supported
+- 0: No claims are supported or output is empty
+
+## Advanced Example
+
+```typescript
+const metric = new FaithfulnessMetric(model);
+
+// Example with mixed claim types
+const result = await metric.measure({
+  input: "What's the company's growth like?",
+  output: "The company has grown from 100 employees in 2020 to 500 now, and might expand to 1000 by next year.",
+  context: [
+    "The company had 100 employees in 2020.",
+    "Current employee count is approximately 500.",
+  ]
+});
+
+// Example output:
+// {
+//   score: 0.67,
+//   reason: "The score is 0.67 because two claims are supported by the context 
+//           (initial employee count of 100 in 2020 and current count of 500), 
+//           while the future expansion claim is marked as unsure as it cannot 
+//           be verified against the context."
+// }
+```
+
+### Related
+
+- [Answer Relevancy Metric](./answer-relevancy)
+- [Context Precision Metric](./context-precision) 

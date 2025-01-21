@@ -4,11 +4,15 @@ import { roundToTwoDecimals } from '../../utils';
 
 import { ContextPositionJudge } from './metricJudge';
 
+export interface ContextPositionMetricOptions {
+  scale?: number;
+}
+
 export class ContextPositionMetric extends Metric {
   private judge: ContextPositionJudge;
   private scale: number;
 
-  constructor(model: ModelConfig, { scale = 10 }: { scale?: number } = {}) {
+  constructor(model: ModelConfig, { scale = 1 }: ContextPositionMetricOptions = {}) {
     super();
     this.judge = new ContextPositionJudge(model);
     this.scale = scale;

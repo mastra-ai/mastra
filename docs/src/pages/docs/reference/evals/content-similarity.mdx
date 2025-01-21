@@ -135,6 +135,14 @@ const result1 = await caseSensitiveMetric.measure({
   output: "hello world"
 }); // Lower score due to case difference
 
+// Example output:
+// {
+//   score: 0.75,
+//   details: "Content similarity: 75.0%",
+//   confidence: 0.9,
+//   metrics: { similarity: 0.75 }
+// }
+
 // Strict whitespace comparison
 const strictWhitespaceMetric = new ContentSimilarityMetric({
   ignoreCase: true,
@@ -145,10 +153,18 @@ const result2 = await strictWhitespaceMetric.measure({
   input: "Hello   World",
   output: "Hello World"
 }); // Lower score due to whitespace difference
+
+// Example output:
+// {
+//   score: 0.85,
+//   details: "Content similarity: 85.0%",
+//   confidence: 0.9,
+//   metrics: { similarity: 0.85 }
+// }
 ```
 
 ## Related
 
 - [Completeness Metric](./completeness)
 - [Textual Difference Metric](./textual-difference) 
-- [Answer Relevancy Metric](./answer-relevancy) 
+- [Answer Relevancy Metric](./answer-relevancy)

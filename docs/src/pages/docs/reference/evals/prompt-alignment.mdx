@@ -22,7 +22,7 @@ const instructions = [
 
 const metric = new PromptAlignmentMetric(model, {
   instructions,
-  scale: 10
+  scale: 1
 });
 
 const result = await metric.measure({
@@ -30,7 +30,7 @@ const result = await metric.measure({
   output: "The sun is shining. Clouds float in the sky. A gentle breeze blows."
 });
 
-console.log(result.score); // Alignment score from 0-10
+console.log(result.score); // Alignment score from 0-1
 console.log(result.reason); // Explanation of the score
 ```
 
@@ -68,7 +68,7 @@ console.log(result.reason); // Explanation of the score
       type: "number",
       description: "Maximum score value",
       isOptional: true,
-      defaultValue: "10",
+      defaultValue: "1",
     }
   ]}
 />
@@ -99,7 +99,7 @@ console.log(result.reason); // Explanation of the score
     {
       name: "score",
       type: "number",
-      description: "Alignment score (0 to scale, default 0-10)",
+      description: "Alignment score (0 to scale, default 0-1)",
     },
     {
       name: "reason",
@@ -121,13 +121,13 @@ The scoring process:
 1. Evaluates each instruction independently
 2. Assigns binary scores (1 for compliant, 0 for non-compliant)
 3. Calculates percentage of followed instructions
-4. Scales to configured range (default 0-10)
+4. Scales to configured range (default 0-1)
 
 Score interpretation:
-- 10: All instructions followed perfectly
-- 7-9: Most instructions followed with minor deviations
-- 4-6: Mixed compliance with instructions
-- 1-3: Limited compliance with instructions
+- 1.0: All instructions followed perfectly
+- 0.7-0.9: Most instructions followed with minor deviations
+- 0.4-0.6: Mixed compliance with instructions
+- 0.1-0.3: Limited compliance with instructions
 - 0: No instructions followed correctly
 
 ## Example with Analysis
@@ -139,7 +139,7 @@ const metric = new PromptAlignmentMetric(model, {
     "Include exactly three examples",
     "End each point with a semicolon"
   ],
-  scale: 10
+  scale: 1
 });
 
 const result = await metric.measure({
@@ -151,8 +151,8 @@ const result = await metric.measure({
 
 // Example output:
 // {
-//   score: 10.0,
-//   reason: "The score is 10.0 because all instructions were followed exactly: 
+//   score: 1.0,
+//   reason: "The score is 1.0 because all instructions were followed exactly: 
 //           bullet points were used, exactly three examples were provided, and 
 //           each point ends with a semicolon."
 // }
@@ -166,8 +166,8 @@ const result2 = await metric.measure({
 
 // Example output:
 // {
-//   score: 3.3,
-//   reason: "The score is 3.3 because: numbered lists were used instead of bullet points, 
+//   score: 0.33,
+//   reason: "The score is 0.33 because: numbered lists were used instead of bullet points, 
 //           no semicolons were used, and four fruits were listed instead of exactly three."
 // }
 ```
