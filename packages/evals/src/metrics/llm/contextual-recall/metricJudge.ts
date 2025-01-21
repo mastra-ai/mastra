@@ -20,7 +20,7 @@ export class ContextualRecallJudge extends MastraAgentJudge {
       output: actualOutput,
       context: retrievalContext,
     });
-    console.log(prompt);
+
     const result = await this.agent.generate(prompt, {
       output: z.object({
         verdicts: z.array(
@@ -31,7 +31,6 @@ export class ContextualRecallJudge extends MastraAgentJudge {
         ),
       }),
     });
-    console.log(result.object.verdicts);
 
     return result.object.verdicts;
   }
