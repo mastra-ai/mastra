@@ -1,4 +1,5 @@
 import { serve } from '@hono/node-server';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { type Mastra } from '@mastra/core';
 import { Hono } from 'hono';
 import { pathToFileURL } from 'url';
@@ -27,6 +28,7 @@ import {
   updateThreadHandler,
 } from './handlers/memory';
 import { rootHandler } from './handlers/root.js';
+// import { rootHandler } from './handlers/root.js';
 import { executeSyncHandler } from './handlers/syncs.js';
 import {
   executeAgentToolHandler,
@@ -74,7 +76,7 @@ export async function createHonoServer(mastra: Mastra) {
     await next();
   });
 
-  app.get('/', rootHandler);
+  app.get('/api', rootHandler);
 
   // Agent routes
   app.get('/api/agents', getAgentsHandler);
@@ -101,7 +103,7 @@ export async function createHonoServer(mastra: Mastra) {
   // Workflow routes
   app.get('/api/workflows', getWorkflowsHandler);
   app.get('/api/workflows/:workflowId', getWorkflowByIdHandler);
-  app.post('/workflows/:workflowId/execute', executeWorkflowHandler);
+  app.post('/api/workflows/:workflowId/execute', executeWorkflowHandler);
 
   // Sync routes
   app.post('/api/syncs/:syncId/execute', executeSyncHandler);
@@ -115,6 +117,42 @@ export async function createHonoServer(mastra: Mastra) {
   app.get('/api/tools/:toolId', getToolByIdHandler);
   app.post('/api/tools/:toolId/execute', executeToolHandler(tools));
 
+  // Playground routes
+  // Serve assets with specific MIME types
+  app.use('/assets/*', async (c, next) => {
+    const path = c.req.path;
+    if (path.endsWith('.js')) {
+      c.header('Content-Type', 'application/javascript');
+    } else if (path.endsWith('.css')) {
+      c.header('Content-Type', 'text/css');
+    }
+    await next();
+  });
+
+  // Serve assets from playground directory
+  app.use(
+    '/assets/*',
+    serveStatic({
+      root: './playground/assets',
+    }),
+  );
+
+  // Serve other static files from playground directory
+  app.use(
+    '/*',
+    serveStatic({
+      root: './playground',
+    }),
+  );
+
+  // Catch-all route to serve index.html
+  app.get(
+    '*',
+    serveStatic({
+      root: './playground/index.html',
+    }),
+  );
+
   return app;
 }
 
@@ -122,7 +160,7 @@ export async function createNodeServer(mastra: Mastra) {
   const app = await createHonoServer(mastra);
   return serve(app, info => {
     console.log(info);
-    console.log(`🦄Server running on port ${process.env.PORT || 4111}`);
+    console.log(`🦄Server running on port ${process.env.PORT || 4111}/api`);
     console.log(`📚 Open API documentation available at http://localhost:${process.env.PORT || 4111}/openapi.json`);
     console.log(`👨‍💻 Playground available at http://localhost:${process.env.PORT || 4111}/`);
   });
