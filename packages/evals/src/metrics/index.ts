@@ -7,3 +7,4 @@ export { TextualDifferenceMetric } from './textual-difference';
 export { KeywordCoverageMetric } from './keyword-coverage';
 export { PromptAlignmentMetric } from './prompt-alignment';
 export { ToneConsistencyMetric } from './tone';
+export { ToxicityMetric } from './toxicity';
