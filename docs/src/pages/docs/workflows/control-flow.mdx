@@ -10,7 +10,7 @@ You can run multiple steps at the same time if they don’t depend on each other
 myWorkflow.step(fetchUserData).step(fetchOrderData);
 ```
 
-See the [Parallel Steps](../examples/workflows/parallel-steps.mdx) example for more details.
+See the [Parallel Steps](../../examples/workflows/parallel-steps.mdx) example for more details.
 
 ## Sequential Execution
 
@@ -20,7 +20,7 @@ Sometimes you need to run steps in strict order to ensure outputs from one step 
 myWorkflow.step(fetchOrderData).then(validateData).then(processOrder);
 ```
 
-See the [Sequential Steps](../examples/workflows/sequential-steps.mdx) example for more details.
+See the [Sequential Steps](../../examples/workflows/sequential-steps.mdx) example for more details.
 
 ## Branching and Merging Paths
 
@@ -44,7 +44,7 @@ In this example:
 - Separately, stepA also triggers stepC, which in turn leads to stepE.  
 - The workflow waits for both stepD and stepE to finish before proceeding to stepF.
 
-See the [Branching Paths](../examples/workflows/branching-paths.mdx) example for more details.
+See the [Branching Paths](../../examples/workflows/branching-paths.mdx) example for more details.
 
 ## Cyclical Dependencies
 
@@ -65,7 +65,7 @@ myWorkflow
 
 If processData returns “success,” finalizeData runs. If it returns “retry,” the workflow loops back to fetchData.
 
-See the [Cyclical Dependencies](../examples/workflows/cyclical-dependencies.mdx) example for more details.
+See the [Cyclical Dependencies](../../examples/workflows/cyclical-dependencies.mdx) example for more details.
 
 ## Conditions
 

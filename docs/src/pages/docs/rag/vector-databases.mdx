@@ -101,13 +101,13 @@ await vectorStore.upsert(
 ## Performance Considerations
 
 - **Indexing:** Create appropriate indexes before bulk insertions 
-- **Batch Size:** Use bath oeprations for large insertions
+- **Batch Size:** Use batch operations for large insertions
 - **Metadata:** Only store metadata you'll query against
-- **Dimensions:** Match embedding dimensions to your model (eg., 1536 for text-embedding-ada-002)
+- **Dimensions:** Match embedding dimensions to your model (eg., 1536 for `text-embedding-ada-002`)
 
 ## Examples
 For complete examples of different vector store implementations, see:
 
-- [Insert Embedding in PgVector](/docs/examples/rag/pgstore.mdx)
-- [Insert Embedding in Pinecone](/docs/examples/rag/pinecone.mdx)
+- [Insert Embedding in PgVector](/docs/examples/rag/insert-embedding-in-pgvector.mdx)
+- [Insert Embedding in Pinecone](/docs/examples/rag/insert-embedding-in-pinecone.mdx)
 - [Basic RAG with Vector Storage](/docs/examples/rag/basic-rag.mdx)

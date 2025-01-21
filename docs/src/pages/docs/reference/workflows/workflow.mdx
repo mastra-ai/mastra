@@ -47,7 +47,7 @@ const workflow = new Workflow({ name: "my-workflow" });
 
 #### `step()`
 
-Adds a [Step](./step.mdx) to the workflow, including transitions to other steps. Returns the workflow instance for chaining. [Learn more about steps](./step.mdx).
+Adds a [Step](./step-class.mdx) to the workflow, including transitions to other steps. Returns the workflow instance for chaining. [Learn more about steps](./step-class.mdx).
 
 #### `commit()`
 
@@ -86,7 +86,7 @@ Variables allow steps to access data from:
 - Previous steps' outputs
 - Trigger data
 
-Variables payloads are typesafe with fields defined in the [Step](./step.mdx) `inputSchema`.
+Variables payloads are typesafe with fields defined in the [Step](./step-class.mdx) `inputSchema`.
 
 ```ts showLineNumbers copy
 workflow
@@ -201,5 +201,7 @@ try {
 
 ## Related Documentation
 
-- [Step](./step.mdx)
-- [Transition](./transition.mdx)
+- [Step](./step-class.mdx)
+- [.then()](./then.mdx)
+- [.step()](./step-function.mdx)
+- [.after()](./after.mdx)
