@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.1-alpha.17
+
+### Patch Changes
+
+- c056555: Added faithfulness and updated docs
+
 ## 0.1.1-alpha.16
 
 ### Patch Changes
