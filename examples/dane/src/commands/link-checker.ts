@@ -2,7 +2,7 @@ import chalk from 'chalk';
 
 import { mastra } from '../mastra/index.js';
 
-export async function linkChecker() {
+export async function linkChecker({ url }: { url: string }) {
   console.log(chalk.green("Hi! I'm Dane!"));
   console.log(chalk.green('Lets check the links...\n'));
 
@@ -12,7 +12,7 @@ export async function linkChecker() {
   const res = await start({
     triggerData: {
       channelId: process.env.LINK_CHECKER_CHANNEL_ID!,
-      targetUrl: process.env.TARGET_URL!,
+      targetUrl: url,
     },
   });
 
