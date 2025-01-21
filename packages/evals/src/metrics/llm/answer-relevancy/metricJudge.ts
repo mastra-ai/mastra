@@ -42,9 +42,9 @@ export class AnswerRelevancyJudge extends MastraAgentJudge {
     actualOutput: string,
     score: number,
     scale: number,
-    reasons: string[],
+    verdicts: { verdict: string; reason: string }[],
   ): Promise<string> {
-    const prompt = generateReasonPrompt({ input, output: actualOutput, reasons, score, scale });
+    const prompt = generateReasonPrompt({ input, output: actualOutput, verdicts, score, scale });
     const result = await this.agent.generate(prompt, {
       output: z.object({
         reason: z.string(),

@@ -172,13 +172,13 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
 
 export function generateReasonPrompt({
   score,
-  reasons,
+  verdicts,
   input,
   output,
   scale,
 }: {
   score: number;
-  reasons: string[];
+  verdicts: { verdict: string; reason: string }[];
   input: string;
   output: string;
   scale: number;
@@ -188,7 +188,7 @@ export function generateReasonPrompt({
   Input: ${input}
   Output: ${output}
   Score: ${score}
-  Irrelevancy Reasons: ${reasons.join('\n')}
+  Verdicts: ${JSON.stringify(verdicts)}
   
   Rules:
   - Explain score based on mix of direct answers and related context
