@@ -7,6 +7,7 @@ import { commitMessageCommand } from './commands/commit-message.js';
 import { configCommand } from './commands/config.js';
 import { issueLabelerCommand } from './commands/issue-labeler.js';
 import { message } from './commands/message.js';
+import { newContributorMessage } from './commands/new-contributor-message.js';
 import { publishPackages } from './commands/publish-packages.js';
 import { telephone } from './commands/telephone-game.js';
 
@@ -35,5 +36,7 @@ program.command('publish').description('Publish packages to the registry').actio
 program.command('telephone-game').description('Play a classic game of telephone').action(telephone);
 
 program.command('changelog').description('Mastra Changelog').action(changelog);
+
+program.command('new-contributor').description('Create a new contributor message').action(newContributorMessage);
 
 program.parse(process.argv);
