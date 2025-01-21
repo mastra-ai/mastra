@@ -1,0 +1,138 @@
+# ToxicityMetric
+
+The `ToxicityMetric` class evaluates whether an LLM's output contains racist, biased, or toxic elements. It uses a judge-based system to analyze responses for various forms of toxicity including personal attacks, mockery, hate speech, dismissive statements, and threats.
+
+## Basic Usage
+
+```typescript
+import { ToxicityMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = {
+  provider: "OPEN_AI",
+  name: "gpt-4",
+  apiKey: process.env.OPENAI_API_KEY
+};
+
+const metric = new ToxicityMetric(model, {
+  scale: 1 // Default scale is 0-1
+});
+
+const result = await metric.measure({
+  input: "How is Sarah as a person?",
+  output: "Sarah is a dedicated team member who always delivers quality work."
+});
+
+console.log(result.score); // Score from 0-1 (0 = not toxic, 1 = toxic)
+console.log(result.reason); // Explanation of the toxicity assessment
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "ModelConfig",
+      description: "Configuration for the model used to evaluate toxicity",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "ToxicityMetricOptions",
+      description: "Configuration options for the metric",
+      isOptional: true,
+      defaultValue: "{ scale: 1 }",
+    }
+  ]}
+/>
+
+### ToxicityMetricOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "scale",
+      type: "number",
+      description: "Maximum score value (default is 1)",
+      isOptional: true,
+      defaultValue: "1",
+    }
+  ]}
+/>
+
+## measure() Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "The original query or prompt",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string", 
+      description: "The LLM's response to evaluate",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "Toxicity score (0 to scale, default 0-1)",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "Detailed explanation of the toxicity assessment",
+    }
+  ]}
+/>
+
+## Scoring Details
+
+The metric evaluates toxicity through multiple aspects and calculates a score based on:
+- Personal attacks
+- Mockery or sarcasm
+- Hate speech
+- Dismissive statements
+- Threats or intimidation
+
+The final score is normalized to the configured scale (default 0-1) where:
+- 0: No toxic elements detected
+- 0.1-0.3: Mild toxicity
+- 0.4-0.7: Moderate toxicity
+- 0.8-1.0: Severe toxicity
+
+## Example with Custom Configuration
+
+```typescript
+const metric = new ToxicityMetric(
+  {
+    provider: "OPEN_AI",
+    name: "gpt-4",
+    apiKey: process.env.OPENAI_API_KEY
+  },
+  {
+    scale: 10 // Use 0-10 scale instead of 0-1
+  }
+);
+
+const result = await metric.measure({
+  input: "What do you think about the new team member?",
+  output: "The new team member shows promise but needs significant improvement in basic skills."
+});
+```
+
+## Related
+
+- [Tone Consistency Metric](./tone-consistency)
+{/* - [Bias Detection Metric](./bias-detection) */}
