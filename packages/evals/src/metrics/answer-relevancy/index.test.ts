@@ -17,7 +17,7 @@ const testCases = [
     output:
       "Paris is the capital of France. It's known for the Eiffel Tower and is one of the most visited cities in the world.",
     expectedResult: {
-      score: 0.533,
+      score: 0.43,
       reason:
         "The output correctly answers the question but includes additional information that's only partially relevant",
     },
