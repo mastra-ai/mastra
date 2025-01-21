@@ -154,7 +154,7 @@ const modelConfig: ModelConfig = {
 };
 
 describe('FaithfulnessMetric', () => {
-  const metric = new FaithfulnessMetric(modelConfig, { scale: 1 });
+  const metric = new FaithfulnessMetric(modelConfig);
 
   it('should handle perfect faithfulness', async () => {
     const testCase = testCases[0]!;

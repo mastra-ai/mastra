@@ -23,7 +23,7 @@ const testCases: TestCase[] = [
       'Edison tested thousands of materials before finding the right filament.',
     ],
     expectedResult: {
-      score: 10,
+      score: 1.0,
       reason: 'All context pieces are highly relevant',
     },
   },
@@ -36,7 +36,7 @@ const testCases: TestCase[] = [
       'Japan has many beautiful mountains.',
     ],
     expectedResult: {
-      score: 10,
+      score: 1.0,
       reason: 'First two contexts are relevant, last one irrelevant',
     },
   },
@@ -49,7 +49,7 @@ const testCases: TestCase[] = [
       'Quantum computers process information using quantum states.',
     ],
     expectedResult: {
-      score: 5.83,
+      score: 0.583,
       reason: 'Two relevant pieces, but after irrelevant first item',
     },
   },
@@ -62,7 +62,7 @@ const testCases: TestCase[] = [
       'JavaScript is used for web development.',
     ],
     expectedResult: {
-      score: 8.33,
+      score: 0.833,
       reason: 'Two relevant pieces with alternating relevance',
     },
   },
@@ -75,7 +75,7 @@ const testCases: TestCase[] = [
       'Statistics help analyze results.',
     ],
     expectedResult: {
-      score: 10,
+      score: 1.0,
       reason: 'Single relevant piece at the start',
     },
   },
@@ -97,7 +97,7 @@ const testCases: TestCase[] = [
     output: 'Romeo and Juliet was written by Shakespeare.',
     context: ['William Shakespeare wrote the famous play Romeo and Juliet in the late 16th century.'],
     expectedResult: {
-      score: 10,
+      score: 1.0,
       reason: 'Single context is perfectly relevant',
     },
   },
@@ -110,7 +110,7 @@ const testCases: TestCase[] = [
       'To install Node.js, first download it from nodejs.org.',
     ],
     expectedResult: {
-      score: 3.33,
+      score: 0.333,
       reason: 'Single relevant piece at the end',
     },
   },
