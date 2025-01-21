@@ -5,12 +5,12 @@ import { PromptAlignmentMetric } from './index';
 
 const testCases = [
   {
-    // Perfect alignment (score: 10)
+    // Perfect alignment (score: 1.0)
     instructions: ['Reply in all uppercase'],
     input: 'What is the weather?',
     output: 'THE WEATHER IS SUNNY TODAY.',
     expectedResult: {
-      score: 10,
+      score: 1.0,
       reason: 'The output follows the uppercase instruction perfectly',
     },
   },
@@ -25,32 +25,32 @@ const testCases = [
     },
   },
   {
-    // Multiple instructions - all followed (score: 10)
+    // Multiple instructions - all followed (score: 1.0)
     instructions: ['Reply in all uppercase', 'End with an exclamation mark'],
     input: 'What is the weather?',
     output: 'THE WEATHER IS SUNNY TODAY!',
     expectedResult: {
-      score: 10,
+      score: 1.0,
       reason: 'The output follows both uppercase and exclamation mark instructions',
     },
   },
   {
-    // Multiple instructions - partial follow (score: 5)
+    // Multiple instructions - partial follow (score: 0.5)
     instructions: ['Reply in all uppercase', 'End with an exclamation mark'],
     input: 'What is the weather?',
     output: 'THE WEATHER IS SUNNY TODAY.',
     expectedResult: {
-      score: 5,
+      score: 0.5,
       reason: 'The output follows the uppercase instruction but lacks an exclamation mark',
     },
   },
   {
-    // Complex multiple instructions (score: 10)
+    // Complex multiple instructions (score: 1.0)
     instructions: ['Start with "Answer:"', 'Use exactly four sentences', 'End with a period'],
     input: 'Describe the seasons.',
     output: 'Answer: Spring brings flowers. Summer brings heat. Fall brings colors. Winter brings snow.',
     expectedResult: {
-      score: 10,
+      score: 1.0,
       reason: 'The output follows all formatting instructions precisely',
     },
   },

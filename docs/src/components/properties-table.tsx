@@ -18,6 +18,7 @@ interface ContentItem {
   isOptional?: boolean;
   description: string;
   properties?: Property[];
+  defaultValue?: string;
 }
 
 interface PropertiesTableProps {
@@ -87,6 +88,11 @@ export const PropertiesTable: React.FC<PropertiesTableProps> = ({
                 <span>{item.isOptional ? "?:" : ":"}</span>
               </h3>
               <div className="text-sm leading-5 text-zinc-500">{item.type}</div>
+              {item.defaultValue && (
+                <div className="text-sm leading-5 text-zinc-500">
+                  = {item.defaultValue}
+                </div>
+              )}
             </div>
             <div className="text-sm leading-5 text-zinc-500">
               {item.description}

@@ -15,7 +15,7 @@ const model = {
 };
 
 const metric = new ContextPositionMetric(model, {
-  scale: 10
+  scale: 1
 });
 
 const result = await metric.measure({
@@ -28,7 +28,7 @@ const result = await metric.measure({
   ]
 });
 
-console.log(result.score); // Position score from 0-10
+console.log(result.score); // Position score from 0-1
 console.log(result.reason); // Explanation of the score
 ```
 
@@ -44,10 +44,24 @@ console.log(result.reason); // Explanation of the score
     },
     {
       name: "options",
-      type: "{ scale?: number }",
+      type: "ContextPositionMetricOptions",
       description: "Configuration options for the metric",
       isOptional: true,
-      defaultValue: "{ scale: 10 }",
+      defaultValue: "{ scale: 1 }",
+    }
+  ]}
+/>
+
+### ContextPositionMetricOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "scale",
+      type: "number",
+      description: "Maximum score value",
+      isOptional: true,
+      defaultValue: "1",
     }
   ]}
 />
@@ -84,7 +98,7 @@ console.log(result.reason); // Explanation of the score
     {
       name: "score",
       type: "number",
-      description: "Position score (0 to scale, default 0-10)",
+      description: "Position score (0 to scale, default 0-1)",
     },
     {
       name: "reason",
@@ -107,13 +121,13 @@ The scoring process:
 2. Applies position weights (earlier positions weighted more heavily)
 3. Sums weighted relevance scores
 4. Normalizes against maximum possible score
-5. Scales to configured range (default 0-10)
+5. Scales to configured range (default 0-1)
 
 Score interpretation:
-- 10: Most relevant context at the beginning, optimal ordering
-- 7-9: Relevant context mostly at the beginning
-- 4-6: Mixed ordering of relevant context
-- 1-3: Relevant context mostly at the end
+- 1.0: Most relevant context at the beginning, optimal ordering
+- 0.7-0.9: Relevant context mostly at the beginning
+- 0.4-0.6: Mixed ordering of relevant context
+- 0.1-0.3: Relevant context mostly at the end
 - 0: No relevant context or worst possible ordering
 
 ## Example with Analysis
@@ -134,8 +148,8 @@ const result = await metric.measure({
 
 // Example output:
 // {
-//   score: 5.0,
-//   reason: "The score is 5.0 because while the second and third contexts are highly 
+//   score: 0.5,
+//   reason: "The score is 0.5 because while the second and third contexts are highly 
 //           relevant to the benefits of exercise, they are not optimally positioned at 
 //           the beginning of the sequence. The first and last contexts are not relevant 
 //           to the query, which impacts the position-weighted scoring."

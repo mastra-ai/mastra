@@ -4,11 +4,15 @@ import { roundToTwoDecimals } from '../../utils';
 
 import { ContextPrecisionJudge } from './metricJudge';
 
+export interface ContextPrecisionMetricOptions {
+  scale?: number;
+}
+
 export class ContextPrecisionMetric extends Metric {
   private judge: ContextPrecisionJudge;
   private scale: number;
 
-  constructor(model: ModelConfig, { scale = 10 }: { scale?: number } = {}) {
+  constructor(model: ModelConfig, { scale = 1 }: ContextPrecisionMetricOptions = {}) {
     super();
     this.judge = new ContextPrecisionJudge(model);
     this.scale = scale;

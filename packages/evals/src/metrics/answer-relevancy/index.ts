@@ -14,7 +14,7 @@ export class AnswerRelevancyMetric extends Metric {
   private uncertaintyWeight: number;
   private scale: number;
 
-  constructor(model: ModelConfig, { uncertaintyWeight = 0.3, scale = 10 }: AnswerRelevancyMetricOptions = {}) {
+  constructor(model: ModelConfig, { uncertaintyWeight = 0.3, scale = 1 }: AnswerRelevancyMetricOptions = {}) {
     super();
 
     this.uncertaintyWeight = uncertaintyWeight;

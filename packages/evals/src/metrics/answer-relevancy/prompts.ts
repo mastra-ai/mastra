@@ -71,7 +71,7 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
         * Contains measurement units or quantities relevant to the question type
         * References locations or entities in the same category as what's being asked about
         * Provides relevant information without using explicit question-type terminology
-        * Contains references to properties of the subject
+        * Contains references to properties of the subject that relate to the question type
 
 
     - "no": Statement lacks meaningful connection to question when it:
@@ -80,6 +80,7 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
         * Contains only general subject information without relating to what's being asked
         * Consists of empty or meaningless content
         * Contains purely tangential information with no mention of the subject or question type
+        * Discusses the subject but not the specific attribute being asked about
         * Note: Assessment is about connection to what's being asked, not factual accuracy
         * Contains no connection to what's being asked about (neither the subject nor the type of information requested)
 
@@ -99,6 +100,7 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
     - Type-level relevance overrides topic-only content
     - Measurement/quantity relevance counts as type-level relevance
     - Administrative/governance terms are only relevant if they relate to the question type
+    - Descriptive facts about the subject should be marked as "no" unless they directly relate to the question type
 
 
     Examples of "no" statements:

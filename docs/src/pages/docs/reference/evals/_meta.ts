@@ -4,9 +4,10 @@ const meta = {
   "content-similarity": "ContentSimilarity",
   "context-position": "ContextPosition",
   "context-precision": "ContextPrecision",
-  "textual-difference": "TextualDifference",
+  faithfulness: "Faithfulness",
   "keyword-coverage": "KeywordCoverage",
   "prompt-alignment": "PromptAlignment",
+  "textual-difference": "TextualDifference",
   "tone-consistency": "ToneConsistency",
 };
 

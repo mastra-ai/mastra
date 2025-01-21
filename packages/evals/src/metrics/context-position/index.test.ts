@@ -24,7 +24,7 @@ const testCases: TestCase[] = [
       'The Sun provides light and heat to Earth.',
     ],
     expectedResult: {
-      score: 10,
+      score: 1.0,
       reason: 'All context pieces are relevant and optimally ordered, with the most important definition first.',
     },
   },
@@ -38,7 +38,7 @@ const testCases: TestCase[] = [
       'Plants need water and CO2 for photosynthesis.',
     ],
     expectedResult: {
-      score: 7.27,
+      score: 0.727,
       reason:
         'First and third pieces are relevant, with an irrelevant piece in between, demonstrating proper handling of mixed relevance.',
     },
@@ -53,7 +53,7 @@ const testCases: TestCase[] = [
       'Spark plugs create electrical sparks.',
     ],
     expectedResult: {
-      score: 10,
+      score: 1.0,
       reason: 'All pieces contribute domain knowledge: direct explanation, mechanical process, and enabling mechanism.',
     },
   },
@@ -67,7 +67,7 @@ const testCases: TestCase[] = [
       'Computers use binary code.',
     ],
     expectedResult: {
-      score: 8.18,
+      score: 0.818,
       reason: 'Two relevant pieces at the start, followed by an irrelevant piece.',
     },
   },
@@ -77,7 +77,7 @@ const testCases: TestCase[] = [
     output: 'Precipitation is water falling from clouds as rain or snow.',
     context: ['Precipitation is water falling from clouds.', 'The Earth is round.', 'Plants are green.'],
     expectedResult: {
-      score: 5.45,
+      score: 0.545,
       reason: 'Single relevant piece at the start, followed by irrelevant pieces.',
     },
   },
@@ -87,7 +87,7 @@ const testCases: TestCase[] = [
     output: 'Clouds are visible masses of water droplets in the sky.',
     context: ['The sky is blue.', 'Clouds are made of water droplets.', 'Birds have feathers.'],
     expectedResult: {
-      score: 2.73,
+      score: 0.273,
       reason: 'Single relevant piece in middle position, with irrelevant pieces before and after.',
     },
   },
@@ -97,7 +97,7 @@ const testCases: TestCase[] = [
     output: "The Moon is Earth's natural satellite.",
     context: ['Stars twinkle at night.', 'The sky appears blue.', 'The Moon orbits around Earth.'],
     expectedResult: {
-      score: 1.82,
+      score: 0.182,
       reason: 'Single relevant piece at the end, with irrelevant pieces before it.',
     },
   },
@@ -131,7 +131,7 @@ const testCases: TestCase[] = [
       'Roots absorb water from the soil.',
     ],
     expectedResult: {
-      score: 10,
+      score: 1.0,
       reason: 'All pieces are relevant and work together to explain the concept, with logical ordering.',
     },
   },
@@ -141,7 +141,7 @@ const testCases: TestCase[] = [
     output: 'DNA contains genetic information.',
     context: ['DNA stores genetic information in cells.'],
     expectedResult: {
-      score: 10,
+      score: 1.0,
       reason: 'Single relevant piece in optimal first position.',
     },
   },
@@ -151,7 +151,7 @@ const testCases: TestCase[] = [
     output: 'A volcano is a mountain that erupts hot lava.',
     context: ['Mountains can be found worldwide.', 'Volcanoes erupt molten rock.', 'Lava flows from volcanic vents.'],
     expectedResult: {
-      score: 4.55,
+      score: 0.455,
       reason: 'Two relevant pieces appear at the end, after an irrelevant general statement.',
     },
   },
