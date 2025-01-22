@@ -1,0 +1,156 @@
+# ContextualRecallMetric
+
+The `ContextualRecallMetric` class evaluates how effectively an LLM's response incorporates all relevant information from the provided context. It measures whether important information from the reference documents was successfully included in the response, focusing on completeness rather than precision.
+
+## Basic Usage
+
+```typescript
+import { ContextualRecallMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = {
+  provider: "OPEN_AI",
+  name: "gpt-4",
+  apiKey: process.env.OPENAI_API_KEY
+};
+
+const metric = new ContextualRecallMetric(model, {
+  scale: 1
+});
+
+const result = await metric.measure({
+  input: "What are the key features of the product?",
+  output: "The product includes cloud sync, offline mode, and multi-device support.",
+  context: [
+    "Product features: cloud synchronization capability",
+    "Offline mode available for all users",
+    "Supports multiple devices simultaneously",
+    "End-to-end encryption for all data"
+  ]
+});
+
+console.log(result.score); // Score from 0-1
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "ModelConfig",
+      description: "Configuration for the model used to evaluate contextual recall",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "ContextualRecallMetricOptions",
+      description: "Configuration options for the metric",
+      isOptional: true,
+      defaultValue: "{ scale: 1 }",
+    }
+  ]}
+/>
+
+### ContextualRecallMetricOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "scale",
+      type: "number",
+      description: "Maximum score value",
+      isOptional: true,
+      defaultValue: "1",
+    }
+  ]}
+/>
+
+## measure() Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "The original query or prompt",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "The LLM's response to evaluate",
+      isOptional: false,
+    },
+    {
+      name: "context",
+      type: "string[]",
+      description: "Array of reference documents or pieces of information to check against",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "Recall score (0 to scale, default 0-1)",
+    }
+  ]}
+/>
+
+## Scoring Details
+
+The metric calculates recall by comparing the LLM's response against the provided context documents:
+
+Score interpretation:
+- 1.0: Perfect recall - all relevant information was included
+- 0.7-0.9: High recall - most relevant information was included
+- 0.4-0.6: Moderate recall - some relevant information was missed
+- 0.1-0.3: Low recall - significant information was missed
+- 0: No recall - failed to include any relevant information
+
+The score is calculated as:
+```
+score = (number of correctly recalled items) / (total number of relevant items in context)
+```
+
+## Example with Custom Configuration
+
+```typescript
+const metric = new ContextualRecallMetric(
+  {
+    provider: "OPEN_AI",
+    name: "gpt-4",
+    apiKey: process.env.OPENAI_API_KEY
+  },
+  {
+    scale: 100 // Use 0-100 scale instead of 0-1
+  }
+);
+
+const result = await metric.measure({
+  input: "Summarize the company's security measures",
+  output: "The company implements encryption for data protection and requires 2FA for all users.",
+  context: [
+    "All data is encrypted at rest and in transit",
+    "Two-factor authentication (2FA) is mandatory",
+    "Regular security audits are performed",
+    "Incident response team available 24/7"
+  ]
+});
+
+// Example output:
+// {
+//   score: 50, // Only half of the security measures were mentioned
+// }
+```
+
+## Related
+
+- [Answer Relevancy Metric](./answer-relevancy)
+- [Context Precision Metric](./context-precision)
