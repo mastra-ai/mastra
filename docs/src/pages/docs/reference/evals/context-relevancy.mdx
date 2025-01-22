@@ -1,0 +1,168 @@
+# ContextualRelevancyMetric
+
+The `ContextualRelevancyMetric` class evaluates the quality of your RAG (Retrieval-Augmented Generation) pipeline's retriever by measuring how relevant the retrieved context is to the input query. It uses an LLM-based evaluation system that first extracts statements from the context and then assesses their relevance to the input.
+
+## Basic Usage
+
+```typescript
+import { ContextualRelevancyMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = {
+  provider: "OPEN_AI",
+  name: "gpt-4",
+  apiKey: process.env.OPENAI_API_KEY
+};
+
+const metric = new ContextualRelevancyMetric(model, {
+  scale: 1
+});
+
+const result = await metric.measure({
+  input: "What are our product's security features?",
+  output: "Our product uses encryption and requires 2FA.",
+  context: [
+    "All data is encrypted at rest and in transit",
+    "Two-factor authentication is mandatory",
+    "The platform supports multiple languages",
+    "Our offices are located in San Francisco"
+  ]
+});
+
+console.log(result.score); // Score from 0-1
+console.log(result.reason); // Explanation of the relevancy assessment
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "ModelConfig",
+      description: "Configuration for the model used to evaluate contextual relevancy",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "ContextualRelevancyMetricOptions",
+      description: "Configuration options for the metric",
+      isOptional: true,
+      defaultValue: "{ scale: 1 }",
+    }
+  ]}
+/>
+
+### ContextualRelevancyMetricOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "scale",
+      type: "number",
+      description: "Maximum score value",
+      isOptional: true,
+      defaultValue: "1",
+    }
+  ]}
+/>
+
+## measure() Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "The original query or prompt",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "The LLM's response to evaluate",
+      isOptional: false,
+    },
+    {
+      name: "context",
+      type: "string[]",
+      description: "Array of retrieved context documents used to generate the response",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "Contextual relevancy score (0 to scale, default 0-1)",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "Detailed explanation of the relevancy assessment",
+    }
+  ]}
+/>
+
+## Scoring Details
+
+The metric calculates relevancy through a two-step process:
+1. Extract individual statements from the retrieval context
+2. Evaluate each statement's relevance to the input query
+
+The score is calculated using the formula:
+```
+Contextual Relevancy = (Number of Relevant Statements) / (Total Number of Statements)
+```
+
+Score interpretation:
+- 1.0: Perfect relevancy - all retrieved context is relevant
+- 0.7-0.9: High relevancy - most context is relevant with few irrelevant pieces
+- 0.4-0.6: Moderate relevancy - mix of relevant and irrelevant context
+- 0.1-0.3: Low relevancy - mostly irrelevant context
+- 0: No relevancy - completely irrelevant context
+
+## Example with Custom Configuration
+
+```typescript
+const metric = new ContextualRelevancyMetric(
+  {
+    provider: "OPEN_AI",
+    name: "gpt-4",
+    apiKey: process.env.OPENAI_API_KEY
+  },
+  {
+    scale: 100 // Use 0-100 scale instead of 0-1
+  }
+);
+
+const result = await metric.measure({
+  input: "What are our pricing plans?",
+  output: "We offer Basic, Pro, and Enterprise plans.",
+  context: [
+    "Basic plan costs $10/month",
+    "Pro plan includes advanced features at $30/month",
+    "Enterprise plan has custom pricing",
+    "Our company was founded in 2020",
+    "We have offices worldwide"
+  ]
+});
+
+// Example output:
+// {
+//   score: 60,
+//   reason: "3 out of 5 statements are relevant to pricing plans. The statements about 
+//           company founding and office locations are not relevant to the pricing query."
+// }
+```
+
+## Related
+
+- [Answer Relevancy Metric](./answer-relevancy)
+- [Contextual Recall Metric](./context-recall)
+- [Context Precision Metric](./context-precision)
