@@ -10,6 +10,6 @@ export async function attachListeners() {
   } catch (error) {}
 
   registerHook(AvailableHooks.ON_EVALUATION, traceObject => {
-    appendFile(join(dotMastraPath, 'evals.json'), JSON.stringify(traceObject), () => {});
+    appendFile(join(dotMastraPath, 'evals.json'), JSON.stringify(traceObject) + '\n', () => {});
   });
 }
