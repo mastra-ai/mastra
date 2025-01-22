@@ -474,7 +474,7 @@ export type DeepseekModel = 'deepseek-chat' | 'deepseek-reasoner';
 
 export type DeepseekConfig = {
   provider: 'DEEPSEEK';
-  name: DeepseekConfig | (string & {});
+  name: DeepseekModel | (string & {});
   apiKey?: string;
   toolChoice?: 'auto' | 'required';
 };
