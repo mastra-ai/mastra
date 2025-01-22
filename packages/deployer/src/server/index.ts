@@ -7,7 +7,6 @@ import { pathToFileURL } from 'url';
 
 import { readFile } from 'fs/promises';
 import { cors } from 'hono/cors';
-import { handle } from 'hono/vercel';
 
 import { generateHandler, getAgentByIdHandler, getAgentsHandler, streamGenerateHandler } from './handlers/agents.js';
 import { handleClientsRefresh } from './handlers/client.js';
@@ -177,9 +176,4 @@ export async function createNodeServer(mastra: Mastra) {
       console.log(`👨‍💻 Playground available at http://localhost:${process.env.PORT || 4111}/`);
     },
   );
-}
-
-export async function createVercelServer(mastra: Mastra) {
-  const app = await createHonoServer(mastra);
-  return { MGET: handle(app), MPOST: handle(app) };
 }

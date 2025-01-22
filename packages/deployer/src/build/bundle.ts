@@ -43,7 +43,7 @@ const bundleStep = new Step({
     const entryPoint = fileService.getFirstExistingFile([entry]);
     const outfilePath = outfile || join(process.cwd(), '.mastra', 'mastra.mjs');
 
-    console.log('Entry point:', entryPoint, outfilePath);
+    console.log('[Bundling]:', entryPoint, outfilePath);
 
     const plugins: any[] = [];
 
@@ -172,7 +172,7 @@ const bundleStep = new Step({
     }
 
     // Log build results
-    console.log(`${buildName} Build completed successfully`);
+    console.log(`[Mastra Deploy] - [${buildName}]: build completed successfully`);
 
     return result;
   },

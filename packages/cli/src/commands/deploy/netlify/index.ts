@@ -71,7 +71,7 @@ export class NetlifyDeployer extends Deployer {
     writeFileSync(join(this.dotMastraPath, 'api.mjs'), NETLIFY);
   }
 
-  async deployCommand({ scope, siteId }: { siteId: string; scope: string }): Promise<void> {
+  async deploy({ scope, siteId }: { siteId: string; scope: string }): Promise<void> {
     console.log(scope, siteId);
     const p2 = execa('netlify', ['deploy', '--site', siteId, '--auth', this.token, '--dir', '.', '--functions', '.'], {
       cwd: this.dotMastraPath,

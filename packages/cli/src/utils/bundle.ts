@@ -230,7 +230,7 @@ export async function bundle(
     const result = await esbuild.build(esbuildConfig);
 
     // Log build results
-    logger.success(`${options?.buildName} Build completed successfully`);
+    logger.success(`[Mastra Deploy] - [${options?.buildName} Build completed successfully`);
 
     // Output build metadata
     await esbuild.analyzeMetafile(result.metafile);

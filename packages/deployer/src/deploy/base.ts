@@ -1,33 +1,82 @@
-import { execa } from 'execa';
-import { existsSync, mkdirSync, readFileSync } from 'fs';
+import { Mastra } from '@mastra/core';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import path, { join } from 'path';
+import { fileURLToPath } from 'url';
 
 import { bundle } from '../build/bundle.js';
 import { Deps } from '../build/deps.js';
+import { upsertMastraDir } from '../build/utils.js';
 
-export abstract class Deployer {
+export class Deployer {
   deps: Deps = new Deps();
-  token: string;
   dotMastraPath: string;
   name: string = '';
 
-  constructor({ token }: { token: string }) {
-    console.log('Deployer created');
-    this.token = token;
-    this.dotMastraPath = join(process.cwd(), '.mastra');
+  constructor({ dir }: { dir: string }) {
+    console.log('[Mastra Deploy] - Deployer initialized');
+    this.dotMastraPath = join(dir, '.mastra');
   }
 
-  async installCli() {
-    console.log('Installing...');
+  getMastraPath() {
+    return this.dotMastraPath;
+  }
+
+  async getMastra() {
+    return (await import(join(this.dotMastraPath, 'mastra.mjs'))) as { mastra: Mastra };
+  }
+
+  async writePackageJson() {
+    console.log('[Mastra Deploy] - Writing package.json');
+    let projectPkg: any = {
+      dependencies: {},
+    };
+    try {
+      projectPkg = JSON.parse(readFileSync(join(this.dotMastraPath, '..', 'package.json'), 'utf-8'));
+    } catch (_e) {
+      // no-op
+    }
+
+    const mastraDeps = Object.entries(projectPkg.dependencies)
+      .filter(([name]) => name.startsWith('@mastra'))
+      .reduce((acc: any, [name, version]) => {
+        if (version === 'workspace:*') {
+          acc[name] = 'latest';
+        } else {
+          acc[name] = version;
+        }
+
+        return acc;
+      }, {});
+
+    writeFileSync(
+      join(this.dotMastraPath, 'package.json'),
+      JSON.stringify(
+        {
+          name: 'server',
+          version: '1.0.0',
+          description: '',
+          main: 'index.mjs',
+          scripts: {
+            start: 'node ./index.mjs',
+          },
+          author: '',
+          license: 'ISC',
+          dependencies: {
+            ...mastraDeps,
+            hono: '4.6.17',
+            superjson: '^2.2.2',
+            'zod-to-json-schema': '^3.24.1',
+          },
+        },
+        null,
+        2,
+      ),
+    );
   }
 
   async install() {
-    console.log('Installing dependencies...');
-    const i = execa('npm', ['install'], {
-      cwd: this.dotMastraPath,
-    });
-    i.stdout.pipe(process.stdout);
-    await i;
+    console.log('[Mastra Deploy] - Installing dependencies...');
+    await this.deps.install();
   }
 
   protected getEnvFiles(): string[] {
@@ -72,36 +121,41 @@ export abstract class Deployer {
     await bundle(dir, { useBanner });
   }
 
-  writePkgJson() {
-    console.log('Writing package.json...');
+  async buildServer() {
+    upsertMastraDir();
+
+    const templatePath = join(this.dotMastraPath, 'hono.mjs');
+
+    writeFileSync(
+      templatePath,
+      `
+      import { createHonoServer } from './server';
+      import _path, { join } from 'path';
+      import { fileURLToPath as _fileURLToPath } from 'url';
+      import { pathToFileURL } from 'url';
+
+      const mastraPath = pathToFileURL(join(process.cwd(), 'mastra.mjs')).href;
+      const { mastra } = await import(mastraPath);
+
+      export const app = await createHonoServer(mastra);
+    `,
+    );
   }
 
-  writeFiles() {
-    console.log('Writing files...');
+  async writeServerFile() {
+    const fileServerPath = await import.meta.resolve('@mastra/deployer/server');
+    const serverPath = fileURLToPath(fileServerPath);
+    copyFileSync(serverPath, join(this.dotMastraPath, 'server.mjs'));
   }
 
-  async deployCommand({ scope, siteId, projectName }: { scope: string; siteId?: string; projectName?: string }) {
-    console.log(`Deploy command ${scope}...${siteId || ''} to ${projectName || 'mastra-starter'}`);
-  }
-
-  async deploy({
-    scope,
-    siteId,
-    dir,
-    projectName,
-  }: {
-    dir?: string;
-    scope: string;
-    siteId?: string;
-    projectName?: string;
-  }) {
-    console.log('Deploying...', scope);
+  async prepare({ dir }: { dir?: string }) {
+    console.log('[Mastra Deploy] - Preparing .mastra directory');
+    upsertMastraDir();
     const dirPath = dir || path.join(process.cwd(), 'src/mastra');
-    await this.installCli();
-    this.writePkgJson();
-    this.writeFiles();
+    this.writePackageJson();
+    this.writeServerFile();
     await this.install();
     await this.build({ dir: dirPath });
-    await this.deployCommand({ scope, siteId, projectName });
+    await this.buildServer();
   }
 }

@@ -110,7 +110,7 @@ ${Object.entries(envVars || {})
       writeFileSync(join(this.dotMastraPath, 'index.mjs'), WORKER);
   }
 
-  async deployCommand({ scope }: { scope: string }): Promise<void> {
+  async deploy({ scope }: { scope: string }): Promise<void> {
     const envVars = this.getEnvVars();
     const p2 = execa('wrangler', ['deploy'], {
       cwd: this.dotMastraPath,

@@ -90,7 +90,7 @@ export class CloudflareDeployer extends Deployer {
     const p2 = execa('wrangler', ['deploy'], {
       cwd: this.dotMastraPath,
       env: {
-        CLOUDFLARE_API_TOKEN: this.token,
+        // CLOUDFLARE_API_TOKEN: this.token,
         CLOUDFLARE_ACCOUNT_ID: scope,
         ...envVars,
       },

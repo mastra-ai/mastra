@@ -42,6 +42,21 @@ export class Deps {
     }
   }
 
+  public async install(packages: string[] = []) {
+    let runCommand = this.packageManager;
+    if (this.packageManager === 'npm') {
+      runCommand = `${this.packageManager} i`;
+    } else {
+      runCommand = `${this.packageManager} ${packages?.length > 0 ? `add` : `install`}`;
+    }
+
+    return execa(`${runCommand}`, packages, {
+      all: true,
+      shell: true,
+      stdio: 'inherit',
+    });
+  }
+
   public async installPackages(packages: string[]) {
     let runCommand = this.packageManager;
     if (this.packageManager === 'npm') {

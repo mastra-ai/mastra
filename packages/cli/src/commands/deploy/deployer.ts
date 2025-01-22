@@ -78,8 +78,18 @@ export abstract class Deployer {
     console.log('Writing files...');
   }
 
-  async deployCommand({ scope, siteId, projectName }: { scope: string; siteId?: string; projectName?: string }) {
-    console.log(`Deploy command ${scope}...${siteId || ''} to ${projectName || 'mastra-starter'}`);
+  async deployCommand({
+    scope,
+    dir,
+    siteId,
+    projectName,
+  }: {
+    dir: string;
+    scope: string;
+    siteId?: string;
+    projectName?: string;
+  }) {
+    console.log(`Deploy command ${scope}...${siteId || ''} to ${dir} - ${projectName || 'mastra-starter'}`);
   }
 
   async deploy({
@@ -100,6 +110,6 @@ export abstract class Deployer {
     this.writeFiles();
     await this.install();
     await this.build({ dir: dirPath });
-    await this.deployCommand({ scope, siteId, projectName });
+    await this.deployCommand({ scope, dir: dirPath, siteId, projectName });
   }
 }
