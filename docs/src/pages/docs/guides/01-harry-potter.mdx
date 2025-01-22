@@ -37,7 +37,7 @@ OPENAI_API_KEY=<your-openai-api-key>
 
 We'll start by creating a model configuration and initializing the Mastra instance.
 
-```typescript
+```ts copy filename="src/index.ts"
 import { CoreMessage, Mastra, type ModelConfig } from "@mastra/core";
 
 const mastra = new Mastra();
@@ -54,7 +54,7 @@ const llm = mastra.LLM(modelConfig);
 
 Next, we'll prepare our prompt. We'll ask:
 
-```typescript
+```ts copy filename="src/index.ts"
 const prompt = "What is your favorite room in Hogwarts?";
 ```
 
@@ -62,7 +62,7 @@ const prompt = "What is your favorite room in Hogwarts?";
 
 We'll use the `generate` method to get the response from the model.
 
-```typescript
+```ts copy filename="src/index.ts"
 const response = await llm.generate(prompt);
 
 console.log("Response:", response.text);
@@ -71,7 +71,7 @@ console.log("Response:", response.text);
 Run the script:
 
 ```bash copy
-npx bun src/mastra/index.ts
+npx bun src/index.ts
 ```
 
 Output:
@@ -88,7 +88,7 @@ To change the perspective, we'll add a system message to specify the persona of 
 
 **As Harry Potter**
 
-```typescript
+```ts copy filename="src/index.ts"
 const messages = [
   {
     role: "system",
@@ -117,7 +117,7 @@ Response as Harry Potter: My favorite room in Hogwarts is definitely the Gryffin
 
 Now, let's change the system message to have the model respond as Draco Malfoy.
 
-```typescript
+```ts copy filename="src/index.ts"
 messages[0].content = "You are Draco Malfoy.";
 
 const responseDraco = await llm.generate(messages);
@@ -135,7 +135,7 @@ Response as Draco Malfoy: My favorite room in Hogwarts is the Slytherin Common R
 
 Finally, we'll demonstrate how to stream the response from the model. Streaming is useful for handling longer outputs or providing real-time feedback.
 
-```typescript
+```ts copy filename="src/index.ts"
 const stream = await llm.stream(messages);
 
 console.log('Streaming response as Draco Malfoy:');
@@ -153,7 +153,7 @@ main();
 Run the script again:
 
 ```bash copy
-npx bun src/mastra/index.ts
+npx bun src/index.ts
 ```
 
 **Output:**

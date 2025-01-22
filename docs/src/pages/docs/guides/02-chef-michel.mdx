@@ -1,8 +1,11 @@
-import { Steps } from 'nextra/components';
+import { Steps } from "nextra/components";
+import YouTube from "../../../components/youtube";
 
 # Agents Guide: Building a Chef Assistant
 
 In this guide, we'll walk through creating a "Chef Assistant" agent that helps users cook meals with available ingredients.
+
+<YouTube id="_tZhOqHCrF0" />
 
 ## Prerequisites
 
@@ -19,17 +22,17 @@ In this guide, we'll walk through creating a "Chef Assistant" agent that helps u
 Create a new file `src/mastra/agents/chefAgent.ts` and define your agent:
 
 ```ts copy filename="src/mastra/agents/chefAgent.ts"
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 export const chefAgent = new Agent({
-  name: 'chef-agent',
+  name: "chef-agent",
   instructions:
-    'You are Michel, a practical and experienced home chef' +
-    'You helps people cook with whatever ingredients they have available.',
+    "You are Michel, a practical and experienced home chef" +
+    "You helps people cook with whatever ingredients they have available.",
   model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o',
-    toolChoice: 'auto',
+    provider: "OPEN_AI",
+    name: "gpt-4o",
+    toolChoice: "auto",
   },
 });
 ```
@@ -50,10 +53,10 @@ OPENAI_API_KEY=your_openai_api_key
 
 In your main file, register the agent:
 
-```ts filename="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
+```ts copy filename="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
 
-import { chefAgent } from './agents/chefAgent';
+import { chefAgent } from "./agents/chefAgent";
 
 export const mastra = new Mastra({
   agents: { chefAgent },
@@ -69,20 +72,26 @@ export const mastra = new Mastra({
 <Steps>
 ### Generating Text Responses
 
-```ts filename="src/mastra/index.ts"
+```ts copy filename="src/index.ts"
 async function main() {
   const query =
-    'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?';
+    "In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?";
   console.log(`Query: ${query}`);
 
-  const response = await chefAgent.generate([{ role: 'user', content: query }]);
-  console.log('\n👨‍🍳 Chef Michel:', response.text);
+  const response = await chefAgent.generate([{ role: "user", content: query }]);
+  console.log("\n👨‍🍳 Chef Michel:", response.text);
 }
 
 main();
 ```
 
-**Output:**
+Run the script:
+
+```bash copy
+npx bun src/index.ts
+```
+
+Output:
 
 ```
 Query: In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?
@@ -94,27 +103,27 @@ Query: In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some
 
 ### Streaming Responses
 
-```ts filename="src/mastra/index.ts"
+```ts copy filename="src/index.ts"
 async function main() {
   const query =
     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
   console.log(`Query: ${query}`);
 
-  const stream = await chefAgent.stream([{ role: 'user', content: query }]);
+  const stream = await chefAgent.stream([{ role: "user", content: query }]);
 
-  console.log('\n Chef Michel: ');
+  console.log("\n Chef Michel: ");
 
   for await (const chunk of stream.textStream) {
     process.stdout.write(chunk);
   }
 
-  console.log('\n\n✅ Recipe complete!');
+  console.log("\n\n✅ Recipe complete!");
 }
 
 main();
 ```
 
-**Output:**
+Output:
 
 ```
 Query: Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.
@@ -129,11 +138,12 @@ Great! You can make a comforting chicken curry...
 
 ### Generating a Recipe with Structured Data
 
-```ts filename="src/mastra/index.ts"
-import { z } from 'zod';
+```ts copy filename="src/index.ts"
+import { z } from "zod";
 
 async function main() {
-  const query = 'I want to make lasagna, can you generate a lasagna recipe for me?';
+  const query =
+    "I want to make lasagna, can you generate a lasagna recipe for me?";
   console.log(`Query: ${query}`);
 
   // Define the Zod schema
@@ -147,14 +157,17 @@ async function main() {
     steps: z.array(z.string()),
   });
 
-  const response = await chefAgent.generate([{ role: 'user', content: query }], { output: schema });
-  console.log('\n👨‍🍳 Chef Michel:', response.object);
+  const response = await chefAgent.generate(
+    [{ role: "user", content: query }],
+    { output: schema },
+  );
+  console.log("\n👨‍🍳 Chef Michel:", response.object);
 }
 
 main();
 ```
 
-**Output:**
+Output:
 
 ```
 Query: I want to make lasagna, can you generate a lasagna recipe for me?
@@ -185,7 +198,7 @@ Query: I want to make lasagna, can you generate a lasagna recipe for me?
 
 You can run your agent as a service using the `mastra dev` command:
 
-```bash
+```bash copy
 mastra dev
 ```
 
@@ -203,7 +216,7 @@ POST http://localhost:4111/api/agents/chefAgent/generate
 
 You can interact with the agent using `curl` from the command line:
 
-```bash
+```bash copy
 curl -X POST http://localhost:4111/api/agents/chefAgent/generate \
   -H "Content-Type: application/json" \
   -d '{
