@@ -3,11 +3,13 @@ import { join } from 'path';
 
 export abstract class MastraDeployer {
   scope: string;
+  projectName: string;
   env?: Record<string, any>;
 
-  constructor({ scope, env }: { scope: string; env?: Record<string, any> }) {
+  constructor({ scope, env, projectName }: { projectName: string; scope: string; env?: Record<string, any> }) {
     this.scope = scope;
     this.env = env;
+    this.projectName = projectName;
   }
 
   protected getEnvFiles(): string[] {
@@ -34,18 +36,7 @@ export abstract class MastraDeployer {
     console.log('Writing index to', dir);
   }
 
-  async deploy({
-    scope,
-    dir,
-    siteId,
-    projectName,
-  }: {
-    token: string;
-    dir: string;
-    scope: string;
-    siteId?: string;
-    projectName?: string;
-  }) {
-    console.log(`Deploy command ${scope}...${siteId || ''} to ${dir} ${projectName || 'mastra-starter'}`);
+  async deploy({ dir, siteId }: { token: string; dir: string; siteId?: string }) {
+    console.log(`Deploy command ${this.scope}...${siteId || ''} to ${dir} ${this.projectName || 'mastra-starter'}`);
   }
 }

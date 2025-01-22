@@ -7,5 +7,6 @@ export const mastra = new Mastra({
   agents: { chefAgent },
   deployer: new VercelDeployer({
     scope: 'abhiaiyer91-gmailcom-s-team',
+    projectName: `mastra-netlify-test`,
   }),
 });

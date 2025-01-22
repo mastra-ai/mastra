@@ -1,7 +1,9 @@
 import { MastraDeployer } from '@mastra/core';
 import { execa } from 'execa';
-import { readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs';
 import { join } from 'path';
+
+import { getOrCreateSite } from './helpers.js';
 
 interface EnvVar {
   key: string;
@@ -15,36 +17,33 @@ interface VercelError {
   code: string;
 }
 
-export class VercelDeployer extends MastraDeployer {
-  constructor({ scope, env, projectName }: { env?: Record<string, any>; scope: string; projectName: string }) {
+export class NetlifyDeployer extends MastraDeployer {
+  constructor({ scope, env, projectName }: { projectName: string; env?: Record<string, any>; scope: string }) {
     super({ scope, env, projectName });
   }
-  writeFiles({ dir }: { dir: string }): void {
-    this.writeIndex({ dir });
 
+  writeFiles({ dir }: { dir: string }): void {
+    if (!existsSync(join(dir, 'netlify/functions/api'))) {
+      mkdirSync(join(dir, 'netlify/functions/api'), { recursive: true });
+    }
+
+    // TODO ENV KEYS
     writeFileSync(
-      join(dir, 'vercel.json'),
-      JSON.stringify(
-        {
-          version: 2,
-          builds: [
-            {
-              src: 'index.mjs',
-              use: '@vercel/node',
-              config: { includeFiles: ['**'] },
-            },
-          ],
-          routes: [
-            {
-              src: '/(.*)',
-              dest: 'index.mjs',
-            },
-          ],
-        },
-        null,
-        2,
-      ),
+      join(dir, 'netlify.toml'),
+      `
+              [functions]
+              node_bundler = "esbuild"            
+              directory = "/netlify/functions"
+
+              [[redirects]]
+              force = true
+              from = "/*"
+              status = 200
+              to = "/.netlify/functions/api/:splat"
+              `,
     );
+
+    this.writeIndex({ dir });
   }
 
   private getProjectId({ dir }: { dir: string }): string {
@@ -111,59 +110,36 @@ export class VercelDeployer extends MastraDeployer {
   }
 
   async deploy({ dir, token }: { dir: string; token: string }): Promise<void> {
-    // Get env vars for initial deployment
-    const envFiles = this.getEnvFiles();
-    const envVars: string[] = [];
+    const site = await getOrCreateSite({ token, name: this.projectName || `mastra`, scope: this.scope });
 
-    for (const file of envFiles) {
-      const vars = this.parseEnvFile(file);
-      envVars.push(...vars);
-    }
-
-    // Create the command array with base arguments
-    const commandArgs = [
-      '--scope',
-      this.scope as string,
-      '--cwd',
-      dir,
-      'deploy',
-      '--token',
-      token,
-      '--yes',
-      ...(this.projectName ? ['--name', this.projectName] : []),
-    ];
-
-    // Add env vars to initial deployment
-    for (const envVar of envVars) {
-      commandArgs.push('--env', envVar);
-    }
-
-    // Run the Vercel deploy command
-    // console.log('Running command:', 'vercel', commandArgs.join(' '));
-    const p2 = execa('vercel', commandArgs);
+    const p2 = execa(
+      'netlify',
+      ['deploy', '--site', site.id, '--auth', token, '--dir', '.', '--functions', './netlify/functions'],
+      {
+        cwd: dir,
+      },
+    );
 
     p2.stdout.pipe(process.stdout);
-    p2.stderr.pipe(process.stderr);
-
-    console.log('Deployment started on Vercel. You can wait for it to finish or exit this command.');
     await p2;
-
-    if (envVars.length > 0) {
-      // Sync environment variables for future deployments
-      await this.syncEnv({ scope: this.scope, dir, token });
-    } else {
-      console.log('\nAdd your ENV vars to .env or your vercel dashboard.\n');
-    }
   }
 
   writeIndex({ dir }: { dir: string }): void {
+    ['mastra.mjs', 'hono.mjs', 'server.mjs'].forEach(file => {
+      renameSync(join(dir, file), join(dir, `netlify/functions/api/${file}`));
+    });
+
     writeFileSync(
-      join(dir, 'index.mjs'),
-      `
-                import { handle } from 'hono/vercel'
-                import { app } from './hono.mjs';
-                export const GET = handle(app);
-                export const POST = handle(app);
+      join(dir, 'netlify/functions/api/api.mts'),
+      `                
+             export default async (req, context) => {
+                const { app } = await import('./hono.mjs');
+                    // Pass the request directly to Hono
+                    return app.fetch(req, {
+                        // Optional context passing if needed
+                        env: { context }
+                    })
+                }
             `,
     );
   }

@@ -15,6 +15,7 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/deployer-vercel": "workspace:*",
+    "@mastra/deployer-netlify": "workspace:*",
     "zod": "^3.24.0"
   }
 }

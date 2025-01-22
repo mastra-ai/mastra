@@ -37,7 +37,7 @@ export class Deployer {
     }
 
     const mastraDeps = Object.entries(projectPkg.dependencies)
-      .filter(([name]) => name.startsWith('@mastra'))
+      .filter(([name]) => name.startsWith('@mastra') && !name.startsWith('@mastra/deployer-'))
       .reduce((acc: any, [name, version]) => {
         if (version === 'workspace:*') {
           acc[name] = 'latest';
@@ -55,6 +55,7 @@ export class Deployer {
           name: 'server',
           version: '1.0.0',
           description: '',
+          type: 'module',
           main: 'index.mjs',
           scripts: {
             start: 'node ./index.mjs',
@@ -64,6 +65,7 @@ export class Deployer {
           dependencies: {
             ...mastraDeps,
             hono: '4.6.17',
+            '@hono/node-server': '^1.13.7',
             superjson: '^2.2.2',
             'zod-to-json-schema': '^3.24.1',
           },
@@ -129,15 +131,9 @@ export class Deployer {
     writeFileSync(
       templatePath,
       `
-      import { createHonoServer } from './server';
-      import _path, { join } from 'path';
-      import { fileURLToPath as _fileURLToPath } from 'url';
-      import { pathToFileURL } from 'url';
-
-      const mastraPath = pathToFileURL(join(process.cwd(), 'mastra.mjs')).href;
-      const { mastra } = await import(mastraPath);
-
-      export const app = await createHonoServer(mastra);
+      import { createHonoServer } from './server.mjs';
+      const { mastra } = await import('./mastra.mjs');
+      export const app = await createHonoServer(mastra, { playground: false });
     `,
     );
   }
@@ -155,7 +151,7 @@ export class Deployer {
     this.writePackageJson();
     this.writeServerFile();
     await this.install();
-    await this.build({ dir: dirPath });
+    await this.build({ dir: dirPath, useBanner: true });
     await this.buildServer();
   }
 }

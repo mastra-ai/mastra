@@ -34,6 +34,7 @@ import {
   validateToolCallArgsHandler,
 } from './handlers/tools';
 import { executeWorkflowHandler, getWorkflowByIdHandler, getWorkflowsHandler } from './handlers/workflows';
+import { html } from './welcome.js';
 
 type Bindings = {};
 
@@ -43,7 +44,7 @@ type Variables = {
   tools: Record<string, any>;
 };
 
-export async function createHonoServer(mastra: Mastra) {
+export async function createHonoServer(mastra: Mastra, options: { playground?: boolean } = {}) {
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -120,33 +121,35 @@ export async function createHonoServer(mastra: Mastra) {
   // Trigger refresh for all clients
   app.post('/__refresh', handleTriggerClientsRefresh);
 
-  // Playground routes - these should come after API routes
-  // Serve assets with specific MIME types
-  app.use('/assets/*', async (c, next) => {
-    const path = c.req.path;
-    if (path.endsWith('.js')) {
-      c.header('Content-Type', 'application/javascript');
-    } else if (path.endsWith('.css')) {
-      c.header('Content-Type', 'text/css');
-    }
-    await next();
-  });
+  if (options?.playground) {
+    // Playground routes - these should come after API routes
+    // Serve assets with specific MIME types
+    app.use('/assets/*', async (c, next) => {
+      const path = c.req.path;
+      if (path.endsWith('.js')) {
+        c.header('Content-Type', 'application/javascript');
+      } else if (path.endsWith('.css')) {
+        c.header('Content-Type', 'text/css');
+      }
+      await next();
+    });
 
-  // Serve assets from playground directory
-  app.use(
-    '/assets/*',
-    serveStatic({
-      root: './playground/assets',
-    }),
-  );
+    // Serve assets from playground directory
+    app.use(
+      '/assets/*',
+      serveStatic({
+        root: './playground/assets',
+      }),
+    );
 
-  // Serve static files from playground directory
-  app.use(
-    '*',
-    serveStatic({
-      root: './playground',
-    }),
-  );
+    // Serve static files from playground directory
+    app.use(
+      '*',
+      serveStatic({
+        root: './playground',
+      }),
+    );
+  }
 
   // Catch-all route to serve index.html for any non-API routes
   app.get('*', async (c, next) => {
@@ -154,9 +157,13 @@ export async function createHonoServer(mastra: Mastra) {
     if (c.req.path.startsWith('/api/')) {
       return await next();
     }
-    // For all other routes, serve index.html
-    const indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
-    return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
+    if (options?.playground) {
+      // For all other routes, serve index.html
+      const indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
+      return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
+    }
+
+    return c.newResponse(html, 200, { 'Content-Type': 'text/html' });
   });
 
   return app;
