@@ -30,6 +30,7 @@ export class Deployer {
     let projectPkg: any = {
       dependencies: {},
     };
+
     try {
       projectPkg = JSON.parse(readFileSync(join(this.dotMastraPath, '..', 'package.json'), 'utf-8'));
     } catch (_e) {
@@ -120,7 +121,7 @@ export class Deployer {
       mkdirSync(this.dotMastraPath);
     }
 
-    await bundle(dir, { useBanner });
+    await bundle(dir, { useBanner, outfile: join(this.dotMastraPath, 'mastra.mjs') });
   }
 
   async buildServer() {
@@ -132,7 +133,8 @@ export class Deployer {
       templatePath,
       `
       import { createHonoServer } from './server.mjs';
-      const { mastra } = await import('./mastra.mjs');
+      import { mastra } from './mastra.mjs';
+
       export const app = await createHonoServer(mastra, { playground: false });
     `,
     );
@@ -152,6 +154,7 @@ export class Deployer {
     this.writeServerFile();
     await this.install();
     await this.build({ dir: dirPath, useBanner: true });
+    console.log('BUILD SERVER');
     await this.buildServer();
   }
 }

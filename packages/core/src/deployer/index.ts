@@ -1,3 +1,4 @@
+import dotenv from 'dotenv';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -12,10 +13,22 @@ export abstract class MastraDeployer {
     this.projectName = projectName;
   }
 
+  loadEnvVars(): void {
+    this.getEnvFiles().forEach(file => {
+      const content = readFileSync(file, 'utf-8');
+      const config = dotenv.parse(content);
+      this.env = {
+        ...this.env,
+        ...config,
+      };
+    });
+  }
+
   protected getEnvFiles(): string[] {
-    const envFiles = ['.env', '.env.development', '.env.local']
+    const envFiles = ['.env', '.env.production']
       .map(file => join(process.cwd(), file))
       .filter(file => existsSync(file));
+
     return envFiles;
   }
 

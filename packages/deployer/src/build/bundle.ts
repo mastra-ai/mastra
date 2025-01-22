@@ -1,6 +1,7 @@
 import { Workflow, Step } from '@mastra/core';
 import * as esbuild from 'esbuild';
 import { type BuildOptions } from 'esbuild';
+import { writeFileSync } from 'fs';
 import { join } from 'path';
 import { z } from 'zod';
 
@@ -84,9 +85,9 @@ const bundleStep = new Step({
       outfile: outfilePath,
       target: 'node20',
       sourcemap: true,
-      minify: true,
+      logLevel: 'silent',
+      minify: false,
       metafile: true,
-      logLevel: 'error',
       mainFields: ['module', 'main'],
       conditions: ['import', 'node'],
       logOverride: {
@@ -111,7 +112,6 @@ const bundleStep = new Step({
         'net',
         'os',
         'path',
-        'process',
         'punycode',
         'querystring',
         'readline',
@@ -143,7 +143,10 @@ const bundleStep = new Step({
         '@mastra/firecrawl',
         '@mastra/github',
         '@mastra/stabilityai',
-        // '@mastra/deployer',
+        '@mastra/deployer',
+        '@mastra/deployer-cloudflare',
+        '@mastra/deployer-netlify',
+        '@mastra/deployer-vercel',
       ],
       plugins,
     };
@@ -179,7 +182,13 @@ const analyzeStep = new Step({
     if (context?.machineContext?.stepResults?.Bundle?.status !== 'success') {
       throw new Error('Bundle step failed');
     }
-    return await esbuild.analyzeMetafile(context.machineContext?.stepResults.Bundle.payload.metafile);
+    writeFileSync(
+      join(process.cwd(), '.mastra', 'metafile.json'),
+      JSON.stringify(context.machineContext?.stepResults.Bundle.payload.metafile, null, 2),
+    );
+    const res = await esbuild.analyzeMetafile(context.machineContext?.stepResults.Bundle.payload.metafile);
+    console.log(res);
+    return res;
   },
 });
 

@@ -4,8 +4,9 @@ import { join } from 'path';
 
 export function upsertMastraDir() {
   const dirPath = join(process.cwd(), '.mastra');
+
   if (!existsSync(dirPath)) {
-    mkdirSync(dirPath);
+    mkdirSync(dirPath, { recursive: true });
     execSync(`echo ".mastra" >> .gitignore`);
   }
 }
