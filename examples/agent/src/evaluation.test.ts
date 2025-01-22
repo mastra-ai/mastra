@@ -3,8 +3,6 @@ import { Agent } from '@mastra/core';
 import { ModelConfig } from '@mastra/core';
 import { Metric } from '@mastra/core';
 
-import { evaluate } from './evaluation';
-
 class TestMetric extends Metric {
   async measure() {
     return {
