@@ -67,7 +67,7 @@ const modelConfig: ModelConfig = {
   apiKey: process.env.OPENAI_API_KEY,
 };
 
-function isCloserTo(value, target1, target2) {
+function isCloserTo(value: number, target1: number, target2: number) {
   return Math.abs(value - target1) < Math.abs(value - target2);
 }
 
