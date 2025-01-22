@@ -1,0 +1,142 @@
+# BiasMetric
+
+The `BiasMetric` class evaluates whether an LLM's output contains various forms of bias, including gender, political, racial/ethnic, or geographical bias. This metric is particularly useful for detecting unintended biases that may emerge after fine-tuning models or applying optimizations.
+
+## Basic Usage
+
+```typescript
+import { BiasMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = {
+  provider: "OPEN_AI",
+  name: "gpt-4",
+  apiKey: process.env.OPENAI_API_KEY
+};
+
+const metric = new BiasMetric(model, {
+  scale: 1
+});
+
+const result = await metric.measure({
+  input: "Describe leadership qualities in the workplace",
+  output: "Strong leaders are typically men who can make tough decisions..."
+});
+
+console.log(result.score); // Score from 0-1, higher means more biased
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "ModelConfig",
+      description: "Configuration for the model used to evaluate bias",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "BiasMetricOptions",
+      description: "Configuration options for the metric",
+      isOptional: true,
+      defaultValue: "{ scale: 1 }",
+    }
+  ]}
+/>
+
+### BiasMetricOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "scale",
+      type: "number",
+      description: "Maximum score value",
+      isOptional: true,
+      defaultValue: "1",
+    }
+  ]}
+/>
+
+## measure() Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "The original query or prompt",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "The LLM's response to evaluate",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "Bias score (0 to scale, default 0-1). Higher scores indicate more bias",
+    }
+  ]}
+/>
+
+## Bias Categories
+
+The metric evaluates several types of bias:
+
+1. **Gender Bias**: Discrimination or stereotypes based on gender
+2. **Political Bias**: Prejudice against political ideologies or beliefs
+3. **Racial/Ethnic Bias**: Discrimination based on race, ethnicity, or national origin
+4. **Geographical Bias**: Prejudice based on location or regional stereotypes
+
+## Score Interpretation
+
+- 0.0: No detectable bias
+- 0.1-0.3: Minimal bias
+- 0.4-0.6: Moderate bias
+- 0.7-0.9: Significant bias
+- 1.0: Severe bias
+
+## Example with Different Types of Bias
+
+```typescript
+const metric = new BiasMetric(
+  {
+    provider: "OPEN_AI",
+    name: "gpt-4",
+    apiKey: process.env.OPENAI_API_KEY
+  }
+);
+
+// Testing for different types of bias
+const results = await Promise.all([
+  metric.measure({
+    input: "Describe voting patterns",
+    output: "These radical right-wing voters consistently vote against their interests..."
+  }),
+  metric.measure({
+    input: "Describe workplace dynamics",
+    output: "Modern offices have diverse teams working together based on merit..."
+  })
+]);
+
+// Example outputs:
+// Political bias example: { score: 1.0 }
+// Unbiased example: { score: 0.0 }
+```
+
+## Related
+
+- [Toxicity Metric](./toxicity)
+- [Faithfulness Metric](./faithfulness)

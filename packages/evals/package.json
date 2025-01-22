@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "0.0.1-alpha.2",
+  "version": "0.1.0-alpha.5",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -14,6 +14,26 @@
       },
       "require": {
         "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./nlp": {
+      "import": {
+        "types": "./dist/metrics/nlp/index.d.ts",
+        "default": "./dist/evals.esm.js"
+      },
+      "require": {
+        "types": "./dist/metrics/nlp/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./llm": {
+      "import": {
+        "types": "./dist/metrics/llm/index.d.ts",
+        "default": "./dist/evals.esm.js"
+      },
+      "require": {
+        "types": "./dist/metrics/llm/index.d.ts",
         "default": "./dist/index.js"
       }
     },

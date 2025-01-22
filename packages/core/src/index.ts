@@ -19,3 +19,4 @@ export * from './vector';
 export * from './workflows';
 export * from './hooks';
 export * from './tts';
+export * from './deployer';

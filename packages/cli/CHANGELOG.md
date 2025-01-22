@@ -1,5 +1,20 @@
 # mastra
 
+## 0.1.57-alpha.99
+
+### Patch Changes
+
+- Updated dependencies [14064f2]
+  - @mastra/core@0.1.27-alpha.66
+
+## 0.1.57-alpha.98
+
+### Patch Changes
+
+- 989833c: Handle rendering workflows without triggerschema on dev playground
+- Updated dependencies [e66643a]
+  - @mastra/core@0.1.27-alpha.65
+
 ## 0.1.57-alpha.97
 
 ### Patch Changes

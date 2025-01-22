@@ -1,0 +1,75 @@
+name: Link Checker Agent
+
+permissions:
+  contents: read
+  pull-requests: write
+
+on:
+  deployment_status:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  link-checker-docs-agent:
+    name: Check Links with Dane
+    if: github.event.deployment_status.state == 'success' && github.event.deployment_status.environment == 'Preview – mastra-docs'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mastra
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build core
+        run: pnpm build:core
+
+      - name: Build engine
+        run: pnpm build:engine && pnpm copy:drizzle
+
+      - name: Setup database
+        run: pnpm db:setup
+        env:
+          DB_URL: 'postgresql://postgres:postgres@localhost:5433/mastra'
+
+      - name: Install dane cli
+        run: pnpm install -g @mastra/dane
+
+      - name: Set Anthropic Key
+        run: dane config --set ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Run link checker agent
+        run: dane link-checker -u ${{ github.event.deployment_status.target_url }}/docs
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_TEAM_ID: ${{ secrets.SLACK_TEAM_ID }}
+          LINK_CHECKER_CHANNEL_ID: ${{ secrets.LINK_CHECKER_CHANNEL_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

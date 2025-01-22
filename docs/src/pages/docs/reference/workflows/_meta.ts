@@ -10,6 +10,7 @@ const meta = {
   resume: ".resume()",
   start: ".start()",
   commit: ".commit()",
+  watch: ".watch()",
 };
 
 export default meta;

@@ -54,6 +54,21 @@ export const danePackagePublisher = new Agent({
   },
 });
 
+export const daneLinkChecker = new Agent({
+  name: 'DaneLinkChecker',
+  instructions: `
+    You are Dane, the link checker for Mastra AI. You report on broken links whenever you see them.
+    Make sure to include the url in the message.
+
+    ## Style Guide
+    - Use active voice
+    - Keep descriptions concise but informative
+    - Avoid marketing language
+    - Link to relevant documentation
+    `,
+  model: getBaseModelConfig(),
+});
+
 export const daneChangeLog = new Agent({
   name: 'DanePackagePublisher',
   instructions: `

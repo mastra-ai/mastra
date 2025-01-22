@@ -50,8 +50,8 @@ export class Mastra<
     logger?: TLogger | false;
     workflows?: TWorkflows;
     tts?: TTTS;
-    deployer?: MastraDeployer;
     telemetry?: OtelConfig;
+    deployer?: MastraDeployer;
   }) {
     /*
     Logger
@@ -67,6 +67,9 @@ export class Mastra<
       this.logger = logger;
     }
 
+    /**
+     * Deployer
+     **/
     if (config?.deployer) {
       this.deployer = config.deployer;
     }
