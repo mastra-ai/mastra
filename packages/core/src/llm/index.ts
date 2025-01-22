@@ -79,6 +79,7 @@ export class LLM extends MastraBase {
       AZURE: 'azure',
       AMAZON: 'amazon',
       ANTHROPIC_VERTEX: 'anthropic-vertex',
+      DEEPSEEK: 'deepseek',
     };
     const type = providerToType[model.provider as LLMProvider] ?? model.provider;
 
