@@ -1,19 +1,12 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { type ModelConfig } from '@mastra/core';
 
+import { isCloserTo } from '../utils';
+import { TestCaseWithContext } from '../utils';
+
 import { ContextualRecallMetric } from './index';
 
-type TestCase = {
-  input: string;
-  output: string;
-  context: string[];
-  expectedResult: {
-    score: number;
-    reason: string;
-  };
-};
-
-const testCases: TestCase[] = [
+const testCases: TestCaseWithContext[] = [
   {
     input: `What are the health benefits of drinking green tea?`,
     output:
@@ -66,10 +59,6 @@ const modelConfig: ModelConfig = {
   toolChoice: 'auto',
   apiKey: process.env.OPENAI_API_KEY,
 };
-
-function isCloserTo(value, target1, target2) {
-  return Math.abs(value - target1) < Math.abs(value - target2);
-}
 
 describe('ContextualRecallMetric', () => {
   const metric = new ContextualRecallMetric(modelConfig);
