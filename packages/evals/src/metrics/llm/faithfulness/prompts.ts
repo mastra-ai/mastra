@@ -54,6 +54,8 @@ export function generateEvaluatePrompt({ claims, context }: { claims: string[]; 
 Context:
 ${context.join('\n')}
 
+Number of claims: ${claims.length}
+
 Claims to verify:
 ${claims.join('\n')}
 
@@ -61,6 +63,8 @@ For each claim, provide a verdict and reasoning. The verdict must be one of:
 - "yes" if the claim is supported by the context
 - "no" if the claim directly contradicts the context
 - "unsure" if the claim is not mentioned in the context or cannot be verified
+
+The number of verdicts MUST MATCH the number of claims exactly.
 
 Format:
 {

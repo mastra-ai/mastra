@@ -47,7 +47,6 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
     Return JSON with array of verdict objects. Each verdict must include:
     - "verdict": "yes", "no", or "unsure"
     - "reason": Clear explanation of the verdict
-    - Exact match between number of verdicts and statements
 
     Verdict Guidelines:
     - "yes": Statement explicitly and directly answers the input question when it:
@@ -157,6 +156,8 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
             }}
         ]
     }}
+
+The number of verdicts MUST MATCH the number of statements exactly.
 
   Input:
   ${input}
