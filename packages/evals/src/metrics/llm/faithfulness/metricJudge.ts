@@ -16,7 +16,6 @@ export class FaithfulnessJudge extends MastraAgentJudge {
   }
 
   async evaluate(output: string, context: string[]): Promise<{ claim: string; verdict: string; reason: string }[]> {
-    // First extract claims from the output
     const claimsPrompt = generateClaimExtractionPrompt({ output });
     const claims = await this.agent.generate(claimsPrompt, {
       output: z.object({
@@ -28,7 +27,6 @@ export class FaithfulnessJudge extends MastraAgentJudge {
       return [];
     }
 
-    // Then verify each claim against the context
     const evaluatePrompt = generateEvaluatePrompt({ claims: claims.object.claims, context });
     const result = await this.agent.generate(evaluatePrompt, {
       output: z.object({
