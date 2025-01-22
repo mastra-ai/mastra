@@ -1,9 +1,11 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { type ModelConfig } from '@mastra/core';
 
+import { TestCase } from '../utils';
+
 import { SummarizationMetric } from './index';
 
-const testCases = [
+const testCases: TestCase[] = [
   {
     // Perfect summarization
     input:

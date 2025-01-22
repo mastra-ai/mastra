@@ -1,19 +1,11 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { type ModelConfig } from '@mastra/core';
 
+import { TestCaseWithContext } from '../utils';
+
 import { ContextPositionMetric } from './index';
 
-type TestCase = {
-  input: string;
-  output: string;
-  context: string[];
-  expectedResult: {
-    score: number;
-    reason: string;
-  };
-};
-
-const testCases: TestCase[] = [
+const testCases: TestCaseWithContext[] = [
   {
     // Perfect ordering with all relevant pieces [1,1,1]
     input: 'What is the Sun?',
