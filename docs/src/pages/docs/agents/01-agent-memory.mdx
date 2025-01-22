@@ -2,13 +2,11 @@
 
 Agents in Mastra have a memory that stores conversation history and contextual information. This memory allows agents to maintain state across interactions, enabling more coherent and context-aware responses.
 
-## Memory basics
+## Using Agent Memory
 
-An agent in Mastra is configured with two named parameters:
+Agent memory in Mastra is configured with two named parameters:
 - `threadId` - A unique identifier for the conversation thread.
 - `resourceId` - A unique identifier for the agent's memory context. This is used to group and manage memory for different agents or resources. You can also just set it to `default` for all agents if you don't need to group threads.
-
-## Using Agent Memory
 
 You can store agent memory in-memory (ha!) or you can persist it to a backend. Let's just start by using it in-memory.
 
