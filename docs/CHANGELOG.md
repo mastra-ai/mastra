@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.1-alpha.19
+
+### Patch Changes
+
+- ceb8086: Added hallucination metric and doc
+
 ## 0.1.1-alpha.18
 
 ### Patch Changes

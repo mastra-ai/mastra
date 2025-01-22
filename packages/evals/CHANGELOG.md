@@ -1,5 +1,17 @@
 # @mastra/evals
 
+## 0.1.0-alpha.5
+
+### Minor Changes
+
+- 633e198: Add bias metric
+
+### Patch Changes
+
+- ceb8086: Added hallucination metric and doc
+- Updated dependencies [14064f2]
+  - @mastra/core@0.1.27-alpha.66
+
 ## 0.1.0-alpha.4
 
 ### Minor Changes

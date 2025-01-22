@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.66
+
+### Patch Changes
+
+- 14064f2: Deployer abstract class
+
 ## 0.1.27-alpha.65
 
 ### Patch Changes
