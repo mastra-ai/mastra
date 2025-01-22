@@ -11,7 +11,8 @@ const meta = {
   summarization: "Summarization",
   "textual-difference": "TextualDifference",
   "tone-consistency": "ToneConsistency",
-  toxicity: "Toxicity",
+  toxicity: "Toxicity 123",
+  bias: "Bias",
 };
 
 export default meta;
