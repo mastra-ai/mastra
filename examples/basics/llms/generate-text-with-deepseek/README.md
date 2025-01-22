@@ -1,12 +1,12 @@
-# Generate Text with Gemini
+# Generate Text with Deepseek
 
-A simple example showing how to generate text using Mastra and Google's Gemini model.
+A simple example showing how to generate text using Mastra and Deepseeks chat model.
 
 ## Prerequisites
 
 - Node.js v20.0+
 - pnpm (recommended) or npm
-- Google API key (Gemini)
+- Deepseek API key
 
 ## Getting Started
 
@@ -14,19 +14,19 @@ A simple example showing how to generate text using Mastra and Google's Gemini m
 
    ```bash
    git clone https://github.com/mastra-ai/mastra
-   cd examples/basics/llms/generate-text-with-gemini
+   cd examples/basics/llms/generate-text-with-deepseek
    ```
 
-2. Copy the environment variables file and add your Gemini API key:
+2. Copy the environment variables file and add your Deepseek API key:
 
    ```bash
    cp .env.example .env
    ```
 
-   Then edit `.env` and add your Gemini API key:
+   Then edit `.env` and add your Deepseek API key:
 
    ```env
-   GEMINI_API_KEY=your-api-key-here
+   DEEPSEEK_API_KEY=your-api-key-here
    ```
 
 3. Install dependencies:
