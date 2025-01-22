@@ -1,5 +1,19 @@
 # @mastra/evals
 
+## 0.1.0-alpha.4
+
+### Minor Changes
+
+- ddd2236: Add contextual metric
+- 94504ec: Add contextual relevancy metric
+- 240c3aa: Enable toxicity metric
+
+### Patch Changes
+
+- 27c933f: Added summarization and doc
+- 07f45e7: Update evals to include all verdicts and updated docs
+- 1bbec77: Reorganized evals into nlp and llm
+
 ## 0.0.1-alpha.3
 
 ### Patch Changes
