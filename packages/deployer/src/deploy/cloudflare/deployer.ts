@@ -8,6 +8,7 @@ import { getWorkerConfig } from './config.js';
 
 export class CloudflareDeployer extends Deployer {
   name = 'Cloudflare';
+  useRequireBanner = false;
 
   async installCli() {
     if (process.env.SKIP_INSTALL_CLI === 'true') {
@@ -87,7 +88,7 @@ export class CloudflareDeployer extends Deployer {
 
   async deployCommand({ scope }: { scope: string }): Promise<void> {
     const envVars = this.getEnvVars();
-    const p2 = execa('wrangler', ['deploy'], {
+    const p2 = execa('npm run wrangler', ['deploy'], {
       cwd: this.dotMastraPath,
       env: {
         // CLOUDFLARE_API_TOKEN: this.token,

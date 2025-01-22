@@ -1,5 +1,5 @@
 import { MastraDeployer } from '@mastra/core';
-import { execa } from 'execa';
+import * as child_process from 'child_process';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 
@@ -9,7 +9,7 @@ interface CFRoute {
 }
 
 export class CloudflareDeployer extends MastraDeployer {
-  routes: CFRoute[] = [];
+  routes?: CFRoute[] = [];
   constructor({
     scope,
     env,
@@ -19,7 +19,7 @@ export class CloudflareDeployer extends MastraDeployer {
     env?: Record<string, any>;
     scope: string;
     projectName: string;
-    routes: CFRoute[];
+    routes?: CFRoute[];
   }) {
     super({ scope, env, projectName });
 
@@ -40,9 +40,8 @@ export class CloudflareDeployer extends MastraDeployer {
         main: 'index.mjs',
         compatibility_date: '2024-12-02',
         compatibility_flags: ['nodejs_compat'],
-        find_additional_modules: true,
         build: {
-          command: 'pnpm install',
+          command: 'npm install',
         },
         observability: {
           logs: {
@@ -59,8 +58,12 @@ export class CloudflareDeployer extends MastraDeployer {
     writeFileSync(
       join(dir, './index.mjs'),
       `
-        import { app } from './hono.mjs';
-        export default app
+      export default {
+        fetch: async (event, context) => {
+                const { app } = await import('./hono.mjs');
+                return app.fetch(event, context);
+        }
+      }
       `,
     );
   }
@@ -119,15 +122,15 @@ export class CloudflareDeployer extends MastraDeployer {
   // }
 
   async deploy({ dir, token }: { dir: string; token: string }): Promise<void> {
-    const p2 = execa('wrangler', ['deploy'], {
+    child_process.execSync(`npm exec wrangler deploy`, {
       cwd: dir,
+      stdio: 'inherit',
       env: {
         CLOUDFLARE_API_TOKEN: token,
         CLOUDFLARE_ACCOUNT_ID: this.scope,
         ...this.env,
+        PATH: process.env.PATH,
       },
     });
-    p2.stdout.pipe(process.stdout);
-    await p2;
   }
 }

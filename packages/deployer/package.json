@@ -25,7 +25,7 @@
   "scripts": {
     "prebuild:app": "esbuild --platform=node --target=node20 --format=esm --bundle --outdir=dist/server src/server/index.ts",
     "build": "dts build && pnpm prebuild:app",
-    "build:dev": "concurrently 'dts watch' 'pnpm prebuild:app --watch'",
+    "build:dev": "concurrently 'dts watch' 'sleep 5 && pnpm prebuild:app --watch'",
     "test": "vitest run"
   },
   "keywords": [],

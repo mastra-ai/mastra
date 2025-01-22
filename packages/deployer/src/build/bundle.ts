@@ -94,6 +94,7 @@ const bundleStep = new Step({
         'commonjs-variable-in-esm': 'silent',
       },
       external: [
+        'execa',
         // Mark node built-ins as external
         'assert',
         'buffer',
@@ -154,8 +155,10 @@ const bundleStep = new Step({
     if (useBanner) {
       esbuildConfig.banner = {
         js: `
-                import { createRequire } from "module";
-                const require = createRequire(import.meta.url);
+                import { createRequire } from "node:module";
+                import { pathToFileURL } from "node:url";
+                
+                const require = createRequire(import.meta.url || 'file:///');
               `,
       };
     }

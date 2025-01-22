@@ -38,7 +38,7 @@ export class Deployer {
     }
 
     const mastraDeps = Object.entries(projectPkg.dependencies)
-      .filter(([name]) => name.startsWith('@mastra') && !name.startsWith('@mastra/deployer-'))
+      .filter(([name]) => name.startsWith('@mastra') && !name.startsWith('@mastra/deployer'))
       .reduce((acc: any, [name, version]) => {
         if (version === 'workspace:*') {
           acc[name] = 'latest';
@@ -66,6 +66,7 @@ export class Deployer {
           dependencies: {
             ...mastraDeps,
             hono: '4.6.17',
+            execa: 'latest',
             '@hono/node-server': '^1.13.7',
             superjson: '^2.2.2',
             'zod-to-json-schema': '^3.24.1',
@@ -153,7 +154,12 @@ export class Deployer {
     this.writePackageJson();
     this.writeServerFile();
     await this.install();
-    await this.build({ dir: dirPath, useBanner: true });
+    try {
+      await this.build({ dir: dirPath, useBanner: true });
+    } catch (e) {
+      console.error('[Mastra Deploy] - Error building:', e);
+    }
+
     console.log('BUILD SERVER');
     await this.buildServer();
   }
