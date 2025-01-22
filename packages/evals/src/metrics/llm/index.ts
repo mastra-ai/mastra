@@ -7,3 +7,4 @@ export { ToxicityMetric } from './toxicity';
 export { ContextRelevancyMetric } from './context-relevancy';
 export { ContextualRecallMetric } from './contextual-recall';
 export { SummarizationMetric } from './summarization';
+export { BiasMetric } from './bias';

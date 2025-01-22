@@ -1,19 +1,11 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { type ModelConfig } from '@mastra/core';
 
+import { TestCaseWithContext } from '../utils';
+
 import { ContextPrecisionMetric } from './index';
 
-type TestCase = {
-  input: string;
-  output: string;
-  context: string[];
-  expectedResult: {
-    score: number;
-    reason: string;
-  };
-};
-
-const testCases: TestCase[] = [
+const testCases: TestCaseWithContext[] = [
   {
     input: 'Who invented the light bulb?',
     output: 'Thomas Edison invented the light bulb.',

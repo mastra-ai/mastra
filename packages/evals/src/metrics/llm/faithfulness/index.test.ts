@@ -1,9 +1,11 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { type ModelConfig } from '@mastra/core';
 
+import { TestCaseWithContext } from '../utils';
+
 import { FaithfulnessMetric } from './index';
 
-const testCases = [
+const testCases: TestCaseWithContext[] = [
   {
     // Perfect faithfulness
     input: 'What can you tell me about the company?',

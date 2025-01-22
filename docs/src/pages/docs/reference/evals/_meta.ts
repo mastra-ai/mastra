@@ -12,6 +12,7 @@ const meta = {
   "textual-difference": "TextualDifference",
   "tone-consistency": "ToneConsistency",
   toxicity: "Toxicity",
+  bias: "Bias",
 };
 
 export default meta;

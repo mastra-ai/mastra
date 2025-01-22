@@ -4,7 +4,7 @@ import child_process from 'node:child_process';
 import util from 'node:util';
 import { z } from 'zod';
 
-import { slack } from '../tools/mcp';
+import { slack } from '../tools/mcp.js';
 
 const exec = util.promisify(child_process.exec);
 

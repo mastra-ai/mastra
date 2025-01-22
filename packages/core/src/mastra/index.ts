@@ -3,6 +3,7 @@ import { z } from 'zod';
 import 'dotenv/config';
 
 import { Agent } from '../agent';
+import { MastraDeployer } from '../deployer';
 import { MastraEngine } from '../engine';
 import { LLM } from '../llm';
 import { ModelConfig } from '../llm/types';
@@ -36,6 +37,7 @@ export class Mastra<
   private workflows: TWorkflows;
   private telemetry?: Telemetry;
   private tts?: TTTS;
+  private deployer?: MastraDeployer;
   engine?: MastraEngine;
   memory?: MastraMemory;
 
@@ -49,6 +51,7 @@ export class Mastra<
     workflows?: TWorkflows;
     tts?: TTTS;
     telemetry?: OtelConfig;
+    deployer?: MastraDeployer;
   }) {
     /*
     Logger
@@ -62,6 +65,13 @@ export class Mastra<
         logger = config.logger;
       }
       this.logger = logger;
+    }
+
+    /**
+     * Deployer
+     **/
+    if (config?.deployer) {
+      this.deployer = config.deployer;
     }
 
     /*
@@ -259,6 +269,10 @@ export class Mastra<
 
   public getVectors() {
     return this.vectors;
+  }
+
+  public getDeployer() {
+    return this.deployer;
   }
 
   public getWorkflow<TWorkflowId extends keyof TWorkflows>(
