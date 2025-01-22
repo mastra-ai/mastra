@@ -11,7 +11,7 @@ const meta = {
   summarization: "Summarization",
   "textual-difference": "TextualDifference",
   "tone-consistency": "ToneConsistency",
-  toxicity: "Toxicity 123",
+  toxicity: "Toxicity",
   bias: "Bias",
 };
 

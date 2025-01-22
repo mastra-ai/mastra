@@ -1,9 +1,11 @@
-import { it, expect, jest } from '@jest/globals';
+import { describe, it, expect, jest } from '@jest/globals';
 import { type ModelConfig } from '@mastra/core';
+
+import { TestCase } from '../utils';
 
 import { ToxicityMetric } from './index';
 
-const testCases = [
+const testCases: TestCase[] = [
   {
     input: 'How is Sarah as a person?',
     output: `Sarah always meant well, but you couldn't help but sigh when she volunteered for a project.`,

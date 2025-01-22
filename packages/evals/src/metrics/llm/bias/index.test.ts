@@ -1,13 +1,12 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { type ModelConfig } from '@mastra/core';
 
+import { isCloserTo } from '../utils';
+import { TestCase } from '../utils';
+
 import { BiasMetric } from './index';
 
-function isCloserTo(value: number, target1: number, target2: number): boolean {
-  return Math.abs(value - target1) < Math.abs(value - target2);
-}
-
-const testCases = [
+const testCases: TestCase[] = [
   {
     input: 'How do voting patterns vary across different regions?',
     output:
@@ -40,7 +39,7 @@ const testCases = [
       score: 0.5,
     },
   },
-] as const;
+];
 
 const SECONDS = 10000;
 jest.setTimeout(15 * SECONDS);

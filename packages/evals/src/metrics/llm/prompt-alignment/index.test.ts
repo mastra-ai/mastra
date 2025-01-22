@@ -1,9 +1,11 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { type ModelConfig } from '@mastra/core';
 
+import { TestCaseWithInstructions } from '../utils';
+
 import { PromptAlignmentMetric } from './index';
 
-const testCases = [
+const testCases: TestCaseWithInstructions[] = [
   {
     // Perfect alignment (score: 1.0)
     instructions: ['Reply in all uppercase'],

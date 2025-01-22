@@ -1,9 +1,11 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { type ModelConfig } from '@mastra/core';
 
+import { TestCase } from '../utils';
+
 import { AnswerRelevancyMetric } from './index';
 
-const testCases = [
+const testCases: TestCase[] = [
   {
     input: 'What is the capital of France?',
     output: 'Paris is the capital of France.',
@@ -86,7 +88,7 @@ const testCases = [
       reason: 'The output contains technical error messages unrelated to the question',
     },
   },
-] as const;
+];
 
 const SECONDS = 10000;
 jest.setTimeout(15 * SECONDS);
