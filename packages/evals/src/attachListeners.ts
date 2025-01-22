@@ -7,11 +7,7 @@ export async function attachListeners() {
 
   try {
     mkdirSync(dotMastraPath);
-  } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'EEXIST') {
-      console.warn(`Error creating directory ${dotMastraPath}:`, error);
-    }
-  }
+  } catch (error) {}
 
   registerHook(AvailableHooks.ON_EVALUATION, traceObject => {
     appendFile(join(dotMastraPath, 'evals.json'), JSON.stringify(traceObject), () => {});
