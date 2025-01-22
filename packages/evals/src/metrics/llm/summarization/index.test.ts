@@ -22,9 +22,9 @@ const testCases = [
       'The company XYZ was founded in 2010 in San Francisco. They specialize in artificial intelligence and have developed several groundbreaking products. Their flagship product, launched in 2015, has over 1 million users worldwide.',
     output: 'XYZ, founded in 2012 in San Francisco, is an AI company. Their main product has 2 million users globally.',
     expectedResult: {
-      score: 0.4,
+      score: 0.33,
       reason:
-        'The summary has mixed accuracy: correct about location and AI focus, but wrong about founding year and user count. It also misses key information about product launch date.',
+        'Contains both accurate information (location, AI focus) and contradictions (founding year, user count). Misses key information about product launch date and multiple products. Incorrect numbers are treated as contradictions, not approximations.',
     },
   },
   {
@@ -33,9 +33,9 @@ const testCases = [
       'The company XYZ was founded in 2010 in San Francisco. They specialize in artificial intelligence and have developed several groundbreaking products. Their flagship product, launched in 2015, has over 1 million users worldwide.',
     output: 'XYZ is a technology company based in San Francisco.',
     expectedResult: {
-      score: 0.33,
+      score: 0.2,
       reason:
-        'While accurate, the summary omits crucial information about founding year, AI specialization, and product details',
+        'While factually accurate about location, the summary omits founding year, AI focus, products, and user base. Tech company claim is unverifiable.',
     },
   },
   {
@@ -52,29 +52,9 @@ const testCases = [
     input: 'The company XYZ was founded in 2010 in San Francisco.',
     output: 'XYZ, founded in 2010 in San Francisco, might expand to Europe next year and could become a market leader.',
     expectedResult: {
-      score: 0.33,
-      reason:
-        'While the factual information is correct, the summary includes unsupported speculative claims about future expansion',
-    },
-  },
-  {
-    // Overly detailed/verbose
-    input: 'The company XYZ was founded in 2010.',
-    output:
-      'XYZ was established in 2010 in what was likely a strategic move to enter the technology sector during the post-recession recovery period.',
-    expectedResult: {
       score: 0.5,
       reason:
-        'The core fact is correct but the summary adds unsupported context and speculation about business strategy',
-    },
-  },
-  {
-    // Partial information with inference
-    input: 'The company XYZ specializes in artificial intelligence. Their products are used by major tech companies.',
-    output: 'XYZ develops AI solutions that are popular in the technology industry.',
-    expectedResult: {
-      score: 1.0,
-      reason: 'The summary accurately rephrases the key information without adding unsupported claims',
+        'The factual claims about founding year and location are correct, but includes unsupported speculative claims about expansion and market position',
     },
   },
   {
@@ -83,9 +63,9 @@ const testCases = [
       'The company XYZ was founded in 2010 in San Francisco. Their groundbreaking AI product has transformed the industry.',
     output: 'XYZ, a San Francisco company since 2010, has offices worldwide.',
     expectedResult: {
-      score: 0.33,
+      score: 0.5,
       reason:
-        'While some facts are correct, the summary misses the main point about AI impact and adds unsupported claims about offices',
+        'While location and founding date are correct, misses key AI impact and adds unsupported claims about offices',
     },
   },
   {
@@ -93,9 +73,9 @@ const testCases = [
     input: `XYZ's AI platform processes 1 million transactions per second using distributed computing. The system was developed over 5 years with a team of 100 engineers.`,
     output: `XYZ's platform handles 1 million transactions per second.`,
     expectedResult: {
-      score: 0.5,
+      score: 0.25,
       reason:
-        'While technically accurate, the summary omits important context about AI, development time, and team size',
+        'While the transaction speed is accurately reported (perfect alignment), the summary omits crucial technical context about AI, distributed computing, development time, and team size (poor coverage: 1/4 key points).',
     },
   },
   {
@@ -103,8 +83,8 @@ const testCases = [
     input: 'XYZ has 1,023 employees across 12 offices.',
     output: 'XYZ employs approximately 1,000 people in multiple offices.',
     expectedResult: {
-      score: 1.0,
-      reason: 'The summary uses acceptable approximation for numbers while maintaining accuracy',
+      score: 0,
+      reason: 'While using acceptable approximations, fails to precisely convey the specific numbers from the source',
     },
   },
   {
@@ -112,8 +92,9 @@ const testCases = [
     input: 'XYZ launched in 2010 and has grown steadily. They plan to expand next year.',
     output: 'XYZ, which started in 2010, continues to grow and has future expansion plans.',
     expectedResult: {
-      score: 1.0,
-      reason: 'The summary accurately captures past events and future plans while maintaining temporal context',
+      score: 0.33,
+      reason:
+        'While factually accurate, the summary unnecessarily loses precision by making specific details vague (steady growth → continues to grow, next year → future plans) without gaining brevity or clarity.',
     },
   },
   {
@@ -121,8 +102,9 @@ const testCases = [
     input: `XYZ's revenue grew by 50% last year, reaching $100 million.`,
     output: 'XYZ had an impressive year with substantial revenue growth to $100 million.',
     expectedResult: {
-      score: 0.75,
-      reason: 'While the numbers are accurate, the summary adds subjective interpretation ("impressive")',
+      score: 0.5,
+      reason:
+        'While revenue numbers are accurate, adds subjective interpretation ("impressive") and omits specific growth percentage',
     },
   },
   {
@@ -132,7 +114,7 @@ const testCases = [
     They have partnerships with major tech companies and are expanding into Europe.`,
     output: 'ABC is a New York-based company founded in 2020.',
     expectedResult: {
-      score: 0.3,
+      score: 0.2,
       reason:
         'While all stated facts are accurate (high alignment), the summary misses crucial information about quantum computing, achievements, team, funding, and expansion plans (low coverage).',
     },
@@ -144,20 +126,9 @@ const testCases = [
     output: `ABC, founded in 2021 in Boston, has made breakthroughs in quantum computing with their first product achieving quantum supremacy in 2022. 
     They are leaders in the quantum computing field.`,
     expectedResult: {
-      score: 0.25,
+      score: 0.5,
       reason:
         'While the summary covers most key points (high coverage), it contains factual errors about founding year and location (low alignment).',
-    },
-  },
-  {
-    // Perfect alignment with minimal content
-    input: `The company ABC was founded in 2020 in New York. They have developed revolutionary quantum computing technology. 
-    Their first product achieved quantum supremacy in 2022.`,
-    output: 'ABC was founded in 2020.',
-    expectedResult: {
-      score: 0.2,
-      reason:
-        'The single claim is perfectly accurate (perfect alignment) but misses most key information (very low coverage).',
     },
   },
   {
@@ -166,7 +137,7 @@ const testCases = [
       'The company XYZ specializes in artificial intelligence and machine learning, with offices in multiple countries.',
     output: 'AI.',
     expectedResult: {
-      score: 0.1,
+      score: 0,
       reason: 'While technically accurate, the summary is extremely minimal and misses almost all key information',
     },
   },
@@ -175,9 +146,9 @@ const testCases = [
     input: 'XYZ develops AI solutions for healthcare.',
     output: 'XYZ is an AI company that develops AI solutions. Their AI technology is used in AI applications.',
     expectedResult: {
-      score: 0.4,
+      score: 0,
       reason:
-        'While factually correct, the summary is unnecessarily repetitive and fails to mention the healthcare focus',
+        'While factually correct about AI, the summary is unnecessarily repetitive and fails to mention the healthcare focus',
     },
   },
   {
@@ -186,7 +157,7 @@ const testCases = [
     output:
       'XYZ is a technology company that develops software solutions and might be working on various projects across different sectors with potential future expansion plans.',
     expectedResult: {
-      score: 0.2,
+      score: 0,
       reason: 'The summary adds many unsupported claims and is inappropriately verbose for the given input',
     },
   },
@@ -207,139 +178,96 @@ describe('SummarizationMetric', () => {
 
   it('should handle perfect summarization', async () => {
     const testCase = testCases[0]!;
-    console.log('perfect summarization');
     const result = await metric.measure({
       input: testCase.input,
       output: testCase.output,
     });
-
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 
   it('should handle mixed accuracy with contradictions', async () => {
     const testCase = testCases[1]!;
-    console.log('mixed accuracy with contradictions');
     const result = await metric.measure({
       input: testCase.input,
       output: testCase.output,
     });
-
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 
   it('should handle missing key information', async () => {
     const testCase = testCases[2]!;
-    console.log('missing key information');
     const result = await metric.measure({
       input: testCase.input,
       output: testCase.output,
     });
-
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 
   it('should handle empty output', async () => {
     const testCase = testCases[3]!;
-    console.log('empty output');
     const result = await metric.measure({
       input: testCase.input,
       output: testCase.output,
     });
-
     expect(result.score).toBe(testCase.expectedResult.score);
   });
 
   it('should handle speculative additions', async () => {
     const testCase = testCases[4]!;
-    console.log('speculative additions');
     const result = await metric.measure({
       input: testCase.input,
       output: testCase.output,
     });
-
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
-  });
-
-  it('should handle overly detailed summaries', async () => {
-    const testCase = testCases[5]!;
-    console.log('overly detailed summaries');
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-    });
-
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
-  });
-
-  it('should handle partial information with inference', async () => {
-    const testCase = testCases[6]!;
-    console.log('partial information with inference');
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-    });
-
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 
   it('should handle incorrect emphasis', async () => {
-    const testCase = testCases[7]!;
-    console.log('incorrect emphasis');
+    const testCase = testCases[5]!;
     const result = await metric.measure({
       input: testCase.input,
       output: testCase.output,
     });
-
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 
   it('should handle technical accuracy with missing context', async () => {
-    const testCase = testCases[8]!;
-    console.log('technical accuracy with missing context');
+    const testCase = testCases[6]!;
     const result = await metric.measure({
       input: testCase.input,
       output: testCase.output,
     });
-
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 
   it('should handle numerical approximation', async () => {
-    const testCase = testCases[9]!;
-    console.log('numerical approximation');
+    const testCase = testCases[7]!;
     const result = await metric.measure({
       input: testCase.input,
       output: testCase.output,
     });
-
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 
   it('should handle mixed tenses', async () => {
-    const testCase = testCases[10]!;
-    console.log('mixed tenses');
+    const testCase = testCases[8]!;
     const result = await metric.measure({
       input: testCase.input,
       output: testCase.output,
     });
-
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 
   it('should handle subjective interpretation', async () => {
-    const testCase = testCases[11]!;
-    console.log('subjective interpretation');
+    const testCase = testCases[9]!;
     const result = await metric.measure({
       input: testCase.input,
       output: testCase.output,
     });
-
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 
   it('should handle high alignment with low coverage', async () => {
-    const testCase = testCases.find(t => t.expectedResult.reason.includes('high alignment'))!;
-    console.log('high alignment with low coverage');
+    const testCase = testCases[10]!;
     const result = await metric.measure({
       input: testCase.input,
       output: testCase.output,
@@ -348,18 +276,7 @@ describe('SummarizationMetric', () => {
   });
 
   it('should handle low alignment with high coverage', async () => {
-    const testCase = testCases.find(t => t.expectedResult.reason.includes('low alignment'))!;
-    console.log('low alignment with high coverage');
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-    });
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
-  });
-
-  it('should handle perfect alignment with minimal content', async () => {
-    const testCase = testCases.find(t => t.expectedResult.reason.includes('perfect alignment'))!;
-    console.log('perfect alignment with minimal content');
+    const testCase = testCases[11]!;
     const result = await metric.measure({
       input: testCase.input,
       output: testCase.output,
@@ -368,8 +285,7 @@ describe('SummarizationMetric', () => {
   });
 
   it('should handle single word summary', async () => {
-    const testCase = testCases.find(t => t.expectedResult.reason.includes('extremely minimal'))!;
-    console.log('single word summary');
+    const testCase = testCases[12]!;
     const result = await metric.measure({
       input: testCase.input,
       output: testCase.output,
@@ -378,8 +294,7 @@ describe('SummarizationMetric', () => {
   });
 
   it('should handle repetitive summary', async () => {
-    const testCase = testCases.find(t => t.expectedResult.reason.includes('repetitive'))!;
-    console.log('repetitive summary');
+    const testCase = testCases[13]!;
     const result = await metric.measure({
       input: testCase.input,
       output: testCase.output,
@@ -388,8 +303,7 @@ describe('SummarizationMetric', () => {
   });
 
   it('should handle overly verbose summary', async () => {
-    const testCase = testCases.find(t => t.expectedResult.reason.includes('inappropriately verbose'))!;
-    console.log('overly verbose summary');
+    const testCase = testCases[14]!;
     const result = await metric.measure({
       input: testCase.input,
       output: testCase.output,

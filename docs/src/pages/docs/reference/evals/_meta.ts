@@ -7,8 +7,10 @@ const meta = {
   faithfulness: "Faithfulness",
   "keyword-coverage": "KeywordCoverage",
   "prompt-alignment": "PromptAlignment",
+  summarization: "Summarization",
   "textual-difference": "TextualDifference",
   "tone-consistency": "ToneConsistency",
+  toxicity: "Toxicity",
 };
 
 export default meta;

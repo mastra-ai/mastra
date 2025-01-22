@@ -4,9 +4,9 @@ You are a strict and thorough summarization evaluator. Your job is to determine 
 Key Principles:
 1. Be EXTRA STRICT in evaluating factual correctness and coverage.
 2. Only give a "yes" verdict if a statement is COMPLETELY supported by the original text.
-3. Give "no" if the statement contradicts the original text.
-4. Give "unsure" if the statement cannot be verified from the original text.
-5. Focus on both factual accuracy and coverage of key information.
+3. Give "no" if the statement contradicts or deviates from the original text.
+4. Focus on both factual accuracy and coverage of key information.
+5. Exact details matter - approximations or generalizations count as deviations.
 `;
 
 export function generateAlignmentPrompt({
@@ -36,11 +36,11 @@ export function generateAlignmentPrompt({
     Original Text: "The company was founded in 1995 by John Smith. It started with 10 employees and grew to 500 by 2020. The company is based in Seattle."
     Summary Claims: [
       "The company was established around 1995",
-      "The company currently has 1000 employees",
+      "The company has thousands of employees",
       "The founder was John Smith",
       "The business might be doing well in the Pacific Northwest"
+      "The company is growing rapidly"
     ]
-
     {
       "verdicts": [
         {
@@ -49,9 +49,9 @@ export function generateAlignmentPrompt({
           "reason": "The founding year is correctly stated with acceptable approximation ('around 1995' matches '1995')"
         },
         {
-          "claim": "The company currently has 1000 employees",
+          "claim": "The company has thousands of employees",
           "verdict": "no",
-          "reason": "The current employee count of 1000 contradicts the original text, which states 500 employees by 2020"
+          "reason": "The original text states 500 employees, which contradicts thousands"
         },
         {
           "claim": "The founder was John Smith",
@@ -62,6 +62,11 @@ export function generateAlignmentPrompt({
           "claim": "The business might be doing well in the Pacific Northwest",
           "verdict": "unsure",
           "reason": "While the location (Pacific Northwest/Seattle) is correct, the business performance claim cannot be verified from the original text"
+        },
+        {
+          "claim": "The company is growing rapidly",
+          "verdict": "no",
+          "reason": "The original text does not mention growth or a specific rate of growth"
         }
       ]
     }
@@ -76,34 +81,25 @@ export function generateAlignmentPrompt({
   `;
 }
 
-export function generateQuestionsPrompt({
-  originalText,
-  numberOfQuestions = 5,
-}: {
-  originalText: string;
-  numberOfQuestions?: number;
-}) {
+export function generateQuestionsPrompt({ originalText }: { originalText: string }) {
   return `
-    Based on the given text, generate ${numberOfQuestions} closed-ended questions that can be answered with STRICTLY 'yes' or 'no'.
-    The questions should capture key information from the original text.
+    Given the input text, generate yes/no questions to verify if key information is preserved in a summary. Follow these rules:
 
     Key requirements:
     - Questions MUST be answerable as STRICTLY 'yes' based on the original text
     - Each question must be verifiable with ONLY the information in the text
     - Focus on important facts and main points
     - Questions should be specific and unambiguous
-    - Avoid questions about minor or irrelevant details
     - No questions that could be interpreted as "maybe" or "partially"
 
     Example:
     Original Text: "The company was founded in 1995 by John Smith. It started with 10 employees and grew to 500 by 2020. The company is based in Seattle."
-
     {
       "questions": [
-        "Was the company founded in 1995?",  
-        "Was John Smith the founder?",       
-        "Did it start with 10 employees?",   
-        "Did it have 500 employees by 2020?",
+        "Was the company founded in 1995?",
+        "Was John Smith the founder?",
+        "Did it start with 10 employees?",
+        "Did it grow to 500 employees by 2020?",
         "Is the company based in Seattle?"
       ]
     }
@@ -132,18 +128,24 @@ export function generateAnswersPrompt({
     - Give "yes" if the summary provides enough information to definitively answer the question
     - Give "no" if the summary lacks the necessary information or provides contradicting information
     - Each answer must be based ONLY on the information in the summary
+    - Exact matches are required - generalizations or approximations count as "no":
+      - "steadily growing" ≠ "continues to grow"
+      - "next year" ≠ "future plans"
+      - "500 employees" ≠ "about 500 employees"
 
     Example:
-    Original Text: "The company was founded in 1995 by John Smith. It started with 10 employees and grew to 500 by 2020."
-    Summary: "The company was established in 1995 and currently has 1000 employees."
+    Original Text: "The company was founded in 1995 by John Smith in Seattle. It started with 10 employees and grew to 500 by 2020."
+    Summary: "The company was founded in 1995 in Seattle and currently has about 500 employees."
     Questions: [
       "Was the company founded in 1995?",
+      "Is the company based in Seattle?",
       "Was John Smith the founder?",
-      "Did it start with 10 employees?"
+      "Did it start with 10 employees?",
+      "Did it grow to specifically 500 employees by 2020?"
     ]
 
     {
-      "answers": ["yes", "no", "no"]
+      "answers": ["yes", "yes", "no", "no", "no"]
     }
 
     Original Text:

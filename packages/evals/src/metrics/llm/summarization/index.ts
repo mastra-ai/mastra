@@ -27,14 +27,6 @@ export class SummarizationMetric extends Metric {
     const coverageScore = this.calculateScore(coverageVerdicts);
     const finalScore = Math.min(alignmentScore, coverageScore);
 
-    console.log({
-      alignmentVerdicts: JSON.stringify(alignmentVerdicts),
-      coverageVerdicts: JSON.stringify(coverageVerdicts),
-      alignmentScore,
-      coverageScore,
-      finalScore,
-    });
-
     const reason = await this.judge.getReason(
       input,
       output,
@@ -55,7 +47,7 @@ export class SummarizationMetric extends Metric {
   private calculateScore(evaluation: { verdict: string; reason: string }[]): number {
     const numberOfVerdicts = evaluation?.length || 0;
     if (numberOfVerdicts === 0) {
-      return 1;
+      return 0;
     }
 
     let positiveCount = 0;
