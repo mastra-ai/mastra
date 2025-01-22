@@ -1,19 +1,12 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { type ModelConfig } from '@mastra/core';
 
+import { isCloserTo } from '../utils';
+import { TestCaseWithContext } from '../utils';
+
 import { ContextRelevancyMetric } from './index';
 
-type TestCase = {
-  input: string;
-  output: string;
-  context: string[];
-  expectedResult: {
-    score: number;
-    reason: string;
-  };
-};
-
-const testCases: TestCase[] = [
+const testCases: TestCaseWithContext[] = [
   {
     input: 'What are the symptoms and treatment options for type 2 diabetes?',
     output:
@@ -63,10 +56,6 @@ const testCases: TestCase[] = [
 
 const SECONDS = 10000;
 jest.setTimeout(15 * SECONDS);
-
-function isCloserTo(value: number, target1: number, target2: number) {
-  return Math.abs(value - target1) < Math.abs(value - target2);
-}
 
 const modelConfig: ModelConfig = {
   provider: 'OPEN_AI',

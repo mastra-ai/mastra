@@ -1,9 +1,11 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { type ModelConfig } from '@mastra/core';
 
+import { TestCaseWithContext } from '../utils';
+
 import { HallucinationMetric } from './index';
 
-const testCases = [
+const testCases: TestCaseWithContext[] = [
   {
     // No hallucination - output aligns with context
     input: 'Tell me about Tesla.',

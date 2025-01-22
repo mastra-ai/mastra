@@ -6,3 +6,4 @@ export { PromptAlignmentMetric } from './prompt-alignment';
 export { ToxicityMetric } from './toxicity';
 export { ContextRelevancyMetric } from './context-relevancy';
 export { ContextualRecallMetric } from './contextual-recall';
+export { BiasMetric } from './bias';
