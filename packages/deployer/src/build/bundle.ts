@@ -25,7 +25,7 @@ const ensureDir = new Step({
   id: 'Ensure Directory',
   execute: async () => {
     // Ensure .mastra directory exists
-    upsertMastraDir();
+    upsertMastraDir({});
   },
 });
 

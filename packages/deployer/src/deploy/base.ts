@@ -10,6 +10,7 @@ import { upsertMastraDir } from '../build/utils.js';
 export class Deployer {
   deps: Deps = new Deps();
   dotMastraPath: string;
+  projectPath: string;
   name: string = '';
   type: 'Deploy' | 'Dev';
 
@@ -18,6 +19,7 @@ export class Deployer {
   };
 
   constructor({ dir, type }: { dir: string; type: 'Deploy' | 'Dev' }) {
+    this.projectPath = dir;
     this.dotMastraPath = join(dir, '.mastra');
     this.type = type;
   }
@@ -89,14 +91,14 @@ export class Deployer {
     );
   }
 
-  async install() {
+  async install(): Promise<void> {
     this.log('Ensuring your dependencies up to date...');
-    await this.deps.install();
+    await this.deps.install({ dir: this.dotMastraPath });
   }
 
   protected getEnvFiles(): string[] {
     const envFiles = ['.env', '.env.development', '.env.local']
-      .map(file => join(process.cwd(), file))
+      .map(file => join(this.projectPath, file))
       .filter(file => existsSync(file));
     return envFiles;
   }
@@ -137,7 +139,7 @@ export class Deployer {
   }
 
   async buildServer({ playground = false }: { playground?: boolean } = { playground: false }) {
-    upsertMastraDir();
+    upsertMastraDir({ dir: this.projectPath });
 
     const templatePath = join(this.dotMastraPath, 'hono.mjs');
 
@@ -160,8 +162,8 @@ export class Deployer {
 
   async prepare({ dir, playground, useBanner = true }: { useBanner?: boolean; dir?: string; playground?: boolean }) {
     this.log('Preparing .mastra directory');
-    upsertMastraDir();
-    const dirPath = dir || path.join(process.cwd(), 'src/mastra');
+    upsertMastraDir({ dir: this.projectPath });
+    const dirPath = dir || path.join(this.projectPath, 'src/mastra');
     this.writePackageJson();
     this.writeServerFile();
     await this.install();
