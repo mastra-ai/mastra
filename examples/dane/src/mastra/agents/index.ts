@@ -1,6 +1,5 @@
 import { Agent } from '@mastra/core';
 
-import { config } from '../../config/index.js';
 import { browserTool, googleSearch } from '../tools/browser.js';
 import { listEvents } from '../tools/calendar.js';
 import { crawl } from '../tools/crawl.js';
@@ -10,12 +9,7 @@ import { imageTool } from '../tools/image.js';
 import { readPDF } from '../tools/pdf.js';
 import { activeDistTag, pnpmBuild, pnpmChangesetPublish, pnpmChangesetStatus } from '../tools/pnpm.js';
 
-const getBaseModelConfig = () => ({
-  provider: 'ANTHROPIC' as const,
-  toolChoice: 'auto' as const,
-  name: 'claude-3-5-sonnet-20241022',
-  apiKey: config.getAnthropicApiKey(),
-});
+import { getBaseModelConfig } from './model';
 
 export const daneCommitMessage = new Agent({
   name: 'DaneCommitMessage',

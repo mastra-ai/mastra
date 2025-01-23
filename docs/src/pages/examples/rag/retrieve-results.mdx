@@ -1,13 +1,17 @@
 ---
-title: "Example: Retrieving Results | RAG | Mastra Docs"
+title: "Example: Retrieving Top-K Results | RAG | Mastra Docs"
 description: Example of using Mastra to query a vector database and retrieve semantically similar chunks.
 ---
 
 import { GithubLink } from "../../../components/github-link";
 
-# Retrieve Results
+# Retrieving Top-K Results
 
-After storing embeddings in a vector database, you need to query them to find similar content. The `query` method returns the most semantically similar chunks to your input embedding, ranked by relevance. This example shows how to retrieve similar chunks from a Pinecone vector database.
+After storing embeddings in a vector database, you need to query them to find similar content. 
+
+The `query` method returns the most semantically similar chunks to your input embedding, ranked by relevance. The `topK` parameter allows you to specify the number of results to return.
+
+This example shows how to retrieve similar chunks from a Pinecone vector database.
 
 ```tsx copy
 import { MDocument, embed, PineconeVector } from "@mastra/rag";
@@ -32,7 +36,9 @@ await pinecone.upsert(
   chunks?.map((chunk: any) => ({ text: chunk.text })),
 );
 
-const results = await pinecone.query("test_index", embeddings[0], 10);
+const topK = 10;
+
+const results = await pinecone.query("test_index", embeddings[0], topK);
 
 console.log(results);
 ```

@@ -95,47 +95,6 @@ console.log(records);
 
 This mock engine mimics the behavior of the real engine without requiring a real database connection, making it ideal for unit tests.
 
-## Using the Engine for Sync Operations
-
-The engine also supports keeping external data sources up to date through sync operations:
-
-```typescript showLineNumbers copy
-await engine.syncRecords({
-  name: "external_docs",
-  connectionId: "sync_123",
-  records: updatedRecords,
-  lastSyncId: "sync_20240315",
-});
-```
-
-More details:
-
-- **Entities** represent a conceptual data model (like "Contacts", "Orders", or "Tickets") in your application.
-- **Records** are individual data entries within an entity.
-- **Syncs** are async functions that manage data synchronization between external systems and Mastra. For example, you can use a sync to import records from a third-party API into your local database.
-
-You can create, read, update, and delete entities and their records using the engine's methods.
-
-### Engine Sync Operations APIs
-
-**Entity Management:**
-
-- `createEntity({ name, connectionId })`: Create a new entity
-- `getEntityById({ id })`: Get an entity by ID
-- `getEntity({ name, connectionId })`: Get entity by name and/or connectionId
-- `deleteEntityById({ id })`: Delete an entity and its associated records
-
-**Record Management:**
-
-- `upsertRecords({ entityId, records })`: Insert or update records for an entity
-- `getRecordsByEntityId({ entityId })`: Retrieve all records for an entity
-- `getRecordsByEntityName({ name, connectionId })`: Retrieve all records for an entity by name and connectionId
-- `getRecords({ entityName, connectionId, options })`: Query records with filtering, sorting, and pagination
-
-**Sync Operations:**
-
-- `syncRecords({ name, connectionId, records, lastSyncId })`: Sync incoming data to an entity
-
 ## Summary
 
 The Mastra Engine is a PostgreSQL instance that stores agent memory and vector embeddings. You can spin it up locally with Docker for development and deploy it to a production instance. It's a helpful starting spot for handling agent memory and vector operations -- start with Postgres + pgvector, then adapt individual components based on your needs.
