@@ -137,105 +137,73 @@ const modelConfig: ModelConfig = {
 };
 
 describe('ContextPrecisionMetric', () => {
-  const metric = new ContextPrecisionMetric(modelConfig);
-
   it('should measure perfect context precision with all relevant items', async () => {
     const testCase = testCases[0]!;
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-      context: testCase.context,
-    });
+    const metric = new ContextPrecisionMetric(modelConfig, { context: testCase.context });
+    const result = await metric.measure(testCase.input, testCase.output);
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 
   it('should measure high precision with irrelevant item at end', async () => {
     const testCase = testCases[1]!;
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-      context: testCase.context,
-    });
+    const metric = new ContextPrecisionMetric(modelConfig, { context: testCase.context });
+    const result = await metric.measure(testCase.input, testCase.output);
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 
   it('should measure precision with two relevant items after irrelevant start', async () => {
     const testCase = testCases[2]!;
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-      context: testCase.context,
-    });
+    const metric = new ContextPrecisionMetric(modelConfig, { context: testCase.context });
+    const result = await metric.measure(testCase.input, testCase.output);
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 
   it('should measure precision with alternating relevant items', async () => {
     const testCase = testCases[3]!;
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-      context: testCase.context,
-    });
+    const metric = new ContextPrecisionMetric(modelConfig, { context: testCase.context });
+    const result = await metric.measure(testCase.input, testCase.output);
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 
   it('should measure precision with single relevant item at start', async () => {
     const testCase = testCases[4]!;
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-      context: testCase.context,
-    });
+    const metric = new ContextPrecisionMetric(modelConfig, { context: testCase.context });
+    const result = await metric.measure(testCase.input, testCase.output);
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 
   it('should handle completely irrelevant context', async () => {
     const testCase = testCases[5]!;
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-      context: testCase.context,
-    });
+    const metric = new ContextPrecisionMetric(modelConfig, { context: testCase.context });
+    const result = await metric.measure(testCase.input, testCase.output);
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 
   it('should handle single relevant context perfectly', async () => {
     const testCase = testCases[6]!;
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-      context: testCase.context,
-    });
+    const metric = new ContextPrecisionMetric(modelConfig, { context: testCase.context });
+    const result = await metric.measure(testCase.input, testCase.output);
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 
   it('should measure precision with single relevant item at end', async () => {
     const testCase = testCases[7]!;
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-      context: testCase.context,
-    });
+    const metric = new ContextPrecisionMetric(modelConfig, { context: testCase.context });
+    const result = await metric.measure(testCase.input, testCase.output);
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 
   it('should handle empty context', async () => {
     const testCase = testCases[8]!;
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-      context: testCase.context,
-    });
+    const metric = new ContextPrecisionMetric(modelConfig, { context: testCase.context });
+    const result = await metric.measure(testCase.input, testCase.output);
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 
   it('should handle single irrelevant context', async () => {
     const testCase = testCases[9]!;
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-      context: testCase.context,
-    });
+    const metric = new ContextPrecisionMetric(modelConfig, { context: testCase.context });
+    const result = await metric.measure(testCase.input, testCase.output);
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 });

@@ -48,28 +48,19 @@ describe('ToxicityMetric', () => {
   const metric = new ToxicityMetric(modelConfig);
 
   it('should be able to measure a prompt that is toxic', async () => {
-    const result = await metric.measure({
-      input: testCases[0].input,
-      output: testCases[0].output,
-    });
+    const result = await metric.measure(testCases[0].input, testCases[0].output);
 
     expect(result.score).toBeCloseTo(testCases[0].expectedResult.score, 1);
   });
 
   it('should be able to measure a prompt that is not toxic', async () => {
-    const result = await metric.measure({
-      input: testCases[1].input,
-      output: testCases[1].output,
-    });
+    const result = await metric.measure(testCases[1].input, testCases[1].output);
 
     expect(result.score).toBeCloseTo(testCases[1].expectedResult.score, 1);
   });
 
   it('should be able to measure a prompt that is midly toxic', async () => {
-    const result = await metric.measure({
-      input: testCases[2].input,
-      output: testCases[2].output,
-    });
+    const result = await metric.measure(testCases[2].input, testCases[2].output);
 
     expect(result.score).toBeCloseTo(testCases[2].expectedResult.score, 1);
   });

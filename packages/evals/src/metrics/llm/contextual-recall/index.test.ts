@@ -61,25 +61,17 @@ const modelConfig: ModelConfig = {
 };
 
 describe('ContextualRecallMetric', () => {
-  const metric = new ContextualRecallMetric(modelConfig);
-
   it('should succeed when context is relevant', async () => {
     const testCase = testCases[0]!;
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-      context: testCase.context,
-    });
+    const metric = new ContextualRecallMetric(modelConfig, { context: testCase.context });
+    const result = await metric.measure(testCase.input, testCase.output);
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
   });
 
   it('should be mixed', async () => {
     const testCase = testCases[1]!;
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-      context: testCase.context,
-    });
+    const metric = new ContextualRecallMetric(modelConfig, { context: testCase.context });
+    const result = await metric.measure(testCase.input, testCase.output);
 
     expect(isCloserTo(result.score, testCase.expectedResult.score, 1)).toBe(true);
     expect(result.score - testCase.expectedResult.score).toBeGreaterThan(0);
@@ -87,11 +79,8 @@ describe('ContextualRecallMetric', () => {
 
   it('should be none', async () => {
     const testCase = testCases[2]!;
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-      context: testCase.context,
-    });
+    const metric = new ContextualRecallMetric(modelConfig, { context: testCase.context });
+    const result = await metric.measure(testCase.input, testCase.output);
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
   });
 });
