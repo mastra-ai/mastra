@@ -2,6 +2,8 @@ import { AvailableHooks, registerHook } from '@mastra/core';
 import { mkdirSync, appendFile } from 'fs';
 import { join } from 'path';
 
+import { GLOBAL_RUN_ID_ENV_KEY } from './constants';
+
 export async function attachListeners() {
   const dotMastraPath = join(process.cwd(), '.mastra');
 

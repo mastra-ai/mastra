@@ -1,6 +1,8 @@
 import { AvailableHooks, executeHook } from '@mastra/core';
 import { type Agent, type Metric } from '@mastra/core';
 
+import { GLOBAL_RUN_ID_ENV_KEY } from './constants';
+
 export async function evaluate<T extends Agent>(agent: T, input: Parameters<T['generate']>[0], metric: Metric) {
   const testInfo = await getCurrentTestInfo();
   let globalRunId = process.env[GLOBAL_RUN_ID_ENV_KEY];
