@@ -18,8 +18,11 @@ You can currently store agent memory in (Postgres)[#using-postgres-for-agent-mem
 First, create a new conversation thread:
 
 ```typescript
-const thread = await mastra.memory.createThread({
-  resourceId: "memory_id"
+import { randomUUID } from 'crypto';
+
+const thread = await mastra.memory?.createThread({
+  resourceid: "user-1"
+  threadId: randomUUID()
 });
 ```
 
@@ -27,12 +30,12 @@ Now, let's start adding messages to the thread:
 
 ```typescript
 const responseOne = await myAgent.generate("Tell me about the project requirements.", {
-  resourceId: "memory_id",
+  resourceid: "memory_id",
   threadId: thread.id,
 });
 
 const responseTwo = await myAgent.generate("What are the next steps?", {
-  resourceId: "memory_id",
+  resourceid: "memory_id",
   threadId: thread.id,
 });
 ```
@@ -48,7 +51,7 @@ You can also explicitly insert messages to the thread.
 ```typescript
 await myAgent.saveMemory({
   threadId: thread.id,
-  resourceId: "memory_id",
+  resourceid: "memory_id",
   userMessages: [
     {
       role: "user",
