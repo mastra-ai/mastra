@@ -26,7 +26,7 @@
     "prebuild:app": "esbuild --platform=node --target=node20 --format=esm --bundle --outdir=dist/server src/server/index.ts",
     "build": "dts build && pnpm prebuild:app",
     "build:dev": "concurrently 'dts watch' 'sleep 5 && pnpm prebuild:app --watch'",
-    "pull:openapispec": "node -e \"fetch('http://localhost:4111/openapi.json').then(r => r.text()).then(text => require('fs').writeFileSync('src/server/openapi.json', text))\"",
+    "pull:openapispec": "node src/server/openapi.script.js",
     "test": "vitest run"
   },
   "keywords": [],
