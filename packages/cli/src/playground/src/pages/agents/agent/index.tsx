@@ -1,6 +1,6 @@
 import { PanelLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useMatch, useNavigate, useParams } from 'react-router';
 
 import { Chat } from '@/components/Chat';
 import Breadcrumb from '@/components/ui/breadcrumbs';
@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 import { cn } from '@/lib/utils';
 
+import { AgentEvals } from '@/domains/agents/agent-evals';
 import { AgentInformation } from '@/domains/agents/agent-information';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { useAgent } from '@/hooks/use-agents';
@@ -18,6 +19,7 @@ import { Message } from '@/types';
 
 function Agent() {
   const { agentId, threadId } = useParams();
+  const isEvalsPage = useMatch(`/agents/${agentId}/evals`);
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { memory } = useMemory();
   const navigate = useNavigate();
@@ -57,43 +59,50 @@ function Agent() {
     {
       label: agent?.name,
       href: `/agents/${agentId}`,
-      isCurrent: true,
+      isCurrent: isEvalsPage ? false : true,
     },
+    ...(isEvalsPage ? [{ label: 'Evals', href: `/agents/${agentId}/evals`, isCurrent: true }] : []),
   ];
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <Header title={<Breadcrumb items={breadcrumbItems} />} />
-      <main
-        className={cn(
-          'flex-1 relative grid divide-x',
-          sidebar && memory?.result ? 'grid-cols-[256px_1fr_400px]' : 'grid-cols-[1fr_400px]',
-        )}
-      >
-        {sidebar && memory?.result ? <AgentSidebar agentId={agentId!} threadId={threadId!} /> : null}
-        <div className="relative">
-          {memory?.result ? (
-            <Button
-              variant="primary"
-              size="icon"
-              className="absolute top-4 left-4 z-50"
-              onClick={() => setSidebar(!sidebar)}
-            >
-              <PanelLeft />
-            </Button>
-          ) : null}
-          <Chat
-            agentId={agentId!}
-            agentName={agent?.name}
-            threadId={threadId!}
-            initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
-            memory={memory?.result}
-          />
-        </div>
-        <div className="flex flex-col">
-          <AgentInformation agentId={agentId!} />
-        </div>
-      </main>
+      {isEvalsPage ? (
+        <main className="flex-1">
+          <AgentEvals agentId={agentId!} />
+        </main>
+      ) : (
+        <main
+          className={cn(
+            'flex-1 relative grid divide-x',
+            sidebar && memory?.result ? 'grid-cols-[256px_1fr_400px]' : 'grid-cols-[1fr_400px]',
+          )}
+        >
+          {sidebar && memory?.result ? <AgentSidebar agentId={agentId!} threadId={threadId!} /> : null}
+          <div className="relative">
+            {memory?.result ? (
+              <Button
+                variant="primary"
+                size="icon"
+                className="absolute top-4 left-4 z-50"
+                onClick={() => setSidebar(!sidebar)}
+              >
+                <PanelLeft />
+              </Button>
+            ) : null}
+            <Chat
+              agentId={agentId!}
+              agentName={agent?.name}
+              threadId={threadId!}
+              initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
+              memory={memory?.result}
+            />
+          </div>
+          <div className="flex flex-col">
+            <AgentInformation agentId={agentId!} />
+          </div>
+        </main>
+      )}
     </div>
   );
 }

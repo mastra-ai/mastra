@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+export type Evals = {
+  result: {
+    score: number;
+  };
+  meta: {
+    metricName: string;
+    runId: string;
+    timestamp: string;
+    testName: string;
+  };
+};
+
 export const useEvalsByAgentId = (agentId: string) => {
-  const [evals, setEvals] = useState<
-    {
-      result: {
-        score: number;
-      };
-      meta: {
-        metricName: string;
-        runId: string;
-      };
-    }[]
-  >([]);
+  const [evals, setEvals] = useState<Evals[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchEvals = async (_agentId?: string) => {
