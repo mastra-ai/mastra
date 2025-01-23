@@ -93,7 +93,7 @@ export class Deployer {
 
   async install(): Promise<void> {
     this.log('Ensuring your dependencies up to date...');
-    await this.deps.install({ dir: this.dotMastraPath });
+    await this.deps.install({ dir: this.projectPath });
   }
 
   protected getEnvFiles(): string[] {

@@ -41,9 +41,9 @@ export class CloudflareDeployer extends MastraDeployer {
         main: 'index.mjs',
         compatibility_date: '2024-12-02',
         compatibility_flags: ['nodejs_compat'],
-        // build: {
-        //   command: 'npm install',
-        // },
+        build: {
+          command: 'npm install',
+        },
         observability: {
           logs: {
             enabled: true,
