@@ -23,18 +23,31 @@ const getPacakgesToPublish = new Step({
     }
 
     const result = await agent.generate(`
-              Can you tell me which packages within the packages, deployers, and integrations directory need to be published to npm?
-              `);
+        Here is my project structure in my monorepo.
+        * My core modules are in the 'packages' directory.
+        * My integrations are in the 'integrations' directory.
+        * My deployers are in the 'deployers' directory.
+
+        Can you tell me which packages within these folders need to be published to npm?
+    `);
 
     const resultObj = await agent.generate(
       `
-              ONLY RETURN DATA IF WE HAVE PACKAGES TO PUBLISH. If we do not, return empty arrays.
-              Can you format this for me ${result.text}?
-              @mastra/core must be first. mastra must be second. 
-              create-mastra is a package (not an integration) and should be listed in packages array.
-              deployers should be listed after packages.
-              @mastra/dane should be listed after packages and integrations.
-              `,
+      Can you format the following text with my described format?
+      Text: ${result.text}
+
+      Precheck: ONLY RETURN DATA IF WE HAVE PACKAGES TO PUBLISH. If we do not, return empty arrays.
+
+      Formatting Rules:
+      * @mastra/core must be first. 
+      * @mastra/deployer must be second.
+      * mastra must be third.
+      
+      Very Important:
+      * create-mastra is a package (not an integration) and should be listed in packages array.
+      * @mastra/deployers-{name} should be listed after packages.
+      * @mastra/dane should be listed after packages and integrations.    
+    `,
       {
         output: z.object({
           packages: z.array(z.string()),
