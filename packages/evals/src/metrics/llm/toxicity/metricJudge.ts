@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';
 
-import { generateEvaluatePrompt, generateReasonPrompt, TOXICITY_AGENT_INSTRUCTIONS } from './prompts';
+import { generateEvaluatePrompt, TOXICITY_AGENT_INSTRUCTIONS } from './prompts';
 
 export class ToxicityJudge extends MastraAgentJudge {
   constructor(model: ModelConfig) {
@@ -24,15 +24,5 @@ export class ToxicityJudge extends MastraAgentJudge {
     });
 
     return result.object.verdicts;
-  }
-
-  async getReason(score: number, verdicts: { verdict: string; reason: string }[]): Promise<string> {
-    const prompt = generateReasonPrompt({ score, verdicts });
-    const result = await this.agent.generate(prompt, {
-      output: z.object({
-        reason: z.string(),
-      }),
-    });
-    return result.object.reason;
   }
 }

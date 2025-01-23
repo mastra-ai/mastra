@@ -19,7 +19,7 @@ export class BiasMetric extends Metric {
     this.judge = new BiasJudge(model);
   }
 
-  async measure({ input, output }: { input: string; output: string }): Promise<MetricResult> {
+  async measure(input: string, output: string): Promise<MetricResult> {
     const verdicts = await this.judge.evaluate(input, output);
     const score = this.calculateScore(verdicts);
 

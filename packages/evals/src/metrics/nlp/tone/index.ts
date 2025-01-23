@@ -6,7 +6,7 @@ import { MetricScoringResult } from '../types';
 export class ToneConsistencyMetric extends Metric {
   private sentiment = new Sentiment();
 
-  async measure({ input, output }: { input: string; output: string }): Promise<MetricScoringResult> {
+  async measure(input: string, output: string): Promise<MetricScoringResult> {
     const responseSentiment = this.sentiment.analyze(input);
 
     if (output) {

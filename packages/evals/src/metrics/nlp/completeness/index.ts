@@ -4,7 +4,7 @@ import nlp from 'compromise';
 import { MetricScoringResult } from '../types';
 
 export class CompletenessMetric extends Metric {
-  async measure({ input, output }: { input: string; output: string }): Promise<MetricScoringResult> {
+  async measure(input: string, output: string): Promise<MetricScoringResult> {
     // Handle null/undefined inputs
     if (input === null || input === undefined || output === null || output === undefined) {
       throw new Error('Inputs cannot be null or undefined');

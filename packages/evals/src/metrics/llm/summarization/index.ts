@@ -19,7 +19,7 @@ export class SummarizationMetric extends Metric {
     this.scale = scale;
   }
 
-  async measure({ input, output }: { input: string; output: string }): Promise<MetricResult> {
+  async measure(input: string, output: string): Promise<MetricResult> {
     const alignmentVerdicts = await this.judge.evaluateAlignment(input, output);
     const coverageVerdicts = await this.judge.evaluateCoverage(input, output);
 
@@ -27,20 +27,8 @@ export class SummarizationMetric extends Metric {
     const coverageScore = this.calculateScore(coverageVerdicts);
     const finalScore = Math.min(alignmentScore, coverageScore);
 
-    const reason = await this.judge.getReason(
-      input,
-      output,
-      alignmentScore,
-      coverageScore,
-      finalScore,
-      this.scale,
-      alignmentVerdicts,
-      coverageVerdicts,
-    );
-
     return {
       score: finalScore,
-      reason,
     };
   }
 

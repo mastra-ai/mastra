@@ -15,7 +15,7 @@ export class ContentSimilarityMetric extends Metric {
     };
   }
 
-  async measure({ input, output }: { input: string; output: string }): Promise<MetricScoringResult> {
+  async measure(input: string, output: string): Promise<MetricScoringResult> {
     let processedInput = input;
     let processedOutput = output;
 

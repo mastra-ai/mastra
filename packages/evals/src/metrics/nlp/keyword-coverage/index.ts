@@ -4,7 +4,7 @@ import keyword_extractor from 'keyword-extractor';
 import { MetricScoringResult } from '../types';
 
 export class KeywordCoverageMetric extends Metric {
-  async measure({ input, output }: { input: string; output: string }): Promise<MetricScoringResult> {
+  async measure(input: string, output: string): Promise<MetricScoringResult> {
     // Handle empty strings case
     if (!input && !output) {
       return {

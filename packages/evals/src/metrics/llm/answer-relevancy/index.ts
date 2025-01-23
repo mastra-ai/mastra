@@ -22,15 +22,12 @@ export class AnswerRelevancyMetric extends Metric {
     this.scale = scale;
   }
 
-  async measure({ input, output }: { input: string; output: string }): Promise<MetricResult> {
+  async measure(input: string, output: string): Promise<MetricResult> {
     const verdicts = await this.judge.evaluate(input, output);
     const score = this.calculateScore(verdicts);
 
-    const reason = await this.judge.getReason(input, output, score, this.scale, verdicts);
-
     return {
       score,
-      reason,
     };
   }
 

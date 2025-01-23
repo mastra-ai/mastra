@@ -5,7 +5,6 @@ import { MastraAgentJudge } from '../../judge';
 
 import {
   generateEvaluatePrompt,
-  generateReasonPrompt,
   ANSWER_RELEVANCY_AGENT_INSTRUCTIONS,
   generateEvaluationStatementsPrompt,
 } from './prompts';
@@ -35,21 +34,5 @@ export class AnswerRelevancyJudge extends MastraAgentJudge {
     });
 
     return result.object.verdicts;
-  }
-
-  async getReason(
-    input: string,
-    actualOutput: string,
-    score: number,
-    scale: number,
-    verdicts: { verdict: string; reason: string }[],
-  ): Promise<string> {
-    const prompt = generateReasonPrompt({ input, output: actualOutput, verdicts, score, scale });
-    const result = await this.agent.generate(prompt, {
-      output: z.object({
-        reason: z.string(),
-      }),
-    });
-    return result.object.reason;
   }
 }

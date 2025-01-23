@@ -5,7 +5,6 @@ export interface MeasureParams {
 
 export interface MetricResult {
   score: number;
-  reason?: string;
 }
 
 export abstract class Metric {

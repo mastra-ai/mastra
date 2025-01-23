@@ -6,28 +6,23 @@ import { ContextualRecallJudge } from './metricJudge';
 
 export interface ContextualRecallMetricOptions {
   scale?: number;
+  context: string[];
 }
 
 export class ContextualRecallMetric extends Metric {
   private judge: ContextualRecallJudge;
   private scale: number;
+  private context: string[];
 
-  constructor(model: ModelConfig, { scale = 1 }: ContextualRecallMetricOptions = {}) {
+  constructor(model: ModelConfig, { scale = 1, context }: ContextualRecallMetricOptions) {
     super();
     this.judge = new ContextualRecallJudge(model);
     this.scale = scale;
+    this.context = context;
   }
 
-  async measure({
-    input,
-    output,
-    context,
-  }: {
-    input: string;
-    output: string;
-    context: string[];
-  }): Promise<MetricResult> {
-    const verdicts = await this.judge.evaluate(input, output, context);
+  async measure(input: string, output: string): Promise<MetricResult> {
+    const verdicts = await this.judge.evaluate(input, output, this.context);
     const score = this.calculateScore(verdicts);
 
     return {

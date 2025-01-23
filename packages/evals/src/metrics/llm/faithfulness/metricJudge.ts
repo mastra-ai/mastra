@@ -42,21 +42,4 @@ export class FaithfulnessJudge extends MastraAgentJudge {
 
     return result.object.verdicts;
   }
-
-  async getReason(
-    input: string,
-    output: string,
-    context: string[],
-    score: number,
-    scale: number,
-    verdicts: { verdict: string; reason: string }[],
-  ): Promise<string> {
-    const prompt = generateReasonPrompt({ input, output, context, score, scale, verdicts });
-    const result = await this.agent.generate(prompt, {
-      output: z.object({
-        reason: z.string(),
-      }),
-    });
-    return result.object.reason;
-  }
 }
