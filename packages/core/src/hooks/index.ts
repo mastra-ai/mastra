@@ -10,10 +10,19 @@ export enum AvailableHooks {
 const hooks = mitt();
 
 export function registerHook(
-  hook: `onEvaluation`,
+  hook: AvailableHooks.ON_EVALUATION,
   action: Handler<{
     input: string;
     output: string;
+  }>,
+): void;
+export function registerHook(
+  hook: AvailableHooks.ON_GENERATION,
+  action: Handler<{
+    input: string;
+    output: string;
+    metric: Metric;
+    runId: string;
   }>,
 ): void;
 export function registerHook(hook: `${AvailableHooks}`, action: Handler<any>): void {
@@ -21,7 +30,7 @@ export function registerHook(hook: `${AvailableHooks}`, action: Handler<any>): v
 }
 
 export function executeHook(
-  hook: `onEvaluation`,
+  hook: AvailableHooks.ON_EVALUATION,
   action: {
     input: string;
     output: string;
@@ -29,7 +38,7 @@ export function executeHook(
   },
 ): void;
 export function executeHook(
-  hook: `onGeneration`,
+  hook: AvailableHooks.ON_GENERATION,
   action: {
     input: string;
     output: string;

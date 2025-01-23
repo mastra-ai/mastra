@@ -8,7 +8,13 @@ import { pathToFileURL } from 'url';
 import { readFile } from 'fs/promises';
 import { cors } from 'hono/cors';
 
-import { generateHandler, getAgentByIdHandler, getAgentsHandler, streamGenerateHandler } from './handlers/agents.js';
+import {
+  generateHandler,
+  getAgentByIdHandler,
+  getAgentsHandler,
+  getEvalsByAgentIdHandler,
+  streamGenerateHandler,
+} from './handlers/agents.js';
 import { handleClientsRefresh } from './handlers/client.js';
 import { handleTriggerClientsRefresh } from './handlers/client.js';
 import { getLogsByRunIdHandler, getLogsHandler } from './handlers/logs';
@@ -81,6 +87,7 @@ export async function createHonoServer(mastra: Mastra, options: { playground?: b
   // Agent routes
   app.get('/api/agents', getAgentsHandler);
   app.get('/api/agents/:agentId', getAgentByIdHandler);
+  app.get('/api/agents/:agentId/evals', getEvalsByAgentIdHandler);
   app.post('/api/agents/:agentId/generate', generateHandler);
   app.post('/api/agents/:agentId/stream', streamGenerateHandler);
   app.post('/api/agents/:agentId/tools/:toolId/execute', executeAgentToolHandler);
