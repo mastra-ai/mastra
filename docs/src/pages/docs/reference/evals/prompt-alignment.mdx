@@ -25,10 +25,10 @@ const metric = new PromptAlignmentMetric(model, {
   scale: 1
 });
 
-const result = await metric.measure({
-  input: "describe the weather",
-  output: "The sun is shining. Clouds float in the sky. A gentle breeze blows."
-});
+const result = await metric.measure(
+  "describe the weather",
+  "The sun is shining. Clouds float in the sky. A gentle breeze blows."
+);
 
 console.log(result.score); // Alignment score from 0-1
 console.log(result.reason); // Explanation of the score

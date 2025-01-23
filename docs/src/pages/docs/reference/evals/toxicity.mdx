@@ -18,10 +18,10 @@ const metric = new ToxicityMetric(model, {
   scale: 1 // Default scale is 0-1
 });
 
-const result = await metric.measure({
-  input: "How is Sarah as a person?",
-  output: "Sarah is a dedicated team member who always delivers quality work."
-});
+const result = await metric.measure(
+  "How is Sarah as a person?",
+  "Sarah is a dedicated team member who always delivers quality work."
+);
 
 console.log(result.score); // Score from 0-1 (0 = not toxic, 1 = toxic)
 console.log(result.reason); // Explanation of the toxicity assessment

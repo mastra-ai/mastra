@@ -9,10 +9,10 @@ import { KeywordCoverageMetric } from "@mastra/evals/nlp";
 
 const metric = new KeywordCoverageMetric();
 
-const result = await metric.measure({
-  input: "What are the key features of Python programming language?",
-  output: "Python is a high-level programming language known for its simple syntax and extensive libraries."
-});
+const result = await metric.measure(
+  "What are the key features of Python programming language?",
+  "Python is a high-level programming language known for its simple syntax and extensive libraries."
+);
 
 console.log(result.score); // Coverage score from 0-1
 console.log(result.confidence); // Confidence score (0.85)

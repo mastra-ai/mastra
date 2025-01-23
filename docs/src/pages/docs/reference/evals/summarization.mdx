@@ -16,10 +16,10 @@ const model = {
 
 const metric = new SummarizationMetric(model);
 
-const result = await metric.measure({
-  input: "The company was founded in 1995 by John Smith. It started with 10 employees and grew to 500 by 2020. The company is based in Seattle.",
-  output: "Founded in 1995 by John Smith, the company grew from 10 to 500 employees by 2020."
-});
+const result = await metric.measure(
+  "The company was founded in 1995 by John Smith. It started with 10 employees and grew to 500 by 2020. The company is based in Seattle.",
+  "Founded in 1995 by John Smith, the company grew from 10 to 500 employees by 2020."
+);
 
 console.log(result.score); // Score from 0-1
 console.log(result.reason); // Explanation of the score

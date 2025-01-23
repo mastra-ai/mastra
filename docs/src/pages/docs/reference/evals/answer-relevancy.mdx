@@ -19,10 +19,10 @@ const metric = new AnswerRelevancyMetric(model, {
   scale: 1
 });
 
-const result = await metric.measure({
-  input: "What is the capital of France?",
-  output: "Paris is the capital of France."
-});
+const result = await metric.measure(
+  "What is the capital of France?",
+  "Paris is the capital of France."
+);
 
 console.log(result.score); // Score from 0-1
 console.log(result.reason); // Explanation of the score
@@ -135,10 +135,10 @@ const metric = new AnswerRelevancyMetric(
   }
 );
 
-const result = await metric.measure({
-  input: "What are the benefits of exercise?",
-  output: "Regular exercise improves cardiovascular health, builds strength, and boosts mental wellbeing."
-});
+const result = await metric.measure(
+  "What are the benefits of exercise?",
+  "Regular exercise improves cardiovascular health, builds strength, and boosts mental wellbeing."
+);
 
 // Example output:
 // {

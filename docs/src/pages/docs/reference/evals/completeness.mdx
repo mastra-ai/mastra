@@ -9,10 +9,10 @@ import { CompletenessMetric } from "@mastra/evals/nlp";
 
 const metric = new CompletenessMetric();
 
-const result = await metric.measure({
-  input: "Explain how photosynthesis works in plants using sunlight, water, and carbon dioxide.",
-  output: "Plants use sunlight to convert water and carbon dioxide into glucose through photosynthesis."
-});
+const result = await metric.measure(
+  "Explain how photosynthesis works in plants using sunlight, water, and carbon dioxide.",
+  "Plants use sunlight to convert water and carbon dioxide into glucose through photosynthesis."
+);
 
 console.log(result.score); // Coverage score from 0-1
 console.log(result.details); // Explanation of completeness

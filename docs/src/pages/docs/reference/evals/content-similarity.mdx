@@ -12,10 +12,10 @@ const metric = new ContentSimilarityMetric({
   ignoreWhitespace: true
 });
 
-const result = await metric.measure({
-  input: "Hello, world!",
-  output: "hello world"
-});
+const result = await metric.measure(
+  "Hello, world!",
+  "hello world"
+);
 
 console.log(result.score); // Similarity score from 0-1
 console.log(result.details); // Explanation of similarity

@@ -15,18 +15,17 @@ const model = {
 };
 
 const metric = new ContextPositionMetric(model, {
-  scale: 1
-});
-
-const result = await metric.measure({
-  input: "What is photosynthesis?",
-  output: "Photosynthesis is the process by which plants convert sunlight into energy.",
   context: [
     "Photosynthesis is a biological process used by plants to create energy from sunlight.",
     "The process of photosynthesis produces oxygen as a byproduct.",
     "Plants need water and nutrients from the soil to grow."
-  ]
+   ]
 });
+
+const result = await metric.measure(
+  "What is photosynthesis?",
+  "Photosynthesis is the process by which plants convert sunlight into energy.",
+);
 
 console.log(result.score); // Position score from 0-1
 console.log(result.reason); // Explanation of the score

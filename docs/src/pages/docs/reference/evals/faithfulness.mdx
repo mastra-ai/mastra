@@ -15,14 +15,13 @@ const model = {
 };
 
 const metric = new FaithfulnessMetric(model, {
-  scale: 1
-});
-
-const result = await metric.measure({
-  input: "Tell me about the company.",
-  output: "The company was founded in 1995 and has 500 employees.",
   context: ["The company was established in 1995.", "Currently employs around 450-550 people."]
 });
+
+const result = await metric.measure(
+  "Tell me about the company.",
+  "The company was founded in 1995 and has 500 employees."
+);
 
 console.log(result.score); // 1.0
 console.log(result.reason); // "All claims are supported by the context."

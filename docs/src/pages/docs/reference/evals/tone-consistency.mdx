@@ -10,16 +10,16 @@ import { ToneConsistencyMetric } from "@mastra/evals/nlp";
 const metric = new ToneConsistencyMetric();
 
 // Compare tone between input and output
-const result1 = await metric.measure({
-  input: "I love this amazing product!",
-  output: "This product is wonderful and fantastic!"
-});
+const result1 = await metric.measure(
+  "I love this amazing product!",
+  "This product is wonderful and fantastic!"
+);
 
 // Analyze tone stability in a single text
-const result2 = await metric.measure({
-  input: "The service is excellent. The staff is friendly. The atmosphere is perfect.",
-  output: ""  // Empty string for single-text analysis
-});
+const result2 = await metric.measure(
+  "The service is excellent. The staff is friendly. The atmosphere is perfect.",
+  ""  // Empty string for single-text analysis
+);
 
 console.log(result1.score); // Tone consistency score from 0-1
 console.log(result2.score); // Tone stability score from 0-1

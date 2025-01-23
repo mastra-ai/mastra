@@ -9,10 +9,10 @@ import { TextualDifferenceMetric } from "@mastra/evals/nlp";
 
 const metric = new TextualDifferenceMetric();
 
-const result = await metric.measure({
-  input: "The quick brown fox",
-  output: "The fast brown fox"
-});
+const result = await metric.measure(
+  "The quick brown fox",
+  "The fast brown fox"
+);
 
 console.log(result.score); // Similarity ratio from 0-1
 console.log(result.details); // Description of differences

@@ -14,13 +14,14 @@ const model = {
   apiKey: process.env.OPENAI_API_KEY
 };
 
-const metric = new HallucinationMetric(model);
-
-const result = await metric.measure({
-  input: "Tell me about Tesla's founding.",
-  output: "Tesla was founded in 2004 by Elon Musk in California.",
+const metric = new HallucinationMetric(model, {
   context: ["Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning in San Carlos, California."]
 });
+
+const result = await metric.measure(
+  "Tell me about Tesla's founding.",
+  "Tesla was founded in 2004 by Elon Musk in California.",
+);
 
 console.log(result.score); // Score from 0-1
 console.log(result.reason); // Explanation of the score
