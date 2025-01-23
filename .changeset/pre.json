@@ -54,7 +54,11 @@
     "workflow": "1.0.1-alpha.23",
     "workflow-with-separate-steps": "1.0.1-alpha.10",
     "@mastra/evals": "0.0.0",
-    "@mastra/playground": "0.0.1"
+    "@mastra/playground": "0.0.1",
+    "@mastra/deployer-cloudflare": "0.0.0",
+    "@mastra/deployer-netlify": "0.0.0",
+    "@mastra/deployer-vercel": "0.0.0",
+    "@mastra/deployer": "0.0.0"
   },
   "changesets": [
     "afraid-papayas-shake",
@@ -105,6 +109,7 @@
     "fluffy-beds-help",
     "fluffy-rings-shake",
     "fresh-lions-work",
+    "fuzzy-eels-protect",
     "gentle-suits-complain",
     "giant-falcons-sneeze",
     "giant-pears-taste",
@@ -201,6 +206,7 @@
     "smart-kings-smile",
     "smooth-queens-rhyme",
     "sour-carpets-marry",
+    "spicy-rats-check",
     "spicy-spiders-teach",
     "spicy-turtles-occur",
     "spotty-plums-clap",
@@ -247,6 +253,7 @@
     "wet-bikes-knock",
     "wild-dragons-switch",
     "wise-rice-jam",
+    "wise-singers-promise",
     "wise-swans-shout",
     "wise-taxis-wink",
     "yellow-nails-add",
