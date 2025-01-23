@@ -9,6 +9,7 @@ import { readFile } from 'fs/promises';
 import { cors } from 'hono/cors';
 
 import {
+  createEvalsHandler,
   generateHandler,
   getAgentByIdHandler,
   getAgentsHandler,
@@ -88,6 +89,7 @@ export async function createHonoServer(mastra: Mastra, options: { playground?: b
   app.get('/api/agents', getAgentsHandler);
   app.get('/api/agents/:agentId', getAgentByIdHandler);
   app.get('/api/agents/:agentId/evals', getEvalsByAgentIdHandler);
+  app.post('/api/agents/:agentId/evals', createEvalsHandler);
   app.post('/api/agents/:agentId/generate', generateHandler);
   app.post('/api/agents/:agentId/stream', streamGenerateHandler);
   app.post('/api/agents/:agentId/tools/:toolId/execute', executeAgentToolHandler);

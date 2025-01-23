@@ -2,7 +2,7 @@ import { Context } from 'hono';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 
-import { readFile } from 'fs/promises';
+import { appendFile, readFile } from 'fs/promises';
 import { HTTPException } from 'hono/http-exception';
 
 import { handleError } from './error';
@@ -83,6 +83,16 @@ export async function getEvalsByAgentIdHandler(c: Context) {
     });
   } catch (error) {
     return handleError(error, 'Error getting evals');
+  }
+}
+
+export async function createEvalsHandler(c: Context) {
+  try {
+    const { traceObject } = await c.req.json();
+    await appendFile('./evals.json', JSON.stringify(traceObject) + '\n');
+    return c.json({ message: 'Eval created' });
+  } catch (error) {
+    return handleError(error, 'Error creating eval');
   }
 }
 

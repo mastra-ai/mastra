@@ -237,6 +237,8 @@ export async function dev({
   `,
   );
 
+  writeFileSync(join(dotMastraPath, 'evals.json'), ``);
+
   await startServer(dotMastraPath, port, MASTRA_TOOLS_PATH);
 
   const watcher = watch([mastraDir, ...envPaths], {
