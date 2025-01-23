@@ -83,11 +83,7 @@ export async function generateHandler(c: Context) {
       throw new HTTPException(400, { message: 'Messages should be an array' });
     }
 
-    console.log(messages, agent, agentId, output);
-
     const result = await agent.generate(messages, { threadId, resourceid, output });
-
-    console.log(result);
 
     return c.json(result);
   } catch (error) {
@@ -106,8 +102,6 @@ export async function streamGenerateHandler(c: Context) {
     }
 
     const { messages, threadId, resourceid, output } = await c.req.json();
-
-    console.log(messages, agent, agentId, output);
 
     validateBody({ messages });
 
