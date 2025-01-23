@@ -1,5 +1,4 @@
-import { AvailableHooks, executeHook } from '@mastra/core';
-import { type Agent, type Metric } from '@mastra/core';
+import { type Agent, type Metric, evaluate as coreEvaluate } from '@mastra/core';
 
 import { GLOBAL_RUN_ID_ENV_KEY } from './constants';
 
@@ -16,26 +15,15 @@ export async function evaluate<T extends Agent>(agent: T, input: Parameters<T['g
     console.warn('Global run id not set, you should run "globalSetup" from "@mastra/evals" before evaluating.');
   }
 
-  const metricResult = await metric.measure({
-    input: input.toString(),
+  const metricResult = await coreEvaluate({
+    agentName: agent.name,
+    input,
+    metric,
     output: agentOutput.text,
+    globalRunId,
+    runId,
+    testInfo,
   });
-  const traceObject = {
-    input: input.toString(),
-    output: agentOutput.text,
-    result: metricResult,
-    meta: {
-      ...testInfo,
-      globalRunId,
-      testId: runId,
-      agentName: agent.name,
-      timestamp: new Date().toISOString(),
-      metricName: metric.constructor.name,
-    },
-  };
-
-  // capture infomration about the evaluation
-  executeHook(AvailableHooks.ON_EVALUATION, traceObject);
 
   return metricResult;
 }
@@ -61,8 +49,5 @@ export const getCurrentTestInfo = async () => {
     }
   } catch {}
 
-  return {
-    testName: null,
-    testPath: null,
-  };
+  return null;
 };

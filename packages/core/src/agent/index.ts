@@ -16,6 +16,9 @@ import 'dotenv/config';
 
 import { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
+import { Metric } from '../eval';
+import { executeHook } from '../hooks';
+import { AvailableHooks } from '../hooks';
 import { LLM } from '../llm';
 import { GenerateReturn, ModelConfig, OutputType, StreamReturn } from '../llm/types';
 import { LogLevel, RegisteredLogger } from '../logger';
@@ -499,6 +502,7 @@ export class Agent<
     resourceid,
     runId,
     toolsets,
+    metrics,
   }: {
     toolsets?: ToolsetsInput;
     resourceid?: string;
@@ -506,6 +510,7 @@ export class Agent<
     context?: CoreMessage[];
     runId?: string;
     messages: UserContent[];
+    metrics?: Metric[];
   }) {
     return {
       before: async () => {
@@ -564,7 +569,15 @@ export class Agent<
 
         return { messageObjects, convertedTools, threadId: threadIdToUse as string };
       },
-      after: async ({ result, threadId }: { result: Record<string, any>; threadId: string }) => {
+      after: async ({
+        result,
+        threadId,
+        outputText,
+      }: {
+        result: Record<string, any>;
+        threadId: string;
+        outputText: string;
+      }) => {
         this.log(LogLevel.DEBUG, `After LLM call for agent ${this.name}`, {
           runId: this.name,
         });
@@ -590,6 +603,19 @@ export class Agent<
             },
           );
         }
+
+        if (metrics) {
+          const input = messages.map(message => message).join('\n');
+          const runIdToUse = runId || crypto.randomUUID();
+          for (const metric of metrics) {
+            executeHook(AvailableHooks.ON_GENERATION, {
+              input,
+              output: outputText,
+              runId: runIdToUse,
+              metric,
+            });
+          }
+        }
       },
     };
   }
@@ -605,6 +631,7 @@ export class Agent<
       runId,
       toolsets,
       output = 'text',
+      metrics = [],
     }: {
       toolsets?: ToolsetsInput;
       resourceid?: string;
@@ -614,6 +641,7 @@ export class Agent<
       onStepFinish?: (step: string) => void;
       maxSteps?: number;
       output?: OutputType | Z;
+      metrics?: Metric[];
     } = {},
   ): Promise<GenerateReturn<Z>> {
     let messagesToUse: UserContent[] = [];
@@ -636,6 +664,7 @@ export class Agent<
       resourceid,
       runId: runId || this.name,
       toolsets,
+      metrics,
     });
 
     const { threadId, messageObjects, convertedTools } = await before();
@@ -654,7 +683,9 @@ export class Agent<
         runId,
       });
 
-      await after({ result, threadId });
+      const outputText = result.text;
+
+      await after({ result, threadId, outputText });
 
       return result as unknown as GenerateReturn<Z>;
     }
@@ -672,7 +703,9 @@ export class Agent<
       runId,
     });
 
-    await after({ result, threadId });
+    const outputText = JSON.stringify(result.object);
+
+    await after({ result, threadId, outputText });
 
     return result as unknown as GenerateReturn<Z>;
   }
@@ -737,7 +770,8 @@ export class Agent<
         onFinish: async result => {
           try {
             const res = JSON.parse(result) || {};
-            await after({ result: res, threadId });
+            const outputText = res.text;
+            await after({ result: res, threadId, outputText });
           } catch (e) {
             this.log(LogLevel.ERROR, 'Error saving memory on finish', {
               error: e,
@@ -763,7 +797,8 @@ export class Agent<
       onFinish: async result => {
         try {
           const res = JSON.parse(result) || {};
-          await after({ result: res, threadId });
+          const outputText = JSON.stringify(res.object);
+          await after({ result: res, threadId, outputText });
         } catch (e) {
           this.log(LogLevel.ERROR, 'Error saving memory on finish', {
             error: e,
