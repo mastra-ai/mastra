@@ -106,7 +106,7 @@ const docs: DocsThemeConfig = {
     const { title, frontMatter } = config;
     const description = frontMatter?.description;
 
-    const ogTitle = `${title} – Mastra`;
+    const ogTitle = `${title}`;
     return (
       <>
         <title>{ogTitle}</title>
