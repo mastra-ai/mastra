@@ -32,7 +32,6 @@ import {
   getToolByIdHandler,
   getToolResultHandler,
   getToolsHandler,
-  validateToolCallArgsHandler,
 } from './handlers/tools.js';
 import { executeWorkflowHandler, getWorkflowByIdHandler, getWorkflowsHandler } from './handlers/workflows.js';
 import { html } from './welcome.js';
@@ -219,6 +218,53 @@ export async function createHonoServer(mastra: Mastra, options: { playground?: b
       },
     }),
     streamGenerateHandler,
+  );
+
+  app.post(
+    '/api/agents/:agentId/tools/:toolId/execute',
+    describeRoute({
+      description: 'Execute a tool through an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'toolId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                args: { type: 'object' },
+                threadId: { type: 'string' },
+                resourceid: { type: 'string' },
+              },
+              required: ['args'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Tool execution result',
+        },
+        404: {
+          description: 'Tool or agent not found',
+        },
+      },
+    }),
+    executeAgentToolHandler,
   );
 
   // Memory routes
@@ -420,6 +466,46 @@ export async function createHonoServer(mastra: Mastra, options: { playground?: b
       },
     }),
     saveMessagesHandler,
+  );
+
+  app.post(
+    '/api/memory/threads/:threadId/tool-result',
+    describeRoute({
+      description: 'Get tool execution result for a thread',
+      tags: ['memory'],
+      parameters: [
+        {
+          name: 'threadId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                toolId: { type: 'string' },
+                resultId: { type: 'string' },
+              },
+              required: ['toolId', 'resultId'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Tool execution result',
+        },
+        404: {
+          description: 'Result not found',
+        },
+      },
+    }),
+    getToolResultHandler,
   );
 
   // Workflow routes
@@ -648,45 +734,6 @@ export async function createHonoServer(mastra: Mastra, options: { playground?: b
   );
 
   app.post(
-    '/api/tools/:toolId/validate',
-    describeRoute({
-      description: 'Validate tool call arguments',
-      tags: ['tools'],
-      parameters: [
-        {
-          name: 'toolId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                args: { type: 'object' },
-              },
-              required: ['args'],
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'Arguments are valid',
-        },
-        400: {
-          description: 'Invalid arguments',
-        },
-      },
-    }),
-    validateToolCallArgsHandler,
-  );
-
-  app.post(
     '/api/tools/:toolId/execute',
     describeRoute({
       description: 'Execute a tool',
@@ -725,48 +772,6 @@ export async function createHonoServer(mastra: Mastra, options: { playground?: b
       },
     }),
     executeToolHandler(tools),
-  );
-
-  app.post(
-    '/api/tools/:toolId/agent-execute',
-    describeRoute({
-      description: 'Execute a tool through an agent',
-      tags: ['tools'],
-      parameters: [
-        {
-          name: 'toolId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                args: { type: 'object' },
-                agentId: { type: 'string' },
-                threadId: { type: 'string' },
-                resourceid: { type: 'string' },
-              },
-              required: ['args', 'agentId'],
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'Tool execution result',
-        },
-        404: {
-          description: 'Tool or agent not found',
-        },
-      },
-    }),
-    executeAgentToolHandler,
   );
 
   app.get(

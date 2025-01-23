@@ -82,25 +82,6 @@ export async function getToolResultHandler(c: Context) {
   }
 }
 
-export async function validateToolCallArgsHandler(c: Context) {
-  try {
-    const mastra = c.get('mastra');
-    const memory = mastra.memory;
-    const { hashedArgs } = await c.req.json();
-
-    if (!memory) {
-      throw new HTTPException(400, { message: 'Memory is not initialized' });
-    }
-
-    validateBody({ hashedArgs });
-
-    const result = await memory.validateToolCallArgs({ hashedArgs });
-    return c.json(result);
-  } catch (error) {
-    return handleError(error, 'Error validating tool call args');
-  }
-}
-
 export function executeToolHandler(tools: Record<string, any>) {
   return async (c: Context) => {
     try {
