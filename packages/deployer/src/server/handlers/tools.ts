@@ -111,11 +111,11 @@ export function executeToolHandler(tools: Record<string, any>) {
         return c.json({ error: 'Tool not found' }, 404);
       }
 
-      const { input } = await c.req.json();
+      const body = await c.req.json();
       const mastra = c.get('mastra');
       const result = await tool.execute({
         context: {
-          ...input,
+          ...body,
         },
         mastra,
         runId: mastra.runId,
