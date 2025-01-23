@@ -1,5 +1,5 @@
 import { MastraDeployer } from '@mastra/core';
-import { execa } from 'execa';
+import * as child_process from 'child_process';
 import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
@@ -27,6 +27,7 @@ export class VercelDeployer extends MastraDeployer {
       JSON.stringify(
         {
           version: 2,
+          installCommand: 'npm install --omit=dev',
           builds: [
             {
               src: 'index.mjs',
@@ -139,14 +140,16 @@ export class VercelDeployer extends MastraDeployer {
     }
 
     // Run the Vercel deploy command
-    // console.log('Running command:', 'vercel', commandArgs.join(' '));
-    const p2 = execa('vercel', commandArgs);
-
-    p2.stdout.pipe(process.stdout);
-    p2.stderr.pipe(process.stderr);
+    child_process.execSync(`vercel ${commandArgs.join(' ')}`, {
+      cwd: dir,
+      env: {
+        ...this.env,
+        PATH: process.env.PATH,
+      },
+      stdio: 'inherit',
+    });
 
     console.log('Deployment started on Vercel. You can wait for it to finish or exit this command.');
-    await p2;
 
     if (envVars.length > 0) {
       // Sync environment variables for future deployments

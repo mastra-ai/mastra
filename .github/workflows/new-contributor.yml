@@ -47,6 +47,20 @@ jobs:
     needs: check-first-time
     if: needs.check-first-time.outputs.is_first_time == 'true'
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mastra
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout Repository
@@ -60,9 +74,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'pnpm'
-          registry-url: 'https://registry.npmjs.org'
+          node-version: "20"
+          cache: "pnpm"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
         run: pnpm install
@@ -79,7 +93,7 @@ jobs:
       - name: Setup database
         run: pnpm db:setup
         env:
-          DB_URL: 'postgresql://postgres:postgres@localhost:5433/mastra'
+          DB_URL: "postgresql://postgres:postgres@localhost:5433/mastra"
 
       - name: Install dane cli
         run: pnpm install -g @mastra/dane@alpha
