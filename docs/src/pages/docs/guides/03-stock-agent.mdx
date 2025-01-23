@@ -1,8 +1,11 @@
 import { Steps } from "nextra/components";
+import YouTube from "../../../components/youtube";
 
 # Stock Agent
 
 We're going to create a simple agent that fetches the last day's closing stock price for a given symbol. This example will show you how to create a tool, add it to an agent, and use the agent to fetch stock prices.
+
+<YouTube id="rIaZ4l7y9wo" />
 
 ## Project Structure
 
@@ -136,16 +139,12 @@ In your terminal, start the Mastra server by running:
 mastra dev --dir src
 ```
 
-This command will start the server and make your agent available at:
+This command will allow you to test your stockPrices tool and your stockAgent within the playground.
+
+This will also start the server and make your agent available at:
 
 ```
 http://localhost:4111/api/agents/stockAgent/generate
-```
-
-Make sure that your environment variables are set, especially your OpenAI API key. If you haven't set it yet, you can provide it inline:
-
-```bash
-OPENAI_API_KEY=your_openai_api_key mastra dev
 ```
 
 ---
