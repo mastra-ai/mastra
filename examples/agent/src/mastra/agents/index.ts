@@ -1,5 +1,7 @@
 import { Agent } from '@mastra/core';
 
+import { myTool } from '../tools/index.js';
+
 export const chefAgent = new Agent({
   name: 'Chef Agent',
   instructions:
@@ -8,5 +10,8 @@ export const chefAgent = new Agent({
     provider: 'OPEN_AI',
     name: 'gpt-4o',
     toolChoice: 'auto',
+  },
+  tools: {
+    myTool,
   },
 });

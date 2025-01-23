@@ -1,10 +1,7 @@
+import { MastraDeployer } from '@mastra/core';
 import { execa } from 'execa';
-import { writeFileSync, readFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-
-import { DepsService } from '../../../services/service.deps.js';
-import { Deployer } from '../deployer.js';
-import { EXPRESS_SERVER } from '../server.js';
 
 interface EnvVar {
   key: string;
@@ -18,47 +15,15 @@ interface VercelError {
   code: string;
 }
 
-export class VercelDeployer extends Deployer {
-  name = 'Vercel';
-  async installCli() {
-    console.log('Installing Vercel CLI...');
-    const depsService = new DepsService();
-    await depsService.installPackages(['vercel -g']);
+export class VercelDeployer extends MastraDeployer {
+  constructor({ scope, env, projectName }: { env?: Record<string, any>; scope: string; projectName: string }) {
+    super({ scope, env, projectName });
   }
+  writeFiles({ dir }: { dir: string }): void {
+    this.writeIndex({ dir });
 
-  async writePkgJson() {
     writeFileSync(
-      join(this.dotMastraPath, 'package.json'),
-      JSON.stringify(
-        {
-          name: 'server',
-          version: '1.0.0',
-          description: '',
-          main: 'index.mjs',
-          scripts: {
-            start: 'node ./index.mjs',
-          },
-          author: '',
-          license: 'ISC',
-          dependencies: {
-            express: '^4.21.1',
-            '@mastra/core': '0.1.27-alpha.35',
-            'express-jsdoc-swagger': '^1.8.0',
-            'serverless-http': '^3.2.0',
-            superjson: '^2.2.2',
-            'zod-to-json-schema': '^3.24.1',
-            zod: '3.24.0',
-          },
-        },
-        null,
-        2,
-      ),
-    );
-  }
-
-  writeFiles() {
-    writeFileSync(
-      join(this.dotMastraPath, 'vercel.json'),
+      join(dir, 'vercel.json'),
       JSON.stringify(
         {
           version: 2,
@@ -80,12 +45,10 @@ export class VercelDeployer extends Deployer {
         2,
       ),
     );
-
-    writeFileSync(join(this.dotMastraPath, 'index.mjs'), EXPRESS_SERVER);
   }
 
-  private getProjectId(): string {
-    const projectJsonPath = join(this.dotMastraPath, '.vercel', 'project.json');
+  private getProjectId({ dir }: { dir: string }): string {
+    const projectJsonPath = join(dir, '.vercel', 'project.json');
     try {
       const projectJson = JSON.parse(readFileSync(projectJsonPath, 'utf-8'));
       return projectJson.projectId;
@@ -94,7 +57,7 @@ export class VercelDeployer extends Deployer {
     }
   }
 
-  async syncEnv({ scope }: { scope: string }) {
+  async syncEnv({ scope, dir, token }: { token: string; dir: string; scope: string }) {
     const envFiles = this.getEnvFiles();
     const envVars: string[] = [];
 
@@ -120,12 +83,12 @@ export class VercelDeployer extends Deployer {
     });
 
     try {
-      const projectId = this.getProjectId();
+      const projectId = this.getProjectId({ dir });
 
       const response = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env?teamId=${scope}&upsert=true`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${this.token}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(vercelEnvVars),
@@ -147,13 +110,7 @@ export class VercelDeployer extends Deployer {
     }
   }
 
-  async deployCommand({
-    scope,
-    projectName = 'mastra-starter',
-  }: {
-    scope: string;
-    projectName?: string;
-  }): Promise<void> {
+  async deploy({ dir, token }: { dir: string; token: string }): Promise<void> {
     // Get env vars for initial deployment
     const envFiles = this.getEnvFiles();
     const envVars: string[] = [];
@@ -166,14 +123,14 @@ export class VercelDeployer extends Deployer {
     // Create the command array with base arguments
     const commandArgs = [
       '--scope',
-      scope as string,
+      this.scope as string,
       '--cwd',
-      join(process.cwd(), '.mastra'),
+      dir,
       'deploy',
       '--token',
-      this.token,
+      token,
       '--yes',
-      ...(projectName ? ['--name', projectName] : []),
+      ...(this.projectName ? ['--name', this.projectName] : []),
     ];
 
     // Add env vars to initial deployment
@@ -182,7 +139,7 @@ export class VercelDeployer extends Deployer {
     }
 
     // Run the Vercel deploy command
-    console.log('Running command:', 'vercel', commandArgs.join(' '));
+    // console.log('Running command:', 'vercel', commandArgs.join(' '));
     const p2 = execa('vercel', commandArgs);
 
     p2.stdout.pipe(process.stdout);
@@ -193,9 +150,21 @@ export class VercelDeployer extends Deployer {
 
     if (envVars.length > 0) {
       // Sync environment variables for future deployments
-      await this.syncEnv({ scope });
+      await this.syncEnv({ scope: this.scope, dir, token });
     } else {
       console.log('\nAdd your ENV vars to .env or your vercel dashboard.\n');
     }
+  }
+
+  writeIndex({ dir }: { dir: string }): void {
+    writeFileSync(
+      join(dir, 'index.mjs'),
+      `
+                import { handle } from 'hono/vercel'
+                import { app } from './hono.mjs';
+                export const GET = handle(app);
+                export const POST = handle(app);
+            `,
+    );
   }
 }

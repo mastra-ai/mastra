@@ -4,8 +4,8 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'packages/cli/**'
-      - '.github/workflows/test-cli.yml'
+      - "packages/cli/**"
+      - ".github/workflows/test-cli.yml"
 
 jobs:
   test:
@@ -21,16 +21,16 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'pnpm'
+          node-version: "20"
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install
 
       - name: Build packages
-        run: pnpm build:core && pnpm build:cli
+        run: pnpm build:core && pnpm build:deployer && pnpm build:cli
 
       - name: Run CLI tests
         run: pnpm test:cli
         env:
-          NODE_OPTIONS: '--max_old_space_size=8096'
+          NODE_OPTIONS: "--max_old_space_size=8096"
