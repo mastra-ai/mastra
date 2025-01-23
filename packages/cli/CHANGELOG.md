@@ -1,5 +1,27 @@
 # mastra
 
+## 0.1.57-alpha.102
+
+### Patch Changes
+
+- Updated dependencies [a9b5ddf]
+- Updated dependencies [72c280b]
+  - @mastra/deployer@0.0.1-alpha.2
+
+## 0.1.57-alpha.101
+
+### Patch Changes
+
+- e38b412: Fixes
+
+## 0.1.57-alpha.100
+
+### Patch Changes
+
+- Updated dependencies [4139b43]
+- Updated dependencies [a5604c4]
+  - @mastra/deployer@0.0.1-alpha.0
+
 ## 0.1.57-alpha.99
 
 ### Patch Changes

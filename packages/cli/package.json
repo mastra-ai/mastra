@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.1.57-alpha.99",
+  "version": "0.1.57-alpha.102",
   "license": "MIT",
   "description": "cli for mastra",
   "type": "module",
@@ -40,6 +40,7 @@
     "@clack/prompts": "^0.8.2",
     "@dagrejs/dagre": "^1.1.4",
     "@mastra/core": "workspace:*",
+    "@mastra/deployer": "workspace:*",
     "@swc/core": "^1.9.3",
     "@types/figlet": "^1.7.0",
     "chokidar": "^4.0.3",

@@ -1,0 +1,24 @@
+{
+  "name": "yc-directory",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@mastra/core": "workspace:^",
+    "@mastra/evals": "workspace:^",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "mastra": "workspace:^",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

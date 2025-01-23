@@ -10,8 +10,10 @@ import {
   daneLinkChecker,
   danePackagePublisher,
 } from './agents/index.js';
+import { daneNewContributor } from './agents/new-contributor';
 import { firecrawl } from './integrations/index.js';
 import { changelogWorkflow } from './workflows/changelog.js';
+import { githubFirstContributorMessage } from './workflows/first-contributor';
 import { messageWorkflow, githubIssueLabeler, commitMessageGenerator } from './workflows/index.js';
 import { linkCheckerWorkflow } from './workflows/link-checker.js';
 import { packagePublisher } from './workflows/publish-packages.js';
@@ -29,6 +31,7 @@ export const mastra = new Mastra({
     daneIssueLabeler,
     daneCommitMessage,
     daneChangeLog,
+    daneNewContributor,
   },
   engine,
   memory: new UpstashKVMemory({
@@ -43,6 +46,7 @@ export const mastra = new Mastra({
     packagePublisher: packagePublisher,
     telephoneGame: telephoneGameWorkflow,
     changelog: changelogWorkflow,
+    githubFirstContributorMessage: githubFirstContributorMessage,
     linkChecker: linkCheckerWorkflow,
   },
   syncs: {

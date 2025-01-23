@@ -1,6 +1,11 @@
+---
+title: "Example: Parallel Execution | Workflows | Mastra Docs"
+description: Example of using Mastra to execute multiple independent tasks in parallel within a workflow.
+---
+
 import { GithubLink } from "../../../components/github-link";
 
-# Parallel Steps
+# Parallel Execution with Steps
 
 When building AI applications, you often need to process multiple independent tasks simultaneously to improve efficiency.
 
@@ -73,7 +78,9 @@ myWorkflow
   .then(stepFour) // chain two
   .commit();
 
-const result = await myWorkflow.execute({ triggerData: { inputValue: 3 } });
+const { start } = myWorkflow.createRun();  
+
+const result = await start({ triggerData: { inputValue: 3 } });
 ```
 
 <br />

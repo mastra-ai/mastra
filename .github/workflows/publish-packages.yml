@@ -47,15 +47,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Build core
+        run: pnpm build:core && pnpm build:deployer
+
       - name: Prepare CLI package for publishing
         run: cd packages/cli && rm -rf node_modules && pnpm install --shamefully-hoist --ignore-scripts && cd ../..
 
       - name: Setup npm auth
         run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
-
-      - name: Build core
-        run: pnpm build:core
 
       - name: Build engine
         run: pnpm build:engine && pnpm copy:drizzle

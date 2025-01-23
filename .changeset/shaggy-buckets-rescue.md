@@ -1,0 +1,5 @@
+---
+'@mastra/deployer': patch
+---
+
+Fixes
