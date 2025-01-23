@@ -6,23 +6,11 @@ export abstract class MastraDeployer {
   scope: string;
   projectName: string;
   env?: Record<string, any>;
-  useRequireBanner?: boolean;
 
-  constructor({
-    scope,
-    env,
-    projectName,
-    useRequireBanner = true,
-  }: {
-    useRequireBanner?: boolean;
-    projectName: string;
-    scope: string;
-    env?: Record<string, any>;
-  }) {
+  constructor({ scope, env, projectName }: { projectName: string; scope: string; env?: Record<string, any> }) {
     this.scope = scope;
     this.env = env;
     this.projectName = projectName;
-    this.useRequireBanner = useRequireBanner;
   }
 
   loadEnvVars(): void {
