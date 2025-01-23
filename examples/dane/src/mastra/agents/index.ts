@@ -41,7 +41,9 @@ const packages_llm_text = `
   @mastra/rag is located in the "packages/rag" directory.
   @mastra/tts is located in the "packages/tts" directory.
   @mastra/memory is located in the "packages/memory" directory.
+  @mastra/mcp is located in the "packages/mcp" directory.
   @mastra/deployer-{name} is located in the "deployers/{name}" directory.
+  dane or @mastra/dane is located in the "exampeles/dane" directory.
 `;
 
 export const danePackagePublisher = new Agent({
