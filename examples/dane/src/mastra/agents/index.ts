@@ -32,11 +32,25 @@ export const daneIssueLabeler = new Agent({
   model: getBaseModelConfig(),
 });
 
+const packages_llm_text = `
+  @mastra/core is located in the "packages/core" directory.
+  @mastra/deployer is located in the "packages/deployer" directory.
+  mastra is located in the "packages/cli" directory.
+  @mastra/engine is located in the "packages/engine" directory.
+  @mastra/evals is located in the "packages/evals" directory.
+  @mastra/rag is located in the "packages/rag" directory.
+  @mastra/tts is located in the "packages/tts" directory.
+  @mastra/memory is located in the "packages/memory" directory.
+  @mastra/deployer-{name} is located in the "deployers/{name}" directory.
+`;
+
 export const danePackagePublisher = new Agent({
   name: 'DanePackagePublisher',
   instructions: `
     You are Dane, the ultimate node module publisher.
     You help engineers publish their pnpm changesets.
+
+    ${packages_llm_text}
     `,
   model: getBaseModelConfig(),
   tools: {
