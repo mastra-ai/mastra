@@ -83,7 +83,12 @@ export async function generateHandler(c: Context) {
       throw new HTTPException(400, { message: 'Messages should be an array' });
     }
 
+    console.log(messages, agent, agentId, output);
+
     const result = await agent.generate(messages, { threadId, resourceid, output });
+
+    console.log(result);
+
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error generating from agent');
@@ -101,6 +106,9 @@ export async function streamGenerateHandler(c: Context) {
     }
 
     const { messages, threadId, resourceid, output } = await c.req.json();
+
+    console.log(messages, agent, agentId, output);
+
     validateBody({ messages });
 
     if (!Array.isArray(messages)) {
@@ -108,6 +116,7 @@ export async function streamGenerateHandler(c: Context) {
     }
 
     const streamResult = await agent.stream(messages, { threadId, resourceid, output });
+
     return new Response(streamResult.toDataStream(), {
       headers: {
         'Content-Type': 'text/x-unknown',
@@ -116,6 +125,7 @@ export async function streamGenerateHandler(c: Context) {
       },
     });
   } catch (error) {
+    console.log(error);
     return handleError(error, 'Error streaming from agent');
   }
 }

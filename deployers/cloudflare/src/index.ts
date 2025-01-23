@@ -60,9 +60,12 @@ export class CloudflareDeployer extends MastraDeployer {
       join(dir, './index.mjs'),
       `
       export default {
-        fetch: async (event, context) => {
-                const { app } = await import('./hono.mjs');
-                return app.fetch(event, context);
+        fetch: async (request, env, context) => {
+          Object.keys(env).forEach(key => {
+            process.env[key] = env[key]
+          })
+          const { app } = await import('./hono.mjs');
+          return app.fetch(request, env, context);
         }
       }
       `,
