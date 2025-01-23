@@ -9,12 +9,14 @@ export async function evaluate<T extends Agent>({
   metric,
   output,
   runId,
+  globalRunId,
   testInfo,
 }: {
   agentName: string;
   input: Parameters<T['generate']>[0];
   metric: Metric;
   output: string;
+  globalRunId: string;
   runId?: string;
   testInfo?: {
     testName?: string;
@@ -36,6 +38,7 @@ export async function evaluate<T extends Agent>({
         testName: testInfo.testName,
         testPath: testInfo.testPath,
       }),
+      globalRunId,
       runId: runIdToUse,
       agentName,
       timestamp: new Date().toISOString(),
