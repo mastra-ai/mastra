@@ -11,10 +11,15 @@ export class Deployer {
   deps: Deps = new Deps();
   dotMastraPath: string;
   name: string = '';
+  type: 'Deploy' | 'Dev';
 
-  constructor({ dir }: { dir: string }) {
-    console.log('[Mastra Deploy] - Deployer initialized');
+  log = (message: string) => {
+    console.log(`[Mastra ${this.type}] - ${message}`);
+  };
+
+  constructor({ dir, type }: { dir: string; type: 'Deploy' | 'Dev' }) {
     this.dotMastraPath = join(dir, '.mastra');
+    this.type = type;
   }
 
   getMastraPath() {
@@ -26,7 +31,7 @@ export class Deployer {
   }
 
   async writePackageJson() {
-    console.log('[Mastra Deploy] - Writing package.json');
+    this.log('Writing package.json');
     let projectPkg: any = {
       dependencies: {},
     };
@@ -49,8 +54,14 @@ export class Deployer {
         return acc;
       }, {});
 
+    const pkgPath = join(this.dotMastraPath, 'package.json');
+
+    if (this.type === 'Dev' && existsSync(pkgPath)) {
+      return;
+    }
+
     writeFileSync(
-      join(this.dotMastraPath, 'package.json'),
+      pkgPath,
       JSON.stringify(
         {
           name: 'server',
@@ -79,7 +90,7 @@ export class Deployer {
   }
 
   async install() {
-    console.log('[Mastra Deploy] - Installing dependencies...');
+    this.log('Ensuring your dependencies up to date...');
     await this.deps.install();
   }
 
@@ -147,19 +158,14 @@ export class Deployer {
     copyFileSync(serverPath, join(this.dotMastraPath, 'server.mjs'));
   }
 
-  async prepare({ dir, playground, useBanner = true }: { useBanner?: boolean, dir?: string, playground?: boolean }) {
-    console.log('[Mastra Deploy] - Preparing .mastra directory');
+  async prepare({ dir, playground, useBanner = true }: { useBanner?: boolean; dir?: string; playground?: boolean }) {
+    this.log('Preparing .mastra directory');
     upsertMastraDir();
     const dirPath = dir || path.join(process.cwd(), 'src/mastra');
     this.writePackageJson();
     this.writeServerFile();
     await this.install();
-    try {
-      await this.build({ dir: dirPath, useBanner });
-    } catch (e) {
-      console.error('[Mastra Deploy] - Error building:', e);
-    }
-
+    await this.build({ dir: dirPath, useBanner });
     await this.buildServer({ playground });
   }
 }

@@ -44,8 +44,6 @@ const bundleStep = new Step({
     const entryPoint = fileService.getFirstExistingFile([entry]);
     const outfilePath = outfile || join(process.cwd(), '.mastra', 'mastra.mjs');
 
-    console.log('[Bundling]:', entryPoint, outfilePath);
-
     const plugins: any[] = [];
 
     let missingMastraDependency = false;
@@ -171,7 +169,7 @@ const bundleStep = new Step({
     }
 
     // Log build results
-    console.log(`[Mastra Deploy] - [${buildName}]: build completed successfully`);
+    console.log(`[${buildName}]: build completed successfully`);
 
     return result;
   },
@@ -188,7 +186,6 @@ const analyzeStep = new Step({
       JSON.stringify(context.machineContext?.stepResults.Bundle.payload.metafile, null, 2),
     );
     const res = await esbuild.analyzeMetafile(context.machineContext?.stepResults.Bundle.payload.metafile);
-    console.log(res);
     return res;
   },
 });

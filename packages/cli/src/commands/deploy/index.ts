@@ -1,5 +1,4 @@
 import * as prompts from '@clack/prompts';
-// import { readFileSync } from 'fs';
 import { Deployer } from '@mastra/deployer';
 import { join } from 'path';
 
@@ -31,6 +30,7 @@ export async function deploy({ dir, token }: { dir?: string; token?: string }) {
 
   const deployer = new Deployer({
     dir: process.cwd(),
+    type: 'Deploy',
   });
 
   await deployer.prepare({
@@ -56,28 +56,3 @@ export async function deploy({ dir, token }: { dir?: string; token?: string }) {
     }
   }
 }
-
-// function removeCloudflareDeployer(code: string) {
-//   // Array of patterns to match CloudflareDeployer related code
-//   const patterns = [
-//     // Remove CloudflareDeployer import
-//     /import\s*{\s*CloudflareDeployer\s*}\s*from\s*["']@mastra\/deployer-cloudflare["'];\s*\n?/g,
-
-//     // Remove deployer instantiation block
-//     /var\s+deployer\s*=\s*new\s+CloudflareDeployer\s*\({[\s\S]*?\}\);\s*\n?/g,
-
-//     // Remove deployer from exports
-//     /,?\s*deployer(?=\s*[,}])/g
-//   ];
-
-//   // Apply each pattern to remove CloudflareDeployer code
-//   let cleanedCode = code;
-//   patterns.forEach(pattern => {
-//     cleanedCode = cleanedCode.replace(pattern, '');
-//   });
-
-//   // Clean up any multiple empty lines that might be left
-//   cleanedCode = cleanedCode.replace(/(\r?\n){3,}/g, '\n\n');
-
-//   return cleanedCode;
-// }

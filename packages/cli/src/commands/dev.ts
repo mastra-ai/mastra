@@ -65,7 +65,7 @@ const bundleTools = async (mastraPath: string, dotMastraPath: string, toolsDirs?
 const startServer = async (dotMastraPath: string, port: number, MASTRA_TOOLS_PATH: string) => {
   try {
     // Restart server
-    console.log('Starting server...');
+    console.log('[Mastra Dev] - Starting server...');
     currentServerProcess = execa('node', ['index.mjs'], {
       cwd: dotMastraPath,
       env: {
@@ -138,6 +138,7 @@ async function rebundleAndRestart(
 
     const deployer = new Deployer({
       dir,
+      type: 'Dev',
     });
 
     /*
@@ -148,7 +149,7 @@ async function rebundleAndRestart(
       dir: mastraPath,
       playground: true,
       useBanner: false,
-    })
+    });
 
     /*
       Bundle tools
@@ -179,6 +180,7 @@ export async function dev({
 
   const deployer = new Deployer({
     dir: dirSelected,
+    type: 'Dev',
   });
 
   const dotMastraPath = deployer.getMastraPath();
@@ -218,8 +220,7 @@ export async function dev({
     dir: join(dirSelected, 'src/mastra'),
     playground: true,
     useBanner: false,
-  })
-
+  });
 
   const envPaths = [path.join(dirSelected, '.env'), path.join(dirSelected, '.env.development')];
   /*
@@ -227,11 +228,14 @@ export async function dev({
   */
   const MASTRA_TOOLS_PATH = await bundleTools(mastraDir, dotMastraPath, toolsDirs);
 
-  writeFileSync(join(dotMastraPath, 'index.mjs'), `
+  writeFileSync(
+    join(dotMastraPath, 'index.mjs'),
+    `
     import { createNodeServer } from './server.mjs';
     import { mastra } from './mastra.mjs';
     const server = await createNodeServer(mastra, { playground: true });
-  `);
+  `,
+  );
 
   await startServer(dotMastraPath, port, MASTRA_TOOLS_PATH);
 
