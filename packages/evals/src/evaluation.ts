@@ -16,7 +16,13 @@ export async function evaluate<T extends Agent>(agent: T, input: Parameters<T['g
     input: input.toString(),
     output: agentOutput.text,
     result: metricResult,
-    meta: { ...testInfo, runId, agentName: agent.name },
+    meta: {
+      ...testInfo,
+      runId,
+      agentName: agent.name,
+      timestamp: new Date().toISOString(),
+      metricName: metric.constructor.name,
+    },
   };
 
   // capture infomration about the evaluation

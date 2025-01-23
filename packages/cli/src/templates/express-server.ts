@@ -7,6 +7,8 @@ import { fileURLToPath as _fileURLToPath } from 'url';
 import { pathToFileURL } from 'url';
 import zodToJsonSchema from 'zod-to-json-schema';
 
+import { readFile } from 'fs/promises';
+
 const ___filename = _fileURLToPath(import.meta.url);
 const ___dirname = _path.dirname(___filename);
 
@@ -147,6 +149,35 @@ app.get('/api/agents/:agentId', async (req: Request, res: Response) => {
     res.json({
       ...agent,
       tools: serializedAgentTools,
+    });
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting agent', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting agent' });
+    return;
+  }
+});
+
+/**
+ * GET /api/agents/{agentId}/evals
+ * @summary Get agent evals by ID
+ * @tags Agent
+ * @param {string} agentId.path.required - Agent identifier
+ * @return {object} 200 - Agent response
+ * @return {Error} 500 - Server error
+ */
+app.get('/api/agents/:agentId/evals', async (req: Request, res: Response) => {
+  try {
+    const agentId = req.params.agentId;
+    const agent = mastra.getAgent(agentId);
+    const evals = await readFile('./evals.json', 'utf-8');
+    const parsedEvals = evals
+      .split('\n')
+      .map(line => line && JSON.parse(line))
+      .filter((line: any) => line?.meta?.agentName === agent.name);
+    res.json({
+      ...agent,
+      evals: parsedEvals,
     });
   } catch (error) {
     const apiError = error as ApiError;
