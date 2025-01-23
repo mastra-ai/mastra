@@ -1,5 +1,11 @@
 # @mastra/deployer-netlify
 
+## 0.0.1-alpha.2
+
+### Patch Changes
+
+- 88600bc: Deployer fixes
+
 ## 0.0.1-alpha.1
 
 ### Patch Changes
