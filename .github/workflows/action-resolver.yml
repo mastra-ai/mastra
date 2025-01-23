@@ -1,0 +1,59 @@
+name: DANE_Failed_Actions_Resolver
+on:
+  pull_request:
+    types: [opened, synchronize]
+  workflow_dispatch:
+    inputs:
+      pull_number:
+        description: 'Pull Request Number'
+        required: true
+        type: string
+
+jobs:
+  wait-for-workflows:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for other workflows
+        uses: lewagon/wait-on-check-action@v1.3.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 20
+          check-regexp: '^(?!.*DANE_Failed_Actions_Resolver).*$'
+          running-workflow-name: 'wait-for-workflows'
+          allowed-conclusions: success,failure,skipped,neutral
+
+  analyze_failed_action:
+    needs: [wait-for-workflows]
+    if: always() && (github.event_name != 'pull_request' || needs.wait-for-workflows.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: pnpm install #change to pnpm install @mastra/dane@alpha
+
+      - name: Analyze Actions
+        run: cd packages/core && pnpm build && cd ../engine && pnpm build && cd ../rag && pnpm build && cd ../memory && pnpm build && cd ../mcp && pnpm build && cd ../../integrations/github && pnpm build && cd ../firecrawl && pnpm build && cd ../stabilityai && pnpm build && cd ../../examples/dane && pnpm start action-resolver #change to dane action-resolver
+        env:
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.repository }}
+          PULL_NUMBER: ${{ github.event.pull_request.number || inputs.pull_number }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

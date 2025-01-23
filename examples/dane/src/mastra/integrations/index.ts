@@ -4,7 +4,7 @@ import { StabilityAiIntegration } from "@mastra/stabilityai";
 import { config } from "../../config/index.js";
 
 // Helper function to get key from config or env
-const getApiKey = (configKey: string, envKey: string): string => {
+export const getApiKey = (configKey: string, envKey: string): string => {
     const configValue = config.get(configKey);
     if (configValue) return configValue;
 

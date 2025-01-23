@@ -29,6 +29,7 @@
     "build:rag": "pnpm --filter ./packages/cli build",
     "build:engine": "pnpm --filter ./packages/engine build",
     "build:memory": "pnpm --filter ./packages/memory build",
+    "build:mcp": "pnpm --filter ./packages/mcp build",
     "build:toolsets": "pnpm --filter ./packages/toolsets build",
     "build:evals": "pnpm --filter ./packages/evals build",
     "generate:integration": "pnpx tsx ./integration-generator/index.ts",

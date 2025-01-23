@@ -4,6 +4,7 @@ import { UpstashKVMemory } from '@mastra/memory';
 
 import {
   dane,
+  daneActionResolver,
   daneChangeLog,
   daneCommitMessage,
   daneIssueLabeler,
@@ -11,6 +12,7 @@ import {
   danePackagePublisher,
 } from './agents/index.js';
 import { firecrawl } from './integrations/index.js';
+import { githubActionResolver } from './workflows/action-resolver.js';
 import { changelogWorkflow } from './workflows/changelog.js';
 import { messageWorkflow, githubIssueLabeler, commitMessageGenerator } from './workflows/index.js';
 import { linkCheckerWorkflow } from './workflows/link-checker.js';
@@ -27,6 +29,7 @@ export const mastra = new Mastra({
     danePackagePublisher,
     daneLinkChecker,
     daneIssueLabeler,
+    daneActionResolver,
     daneCommitMessage,
     daneChangeLog,
   },
@@ -44,6 +47,7 @@ export const mastra = new Mastra({
     telephoneGame: telephoneGameWorkflow,
     changelog: changelogWorkflow,
     linkChecker: linkCheckerWorkflow,
+    githubActionResolver: githubActionResolver,
   },
   syncs: {
     ...firecrawl.getSyncs(),

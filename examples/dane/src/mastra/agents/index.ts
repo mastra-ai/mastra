@@ -38,6 +38,18 @@ export const daneIssueLabeler = new Agent({
   model: getBaseModelConfig(),
 });
 
+export const daneActionResolver = new Agent({
+  name: 'DaneActionResolver',
+  instructions: `
+    You are Dane, the ultimate GitHub operator.
+    You help engineers resolve their failed actions.
+
+    FIGURE OUT WHY THE ACTION FAILED.
+    PROVIDE A SOLUTION TO THE ACTION.
+    `,
+  model: getBaseModelConfig(),
+});
+
 export const danePackagePublisher = new Agent({
   name: 'DanePackagePublisher',
   instructions: `

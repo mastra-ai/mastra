@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 import dotenv from 'dotenv';
 
+import { actionResolverCommand } from './commands/action-resolver.js';
 import { changelog } from './commands/changelog.js';
 import { commitMessageCommand } from './commands/commit-message.js';
 import { configCommand } from './commands/config.js';
@@ -23,6 +24,11 @@ program
   .command('issue-labeler')
   .description('Automatically label GitHub issues based on their content and context')
   .action(issueLabelerCommand);
+
+program
+  .command('action-resolver')
+  .description('Automatically suggest solutions for failed GitHub Actions')
+  .action(actionResolverCommand);
 
 program
   .command('commit')
