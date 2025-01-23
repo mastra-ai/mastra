@@ -68,59 +68,6 @@ export class CloudflareDeployer extends MastraDeployer {
     );
   }
 
-  // async syncEnv({ scope, dir, token }: { token: string; dir: string; scope: string }) {
-  //   const envFiles = this.getEnvFiles();
-  //   const envVars: string[] = [];
-
-  //   for (const file of envFiles) {
-  //     const vars = this.parseEnvFile(file);
-  //     envVars.push(...vars);
-  //   }
-
-  //   console.log('Syncing environment variables...');
-
-  //   // Transform env vars into the format expected by Vercel API
-  //   const vercelEnvVars: EnvVar[] = envVars.map(envVar => {
-  //     const [key, value] = envVar.split('=');
-  //     if (!key || !value) {
-  //       throw new Error(`Invalid environment variable format: ${envVar}`);
-  //     }
-  //     return {
-  //       key,
-  //       value,
-  //       target: ['production', 'preview', 'development'],
-  //       type: 'plain',
-  //     };
-  //   });
-
-  //   try {
-  //     const projectId = this.getProjectId({ dir });
-
-  //     const response = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env?teamId=${scope}&upsert=true`, {
-  //       method: 'POST',
-  //       headers: {
-  //         Authorization: `Bearer ${token}`,
-  //         'Content-Type': 'application/json',
-  //       },
-  //       body: JSON.stringify(vercelEnvVars),
-  //     });
-
-  //     if (!response.ok) {
-  //       const error = (await response.json()) as VercelError;
-  //       throw new Error(`Failed to sync environment variables: ${error.message}`);
-  //     }
-
-  //     console.log('✓ Successfully synced environment variables');
-  //   } catch (error) {
-  //     if (error instanceof Error) {
-  //       console.error('Failed to sync environment variables:', error.message);
-  //     } else {
-  //       console.error('Failed to sync environment variables:', error);
-  //     }
-  //     throw error;
-  //   }
-  // }
-
   async deploy({ dir, token }: { dir: string; token: string }): Promise<void> {
     child_process.execSync(`npm exec wrangler deploy`, {
       cwd: dir,
