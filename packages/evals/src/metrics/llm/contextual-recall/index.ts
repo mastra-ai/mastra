@@ -1,5 +1,6 @@
-import { Metric, MetricResult, ModelConfig } from '@mastra/core';
+import { Metric, ModelConfig } from '@mastra/core';
 
+import { MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';
 
 import { ContextualRecallJudge } from './metricJudge';
@@ -21,12 +22,21 @@ export class ContextualRecallMetric extends Metric {
     this.context = context;
   }
 
-  async measure(input: string, output: string): Promise<MetricResult> {
+  async measure(input: string, output: string): Promise<MetricResultWithReason> {
     const verdicts = await this.judge.evaluate(input, output, this.context);
     const score = this.calculateScore(verdicts);
+    const reason = await this.judge.getReason({
+      score,
+      expectedOutput: output,
+      supportiveReasons: verdicts.filter(v => v.verdict === 'yes').map(v => v.reason),
+      unsupportiveReasons: verdicts.filter(v => v.verdict === 'no').map(v => v.reason),
+    });
 
     return {
       score,
+      info: {
+        reason,
+      },
     };
   }
 

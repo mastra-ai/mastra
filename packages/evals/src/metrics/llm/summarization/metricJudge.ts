@@ -8,6 +8,7 @@ import {
   generateAlignmentPrompt,
   generateAnswersPrompt,
   generateQuestionsPrompt,
+  generateReasonPrompt,
   SUMMARIZATION_AGENT_INSTRUCTIONS,
 } from './prompts';
 
@@ -81,5 +82,20 @@ export class SummarizationJudge extends MastraAgentJudge {
     }));
 
     return coverageVerdicts;
+  }
+
+  async getReason(args: {
+    originalText: string;
+    summary: string;
+    alignmentScore: number;
+    coverageScore: number;
+    finalScore: number;
+    alignmentVerdicts: { verdict: string; reason: string }[];
+    coverageVerdicts: { verdict: string; reason: string }[];
+    scale: number;
+  }): Promise<string> {
+    const prompt = generateReasonPrompt(args);
+    const result = await this.agent.generate(prompt, { output: z.object({ reason: z.string() }) });
+    return result.object.reason;
   }
 }

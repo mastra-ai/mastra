@@ -1,7 +1,13 @@
-import { Metric } from '@mastra/core';
+import { Metric, MetricResult } from '@mastra/core';
 import stringSimilarity from 'string-similarity';
 
-import { MetricOptions, MetricScoringResult } from '../types';
+import { MetricOptions } from '../types';
+
+interface ContentSimilarityResult extends MetricResult {
+  info: {
+    similarity: number;
+  };
+}
 
 export class ContentSimilarityMetric extends Metric {
   private options: MetricOptions;
@@ -15,7 +21,7 @@ export class ContentSimilarityMetric extends Metric {
     };
   }
 
-  async measure(input: string, output: string): Promise<MetricScoringResult> {
+  async measure(input: string, output: string): Promise<ContentSimilarityResult> {
     let processedInput = input;
     let processedOutput = output;
 
@@ -33,9 +39,7 @@ export class ContentSimilarityMetric extends Metric {
 
     return {
       score: similarity,
-      details: `Content similarity: ${(similarity * 100).toFixed(1)}%`,
-      confidence: 0.9,
-      metrics: { similarity },
+      info: { similarity },
     };
   }
 }

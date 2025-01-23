@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';
 
-import { generateEvaluatePrompt, PROMPT_ALIGNMENT_AGENT_INSTRUCTIONS } from './prompts';
+import { generateEvaluatePrompt, PROMPT_ALIGNMENT_AGENT_INSTRUCTIONS, generateReasonPrompt } from './prompts';
 
 export class PromptAlignmentJudge extends MastraAgentJudge {
   constructor(model: ModelConfig) {
@@ -27,5 +27,17 @@ export class PromptAlignmentJudge extends MastraAgentJudge {
       }),
     });
     return result.object.verdicts;
+  }
+
+  async getReason(args: {
+    input: string;
+    output: string;
+    score: number;
+    verdicts: { verdict: string; reason: string }[];
+    scale: number;
+  }): Promise<string> {
+    const prompt = generateReasonPrompt(args);
+    const result = await this.agent.generate(prompt, { output: z.object({ reason: z.string() }) });
+    return result.object.reason;
   }
 }

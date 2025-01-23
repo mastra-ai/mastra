@@ -1,5 +1,6 @@
-import { Metric, MetricResult, ModelConfig } from '@mastra/core';
+import { Metric, ModelConfig } from '@mastra/core';
 
+import { MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';
 
 import { FaithfulnessJudge } from './metricJudge';
@@ -21,13 +22,23 @@ export class FaithfulnessMetric extends Metric {
     this.judge = new FaithfulnessJudge(model);
   }
 
-  // @ts-expect-error - input is unused
-  async measure(input: string, output: string): Promise<MetricResult> {
+  async measure(input: string, output: string): Promise<MetricResultWithReason> {
     const verdicts = await this.judge.evaluate(output, this.context);
     const score = this.calculateScore(verdicts);
+    const reason = await this.judge.getReason({
+      input,
+      output,
+      context: this.context,
+      score,
+      scale: this.scale,
+      verdicts,
+    });
 
     return {
       score,
+      info: {
+        reason,
+      },
     };
   }
 

@@ -1,9 +1,13 @@
-export interface MetricScoringResult {
+import { MetricResult } from '@mastra/core';
+
+export interface MetricScoringResult extends MetricResult {
   score: number; // 0-1 normalized score
-  weight?: number;
-  details: string; // Human-readable explanation
-  confidence: number; // 0-1 confidence level
-  metrics?: Record<string, number | boolean | Record<string, any>>; // Additional numerical metrics
+  info: {
+    weight?: number;
+    responseSentiment: number;
+    referenceSentiment: number;
+    difference: number;
+  };
 }
 
 export interface MetricOptions {

@@ -1,5 +1,6 @@
-import { Metric, MetricResult, ModelConfig } from '@mastra/core';
+import { Metric, ModelConfig } from '@mastra/core';
 
+import { MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';
 
 import { ContextRelevancyJudge } from './metricJudge';
@@ -21,12 +22,24 @@ export class ContextRelevancyMetric extends Metric {
     this.context = context;
   }
 
-  async measure(input: string, output: string): Promise<MetricResult> {
+  async measure(input: string, output: string): Promise<MetricResultWithReason> {
     const verdicts = await this.judge.evaluate(input, output, this.context);
     const score = this.calculateScore(verdicts);
 
+    const irrelevancies = verdicts.filter(v => v.verdict.toLowerCase() === 'no').map(v => v.reason);
+    const relevantStatements = verdicts.filter(v => v.verdict.toLowerCase() === 'no').map(v => v.reason);
+    const reason = await this.judge.getReason({
+      input,
+      irrelevancies,
+      relevantStatements,
+      score,
+    });
+
     return {
       score,
+      info: {
+        reason,
+      },
     };
   }
 

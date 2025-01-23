@@ -3,7 +3,12 @@ import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';
 
-import { generateClaimExtractionPrompt, generateEvaluatePrompt, FAITHFULNESS_AGENT_INSTRUCTIONS } from './prompts';
+import {
+  generateClaimExtractionPrompt,
+  generateEvaluatePrompt,
+  FAITHFULNESS_AGENT_INSTRUCTIONS,
+  generateReasonPrompt,
+} from './prompts';
 
 export class FaithfulnessJudge extends MastraAgentJudge {
   constructor(model: ModelConfig) {
@@ -36,5 +41,22 @@ export class FaithfulnessJudge extends MastraAgentJudge {
     });
 
     return result.object.verdicts;
+  }
+
+  async getReason(args: {
+    input: string;
+    output: string;
+    context: string[];
+    score: number;
+    scale: number;
+    verdicts: { verdict: string; reason: string }[];
+  }): Promise<string> {
+    const prompt = generateReasonPrompt(args);
+    const result = await this.agent.generate(prompt, {
+      output: z.object({
+        reason: z.string(),
+      }),
+    });
+    return result.object.reason;
   }
 }

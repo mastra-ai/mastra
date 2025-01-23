@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { MastraAgentJudge } from '../../judge';
 
 import './prompts';
-import { CONTEXT_PRECISION_AGENT_INSTRUCTIONS, generateEvaluatePrompt } from './prompts';
+import { CONTEXT_PRECISION_AGENT_INSTRUCTIONS, generateEvaluatePrompt, generateReasonPrompt } from './prompts';
 
 export class ContextPrecisionJudge extends MastraAgentJudge {
   constructor(model: ModelConfig) {
@@ -33,5 +33,24 @@ export class ContextPrecisionJudge extends MastraAgentJudge {
     });
 
     return result.object.verdicts;
+  }
+
+  async getReason(
+    input: string,
+    actualOutput: string,
+    score: number,
+    scale: number,
+    verdicts: {
+      verdict: string;
+      reason: string;
+    }[],
+  ): Promise<string> {
+    const prompt = generateReasonPrompt({ input, output: actualOutput, verdicts, score, scale });
+    const result = await this.agent.generate(prompt, {
+      output: z.object({
+        reason: z.string(),
+      }),
+    });
+    return result.object.reason;
   }
 }
