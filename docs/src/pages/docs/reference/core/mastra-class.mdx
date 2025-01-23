@@ -61,13 +61,6 @@ The Mastra class is the core entry point for your application. It manages agents
       isOptional: true,
       defaultValue: "[]",
     },
-    {
-      name: "syncs",
-      type: "Record<string, SyncConfig>",
-      description: "Sync configurations (requires engine)",
-      isOptional: true,
-      defaultValue: "{}",
-    },
   ]}
 />
 
@@ -91,7 +84,6 @@ export const mastra = new Mastra({
     level: "INFO",
   }),
   engine: {},
-  syncs: {},
   tools: {},
   vectors: {},
 });
