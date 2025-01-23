@@ -148,6 +148,7 @@ async function rebundleAndRestart(
     await deployer.prepare({
       dir: mastraPath,
       playground: true,
+
       useBanner: false,
     });
 
@@ -233,7 +234,7 @@ export async function dev({
     `
     import { createNodeServer } from './server.mjs';
     import { mastra } from './mastra.mjs';
-    const server = await createNodeServer(mastra, { playground: true });
+    const server = await createNodeServer(mastra, { playground: true, swaggerUI: true });
   `,
   );
 

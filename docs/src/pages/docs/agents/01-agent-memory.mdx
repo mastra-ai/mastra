@@ -13,13 +13,16 @@ Agent memory in Mastra is configured with two named parameters:
 - `threadId` - A unique identifier for the conversation thread.
 - `resourceId` - A unique identifier for the agent's memory context. This is used to group and manage memory for different agents or resources. You can also just set it to `default` for all agents if you don't need to group threads.
 
-You can store agent memory in-memory (ha!) or you can persist it to a backend. Let's just start by using it in-memory.
+You can currently store agent memory in (Postgres)[#using-postgres-for-agent-memory] or (UpstashKV)[#using-redis-for-agent-memory].
 
 First, create a new conversation thread:
 
 ```typescript
-const thread = await mastra.memory.createThread({
-  resourceId: "memory_id"
+import { randomUUID } from 'crypto';
+
+const thread = await mastra.memory?.createThread({
+  resourceid: "user-1"
+  threadId: randomUUID()
 });
 ```
 
@@ -27,12 +30,12 @@ Now, let's start adding messages to the thread:
 
 ```typescript
 const responseOne = await myAgent.generate("Tell me about the project requirements.", {
-  resourceId: "memory_id",
+  resourceid: "memory_id",
   threadId: thread.id,
 });
 
 const responseTwo = await myAgent.generate("What are the next steps?", {
-  resourceId: "memory_id",
+  resourceid: "memory_id",
   threadId: thread.id,
 });
 ```
@@ -48,7 +51,7 @@ You can also explicitly insert messages to the thread.
 ```typescript
 await myAgent.saveMemory({
   threadId: thread.id,
-  resourceId: "memory_id",
+  resourceid: "memory_id",
   userMessages: [
     {
       role: "user",
@@ -132,7 +135,7 @@ Then, configure your agent to use PostgreSQL for memory storage:
 ```typescript
 // src/mastra/index.ts
 import { Mastra } from "@mastra/core";
-import { PostgresMemory } from "@mastra/memory";
+import { PgMemory } from "@mastra/memory";
 
 import { myAgent } from "./agents";
 

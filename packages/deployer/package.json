@@ -26,6 +26,7 @@
     "prebuild:app": "esbuild --platform=node --target=node20 --format=esm --bundle --outdir=dist/server src/server/index.ts",
     "build": "dts build && pnpm prebuild:app",
     "build:dev": "concurrently 'dts watch' 'sleep 5 && pnpm prebuild:app --watch'",
+    "pull:openapispec": "node src/server/openapi.script.js",
     "test": "vitest run"
   },
   "keywords": [],
@@ -33,12 +34,15 @@
   "license": "ISC",
   "dependencies": {
     "@hono/node-server": "^1.13.7",
+    "@hono/swagger-ui": "^0.5.0",
+    "@hono/zod-validator": "^0.4.2",
     "@mastra/core": "workspace:*",
     "dotenv": "^16.3.1",
     "esbuild": "^0.24.2",
     "execa": "^9.3.1",
     "fs-extra": "^11.2.0",
     "hono": "^4.6.17",
+    "hono-openapi": "^0.4.3",
     "superjson": "^2.2.2",
     "type-fest": "^4.30.0",
     "zod": "^3.24.1",
