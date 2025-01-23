@@ -46,7 +46,6 @@
     "superjson": "^2.2.2",
     "type-fest": "^4.30.0",
     "zod": "^3.24.1",
-    "zod-openapi": "^4.2.2",
     "zod-to-json-schema": "^3.24.1"
   },
   "devDependencies": {
