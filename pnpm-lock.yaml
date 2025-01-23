@@ -246,6 +246,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/deployer-cloudflare':
+        specifier: workspace:*
+        version: link:../../deployers/cloudflare
       zod:
         specifier: ^3.24.0
         version: 3.24.1
