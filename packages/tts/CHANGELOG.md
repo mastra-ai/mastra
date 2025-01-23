@@ -1,5 +1,11 @@
 # @mastra/tts
 
+## 0.0.1-alpha.13
+
+### Patch Changes
+
+- afb9604: Fix publish
+
 ## 0.0.1-alpha.12
 
 ### Patch Changes
