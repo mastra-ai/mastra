@@ -23,7 +23,7 @@ const getPacakgesToPublish = new Step({
     }
 
     const result = await agent.generate(`
-              Can you tell me which packages within the packages and integrations directory need to be published to npm?
+              Can you tell me which packages within the packages, deployers, and integrations directory need to be published to npm?
               `);
 
     const resultObj = await agent.generate(
@@ -32,6 +32,7 @@ const getPacakgesToPublish = new Step({
               Can you format this for me ${result.text}?
               @mastra/core must be first. mastra must be second. 
               create-mastra is a package (not an integration) and should be listed in packages array.
+              deployers should be listed after packages.
               @mastra/dane should be listed after packages and integrations.
               `,
       {
