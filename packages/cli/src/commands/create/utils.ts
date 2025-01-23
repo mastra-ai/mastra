@@ -46,13 +46,13 @@ export const createMastraProject = async () => {
   await depsService.addScriptsToPackageJson({
     dev: 'mastra dev',
   });
+
   s.stop('Project created');
 
   s.start('Installing npm dependencies');
   await exec(`npm i zod`);
   await exec(`npm i typescript tsx @types/node --save-dev`);
   s.stop('NPM dependencies installed');
-
   s.start('Installing mastra');
   await exec(`npm i -D mastra`);
   s.stop('mastra installed');

@@ -1,5 +1,11 @@
 # @mastra/evals
 
+## 0.1.0-alpha.6
+
+### Patch Changes
+
+- aea3c13: Fix evals export for llm and nlp
+
 ## 0.1.0-alpha.5
 
 ### Minor Changes
