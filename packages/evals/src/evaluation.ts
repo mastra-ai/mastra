@@ -3,10 +3,16 @@ import { type Agent, type Metric } from '@mastra/core';
 
 export async function evaluate<T extends Agent>(agent: T, input: Parameters<T['generate']>[0], metric: Metric) {
   const testInfo = await getCurrentTestInfo();
+  let globalRunId = process.env[GLOBAL_RUN_ID_ENV_KEY];
   const runId = crypto.randomUUID();
   const agentOutput = await agent.generate(input, {
     runId,
   });
+
+  if (!globalRunId) {
+    globalRunId = process.env[GLOBAL_RUN_ID_ENV_KEY] = crypto.randomUUID();
+    console.warn('Global run id not set, you should run "globalSetup" from "@mastra/evals" before evaluating.');
+  }
 
   const metricResult = await metric.measure({
     input: input.toString(),
@@ -18,7 +24,8 @@ export async function evaluate<T extends Agent>(agent: T, input: Parameters<T['g
     result: metricResult,
     meta: {
       ...testInfo,
-      runId,
+      globalRunId,
+      testId: runId,
       agentName: agent.name,
       timestamp: new Date().toISOString(),
       metricName: metric.constructor.name,

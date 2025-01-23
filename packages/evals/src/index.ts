@@ -1,2 +1,2 @@
 export { evaluate } from './evaluation';
-export { attachListeners } from './attachListeners';
+export { attachListeners, globalSetup } from './attachListeners';

@@ -13,3 +13,12 @@ export async function attachListeners() {
     appendFile(join(dotMastraPath, 'evals.json'), JSON.stringify(traceObject) + '\n', () => {});
   });
 }
+
+export async function globalSetup() {
+  if (process.env[GLOBAL_RUN_ID_ENV_KEY]) {
+    throw new Error('Global run id already set, you should only run "GlobalSetup" once');
+  }
+
+  const globalRunId = crypto.randomUUID();
+  process.env[GLOBAL_RUN_ID_ENV_KEY] = globalRunId;
+}
