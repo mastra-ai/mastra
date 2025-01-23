@@ -1,5 +1,19 @@
 # @mastra/dane
 
+## 0.0.2-alpha.70
+
+### Patch Changes
+
+- Updated dependencies [c8ff2f5]
+  - @mastra/core@0.1.27-alpha.67
+  - @mastra/firecrawl@1.0.4-alpha.55
+  - @mastra/github@1.0.3-alpha.51
+  - @mastra/stabilityai@1.0.1-alpha.42
+  - @mastra/engine@0.0.5-alpha.61
+  - @mastra/mcp@0.0.1-alpha.7
+  - @mastra/memory@0.0.2-alpha.47
+  - @mastra/rag@0.0.2-alpha.53
+
 ## 0.0.2-alpha.65
 
 ### Patch Changes
