@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';
 
-import { generateEvaluatePrompt, generateReasonPrompt, PROMPT_ALIGNMENT_AGENT_INSTRUCTIONS } from './prompts';
+import { generateEvaluatePrompt, PROMPT_ALIGNMENT_AGENT_INSTRUCTIONS } from './prompts';
 
 export class PromptAlignmentJudge extends MastraAgentJudge {
   constructor(model: ModelConfig) {

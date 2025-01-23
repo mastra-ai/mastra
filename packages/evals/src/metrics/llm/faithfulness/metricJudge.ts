@@ -3,12 +3,7 @@ import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';
 
-import {
-  generateClaimExtractionPrompt,
-  generateEvaluatePrompt,
-  generateReasonPrompt,
-  FAITHFULNESS_AGENT_INSTRUCTIONS,
-} from './prompts';
+import { generateClaimExtractionPrompt, generateEvaluatePrompt, FAITHFULNESS_AGENT_INSTRUCTIONS } from './prompts';
 
 export class FaithfulnessJudge extends MastraAgentJudge {
   constructor(model: ModelConfig) {

@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { MastraAgentJudge } from '../../judge';
 
 import './prompts';
-import { CONTEXT_PRECISION_AGENT_INSTRUCTIONS, generateEvaluatePrompt, generateReasonPrompt } from './prompts';
+import { CONTEXT_PRECISION_AGENT_INSTRUCTIONS, generateEvaluatePrompt } from './prompts';
 
 export class ContextPrecisionJudge extends MastraAgentJudge {
   constructor(model: ModelConfig) {
