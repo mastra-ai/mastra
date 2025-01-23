@@ -1,3 +1,8 @@
+---
+title: Mastra Dev Command
+description: Documentation for the mastra dev command, which starts a development server for agents, tools, and workflows.
+---
+
 # `mastra dev` Reference
 
 The `mastra dev` command starts a development server that exposes REST endpoints for your agents, tools, and workflows,
@@ -48,7 +53,7 @@ Agents are expected to be exported from `src/mastra/agents`.
 • `GET /api/agents`
   - Lists the registered agents found in your Mastra folder.
 • `POST /api/agents/:agentId/generate`
-  - Sends a text-based prompt to the specified agent, returning the agent’s response.
+  - Sends a text-based prompt to the specified agent, returning the agent's response.
 
 ### Tool Routes
 
@@ -71,7 +76,7 @@ Workflows are expected to be exported from `src/mastra/workflows` (or the config
 ### OpenAPI Specification
 
 • `GET /openapi.json`
-  - Returns an auto-generated OpenAPI specification for your project’s endpoints.
+  - Returns an auto-generated OpenAPI specification for your project's endpoints.
 
 ## Additional Notes
 

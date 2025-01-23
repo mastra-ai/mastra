@@ -102,13 +102,16 @@ const docs: DocsThemeConfig = {
     ),
   },
   head: () => {
-    const { title } = useConfig();
+    const config = useConfig();
+    const { title, frontMatter } = config;
+    const description = frontMatter?.description;
 
     const ogTitle = `${title} – Mastra`;
     return (
       <>
         <title>{ogTitle}</title>
         <meta property="og:title" content={ogTitle} />
+        {description && <meta name="description" content={description} />}
       </>
     );
   },
