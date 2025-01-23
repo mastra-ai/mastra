@@ -1,6 +1,6 @@
 {
   "name": "workflow-ai-recruiter",
-  "version": "1.0.1-alpha.12",
+  "version": "1.0.1-alpha.13",
   "main": "index.js",
   "private": true,
   "scripts": {

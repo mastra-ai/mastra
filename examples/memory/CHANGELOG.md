@@ -1,5 +1,13 @@
 # memory
 
+## 1.0.1-alpha.45
+
+### Patch Changes
+
+- Updated dependencies [c8ff2f5]
+  - @mastra/core@0.1.27-alpha.67
+  - @mastra/memory@0.0.2-alpha.47
+
 ## 1.0.1-alpha.44
 
 ### Patch Changes
