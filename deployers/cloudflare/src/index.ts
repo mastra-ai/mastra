@@ -6,6 +6,7 @@ import { join } from 'path';
 interface CFRoute {
   pattern: string;
   zone_name: string;
+  custom_domain?: boolean;
 }
 
 export class CloudflareDeployer extends MastraDeployer {

@@ -1,3 +1,8 @@
+---
+title: "Example: Branching Paths | Workflows | Mastra Docs"
+description: Example of using Mastra to create workflows with branching paths based on intermediate results.
+---
+
 import { GithubLink } from "../../../components/github-link";
 
 # Branching Paths
@@ -75,7 +80,9 @@ myWorkflow
   .then(stepFour)
   .commit();
 
-const result = await myWorkflow.execute({ triggerData: { inputValue: 3 } });
+const { start } = myWorkflow.createRun();
+
+const result = await start({ triggerData: { inputValue: 3 } });
 ```
 
 <br />

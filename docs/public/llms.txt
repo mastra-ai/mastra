@@ -21,7 +21,6 @@ Files included:
 - src/pages/docs/local-dev/integrations.mdx
 - src/pages/docs/local-dev/mastra-dev.mdx
 - src/pages/docs/local-dev/mastra-init.mdx
-- src/pages/docs/local-dev/syncs.mdx
 - src/pages/docs/rag/chunking-and-embedding.mdx
 - src/pages/docs/rag/overview.mdx
 - src/pages/docs/rag/retrieval.mdx
@@ -2203,7 +2202,7 @@ Source: src/pages/docs/index.mdx
 
 # Introduction
 
-Mastra is an opinionated Typescript framework that helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations, syncs and evals. You can run Mastra on your local machine, or deploy to a serverless cloud.
+Mastra is an opinionated Typescript framework that helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations and evals. You can run Mastra on your local machine, or deploy to a serverless cloud.
 
 The main Mastra features are:
 
@@ -2214,7 +2213,7 @@ The main Mastra features are:
 | [Tools](/docs/agents/02-adding-tools.mdx)         | Tools are typed functions that can be executed by agents or workflows, with built-in integration access and parameter validation.                               |
 | [Workflows](/docs/workflows/00-overview.mdx)      | Workflows are durable graph-based state machines with built-in tracing. They can execute complex sequences of LLM operations.                                   |
 | [RAG](/docs/rag/overview.mdx)                     | Retrieval-augemented generation (RAG) lets you construct a knowledge base for your agents.                                                                      |
-| [Integrations & Syncs](/docs/local-dev/syncs.mdx) | In Mastra, syncs are async functions that can be deployed as background tasks. Integrations are auto-generated, type-safe API clients for third-party services. |
+| [Integrations](/docs/local-dev/integrations.mdx)  | In Mastra, integrations are auto-generated, type-safe API clients for third-party services. |
 | [Evals](/docs/08-running-evals)                   | Evals are automated tests that evaluate LLM outputs using model-graded, rule-based, and statistical methods.                                                    |
 
 
@@ -2492,48 +2491,6 @@ console.log(records);
 
 This mock engine mimics the behavior of the real engine without requiring a real database connection, making it ideal for unit tests.
 
-## Using the Engine for Sync Operations
-
-The engine also supports keeping external data sources up to date through sync operations:
-
-```typescript showLineNumbers copy
-
-await engine.syncRecords({
-  name: "external_docs",
-  connectionId: "sync_123", 
-  records: updatedRecords,
-  lastSyncId: "sync_20240315"
-});
-```
-
-More details:
-
-- **Entities** represent a conceptual data model (like "Contacts", "Orders", or "Tickets") in your application.
-- **Records** are individual data entries within an entity.
-- **Syncs** are async functions that manage data synchronization between external systems and Mastra. For example, you can use a sync to import records from a third-party API into your local database.
-
-You can create, read, update, and delete entities and their records using the engine's methods.
-
-### Engine Sync Operations APIs
-
-**Entity Management:**
-
-- `createEntity({ name, connectionId })`: Create a new entity
-- `getEntityById({ id })`: Get an entity by ID
-- `getEntity({ name, connectionId })`: Get entity by name and/or connectionId
-- `deleteEntityById({ id })`: Delete an entity and its associated records
-
-**Record Management:**
-
-- `upsertRecords({ entityId, records })`: Insert or update records for an entity
-- `getRecordsByEntityId({ entityId })`: Retrieve all records for an entity
-- `getRecordsByEntityName({ name, connectionId })`: Retrieve all records for an entity by name and connectionId
-- `getRecords({ entityName, connectionId, options })`: Query records with filtering, sorting, and pagination
-
-**Sync Operations:**
-
-- `syncRecords({ name, connectionId, records, lastSyncId })`: Sync incoming data to an entity
-
 ## Summary
 
 The Mastra Engine is a PostgreSQL instance that stores agent memory and vector embeddings. You can spin it up locally with Docker for development and deploy it to a production instance. It's a helpful starting spot for handling agent memory and vector operations -- start with Postgres + pgvector, then adapt individual components based on your needs.
@@ -2770,256 +2727,6 @@ mastra init --dir src/mastra --components agents,tools --llm openai --example
 This allows you to specify your preferences upfront without being prompted.
 
 - [Mastra Init reference](../reference/cli/init.mdx)
-
-
-================================================================================
-Source: src/pages/docs/local-dev/syncs.mdx
-================================================================================
-
-# Mastra Syncs
-
-Syncs in Mastra are async functions that handle data synchronization and background tasks. Unlike full job systems (e.g., Inngest or Trigger.dev), Mastra syncs are executed synchronously in the current process and do not include built-in retry, scheduling, or job queue capabilities.
-
-## Creating a Sync
-
-Create a sync using the `createSync` function:
-
-```typescript
-import { createSync } from "@mastra/core";
-import { z } from "zod";
-
-export const mySync = createSync({
-  id: "my-sync",
-  description: "Synchronize user data",
-  inputSchema: z.object({
-    userId: z.string(),
-    data: z.record(z.any()),
-  }),
-  outputSchema: z.object({
-    success: z.boolean(),
-    message: z.string(),
-  }),
-  execute: async ({ context, engine }) => {
-    try {
-      await engine.syncRecords({
-        connectionId: "users",
-        name: "user_data",
-        records: [
-          {
-            externalId: context.userId,
-            data: context.data,
-          },
-        ],
-      });
-
-      return {
-        success: true,
-        message: "Data synchronized successfully",
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  },
-});
-```
-
-## Registering Syncs
-
-Register syncs when initializing Mastra:
-
-```typescript
-import { Mastra } from "@mastra/core";
-import { PostgresEngine } from "@mastra/engine";
-
-export const mastra = new Mastra({
-  engine: new PostgresEngine({
-    url: process.env.DATABASE_URL,
-  }),
-  syncs: {
-    mySync,
-    otherSync,
-  },
-});
-```
-
-## Executing Syncs
-
-Execute a sync using the `sync` method:
-
-```typescript
-const result = await mastra.sync("mySync", {
-  userId: "123",
-  data: {
-    name: "John Doe",
-    email: "john@example.com",
-  },
-});
-```
-
-## Sync Context
-
-Syncs receive a context object with:
-
-- `context`: The input parameters (validated by `inputSchema`)
-- `engine`: The Mastra engine instance
-- `agents`: Available Mastra agents
-- `vectors`: Vector storage capabilities
-- `llm`: LLM functionality
-- `runId`: Optional execution ID for tracking
-
-## Production Usage
-
-For production environments, it's recommended to wrap Mastra syncs in a proper job system. For example:
-
-```typescript
-import { Queue } from "your-job-system";
-
-const queue = new Queue("data-sync");
-
-queue.process("sync-user-data", async (job) => {
-  const result = await mastra.sync("mySync", job.data);
-  return result;
-});
-```
-
-## Example Use Cases
-
-1. Data Synchronization:
-
-```typescript
-export const mySync = createSync({
-  label: "My Sync",
-  description: "This is a test sync",
-  schema: z.object({
-    name: z.string(),
-    connectionId: z.string(),
-    records: z.array(
-      z.object({
-        data: z.record(z.any()),
-        externalId: z.string(),
-      }),
-    ),
-  }),
-  outputShema: z.object({
-    message: z.string(),
-  }),
-  execute: async ({ context, engine }) => {
-    await engine.syncRecords({
-      name: context.name,
-      connectionId: context.connectionId,
-      records: context.records,
-    });
-
-    return {
-      message: "Hello",
-    };
-  },
-});
-```
-
-2. Web Crawling:
-
-```typescript filename="examples/openapi-spec-writer/src/mastra/syncs/index.ts"
-export const siteCrawlSync = createSync({
-  id: "site-crawl-sync",
-  label: "Site Crawl Sync",
-  inputSchema: z.object({
-    url: z.string(),
-    pathRegex: z.string(),
-    limit: z.number(),
-  }),
-  outputSchema: z.object({
-    success: z.boolean(),
-    crawlData: z.array(
-      z.object({
-        markdown: z.string(),
-        metadata: z.object({
-          sourceURL: z.string(),
-        }),
-      })
-    ),
-    entityType: z.string(),
-  }),
-  description:
-    "Crawl a website and extract the markdown content and sync it to the database",
-  execute: async ({ context, engine, runId }) => {
-    const toolResult = await tools.siteCrawlTool.execute({
-      context,
-      runId,
-    });
-
-    const { crawlData, entityType } = toolResult;
-
-    if (!crawlData) {
-      return {
-        success: false,
-        crawlData: [],
-        entityType: "",
-      };
-    }
-
-    const recordsToPersist = await Promise.all(
-      crawlData?.flatMap(async ({ markdown, metadata }) => {
-        const doc = MDocument.fromMarkdown(markdown, metadata);
-
-        await doc.chunk({
-          strategy: "markdown",
-          options: {
-            maxSize: 8190,
-          },
-        });
-
-        const chunks = doc.getDocs();
-
-        return chunks.map((c, i) => {
-          return {
-            externalId: `${c.metadata?.sourceURL}_chunk_${i}`,
-            data: { markdown: c.text },
-          };
-        });
-      })
-    );
-
-    await engine?.syncRecords({
-      connectionId: "SYSTEM",
-      records: recordsToPersist.flatMap((r) => r),
-      name: entityType,
-    });
-
-    return {
-      success: true,
-      crawlData,
-      entityType,
-    };
-  },
-```
-
-## Testing Syncs
-
-You can test syncs using the mock engine:
-
-```typescript filename="packages/core/src/sync/sync.test.ts"
-const testSync = createSync({
-  id: "test",
-  description: "test",
-  inputSchema: z.object({
-    name: z.string(),
-  }),
-  outputSchema: z.object({
-    message: z.string(),
-  }),
-  execute: async ({ context }) => {
-    return {
-      message: `Hello, ${context.name}`,
-    };
-  },
-});
-```
-
-Remember that syncs are meant for data synchronization tasks rather than full background job processing. For production applications requiring robust job scheduling, retries, and distributed execution, wrap Mastra syncs in your preferred job system (or use the job system of the platform you are deploying to).
 
 
 ================================================================================
@@ -4282,13 +3989,6 @@ The Mastra class is the core entry point for your application. It manages agents
       isOptional: true,
       defaultValue: "[]",
     },
-    {
-      name: "syncs",
-      type: "Record<string, SyncConfig>",
-      description: "Sync configurations (requires engine)",
-      isOptional: true,
-      defaultValue: "{}",
-    },
   ]}
 />
 
@@ -4312,7 +4012,6 @@ export const mastra = new Mastra({
     level: "INFO",
   }),
   engine: {},
-  syncs: {},
   tools: {},
   vectors: {},
 });

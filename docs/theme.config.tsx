@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 import { DocsThemeConfig, useConfig } from "nextra-theme-docs";
+import { useRouter } from "next/router";
 
 import { PropertiesTable } from "./src/components/properties-table";
 import { TableOfContents } from "./src/components/toc";
@@ -102,13 +103,18 @@ const docs: DocsThemeConfig = {
     ),
   },
   head: () => {
-    const { title } = useConfig();
+    const config = useConfig();
+    const router = useRouter();
+    const { title, frontMatter } = config;
+    const description = frontMatter?.description;
 
-    const ogTitle = `${title} – Mastra`;
+    const ogTitle = `${title}`;
     return (
       <>
         <title>{ogTitle}</title>
         <meta property="og:title" content={ogTitle} />
+        {description && <meta name="description" content={description} />}
+        <link rel="canonical" href={`${process.env.NEXT_PUBLIC_APP_URL}${router.route}`} />
       </>
     );
   },

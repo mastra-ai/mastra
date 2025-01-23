@@ -470,6 +470,15 @@ export type AzureConfig = {
   toolChoice?: 'auto' | 'required';
 };
 
+export type DeepseekModel = 'deepseek-chat' | 'deepseek-reasoner';
+
+export type DeepseekConfig = {
+  provider: 'DEEPSEEK';
+  name: DeepseekModel | (string & {});
+  apiKey?: string;
+  toolChoice?: 'auto' | 'required';
+};
+
 export type AmazonModel =
   | 'amazon-titan-tg1-large'
   | 'amazon-titan-text-express-v1'
@@ -533,7 +542,8 @@ type BuiltInModelConfig =
   | CohereConfig
   | AzureConfig
   | AmazonConfig
-  | AnthropicVertexConfig;
+  | AnthropicVertexConfig
+  | DeepseekConfig;
 
 export type ModelConfig = BuiltInModelConfig | CustomModelConfig;
 

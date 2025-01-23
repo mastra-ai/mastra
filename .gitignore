@@ -18,5 +18,7 @@ dist/
 openapi-ts-error*
 
 .mastra
+# github actions
+.secrets
 # Local Netlify folder
 .netlify

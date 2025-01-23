@@ -58,7 +58,8 @@
     "@mastra/deployer-cloudflare": "0.0.0",
     "@mastra/deployer-netlify": "0.0.0",
     "@mastra/deployer-vercel": "0.0.0",
-    "@mastra/deployer": "0.0.0"
+    "@mastra/deployer": "0.0.0",
+    "generate-text-with-deepseek": "0.0.1-alpha.6"
   },
   "changesets": [
     "afraid-papayas-shake",
@@ -110,6 +111,7 @@
     "fluffy-beds-help",
     "fluffy-rings-shake",
     "fresh-lions-work",
+    "funny-geese-deliver",
     "fuzzy-eels-protect",
     "gentle-suits-complain",
     "giant-falcons-sneeze",
@@ -195,6 +197,7 @@
     "serious-bananas-rush",
     "seven-mayflies-impress",
     "seven-teachers-talk",
+    "shaggy-buckets-rescue",
     "shaggy-donkeys-happen",
     "shiny-cameras-brake",
     "silver-bats-smell",

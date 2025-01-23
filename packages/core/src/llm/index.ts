@@ -79,6 +79,7 @@ export class LLM extends MastraBase {
       AZURE: 'azure',
       AMAZON: 'amazon',
       ANTHROPIC_VERTEX: 'anthropic-vertex',
+      DEEPSEEK: 'deepseek',
     };
     const type = providerToType[model.provider as LLMProvider] ?? model.provider;
 
@@ -250,6 +251,14 @@ export class LLM extends MastraBase {
         apiKey: process.env.ANTHROPIC_API_KEY ?? '',
       });
       modelDef = anthropicVertex(model.name || 'claude-3-5-sonnet@20240620');
+    } else if (model.type === 'deepseek') {
+      this.log(LogLevel.DEBUG, `Initializing Deepseek model ${model.name || 'deepseek-chat'}`);
+      modelDef = this.createOpenAICompatibleModel({
+        baseURL: 'https://api.deepseek.com/v1/',
+        apiKey: model?.apiKey || process.env.DEEPSEEK_API_KEY || '',
+        defaultModelName: 'deepseek-chat',
+        modelName: model.name,
+      });
     } else {
       const error = `Invalid model type: ${model.type}`;
       this.logger.error(error);
