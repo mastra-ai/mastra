@@ -1,5 +1,11 @@
 # @mastra/deployer-vercel
 
+## 0.0.1-alpha.5
+
+### Patch Changes
+
+- 88600bc: Deployer fixes
+
 ## 0.0.1-alpha.4
 
 ### Patch Changes
