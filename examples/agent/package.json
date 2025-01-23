@@ -14,7 +14,6 @@
   "license": "ISC",
   "dependencies": {
     "@mastra/core": "workspace:*",
-    "@mastra/deployer-cloudflare": "workspace:*",
     "zod": "^3.24.0"
   }
 }

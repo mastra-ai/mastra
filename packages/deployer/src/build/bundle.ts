@@ -82,7 +82,7 @@ const bundleStep = new Step({
       outfile: outfilePath,
       target: 'node20',
       sourcemap: true,
-      // logLevel: 'silent',
+      logLevel: 'silent',
       minify: true,
       metafile: true,
       mainFields: ['module', 'main'],

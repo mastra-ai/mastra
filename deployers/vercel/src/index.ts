@@ -123,7 +123,6 @@ export class VercelDeployer extends MastraDeployer {
 
     // Create the command array with base arguments
     const commandArgs = [
-      '--debug',
       '--scope',
       this.scope as string,
       '--cwd',
@@ -141,9 +140,6 @@ export class VercelDeployer extends MastraDeployer {
     }
 
     // Run the Vercel deploy command
-    // console.log('Running command:', 'vercel', commandArgs.join(' '));
-    console.log(`vercel ${commandArgs.join(' ')}`);
-
     child_process.execSync(`vercel ${commandArgs.join(' ')}`, {
       cwd: dir,
       env: {
