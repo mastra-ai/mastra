@@ -2580,9 +2580,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      date-fns:
-        specifier: ^4.1.0
-        version: 4.1.0
       dotenv:
         specifier: ^16.3.1
         version: 16.4.7
@@ -2604,9 +2601,6 @@ importers:
       type-fest:
         specifier: ^4.30.0
         version: 4.31.0
-      wrangler:
-        specifier: ^3.103.2
-        version: 3.103.2(bufferutil@4.0.8)(utf-8-validate@6.0.5)
       zod:
         specifier: ^3.24.1
         version: 3.24.1

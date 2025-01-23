@@ -27,6 +27,7 @@ export class VercelDeployer extends MastraDeployer {
       JSON.stringify(
         {
           version: 2,
+          installCommand: 'npm install --omit=dev',
           builds: [
             {
               src: 'index.mjs',
@@ -122,6 +123,7 @@ export class VercelDeployer extends MastraDeployer {
 
     // Create the command array with base arguments
     const commandArgs = [
+      '--debug',
       '--scope',
       this.scope as string,
       '--cwd',

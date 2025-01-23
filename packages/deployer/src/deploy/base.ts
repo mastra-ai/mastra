@@ -45,7 +45,7 @@ export class Deployer {
     }
 
     const mastraDeps = Object.entries(projectPkg.dependencies)
-      .filter(([name]) => name.startsWith('@mastra') && !name.startsWith('@mastra/deployer'))
+      .filter(([name]) => name.startsWith('@mastra'))
       .reduce((acc: any, [name, version]) => {
         if (version === 'workspace:*') {
           acc[name] = 'latest';
