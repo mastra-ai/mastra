@@ -11,20 +11,24 @@ interface CFRoute {
 
 export class CloudflareDeployer extends MastraDeployer {
   routes?: CFRoute[] = [];
+  workerNamespace?: string;
   constructor({
     scope,
     env,
     projectName,
     routes,
+    workerNamespace,
   }: {
     env?: Record<string, any>;
     scope: string;
     projectName: string;
     routes?: CFRoute[];
+    workerNamespace?: string;
   }) {
     super({ scope, env, projectName });
 
     this.routes = routes;
+    this.workerNamespace = workerNamespace;
   }
 
   writeFiles({ dir }: { dir: string }): void {
@@ -73,7 +77,10 @@ export class CloudflareDeployer extends MastraDeployer {
   }
 
   async deploy({ dir, token }: { dir: string; token: string }): Promise<void> {
-    child_process.execSync(`npm exec wrangler deploy`, {
+    const cmd = this.workerNamespace
+      ? `npm exec -- wrangler deploy --dispatch-namespace ${this.workerNamespace}`
+      : 'npm exec -- wrangler deploy';
+    child_process.execSync(cmd, {
       cwd: dir,
       stdio: 'inherit',
       env: {
