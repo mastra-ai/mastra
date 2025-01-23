@@ -18,7 +18,7 @@ export const pnpmBuild = createTool({
   }),
   execute: async ({ context: { name, packagePath } }) => {
     try {
-      console.log(chalk.green(`Building: ${name} at ${packagePath}`));
+      console.log(chalk.green(`\n Building: ${name} at ${packagePath}`));
       const p = execa(`pnpm`, ['build'], {
         stdio: 'inherit',
         cwd: packagePath,
