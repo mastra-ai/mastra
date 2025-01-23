@@ -79,7 +79,6 @@ export class Deployer {
           dependencies: {
             ...mastraDeps,
             hono: '4.6.17',
-            execa: 'latest',
             '@hono/node-server': '^1.13.7',
             superjson: '^2.2.2',
             'zod-to-json-schema': '^3.24.1',
