@@ -38,25 +38,27 @@ export class CloudflareDeployer extends MastraDeployer {
 
     const cfWorkerName = this.projectName || 'mastra';
 
-    writeFileSync(
-      join(dir, 'wrangler.json'),
-      JSON.stringify({
-        name: cfWorkerName,
-        main: 'index.mjs',
-        compatibility_date: '2024-12-02',
-        compatibility_flags: ['nodejs_compat'],
-        build: {
-          command: 'npm install',
+    const wranglerConfig: Record<string, any> = {
+      name: cfWorkerName,
+      main: 'index.mjs',
+      compatibility_date: '2024-12-02',
+      compatibility_flags: ['nodejs_compat'],
+      build: {
+        command: 'npm install',
+      },
+      observability: {
+        logs: {
+          enabled: true,
         },
-        observability: {
-          logs: {
-            enabled: true,
-          },
-        },
-        routes: this.routes,
-        vars: this.env,
-      }),
-    );
+      },
+      vars: this.env,
+    };
+
+    if (!this.workerNamespace && this.routes) {
+      wranglerConfig.routes = this.routes;
+    }
+
+    writeFileSync(join(dir, 'wrangler.json'), JSON.stringify(wranglerConfig));
   }
 
   writeIndex({ dir }: { dir: string }): void {
