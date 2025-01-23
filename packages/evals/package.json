@@ -20,27 +20,21 @@
     "./nlp": {
       "import": {
         "types": "./dist/metrics/nlp/index.d.ts",
-        "default": "./dist/evals.esm.js"
-      },
-      "require": {
-        "types": "./dist/metrics/nlp/index.d.ts",
-        "default": "./dist/index.js"
+        "default": "./dist/nlp.esm.js"
       }
     },
     "./llm": {
       "import": {
         "types": "./dist/metrics/llm/index.d.ts",
-        "default": "./dist/evals.esm.js"
-      },
-      "require": {
-        "types": "./dist/metrics/llm/index.d.ts",
-        "default": "./dist/index.js"
+        "default": "./dist/llm.esm.js"
       }
     },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "dts build",
+    "build": "dts build && pnpm build:llm && pnpm build:nlp",
+    "build:llm": "dts build --name llm --entry ./src/metrics/llm/index.ts --target node --format esm --noClean",
+    "build:nlp": "dts build --name nlp --entry ./src/metrics/nlp/index.ts --target node --format esm --noClean",
     "build:dev": "dts watch",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
   },
