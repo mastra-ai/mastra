@@ -119,7 +119,6 @@ export async function streamGenerateHandler(c: Context) {
       },
     });
   } catch (error) {
-    console.log(error);
     return handleError(error, 'Error streaming from agent');
   }
 }
