@@ -1,3 +1,8 @@
+---
+title: "Example: Chain of Thought Workflow | RAG | Mastra Docs"
+description: Example of implementing a RAG system in Mastra with chain-of-thought reasoning using OpenAI and PGVector.
+---
+
 import { GithubLink } from "../../../components/github-link";
 
 # Chain of Thought Workflow RAG
@@ -266,7 +271,7 @@ export const mastra = new Mastra({
 
 ## Document Processing
 
-Process and chunk the document:
+Process and chunks the document:
 
 ```typescript copy showLineNumbers{206} filename="src/mastra/index.ts"
 const doc = MDocument.fromText(`Your document text here...`);

@@ -1,3 +1,8 @@
+---
+title: "Reference: stream() | Text to Speech (TTS) | Mastra Docs"
+description: "Documentation for the `stream()` method in TTS, which produces an audio response stream."
+---
+
 # `stream()`
 
 The `stream()` method is used to interact with the TTS model to produce an audio response stream. This method accepts `text` and `voice` as parameters.
@@ -88,6 +93,50 @@ import { OpenAITTS } from '@mastra/tts'
       name: 'tts-1',
       apiKey: process.env.OPENAI_API_KEY!,
     },
+  });
+
+const voices = await tts.voices();
+const voiceId = voices?.[0]?.voice_id!;
+
+const { audioResult } = await tts.stream({ text: "What is AI?", voice: voiceId });
+
+// Create a write stream to simulate real-time playback
+const outputPath = path.join(process.cwd(), '/test-outputs/streaming-output.mp3');
+const writeStream = createWriteStream(outputPath);
+
+let firstChunkTime: number | null = null;
+let lastChunkTime: number | null = null;
+let totalChunks = 0;
+
+// Process chunks as they arrive
+for await (const chunk of audioResult) {
+    if (!firstChunkTime) {
+    firstChunkTime = Date.now();
+    }
+    lastChunkTime = Date.now();
+    totalChunks++;
+
+    // Write chunk immediately as it arrives
+    writeStream.write(chunk);
+
+    // Log timing of chunk arrival
+    console.log(`Received chunk ${totalChunks} at ${lastChunkTime - firstChunkTime!}ms`);
+}
+
+writeStream.end()
+```
+
+### Basic Audio Stream (PlayAI)
+
+```typescript
+import { PlayAITTS } from '@mastra/tts'
+
+ const tts = new PlayAITTS({
+    model: {
+      name: 'PlayDialog',
+      apiKey: process.env.PLAYAI_API_KEY!,
+    },
+    userId: process.env.PLAYAI_USER_ID!,
   });
 
 const voices = await tts.voices();

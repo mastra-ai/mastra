@@ -1,4 +1,5 @@
 export * from './agent';
+export * from './deployer';
 export * from './embeddings';
 export * from './engine';
 export * from './eval';
@@ -18,3 +19,4 @@ export * from './vector';
 export * from './workflows';
 export * from './hooks';
 export * from './tts';
+export * from './deployer';

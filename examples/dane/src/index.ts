@@ -6,6 +6,7 @@ import { changelog } from './commands/changelog.js';
 import { commitMessageCommand } from './commands/commit-message.js';
 import { configCommand } from './commands/config.js';
 import { issueLabelerCommand } from './commands/issue-labeler.js';
+import { linkChecker } from './commands/link-checker.js';
 import { message } from './commands/message.js';
 import { newContributorMessage } from './commands/new-contributor-message.js';
 import { publishPackages } from './commands/publish-packages.js';
@@ -38,5 +39,13 @@ program.command('telephone-game').description('Play a classic game of telephone'
 program.command('changelog').description('Mastra Changelog').action(changelog);
 
 program.command('new-contributor').description('Create a new contributor message').action(newContributorMessage);
+
+program
+  .command('link-checker')
+  .description('Check for broken links')
+  .option('-u, --url <url>', 'URL to check')
+  .action(args => {
+    linkChecker({ url: args.url });
+  });
 
 program.parse(process.argv);

@@ -15,7 +15,15 @@ import {
 import { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
 
-export type OpenAIModel = 'gpt-4' | 'gpt-4-turbo' | 'gpt-3.5-turbo' | 'gpt-4o' | 'gpt-4o-mini';
+export type OpenAIModel =
+  | 'gpt-4'
+  | 'gpt-4-turbo'
+  | 'gpt-3.5-turbo'
+  | 'gpt-4o'
+  | 'gpt-4o-mini'
+  | 'o1'
+  | 'o1-mini'
+  | 'o1-preview';
 
 export type CoreMessage = AiCoreMessage;
 
@@ -462,6 +470,15 @@ export type AzureConfig = {
   toolChoice?: 'auto' | 'required';
 };
 
+export type DeepseekModel = 'deepseek-chat' | 'deepseek-reasoner';
+
+export type DeepseekConfig = {
+  provider: 'DEEPSEEK';
+  name: DeepseekModel | (string & {});
+  apiKey?: string;
+  toolChoice?: 'auto' | 'required';
+};
+
 export type AmazonModel =
   | 'amazon-titan-tg1-large'
   | 'amazon-titan-text-express-v1'
@@ -525,7 +542,8 @@ type BuiltInModelConfig =
   | CohereConfig
   | AzureConfig
   | AmazonConfig
-  | AnthropicVertexConfig;
+  | AnthropicVertexConfig
+  | DeepseekConfig;
 
 export type ModelConfig = BuiltInModelConfig | CustomModelConfig;
 

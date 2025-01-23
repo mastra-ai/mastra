@@ -1,5 +1,44 @@
 # @mastra/tts
 
+## 0.0.1-alpha.13
+
+### Patch Changes
+
+- afb9604: Fix publish
+
+## 0.0.1-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [14064f2]
+  - @mastra/core@0.1.27-alpha.66
+
+## 0.0.1-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [e66643a]
+  - @mastra/core@0.1.27-alpha.65
+
+## 0.0.1-alpha.10
+
+### Patch Changes
+
+- 7ced7f9: bump version again for ci
+
+## 0.0.1-alpha.9
+
+### Patch Changes
+
+- 95cf789: Added export for openai and playai
+- 2e1e2e9: include openai in tts package
+
+## 0.0.1-alpha.8
+
+### Patch Changes
+
+- 442f925: PlayAI
+
 ## 0.0.1-alpha.7
 
 ### Patch Changes
