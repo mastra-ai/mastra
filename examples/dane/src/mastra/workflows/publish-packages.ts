@@ -34,16 +34,17 @@ const getPacakgesToPublish = new Step({
     const resultObj = await agent.generate(
       `
       Can you format the following text with my described format?
-      Text: ${result.text}
-
-      Precheck: ONLY RETURN DATA IF WE HAVE PACKAGES TO PUBLISH. If we do not, return empty arrays.
 
       Formatting Rules:
+      * If the text I am giving you says there are no publishable packages, return empty arrays.
       * @mastra/core must be first. 
       * @mastra/deployer must be second.
       * mastra must be third.
       
+      Text: ${result.text}
+
       Very Important:
+      * Do not include packages if we do not need to build them.
       * create-mastra is a package (not an integration) and should be listed in packages array.
       * @mastra/deployers-{name} should be listed after packages.
       * @mastra/dane should be listed after packages and integrations.    
@@ -52,14 +53,18 @@ const getPacakgesToPublish = new Step({
         output: z.object({
           packages: z.array(z.string()),
           integrations: z.array(z.string()),
+          deployers: z.array(z.string()),
           danePackage: z.string(),
         }),
       },
     );
 
+    console.log(resultObj.object);
+
     return {
       packages: resultObj?.object?.packages!,
       integrations: resultObj?.object?.integrations!,
+      deployers: resultObj?.object?.deployers!,
       danePackage: resultObj?.object?.danePackage!,
     };
   },
@@ -89,6 +94,19 @@ const assemblePackages = new Step({
         }
 
         const pkgPath = path.join(process.cwd(), 'packages', pkgName);
+        packagesToBuild.add(pkgPath);
+      });
+    }
+
+    if (payload?.deployers) {
+      payload.deployers.forEach((pkg: string) => {
+        let pkgName = pkg.replace('@mastra/deployer-', '');
+
+        if (pkgName === 'mastra') {
+          pkgName = 'cli';
+        }
+
+        const pkgPath = path.join(process.cwd(), 'deployers', pkgName);
         packagesToBuild.add(pkgPath);
       });
     }
@@ -161,18 +179,59 @@ const buildPackages = new Step({
       throw new Error('Agent not found');
     }
 
+    console.log(chalk.green(`Building packages:`));
+
+    pkgSet.forEach((pkg: string) => {
+      console.log(chalk.green(pkg));
+    });
+
     let res = await agent.generate(`
-              Here are the packages that need to be built: ${pkgSet.join(',')}.
-              Always build @mastra/core first.
-              Always build mastra second.
-              Next packages found within the 'packages' directory should be built next in parallel.
-              After packages found within the 'integrations' directory should be built in parallel.
-              dane should be built last.
-          `);
+      Here are the packages that need to be built: ${pkgSet.join(',')}.
+
+      ## Follow the rules:
+      * @mastra/core must be first. 
+      * @mastra/deployer must be second.
+      * mastra must be third.
+
+      Packages found within the 'packages' directory should be built next in parallel.
+      Packages found within the 'integrations' directory should be built in parallel.
+      Packages found within the 'deployers' directory should be built in parallel.
+
+      Build @mastra/dane last.
+      `);
 
     console.log(chalk.green(res.text));
 
     return { packages: pkgSet };
+  },
+});
+
+const verifyBuild = new Step({
+  id: 'verifyBuild',
+  outputSchema: z.object({
+    packages: z.array(z.string()),
+  }),
+  execute: async ({ context }) => {
+    if (context.machineContext?.stepResults.buildPackages?.status !== 'success') {
+      return {
+        packages: [],
+      };
+    }
+
+    const pkgSet = context.machineContext.stepResults.buildPackages.payload.packages;
+
+    for (const pkg of pkgSet) {
+      if (!existsSync(`${pkg}/dist`)) {
+        console.error(chalk.red(`Failed to build ${pkg}.`));
+        throw new Error(`Failed to build ${pkg}.`);
+      }
+    }
+
+    console.log(pkgSet);
+
+    return {
+      packages: pkgSet,
+    };
   },
 });
 
@@ -243,6 +302,14 @@ packagePublisher
       return (
         context.stepResults.assemblePackages?.status === 'success' &&
         context.stepResults.assemblePackages?.payload?.packages.length > 0
+      );
+    },
+  })
+  .then(verifyBuild, {
+    when: async ({ context }) => {
+      return (
+        context.stepResults.buildPackages?.status === 'success' &&
+        context.stepResults.buildPackages?.payload?.packages.length > 0
       );
     },
   })

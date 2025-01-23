@@ -39,7 +39,7 @@ const getPullRequest = new Step({
 
     return {
       title: pullRequest.data.title,
-      body: pullRequest.data.body,
+      body: pullRequest.data.body || '',
       diff,
     };
   },
@@ -130,7 +130,7 @@ const createMessage = new Step({
       body: {
         body: `${parentStep.payload.intro}
 
-${parentStep.payload.checklist.map(s => `- [ ] ${s}`).join('\n')}
+${parentStep.payload.checklist.map((s: string) => `- [ ] ${s}`).join('\n')}
 
 ${parentStep.payload.outro}`,
       },

@@ -59,7 +59,8 @@
     "@mastra/deployer-netlify": "0.0.0",
     "@mastra/deployer-vercel": "0.0.0",
     "@mastra/deployer": "0.0.0",
-    "generate-text-with-deepseek": "0.0.1-alpha.6"
+    "generate-text-with-deepseek": "0.0.1-alpha.6",
+    "yc-directory": "1.0.0"
   },
   "changesets": [
     "afraid-papayas-shake",
@@ -122,6 +123,7 @@
     "gorgeous-panthers-grin",
     "great-fireants-clean",
     "green-balloons-watch",
+    "green-hats-return",
     "green-tools-cry",
     "grumpy-beds-return",
     "grumpy-books-rush",
