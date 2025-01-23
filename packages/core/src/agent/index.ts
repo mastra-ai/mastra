@@ -505,7 +505,7 @@ export class Agent<
     threadId?: string;
     context?: CoreMessage[];
     runId?: string;
-    messages: UserContent[];
+    messages: CoreMessage[];
   }) {
     return {
       before: async () => {
@@ -516,15 +516,7 @@ export class Agent<
           content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
         };
 
-        const userMessages: CoreMessage[] = messages.map(content => ({
-          role: 'user',
-          content: content,
-        }));
-
-        let coreMessages = userMessages;
-
-        let convertedTools: Record<string, CoreTool> | undefined;
-
+        let coreMessages = messages;
         let threadIdToUse = threadId;
 
         if (this.#mastra?.memory && resourceid) {
@@ -532,7 +524,7 @@ export class Agent<
             resourceid,
             runId,
             threadId: threadIdToUse,
-            messages: userMessages,
+            messages,
           });
 
           coreMessages = preExecuteResult.coreMessages;
@@ -542,6 +534,8 @@ export class Agent<
             runId: this.name,
           });
         }
+
+        let convertedTools: Record<string, CoreTool> | undefined;
 
         if (
           (toolsets && Object.keys(toolsets || {}).length > 0) ||
@@ -616,17 +610,25 @@ export class Agent<
       output?: OutputType | Z;
     } = {},
   ): Promise<GenerateReturn<Z>> {
-    let messagesToUse: UserContent[] = [];
+    let messagesToUse: CoreMessage[] = [];
 
-    if (Array.isArray(messages)) {
-      messagesToUse = messages.map(content => {
-        if (typeof content === 'string') {
-          return content;
-        }
-        return content.content as string;
-      });
+    if (typeof messages === `string`) {
+      messagesToUse = [
+        {
+          role: 'user',
+          content: messages,
+        },
+      ];
     } else {
-      messagesToUse = [messages];
+      messagesToUse = messages.map(message => {
+        if (typeof message === `string`) {
+          return {
+            role: 'user',
+            content: message,
+          };
+        }
+        return message;
+      });
     }
 
     const { before, after } = this.__primitive({
@@ -701,17 +703,25 @@ export class Agent<
       output?: OutputType | Z;
     } = {},
   ): Promise<StreamReturn<Z>> {
-    let messagesToUse: UserContent[] = [];
+    let messagesToUse: CoreMessage[] = [];
 
-    if (Array.isArray(messages)) {
-      messagesToUse = messages.map(content => {
-        if (typeof content === 'string') {
-          return content;
-        }
-        return content.content as string;
-      });
+    if (typeof messages === `string`) {
+      messagesToUse = [
+        {
+          role: 'user',
+          content: messages,
+        },
+      ];
     } else {
-      messagesToUse = [messages];
+      messagesToUse = messages.map(message => {
+        if (typeof message === `string`) {
+          return {
+            role: 'user',
+            content: message,
+          };
+        }
+        return message;
+      });
     }
 
     const { before, after } = this.__primitive({
