@@ -1,7 +1,6 @@
 import { Workflow, Step } from '@mastra/core';
 import * as esbuild from 'esbuild';
 import { type BuildOptions } from 'esbuild';
-import { writeFileSync } from 'fs';
 import { join } from 'path';
 import { z } from 'zod';
 
@@ -25,7 +24,7 @@ const ensureDir = new Step({
   id: 'Ensure Directory',
   execute: async () => {
     // Ensure .mastra directory exists
-    upsertMastraDir();
+    upsertMastraDir({});
   },
 });
 
@@ -83,8 +82,8 @@ const bundleStep = new Step({
       outfile: outfilePath,
       target: 'node20',
       sourcemap: true,
-      logLevel: 'silent',
-      minify: false,
+      // logLevel: 'silent',
+      minify: true,
       metafile: true,
       mainFields: ['module', 'main'],
       conditions: ['import', 'node'],
@@ -181,10 +180,6 @@ const analyzeStep = new Step({
     if (context?.machineContext?.stepResults?.Bundle?.status !== 'success') {
       throw new Error('Bundle step failed');
     }
-    writeFileSync(
-      join(process.cwd(), '.mastra', 'metafile.json'),
-      JSON.stringify(context.machineContext?.stepResults.Bundle.payload.metafile, null, 2),
-    );
     const res = await esbuild.analyzeMetafile(context.machineContext?.stepResults.Bundle.payload.metafile);
     return res;
   },

@@ -42,7 +42,7 @@ export class Deps {
     }
   }
 
-  public async install(packages: string[] = []) {
+  public async install({ dir = process.cwd(), packages = [] }: { dir?: string; packages?: string[] }) {
     let runCommand = this.packageManager;
     if (this.packageManager === 'npm') {
       runCommand = `${this.packageManager} i`;
@@ -51,6 +51,7 @@ export class Deps {
     }
 
     return execa(`${runCommand}`, packages, {
+      cwd: dir,
       all: true,
       shell: true,
       stdio: 'inherit',

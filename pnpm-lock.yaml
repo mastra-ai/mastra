@@ -151,21 +151,6 @@ importers:
       '@mastra/deployer':
         specifier: workspace:*
         version: link:../../packages/deployer
-      date-fns:
-        specifier: ^4.1.0
-        version: 4.1.0
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.4.7
-      execa:
-        specifier: ^9.3.1
-        version: 9.5.2
-      vercel:
-        specifier: ^39.3.0
-        version: 39.3.0(@swc/core@1.10.2(@swc/helpers@0.5.15))(encoding@0.1.13)(rollup@4.30.1)
-      zod:
-        specifier: ^3.24.1
-        version: 3.24.1
     devDependencies:
       '@babel/preset-env':
         specifier: ^7.26.0
@@ -188,6 +173,9 @@ importers:
       dts-cli:
         specifier: ^2.0.5
         version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.10.5)(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5)
+      vercel:
+        specifier: ^39.3.0
+        version: 39.3.0(@swc/core@1.10.2(@swc/helpers@0.5.15))(encoding@0.1.13)(rollup@4.30.1)
       vitest:
         specifier: ^2.1.8
         version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.5)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
@@ -261,12 +249,6 @@ importers:
       '@mastra/deployer-cloudflare':
         specifier: workspace:*
         version: link:../../deployers/cloudflare
-      '@mastra/deployer-netlify':
-        specifier: workspace:*
-        version: link:../../deployers/netlify
-      '@mastra/deployer-vercel':
-        specifier: workspace:*
-        version: link:../../deployers/vercel
       zod:
         specifier: ^3.24.0
         version: 3.24.1
@@ -2598,9 +2580,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      date-fns:
-        specifier: ^4.1.0
-        version: 4.1.0
       dotenv:
         specifier: ^16.3.1
         version: 16.4.7
@@ -2622,9 +2601,6 @@ importers:
       type-fest:
         specifier: ^4.30.0
         version: 4.31.0
-      wrangler:
-        specifier: ^3.103.2
-        version: 3.103.2(bufferutil@4.0.8)(utf-8-validate@6.0.5)
       zod:
         specifier: ^3.24.1
         version: 3.24.1

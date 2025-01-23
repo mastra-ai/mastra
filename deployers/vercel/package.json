@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-vercel",
-  "version": "0.0.1-alpha.0",
+  "version": "0.0.1-alpha.3",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -29,12 +29,7 @@
   "license": "ISC",
   "dependencies": {
     "@mastra/core": "workspace:*",
-    "@mastra/deployer": "workspace:*",
-    "date-fns": "^4.1.0",
-    "dotenv": "^16.3.1",
-    "execa": "^9.3.1",
-    "vercel": "^39.3.0",
-    "zod": "^3.24.1"
+    "@mastra/deployer": "workspace:*"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.26.0",
@@ -44,6 +39,7 @@
     "@types/node": "^22.9.0",
     "@types/pg": "^8.11.10",
     "dts-cli": "^2.0.5",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "vercel": "^39.3.0"
   }
 }

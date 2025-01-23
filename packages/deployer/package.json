@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "0.0.1-alpha.0",
+  "version": "0.0.1-alpha.1",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -34,7 +34,6 @@
   "dependencies": {
     "@hono/node-server": "^1.13.7",
     "@mastra/core": "workspace:*",
-    "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",
     "esbuild": "^0.24.2",
     "execa": "^9.3.1",
@@ -42,7 +41,6 @@
     "hono": "^4.6.17",
     "superjson": "^2.2.2",
     "type-fest": "^4.30.0",
-    "wrangler": "^3.103.2",
     "zod": "^3.24.1",
     "zod-to-json-schema": "^3.24.1"
   },
