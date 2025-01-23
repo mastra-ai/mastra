@@ -2,7 +2,17 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 export const useEvalsByAgentId = (agentId: string) => {
-  const [evals, setEvals] = useState<{ timestamp: string; level: string; message: string }[]>([]);
+  const [evals, setEvals] = useState<
+    {
+      result: {
+        score: number;
+      };
+      meta: {
+        metricName: string;
+        runId: string;
+      };
+    }[]
+  >([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchEvals = async (_agentId?: string) => {

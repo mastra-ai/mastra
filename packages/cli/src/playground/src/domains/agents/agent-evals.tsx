@@ -1,6 +1,7 @@
 import { RefreshCcwIcon } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { EvalChart } from '@/components/ui/pie-chart';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { useEvalsByAgentId } from '@/hooks/use-evals';
@@ -8,7 +9,25 @@ import { useEvalsByAgentId } from '@/hooks/use-evals';
 export function AgentEvals({ agentId }: { agentId: string }) {
   const { evals, isLoading, refetchEvals } = useEvalsByAgentId(agentId);
 
-  console.log(evals);
+  if (isLoading) return <p>Loading...</p>;
+
+  const groupByMetric = (evaluations: any[]) => {
+    const groups: Record<string, any[]> = {};
+
+    for (const evaluation of evaluations) {
+      const name = evaluation.meta.metricName;
+      groups[name] = groups[name] || [];
+      groups[name].push(evaluation);
+    }
+
+    return new Map(Object.entries(groups));
+  };
+
+  const evalsByMetric = groupByMetric(evals);
+
+  const charts = Array.from(evalsByMetric.entries()).map(([metricName, evaluations]) => (
+    <EvalChart evals={evaluations} key={metricName} metricName={metricName} />
+  ));
 
   return (
     <ScrollArea className="h-[calc(100vh-126px)] px-4 pb-4 text-xs w-[400px]">
@@ -18,22 +37,7 @@ export function AgentEvals({ agentId }: { agentId: string }) {
         </Button>
       </div>
       <div className="space-y-4">
-        {evals.length === 0 ? (
-          <p className="text-gray-300/60">No evals found for this agent.</p>
-        ) : (
-          evals.map(evalResult => {
-            return (
-              <div key={evalResult.timestamp} className="space-y-2">
-                <div className="flex gap-2 items-center">
-                  <p className="text-mastra-el-4">[{evalResult.timestamp}]</p>
-                </div>
-                <p className="text-mastra-el-5 whitespace-pre-wrap">
-                  <code>{JSON.stringify(evalResult, null, 2)}</code>
-                </p>
-              </div>
-            );
-          })
-        )}
+        {evals.length === 0 ? <p className="text-gray-300/60">No evals found for this agent.</p> : charts}
       </div>
     </ScrollArea>
   );
