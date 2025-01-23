@@ -55,21 +55,21 @@ export function AgentEvals({ agentId }: { agentId: string }) {
       <TableHeader className="bg-[#171717] sticky top-0 z-10">
         <TableRow className="border-gray-6 border-b-[0.1px] text-[0.8125rem]">
           <TableHead className="w-[50px]"></TableHead>
-          <TableHead className="text-mastra-el-3">Metric</TableHead>
-          <TableHead className="text-mastra-el-3">Average Score</TableHead>
+          <TableHead className="w-[400px] text-mastra-el-3">Metric</TableHead>
+          <TableHead className="w-[200px] text-mastra-el-3">Average Score</TableHead>
           <TableHead className="text-mastra-el-3">Total Evaluations</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody className="border-b border-gray-6">
         {isLoading ? (
           <TableRow className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem]">
-            <TableCell>
+            <TableCell className="w-[50px]">
               <Skeleton className="h-8 w-8" />
             </TableCell>
-            <TableCell>
+            <TableCell className="w-[300px]">
               <Skeleton className="h-8 w-full" />
             </TableCell>
-            <TableCell>
+            <TableCell className="w-[200px]">
               <Skeleton className="h-8 w-full" />
             </TableCell>
             <TableCell>
@@ -84,7 +84,7 @@ export function AgentEvals({ agentId }: { agentId: string }) {
                 className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem] cursor-pointer hover:bg-mastra-bg-3"
                 onClick={() => toggleMetric(group.metricName)}
               >
-                <TableCell>
+                <TableCell className="w-[50px]">
                   <div className="h-8 w-full flex items-center justify-center">
                     {expandedMetrics.has(group.metricName) ? (
                       <ChevronDown className="h-4 w-4 text-mastra-el-5" />
@@ -93,25 +93,25 @@ export function AgentEvals({ agentId }: { agentId: string }) {
                     )}
                   </div>
                 </TableCell>
-                <TableCell className="font-medium text-mastra-el-5">{group.metricName}</TableCell>
-                <TableCell className="text-mastra-el-5">{group.averageScore.toFixed(2)}</TableCell>
+                <TableCell className="w-[400px] font-medium text-mastra-el-5">{group.metricName}</TableCell>
+                <TableCell className="w-[200px] text-mastra-el-5">{group.averageScore.toFixed(2)}</TableCell>
                 <TableCell className="text-mastra-el-5">{group.evals.length}</TableCell>
               </TableRow>
               {expandedMetrics.has(group.metricName) && (
                 <>
                   <TableRow className="bg-mastra-bg-3 text-[0.7rem] text-mastra-el-3">
-                    <TableCell></TableCell>
-                    <TableCell className="pl-8">Timestamp</TableCell>
-                    <TableCell>Score</TableCell>
+                    <TableCell className="w-[50px]"></TableCell>
+                    <TableCell className="w-[400px] pl-8">Timestamp</TableCell>
+                    <TableCell className="w-[200px]">Score</TableCell>
                     {showTestName && <TableCell>Test Name</TableCell>}
                   </TableRow>
                   {group.evals.map((evaluation, index) => (
                     <TableRow key={`${group.metricName}-${index}`} className="bg-mastra-bg-3 text-[0.8125rem]">
-                      <TableCell></TableCell>
-                      <TableCell className="text-mastra-el-4 pl-8">
+                      <TableCell className="w-[50px]"></TableCell>
+                      <TableCell className="w-[300px] text-mastra-el-4 pl-8">
                         {new Date(evaluation.meta.timestamp).toLocaleString()}
                       </TableCell>
-                      <TableCell className="text-mastra-el-4">{evaluation.result.score}</TableCell>
+                      <TableCell className="w-[200px] text-mastra-el-4">{evaluation.result.score}</TableCell>
                       {showTestName && <TableCell className="text-mastra-el-4">{evaluation.meta.testName}</TableCell>}
                     </TableRow>
                   ))}
