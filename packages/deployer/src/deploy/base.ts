@@ -125,7 +125,7 @@ export class Deployer {
     await bundle(dir, { useBanner, outfile: join(this.dotMastraPath, 'mastra.mjs') });
   }
 
-  async buildServer() {
+  async buildServer({ playground = false }: { playground?: boolean } = { playground: false }) {
     upsertMastraDir();
 
     const templatePath = join(this.dotMastraPath, 'hono.mjs');
@@ -136,7 +136,7 @@ export class Deployer {
       import { createHonoServer } from './server.mjs';
       import { mastra } from './mastra.mjs';
 
-      export const app = await createHonoServer(mastra, { playground: false });
+      export const app = await createHonoServer(mastra, { playground: ${playground} });
     `,
     );
   }
@@ -147,7 +147,7 @@ export class Deployer {
     copyFileSync(serverPath, join(this.dotMastraPath, 'server.mjs'));
   }
 
-  async prepare({ dir }: { dir?: string }) {
+  async prepare({ dir, playground, useBanner = true }: { useBanner?: boolean, dir?: string, playground?: boolean }) {
     console.log('[Mastra Deploy] - Preparing .mastra directory');
     upsertMastraDir();
     const dirPath = dir || path.join(process.cwd(), 'src/mastra');
@@ -155,12 +155,11 @@ export class Deployer {
     this.writeServerFile();
     await this.install();
     try {
-      await this.build({ dir: dirPath, useBanner: true });
+      await this.build({ dir: dirPath, useBanner });
     } catch (e) {
       console.error('[Mastra Deploy] - Error building:', e);
     }
 
-    console.log('BUILD SERVER');
-    await this.buildServer();
+    await this.buildServer({ playground });
   }
 }

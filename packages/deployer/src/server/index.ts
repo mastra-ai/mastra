@@ -52,10 +52,10 @@ export async function createHonoServer(mastra: Mastra, options: { playground?: b
   const mastraToolsPaths = process.env.MASTRA_TOOLS_PATH;
   const toolImports = mastraToolsPaths
     ? await Promise.all(
-        mastraToolsPaths.split(',').map(async toolPath => {
-          return import(pathToFileURL(toolPath).href);
-        }),
-      )
+      mastraToolsPaths.split(',').map(async toolPath => {
+        return import(pathToFileURL(toolPath).href);
+      }),
+    )
     : [];
 
   const tools = toolImports.reduce((acc, toolModule) => {
@@ -169,8 +169,8 @@ export async function createHonoServer(mastra: Mastra, options: { playground?: b
   return app;
 }
 
-export async function createNodeServer(mastra: Mastra) {
-  const app = await createHonoServer(mastra);
+export async function createNodeServer(mastra: Mastra, options: { playground?: boolean } = {}) {
+  const app = await createHonoServer(mastra, options);
   return serve(
     {
       fetch: app.fetch,

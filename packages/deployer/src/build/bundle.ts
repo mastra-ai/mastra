@@ -155,9 +155,7 @@ const bundleStep = new Step({
     if (useBanner) {
       esbuildConfig.banner = {
         js: `
-                import { createRequire } from "node:module";
-                import { pathToFileURL } from "node:url";
-                
+                import { createRequire } from "node:module";                
                 const require = createRequire(import.meta.url || 'file:///');
               `,
       };
