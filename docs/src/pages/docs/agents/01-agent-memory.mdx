@@ -13,7 +13,7 @@ Agent memory in Mastra is configured with two named parameters:
 - `threadId` - A unique identifier for the conversation thread.
 - `resourceId` - A unique identifier for the agent's memory context. This is used to group and manage memory for different agents or resources. You can also just set it to `default` for all agents if you don't need to group threads.
 
-You can store agent memory in-memory (ha!) or you can persist it to a backend. Let's just start by using it in-memory.
+You can currently store agent memory in (Postgres)[#using-postgres-for-agent-memory] or (UpstashKV)[#using-redis-for-agent-memory].
 
 First, create a new conversation thread:
 
@@ -132,7 +132,7 @@ Then, configure your agent to use PostgreSQL for memory storage:
 ```typescript
 // src/mastra/index.ts
 import { Mastra } from "@mastra/core";
-import { PostgresMemory } from "@mastra/memory";
+import { PgMemory } from "@mastra/memory";
 
 import { myAgent } from "./agents";
 
