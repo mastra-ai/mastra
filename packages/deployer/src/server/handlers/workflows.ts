@@ -52,7 +52,9 @@ export async function executeWorkflowHandler(c: Context) {
     const workflow = mastra.getWorkflow(workflowId);
     const body = await c.req.json();
 
-    const result = await workflow.execute(body);
+    const result = await workflow.execute({
+      triggerData: body,
+    });
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error executing workflow');
