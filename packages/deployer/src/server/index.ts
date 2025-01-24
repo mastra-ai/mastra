@@ -823,26 +823,27 @@ export async function createHonoServer(mastra: Mastra, options: { playground?: b
         root: './playground',
       }),
     );
-
-    // Catch-all route to serve index.html for any non-API routes
-    app.get('*', async (c, next) => {
-      // Skip if it's an API route
-      if (
-        c.req.path.startsWith('/api/') ||
-        c.req.path.startsWith('/swagger-ui') ||
-        c.req.path.startsWith('/openapi.json')
-      ) {
-        return await next();
-      }
-      if (options?.playground) {
-        // For all other routes, serve index.html
-        const indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
-        return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
-      }
-
-      return c.newResponse(html, 200, { 'Content-Type': 'text/html' });
-    });
   }
+
+  // Catch-all route to serve index.html for any non-API routes
+  app.get('*', async (c, next) => {
+    // Skip if it's an API route
+    if (
+      c.req.path.startsWith('/api/') ||
+      c.req.path.startsWith('/swagger-ui') ||
+      c.req.path.startsWith('/openapi.json')
+    ) {
+      return await next();
+    }
+
+    if (options?.playground) {
+      // For all other routes, serve index.html
+      const indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
+      return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
+    }
+
+    return c.newResponse(html, 200, { 'Content-Type': 'text/html' });
+  });
 
   return app;
 }

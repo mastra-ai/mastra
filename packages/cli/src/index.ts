@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import color from 'picocolors';
 
 import { PosthogAnalytics } from './analytics/index.js';
+import { build } from './commands/build.js';
 import { create } from './commands/create/create.js';
 import { deploy } from './commands/deploy/index.js';
 import { dev } from './commands/dev.js';
@@ -208,6 +209,20 @@ engine
             `Run ${color.blueBright('mastra engine add')} to get started with a Postgres DB in a docker container`,
           );
         }
+      },
+    });
+  });
+
+program
+  .command('build')
+  .description('Build your Mastra project')
+  .option('-d, --dir <path>', 'Path to directory')
+  .action(async args => {
+    await analytics.trackCommandExecution({
+      command: 'mastra build',
+      args,
+      execution: async () => {
+        await build({ dir: args.dir });
       },
     });
   });
