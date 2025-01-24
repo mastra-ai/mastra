@@ -97,12 +97,27 @@ describe('FileLogger', () => {
   describe('getLogs and getLogsByRunId', () => {
     it('should return empty array for getLogs', async () => {
       const logs = await fileLogger.getLogs();
-      expect(logs).toEqual([]);
+      expect(logs.length).toBeGreaterThan(0);
     });
 
     it('should return empty array for getLogsByRunId', async () => {
-      const logs = await fileLogger.getLogsByRunId('test-run-id');
-      expect(logs).toEqual([]);
+      const logger = createLogger({
+        name: 'test-logger',
+        level: LogLevel.INFO,
+        transports: {
+          file: fileLogger,
+        },
+      });
+
+      let logs = await fileLogger.getLogsByRunId({ runId: 'test-run-id' });
+      expect(logs.length).toBe(0);
+
+      logger.info('test info message', {
+        runId: 'test-run-id',
+      });
+
+      logs = await fileLogger.getLogsByRunId({ runId: 'test-run-id' });
+      expect(logs.length).toBe(0);
     });
   });
 });

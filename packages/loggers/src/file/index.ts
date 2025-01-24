@@ -1,5 +1,5 @@
 import { LoggerTransport, BaseLogMessage } from '@mastra/core';
-import { createWriteStream, existsSync, WriteStream } from 'fs';
+import { createWriteStream, existsSync, readFileSync, WriteStream } from 'fs';
 
 export class FileLogger extends LoggerTransport {
   path: string;
@@ -41,10 +41,19 @@ export class FileLogger extends LoggerTransport {
   }
 
   async getLogs(): Promise<BaseLogMessage[]> {
-    return [];
+    return readFileSync(this.path, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map(log => JSON.parse(log));
   }
 
-  async getLogsByRunId(runId: string): Promise<BaseLogMessage[]> {
-    return [];
+  async getLogsByRunId({ runId }: { runId: string }): Promise<BaseLogMessage[]> {
+    try {
+      const allLogs = await this.getLogs();
+      return (allLogs.filter(log => log.msg?.runId === runId) || []) as BaseLogMessage[];
+    } catch (error) {
+      console.error('Error getting logs by runId from Upstash:', error);
+      return [] as BaseLogMessage[];
+    }
   }
 }

@@ -31,8 +31,9 @@ export interface BaseLogMessage extends Run {
 }
 
 export class LoggerTransport extends Transform {
-  async getLogsByRunId({ runId }: { runId: string }) {
+  async getLogsByRunId({ runId }: { runId: string }): Promise<BaseLogMessage[]> {
     console.log(runId);
+    return [];
   }
   async getLogs(): Promise<BaseLogMessage[]> {
     return [];
@@ -72,28 +73,27 @@ export class Logger<T extends BaseLogMessage = BaseLogMessage> {
 
   protected formatMessage(message: T | string): any {
     if (typeof message === 'string') {
-      return { msg: message };
+      return { message };
     }
     return {
       ...message,
-      msg: message.message,
     };
   }
 
-  debug(message: T | string, ...args: any[]): void {
-    this.logger.debug(this.formatMessage(message), ...args);
+  debug(message: T | string, args: Record<string, any> = {}): void {
+    this.logger.debug(args, this.formatMessage(message));
   }
 
-  info(message: T | string, ...args: any[]): void {
-    this.logger.info(this.formatMessage(message), ...args);
+  info(message: T | string, args: Record<string, any> = {}): void {
+    this.logger.info(args, this.formatMessage(message));
   }
 
-  warn(message: T | string, ...args: any[]): void {
-    this.logger.warn(this.formatMessage(message), ...args);
+  warn(message: T | string, args: Record<string, any> = {}): void {
+    this.logger.warn(args, this.formatMessage(message));
   }
 
-  error(message: T | string, ...args: any[]): void {
-    this.logger.error(this.formatMessage(message), ...args);
+  error(message: T | string, args: Record<string, any> = {}): void {
+    this.logger.error(args, this.formatMessage(message));
   }
 
   // Stream creation for process output handling

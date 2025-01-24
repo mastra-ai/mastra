@@ -575,7 +575,7 @@ export class LLM extends MastraBase {
           props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
           parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
         ) {
-          this.logger.warn('Rate limit approaching, waiting 10 seconds', runId);
+          this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
           await delay(10 * 1000);
         }
       },
@@ -654,7 +654,7 @@ export class LLM extends MastraBase {
           props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
           parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
         ) {
-          this.logger.warn('Rate limit approaching, waiting 10 seconds', runId);
+          this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
           await delay(10 * 1000);
         }
       },
@@ -723,7 +723,7 @@ export class LLM extends MastraBase {
           props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
           parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
         ) {
-          this.logger.warn('Rate limit approaching, waiting 10 seconds', runId);
+          this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
           await delay(10 * 1000);
         }
       },

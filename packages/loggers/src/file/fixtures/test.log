@@ -1,6 +1,5 @@
-{"level":30,"time":1737753437629,"pid":50683,"hostname":"MacBook-Pro.local","name":"test-logger","msg":"test info message"}
-{"level":30,"time":1737753487258,"pid":50841,"hostname":"MacBook-Pro.local","name":"test-logger","msg":"test info message"}
-{"level":30,"time":1737753497270,"pid":50971,"hostname":"MacBook-Pro.local","name":"test-logger","msg":"test info message"}
-{"level":30,"time":1737753497371,"pid":50971,"hostname":"MacBook-Pro.local","name":"test-logger","msg":"message1"}
-{"level":30,"time":1737753497371,"pid":50971,"hostname":"MacBook-Pro.local","name":"test-logger","msg":"message2"}
-{"level":30,"time":1737753497372,"pid":50971,"hostname":"MacBook-Pro.local","name":"test-logger","msg":"message3"}
+{"level":30,"time":1737754916750,"pid":54493,"hostname":"MacBook-Pro.local","name":"test-logger","msg":{"message":"test info message"}}
+{"level":30,"time":1737754916853,"pid":54493,"hostname":"MacBook-Pro.local","name":"test-logger","msg":{"message":"message1"}}
+{"level":30,"time":1737754916853,"pid":54493,"hostname":"MacBook-Pro.local","name":"test-logger","msg":{"message":"message2"}}
+{"level":30,"time":1737754916853,"pid":54493,"hostname":"MacBook-Pro.local","name":"test-logger","msg":{"message":"message3"}}
+{"level":30,"time":1737754916956,"pid":54493,"hostname":"MacBook-Pro.local","name":"test-logger","runId":"test-run-id","msg":{"message":"test info message"}}
