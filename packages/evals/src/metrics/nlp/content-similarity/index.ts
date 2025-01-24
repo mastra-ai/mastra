@@ -1,18 +1,21 @@
 import { Metric, MetricResult } from '@mastra/core';
 import stringSimilarity from 'string-similarity';
 
-import { MetricOptions } from '../types';
-
 interface ContentSimilarityResult extends MetricResult {
   info: {
     similarity: number;
   };
 }
 
-export class ContentSimilarityMetric extends Metric {
-  private options: MetricOptions;
+interface ContentSimilarityOptions {
+  ignoreCase?: boolean;
+  ignoreWhitespace?: boolean;
+}
 
-  constructor(options: MetricOptions = {}) {
+export class ContentSimilarityMetric extends Metric {
+  private options: ContentSimilarityOptions;
+
+  constructor(options: ContentSimilarityOptions = {}) {
     super();
     this.options = {
       ignoreCase: true,

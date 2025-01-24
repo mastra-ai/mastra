@@ -1,4 +1,4 @@
-export const CONTEXT_POSITION_AGENT_INSTRUCTIONS = `You are a balanced and nuanced contextual recall evaluator. Your job is to determine if retrieved context nodes are aligning to the expected output.`;
+export const CONTEXT_RECALL_AGENT_INSTRUCTIONS = `You are a balanced and nuanced contextual recall evaluator. Your job is to determine if retrieved context nodes are aligning to the expected output.`;
 
 export function generateEvaluatePrompt({
   input,

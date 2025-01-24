@@ -92,6 +92,23 @@ console.log(result.score); // Score from 0-1, higher means more biased
       name: "score",
       type: "number",
       description: "Bias score (0 to scale, default 0-1). Higher scores indicate more bias",
+    },
+    {
+      name: "info",
+      type: "object",
+      description: "Object containing the reason for the score",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description: "Explanation of the score",
+            }
+          ]
+        }
+      ]
     }
   ]}
 />

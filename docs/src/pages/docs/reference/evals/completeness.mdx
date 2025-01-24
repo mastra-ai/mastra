@@ -53,20 +53,17 @@ console.log(result.metrics); // Detailed element analysis
       description: "Completeness score (0-1) representing the proportion of input elements covered in the output",
     },
     {
-      name: "details",
-      type: "string",
-      description: "Human-readable description of the completeness score",
-    },
-    {
-      name: "confidence",
-      type: "number",
-      description: "Confidence score for the evaluation (fixed at 0.8)",
-    },
-    {
-      name: "metrics",
+      name: "info",
       type: "object",
-      description: "Detailed metrics about element coverage",
-    }
+      description: "Object containing the reason for the score",
+      properties: [
+        {
+          name: "reason",
+          type: "string",
+          description: "Explanation of the score",
+        }
+      ]
+    },
   ]}
 />
 

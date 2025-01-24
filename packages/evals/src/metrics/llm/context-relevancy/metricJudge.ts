@@ -7,7 +7,7 @@ import { CONTEXT_RELEVANCY_AGENT_INSTRUCTIONS, generateEvaluatePrompt, generateR
 
 export class ContextRelevancyJudge extends MastraAgentJudge {
   constructor(model: ModelConfig) {
-    super('Context Precision', CONTEXT_RELEVANCY_AGENT_INSTRUCTIONS, model);
+    super('Context Relevancy', CONTEXT_RELEVANCY_AGENT_INSTRUCTIONS, model);
   }
 
   async evaluate(

@@ -103,9 +103,21 @@ console.log(result.reason); // Explanation of the score
       description: "Relevancy score (0 to scale, default 0-1)",
     },
     {
-      name: "reason",
-      type: "string",
-      description: "Detailed explanation of the score",
+      name: "info",
+      type: "object",
+      description: "Object containing the reason for the score",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description: "Explanation of the score",
+            }
+          ]
+        }
+      ]
     }
   ]}
 />
