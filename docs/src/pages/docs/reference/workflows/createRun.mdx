@@ -1,11 +1,13 @@
 ---
-title: "Reference: createRun() | Running Workflows | Mastra Docs"
-description: "Documentation for the `createRun()` method in workflows, which initializes a new workflow run instance."
+title: "Reference: Workflow.createRun() | Running Workflows | Mastra Docs"
+description: "Documentation for the `.createRun()` method in workflows, which initializes a new workflow run instance."
 ---
 
-# createRun
+# Workflow.createRun()
 
-The createRun method initializes a new workflow run instance. It generates a unique run ID for tracking and returns a start function that begins workflow execution when called.
+The `.createRun()` method initializes a new workflow run instance. It generates a unique run ID for tracking and returns a start function that begins workflow execution when called.
+
+One reason to use `.createRun()` vs `.execute()` is to get a unique run ID for tracking, logging, or subscribing via `.watch()`.
 
 ## Usage
 
