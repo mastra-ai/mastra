@@ -1,5 +1,11 @@
 # @mastra/deployer-cloudflare
 
+## 0.0.1-alpha.4
+
+### Patch Changes
+
+- 026ca5d: Optional dispatcher namespace configuration for cloudflare deployments
+
 ## 0.0.1-alpha.3
 
 ### Patch Changes
