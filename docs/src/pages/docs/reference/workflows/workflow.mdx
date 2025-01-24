@@ -3,7 +3,7 @@ title: "Reference: Workflow Class | Building Workflows | Mastra Docs"
 description: Documentation for the Workflow class in Mastra, which enables you to create state machines for complex sequences of operations with conditional branching and data validation.
 ---
 
-# Workflow
+# Workflow Class
 
 The Workflow class enables you to create state machines for complex sequences of operations with conditional branching and data validation.
 
@@ -184,7 +184,63 @@ await start({
 - Variable paths exist in referenced step outputs
 - Required variables are present
 
-### Error Handling
+## Workflow Status
+
+A workflow's status indicates its current execution state. The possible values are:
+
+<PropertiesTable
+  content={[
+    {
+      name: "CREATED",
+      type: "string",
+      description: "Workflow instance has been created but not started"
+    },
+    {
+      name: "RUNNING",
+      type: "string", 
+      description: "Workflow is actively executing steps"
+    },
+    {
+      name: "SUSPENDED",
+      type: "string",
+      description: "Workflow execution is paused waiting for resume"
+    },
+    {
+      name: "COMPLETED",
+      type: "string",
+      description: "All steps finished executing successfully"
+    },
+    {
+      name: "FAILED",
+      type: "string",
+      description: "Workflow encountered an error during execution"
+    }
+  ]}
+/>
+
+### Example: Handling Different Statuses
+
+```typescript showLineNumbers copy
+const { runId, start } = workflow.createRun();
+
+workflow.watch(runId, async ({ status }) => {
+  switch (status) {
+    case "SUSPENDED":
+      // Handle suspended state
+      break;
+    case "COMPLETED":
+      // Process results
+      break;
+    case "FAILED":
+      // Handle error state
+      break;
+  }
+});
+
+await start({ triggerData: data });
+```
+
+## Error Handling
 
 ```ts showLineNumbers copy
 try {

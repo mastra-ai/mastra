@@ -73,9 +73,9 @@ Now we can add the steps to the workflow. Note the `.then()` method is used to c
 ```ts showLineNumbers copy
 myWorkflow
   .step(stepOne)
-  .then(stepTwo) // chain one
+    .then(stepTwo) // chain one
   .step(stepThree)
-  .then(stepFour) // chain two
+    .then(stepFour) // chain two
   .commit();
 
 const { start } = myWorkflow.createRun();  
