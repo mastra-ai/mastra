@@ -30,7 +30,7 @@ export interface BaseLogMessage extends Run {
   type: RegisteredLogger;
 }
 
-export class LoggerTransform extends Transform {
+export class LoggerTransport extends Transform {
   async getLogsByRunId({ runId }: { runId: string }) {
     console.log(runId);
   }
@@ -39,7 +39,7 @@ export class LoggerTransform extends Transform {
   }
 }
 
-type TransportMap = Record<string, LoggerTransform>;
+type TransportMap = Record<string, LoggerTransport>;
 
 // Base Pino Logger
 export class Logger<T extends BaseLogMessage = BaseLogMessage> {
