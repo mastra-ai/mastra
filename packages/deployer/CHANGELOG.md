@@ -1,5 +1,11 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.4
+
+### Patch Changes
+
+- 7babd5c: CLI build and other
+
 ## 0.0.1-alpha.3
 
 ### Patch Changes
