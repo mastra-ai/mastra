@@ -1,7 +1,7 @@
 import { createLogger, LogLevel } from '@mastra/core';
 import fs from 'fs';
 import path from 'path';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, afterAll } from 'vitest';
 
 import { FileLogger } from './index.js';
 
@@ -17,6 +17,11 @@ describe('FileLogger', () => {
       fs.mkdirSync(testDir);
     }
     fileLogger = new FileLogger({ path: testPath });
+  });
+
+  afterAll(async () => {
+    // Cleanup test directory
+    fs.writeFileSync(testPath, ``);
   });
 
   it('should create a file stream when instantiated', () => {
@@ -116,8 +121,10 @@ describe('FileLogger', () => {
         runId: 'test-run-id',
       });
 
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       logs = await fileLogger.getLogsByRunId({ runId: 'test-run-id' });
-      expect(logs.length).toBe(0);
+      expect(logs.length).toBe(1);
     });
   });
 });

@@ -73,7 +73,7 @@ export class Logger<T extends BaseLogMessage = BaseLogMessage> {
 
   protected formatMessage(message: T | string): any {
     if (typeof message === 'string') {
-      return { message };
+      return message;
     }
     return {
       ...message,

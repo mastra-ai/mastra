@@ -1,5 +1,0 @@
-{"level":30,"time":1737754916750,"pid":54493,"hostname":"MacBook-Pro.local","name":"test-logger","msg":{"message":"test info message"}}
-{"level":30,"time":1737754916853,"pid":54493,"hostname":"MacBook-Pro.local","name":"test-logger","msg":{"message":"message1"}}
-{"level":30,"time":1737754916853,"pid":54493,"hostname":"MacBook-Pro.local","name":"test-logger","msg":{"message":"message2"}}
-{"level":30,"time":1737754916853,"pid":54493,"hostname":"MacBook-Pro.local","name":"test-logger","msg":{"message":"message3"}}
-{"level":30,"time":1737754916956,"pid":54493,"hostname":"MacBook-Pro.local","name":"test-logger","runId":"test-run-id","msg":{"message":"test info message"}}
