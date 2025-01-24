@@ -1,5 +1,13 @@
 # @mastra/deployer-cloudflare
 
+## 0.0.1-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [291fe57]
+- Updated dependencies [1a41fbf]
+  - @mastra/deployer@0.0.1-alpha.6
+
 ## 0.0.1-alpha.6
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.6
+
+### Patch Changes
+
+- 291fe57: mastra openapi, swagger ui, dynamic servers
+- 1a41fbf: Fix playground workflow triggerData on execution
+
 ## 0.0.1-alpha.5
 
 ### Patch Changes

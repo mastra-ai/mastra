@@ -1,7 +1,6 @@
 {
   "openapi": "3.1.0",
   "info": { "title": "Mastra API", "description": "Mastra API", "version": "1.0.0" },
-  "servers": [{ "url": "http://localhost:4111", "description": "Mastra Server" }],
   "paths": {
     "/api": {
       "get": {

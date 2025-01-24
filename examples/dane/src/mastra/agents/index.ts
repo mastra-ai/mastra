@@ -9,7 +9,7 @@ import { imageTool } from '../tools/image.js';
 import { readPDF } from '../tools/pdf.js';
 import { activeDistTag, pnpmBuild, pnpmChangesetPublish, pnpmChangesetStatus } from '../tools/pnpm.js';
 
-import { getBaseModelConfig } from './model';
+import { getBaseModelConfig } from './model.js';
 
 export const daneCommitMessage = new Agent({
   name: 'DaneCommitMessage',
