@@ -1,5 +1,17 @@
 # openapi-spec-writer
 
+## 0.1.1-alpha.52
+
+### Patch Changes
+
+- Updated dependencies [0be7181]
+- Updated dependencies [0be7181]
+  - @mastra/core@0.1.27-alpha.68
+  - @mastra/firecrawl@1.0.4-alpha.56
+  - @mastra/github@1.0.3-alpha.52
+  - @mastra/engine@0.0.5-alpha.62
+  - @mastra/rag@0.0.2-alpha.54
+
 ## 0.1.1-alpha.51
 
 ### Patch Changes
