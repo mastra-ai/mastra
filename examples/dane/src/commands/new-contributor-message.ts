@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 
-import { mastra } from '../mastra';
+import { mastra } from '../mastra/index.js';
 
 export async function newContributorMessage() {
   console.log(chalk.green("Hi! I'm Dane!"));
