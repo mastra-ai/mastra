@@ -30,7 +30,7 @@ const result = await metric.measure(
 );
 
 console.log(result.score); // Score from 0-1
-console.log(result.reason); // Explanation of the score
+console.log(result.info.reason); // Explanation of the score
 ```
 
 ## Constructor Parameters
@@ -160,11 +160,13 @@ const result = await metric.measure(
 // Example output:
 // {
 //   score: 4.5,
-//   reason: "The score is 4.5 out of 5 because the response directly addresses the query 
+//   info: {
+//     reason: "The score is 4.5 out of 5 because the response directly addresses the query 
 //           with specific, accurate benefits of exercise. It covers multiple aspects 
 //           (cardiovascular, muscular, and mental health) in a clear and concise manner. 
 //           The answer is highly relevant and provides appropriate detail without 
 //           including unnecessary information."
+//   }
 // }
 ```
 

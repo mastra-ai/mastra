@@ -20,8 +20,7 @@ const result = await metric.measure(
 );
 
 console.log(result.score); // Coverage score from 0-1
-console.log(result.details); // Explanation of completeness
-console.log(result.metrics); // Detailed element analysis
+console.log(result.info); // Object containing detailed metrics about element coverage
 ```
 
 ## measure() Parameters
@@ -55,42 +54,50 @@ console.log(result.metrics); // Detailed element analysis
     {
       name: "info",
       type: "object",
-      description: "Object containing the reason for the score",
+      description: "Object containing detailed metrics about element coverage",
       properties: [
         {
-          name: "reason",
-          type: "string",
-          description: "Explanation of the score",
+          type: "string[]",
+          parameters: [
+            {
+              name: "inputElements",
+              type: "string[]",
+              description: "Array of key elements extracted from the input",
+            }
+          ]
+        },
+        {
+          type: "string[]",
+          parameters: [
+            {
+              name: "outputElements",
+              type: "string[]",
+              description: "Array of key elements found in the output",
+            }
+          ]
+        },
+        {
+          type: "string[]",
+          parameters: [
+            {
+              name: "missingElements",
+              type: "string[]",
+              description: "Array of input elements not found in the output",
+            }
+          ]
+        },
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "elementCounts",
+              type: "object",
+              description: "Count of elements in input and output",
+            }
+          ]
         }
       ]
     },
-  ]}
-/>
-
-### metrics Object
-
-<PropertiesTable
-  content={[
-    {
-      name: "inputElements",
-      type: "string[]",
-      description: "Array of key elements extracted from the input",
-    },
-    {
-      name: "outputElements",
-      type: "string[]",
-      description: "Array of key elements found in the output",
-    },
-    {
-      name: "missingElements",
-      type: "string[]",
-      description: "Array of input elements not found in the output",
-    },
-    {
-      name: "elementCounts",
-      type: "{ input: number, output: number }",
-      description: "Count of elements in input and output",
-    }
   ]}
 />
 
@@ -114,17 +121,15 @@ The extraction process includes:
 ```typescript
 const metric = new CompletenessMetric();
 
-const result = await metric.measure({
-  input: "The quick brown fox jumps over the lazy dog",
-  output: "A brown fox jumped over a dog"
-});
+const result = await metric.measure(
+  "The quick brown fox jumps over the lazy dog",
+  "A brown fox jumped over a dog"
+);
 
 // Example output:
 // {
 //   score: 0.75,
-//   details: "Completeness score: 75.0%",
-//   confidence: 0.8,
-//   metrics: {
+//   info: {
 //     inputElements: ["quick", "brown", "fox", "jump", "lazy", "dog"],
 //     outputElements: ["brown", "fox", "jump", "dog"],
 //     missingElements: ["quick", "lazy"],
