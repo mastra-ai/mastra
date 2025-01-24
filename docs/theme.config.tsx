@@ -88,7 +88,7 @@ const docs: DocsThemeConfig = {
   },
   docsRepositoryBase: "https://github.com/mastra-ai/mastra/blob/main/docs",
   chat: {
-    link: "https://discord.gg/TpapMTnjyB",
+    link: "https://discord.gg/BTYqqHKUrf",
     icon: (
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -114,7 +114,10 @@ const docs: DocsThemeConfig = {
         <title>{ogTitle}</title>
         <meta property="og:title" content={ogTitle} />
         {description && <meta name="description" content={description} />}
-        <link rel="canonical" href={`${process.env.NEXT_PUBLIC_APP_URL}${router.route}`} />
+        <link
+          rel="canonical"
+          href={`${process.env.NEXT_PUBLIC_APP_URL}${router.route}`}
+        />
       </>
     );
   },

@@ -101,6 +101,6 @@ Information about the project setup can be found in the [development documentati
 
 ## Support
 
-We have an [open community Discord](https://discord.gg/TpapMTnjyB). Come and say hello and let us know if you have any questions or need any help getting things running.
+We have an [open community Discord](https://discord.gg/BTYqqHKUrf). Come and say hello and let us know if you have any questions or need any help getting things running.
 
 It's also super helpful if you leave the project a star here at the [top of the page](https://github.com/mastra-ai/mastra)
