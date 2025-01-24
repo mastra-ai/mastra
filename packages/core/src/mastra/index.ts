@@ -7,7 +7,7 @@ import { MastraDeployer } from '../deployer';
 import { MastraEngine } from '../engine';
 import { LLM } from '../llm';
 import { ModelConfig } from '../llm/types';
-import { BaseLogger, createLogger, noopLogger } from '../logger';
+import { LogLevel, Logger, createLogger, noopLogger } from '../logger';
 import { MastraMemory } from '../memory';
 import { Run } from '../run/types';
 import { SyncAction } from '../sync';
@@ -28,7 +28,7 @@ export class Mastra<
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
-  TLogger extends BaseLogger = BaseLogger,
+  TLogger extends Logger = Logger,
 > {
   private vectors?: TVectors;
   private agents: TAgents;
@@ -54,17 +54,17 @@ export class Mastra<
     deployer?: MastraDeployer;
   }) {
     /*
-    Logger
+      Logger
     */
 
     if (config?.logger === false) {
       this.logger = noopLogger as unknown as TLogger;
     } else {
-      let logger = createLogger({ type: 'CONSOLE', level: 'WARN' }) as unknown as TLogger;
       if (config?.logger) {
-        logger = config.logger;
+        this.logger = config.logger;
+      } else {
+        this.logger = createLogger({ name: 'Mastra', level: LogLevel.WARN }) as unknown as TLogger;
       }
-      this.logger = logger;
     }
 
     /**
@@ -315,11 +315,17 @@ export class Mastra<
     return this.telemetry;
   }
 
-  public async getLogsByRunId(runId: string) {
-    return await this.logger.getLogsByRunId(runId);
+  public async getLogsByRunId({ runId, transportId }: { runId: string; transportId: string }) {
+    if (!transportId) {
+      throw new Error('Transport ID is required');
+    }
+    return await this.logger.getLogsByRunId({ runId, transportId });
   }
 
-  public async getLogs() {
-    return await this.logger.getLogs();
+  public async getLogs(transportId: string) {
+    if (!transportId) {
+      throw new Error('Transport ID is required');
+    }
+    return await this.logger.getLogs(transportId);
   }
 }

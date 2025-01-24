@@ -10,7 +10,7 @@ export class MastraBase {
   constructor({ component, name }: { component: RegisteredLogger; name?: string }) {
     this.component = component;
     this.name = name;
-    this.logger = createLogger({ type: 'CONSOLE' });
+    this.logger = createLogger({ name: `${this.component} - ${this.name}` });
   }
 
   /**
@@ -39,7 +39,7 @@ export class MastraBase {
     };
 
     const logMethod = level.toLowerCase() as keyof Logger<BaseLogMessage>;
-    this.logger[logMethod]?.(logMessage);
+    (this.logger as any)[logMethod]?.(logMessage);
   }
 
   /**
