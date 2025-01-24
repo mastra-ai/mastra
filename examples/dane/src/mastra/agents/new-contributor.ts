@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core';
 
-import { getBaseModelConfig } from './model';
+import { getBaseModelConfig } from './model.js';
 
 export const daneNewContributor = new Agent({
   name: 'DaneNewContributor',
