@@ -23,6 +23,7 @@ export function registerHook(
     output: string;
     metric: Metric;
     runId: string;
+    agentName: string;
   }>,
 ): void;
 export function registerHook(hook: `${AvailableHooks}`, action: Handler<any>): void {
@@ -44,6 +45,7 @@ export function executeHook(
     output: string;
     metric: Metric;
     runId: string;
+    agentName: string;
   },
 ): void;
 

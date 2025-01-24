@@ -25,10 +25,7 @@ export async function evaluate<T extends Agent>({
 }) {
   const runIdToUse = runId || crypto.randomUUID();
 
-  const metricResult = await metric.measure({
-    input: input.toString(),
-    output: output,
-  });
+  const metricResult = await metric.measure(input.toString(), output);
   const traceObject = {
     input: input.toString(),
     output: output,

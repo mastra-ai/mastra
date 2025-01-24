@@ -34,6 +34,7 @@ import { ToolsetsInput } from './types';
 })
 export class Agent<
   TTools extends Record<string, ToolAction<any, any, any, any>> = Record<string, ToolAction<any, any, any, any>>,
+  TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > extends MastraBase {
   public name: string;
   readonly llm: LLM;
@@ -41,6 +42,7 @@ export class Agent<
   readonly model: ModelConfig;
   #mastra?: MastraPrimitives;
   tools: TTools;
+  metrics: TMetrics;
 
   constructor(config: {
     name: string;
@@ -48,6 +50,7 @@ export class Agent<
     model: ModelConfig;
     tools?: TTools;
     mastra?: MastraPrimitives;
+    metrics?: TMetrics;
   }) {
     super({ component: RegisteredLogger.AGENT });
 
@@ -62,12 +65,18 @@ export class Agent<
 
     this.tools = {} as TTools;
 
+    this.metrics = {} as TMetrics;
+
     if (config.tools) {
       this.tools = config.tools;
     }
 
     if (config.mastra) {
       this.#mastra = config.mastra;
+    }
+
+    if (config.metrics) {
+      this.metrics = config.metrics;
     }
   }
 
@@ -502,7 +511,6 @@ export class Agent<
     resourceid,
     runId,
     toolsets,
-    metrics,
   }: {
     toolsets?: ToolsetsInput;
     resourceid?: string;
@@ -510,7 +518,6 @@ export class Agent<
     context?: CoreMessage[];
     runId?: string;
     messages: UserContent[];
-    metrics?: Metric[];
   }) {
     return {
       before: async () => {
@@ -604,15 +611,16 @@ export class Agent<
           );
         }
 
-        if (metrics) {
+        if (Object.keys(this.metrics || {}).length > 0) {
           const input = messages.map(message => message).join('\n');
           const runIdToUse = runId || crypto.randomUUID();
-          for (const metric of metrics) {
+          for (const metric of Object.values(this.metrics || {})) {
             executeHook(AvailableHooks.ON_GENERATION, {
               input,
               output: outputText,
               runId: runIdToUse,
               metric,
+              agentName: this.name,
             });
           }
         }
@@ -631,7 +639,6 @@ export class Agent<
       runId,
       toolsets,
       output = 'text',
-      metrics = [],
     }: {
       toolsets?: ToolsetsInput;
       resourceid?: string;
@@ -641,7 +648,6 @@ export class Agent<
       onStepFinish?: (step: string) => void;
       maxSteps?: number;
       output?: OutputType | Z;
-      metrics?: Metric[];
     } = {},
   ): Promise<GenerateReturn<Z>> {
     let messagesToUse: UserContent[] = [];
@@ -664,7 +670,6 @@ export class Agent<
       resourceid,
       runId: runId || this.name,
       toolsets,
-      metrics,
     });
 
     const { threadId, messageObjects, convertedTools } = await before();

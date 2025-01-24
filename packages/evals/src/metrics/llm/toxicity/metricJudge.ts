@@ -29,7 +29,9 @@ export class ToxicityJudge extends MastraAgentJudge {
   async getReason({ score, toxics }: { score: number; toxics: string[] }): Promise<string> {
     const prompt = getReasonPrompt({ score, toxics });
     const result = await this.agent.generate(prompt, {
-      output: z.string(),
+      output: z.object({
+        reason: z.string(),
+      }),
     });
 
     return result.object;
