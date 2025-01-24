@@ -1,6 +1,7 @@
 {
   "name": "yc-directory",
-  "version": "1.0.0",
+  "version": "1.0.1-alpha.1",
+  "private": true,
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",

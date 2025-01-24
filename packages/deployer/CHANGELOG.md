@@ -1,5 +1,27 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [0be7181]
+- Updated dependencies [0be7181]
+  - @mastra/core@0.1.27-alpha.68
+
+## 0.0.1-alpha.4
+
+### Patch Changes
+
+- 7babd5c: CLI build and other
+
+## 0.0.1-alpha.3
+
+### Patch Changes
+
+- a291824: Deployer fixes
+- Updated dependencies [c8ff2f5]
+  - @mastra/core@0.1.27-alpha.67
+
 ## 0.0.1-alpha.2
 
 ### Patch Changes

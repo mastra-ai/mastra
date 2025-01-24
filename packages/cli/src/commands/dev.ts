@@ -148,6 +148,7 @@ async function rebundleAndRestart(
     await deployer.prepare({
       dir: mastraPath,
       playground: true,
+
       useBanner: false,
     });
 

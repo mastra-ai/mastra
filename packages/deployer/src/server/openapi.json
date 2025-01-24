@@ -1,0 +1,348 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Mastra API", "description": "Mastra API", "version": "1.0.0" },
+  "servers": [{ "url": "http://localhost:4111", "description": "Mastra Server" }],
+  "paths": {
+    "/api": {
+      "get": {
+        "responses": { "200": { "description": "Success" } },
+        "operationId": "getApi",
+        "description": "Get API status",
+        "tags": ["system"]
+      }
+    },
+    "/api/agents": {
+      "get": {
+        "responses": { "200": { "description": "List of all agents" } },
+        "operationId": "getApiAgents",
+        "description": "Get all available agents",
+        "tags": ["agents"]
+      }
+    },
+    "/api/agents/{agentId}": {
+      "get": {
+        "responses": { "200": { "description": "Agent details" }, "404": { "description": "Agent not found" } },
+        "operationId": "getApiAgentsByAgentId",
+        "description": "Get agent by ID",
+        "tags": ["agents"],
+        "parameters": [{ "name": "agentId", "in": "path", "required": true, "schema": { "type": "string" } }]
+      }
+    },
+    "/api/agents/{agentId}/generate": {
+      "post": {
+        "responses": { "200": { "description": "Generated response" }, "404": { "description": "Agent not found" } },
+        "operationId": "postApiAgentsByAgentIdGenerate",
+        "description": "Generate a response from an agent",
+        "tags": ["agents"],
+        "parameters": [{ "name": "agentId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "messages": { "type": "array", "items": { "type": "object" } },
+                  "threadId": { "type": "string" },
+                  "resourceid": { "type": "string" },
+                  "output": { "type": "object" }
+                },
+                "required": ["messages"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{agentId}/stream": {
+      "post": {
+        "responses": { "200": { "description": "Streamed response" }, "404": { "description": "Agent not found" } },
+        "operationId": "postApiAgentsByAgentIdStream",
+        "description": "Stream a response from an agent",
+        "tags": ["agents"],
+        "parameters": [{ "name": "agentId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "messages": { "type": "array", "items": { "type": "object" } },
+                  "threadId": { "type": "string" },
+                  "resourceid": { "type": "string" },
+                  "output": { "type": "object" }
+                },
+                "required": ["messages"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{agentId}/tools/{toolId}/execute": {
+      "post": {
+        "responses": {
+          "200": { "description": "Tool execution result" },
+          "404": { "description": "Tool or agent not found" }
+        },
+        "operationId": "postApiAgentsByAgentIdToolsByToolIdExecute",
+        "description": "Execute a tool through an agent",
+        "tags": ["agents"],
+        "parameters": [
+          { "name": "agentId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "toolId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "args": { "type": "object" },
+                  "threadId": { "type": "string" },
+                  "resourceid": { "type": "string" }
+                },
+                "required": ["args"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory/status": {
+      "get": {
+        "responses": { "200": { "description": "Memory status" } },
+        "operationId": "getApiMemoryStatus",
+        "description": "Get memory status",
+        "tags": ["memory"]
+      }
+    },
+    "/api/memory/threads": {
+      "get": {
+        "responses": { "200": { "description": "List of all threads" } },
+        "operationId": "getApiMemoryThreads",
+        "description": "Get all threads",
+        "tags": ["memory"]
+      },
+      "post": {
+        "responses": { "200": { "description": "Created thread" } },
+        "operationId": "postApiMemoryThreads",
+        "description": "Create a new thread",
+        "tags": ["memory"]
+      }
+    },
+    "/api/memory/threads/{threadId}": {
+      "get": {
+        "responses": { "200": { "description": "Thread details" }, "404": { "description": "Thread not found" } },
+        "operationId": "getApiMemoryThreadsByThreadId",
+        "description": "Get thread by ID",
+        "tags": ["memory"],
+        "parameters": [{ "name": "threadId", "in": "path", "required": true, "schema": { "type": "string" } }]
+      },
+      "patch": {
+        "responses": { "200": { "description": "Updated thread" }, "404": { "description": "Thread not found" } },
+        "operationId": "patchApiMemoryThreadsByThreadId",
+        "description": "Update a thread",
+        "tags": ["memory"],
+        "parameters": [{ "name": "threadId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } }
+      },
+      "delete": {
+        "responses": { "200": { "description": "Thread deleted" }, "404": { "description": "Thread not found" } },
+        "operationId": "deleteApiMemoryThreadsByThreadId",
+        "description": "Delete a thread",
+        "tags": ["memory"],
+        "parameters": [{ "name": "threadId", "in": "path", "required": true, "schema": { "type": "string" } }]
+      }
+    },
+    "/api/memory/threads/{threadId}/messages": {
+      "get": {
+        "responses": { "200": { "description": "List of messages" } },
+        "operationId": "getApiMemoryThreadsByThreadIdMessages",
+        "description": "Get messages for a thread",
+        "tags": ["memory"],
+        "parameters": [{ "name": "threadId", "in": "path", "required": true, "schema": { "type": "string" } }]
+      }
+    },
+    "/api/memory/threads/{threadId}/context-window": {
+      "get": {
+        "responses": { "200": { "description": "Context window" } },
+        "operationId": "getApiMemoryThreadsByThreadIdContext-window",
+        "description": "Get context window for a thread",
+        "tags": ["memory"],
+        "parameters": [{ "name": "threadId", "in": "path", "required": true, "schema": { "type": "string" } }]
+      }
+    },
+    "/api/memory/save-messages": {
+      "post": {
+        "responses": { "200": { "description": "Messages saved" } },
+        "operationId": "postApiMemorySave-messages",
+        "description": "Save messages",
+        "tags": ["memory"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "messages": { "type": "array", "items": { "type": "object" } } },
+                "required": ["messages"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory/threads/{threadId}/tool-result": {
+      "post": {
+        "responses": {
+          "200": { "description": "Tool execution result" },
+          "404": { "description": "Result not found" }
+        },
+        "operationId": "postApiMemoryThreadsByThreadIdTool-result",
+        "description": "Get tool execution result for a thread",
+        "tags": ["memory"],
+        "parameters": [{ "name": "threadId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "toolId": { "type": "string" }, "resultId": { "type": "string" } },
+                "required": ["toolId", "resultId"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workflows": {
+      "get": {
+        "responses": { "200": { "description": "List of all workflows" } },
+        "operationId": "getApiWorkflows",
+        "description": "Get all workflows",
+        "tags": ["workflows"]
+      }
+    },
+    "/api/workflows/{workflowId}": {
+      "get": {
+        "responses": { "200": { "description": "Workflow details" }, "404": { "description": "Workflow not found" } },
+        "operationId": "getApiWorkflowsByWorkflowId",
+        "description": "Get workflow by ID",
+        "tags": ["workflows"],
+        "parameters": [{ "name": "workflowId", "in": "path", "required": true, "schema": { "type": "string" } }]
+      }
+    },
+    "/api/workflows/{workflowId}/execute": {
+      "post": {
+        "responses": {
+          "200": { "description": "Workflow execution result" },
+          "404": { "description": "Workflow not found" }
+        },
+        "operationId": "postApiWorkflowsByWorkflowIdExecute",
+        "description": "Execute a workflow",
+        "tags": ["workflows"],
+        "parameters": [{ "name": "workflowId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "type": "object", "properties": { "input": { "type": "object" } } } }
+          }
+        }
+      }
+    },
+    "/api/syncs/{syncId}/execute": {
+      "post": {
+        "responses": { "200": { "description": "Sync execution result" }, "404": { "description": "Sync not found" } },
+        "operationId": "postApiSyncsBySyncIdExecute",
+        "description": "Execute a sync",
+        "tags": ["syncs"],
+        "parameters": [{ "name": "syncId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "type": "object", "properties": { "input": { "type": "object" } } } }
+          }
+        }
+      }
+    },
+    "/api/logs": {
+      "get": {
+        "responses": { "200": { "description": "List of all logs" } },
+        "operationId": "getApiLogs",
+        "description": "Get all logs",
+        "tags": ["logs"]
+      }
+    },
+    "/api/logs/{runId}": {
+      "get": {
+        "responses": { "200": { "description": "List of logs for run ID" } },
+        "operationId": "getApiLogsByRunId",
+        "description": "Get logs by run ID",
+        "tags": ["logs"],
+        "parameters": [{ "name": "runId", "in": "path", "required": true, "schema": { "type": "string" } }]
+      }
+    },
+    "/api/tools": {
+      "get": {
+        "responses": { "200": { "description": "List of all tools" } },
+        "operationId": "getApiTools",
+        "description": "Get all tools",
+        "tags": ["tools"]
+      }
+    },
+    "/api/tools/{toolId}": {
+      "get": {
+        "responses": { "200": { "description": "Tool details" }, "404": { "description": "Tool not found" } },
+        "operationId": "getApiToolsByToolId",
+        "description": "Get tool by ID",
+        "tags": ["tools"],
+        "parameters": [{ "name": "toolId", "in": "path", "required": true, "schema": { "type": "string" } }]
+      }
+    },
+    "/api/tools/{toolId}/result/{resultId}": {
+      "get": {
+        "responses": {
+          "200": { "description": "Tool execution result" },
+          "404": { "description": "Result not found" }
+        },
+        "operationId": "getApiToolsByToolIdResultByResultId",
+        "description": "Get tool execution result",
+        "tags": ["tools"],
+        "parameters": [
+          { "name": "toolId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "resultId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ]
+      }
+    },
+    "/api/tools/{toolId}/execute": {
+      "post": {
+        "responses": { "200": { "description": "Tool execution result" }, "404": { "description": "Tool not found" } },
+        "operationId": "postApiToolsByToolIdExecute",
+        "description": "Execute a tool",
+        "tags": ["tools"],
+        "parameters": [{ "name": "toolId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "args": { "type": "object" },
+                  "threadId": { "type": "string" },
+                  "resourceid": { "type": "string" }
+                },
+                "required": ["args"]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": { "schemas": {} }
+}

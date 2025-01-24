@@ -1,5 +1,18 @@
 # @mastra/core
 
+## 0.1.27-alpha.68
+
+### Patch Changes
+
+- 0be7181: Fix forward version
+- 0be7181: Add perplexity models
+
+## 0.1.27-alpha.67
+
+### Patch Changes
+
+- c8ff2f5: Fixed passing CoreMessages to stream/generate where the role is not user. Previously all messages would be rewritten to have role: "user"
+
 ## 0.1.27-alpha.66
 
 ### Patch Changes

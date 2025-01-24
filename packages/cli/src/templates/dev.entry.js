@@ -8,7 +8,7 @@ import { createNodeServer } from './server.mjs';
 // @ts-ignore
 const evalStore = [];
 // @ts-ignore
-const server = await createNodeServer(mastra, { playground: true, evalStore });
+const server = await createNodeServer(mastra, { playground: true, swaggerUI: true, evalStore });
 
 registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName }) => {
   evaluate({
