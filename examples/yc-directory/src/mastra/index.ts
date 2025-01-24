@@ -5,7 +5,7 @@ import { ycAgent } from './agents';
 export const mastra = new Mastra({
   agents: { ycAgent },
   logger: createLogger({
-    type: 'CONSOLE',
+    name: 'Mastra',
     level: 'INFO',
   }),
 });

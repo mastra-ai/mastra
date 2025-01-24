@@ -22,7 +22,7 @@ export const mastra = new Mastra({
   memory,
   agents: { travelAgent, travelAnalyzer },
   logger: createLogger({
-    type: "CONSOLE",
-    level: "INFO",
+    name: "CONSOLE",
+    level: "info",
   }),
 });

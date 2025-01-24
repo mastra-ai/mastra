@@ -25,16 +25,16 @@ import { Mastra, createLogger } from "@mastra/core";
 export const mastra = new Mastra({
   // Other Mastra configuration...
   logger: createLogger({
-    type: "CONSOLE",
-    level: "INFO",
+    name: "Mastra",
+    level: "info",
   }),
 });
 ```
 
 In this configuration:
 
-- `type: "CONSOLE"` specifies that logs should be output to the console.
-- `level: "INFO"` sets the minimum severity of logs to record.
+- `name: "Mastra"` specifies the name to group logs under.
+- `level: "info"` sets the minimum severity of logs to record.
 
 ### Configuration
 
