@@ -86,8 +86,8 @@ export async function getEvalsByAgentIdHandler(c: Context) {
   }
 }
 
-export async function getLiveEvalsByAgentIdHandlerFactory(evalStore: any) {
-  return async function getLiveEvalsByAgentIdHandler(c: Context) {
+export function getLiveEvalsByAgentIdHandler(evalStore: any) {
+  return async (c: Context) => {
     try {
       const mastra = c.get('mastra');
       const agentId = c.req.param('agentId');

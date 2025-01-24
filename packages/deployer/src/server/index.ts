@@ -13,7 +13,7 @@ import {
   getAgentByIdHandler,
   getAgentsHandler,
   getEvalsByAgentIdHandler,
-  getLiveEvalsByAgentIdHandlerFactory,
+  getLiveEvalsByAgentIdHandler,
   streamGenerateHandler,
 } from './handlers/agents.js';
 import { handleClientsRefresh } from './handlers/client.js';
@@ -89,7 +89,7 @@ export async function createHonoServer(mastra: Mastra, options: { playground?: b
   app.get('/api/agents', getAgentsHandler);
   app.get('/api/agents/:agentId', getAgentByIdHandler);
   app.get('/api/agents/:agentId/evals/ci', getEvalsByAgentIdHandler);
-  app.get('/api/agents/:agentId/evals/live', await getLiveEvalsByAgentIdHandlerFactory(options.evalStore));
+  app.get('/api/agents/:agentId/evals/live', getLiveEvalsByAgentIdHandler(options.evalStore));
   app.post('/api/agents/:agentId/generate', generateHandler);
   app.post('/api/agents/:agentId/stream', streamGenerateHandler);
   app.post('/api/agents/:agentId/tools/:toolId/execute', executeAgentToolHandler);
