@@ -1,23 +1,21 @@
 {
-  "name": "memory",
+  "name": "memory-upstashkv",
   "type": "module",
-  "version": "1.0.1-alpha.53",
+  "version": "1.0.1-alpha.44",
   "description": "",
   "private": true,
   "main": "index.js",
   "scripts": {
-    "start": "npx tsx --watch src/index.ts"
+    "start": "npx bun src/index.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@mastra/core": "workspace:*",
-    "@mastra/memory": "workspace:*",
-    "@mastra/rag": "workspace:*"
+    "@mastra/memory": "workspace:*"
   },
   "devDependencies": {
-    "dotenv": "^16.4.7",
     "tsx": "^4.19.2"
   }
 }

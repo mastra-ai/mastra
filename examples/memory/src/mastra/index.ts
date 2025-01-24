@@ -1,14 +1,28 @@
-import { Mastra } from '@mastra/core';
-import { UpstashKVMemory } from '@mastra/memory';
+import { Mastra, createLogger } from '@mastra/core';
+import { PgMemory } from '@mastra/memory';
+
+// import { PgVector } from '@mastra/rag';
+import 'dotenv/config';
 
 import { chefAgent } from './agents';
 
-const kvMemory = new UpstashKVMemory({
-  url: process.env.KV_REST_API_URL!,
-  token: process.env.KV_REST_API_TOKEN!,
+const connectionString = process.env.POSTGRES_CONNECTION_STRING;
+
+if (!connectionString) {
+  throw new Error(`process.env.POSTGRES_CONNECTION_STRING is required for this example to work`);
+}
+
+const pgMemory = new PgMemory({
+  connectionString,
 });
+// export const pgVector = new PgVector(connectionString);
 
 export const mastra = new Mastra({
-  memory: kvMemory,
   agents: { chefAgent },
+  // vectors: { pgVector },
+  memory: pgMemory,
+  logger: createLogger({
+    type: 'CONSOLE',
+    level: 'ERROR',
+  }),
 });

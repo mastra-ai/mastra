@@ -1,65 +1,56 @@
 import { randomUUID } from 'crypto';
 
-import { bubble } from './bubble';
 import { mastra } from './mastra';
 
+function log(message: string) {
+  console.log(`\n>>Prompt: ${message}
+`);
+  return message;
+}
+
+const agent = mastra.getAgent('chefAgent');
+const threadId = randomUUID();
+const resourceid = 'SOME_USER_ID';
+
+async function logRes(res: Awaited<ReturnType<typeof agent.stream>>) {
+  console.log(`\n👨‍🍳 Chef:`);
+  for await (const chunk of res.textStream) {
+    process.stdout.write(chunk);
+  }
+  console.log(`\n\n`);
+}
+
 async function main() {
-  const agent = mastra.getAgent('chefAgent');
-  const threadId = randomUUID();
-  const resourceid = 'SOME_USER_ID';
+  await logRes(
+    await agent.stream(
+      log(
+        'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make? Please keep your answer brief, only give me the high level steps.',
+      ),
+      {
+        threadId,
+        resourceid,
+      },
+    ),
+  );
 
-  const query1 =
-    'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?';
+  await logRes(
+    await agent.stream(
+      log(
+        "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.",
+      ),
+      {
+        threadId,
+        resourceid,
+      },
+    ),
+  );
 
-  await agent.generate(query1, {
-    threadId,
-    resourceid,
-  });
-
-  console.log('\n👨‍🍳 Thread w/ Chef Michel:');
-  let messages = await mastra.memory?.getMessages({
-    threadId,
-  });
-
-  messages?.messages?.forEach(message => {
-    if (Array.isArray(message.content)) {
-      message.content.forEach(content => {
-        bubble.print(content.text);
-      });
-    } else {
-      bubble.print(message.content);
-    }
-  });
-
-  const query2 =
-    "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
-  await agent.generate(query2, {
-    threadId,
-    resourceid,
-  });
-
-  messages = await mastra.memory?.getMessages({
-    threadId,
-  });
-
-  messages?.messages?.forEach(message => {
-    if (Array.isArray(message.content)) {
-      message.content.forEach(content => {
-        bubble.print(content.text);
-      });
-    } else {
-      bubble.print(message.content);
-    }
-  });
-
-  const m = await mastra.memory?.getContextWindow({
-    threadId,
-    format: 'core_message',
-  });
-
-  const res = await agent.generate('What did we cook before I went to my friends house?', { context: m });
-
-  console.log(res.text);
+  await logRes(
+    await agent.stream(log('What did we cook before I went to my friends house?'), {
+      threadId,
+      resourceid,
+    }),
+  );
 }
 
 main();
