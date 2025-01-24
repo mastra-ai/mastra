@@ -131,7 +131,10 @@ export function generateAnswersPrompt({
     
     Matching guidelines:
     Facts:
-    - Dates, numbers, locations must match exactly: "2020" ≠ "about 2020"
+    - Locations must be treated equally when referring to the same place:
+        - "founded in X" = "based in X" = "located in X"
+        - "headquarters in X" = "located in X"
+    - Dates and numbers must match exactly: "2020" ≠ "about 2020"
     - Names and proper nouns must match exactly: "ABC Corp" ≠ "ABC Company"
 
     Technical Content:
@@ -154,7 +157,22 @@ export function generateAnswersPrompt({
     - Future references must match exactly: "next year" ≠ "future plans"
     - Durations must match exactly: "for 5 years" ≠ "for several years"
 
-    Example:
+    Example 1:
+    Original Text: "Company Y was established in Boston in 2015. Their first ML model achieved 95% accuracy. The company relocated to Seattle in 2018."
+    Summary: "Company Y, founded in Boston in 2015 and later moved to Seattle, developed an ML model with 95% accuracy."
+    Questions: [
+    "Was Company Y founded in Boston?",
+    "Was the company founded in 2015?",
+    "Did their ML model achieve 95% accuracy?",
+    "Did they move to Seattle?",
+    "Did they move in 2018?"
+    ]
+    {
+    "answers": ["yes", "yes", "yes", "yes", "yes"]
+    }
+
+
+    Example 2:
     Original Text: "Company X created revolutionary machine learning solutions in 2020. Their AI model achieved 99% accuracy on benchmarks and processed data 5x faster than competitors. The team grew from 50 to 200 engineers."
     Summary: "In 2020, Company X made breakthroughs in ML technology. Their AI reached 99% accuracy and had 5x speed improvements. Team size increased to about 200 people."
     Questions: [
