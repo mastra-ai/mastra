@@ -779,7 +779,6 @@ export async function createHonoServer(mastra: Mastra, options: { playground?: b
     openAPISpecs(app, {
       documentation: {
         info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
-        servers: [{ url: `http://localhost:${process.env.PORT || 4111}`, description: 'Mastra Server' }],
       },
     }),
   );
