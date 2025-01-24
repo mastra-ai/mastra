@@ -114,10 +114,7 @@ const docs: DocsThemeConfig = {
         <title>{ogTitle}</title>
         <meta property="og:title" content={ogTitle} />
         {description && <meta name="description" content={description} />}
-        <link
-          rel="canonical"
-          href={`${process.env.NEXT_PUBLIC_APP_URL}${router.route}`}
-        />
+        <link rel="canonical" href={`${process.env.NEXT_PUBLIC_APP_URL}${router.route}`} />
       </>
     );
   },
