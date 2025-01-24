@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.74
+
+### Patch Changes
+
+- ef09ea1: Fix dane
+
 ## 0.0.2-alpha.72
 
 ### Patch Changes
