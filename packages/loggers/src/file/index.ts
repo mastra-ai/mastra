@@ -16,7 +16,7 @@ export class FileLogger extends LoggerTransport {
     this.fileStream = createWriteStream(this.path, { flags: 'a' });
   }
 
-  _transform(chunk: any, encoding: string, callback: (error: Error | null, chunk: any) => void) {
+  _transform(chunk: any, _encoding: string, callback: (error: Error | null, chunk: any) => void) {
     try {
       this.fileStream.write(chunk);
     } catch (error) {
@@ -50,7 +50,7 @@ export class FileLogger extends LoggerTransport {
   async getLogsByRunId({ runId }: { runId: string }): Promise<BaseLogMessage[]> {
     try {
       const allLogs = await this.getLogs();
-      return (allLogs.filter(log => log.msg?.runId === runId) || []) as BaseLogMessage[];
+      return (allLogs.filter(log => log?.runId === runId) || []) as BaseLogMessage[];
     } catch (error) {
       console.error('Error getting logs by runId from Upstash:', error);
       return [] as BaseLogMessage[];

@@ -89,7 +89,7 @@ export class UpstashTransport extends LoggerTransport {
     }
   }
 
-  _transform(chunk: string, enc: string, cb: Function) {
+  _transform(chunk: string, _enc: string, cb: Function) {
     try {
       // Parse the log line if it's a string
       const log = typeof chunk === 'string' ? JSON.parse(chunk) : chunk;
