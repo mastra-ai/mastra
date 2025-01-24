@@ -16,11 +16,79 @@ type GroupedEvals = {
 };
 
 export function AgentEvals({ agentId }: { agentId: string }) {
-  const { evals, isLoading, refetchEvals } = useEvalsByAgentId(agentId);
+  const [activeTab, setActiveTab] = useState<'live' | 'ci'>('live');
+  const {
+    evals: liveEvals,
+    isLoading: isLiveLoading,
+    refetchEvals: refetchLiveEvals,
+  } = useEvalsByAgentId(agentId, 'live');
+  const { evals: ciEvals, isLoading: isCiLoading, refetchEvals: refetchCiEvals } = useEvalsByAgentId(agentId, 'ci');
+
+  const handleRefresh = () => {
+    if (activeTab === 'live') {
+      refetchLiveEvals();
+    } else {
+      refetchCiEvals();
+    }
+  };
+
+  return (
+    <div className="flex-1 relative overflow-hidden">
+      <div className="flex justify-between sticky top-0 bg-mastra-bg-2 p-4">
+        <Tabs value={activeTab} onValueChange={value => setActiveTab(value as 'live' | 'ci')} className="w-full">
+          <TabsList>
+            <TabsTrigger value="live" className="mr-4">
+              Live
+            </TabsTrigger>
+            <TabsTrigger value="ci">CI</TabsTrigger>
+          </TabsList>
+          <div className="flex justify-end my-2">
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              disabled={activeTab === 'live' ? isLiveLoading : isCiLoading}
+            >
+              {(activeTab === 'live' ? isLiveLoading : isCiLoading) ? (
+                <RefreshCcwIcon className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCcwIcon className="w-4 h-4" />
+              )}
+            </Button>
+          </div>
+          <ScrollArea className="rounded-lg h-[calc(100vh-180px)]">
+            <TabsContent value="live" className="mt-0">
+              <EvalTable showTestName={false} evals={liveEvals} isLoading={isLiveLoading} />
+            </TabsContent>
+            <TabsContent value="ci" className="mt-0">
+              <EvalTable showTestName={true} evals={ciEvals} isLoading={isCiLoading} />
+            </TabsContent>
+          </ScrollArea>
+        </Tabs>
+      </div>
+    </div>
+  );
+}
+
+function EvalTable({
+  showTestName = false,
+  evals,
+  isLoading,
+}: {
+  showTestName: boolean;
+  evals: Evals[];
+  isLoading: boolean;
+}) {
   const [expandedMetrics, setExpandedMetrics] = useState<Set<string>>(new Set());
 
-  const liveEvals = evals.filter(evaluation => !evaluation.meta.testName);
-  const ciEvals = evals.filter(evaluation => evaluation.meta.testName);
+  const toggleMetric = (metricName: string) => {
+    const newExpanded = new Set(expandedMetrics);
+    if (newExpanded.has(metricName)) {
+      newExpanded.delete(metricName);
+    } else {
+      newExpanded.add(metricName);
+    }
+    setExpandedMetrics(newExpanded);
+  };
 
   const groupEvals = (evaluations: Evals[]): GroupedEvals[] => {
     return evaluations.reduce((groups: GroupedEvals[], evaluation) => {
@@ -40,22 +108,13 @@ export function AgentEvals({ agentId }: { agentId: string }) {
     }, []);
   };
 
-  const toggleMetric = (metricName: string) => {
-    const newExpanded = new Set(expandedMetrics);
-    if (newExpanded.has(metricName)) {
-      newExpanded.delete(metricName);
-    } else {
-      newExpanded.add(metricName);
-    }
-    setExpandedMetrics(newExpanded);
-  };
-
-  const EvalTable = ({ evaluations, showTestName = false }: { evaluations: Evals[]; showTestName: boolean }) => (
+  return (
     <Table>
       <TableHeader className="bg-[#171717] sticky top-0 z-10">
         <TableRow className="border-gray-6 border-b-[0.1px] text-[0.8125rem]">
           <TableHead className="w-[50px]"></TableHead>
-          <TableHead className="w-[400px] text-mastra-el-3">Metric</TableHead>
+          <TableHead className="w-[300px] text-mastra-el-3">Metric</TableHead>
+          <TableHead className="w-[600px] text-mastra-el-3" />
           <TableHead className="w-[200px] text-mastra-el-3">Average Score</TableHead>
           <TableHead className="text-mastra-el-3">Total Evaluations</TableHead>
         </TableRow>
@@ -66,7 +125,10 @@ export function AgentEvals({ agentId }: { agentId: string }) {
             <TableCell className="w-[50px]">
               <Skeleton className="h-8 w-8" />
             </TableCell>
-            <TableCell className="w-[300px]">
+            <TableCell className="w-[400px]">
+              <Skeleton className="h-8 w-full" />
+            </TableCell>
+            <TableCell className="w-[400px]">
               <Skeleton className="h-8 w-full" />
             </TableCell>
             <TableCell className="w-[200px]">
@@ -77,7 +139,7 @@ export function AgentEvals({ agentId }: { agentId: string }) {
             </TableCell>
           </TableRow>
         ) : (
-          groupEvals(evaluations).map(group => (
+          groupEvals(evals).map(group => (
             <>
               <TableRow
                 key={group.metricName}
@@ -93,7 +155,8 @@ export function AgentEvals({ agentId }: { agentId: string }) {
                     )}
                   </div>
                 </TableCell>
-                <TableCell className="w-[400px] font-medium text-mastra-el-5">{group.metricName}</TableCell>
+                <TableCell className="w-[300px] font-medium text-mastra-el-5">{group.metricName}</TableCell>
+                <TableCell className="w-[600px] text-mastra-el-5" />
                 <TableCell className="w-[200px] text-mastra-el-5">{group.averageScore.toFixed(2)}</TableCell>
                 <TableCell className="text-mastra-el-5">{group.evals.length}</TableCell>
               </TableRow>
@@ -101,7 +164,8 @@ export function AgentEvals({ agentId }: { agentId: string }) {
                 <>
                   <TableRow className="bg-mastra-bg-3 text-[0.7rem] text-mastra-el-3">
                     <TableCell className="w-[50px]"></TableCell>
-                    <TableCell className="w-[400px] pl-8">Timestamp</TableCell>
+                    <TableCell className="w-[300px] pl-8">Timestamp</TableCell>
+                    <TableCell className="w-[600px] pl-8">Input</TableCell>
                     <TableCell className="w-[200px]">Score</TableCell>
                     {showTestName && <TableCell>Test Name</TableCell>}
                   </TableRow>
@@ -111,6 +175,7 @@ export function AgentEvals({ agentId }: { agentId: string }) {
                       <TableCell className="w-[300px] text-mastra-el-4 pl-8">
                         {new Date(evaluation.meta.timestamp).toLocaleString()}
                       </TableCell>
+                      <TableCell className="w-[600px] text-mastra-el-4">{evaluation.input}</TableCell>
                       <TableCell className="w-[200px] text-mastra-el-4">{evaluation.result.score}</TableCell>
                       {showTestName && <TableCell className="text-mastra-el-4">{evaluation.meta.testName}</TableCell>}
                     </TableRow>
@@ -122,33 +187,5 @@ export function AgentEvals({ agentId }: { agentId: string }) {
         )}
       </TableBody>
     </Table>
-  );
-
-  return (
-    <div className="flex-1 relative overflow-hidden">
-      <div className="flex justify-between sticky top-0 bg-mastra-bg-2 p-4">
-        <Tabs defaultValue="live" className="w-full">
-          <TabsList>
-            <TabsTrigger value="live" className="mr-4">
-              Live
-            </TabsTrigger>
-            <TabsTrigger value="ci">CI</TabsTrigger>
-          </TabsList>
-          <div className="flex justify-end my-2">
-            <Button variant="outline" onClick={() => refetchEvals()}>
-              {isLoading ? <RefreshCcwIcon className="w-4 h-4 animate-spin" /> : <RefreshCcwIcon className="w-4 h-4" />}
-            </Button>
-          </div>
-          <ScrollArea className="rounded-lg h-[calc(100vh-180px)]">
-            <TabsContent value="live">
-              <EvalTable evaluations={liveEvals} showTestName={false} />
-            </TabsContent>
-            <TabsContent value="ci">
-              <EvalTable evaluations={ciEvals} showTestName={true} />
-            </TabsContent>
-          </ScrollArea>
-        </Tabs>
-      </div>
-    </div>
   );
 }

@@ -13,14 +13,14 @@ export type Evals = {
   };
 };
 
-export const useEvalsByAgentId = (agentId: string) => {
+export const useEvalsByAgentId = (agentId: string, type: 'ci' | 'live') => {
   const [evals, setEvals] = useState<Evals[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchEvals = async (_agentId?: string) => {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/agents/${_agentId ?? agentId}/evals`);
+      const res = await fetch(`/api/agents/${_agentId ?? agentId}/evals/${type}`);
       if (!res.ok) {
         const error = await res.json();
         setEvals([]);

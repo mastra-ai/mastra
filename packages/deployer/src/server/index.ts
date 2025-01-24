@@ -9,11 +9,11 @@ import { readFile } from 'fs/promises';
 import { cors } from 'hono/cors';
 
 import {
-  createEvalsHandler,
   generateHandler,
   getAgentByIdHandler,
   getAgentsHandler,
   getEvalsByAgentIdHandler,
+  getLiveEvalsByAgentIdHandlerFactory,
   streamGenerateHandler,
 } from './handlers/agents.js';
 import { handleClientsRefresh } from './handlers/client.js';
@@ -51,7 +51,7 @@ type Variables = {
   tools: Record<string, any>;
 };
 
-export async function createHonoServer(mastra: Mastra, options: { playground?: boolean } = {}) {
+export async function createHonoServer(mastra: Mastra, options: { playground?: boolean; evalStore?: any } = {}) {
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -88,8 +88,8 @@ export async function createHonoServer(mastra: Mastra, options: { playground?: b
   // Agent routes
   app.get('/api/agents', getAgentsHandler);
   app.get('/api/agents/:agentId', getAgentByIdHandler);
-  app.get('/api/agents/:agentId/evals', getEvalsByAgentIdHandler);
-  app.post('/api/agents/:agentId/evals', createEvalsHandler);
+  app.get('/api/agents/:agentId/evals/ci', getEvalsByAgentIdHandler);
+  app.get('/api/agents/:agentId/evals/live', await getLiveEvalsByAgentIdHandlerFactory(options.evalStore));
   app.post('/api/agents/:agentId/generate', generateHandler);
   app.post('/api/agents/:agentId/stream', streamGenerateHandler);
   app.post('/api/agents/:agentId/tools/:toolId/execute', executeAgentToolHandler);
@@ -178,7 +178,7 @@ export async function createHonoServer(mastra: Mastra, options: { playground?: b
   return app;
 }
 
-export async function createNodeServer(mastra: Mastra, options: { playground?: boolean } = {}) {
+export async function createNodeServer(mastra: Mastra, options: { playground?: boolean; evalStore?: any } = {}) {
   const app = await createHonoServer(mastra, options);
   return serve(
     {
