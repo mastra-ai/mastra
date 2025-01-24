@@ -1,2 +1,2 @@
-export { Metric } from './metric';
-export { type MeasureParams, type MetricResult } from './metric';
+export { Metric, type MetricResult } from './metric';
+export { evaluate } from './evaluation';

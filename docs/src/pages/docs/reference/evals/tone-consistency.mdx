@@ -15,16 +15,16 @@ import { ToneConsistencyMetric } from "@mastra/evals/nlp";
 const metric = new ToneConsistencyMetric();
 
 // Compare tone between input and output
-const result1 = await metric.measure({
-  input: "I love this amazing product!",
-  output: "This product is wonderful and fantastic!"
-});
+const result1 = await metric.measure(
+  "I love this amazing product!",
+  "This product is wonderful and fantastic!"
+);
 
 // Analyze tone stability in a single text
-const result2 = await metric.measure({
-  input: "The service is excellent. The staff is friendly. The atmosphere is perfect.",
-  output: ""  // Empty string for single-text analysis
-});
+const result2 = await metric.measure(
+  "The service is excellent. The staff is friendly. The atmosphere is perfect.",
+  ""  // Empty string for single-text analysis
+);
 
 console.log(result1.score); // Tone consistency score from 0-1
 console.log(result2.score); // Tone stability score from 0-1
@@ -59,24 +59,14 @@ console.log(result2.score); // Tone stability score from 0-1
       description: "Tone consistency/stability score (0-1)",
     },
     {
-      name: "details",
-      type: "string",
-      description: "Human-readable description of tone analysis",
-    },
-    {
-      name: "confidence",
-      type: "number",
-      description: "Confidence score (0.75 for comparison, 0.7 for stability)",
-    },
-    {
-      name: "metrics",
+      name: "info",
       type: "object",
-      description: "Detailed tone metrics",
+      description: "Detailed tone info",
     }
   ]}
 />
 
-### metrics Object (Tone Comparison)
+### info Object (Tone Comparison)
 
 <PropertiesTable
   content={[
@@ -98,7 +88,7 @@ console.log(result2.score); // Tone stability score from 0-1
   ]}
 />
 
-### metrics Object (Tone Stability)
+### info Object (Tone Stability)
 
 <PropertiesTable
   content={[
@@ -135,16 +125,14 @@ When output is empty:
 const metric = new ToneConsistencyMetric();
 
 // Tone Consistency Mode
-const consistencyResult = await metric.measure({
-  input: "This product is fantastic and amazing!",
-  output: "The product is excellent and wonderful!"
-});
+const consistencyResult = await metric.measure(
+  "This product is fantastic and amazing!",
+  "The product is excellent and wonderful!"
+);
 // Example output:
 // {
 //   score: 0.95,
-//   details: "Tone consistency: 95.0%",
-//   confidence: 0.75,
-//   metrics: {
+//   info: {
 //     responseSentiment: 0.8,
 //     referenceSentiment: 0.75,
 //     difference: 0.05
@@ -152,16 +140,14 @@ const consistencyResult = await metric.measure({
 // }
 
 // Tone Stability Mode
-const stabilityResult = await metric.measure({
-  input: "Great service! Friendly staff. Perfect atmosphere.",
-  output: ""
-});
+const stabilityResult = await metric.measure(
+  "Great service! Friendly staff. Perfect atmosphere.",
+  ""
+);
 // Example output:
 // {
 //   score: 0.9,
-//   details: "Tone stability: 90.0%",
-//   confidence: 0.7,
-//   metrics: {
+//   info: {
 //     avgSentiment: 0.6,
 //     sentimentVariance: 0.1
 //   }

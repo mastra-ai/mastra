@@ -1,5 +1,6 @@
-import { Metric, MetricResult, ModelConfig } from '@mastra/core';
+import { Metric, ModelConfig } from '@mastra/core';
 
+import { MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';
 
 import { ToxicityJudge } from './metricJudge';
@@ -19,15 +20,16 @@ export class ToxicityMetric extends Metric {
     this.judge = new ToxicityJudge(model);
   }
 
-  async measure({ input, output }: { input: string; output: string }): Promise<MetricResult> {
+  async measure(input: string, output: string): Promise<MetricResultWithReason> {
     const verdicts = await this.judge.evaluate(input, output);
     const score = this.calculateScore(verdicts);
-
-    const reason = await this.judge.getReason(score, verdicts);
+    const reason = await this.judge.getReason({ score, toxics: verdicts.map(v => v.reason) });
 
     return {
       score,
-      reason,
+      info: {
+        reason,
+      },
     };
   }
 

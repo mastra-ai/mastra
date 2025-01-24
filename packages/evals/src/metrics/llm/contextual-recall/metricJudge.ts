@@ -3,11 +3,11 @@ import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';
 
-import { CONTEXT_POSITION_AGENT_INSTRUCTIONS, generateEvaluatePrompt } from './prompts';
+import { CONTEXT_RECALL_AGENT_INSTRUCTIONS, generateEvaluatePrompt, generateReasonPrompt } from './prompts';
 
 export class ContextualRecallJudge extends MastraAgentJudge {
   constructor(model: ModelConfig) {
-    super('Context Position', CONTEXT_POSITION_AGENT_INSTRUCTIONS, model);
+    super('Contextual Recall', CONTEXT_RECALL_AGENT_INSTRUCTIONS, model);
   }
 
   async evaluate(
@@ -33,5 +33,20 @@ export class ContextualRecallJudge extends MastraAgentJudge {
     });
 
     return result.object.verdicts;
+  }
+
+  async getReason(args: {
+    score: number;
+    unsupportiveReasons: string[];
+    expectedOutput: string;
+    supportiveReasons: string[];
+  }): Promise<string> {
+    const prompt = generateReasonPrompt(args);
+    const result = await this.agent.generate(prompt, {
+      output: z.object({
+        reason: z.string(),
+      }),
+    });
+    return result.object.reason;
   }
 }

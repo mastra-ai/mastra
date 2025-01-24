@@ -84,31 +84,18 @@ export class SummarizationJudge extends MastraAgentJudge {
     return coverageVerdicts;
   }
 
-  async getReason(
-    originalText: string,
-    summary: string,
-    alignmentScore: number,
-    coverageScore: number,
-    finalScore: number,
-    scale: number,
-    alignmentVerdicts: { verdict: string; reason: string }[],
-    coverageVerdicts: { verdict: string; reason: string }[],
-  ): Promise<string> {
-    const prompt = generateReasonPrompt({
-      originalText,
-      summary,
-      alignmentScore,
-      coverageScore,
-      finalScore,
-      alignmentVerdicts,
-      coverageVerdicts,
-      scale,
-    });
-    const result = await this.agent.generate(prompt, {
-      output: z.object({
-        reason: z.string(),
-      }),
-    });
+  async getReason(args: {
+    originalText: string;
+    summary: string;
+    alignmentScore: number;
+    coverageScore: number;
+    finalScore: number;
+    alignmentVerdicts: { verdict: string; reason: string }[];
+    coverageVerdicts: { verdict: string; reason: string }[];
+    scale: number;
+  }): Promise<string> {
+    const prompt = generateReasonPrompt(args);
+    const result = await this.agent.generate(prompt, { output: z.object({ reason: z.string() }) });
     return result.object.reason;
   }
 }

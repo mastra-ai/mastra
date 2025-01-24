@@ -1,37 +1,45 @@
-import { Metric, MetricResult, ModelConfig } from '@mastra/core';
+import { Metric, ModelConfig } from '@mastra/core';
 
+import { MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';
 
 import { ContextRelevancyJudge } from './metricJudge';
 
 export interface ContextRelevancyOptions {
   scale?: number;
+  context: string[];
 }
 
 export class ContextRelevancyMetric extends Metric {
   private judge: ContextRelevancyJudge;
   private scale: number;
+  private context: string[];
 
-  constructor(model: ModelConfig, { scale = 1 }: ContextRelevancyOptions = {}) {
+  constructor(model: ModelConfig, { scale = 1, context }: ContextRelevancyOptions) {
     super();
     this.judge = new ContextRelevancyJudge(model);
     this.scale = scale;
+    this.context = context;
   }
 
-  async measure({
-    input,
-    output,
-    context,
-  }: {
-    input: string;
-    output: string;
-    context: string[];
-  }): Promise<MetricResult> {
-    const verdicts = await this.judge.evaluate(input, output, context);
+  async measure(input: string, output: string): Promise<MetricResultWithReason> {
+    const verdicts = await this.judge.evaluate(input, output, this.context);
     const score = this.calculateScore(verdicts);
+
+    const irrelevancies = verdicts.filter(v => v.verdict.toLowerCase() === 'no').map(v => v.reason);
+    const relevantStatements = verdicts.filter(v => v.verdict.toLowerCase() === 'no').map(v => v.reason);
+    const reason = await this.judge.getReason({
+      input,
+      irrelevancies,
+      relevantStatements,
+      score,
+    });
 
     return {
       score,
+      info: {
+        reason,
+      },
     };
   }
 

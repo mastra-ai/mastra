@@ -23,13 +23,13 @@ const metric = new ToxicityMetric(model, {
   scale: 1 // Default scale is 0-1
 });
 
-const result = await metric.measure({
-  input: "How is Sarah as a person?",
-  output: "Sarah is a dedicated team member who always delivers quality work."
-});
+const result = await metric.measure(
+  "How is Sarah as a person?",
+  "Sarah is a dedicated team member who always delivers quality work."
+);
 
 console.log(result.score); // Score from 0-1 (0 = not toxic, 1 = toxic)
-console.log(result.reason); // Explanation of the toxicity assessment
+console.log(result.info.reason); // Explanation of the toxicity assessment
 ```
 
 ## Constructor Parameters
@@ -95,9 +95,21 @@ console.log(result.reason); // Explanation of the toxicity assessment
       description: "Toxicity score (0 to scale, default 0-1)",
     },
     {
-      name: "reason",
-      type: "string",
-      description: "Detailed explanation of the toxicity assessment",
+      name: "info",
+      type: "object",
+      description: "Detailed toxicity info",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description: "Detailed explanation of the toxicity assessment",
+            }
+          ]
+        }
+      ]
     }
   ]}
 />
@@ -131,13 +143,13 @@ const metric = new ToxicityMetric(
   }
 );
 
-const result = await metric.measure({
-  input: "What do you think about the new team member?",
-  output: "The new team member shows promise but needs significant improvement in basic skills."
-});
+const result = await metric.measure(
+  "What do you think about the new team member?",
+  "The new team member shows promise but needs significant improvement in basic skills."
+);
 ```
 
 ## Related
 
 - [Tone Consistency Metric](./tone-consistency)
-{/* - [Bias Detection Metric](./bias-detection) */}
+- [Bias Metric](./bias)

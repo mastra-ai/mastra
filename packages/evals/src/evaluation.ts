@@ -1,20 +1,53 @@
-import { AvailableHooks, executeHook } from '@mastra/core';
-import { type Agent, type Metric } from '@mastra/core';
+import { type Agent, type Metric, evaluate as coreEvaluate } from '@mastra/core';
+
+import { GLOBAL_RUN_ID_ENV_KEY } from './constants';
 
 export async function evaluate<T extends Agent>(agent: T, input: Parameters<T['generate']>[0], metric: Metric) {
-  const agentOutput = await agent.generate(input);
-
-  const metricResult = await metric.measure({
-    input: input.toString(),
-    output: agentOutput.text,
+  const testInfo = await getCurrentTestInfo();
+  let globalRunId = process.env[GLOBAL_RUN_ID_ENV_KEY];
+  const runId = crypto.randomUUID();
+  const agentOutput = await agent.generate(input, {
+    runId,
   });
 
-  // capture infomration about the evaluation
-  executeHook(AvailableHooks.ON_EVALUATION, {
-    input: input.toString(),
+  if (!globalRunId) {
+    globalRunId = process.env[GLOBAL_RUN_ID_ENV_KEY] = crypto.randomUUID();
+    console.warn('Global run id not set, you should run "globalSetup" from "@mastra/evals" before evaluating.');
+  }
+
+  const metricResult = await coreEvaluate({
+    agentName: agent.name,
+    input,
+    metric,
     output: agentOutput.text,
-    result: metricResult,
+    globalRunId,
+    runId,
+    testInfo,
   });
 
   return metricResult;
 }
+
+export const getCurrentTestInfo = async () => {
+  // Jest
+  if (typeof expect !== 'undefined' && expect.getState) {
+    const state = expect.getState();
+    return {
+      testName: state.currentTestName,
+      testPath: state.testPath,
+    };
+  }
+
+  try {
+    const vitest = await import('vitest');
+    if (typeof vitest !== 'undefined' && vitest.expect?.getState) {
+      const state = vitest.expect.getState();
+      return {
+        testName: state.currentTestName,
+        testPath: state.testPath,
+      };
+    }
+  } catch {}
+
+  return null;
+};

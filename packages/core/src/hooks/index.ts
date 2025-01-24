@@ -1,18 +1,29 @@
-import { MetricResult } from '../eval/metric';
+import { Metric, MetricResult } from '../eval/metric';
 
 import mitt, { Handler } from './mitt';
 
 export enum AvailableHooks {
   ON_EVALUATION = 'onEvaluation',
+  ON_GENERATION = 'onGeneration',
 }
 
 const hooks = mitt();
 
 export function registerHook(
-  hook: `onEvaluation`,
+  hook: AvailableHooks.ON_EVALUATION,
   action: Handler<{
     input: string;
     output: string;
+  }>,
+): void;
+export function registerHook(
+  hook: AvailableHooks.ON_GENERATION,
+  action: Handler<{
+    input: string;
+    output: string;
+    metric: Metric;
+    runId: string;
+    agentName: string;
   }>,
 ): void;
 export function registerHook(hook: `${AvailableHooks}`, action: Handler<any>): void {
@@ -20,13 +31,24 @@ export function registerHook(hook: `${AvailableHooks}`, action: Handler<any>): v
 }
 
 export function executeHook(
-  hook: `onEvaluation`,
+  hook: AvailableHooks.ON_EVALUATION,
   action: {
     input: string;
     output: string;
     result: MetricResult;
   },
 ): void;
+export function executeHook(
+  hook: AvailableHooks.ON_GENERATION,
+  action: {
+    input: string;
+    output: string;
+    metric: Metric;
+    runId: string;
+    agentName: string;
+  },
+): void;
+
 export function executeHook(hook: `${AvailableHooks}`, data: unknown): void {
   // do not block the main thread
   setImmediate(() => {

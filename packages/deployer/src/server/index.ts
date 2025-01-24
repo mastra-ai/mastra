@@ -10,7 +10,14 @@ import { pathToFileURL } from 'url';
 import { readFile } from 'fs/promises';
 import { cors } from 'hono/cors';
 
-import { generateHandler, getAgentByIdHandler, getAgentsHandler, streamGenerateHandler } from './handlers/agents.js';
+import {
+  generateHandler,
+  getAgentByIdHandler,
+  getAgentsHandler,
+  getEvalsByAgentIdHandler,
+  getLiveEvalsByAgentIdHandler,
+  streamGenerateHandler,
+} from './handlers/agents.js';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client.js';
 import { getLogsByRunIdHandler, getLogsHandler } from './handlers/logs.js';
 import {
@@ -44,7 +51,10 @@ type Variables = {
   tools: Record<string, any>;
 };
 
-export async function createHonoServer(mastra: Mastra, options: { playground?: boolean; swaggerUI?: boolean } = {}) {
+export async function createHonoServer(
+  mastra: Mastra,
+  options: { playground?: boolean; swaggerUI?: boolean; evalStore?: any } = {},
+) {
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -128,6 +138,50 @@ export async function createHonoServer(mastra: Mastra, options: { playground?: b
       },
     }),
     getAgentByIdHandler,
+  );
+
+  app.get(
+    '/api/agents/:agentId/evals/ci',
+    describeRoute({
+      description: 'Get CI evals by agent ID',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'List of evals',
+        },
+      },
+    }),
+    getEvalsByAgentIdHandler,
+  );
+
+  app.get(
+    '/api/agents/:agentId/evals/live',
+    describeRoute({
+      description: 'Get live evals by agent ID',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'List of evals',
+        },
+      },
+    }),
+    getLiveEvalsByAgentIdHandler(options.evalStore),
   );
 
   app.post(
@@ -847,7 +901,10 @@ export async function createHonoServer(mastra: Mastra, options: { playground?: b
   return app;
 }
 
-export async function createNodeServer(mastra: Mastra, options: { playground?: boolean; swaggerUI?: boolean } = {}) {
+export async function createNodeServer(
+  mastra: Mastra,
+  options: { playground?: boolean; swaggerUI?: boolean; evalStore?: any } = {},
+) {
   const app = await createHonoServer(mastra, options);
   return serve(
     {

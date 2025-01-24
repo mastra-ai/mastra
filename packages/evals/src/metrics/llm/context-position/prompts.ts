@@ -93,48 +93,43 @@ JSON:
 }
 
 export function generateReasonPrompt({
+  score,
+  verdicts,
   input,
   output,
-  verdicts,
-  score,
   scale,
 }: {
+  score: number;
+  verdicts: { verdict: string; reason: string }[];
   input: string;
   output: string;
-  verdicts: Array<{ verdict: string; reason: string }>;
-  score: number;
   scale: number;
 }) {
-  return `Given the input, output, verdicts, and position score, and the highest possible score is ${scale}, provide a BRIEF explanation for the score. Focus on both relevance and positioning of the context.
-  The verdicts are a list containing \`verdict\` ('yes' or 'no' for relevance), \`reason\` (explaining the verdict) and \`node\` (the context text). Contexts are listed in their ranking order.
-
-**
-IMPORTANT: Return only JSON format with a single 'reason' key explaining the score.
-Example JSON:
-{
-    "reason": "The score is <score> because <explanation>."
-}
-
-Guidelines:
-- Don't mention 'verdict' - refer to relevant/irrelevant nodes instead
-- Use information from the \`reason\` field, not the field itself
-- Reference node positions (first, second, etc.) when explaining relevance
-- For perfect scores (${scale}.0), emphasize both relevance and optimal ordering
-- Always reference the ranking order when discussing relevance
-**
-
-Position Score:
-${score}
-
-Input:
-${input}
-
-Output:
-${output}
-
-Verdicts:
-${JSON.stringify(verdicts)}
-
-JSON:
-`;
+  return `Explain the irrelevancy score where 0 is the lowest and ${scale} is the highest for the LLM's response using this context:
+  Context:
+  Input: ${input}
+  Output: ${output}
+  Score: ${score}
+  Verdicts: ${JSON.stringify(verdicts)}
+  
+  Rules:
+  - Explain score based on mix of direct answers and related context
+  - Consider both full and partial relevance
+  - Keep explanation concise and focused
+  - Use given score, don't recalculate
+  - Don't judge factual correctness
+  - Explain both relevant and irrelevant aspects
+  - For mixed responses, explain the balance
+    Format:
+    {
+        "reason": "The score is {score} because {explanation of overall relevance}"
+    }
+    Example Responses:
+    {
+        "reason": "The score is 7 because while the first statement directly answers the question, the additional context is only partially relevant"
+    }
+    {
+        "reason": "The score is 3 because while the answer discusses the right topic, it doesn't directly address the question"
+    }
+    `;
 }

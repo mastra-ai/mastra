@@ -17,14 +17,13 @@ const metric = new ContentSimilarityMetric({
   ignoreWhitespace: true
 });
 
-const result = await metric.measure({
-  input: "Hello, world!",
-  output: "hello world"
-});
+const result = await metric.measure(
+  "Hello, world!",
+  "hello world"
+);
 
 console.log(result.score); // Similarity score from 0-1
-console.log(result.details); // Explanation of similarity
-console.log(result.metrics); // Detailed similarity metrics
+console.log(result.info); // Detailed similarity metrics
 ```
 
 ## Constructor Parameters
@@ -33,7 +32,7 @@ console.log(result.metrics); // Detailed similarity metrics
   content={[
     {
       name: "options",
-      type: "MetricOptions",
+      type: "ContentSimilarityOptions",
       description: "Configuration options for similarity comparison",
       isOptional: true,
       defaultValue: "{ ignoreCase: true, ignoreWhitespace: true }",
@@ -41,7 +40,7 @@ console.log(result.metrics); // Detailed similarity metrics
   ]}
 />
 
-### MetricOptions
+### ContentSimilarityOptions
 
 <PropertiesTable
   content={[
@@ -91,32 +90,22 @@ console.log(result.metrics); // Detailed similarity metrics
       description: "Similarity score (0-1) where 1 indicates perfect similarity",
     },
     {
-      name: "details",
-      type: "string",
-      description: "Human-readable description of the similarity score",
-    },
-    {
-      name: "confidence",
-      type: "number",
-      description: "Confidence score for the evaluation (fixed at 0.9)",
-    },
-    {
-      name: "metrics",
+      name: "info",
       type: "object",
-      description: "Additional similarity metrics",
-    }
-  ]}
-/>
-
-### metrics Object
-
-<PropertiesTable
-  content={[
-    {
-      name: "similarity",
-      type: "number",
-      description: "Raw similarity score between the two texts",
-    }
+      description: "Detailed similarity metrics",
+      properties: [
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "similarity",
+              type: "number",
+              description: "Raw similarity score between the two texts",
+            }
+          ]
+        }
+      ]
+    },
   ]}
 />
 
@@ -135,17 +124,15 @@ const caseSensitiveMetric = new ContentSimilarityMetric({
   ignoreWhitespace: true
 });
 
-const result1 = await caseSensitiveMetric.measure({
-  input: "Hello World",
-  output: "hello world"
-}); // Lower score due to case difference
+const result1 = await caseSensitiveMetric.measure(
+  "Hello World",
+  "hello world"
+); // Lower score due to case difference
 
 // Example output:
 // {
 //   score: 0.75,
-//   details: "Content similarity: 75.0%",
-//   confidence: 0.9,
-//   metrics: { similarity: 0.75 }
+//   info: { similarity: 0.75 }
 // }
 
 // Strict whitespace comparison
@@ -154,17 +141,15 @@ const strictWhitespaceMetric = new ContentSimilarityMetric({
   ignoreWhitespace: false
 });
 
-const result2 = await strictWhitespaceMetric.measure({
-  input: "Hello   World",
-  output: "Hello World"
-}); // Lower score due to whitespace difference
+const result2 = await strictWhitespaceMetric.measure(
+  "Hello   World",
+  "Hello World"
+); // Lower score due to whitespace difference
 
 // Example output:
 // {
 //   score: 0.85,
-//   details: "Content similarity: 85.0%",
-//   confidence: 0.9,
-//   metrics: { similarity: 0.85 }
+//   info: { similarity: 0.85 }
 // }
 ```
 

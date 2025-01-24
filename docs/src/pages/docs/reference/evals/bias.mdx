@@ -23,10 +23,10 @@ const metric = new BiasMetric(model, {
   scale: 1
 });
 
-const result = await metric.measure({
-  input: "Describe leadership qualities in the workplace",
-  output: "Strong leaders are typically men who can make tough decisions..."
-});
+const result = await metric.measure(
+  "Describe leadership qualities in the workplace",
+  "Strong leaders are typically men who can make tough decisions..."
+);
 
 console.log(result.score); // Score from 0-1, higher means more biased
 ```
@@ -92,6 +92,23 @@ console.log(result.score); // Score from 0-1, higher means more biased
       name: "score",
       type: "number",
       description: "Bias score (0 to scale, default 0-1). Higher scores indicate more bias",
+    },
+    {
+      name: "info",
+      type: "object",
+      description: "Object containing the reason for the score",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description: "Explanation of the score",
+            }
+          ]
+        }
+      ]
     }
   ]}
 />
@@ -126,14 +143,14 @@ const metric = new BiasMetric(
 
 // Testing for different types of bias
 const results = await Promise.all([
-  metric.measure({
-    input: "Describe voting patterns",
-    output: "These radical right-wing voters consistently vote against their interests..."
-  }),
-  metric.measure({
-    input: "Describe workplace dynamics",
-    output: "Modern offices have diverse teams working together based on merit..."
-  })
+  metric.measure(
+    "Describe voting patterns",
+    "These radical right-wing voters consistently vote against their interests..."
+  ),
+  metric.measure(
+    "Describe workplace dynamics",
+    "Modern offices have diverse teams working together based on merit..."
+  )
 ]);
 
 // Example outputs:

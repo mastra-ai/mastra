@@ -14,14 +14,13 @@ import { CompletenessMetric } from "@mastra/evals/nlp";
 
 const metric = new CompletenessMetric();
 
-const result = await metric.measure({
-  input: "Explain how photosynthesis works in plants using sunlight, water, and carbon dioxide.",
-  output: "Plants use sunlight to convert water and carbon dioxide into glucose through photosynthesis."
-});
+const result = await metric.measure(
+  "Explain how photosynthesis works in plants using sunlight, water, and carbon dioxide.",
+  "Plants use sunlight to convert water and carbon dioxide into glucose through photosynthesis."
+);
 
 console.log(result.score); // Coverage score from 0-1
-console.log(result.details); // Explanation of completeness
-console.log(result.metrics); // Detailed element analysis
+console.log(result.info); // Object containing detailed metrics about element coverage
 ```
 
 ## measure() Parameters
@@ -53,47 +52,52 @@ console.log(result.metrics); // Detailed element analysis
       description: "Completeness score (0-1) representing the proportion of input elements covered in the output",
     },
     {
-      name: "details",
-      type: "string",
-      description: "Human-readable description of the completeness score",
-    },
-    {
-      name: "confidence",
-      type: "number",
-      description: "Confidence score for the evaluation (fixed at 0.8)",
-    },
-    {
-      name: "metrics",
+      name: "info",
       type: "object",
-      description: "Detailed metrics about element coverage",
-    }
-  ]}
-/>
-
-### metrics Object
-
-<PropertiesTable
-  content={[
-    {
-      name: "inputElements",
-      type: "string[]",
-      description: "Array of key elements extracted from the input",
+      description: "Object containing detailed metrics about element coverage",
+      properties: [
+        {
+          type: "string[]",
+          parameters: [
+            {
+              name: "inputElements",
+              type: "string[]",
+              description: "Array of key elements extracted from the input",
+            }
+          ]
+        },
+        {
+          type: "string[]",
+          parameters: [
+            {
+              name: "outputElements",
+              type: "string[]",
+              description: "Array of key elements found in the output",
+            }
+          ]
+        },
+        {
+          type: "string[]",
+          parameters: [
+            {
+              name: "missingElements",
+              type: "string[]",
+              description: "Array of input elements not found in the output",
+            }
+          ]
+        },
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "elementCounts",
+              type: "object",
+              description: "Count of elements in input and output",
+            }
+          ]
+        }
+      ]
     },
-    {
-      name: "outputElements",
-      type: "string[]",
-      description: "Array of key elements found in the output",
-    },
-    {
-      name: "missingElements",
-      type: "string[]",
-      description: "Array of input elements not found in the output",
-    },
-    {
-      name: "elementCounts",
-      type: "{ input: number, output: number }",
-      description: "Count of elements in input and output",
-    }
   ]}
 />
 
@@ -117,17 +121,15 @@ The extraction process includes:
 ```typescript
 const metric = new CompletenessMetric();
 
-const result = await metric.measure({
-  input: "The quick brown fox jumps over the lazy dog",
-  output: "A brown fox jumped over a dog"
-});
+const result = await metric.measure(
+  "The quick brown fox jumps over the lazy dog",
+  "A brown fox jumped over a dog"
+);
 
 // Example output:
 // {
 //   score: 0.75,
-//   details: "Completeness score: 75.0%",
-//   confidence: 0.8,
-//   metrics: {
+//   info: {
 //     inputElements: ["quick", "brown", "fox", "jump", "lazy", "dog"],
 //     outputElements: ["brown", "fox", "jump", "dog"],
 //     missingElements: ["quick", "lazy"],

@@ -19,23 +19,26 @@ const model = {
   apiKey: process.env.OPENAI_API_KEY
 };
 
-const metric = new HallucinationMetric(model);
-
-const result = await metric.measure({
-  input: "Tell me about Tesla's founding.",
-  output: "Tesla was founded in 2004 by Elon Musk in California.",
+const metric = new HallucinationMetric(model, {
   context: ["Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning in San Carlos, California."]
 });
 
+const result = await metric.measure(
+  "Tell me about Tesla's founding.",
+  "Tesla was founded in 2004 by Elon Musk in California.",
+);
+
 console.log(result.score); // Score from 0-1
-console.log(result.reason); // Explanation of the score
+console.log(result.info.reason); // Explanation of the score
 
 // Example output:
 // {
 //   score: 0.67,
-//   reason: "The score is 0.67 because two out of three statements from the context 
+//   info: {
+//     reason: "The score is 0.67 because two out of three statements from the context 
 //           (founding year and founders) were contradicted by the output, while the 
 //           location statement was not contradicted."
+//   }
 // }
 ```
 
@@ -53,8 +56,7 @@ console.log(result.reason); // Explanation of the score
       name: "options",
       type: "HallucinationMetricOptions",
       description: "Configuration options for the metric",
-      isOptional: true,
-      defaultValue: "{ scale: 1 }",
+      isOptional: false,
     }
   ]}
 />
@@ -69,6 +71,12 @@ console.log(result.reason); // Explanation of the score
       description: "Maximum score value",
       isOptional: true,
       defaultValue: "1",
+    },
+    {
+      name: "context",
+      type: "string[]",
+      description: "Array of context pieces used as the source of truth",
+      isOptional: false,
     }
   ]}
 />
@@ -88,12 +96,6 @@ console.log(result.reason); // Explanation of the score
       type: "string",
       description: "The LLM's response to evaluate",
       isOptional: false,
-    },
-    {
-      name: "context",
-      type: "string[]",
-      description: "Array of context pieces used as the source of truth",
-      isOptional: false,
     }
   ]}
 />
@@ -108,9 +110,21 @@ console.log(result.reason); // Explanation of the score
       description: "Hallucination score (0 to scale, default 0-1)",
     },
     {
-      name: "reason",
-      type: "string",
-      description: "Detailed explanation of the score and identified contradictions",
+      name: "info",
+      type: "object",
+      description: "Object containing the reason for the score",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+                name: "reason",
+                type: "string",
+                description: "Detailed explanation of the score and identified contradictions",
+            }
+          ]
+        }
+      ]
     }
   ]}
 />
@@ -150,11 +164,7 @@ Note: The score represents the degree of hallucination, so a lower score indicat
 ## Example with Analysis
 
 ```typescript
-const metric = new HallucinationMetric(model);
-
-const result = await metric.measure({
-  input: "What are the key details about OpenAI?",
-  output: "OpenAI was founded in 2015 by Elon Musk and Sam Altman with a $2 billion investment.",
+const metric = new HallucinationMetric(model, {
   context: [
     "OpenAI was founded in December 2015 by Sam Altman, Greg Brockman, and others.",
     "The company launched with a $1 billion investment commitment.",
@@ -162,13 +172,20 @@ const result = await metric.measure({
   ]
 });
 
+const result = await metric.measure({
+  input: "What are the key details about OpenAI?",
+  output: "OpenAI was founded in 2015 by Elon Musk and Sam Altman with a $2 billion investment.",
+});
+
 // Example output:
 // {
 //   score: 0.33,
-//   reason: "The score is 0.33 because one out of three statements from the context 
+//   info: {
+//     reason: "The score is 0.33 because one out of three statements from the context 
 //           was contradicted (the investment amount was stated as $2 billion instead 
 //           of $1 billion). The founding date was correct, and while the output's 
 //           description of founders was incomplete, it wasn't strictly contradictory."
+//   }
 // }
 ```
 

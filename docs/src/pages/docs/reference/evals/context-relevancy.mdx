@@ -1,16 +1,16 @@
 ---
-title: "Reference: Contextual Relevancy | Evals | Mastra Docs"
-description: Documentation for the Contextual Relevancy Metric, which evaluates the relevance of retrieved context in RAG pipelines.
+title: "Reference: Context Relevancy | Evals | Mastra Docs"
+description: Documentation for the Context Relevancy Metric, which evaluates the relevance of retrieved context in RAG pipelines.
 ---
 
-# ContextualRelevancyMetric
+# ContextRelevancyMetric
 
-The `ContextualRelevancyMetric` class evaluates the quality of your RAG (Retrieval-Augmented Generation) pipeline's retriever by measuring how relevant the retrieved context is to the input query. It uses an LLM-based evaluation system that first extracts statements from the context and then assesses their relevance to the input.
+The `ContextRelevancyMetric` class evaluates the quality of your RAG (Retrieval-Augmented Generation) pipeline's retriever by measuring how relevant the retrieved context is to the input query. It uses an LLM-based evaluation system that first extracts statements from the context and then assesses their relevance to the input.
 
 ## Basic Usage
 
 ```typescript
-import { ContextualRelevancyMetric } from "@mastra/evals/llm";
+import { ContextRelevancyMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
 const model = {
@@ -19,13 +19,7 @@ const model = {
   apiKey: process.env.OPENAI_API_KEY
 };
 
-const metric = new ContextualRelevancyMetric(model, {
-  scale: 1
-});
-
-const result = await metric.measure({
-  input: "What are our product's security features?",
-  output: "Our product uses encryption and requires 2FA.",
+const metric = new ContextRelevancyMetric(model, {
   context: [
     "All data is encrypted at rest and in transit",
     "Two-factor authentication is mandatory",
@@ -34,8 +28,13 @@ const result = await metric.measure({
   ]
 });
 
+const result = await metric.measure(
+  "What are our product's security features?",
+  "Our product uses encryption and requires 2FA.",
+  );
+
 console.log(result.score); // Score from 0-1
-console.log(result.reason); // Explanation of the relevancy assessment
+console.log(result.info.reason); // Explanation of the relevancy assessment
 ```
 
 ## Constructor Parameters
@@ -45,20 +44,19 @@ console.log(result.reason); // Explanation of the relevancy assessment
     {
       name: "model",
       type: "ModelConfig",
-      description: "Configuration for the model used to evaluate contextual relevancy",
+      description: "Configuration for the model used to evaluate context relevancy",
       isOptional: false,
     },
     {
       name: "options",
-      type: "ContextualRelevancyMetricOptions",
+      type: "ContextRelevancyMetricOptions",
       description: "Configuration options for the metric",
-      isOptional: true,
-      defaultValue: "{ scale: 1 }",
+      isOptional: false,
     }
   ]}
 />
 
-### ContextualRelevancyMetricOptions
+### ContextRelevancyMetricOptions
 
 <PropertiesTable
   content={[
@@ -68,6 +66,12 @@ console.log(result.reason); // Explanation of the relevancy assessment
       description: "Maximum score value",
       isOptional: true,
       defaultValue: "1",
+    },
+    {
+      name: "context",
+      type: "string[]",
+      description: "Array of retrieved context documents used to generate the response",
+      isOptional: false,
     }
   ]}
 />
@@ -87,12 +91,6 @@ console.log(result.reason); // Explanation of the relevancy assessment
       type: "string",
       description: "The LLM's response to evaluate",
       isOptional: false,
-    },
-    {
-      name: "context",
-      type: "string[]",
-      description: "Array of retrieved context documents used to generate the response",
-      isOptional: false,
     }
   ]}
 />
@@ -104,12 +102,24 @@ console.log(result.reason); // Explanation of the relevancy assessment
     {
       name: "score",
       type: "number",
-      description: "Contextual relevancy score (0 to scale, default 0-1)",
+      description: "Context relevancy score (0 to scale, default 0-1)",
     },
     {
-      name: "reason",
-      type: "string",
-      description: "Detailed explanation of the relevancy assessment",
+      name: "info",
+      type: "object",
+      description: "Object containing the reason for the score",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description: "Detailed explanation of the relevancy assessment",
+            }
+          ]
+        }
+      ]
     }
   ]}
 />
@@ -122,7 +132,7 @@ The metric calculates relevancy through a two-step process:
 
 The score is calculated using the formula:
 ```
-Contextual Relevancy = (Number of Relevant Statements) / (Total Number of Statements)
+Context Relevancy = (Number of Relevant Statements) / (Total Number of Statements)
 ```
 
 Score interpretation:
@@ -135,34 +145,36 @@ Score interpretation:
 ## Example with Custom Configuration
 
 ```typescript
-const metric = new ContextualRelevancyMetric(
+const metric = new ContextRelevancyMetric(
   {
     provider: "OPEN_AI",
     name: "gpt-4",
     apiKey: process.env.OPENAI_API_KEY
   },
   {
-    scale: 100 // Use 0-100 scale instead of 0-1
+    scale: 100, // Use 0-100 scale instead of 0-1
+    context: [
+      "Basic plan costs $10/month",
+      "Pro plan includes advanced features at $30/month",
+      "Enterprise plan has custom pricing",
+      "Our company was founded in 2020",
+      "We have offices worldwide"
+    ]
   }
 );
 
-const result = await metric.measure({
-  input: "What are our pricing plans?",
-  output: "We offer Basic, Pro, and Enterprise plans.",
-  context: [
-    "Basic plan costs $10/month",
-    "Pro plan includes advanced features at $30/month",
-    "Enterprise plan has custom pricing",
-    "Our company was founded in 2020",
-    "We have offices worldwide"
-  ]
-});
+const result = await metric.measure(
+  "What are our pricing plans?",
+  "We offer Basic, Pro, and Enterprise plans.",
+);
 
 // Example output:
 // {
 //   score: 60,
-//   reason: "3 out of 5 statements are relevant to pricing plans. The statements about 
+//   info: {
+//     reason: "3 out of 5 statements are relevant to pricing plans. The statements about 
 //           company founding and office locations are not relevant to the pricing query."
+//   }
 // }
 ```
 

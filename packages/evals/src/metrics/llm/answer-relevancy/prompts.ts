@@ -185,32 +185,30 @@ export function generateReasonPrompt({
   scale: number;
 }) {
   return `Explain the irrelevancy score where 0 is the lowest and ${scale} is the highest for the LLM's response using this context:
-  Context:
-  Input: ${input}
-  Output: ${output}
-  Score: ${score}
-  Verdicts: ${JSON.stringify(verdicts)}
-  
-  Rules:
-  - Explain score based on mix of direct answers and related context
-  - Consider both full and partial relevance
-  - Keep explanation concise and focused
-  - Use given score, don't recalculate
-  - Don't judge factual correctness
-  - Explain both relevant and irrelevant aspects
-  - For mixed responses, explain the balance
-
-    Format:
-    {
-        "reason": "The score is {score} because {explanation of overall relevance}"
-    }
-
-    Example Responses:
-    {
-        "reason": "The score is 7 because while the first statement directly answers the question, the additional context is only partially relevant"
-    }
-    {
-        "reason": "The score is 3 because while the answer discusses the right topic, it doesn't directly address the question"
-    }
-    `;
+    Context:
+    Input: ${input}
+    Output: ${output}
+    Score: ${score}
+    Verdicts: ${JSON.stringify(verdicts)}
+    
+    Rules:
+    - Explain score based on mix of direct answers and related context
+    - Consider both full and partial relevance
+    - Keep explanation concise and focused
+    - Use given score, don't recalculate
+    - Don't judge factual correctness
+    - Explain both relevant and irrelevant aspects
+    - For mixed responses, explain the balance
+      Format:
+      {
+          "reason": "The score is {score} because {explanation of overall relevance}"
+      }
+      Example Responses:
+      {
+          "reason": "The score is 7 because while the first statement directly answers the question, the additional context is only partially relevant"
+      }
+      {
+          "reason": "The score is 3 because while the answer discusses the right topic, it doesn't directly address the question"
+      }
+      `;
 }

@@ -20,12 +20,6 @@ const model = {
 };
 
 const metric = new ContextPrecisionMetric(model, {
-  scale: 1
-});
-
-const result = await metric.measure({
-  input: "What is photosynthesis?",
-  output: "Photosynthesis is the process by which plants convert sunlight into energy.",
   context: [
     "Photosynthesis is a biological process used by plants to create energy from sunlight.",
     "Plants need water and nutrients from the soil to grow.",
@@ -33,8 +27,13 @@ const result = await metric.measure({
   ]
 });
 
+const result = await metric.measure(
+  "What is photosynthesis?",
+  "Photosynthesis is the process by which plants convert sunlight into energy.",
+);
+
 console.log(result.score); // Precision score from 0-1
-console.log(result.reason); // Explanation of the score
+console.log(result.info.reason); // Explanation of the score
 ```
 
 ## Constructor Parameters
@@ -51,8 +50,7 @@ console.log(result.reason); // Explanation of the score
       name: "options",
       type: "ContextPrecisionMetricOptions",
       description: "Configuration options for the metric",
-      isOptional: true,
-      defaultValue: "{ scale: 1 }",
+      isOptional: false,
     }
   ]}
 />
@@ -67,6 +65,12 @@ console.log(result.reason); // Explanation of the score
       description: "Maximum score value",
       isOptional: true,
       defaultValue: "1",
+    },
+    {
+      name: "context",
+      type: "string[]",
+      description: "Array of context pieces in their retrieval order",
+      isOptional: false,
     }
   ]}
 />
@@ -86,12 +90,6 @@ console.log(result.reason); // Explanation of the score
       type: "string",
       description: "The generated response to evaluate",
       isOptional: false,
-    },
-    {
-      name: "context",
-      type: "string[]",
-      description: "Array of context pieces used to generate the output",
-      isOptional: false,
     }
   ]}
 />
@@ -106,9 +104,21 @@ console.log(result.reason); // Explanation of the score
       description: "Precision score (0 to scale, default 0-1)",
     },
     {
-      name: "reason",
-      type: "string",
-      description: "Detailed explanation of the score and context relevance",
+      name: "info",
+      type: "object",
+      description: "Object containing the reason for the score",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description: "Detailed explanation of the score",
+            }
+          ]
+        }
+      ]
     }
   ]}
 />
@@ -137,11 +147,7 @@ Score interpretation:
 ## Example with Analysis
 
 ```typescript
-const metric = new ContextPrecisionMetric(model);
-
-const result = await metric.measure({
-  input: "What are the benefits of exercise?",
-  output: "Regular exercise improves cardiovascular health and mental wellbeing.",
+const metric = new ContextPrecisionMetric(model, {
   context: [
     "Exercise strengthens the heart and improves blood circulation.",
     "A balanced diet is important for health.",
@@ -150,13 +156,20 @@ const result = await metric.measure({
   ]
 });
 
+const result = await metric.measure(
+  "What are the benefits of exercise?",
+  "Regular exercise improves cardiovascular health and mental wellbeing.",
+);
+
 // Example output:
 // {
 //   score: 0.75,
-//   reason: "The score is 0.75 because the first and third contexts are highly relevant 
+//   info: {
+//     reason: "The score is 0.75 because the first and third contexts are highly relevant 
 //           to the benefits mentioned in the output, while the second and fourth contexts 
 //           are not directly related to exercise benefits. The relevant contexts are well-positioned 
 //           at the beginning and middle of the sequence."
+//   }
 // }
 ```
 

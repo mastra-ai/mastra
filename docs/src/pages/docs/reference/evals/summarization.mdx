@@ -21,13 +21,13 @@ const model = {
 
 const metric = new SummarizationMetric(model);
 
-const result = await metric.measure({
-  input: "The company was founded in 1995 by John Smith. It started with 10 employees and grew to 500 by 2020. The company is based in Seattle.",
-  output: "Founded in 1995 by John Smith, the company grew from 10 to 500 employees by 2020."
-});
+const result = await metric.measure(
+  "The company was founded in 1995 by John Smith. It started with 10 employees and grew to 500 by 2020. The company is based in Seattle.",
+  "Founded in 1995 by John Smith, the company grew from 10 to 500 employees by 2020."
+);
 
 console.log(result.score); // Score from 0-1
-console.log(result.reason); // Explanation of the score
+console.log(result.info); // Object containing detailed metrics about the summary
 ```
 
 ## Constructor Parameters
@@ -93,9 +93,41 @@ console.log(result.reason); // Explanation of the score
       description: "Summarization score (0 to scale, default 0-1)",
     },
     {
-      name: "reason",
-      type: "string",
-      description: "Detailed explanation of the score, including both alignment and coverage aspects",
+      name: "info",
+      type: "object",
+      description: "Object containing detailed metrics about the summary",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description: "Detailed explanation of the score, including both alignment and coverage aspects"
+            }
+          ]
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "alignmentScore",
+              type: "number",
+              description: "Alignment score (0 to 1)",
+            }
+          ]
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "coverageScore",
+              type: "number",
+              description: "Coverage score (0 to 1)",
+            }
+          ]
+        }
+      ]
     }
   ]}
 />
@@ -129,19 +161,23 @@ Score interpretation:
 ```typescript
 const metric = new SummarizationMetric(model);
 
-const result = await metric.measure({
-  input: "The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning. Elon Musk joined in 2004 as the largest investor and became CEO in 2008. The company's first car, the Roadster, was launched in 2008.",
-  output: "Tesla, founded by Elon Musk in 2003, revolutionized the electric car industry starting with the Roadster in 2008."
-});
+const result = await metric.measure(
+  "The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning. Elon Musk joined in 2004 as the largest investor and became CEO in 2008. The company's first car, the Roadster, was launched in 2008.",
+  "Tesla, founded by Elon Musk in 2003, revolutionized the electric car industry starting with the Roadster in 2008."
+);
 
 // Example output:
 // {
 //   score: 0.5,
-//   reason: "The score is 0.5 because while the coverage is good (0.75) - mentioning the founding year, 
+//   info: {
+//     reason: "The score is 0.5 because while the coverage is good (0.75) - mentioning the founding year, 
 //           first car model, and launch date - the alignment score is lower (0.5) due to incorrectly 
 //           attributing the company's founding to Elon Musk instead of Martin Eberhard and Marc Tarpenning. 
 //           The final score takes the minimum of these two scores to ensure both factual accuracy and 
 //           coverage are necessary for a good summary."
+//     alignmentScore: 0.5,
+//     coverageScore: 0.75,
+//   }
 // }
 ```
 

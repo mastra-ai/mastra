@@ -1,10 +1,17 @@
-import { Metric } from '@mastra/core';
+import { Metric, MetricResult } from '@mastra/core';
 import { SequenceMatcher } from 'difflib';
 
-import { MetricScoringResult } from '../types';
+interface TextualDifferenceResult extends MetricResult {
+  info: {
+    ratio: number;
+    changes: number;
+    lengthDiff: number;
+    confidence: number;
+  };
+}
 
 export class TextualDifferenceMetric extends Metric {
-  async measure({ input, output }: { input: string; output: string }): Promise<MetricScoringResult> {
+  async measure(input: string, output: string): Promise<TextualDifferenceResult> {
     const matcher = new SequenceMatcher(null, input, output);
     const ratio = matcher.ratio();
 
@@ -19,9 +26,8 @@ export class TextualDifferenceMetric extends Metric {
 
     return {
       score: ratio,
-      details: `Difference score: ${(ratio * 100).toFixed(1)}% with ${changes} changes`,
-      confidence,
-      metrics: {
+      info: {
+        confidence,
         ratio,
         changes,
         lengthDiff,

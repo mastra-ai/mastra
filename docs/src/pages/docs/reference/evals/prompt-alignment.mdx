@@ -30,13 +30,13 @@ const metric = new PromptAlignmentMetric(model, {
   scale: 1
 });
 
-const result = await metric.measure({
-  input: "describe the weather",
-  output: "The sun is shining. Clouds float in the sky. A gentle breeze blows."
-});
+const result = await metric.measure(
+  "describe the weather",
+  "The sun is shining. Clouds float in the sky. A gentle breeze blows."
+);
 
 console.log(result.score); // Alignment score from 0-1
-console.log(result.reason); // Explanation of the score
+console.log(result.info.reason); // Explanation of the score
 ```
 
 ## Constructor Parameters
@@ -107,9 +107,21 @@ console.log(result.reason); // Explanation of the score
       description: "Alignment score (0 to scale, default 0-1)",
     },
     {
-      name: "reason",
-      type: "string",
-      description: "Detailed explanation of the score and instruction compliance",
+      name: "info",
+      type: "object",
+      description: "Object containing detailed metrics about instruction compliance",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description: "Detailed explanation of the score and instruction compliance",
+            }
+          ]
+        }
+      ]
     }
   ]}
 />
@@ -147,33 +159,37 @@ const metric = new PromptAlignmentMetric(model, {
   scale: 1
 });
 
-const result = await metric.measure({
-  input: "List three fruits",
-  output: "• Apple is red and sweet;
+const result = await metric.measure(
+  "List three fruits",
+  "• Apple is red and sweet;
 • Banana is yellow and curved;
 • Orange is citrus and round."
-});
+);
 
 // Example output:
 // {
 //   score: 1.0,
-//   reason: "The score is 1.0 because all instructions were followed exactly: 
+//   info: {
+//     reason: "The score is 1.0 because all instructions were followed exactly: 
 //           bullet points were used, exactly three examples were provided, and 
 //           each point ends with a semicolon."
+//   }
 // }
 
-const result2 = await metric.measure({
-  input: "List three fruits",
-  output: "1. Apple
+const result2 = await metric.measure(
+  "List three fruits",
+  "1. Apple
 2. Banana
 3. Orange and Grape"
-});
+);
 
 // Example output:
 // {
 //   score: 0.33,
-//   reason: "The score is 0.33 because: numbered lists were used instead of bullet points, 
+//   info: {
+//     reason: "The score is 0.33 because: numbered lists were used instead of bullet points, 
 //           no semicolons were used, and four fruits were listed instead of exactly three."
+//   }
 // }
 ```
 

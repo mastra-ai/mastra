@@ -14,14 +14,13 @@ import { KeywordCoverageMetric } from "@mastra/evals/nlp";
 
 const metric = new KeywordCoverageMetric();
 
-const result = await metric.measure({
-  input: "What are the key features of Python programming language?",
-  output: "Python is a high-level programming language known for its simple syntax and extensive libraries."
-});
+const result = await metric.measure(
+  "What are the key features of Python programming language?",
+  "Python is a high-level programming language known for its simple syntax and extensive libraries."
+);
 
 console.log(result.score); // Coverage score from 0-1
-console.log(result.confidence); // Confidence score (0.85)
-console.log(result.metrics); // Detailed keyword matching metrics
+console.log(result.info); // Object containing detailed metrics about keyword coverage
 ```
 
 ## measure() Parameters
@@ -53,31 +52,31 @@ console.log(result.metrics); // Detailed keyword matching metrics
       description: "Coverage score (0-1) representing the proportion of matched keywords",
     },
     {
-      name: "confidence",
-      type: "number",
-      description: "Confidence score for the evaluation (fixed at 0.85)",
-    },
-    {
-      name: "metrics",
+      name: "info",
       type: "object",
-      description: "Detailed metrics about keyword coverage",
-    }
-  ]}
-/>
-
-### metrics Object
-
-<PropertiesTable
-  content={[
-    {
-      name: "matchedKeywords",
-      type: "number",
-      description: "Number of keywords found in the output",
-    },
-    {
-      name: "totalKeywords",
-      type: "number",
-      description: "Total number of keywords from the input",
+      description: "Object containing detailed metrics about keyword coverage",
+      properties: [
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "matchedKeywords",
+              type: "number",
+              description: "Number of keywords found in the output",
+            }
+          ]
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "totalKeywords",
+              type: "number",
+              description: "Total number of keywords from the input",
+            }
+          ]
+        }
+      ]
     }
   ]}
 />
@@ -104,42 +103,39 @@ Score interpretation:
 const metric = new KeywordCoverageMetric();
 
 // Perfect coverage example
-const result1 = await metric.measure({
-  input: "The quick brown fox jumps over the lazy dog",
-  output: "A quick brown fox jumped over a lazy dog"
-});
+const result1 = await metric.measure(
+  "The quick brown fox jumps over the lazy dog",
+  "A quick brown fox jumped over a lazy dog"
+);
 // {
 //   score: 1.0,
-//   confidence: 0.85,
-//   metrics: {
+//   info: {
 //     matchedKeywords: 6,
 //     totalKeywords: 6
 //   }
 // }
 
 // Partial coverage example
-const result2 = await metric.measure({
-  input: "Python features include easy syntax, dynamic typing, and extensive libraries",
-  output: "Python has simple syntax and many libraries"
-});
+const result2 = await metric.measure(
+  "Python features include easy syntax, dynamic typing, and extensive libraries",
+  "Python has simple syntax and many libraries"
+);
 // {
 //   score: 0.67,
-//   confidence: 0.85,
-//   metrics: {
+//   info: {
 //     matchedKeywords: 4,
 //     totalKeywords: 6
 //   }
 // }
 
 // Technical terms example
-const result3 = await metric.measure({
-  input: "Discuss React.js component lifecycle and state management",
-  output: "React components have lifecycle methods and manage state"
-});
+const result3 = await metric.measure(
+  "Discuss React.js component lifecycle and state management",
+  "React components have lifecycle methods and manage state"
+);
 // {
 //   score: 1.0,
-//   confidence: 0.85,
-//   metrics: {
+//   info: {
 //     matchedKeywords: 4,
 //     totalKeywords: 4
 //   }

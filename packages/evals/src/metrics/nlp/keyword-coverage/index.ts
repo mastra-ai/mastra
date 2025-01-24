@@ -1,17 +1,20 @@
-import { Metric } from '@mastra/core';
+import { Metric, MetricResult } from '@mastra/core';
 import keyword_extractor from 'keyword-extractor';
 
-import { MetricScoringResult } from '../types';
+interface KeywordCoverageResult extends MetricResult {
+  info: {
+    totalKeywords: number;
+    matchedKeywords: number;
+  };
+}
 
 export class KeywordCoverageMetric extends Metric {
-  async measure({ input, output }: { input: string; output: string }): Promise<MetricScoringResult> {
+  async measure(input: string, output: string): Promise<KeywordCoverageResult> {
     // Handle empty strings case
     if (!input && !output) {
       return {
         score: 1,
-        details: 'Keyword coverage: 100.0% (0/0 keywords)',
-        confidence: 0.85,
-        metrics: {
+        info: {
           totalKeywords: 0,
           matchedKeywords: 0,
         },
@@ -36,9 +39,7 @@ export class KeywordCoverageMetric extends Metric {
 
     return {
       score: coverage,
-      details: `Keyword coverage: ${(coverage * 100).toFixed(1)}% (${matchedKeywords.length}/${referenceKeywords.size} keywords)`,
-      confidence: 0.85,
-      metrics: {
+      info: {
         totalKeywords: referenceKeywords.size,
         matchedKeywords: matchedKeywords.length,
       },

@@ -2,6 +2,7 @@ import { Context } from 'hono';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 
+import { readFile } from 'fs/promises';
 import { HTTPException } from 'hono/http-exception';
 
 import { handleError } from './error';
@@ -64,6 +65,42 @@ export async function getAgentByIdHandler(c: Context) {
   } catch (error) {
     return handleError(error, 'Error getting agent');
   }
+}
+
+export async function getEvalsByAgentIdHandler(c: Context) {
+  try {
+    const mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+    const agent = mastra.getAgent(agentId);
+    const evals = await readFile('./evals.json', 'utf-8');
+    const parsedEvals = evals
+      .split('\n')
+      .map(line => line && JSON.parse(line))
+      .filter((line: any) => line?.meta?.agentName === agent.name);
+    return c.json({
+      ...agent,
+      evals: parsedEvals,
+    });
+  } catch (error) {
+    return handleError(error, 'Error getting evals');
+  }
+}
+
+export function getLiveEvalsByAgentIdHandler(evalStore: any) {
+  return async (c: Context) => {
+    try {
+      const mastra = c.get('mastra');
+      const agentId = c.req.param('agentId');
+      const agent = mastra.getAgent(agentId);
+      const parsedEvals = evalStore.filter((line: any) => line?.meta?.agentName === agent.name);
+      return c.json({
+        ...agent,
+        evals: parsedEvals,
+      });
+    } catch (error) {
+      return handleError(error, 'Error getting evals');
+    }
+  };
 }
 
 export async function generateHandler(c: Context) {

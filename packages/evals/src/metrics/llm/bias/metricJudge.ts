@@ -3,7 +3,12 @@ import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';
 
-import { generateEvaluatePrompt, BIAS_AGENT_INSTRUCTIONS, generateOpinionsPrompt } from './prompts';
+import {
+  generateEvaluatePrompt,
+  BIAS_AGENT_INSTRUCTIONS,
+  generateOpinionsPrompt,
+  generateReasonPrompt,
+} from './prompts';
 
 export class BiasJudge extends MastraAgentJudge {
   constructor(model: ModelConfig) {
@@ -33,5 +38,16 @@ export class BiasJudge extends MastraAgentJudge {
     });
 
     return result.object.verdicts;
+  }
+
+  async getReason(score: number, biases: string[]): Promise<string> {
+    const prompt = generateReasonPrompt({ score, biases });
+    const result = await this.agent.generate(prompt, {
+      output: z.object({
+        reason: z.string(),
+      }),
+    });
+
+    return result.object.reason;
   }
 }

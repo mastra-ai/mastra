@@ -16,6 +16,9 @@ import 'dotenv/config';
 
 import { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
+import { Metric } from '../eval';
+import { executeHook } from '../hooks';
+import { AvailableHooks } from '../hooks';
 import { LLM } from '../llm';
 import { GenerateReturn, ModelConfig, OutputType, StreamReturn } from '../llm/types';
 import { LogLevel, RegisteredLogger } from '../logger';
@@ -31,6 +34,7 @@ import { ToolsetsInput } from './types';
 })
 export class Agent<
   TTools extends Record<string, ToolAction<any, any, any, any>> = Record<string, ToolAction<any, any, any, any>>,
+  TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > extends MastraBase {
   public name: string;
   readonly llm: LLM;
@@ -38,6 +42,7 @@ export class Agent<
   readonly model: ModelConfig;
   #mastra?: MastraPrimitives;
   tools: TTools;
+  metrics: TMetrics;
 
   constructor(config: {
     name: string;
@@ -45,6 +50,7 @@ export class Agent<
     model: ModelConfig;
     tools?: TTools;
     mastra?: MastraPrimitives;
+    metrics?: TMetrics;
   }) {
     super({ component: RegisteredLogger.AGENT });
 
@@ -59,12 +65,18 @@ export class Agent<
 
     this.tools = {} as TTools;
 
+    this.metrics = {} as TMetrics;
+
     if (config.tools) {
       this.tools = config.tools;
     }
 
     if (config.mastra) {
       this.#mastra = config.mastra;
+    }
+
+    if (config.metrics) {
+      this.metrics = config.metrics;
     }
   }
 
@@ -509,7 +521,9 @@ export class Agent<
   }) {
     return {
       before: async () => {
-        this.log(LogLevel.INFO, `Starting generation for agent ${this.name}`, { runId });
+        if (process.env.NODE_ENV !== 'test') {
+          this.log(LogLevel.INFO, `Starting generation for agent ${this.name}`, { runId });
+        }
 
         const systemMessage: CoreMessage = {
           role: 'system',
@@ -558,7 +572,15 @@ export class Agent<
 
         return { messageObjects, convertedTools, threadId: threadIdToUse as string };
       },
-      after: async ({ result, threadId }: { result: Record<string, any>; threadId: string }) => {
+      after: async ({
+        result,
+        threadId,
+        outputText,
+      }: {
+        result: Record<string, any>;
+        threadId: string;
+        outputText: string;
+      }) => {
         this.log(LogLevel.DEBUG, `After LLM call for agent ${this.name}`, {
           runId: this.name,
         });
@@ -583,6 +605,20 @@ export class Agent<
               runId: this.name,
             },
           );
+        }
+
+        if (Object.keys(this.metrics || {}).length > 0) {
+          const input = messages.map(message => message).join('\n');
+          const runIdToUse = runId || crypto.randomUUID();
+          for (const metric of Object.values(this.metrics || {})) {
+            executeHook(AvailableHooks.ON_GENERATION, {
+              input,
+              output: outputText,
+              runId: runIdToUse,
+              metric,
+              agentName: this.name,
+            });
+          }
         }
       },
     };
@@ -656,7 +692,9 @@ export class Agent<
         runId,
       });
 
-      await after({ result, threadId });
+      const outputText = result.text;
+
+      await after({ result, threadId, outputText });
 
       return result as unknown as GenerateReturn<Z>;
     }
@@ -674,7 +712,9 @@ export class Agent<
       runId,
     });
 
-    await after({ result, threadId });
+    const outputText = JSON.stringify(result.object);
+
+    await after({ result, threadId, outputText });
 
     return result as unknown as GenerateReturn<Z>;
   }
@@ -747,7 +787,8 @@ export class Agent<
         onFinish: async result => {
           try {
             const res = JSON.parse(result) || {};
-            await after({ result: res, threadId });
+            const outputText = res.text;
+            await after({ result: res, threadId, outputText });
           } catch (e) {
             this.log(LogLevel.ERROR, 'Error saving memory on finish', {
               error: e,
@@ -773,7 +814,8 @@ export class Agent<
       onFinish: async result => {
         try {
           const res = JSON.parse(result) || {};
-          await after({ result: res, threadId });
+          const outputText = JSON.stringify(res.object);
+          await after({ result: res, threadId, outputText });
         } catch (e) {
           this.log(LogLevel.ERROR, 'Error saving memory on finish', {
             error: e,

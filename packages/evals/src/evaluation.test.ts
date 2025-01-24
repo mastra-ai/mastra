@@ -1,3 +1,4 @@
+import { describe, expect, it } from '@jest/globals';
 import { Agent } from '@mastra/core';
 import { ModelConfig } from '@mastra/core';
 import { Metric } from '@mastra/core';
@@ -19,14 +20,16 @@ const modelConfig: ModelConfig = {
   toolChoice: 'auto',
 };
 
-it.skip('should get a text response from the agent', async () => {
-  const electionAgent = new Agent({
-    name: 'US Election agent',
-    instructions: 'You know about the past US elections',
-    model: modelConfig,
-  });
+describe('evaluate', () => {
+  it('should get a text response from the agent', async () => {
+    const electionAgent = new Agent({
+      name: 'US Election agent',
+      instructions: 'You know about the past US elections',
+      model: modelConfig,
+    });
 
-  const result = await evaluate(electionAgent, 'Who won the 2016 US presidential election?', new TestMetric());
+    const result = await evaluate(electionAgent, 'Who won the 2016 US presidential election?', new TestMetric());
 
-  expect(result.score).toBe(1);
-}, 10000);
+    expect(result.score).toBe(1);
+  }, 10000);
+});

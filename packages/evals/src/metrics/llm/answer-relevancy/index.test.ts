@@ -104,82 +104,47 @@ describe('AnswerRelevancyMetric', () => {
   const metric = new AnswerRelevancyMetric(modelConfig);
 
   it('should be able to measure a prompt with perfect relevancy', async () => {
-    const result = await metric.measure({
-      input: testCases[0].input,
-      output: testCases[0].output,
-    });
-
+    const result = await metric.measure(testCases[0].input, testCases[0].output);
     expect(result.score).toBeCloseTo(testCases[0].expectedResult.score, 1);
   });
 
   it('should be able to measure a prompt with mostly relevant information', async () => {
-    const result = await metric.measure({
-      input: testCases[1].input,
-      output: testCases[1].output,
-    });
-
+    const result = await metric.measure(testCases[1].input, testCases[1].output);
     expect(result.score).toBeCloseTo(testCases[1].expectedResult.score, 1);
   });
 
   it('should be able to measure a prompt with partial relevance', async () => {
-    const result = await metric.measure({
-      input: testCases[2].input,
-      output: testCases[2].output,
-    });
-
+    const result = await metric.measure(testCases[2].input, testCases[2].output);
     expect(result.score).toBeCloseTo(testCases[2].expectedResult.score, 1);
   });
 
   it('should be able to measure a prompt with low relevance', async () => {
-    const result = await metric.measure({
-      input: testCases[3].input,
-      output: testCases[3].output,
-    });
-
+    const result = await metric.measure(testCases[3].input, testCases[3].output);
     expect(result.score).toBeCloseTo(testCases[3].expectedResult.score, 1);
   });
 
   it('should be able to measure a prompt with empty output', async () => {
-    const result = await metric.measure({
-      input: testCases[5].input,
-      output: testCases[5].output,
-    });
-
+    const result = await metric.measure(testCases[5].input, testCases[5].output);
     expect(result.score).toBeCloseTo(testCases[5].expectedResult.score, 1);
   });
 
   it('should be able to measure a prompt with incorrect but relevant answer', async () => {
-    const result = await metric.measure({
-      input: testCases[6].input,
-      output: testCases[6].output,
-    });
+    const result = await metric.measure(testCases[6].input, testCases[6].output);
     expect(result.score).toBeCloseTo(testCases[6].expectedResult.score, 1);
   });
 
   it('should be able to measure a prompt with a single word correct answer', async () => {
-    const result = await metric.measure({
-      input: testCases[7].input,
-      output: testCases[7].output,
-    });
-
+    const result = await metric.measure(testCases[7].input, testCases[7].output);
     expect(result.score).toBeCloseTo(testCases[7].expectedResult.score, 1);
   });
 
   it('should be able to measure a prompt with multiple questions', async () => {
-    const result = await metric.measure({
-      input: testCases[8].input,
-      output: testCases[8].output,
-    });
-
+    const result = await metric.measure(testCases[8].input, testCases[8].output);
     expect(result.score).toBeCloseTo(testCases[8].expectedResult.score, 1);
   });
 
   it('should be able to measure a prompt with technical gibberish', async () => {
-    const result = await metric.measure({
-      input: testCases[9].input,
-      output: testCases[9].output,
-    });
-
+    const result = await metric.measure(testCases[9].input, testCases[9].output);
     expect(result.score).toBeCloseTo(testCases[9].expectedResult.score, 1);
   });
 });

@@ -14,14 +14,13 @@ import { TextualDifferenceMetric } from "@mastra/evals/nlp";
 
 const metric = new TextualDifferenceMetric();
 
-const result = await metric.measure({
-  input: "The quick brown fox",
-  output: "The fast brown fox"
-});
+const result = await metric.measure(
+  "The quick brown fox",
+  "The fast brown fox"
+);
 
 console.log(result.score); // Similarity ratio from 0-1
-console.log(result.details); // Description of differences
-console.log(result.metrics); // Detailed change metrics
+console.log(result.info); // Detailed change metrics
 ```
 
 ## measure() Parameters
@@ -53,42 +52,51 @@ console.log(result.metrics); // Detailed change metrics
       description: "Similarity ratio (0-1) where 1 indicates identical texts",
     },
     {
-      name: "details",
-      type: "string",
-      description: "Human-readable description of differences including number of changes",
-    },
-    {
-      name: "confidence",
-      type: "number",
-      description: "Confidence score based on length difference between texts (0-1)",
-    },
-    {
-      name: "metrics",
-      type: "object",
+      name: "info",
       description: "Detailed metrics about the differences",
-    }
-  ]}
-/>
-
-### metrics Object
-
-<PropertiesTable
-  content={[
-    {
-      name: "ratio",
-      type: "number",
-      description: "Raw similarity ratio between the texts",
+      properties: [
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "confidence",
+              type: "number",
+              description: "Confidence score based on length difference between texts (0-1)",
+            }
+          ]
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "ratio",
+              type: "number",
+              description: "Raw similarity ratio between the texts",
+            }
+          ]
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "changes",
+              type: "number",
+              description: "Number of change operations (insertions, deletions, replacements)",
+            }
+          ]
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "lengthDiff",
+              type: "number",
+              description: "Normalized difference in length between input and output (0-1)",
+            }
+          ]
+        },
+      ]
     },
-    {
-      name: "changes",
-      type: "number",
-      description: "Number of change operations (insertions, deletions, replacements)",
-    },
-    {
-      name: "lengthDiff",
-      type: "number",
-      description: "Normalized difference in length between input and output (0-1)",
-    }
   ]}
 />
 
@@ -111,17 +119,16 @@ The scoring process:
 ```typescript
 const metric = new TextualDifferenceMetric();
 
-const result = await metric.measure({
-  input: "Hello world! How are you?",
-  output: "Hello there! How is it going?"
-});
+const result = await metric.measure(
+  "Hello world! How are you?",
+  "Hello there! How is it going?"
+);
 
 // Example output:
 // {
 //   score: 0.65,
-//   details: "Difference score: 65.0% with 2 changes",
-//   confidence: 0.95,
-//   metrics: {
+//   info: {
+//     confidence: 0.95,
 //     ratio: 0.65,
 //     changes: 2,
 //     lengthDiff: 0.05

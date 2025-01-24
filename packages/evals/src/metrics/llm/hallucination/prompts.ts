@@ -112,39 +112,32 @@ export function generateReasonPrompt({
   verdicts: { verdict: string; reason: string }[];
 }) {
   return `Explain the hallucination score where 0 is the lowest and ${scale} is the highest for the LLM's response using this context:
-
-Context:
-${context.join('\n')}
-
-Input:
-${input}
-
-Output:
-${output}
-
-Score: ${score}
-Verdicts:
-${JSON.stringify(verdicts)}
-
-Rules:
-- Explain score based on ratio of contradicted statements to total statements
-- Focus on factual inconsistencies with context
-- Keep explanation concise and focused
-- Use given score, don't recalculate
-- Explain both contradicted and non-contradicted aspects
-- For mixed cases, explain the balance
-- Base explanation only on the verified statements, not prior knowledge
-
-Format:
-{
-    "reason": "The score is {score} because {explanation of hallucination}"
-}
-
-Example Responses:
-{
-    "reason": "The score is 0.0 because none of the statements from the context were contradicted by the output"
-}
-{
-    "reason": "The score is 0.5 because half of the statements from the context were directly contradicted by claims in the output"
-}`;
+  Context:
+  ${context.join('\n')}
+  Input:
+  ${input}
+  Output:
+  ${output}
+  Score: ${score}
+  Verdicts:
+  ${JSON.stringify(verdicts)}
+  Rules:
+  - Explain score based on ratio of contradicted statements to total statements
+  - Focus on factual inconsistencies with context
+  - Keep explanation concise and focused
+  - Use given score, don't recalculate
+  - Explain both contradicted and non-contradicted aspects
+  - For mixed cases, explain the balance
+  - Base explanation only on the verified statements, not prior knowledge
+  Format:
+  {
+      "reason": "The score is {score} because {explanation of hallucination}"
+  }
+  Example Responses:
+  {
+      "reason": "The score is 0.0 because none of the statements from the context were contradicted by the output"
+  }
+  {
+      "reason": "The score is 0.5 because half of the statements from the context were directly contradicted by claims in the output"
+  }`;
 }

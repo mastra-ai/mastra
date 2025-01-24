@@ -5,9 +5,9 @@ import { MastraAgentJudge } from '../../judge';
 
 import {
   generateEvaluatePrompt,
-  generateReasonPrompt,
   ANSWER_RELEVANCY_AGENT_INSTRUCTIONS,
   generateEvaluationStatementsPrompt,
+  generateReasonPrompt,
 } from './prompts';
 
 export class AnswerRelevancyJudge extends MastraAgentJudge {
@@ -50,6 +50,7 @@ export class AnswerRelevancyJudge extends MastraAgentJudge {
         reason: z.string(),
       }),
     });
+
     return result.object.reason;
   }
 }

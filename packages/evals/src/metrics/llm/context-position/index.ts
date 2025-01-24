@@ -1,39 +1,37 @@
-import { Metric, MetricResult, ModelConfig } from '@mastra/core';
+import { Metric, ModelConfig } from '@mastra/core';
 
+import { MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';
 
 import { ContextPositionJudge } from './metricJudge';
 
 export interface ContextPositionMetricOptions {
   scale?: number;
+  context: string[];
 }
 
 export class ContextPositionMetric extends Metric {
   private judge: ContextPositionJudge;
   private scale: number;
+  private context: string[];
 
-  constructor(model: ModelConfig, { scale = 1 }: ContextPositionMetricOptions = {}) {
+  constructor(model: ModelConfig, { scale = 1, context }: ContextPositionMetricOptions) {
     super();
     this.judge = new ContextPositionJudge(model);
     this.scale = scale;
+    this.context = context;
   }
 
-  async measure({
-    input,
-    output,
-    context,
-  }: {
-    input: string;
-    output: string;
-    context: string[];
-  }): Promise<MetricResult> {
-    const verdicts = await this.judge.evaluate(input, output, context);
+  async measure(input: string, output: string): Promise<MetricResultWithReason> {
+    const verdicts = await this.judge.evaluate(input, output, this.context);
     const score = this.calculateScore(verdicts);
     const reason = await this.judge.getReason(input, output, score, this.scale, verdicts);
 
     return {
       score,
-      reason,
+      info: {
+        reason,
+      },
     };
   }
 

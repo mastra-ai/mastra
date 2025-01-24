@@ -1,12 +1,23 @@
-import { Metric } from '@mastra/core';
+import { Metric, MetricResult } from '@mastra/core';
 import Sentiment from 'sentiment';
 
-import { MetricScoringResult } from '../types';
+interface ToneConsitencyResult extends MetricResult {
+  info:
+    | {
+        responseSentiment: number;
+        referenceSentiment: number;
+        difference: number;
+      }
+    | {
+        avgSentiment: number;
+        sentimentVariance: number;
+      };
+}
 
 export class ToneConsistencyMetric extends Metric {
   private sentiment = new Sentiment();
 
-  async measure({ input, output }: { input: string; output: string }): Promise<MetricScoringResult> {
+  async measure(input: string, output: string): Promise<ToneConsitencyResult> {
     const responseSentiment = this.sentiment.analyze(input);
 
     if (output) {
@@ -17,9 +28,7 @@ export class ToneConsistencyMetric extends Metric {
 
       return {
         score: normalizedScore,
-        details: `Tone consistency: ${(normalizedScore * 100).toFixed(1)}%`,
-        confidence: 0.75,
-        metrics: {
+        info: {
           responseSentiment: responseSentiment.comparative,
           referenceSentiment: referenceSentiment.comparative,
           difference: sentimentDiff,
@@ -36,9 +45,7 @@ export class ToneConsistencyMetric extends Metric {
 
     return {
       score: stability,
-      details: `Tone stability: ${(stability * 100).toFixed(1)}%`,
-      confidence: 0.7,
-      metrics: {
+      info: {
         avgSentiment,
         sentimentVariance: variance,
       },

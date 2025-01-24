@@ -85,11 +85,7 @@ describe('PromptAlignmentMetric', () => {
       instructions: testCase.instructions,
     });
 
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-    });
-
+    const result = await metric.measure(testCase.input, testCase.output);
     expect(result.score).toBe(testCase.expectedResult.score);
   });
 
@@ -99,10 +95,7 @@ describe('PromptAlignmentMetric', () => {
       instructions: testCase.instructions,
     });
 
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-    });
+    const result = await metric.measure(testCase.input, testCase.output);
 
     expect(result.score).toBe(testCase.expectedResult.score);
   });
@@ -113,10 +106,7 @@ describe('PromptAlignmentMetric', () => {
       instructions: testCase.instructions,
     });
 
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-    });
+    const result = await metric.measure(testCase.input, testCase.output);
 
     expect(result.score).toBe(testCase.expectedResult.score);
   });
@@ -127,10 +117,7 @@ describe('PromptAlignmentMetric', () => {
       instructions: testCase.instructions,
     });
 
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-    });
+    const result = await metric.measure(testCase.input, testCase.output);
 
     expect(result.score).toBe(testCase.expectedResult.score);
   });
@@ -141,10 +128,7 @@ describe('PromptAlignmentMetric', () => {
       instructions: testCase.instructions,
     });
 
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-    });
+    const result = await metric.measure(testCase.input, testCase.output);
 
     expect(result.score).toBe(testCase.expectedResult.score);
   });
@@ -155,10 +139,7 @@ describe('PromptAlignmentMetric', () => {
       instructions: testCase.instructions,
     });
 
-    const result = await metric.measure({
-      input: testCase.input,
-      output: testCase.output,
-    });
+    const result = await metric.measure(testCase.input, testCase.output);
 
     expect(result.score).toBe(testCase.expectedResult.score);
   });

@@ -1,39 +1,44 @@
-import { Metric, MetricResult, ModelConfig } from '@mastra/core';
+import { Metric, ModelConfig } from '@mastra/core';
 
+import { MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';
 
 import { HallucinationJudge } from './metricJudge';
 
 export interface HallucinationMetricOptions {
   scale?: number;
+  context: string[];
 }
 
 export class HallucinationMetric extends Metric {
   private judge: HallucinationJudge;
   private scale: number;
+  private context: string[];
 
-  constructor(model: ModelConfig, { scale = 1 }: HallucinationMetricOptions = {}) {
+  constructor(model: ModelConfig, { scale = 1, context }: HallucinationMetricOptions) {
     super();
     this.judge = new HallucinationJudge(model);
     this.scale = scale;
+    this.context = context;
   }
 
-  async measure({
-    input,
-    output,
-    context,
-  }: {
-    input: string;
-    output: string;
-    context: string[];
-  }): Promise<MetricResult> {
-    const verdicts = await this.judge.evaluate(output, context);
+  async measure(input: string, output: string): Promise<MetricResultWithReason> {
+    const verdicts = await this.judge.evaluate(output, this.context);
     const score = this.calculateScore(verdicts);
-    const reason = await this.judge.getReason(input, output, context, score, this.scale, verdicts);
+    const reason = await this.judge.getReason({
+      input,
+      output,
+      context: this.context,
+      score,
+      scale: this.scale,
+      verdicts,
+    });
 
     return {
       score,
-      reason,
+      info: {
+        reason,
+      },
     };
   }
 

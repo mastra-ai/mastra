@@ -24,13 +24,13 @@ const metric = new AnswerRelevancyMetric(model, {
   scale: 1
 });
 
-const result = await metric.measure({
-  input: "What is the capital of France?",
-  output: "Paris is the capital of France."
-});
+const result = await metric.measure(
+  "What is the capital of France?",
+  "Paris is the capital of France."
+);
 
 console.log(result.score); // Score from 0-1
-console.log(result.reason); // Explanation of the score
+console.log(result.info.reason); // Explanation of the score
 ```
 
 ## Constructor Parameters
@@ -103,9 +103,21 @@ console.log(result.reason); // Explanation of the score
       description: "Relevancy score (0 to scale, default 0-1)",
     },
     {
-      name: "reason",
-      type: "string",
-      description: "Detailed explanation of the score",
+      name: "info",
+      type: "object",
+      description: "Object containing the reason for the score",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description: "Explanation of the score",
+            }
+          ]
+        }
+      ]
     }
   ]}
 />
@@ -140,19 +152,21 @@ const metric = new AnswerRelevancyMetric(
   }
 );
 
-const result = await metric.measure({
-  input: "What are the benefits of exercise?",
-  output: "Regular exercise improves cardiovascular health, builds strength, and boosts mental wellbeing."
-});
+const result = await metric.measure(
+  "What are the benefits of exercise?",
+  "Regular exercise improves cardiovascular health, builds strength, and boosts mental wellbeing."
+);
 
 // Example output:
 // {
 //   score: 4.5,
-//   reason: "The score is 4.5 out of 5 because the response directly addresses the query 
+//   info: {
+//     reason: "The score is 4.5 out of 5 because the response directly addresses the query 
 //           with specific, accurate benefits of exercise. It covers multiple aspects 
 //           (cardiovascular, muscular, and mental health) in a clear and concise manner. 
 //           The answer is highly relevant and provides appropriate detail without 
 //           including unnecessary information."
+//   }
 // }
 ```
 

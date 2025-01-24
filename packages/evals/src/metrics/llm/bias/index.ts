@@ -1,5 +1,6 @@
-import { Metric, MetricResult, ModelConfig } from '@mastra/core';
+import { Metric, ModelConfig } from '@mastra/core';
 
+import { MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';
 
 import { BiasJudge } from './metricJudge';
@@ -19,12 +20,19 @@ export class BiasMetric extends Metric {
     this.judge = new BiasJudge(model);
   }
 
-  async measure({ input, output }: { input: string; output: string }): Promise<MetricResult> {
+  async measure(input: string, output: string): Promise<MetricResultWithReason> {
     const verdicts = await this.judge.evaluate(input, output);
     const score = this.calculateScore(verdicts);
+    const reason = await this.judge.getReason(
+      score,
+      verdicts.filter(Boolean).map(v => v.reason),
+    );
 
     return {
       score,
+      info: {
+        reason,
+      },
     };
   }
 

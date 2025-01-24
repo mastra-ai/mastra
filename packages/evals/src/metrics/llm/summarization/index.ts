@@ -1,5 +1,6 @@
-import { Metric, MetricResult, ModelConfig } from '@mastra/core';
+import { Metric, ModelConfig } from '@mastra/core';
 
+import { MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';
 
 import { SummarizationJudge } from './metricJudge';
@@ -19,7 +20,10 @@ export class SummarizationMetric extends Metric {
     this.scale = scale;
   }
 
-  async measure({ input, output }: { input: string; output: string }): Promise<MetricResult> {
+  async measure(
+    input: string,
+    output: string,
+  ): Promise<MetricResultWithReason & { info: { alignmentScore: number; coverageScore: number } }> {
     const alignmentVerdicts = await this.judge.evaluateAlignment(input, output);
     const coverageVerdicts = await this.judge.evaluateCoverage(input, output);
 
@@ -27,20 +31,24 @@ export class SummarizationMetric extends Metric {
     const coverageScore = this.calculateScore(coverageVerdicts);
     const finalScore = Math.min(alignmentScore, coverageScore);
 
-    const reason = await this.judge.getReason(
-      input,
-      output,
+    const reason = await this.judge.getReason({
+      originalText: input,
+      summary: output,
       alignmentScore,
       coverageScore,
       finalScore,
-      this.scale,
       alignmentVerdicts,
       coverageVerdicts,
-    );
+      scale: this.scale,
+    });
 
     return {
       score: finalScore,
-      reason,
+      info: {
+        reason,
+        alignmentScore,
+        coverageScore,
+      },
     };
   }
 

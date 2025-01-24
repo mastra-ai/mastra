@@ -1,10 +1,20 @@
-import { Metric } from '@mastra/core';
+import { Metric, MetricResult } from '@mastra/core';
 import nlp from 'compromise';
 
-import { MetricScoringResult } from '../types';
+interface CompletenessMetricResult extends MetricResult {
+  info: {
+    inputElements: string[];
+    outputElements: string[];
+    missingElements: string[];
+    elementCounts: {
+      input: number;
+      output: number;
+    };
+  };
+}
 
 export class CompletenessMetric extends Metric {
-  async measure({ input, output }: { input: string; output: string }): Promise<MetricScoringResult> {
+  async measure(input: string, output: string): Promise<CompletenessMetricResult> {
     // Handle null/undefined inputs
     if (input === null || input === undefined || output === null || output === undefined) {
       throw new Error('Inputs cannot be null or undefined');
@@ -25,9 +35,7 @@ export class CompletenessMetric extends Metric {
 
     return {
       score: coverage,
-      details: `Completeness score: ${(coverage * 100).toFixed(1)}%`,
-      confidence: 0.8,
-      metrics: {
+      info: {
         inputElements,
         outputElements,
         missingElements: inputElements.filter(e => !outputElements.includes(e)),
