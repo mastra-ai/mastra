@@ -521,7 +521,9 @@ export class Agent<
   }) {
     return {
       before: async () => {
-        this.log(LogLevel.INFO, `Starting generation for agent ${this.name}`, { runId });
+        if (process.env.NODE_ENV !== 'test') {
+          this.log(LogLevel.INFO, `Starting generation for agent ${this.name}`, { runId });
+        }
 
         const systemMessage: CoreMessage = {
           role: 'system',

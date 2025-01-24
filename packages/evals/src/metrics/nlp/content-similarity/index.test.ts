@@ -8,7 +8,7 @@ describe('ContentSimilarityMetric', () => {
   it('should return perfect similarity for identical strings', async () => {
     const result = await metric.measure('The quick brown fox', 'The quick brown fox');
     expect(result.score).toBe(1);
-    expect(result.confidence).toBe(0.9);
+    expect(result.info?.similarity).toBe(1);
   });
 
   it('should handle case differences with default options', async () => {
@@ -71,7 +71,6 @@ describe('ContentSimilarityMetric', () => {
 
   it('should include similarity details in result', async () => {
     const result = await metric.measure('The quick brown fox', 'The quick brown fox');
-    expect(result.details).toBe('Content similarity: 100.0%');
-    expect(result.metrics).toEqual({ similarity: 1 });
+    expect(result.info).toEqual({ similarity: 1 });
   });
 });
