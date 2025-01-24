@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.1.27-alpha.68
+
+### Patch Changes
+
+- 0be7181: Fix forward version
+- 0be7181: Add perplexity models
+
 ## 0.1.27-alpha.67
 
 ### Patch Changes
