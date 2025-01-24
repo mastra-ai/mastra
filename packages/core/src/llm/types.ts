@@ -131,7 +131,9 @@ export type PerplexityModel =
   | 'llama-3.1-sonar-small-128k-chat'
   | 'llama-3.1-sonar-large-128k-chat'
   | 'llama-3.1-8b-instruct'
-  | 'llama-3.1-70b-instruct';
+  | 'llama-3.1-70b-instruct'
+  | 'sonar'
+  | 'sonar-pro';
 
 export type PerplexityConfig = {
   provider: 'PERPLEXITY';
