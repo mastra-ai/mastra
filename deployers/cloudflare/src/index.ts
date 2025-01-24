@@ -4,6 +4,8 @@ import { Cloudflare } from 'cloudflare';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 
+import { bundleForCloudflare } from './bunder';
+
 interface CFRoute {
   pattern: string;
   zone_name: string;
@@ -42,10 +44,10 @@ export class CloudflareDeployer extends MastraDeployer {
     }
   }
 
-  writeFiles({ dir }: { dir: string }): void {
+  async writeFiles({ dir }: { dir: string }): Promise<void> {
     this.loadEnvVars();
 
-    this.writeIndex({ dir });
+    await this.writeIndex({ dir });
 
     const cfWorkerName = this.projectName || 'mastra';
 
@@ -72,9 +74,9 @@ export class CloudflareDeployer extends MastraDeployer {
     writeFileSync(join(dir, 'wrangler.json'), JSON.stringify(wranglerConfig));
   }
 
-  writeIndex({ dir }: { dir: string }): void {
+  async writeIndex({ dir }: { dir: string }): Promise<void> {
     writeFileSync(
-      join(dir, './index.mjs'),
+      join(dir, './index-template.mjs'),
       `
       export default {
         fetch: async (request, env, context) => {
@@ -87,6 +89,8 @@ export class CloudflareDeployer extends MastraDeployer {
       }
       `,
     );
+
+    await bundleForCloudflare(join(dir, './index-template.mjs'), join(dir, './index.mjs'));
   }
 
   async deploy({ dir, token }: { dir: string; token: string }): Promise<void> {

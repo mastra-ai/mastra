@@ -19,7 +19,7 @@ export class VercelDeployer extends MastraDeployer {
   constructor({ scope, env, projectName }: { env?: Record<string, any>; scope: string; projectName: string }) {
     super({ scope, env, projectName });
   }
-  writeFiles({ dir }: { dir: string }): void {
+  async writeFiles({ dir }: { dir: string }): Promise<void> {
     this.writeIndex({ dir });
 
     writeFileSync(
@@ -159,7 +159,7 @@ export class VercelDeployer extends MastraDeployer {
     }
   }
 
-  writeIndex({ dir }: { dir: string }): void {
+  async writeIndex({ dir }: { dir: string }): Promise<void> {
     writeFileSync(
       join(dir, 'index.mjs'),
       `

@@ -46,7 +46,8 @@ export async function deploy({ dir, token }: { dir?: string; token?: string }) {
   if (!resDeployer) {
     // If no deployer, we are deploying to Mastra Cloud
   } else {
-    resDeployer.writeFiles({ dir: deployer.getMastraPath() });
+    await resDeployer.writeFiles({ dir: deployer.getMastraPath() });
+
     try {
       await resDeployer.deploy({
         dir: deployer.getMastraPath(),

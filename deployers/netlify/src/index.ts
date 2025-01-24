@@ -10,7 +10,7 @@ export class NetlifyDeployer extends MastraDeployer {
     super({ scope, env, projectName });
   }
 
-  writeFiles({ dir }: { dir: string }): void {
+  async writeFiles({ dir }: { dir: string }): Promise<void> {
     if (!existsSync(join(dir, 'netlify/functions/api'))) {
       mkdirSync(join(dir, 'netlify/functions/api'), { recursive: true });
     }
@@ -49,7 +49,7 @@ export class NetlifyDeployer extends MastraDeployer {
     await p2;
   }
 
-  writeIndex({ dir }: { dir: string }): void {
+  async writeIndex({ dir }: { dir: string }): Promise<void> {
     ['mastra.mjs', 'hono.mjs', 'server.mjs'].forEach(file => {
       renameSync(join(dir, file), join(dir, `netlify/functions/api/${file}`));
     });

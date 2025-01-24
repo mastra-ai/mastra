@@ -48,11 +48,11 @@ export abstract class MastraDeployer extends MastraBase {
       .filter(line => line.includes('=')); // Only include valid KEY=value pairs
   }
 
-  writeFiles({ dir }: { dir: string }): void {
+  async writeFiles({ dir }: { dir: string }): Promise<void> {
     this.logger.debug(`Writing files to ${dir}`);
   }
 
-  writeIndex({ dir }: { dir: string }): void {
+  async writeIndex({ dir }: { dir: string }): Promise<void> {
     this.logger.debug(`Writing index file to ${dir}`);
   }
 
