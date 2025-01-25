@@ -12,28 +12,37 @@ The `createLogger()` function is used to instantiate a logger based on a given c
 #### Console Logger (Development)
 
 ```typescript showLineNumbers copy
-const consoleLogger = createLogger({ type: 'CONSOLE', level: 'DEBUG' });
+const consoleLogger = createLogger({ name: 'Mastra', level: 'debug' });
 consoleLogger.info('App started'); 
 ```
 
-#### File Logger (Structured Logs)
+#### File Transport (Structured Logs)
 
 ```typescript showLineNumbers copy
-const fileLogger = createLogger({ type: 'FILE', dirPath: 'my-logs', level: 'WARN' });
-fileLogger.warn({ message: 'Low disk space', destinationPath: 'system', type: 'WORKFLOW' });
+import { FileTransport} from '@mastra/loggers';
+
+const fileLogger = createLogger({ name: 'Mastra', transports: { file: new FileTransport({ path: 'test-dir/test.log' }) }, level: 'warn' });
+fileLogger.warn('Low disk space', { destinationPath: 'system', type: 'WORKFLOW' });
 ```
 
 #### Upstash Logger (Remote Log Drain)
 
 ```typescript showLineNumbers copy
-const upstashLogger = createLogger({
-  type: 'UPSTASH',
-  url: process.env.UPSTASH_URL!,
-  token: process.env.UPSTASH_TOKEN!,
-  level: 'INFO',
-  key: 'production-logs',
+import { UpstashTransport } from '@mastra/loggers';
+
+const logger = createLogger({
+  name: 'Mastra',
+  transports: {
+    upstash: new UpstashTransport({
+        listName:  'production-logs',
+        upstashUrl: process.env.UPSTASH_URL!,
+        upstashToken: process.env.UPSTASH_TOKEN!,
+    })
+  },
+  level: 'info',
 });
-await upstashLogger.info({ message: 'User signed in', destinationPath: 'auth', type: 'AGENT', runId: 'run_123' });
+
+logger.info({ message: 'User signed in', destinationPath: 'auth', type: 'AGENT', runId: 'run_123' });
 ```
 
 ### Parameters

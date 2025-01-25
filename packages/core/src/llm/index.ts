@@ -83,7 +83,10 @@ export class LLM extends MastraBase {
     };
     const type = providerToType[model.provider as LLMProvider] ?? model.provider;
 
-    this.log(LogLevel.DEBUG, `Model type resolved to ${type} for provider ${model.provider}`);
+    this.logger.debug(`[LLM] - Model resolved to provider ${model.provider}`, {
+      sdk_type: type,
+      provider: model.provider,
+    });
 
     return type;
   }
@@ -124,7 +127,7 @@ export class LLM extends MastraBase {
   }): LanguageModelV1 {
     let modelDef: LanguageModelV1;
     if (model.type === 'openai') {
-      this.log(LogLevel.DEBUG, `Initializing OpenAI model ${model.name || 'gpt-4o-2024-08-06'}`);
+      this.logger.debug(`[LLM] - Initializing OpenAI model ${model.name || 'gpt-4o-2024-08-06'}`);
       const openai = createOpenAI({
         apiKey: model?.apiKey || process.env.OPENAI_API_KEY,
       });
@@ -475,7 +478,13 @@ export class LLM extends MastraBase {
     maxSteps?: number;
   } & Run) {
     const model = this.#model;
-    this.log(LogLevel.DEBUG, `Generating text with ${messages.length} messages`, { runId });
+    this.logger.debug(`[LLM] - Generating text`, {
+      runId,
+      messages,
+      maxSteps,
+      tools: Object.keys(tools || convertedTools || {}),
+    });
+
     let modelToPass;
 
     if ('name' in model) {
@@ -506,6 +515,16 @@ export class LLM extends MastraBase {
       maxSteps,
       onStepFinish: async (props: any) => {
         onStepFinish?.(JSON.stringify(props, null, 2));
+
+        this.logger.debug('[LLM] - Step Change:', {
+          text: props?.text,
+          toolCalls: props?.toolCalls,
+          toolResults: props?.toolResults,
+          finishReason: props?.finishReason,
+          usage: props?.usage,
+          runId,
+        });
+
         if (
           props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
           parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
@@ -540,7 +559,7 @@ export class LLM extends MastraBase {
     maxSteps?: number;
   } & Run) {
     const model = this.#model;
-    this.log(LogLevel.DEBUG, `Generating text with ${messages.length} messages`, { runId });
+    this.logger.debug(`[LLM] - Generating a text object`, { runId });
     let modelToPass;
 
     if ('name' in model) {
@@ -570,12 +589,20 @@ export class LLM extends MastraBase {
       toolChoice: params.toolChoice,
       maxSteps,
       onStepFinish: async (props: any) => {
+        this.logger.debug('[LLM] - Step Change:', {
+          text: props?.text,
+          toolCalls: props?.toolCalls,
+          toolResults: props?.toolResults,
+          finishReason: props?.finishReason,
+          usage: props?.usage,
+        });
+
         onStepFinish?.(JSON.stringify(props, null, 2));
         if (
           props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
           parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
         ) {
-          this.logger.warn('Rate limit approaching, waiting 10 seconds', runId);
+          this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
           await delay(10 * 1000);
         }
       },
@@ -649,16 +676,32 @@ export class LLM extends MastraBase {
       toolChoice: params.toolChoice,
       maxSteps,
       onStepFinish: async (props: any) => {
+        this.logger.debug('[LLM] - Step Change:', {
+          text: props?.text,
+          toolCalls: props?.toolCalls,
+          toolResults: props?.toolResults,
+          finishReason: props?.finishReason,
+          usage: props?.usage,
+        });
+
         onStepFinish?.(JSON.stringify(props, null, 2));
         if (
           props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
           parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
         ) {
-          this.logger.warn('Rate limit approaching, waiting 10 seconds', runId);
+          this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
           await delay(10 * 1000);
         }
       },
       onFinish: async (props: any) => {
+        this.logger.debug('[LLM] - On Finish:', {
+          text: props?.text,
+          toolCalls: props?.toolCalls,
+          toolResults: props?.toolResults,
+          finishReason: props?.finishReason,
+          usage: props?.usage,
+        });
+
         onFinish?.(JSON.stringify(props, null, 2));
       },
     };
@@ -718,16 +761,32 @@ export class LLM extends MastraBase {
       toolChoice: params.toolChoice,
       maxSteps,
       onStepFinish: async (props: any) => {
+        this.logger.debug('[LLM] - Step Change:', {
+          text: props?.text,
+          toolCalls: props?.toolCalls,
+          toolResults: props?.toolResults,
+          finishReason: props?.finishReason,
+          usage: props?.usage,
+        });
+
         onStepFinish?.(JSON.stringify(props, null, 2));
         if (
           props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
           parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
         ) {
-          this.logger.warn('Rate limit approaching, waiting 10 seconds', runId);
+          this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
           await delay(10 * 1000);
         }
       },
       onFinish: async (props: any) => {
+        this.logger.debug('[LLM] - On Finish:', {
+          text: props?.text,
+          toolCalls: props?.toolCalls,
+          toolResults: props?.toolResults,
+          finishReason: props?.finishReason,
+          usage: props?.usage,
+        });
+
         onFinish?.(JSON.stringify(props, null, 2));
       },
     };

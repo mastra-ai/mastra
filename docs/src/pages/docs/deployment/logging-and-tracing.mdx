@@ -25,22 +25,21 @@ import { Mastra, createLogger } from "@mastra/core";
 export const mastra = new Mastra({
   // Other Mastra configuration...
   logger: createLogger({
-    type: "CONSOLE",
-    level: "INFO",
+    name: "Mastra",
+    level: "info",
   }),
 });
 ```
 
 In this configuration:
 
-- `type: "CONSOLE"` specifies that logs should be output to the console.
-- `level: "INFO"` sets the minimum severity of logs to record.
+- `name: "Mastra"` specifies the name to group logs under.
+- `level: "info"` sets the minimum severity of logs to record.
 
 ### Configuration
 
 - For more details on the options you can pass to `createLogger()`, see the [createLogger reference documentation](/docs/reference/observability/create-logger.mdx).
 - Once you have a `Logger` instance, you can call its methods (e.g., `.info()`, `.warn()`, `.error()`) in the [Logger instance reference documentation](/docs/reference/observability/logger.mdx).
-- If you need to direct logs to multiple destinations—like both console and an external logging service—see the [combineLoggers reference documentation](/docs/reference/observability/combine-loggers.mdx).
 - If you want to send your logs to an external service for centralized collection, analysis, or storage, you can configure other logger types such as Upstash Redis. Consult the [createLogger reference documentation](/docs/reference/observability/create-logger.mdx) for details on parameters like `url`, `token`, and `key` when using the `UPSTASH` logger type.
 
 ## Telemetry

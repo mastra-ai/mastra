@@ -17,6 +17,7 @@ export class PgVector extends MastraVector {
     });
 
     const telemetry = this.__getTelemetry();
+
     this.pool =
       telemetry?.traceClass(basePool, {
         spanNamePrefix: 'pg-vector',

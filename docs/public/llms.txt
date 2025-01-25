@@ -818,22 +818,21 @@ import { Mastra, createLogger } from "@mastra/core";
 export const mastra = new Mastra({
   // Other Mastra configuration...
   logger: createLogger({
-    type: "CONSOLE",
-    level: "INFO",
+    name: "Mastra",
+    level: "info",
   }),
 });
 ```
 
 In this configuration:
 
-- `type: "CONSOLE"` specifies that logs should be output to the console.
-- `level: "INFO"` sets the minimum severity of logs to record.
+- `name: "Mastra"` specifies the name to group logs under.
+- `level: "info"` sets the minimum severity of logs to record.
 
 ### Configuration
 
 - For more details on the options you can pass to `createLogger()`, see the [createLogger reference documentation](/docs/reference/observability/create-logger.mdx).
 - Once you have a `Logger` instance, you can call its methods (e.g., `.info()`, `.warn()`, `.error()`) in the [Logger instance reference documentation](/docs/reference/observability/logger.mdx).
-- If you need to direct logs to multiple destinations—like both console and an external logging service—see the [combineLoggers reference documentation](/docs/reference/observability/combine-loggers.mdx).
 - If you want to send your logs to an external service for centralized collection, analysis, or storage, you can configure other logger types such as Upstash Redis. Consult the [createLogger reference documentation](/docs/reference/observability/create-logger.mdx) for details on parameters like `url`, `token`, and `key` when using the `UPSTASH` logger type.
 
 ## Telemetry
@@ -4008,8 +4007,8 @@ export const mastra = new Mastra({
   workflows: [],
   integrations: [],
   logger: createLogger({
-    type: "CONSOLE",
-    level: "INFO",
+    name: "Mastra",
+    level: "info",
   }),
   engine: {},
   tools: {},
@@ -4611,41 +4610,6 @@ async function main() {
 - For more details about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/sdk).
 
 ================================================================================
-Source: src/pages/docs/reference/observability/combine-loggers.mdx
-================================================================================
-
-# combineLoggers()
-
-The `combineLoggers()` function takes multiple logger instances and returns a single Logger that broadcasts messages to all underlying loggers. This is useful for writing logs to multiple destinations simultaneously.
-
-### Usage
-
-```typescript showLineNumbers copy
-import { createLogger, combineLoggers } from '@mastra/core';
-
-const consoleLogger = createLogger({ type: 'CONSOLE', level: 'INFO' });
-const fileLogger = createLogger({ type: 'FILE', dirPath: 'my-logs', level: 'INFO' });
-
-const multiLogger = combineLoggers([consoleLogger, fileLogger]);
-
-// This log entry is recorded by both the console and file loggers
-multiLogger.info({ message: 'Server started', destinationPath: 'server', type: 'AGENT' });
-```
-
-### Parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: 'loggers',
-      type: 'Logger<BaseLogMessage>[]',
-      description: 'An array of logger instances created by createLogger() or custom logger objects.',
-    },
-  ]}
-/>
-
-
-================================================================================
 Source: src/pages/docs/reference/observability/create-logger.mdx
 ================================================================================
 
@@ -4676,7 +4640,7 @@ const upstashLogger = createLogger({
   type: 'UPSTASH',
   url: process.env.UPSTASH_URL!,
   token: process.env.UPSTASH_TOKEN!,
-  level: 'INFO',
+  level: 'info',
   key: 'production-logs',
 });
 await upstashLogger.info({ message: 'User signed in', destinationPath: 'auth', type: 'AGENT', runId: 'run_123' });
@@ -4693,7 +4657,7 @@ Source: src/pages/docs/reference/observability/logger.mdx
 
 # Logger Instance
 
-A Logger instance is created by `createLogger()` or `combineLoggers()` and provides methods to record events at various severity levels. Depending on the logger type, messages may be written to the console, file, or an external service.
+A Logger instance is created by `createLogger()` and provides methods to record events at various severity levels. Depending on the logger type, messages may be written to the console, file, or an external service.
 
 ## Example
 

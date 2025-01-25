@@ -24,8 +24,8 @@ const calculatorTool = createTool({
 
 const mastra = new Mastra({
   logger: createLogger({
-    type: 'CONSOLE',
-    level: 'INFO',
+    name: 'CONSOLE',
+    level: 'info',
   }),
 });
 
@@ -39,7 +39,7 @@ describe('LLM Class Integration Tests', () => {
       info: (msg: any) => console.info(msg),
       warn: (msg: any) => console.warn(msg),
       error: (msg: any) => console.error(msg),
-    };
+    } as Logger;
   });
 
   const llm = mastra.LLM({

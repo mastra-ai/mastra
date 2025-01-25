@@ -803,7 +803,7 @@ describe('Workflow', () => {
         retryConfig: { attempts: 3, delay: 500 },
         mastra: {
           logger: createLogger({
-            type: 'CONSOLE',
+            name: 'Workflow',
           }),
         },
       });

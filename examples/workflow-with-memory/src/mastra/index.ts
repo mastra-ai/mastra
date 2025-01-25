@@ -11,8 +11,8 @@ export const mastra = new Mastra({
   memory: pgMemory,
   agents: { catOne },
   logger: createLogger({
-    type: 'CONSOLE',
-    level: 'DEBUG',
+    name: 'Mastra',
+    level: 'debug',
   }),
   workflows: {
     sequentialWorkflow,

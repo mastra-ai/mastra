@@ -38,20 +38,21 @@ export async function generateOpenApiSpec({
       },
     });
 
-    console.log({
-      data: res.results,
-    });
-
     const openApiSpec = (
       res.results["generate-spec"] as { payload: { mergedSpec: string } }
     )?.payload?.mergedSpec;
 
-    const logs = await mastra.getLogsByRunId(res.runId);
+    const logs =
+      (await mastra.getLogsByRunId({
+        runId: res.runId,
+        transportId: "upstash",
+      })) || [];
 
     return { message: "successful", data: openApiSpec, logs: logs.reverse() };
   } catch (error: unknown) {
     const { runId, message } = error as { runId: string; message: string };
-    const logs = await mastra.getLogsByRunId(runId);
+    const logs =
+      (await mastra.getLogsByRunId({ runId, transportId: "upstash" })) || [];
     return { message: "failed", data: message, logs };
   }
 }
@@ -82,12 +83,17 @@ export async function makeMastraPR({
 
     const pr_url = prUrl;
 
-    const logs = await mastra.getLogsByRunId(res.runId);
+    const logs =
+      (await mastra.getLogsByRunId({
+        runId: res.runId,
+        transportId: "upstash",
+      })) || [];
 
     return { message: "successful", data: pr_url, logs: logs.reverse() };
   } catch (error: unknown) {
     const { runId, message } = error as { runId: string; message: string };
-    const logs = await mastra.getLogsByRunId(runId);
+    const logs =
+      (await mastra.getLogsByRunId({ runId, transportId: "upstash" })) || [];
     return { message: "failed", data: message, logs };
   }
 }

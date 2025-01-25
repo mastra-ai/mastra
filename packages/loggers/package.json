@@ -1,16 +1,16 @@
 {
-  "name": "@mastra/deployer-cloudflare",
-  "version": "0.0.1-alpha.7",
+  "name": "@mastra/loggers",
+  "version": "0.0.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
-  "module": "dist/deployer-cloudflare.esm.js",
+  "module": "dist/loggers.esm.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "import": {
         "types": "./dist/index.d.ts",
-        "default": "./dist/deployer-cloudflare.esm.js"
+        "default": "./dist/loggers.esm.js"
       },
       "require": {
         "types": "./dist/index.d.ts",
@@ -28,14 +28,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@mastra/core": "workspace:*",
-    "@mastra/deployer": "workspace:*",
-    "cloudflare": "^4.0.0",
-    "date-fns": "^4.1.0",
-    "dotenv": "^16.3.1",
-    "execa": "^9.3.1",
-    "wrangler": "^3.103.2",
-    "zod": "^3.24.1"
+    "@mastra/core": "workspace:*"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.26.0",
