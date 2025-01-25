@@ -30,6 +30,7 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",
+    "cloudflare": "^4.0.0",
     "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",
     "execa": "^9.3.1",

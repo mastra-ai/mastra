@@ -1,5 +1,6 @@
 import { MastraDeployer } from '@mastra/core';
 import * as child_process from 'child_process';
+import { Cloudflare } from 'cloudflare';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 
@@ -10,6 +11,7 @@ interface CFRoute {
 }
 
 export class CloudflareDeployer extends MastraDeployer {
+  private cloudflare: Cloudflare | undefined;
   routes?: CFRoute[] = [];
   workerNamespace?: string;
   constructor({
@@ -18,17 +20,26 @@ export class CloudflareDeployer extends MastraDeployer {
     projectName,
     routes,
     workerNamespace,
+    auth,
   }: {
     env?: Record<string, any>;
     scope: string;
     projectName: string;
     routes?: CFRoute[];
     workerNamespace?: string;
+    auth?: {
+      apiToken: string;
+      apiEmail: string;
+    };
   }) {
     super({ scope, env, projectName });
 
     this.routes = routes;
     this.workerNamespace = workerNamespace;
+
+    if (auth) {
+      this.cloudflare = new Cloudflare(auth);
+    }
   }
 
   writeFiles({ dir }: { dir: string }): void {
@@ -91,6 +102,27 @@ export class CloudflareDeployer extends MastraDeployer {
         ...this.env,
         PATH: process.env.PATH,
       },
+    });
+  }
+
+  async tagWorker({
+    workerName,
+    namespace,
+    tags,
+    scope,
+  }: {
+    scope: string;
+    workerName: string;
+    namespace: string;
+    tags: string[];
+  }): Promise<void> {
+    if (!this.cloudflare) {
+      throw new Error('Cloudflare Deployer not initialized');
+    }
+
+    await this.cloudflare.workersForPlatforms.dispatch.namespaces.scripts.tags.update(namespace, workerName, {
+      account_id: scope,
+      body: tags,
     });
   }
 }
