@@ -3,20 +3,20 @@ import fs from 'fs';
 import path from 'path';
 import { describe, it, expect, beforeEach, afterEach, vi, afterAll } from 'vitest';
 
-import { FileLogger } from './index.js';
+import { FileTransport } from './index.js';
 
-describe('FileLogger', () => {
+describe('FileTransport', () => {
   const testDir = __dirname + '/fixtures';
   const testFile = 'test.log';
   const testPath = path.join(testDir, testFile);
-  let fileLogger: FileLogger;
+  let fileLogger: FileTransport;
 
   beforeEach(async () => {
     // Create test directory
     if (!fs.existsSync(testDir)) {
       fs.mkdirSync(testDir);
     }
-    fileLogger = new FileLogger({ path: testPath });
+    fileLogger = new FileTransport({ path: testPath });
   });
 
   afterAll(async () => {

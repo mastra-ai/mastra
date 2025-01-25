@@ -8,11 +8,11 @@ import {
   createLogger,
   combineLoggers,
   type BaseLogMessage,
-  LoggerTransform,
+  LoggerTransport,
 } from './index.js';
 
 // Helper to create a memory stream that captures log output
-class MemoryStream extends LoggerTransform {
+class MemoryStream extends LoggerTransport {
   chunks: any[] = [];
 
   constructor() {

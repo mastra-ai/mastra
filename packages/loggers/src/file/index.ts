@@ -1,7 +1,7 @@
 import { LoggerTransport, BaseLogMessage } from '@mastra/core';
 import { createWriteStream, existsSync, readFileSync, WriteStream } from 'fs';
 
-export class FileLogger extends LoggerTransport {
+export class FileTransport extends LoggerTransport {
   path: string;
   fileStream: WriteStream;
   constructor({ path }: { path: string }) {

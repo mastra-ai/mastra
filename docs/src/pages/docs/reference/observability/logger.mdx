@@ -5,13 +5,13 @@ description: Documentation for Logger instances, which provide methods to record
 
 # Logger Instance
 
-A Logger instance is created by `createLogger()` or `combineLoggers()` and provides methods to record events at various severity levels. Depending on the logger type, messages may be written to the console, file, or an external service.
+A Logger instance is created by `createLogger()` and provides methods to record events at various severity levels. Depending on the logger type, messages may be written to the console, file, or an external service.
 
 ## Example
 
 ```typescript showLineNumbers copy
 // Using a console logger
-const logger = createLogger({ type: 'CONSOLE', level: 'INFO' });
+const logger = createLogger({ name: 'Mastra', level: 'info' });
 
 logger.debug('Debug message'); // Won't be logged because level is INFO
 logger.info({ message: 'User action occurred', destinationPath: 'user-actions', type: 'AGENT' }); // Logged
