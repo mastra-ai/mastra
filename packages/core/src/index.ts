@@ -1,4 +1,5 @@
 export * from './agent';
+export * from './base';
 export * from './deployer';
 export * from './embeddings';
 export * from './engine';

@@ -38,7 +38,7 @@ export class MastraBase {
       ...(opts || {}),
     };
 
-    const logMethod = level.toLowerCase() as keyof Logger<BaseLogMessage>;
+    const logMethod = level.toLowerCase() as keyof Logger;
     (this.logger as any)[logMethod]?.(logMessage);
   }
 
@@ -48,7 +48,7 @@ export class MastraBase {
    */
   __setTelemetry(telemetry: Telemetry) {
     this.telemetry = telemetry;
-    this.log(LogLevel.DEBUG, `Telemetry updated for ${this.component} ${this.telemetry.tracer}`);
+    this.logger.debug(`Telemetry updated for ${this.component} ${this.telemetry.tracer}`);
   }
 
   /**

@@ -1,4 +1,5 @@
 import pino from 'pino';
+import pretty from 'pino-pretty';
 import { Transform } from 'stream';
 
 import { Run } from '../run/types';
@@ -47,7 +48,7 @@ export class LoggerTransport extends Transform {
 type TransportMap = Record<string, LoggerTransport>;
 
 // Base Pino Logger
-export class Logger<T extends BaseLogMessage = BaseLogMessage> {
+export class Logger {
   protected logger: pino.Logger;
   transports: TransportMap;
 
@@ -71,34 +72,35 @@ export class Logger<T extends BaseLogMessage = BaseLogMessage> {
           stream: transport,
           level: options.level || LogLevel.INFO,
         })),
-        { stream: pino.destination(1), level: options.level || LogLevel.INFO }, // stdout
+        {
+          stream: pretty({
+            colorize: true,
+            levelFirst: true,
+            ignore: 'pid,hostname',
+            colorizeObjects: true,
+            translateTime: 'SYS:standard',
+            singleLine: false,
+          }),
+          level: options.level || LogLevel.INFO,
+        },
       ]),
     );
   }
 
-  protected formatMessage(message: T | string): any {
-    if (typeof message === 'string') {
-      return message;
-    }
-    return {
-      ...message,
-    };
+  debug(message: string, args: Record<string, any> = {}): void {
+    this.logger.debug(args, message);
   }
 
-  debug(message: T | string, args: Record<string, any> = {}): void {
-    this.logger.debug(args, this.formatMessage(message));
+  info(message: string, args: Record<string, any> = {}): void {
+    this.logger.info(args, message);
   }
 
-  info(message: T | string, args: Record<string, any> = {}): void {
-    this.logger.info(args, this.formatMessage(message));
+  warn(message: string, args: Record<string, any> = {}): void {
+    this.logger.warn(args, message);
   }
 
-  warn(message: T | string, args: Record<string, any> = {}): void {
-    this.logger.warn(args, this.formatMessage(message));
-  }
-
-  error(message: T | string, args: Record<string, any> = {}): void {
-    this.logger.error(args, this.formatMessage(message));
+  error(message: string, args: Record<string, any> = {}): void {
+    this.logger.error(args, message);
   }
 
   // Stream creation for process output handling
@@ -127,42 +129,38 @@ export class Logger<T extends BaseLogMessage = BaseLogMessage> {
 }
 
 // Factory function for creating loggers
-export function createLogger<T extends BaseLogMessage = BaseLogMessage>(options: {
-  name?: string;
-  level?: LogLevel;
-  transports?: TransportMap;
-}) {
-  return new Logger<T>(options);
+export function createLogger(options: { name?: string; level?: LogLevel; transports?: TransportMap }) {
+  return new Logger(options);
 }
 
 // Multi-logger implementation for handling multiple loggers
-export class MultiLogger<T extends BaseLogMessage = BaseLogMessage> {
-  private loggers: Logger<T>[];
+export class MultiLogger {
+  private loggers: Logger[];
 
-  constructor(loggers: Logger<T>[]) {
+  constructor(loggers: Logger[]) {
     this.loggers = loggers;
   }
 
-  debug(message: T | string, ...args: any[]): void {
+  debug(message: string, ...args: any[]): void {
     this.loggers.forEach(logger => logger.debug(message, ...args));
   }
 
-  info(message: T | string, ...args: any[]): void {
+  info(message: string, ...args: any[]): void {
     this.loggers.forEach(logger => logger.info(message, ...args));
   }
 
-  warn(message: T | string, ...args: any[]): void {
+  warn(message: string, ...args: any[]): void {
     this.loggers.forEach(logger => logger.warn(message, ...args));
   }
 
-  error(message: T | string, ...args: any[]): void {
+  error(message: string, ...args: any[]): void {
     this.loggers.forEach(logger => logger.error(message, ...args));
   }
 }
 
 // Utility function to combine multiple loggers
-export function combineLoggers<T extends BaseLogMessage = BaseLogMessage>(loggers: Logger<T>[]): MultiLogger<T> {
-  return new MultiLogger<T>(loggers);
+export function combineLoggers(loggers: Logger[]): MultiLogger {
+  return new MultiLogger(loggers);
 }
 
 // No-op logger implementation
