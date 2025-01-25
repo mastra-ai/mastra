@@ -9,6 +9,10 @@ export const RegisteredLogger = {
   WORKFLOW: 'WORKFLOW',
   LLM: 'LLM',
   TTS: 'TTS',
+  VECTOR: 'VECTOR',
+  DEPLOYER: 'DEPLOYER',
+  ENGINE: 'ENGINE',
+  MEMORY: 'MEMORY',
 } as const;
 
 export type RegisteredLogger = (typeof RegisteredLogger)[keyof typeof RegisteredLogger];

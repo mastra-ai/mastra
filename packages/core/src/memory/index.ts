@@ -9,6 +9,8 @@ import {
   CoreMessage,
 } from 'ai';
 
+import { MastraBase } from '../base';
+
 export type AiMessageType = AiMessage;
 
 // Types for the memory system
@@ -42,8 +44,12 @@ export type MessageResponse<T extends 'raw' | 'core_message'> = {
  * Abstract Memory class that defines the interface for storing and retrieving
  * conversation threads and messages.
  */
-export abstract class MastraMemory {
+export abstract class MastraMemory extends MastraBase {
   MAX_CONTEXT_TOKENS?: number;
+
+  constructor() {
+    super({ component: 'MEMORY', name: 'MastraMemory' });
+  }
 
   estimateTokens(text: string): number {
     return Math.ceil(text.split(' ').length * 1.3);

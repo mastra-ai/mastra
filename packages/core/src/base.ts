@@ -7,8 +7,8 @@ export class MastraBase {
   name?: string;
   telemetry?: Telemetry;
 
-  constructor({ component, name }: { component: RegisteredLogger; name?: string }) {
-    this.component = component;
+  constructor({ component, name }: { component?: RegisteredLogger; name?: string }) {
+    this.component = component || RegisteredLogger.LLM;
     this.name = name;
     this.logger = createLogger({ name: `${this.component} - ${this.name}` });
   }
@@ -19,7 +19,7 @@ export class MastraBase {
    */
   __setLogger(logger: Logger) {
     this.logger = logger;
-    this.log(LogLevel.DEBUG, `Logger updated for LLM `);
+    this.logger.debug(`Logger updated for ${this.component}:${this.name}`);
   }
 
   /**
@@ -49,6 +49,14 @@ export class MastraBase {
   __setTelemetry(telemetry: Telemetry) {
     this.telemetry = telemetry;
     this.log(LogLevel.DEBUG, `Telemetry updated for ${this.component} ${this.telemetry.tracer}`);
+  }
+
+  /**
+   * Get the telemetry on the vector
+   * @returns telemetry
+   */
+  __getTelemetry() {
+    return this.telemetry;
   }
 
   /* 

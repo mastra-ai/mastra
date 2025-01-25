@@ -67,18 +67,25 @@ export class Mastra<
       }
     }
 
-    /**
-     * Deployer
-     **/
-    if (config?.deployer) {
-      this.deployer = config.deployer;
-    }
-
     /*
     Telemetry
     */
     if (config?.telemetry) {
       this.telemetry = Telemetry.init(config.telemetry);
+    }
+
+    /**
+     * Deployer
+     **/
+    if (config?.deployer) {
+      this.deployer = config.deployer;
+      if (this.telemetry) {
+        this.deployer = this.telemetry.traceClass(config.deployer, {
+          excludeMethods: ['__setTelemetry', '__getTelemetry'],
+        });
+        this.deployer.__setTelemetry(this.telemetry);
+      }
+      this.deployer.__setLogger(this.logger);
     }
 
     /*
@@ -93,6 +100,7 @@ export class Mastra<
       } else {
         this.engine = config.engine;
       }
+      this.engine.__setLogger(this.logger);
     }
 
     /*
@@ -109,7 +117,10 @@ export class Mastra<
         } else {
           vectors[key] = vector;
         }
+
+        vectors[key].__setLogger(this.logger);
       });
+
       this.vectors = vectors as TVectors;
     }
 
@@ -136,10 +147,34 @@ export class Mastra<
       this.vectors = config.vectors;
     }
 
-    this.memory = config?.memory;
+    if (config?.memory) {
+      this.memory = config.memory;
+      if (this.telemetry) {
+        this.memory = this.telemetry.traceClass(config.memory, {
+          excludeMethods: ['__setTelemetry', '__getTelemetry'],
+        });
+        this.memory.__setTelemetry(this.telemetry);
+      }
+
+      if (this.memory) {
+        this.memory.__setLogger(this.logger);
+      }
+    }
 
     if (config?.tts) {
       this.tts = config.tts;
+      Object.entries(this.tts).forEach(([key, ttsCl]) => {
+        if (this.tts?.[key]) {
+          if (this.telemetry) {
+            // @ts-ignore
+            this.tts[key] = this.telemetry.traceClass(ttsCl, {
+              excludeMethods: ['__setTelemetry', '__getTelemetry'],
+            });
+            this.tts[key].__setTelemetry(this.telemetry);
+          }
+          this.tts[key].__setLogger(this.logger);
+        }
+      });
     }
 
     /*

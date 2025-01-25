@@ -1,4 +1,4 @@
-import { Telemetry } from '../telemetry';
+import { MastraBase } from '../base';
 
 export interface QueryResult {
   id: string;
@@ -13,26 +13,10 @@ export interface IndexStats {
   metric?: 'cosine' | 'euclidean' | 'dotproduct';
 }
 
-export abstract class MastraVector {
-  #telemetry?: Telemetry;
-
-  /**
-   * Set the telemetry on the vector
-   * @param telemetry
-   */
-  __setTelemetry(telemetry: Telemetry) {
-    this.#telemetry = telemetry;
-    console.log(`${this.#telemetry.name} set on vector`);
+export abstract class MastraVector extends MastraBase {
+  constructor() {
+    super({ name: 'MastraVector', component: 'VECTOR' });
   }
-
-  /**
-   * Get the telemetry on the vector
-   * @returns telemetry
-   */
-  __getTelemetry() {
-    return this.#telemetry;
-  }
-
   abstract upsert(
     indexName: string,
     vectors: number[][],
