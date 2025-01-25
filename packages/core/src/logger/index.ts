@@ -69,8 +69,9 @@ export class Logger<T extends BaseLogMessage = BaseLogMessage> {
       pino.multistream([
         ...Object.entries(this.transports).map(([_, transport]) => ({
           stream: transport,
+          level: options.level || LogLevel.INFO,
         })),
-        { stream: pino.destination(1) }, // stdout
+        { stream: pino.destination(1), level: options.level || LogLevel.INFO }, // stdout
       ]),
     );
   }

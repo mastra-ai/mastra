@@ -12,11 +12,11 @@ export class UpstashTransport extends LoggerTransport {
   flushIntervalId: NodeJS.Timeout;
 
   constructor(opts: {
-    listName: string;
-    maxListLength: number;
-    batchSize: number;
+    listName?: string;
+    maxListLength?: number;
+    batchSize?: number;
     upstashUrl: string;
-    flushInterval: number;
+    flushInterval?: number;
     upstashToken: string;
   }) {
     super({ objectMode: true });
@@ -44,15 +44,13 @@ export class UpstashTransport extends LoggerTransport {
   }
 
   private async executeUpstashCommand(command: any[]): Promise<any> {
-    const response = await fetch(this.upstashUrl, {
+    const response = await fetch(`${this.upstashUrl}/pipeline`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.upstashToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        pipeline: [command],
-      }),
+      body: JSON.stringify([command]),
     });
 
     if (!response.ok) {
@@ -139,7 +137,13 @@ export class UpstashTransport extends LoggerTransport {
       const response = await this.executeUpstashCommand(command);
 
       // Parse the logs from JSON strings back to objects
-      return response[0].map((log: string) => JSON.parse(log)) as BaseLogMessage[];
+      return response?.[0]?.result.map((log: string) => {
+        try {
+          return JSON.parse(log);
+        } catch (e) {
+          return '';
+        }
+      }) as BaseLogMessage[];
     } catch (error) {
       console.error('Error getting logs from Upstash:', error);
       return [];
@@ -149,7 +153,7 @@ export class UpstashTransport extends LoggerTransport {
   async getLogsByRunId({ runId }: { runId: string }): Promise<BaseLogMessage[]> {
     try {
       const allLogs = await this.getLogs();
-      return (allLogs.filter(log => log.runId === runId) || []) as BaseLogMessage[];
+      return (allLogs.filter((log: any) => log.msg?.runId === runId) || []) as BaseLogMessage[];
     } catch (error) {
       console.error('Error getting logs by runId from Upstash:', error);
       return [] as BaseLogMessage[];

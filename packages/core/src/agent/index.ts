@@ -61,8 +61,6 @@ export class Agent<
 
     this.model = config.model;
 
-    this.log(LogLevel.DEBUG, `Agent ${this.name} initialized with model ${this.model.provider}`, { runId: this.name });
-
     this.tools = {} as TTools;
 
     this.metrics = {} as TMetrics;
@@ -90,6 +88,8 @@ export class Agent<
     }
 
     this.#mastra = p;
+
+    this.logger.debug(`Agent ${this.name} initialized with model ${this.model.provider}`, { runId: this.name });
   }
 
   /**
@@ -98,7 +98,7 @@ export class Agent<
    */
   __setTools(tools: TTools) {
     this.tools = tools;
-    this.log(LogLevel.DEBUG, `Tools set for agent ${this.name}`, { runId: this.name });
+    this.logger.debug(`Tools set for agent ${this.name}`, { runId: this.name });
   }
 
   async generateTitleFromUserMessage({ message }: { message: CoreUserMessage }) {

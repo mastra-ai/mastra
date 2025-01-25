@@ -1,4 +1,5 @@
 import { createLogger, Mastra } from "@mastra/core";
+import { UpstashTransport } from "@mastra/loggers";
 import { PostgresEngine } from "@mastra/engine";
 import { agentOne } from "./agents";
 import * as syncs from "./syncs";
@@ -6,9 +7,14 @@ import { makePRToMastraWorkflow, openApiSpecGenWorkflow } from "./workflows";
 
 export const mastra = new Mastra({
   logger: createLogger({
-    type: "UPSTASH",
-    token: process.env.UPSTASH_API_KEY!,
-    url: process.env.UPSTASH_URL!,
+    name: "OPENAPI_SPEC_WRITER",
+    level: "debug",
+    transports: {
+      upstash: new UpstashTransport({
+        upstashToken: process.env.UPSTASH_API_KEY!,
+        upstashUrl: process.env.UPSTASH_URL!,
+      }),
+    },
   }),
   syncs,
   agents: { "openapi-spec-gen-agent": agentOne },
