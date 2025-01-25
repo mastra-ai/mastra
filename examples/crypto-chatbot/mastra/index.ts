@@ -16,8 +16,8 @@ export const createMastra = ({
     memory: pgMemory,
     agents: { cryptoAgent: createCryptoAgent(modelProvider, modelName) },
     logger: createLogger({
-      type: 'CONSOLE',
-      level: 'DEBUG',
+      name: 'CONSOLE',
+      level: 'debug',
     }),
   });
 

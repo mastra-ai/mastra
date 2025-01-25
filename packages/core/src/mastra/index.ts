@@ -7,7 +7,7 @@ import { MastraDeployer } from '../deployer';
 import { MastraEngine } from '../engine';
 import { LLM } from '../llm';
 import { ModelConfig } from '../llm/types';
-import { BaseLogger, createLogger, noopLogger } from '../logger';
+import { LogLevel, Logger, createLogger, noopLogger } from '../logger';
 import { MastraMemory } from '../memory';
 import { Run } from '../run/types';
 import { SyncAction } from '../sync';
@@ -28,7 +28,7 @@ export class Mastra<
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
-  TLogger extends BaseLogger = BaseLogger,
+  TLogger extends Logger = Logger,
 > {
   private vectors?: TVectors;
   private agents: TAgents;
@@ -54,24 +54,18 @@ export class Mastra<
     deployer?: MastraDeployer;
   }) {
     /*
-    Logger
+      Logger
     */
 
     if (config?.logger === false) {
       this.logger = noopLogger as unknown as TLogger;
     } else {
-      let logger = createLogger({ type: 'CONSOLE', level: 'WARN' }) as unknown as TLogger;
       if (config?.logger) {
-        logger = config.logger;
+        this.logger = config.logger;
+      } else {
+        const levleOnEnv = process.env.NODE_ENV === 'production' ? LogLevel.WARN : LogLevel.INFO;
+        this.logger = createLogger({ name: 'Mastra', level: levleOnEnv }) as unknown as TLogger;
       }
-      this.logger = logger;
-    }
-
-    /**
-     * Deployer
-     **/
-    if (config?.deployer) {
-      this.deployer = config.deployer;
     }
 
     /*
@@ -79,6 +73,20 @@ export class Mastra<
     */
     if (config?.telemetry) {
       this.telemetry = Telemetry.init(config.telemetry);
+    }
+
+    /**
+     * Deployer
+     **/
+    if (config?.deployer) {
+      this.deployer = config.deployer;
+      if (this.telemetry) {
+        this.deployer = this.telemetry.traceClass(config.deployer, {
+          excludeMethods: ['__setTelemetry', '__getTelemetry'],
+        });
+        this.deployer.__setTelemetry(this.telemetry);
+      }
+      this.deployer.__setLogger(this.logger);
     }
 
     /*
@@ -93,6 +101,7 @@ export class Mastra<
       } else {
         this.engine = config.engine;
       }
+      this.engine.__setLogger(this.logger);
     }
 
     /*
@@ -109,7 +118,10 @@ export class Mastra<
         } else {
           vectors[key] = vector;
         }
+
+        vectors[key].__setLogger(this.logger);
       });
+
       this.vectors = vectors as TVectors;
     }
 
@@ -136,10 +148,34 @@ export class Mastra<
       this.vectors = config.vectors;
     }
 
-    this.memory = config?.memory;
+    if (config?.memory) {
+      this.memory = config.memory;
+      if (this.telemetry) {
+        this.memory = this.telemetry.traceClass(config.memory, {
+          excludeMethods: ['__setTelemetry', '__getTelemetry'],
+        });
+        this.memory.__setTelemetry(this.telemetry);
+      }
+
+      if (this.memory) {
+        this.memory.__setLogger(this.logger);
+      }
+    }
 
     if (config?.tts) {
       this.tts = config.tts;
+      Object.entries(this.tts).forEach(([key, ttsCl]) => {
+        if (this.tts?.[key]) {
+          if (this.telemetry) {
+            // @ts-ignore
+            this.tts[key] = this.telemetry.traceClass(ttsCl, {
+              excludeMethods: ['__setTelemetry', '__getTelemetry'],
+            });
+            this.tts[key].__setTelemetry(this.telemetry);
+          }
+          this.tts[key].__setLogger(this.logger);
+        }
+      });
     }
 
     /*
@@ -315,11 +351,17 @@ export class Mastra<
     return this.telemetry;
   }
 
-  public async getLogsByRunId(runId: string) {
-    return await this.logger.getLogsByRunId(runId);
+  public async getLogsByRunId({ runId, transportId }: { runId: string; transportId: string }) {
+    if (!transportId) {
+      throw new Error('Transport ID is required');
+    }
+    return await this.logger.getLogsByRunId({ runId, transportId });
   }
 
-  public async getLogs() {
-    return await this.logger.getLogs();
+  public async getLogs(transportId: string) {
+    if (!transportId) {
+      throw new Error('Transport ID is required');
+    }
+    return await this.logger.getLogs(transportId);
   }
 }

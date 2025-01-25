@@ -50,7 +50,7 @@ jobs:
         run: pnpm install
 
       - name: Build core
-        run: pnpm build:core
+        run: pnpm build:core && pnpm build:deployer
 
       - name: Build rag
         run: pnpm build:rag

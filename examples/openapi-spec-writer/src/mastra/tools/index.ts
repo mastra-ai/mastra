@@ -119,15 +119,11 @@ export const generateSpecTool = createTool({
     const openapiResponses = [];
     let mergedSpecAnswer = "";
 
-    console.log("Crawled data", crawledData);
-
     for (const d of crawledData) {
       const data = await agent.generate(
         `I wrote another page of docs, turn this into an Open API spec: ${d.data.markdown}`,
         { runId }
       );
-
-      console.log("spec", { data });
 
       openapiResponses.push(data.text);
     }
@@ -135,7 +131,6 @@ export const generateSpecTool = createTool({
     console.log(
       "inspect this, openapiResponses used to come back in structured output yaml"
     );
-    console.log({ openapiResponses, agent, typeof: typeof agent });
 
     const mergedSpec = await agent?.generate(
       `I have generated the following Open API specs: ${openapiResponses
@@ -148,8 +143,6 @@ export const generateSpecTool = createTool({
     mergedSpecAnswer = mergedSpec.text
       .replace(/```yaml/g, "")
       .replace(/```/g, "");
-
-    console.log(JSON.stringify(mergedSpec, null, 2));
 
     console.log(
       "MERGED SPEC ==================",

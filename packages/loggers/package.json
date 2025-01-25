@@ -1,0 +1,43 @@
+{
+  "name": "@mastra/loggers",
+  "version": "0.0.0",
+  "description": "",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/loggers.esm.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/loggers.esm.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "dts build",
+    "build:dev": "dts watch",
+    "test": "vitest run"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@mastra/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@babel/preset-env": "^7.26.0",
+    "@babel/preset-typescript": "^7.26.0",
+    "@tsconfig/recommended": "^1.0.7",
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^22.9.0",
+    "@types/pg": "^8.11.10",
+    "dts-cli": "^2.0.5",
+    "vitest": "^2.1.8"
+  }
+}

@@ -882,12 +882,16 @@ export class Workflow<
         const stepConfig = stepNode.config;
         const attemptCount = context.attempts[stepNode.step.id];
 
-        this.log(LogLevel.INFO, `Checking conditions for ${stepNode.step.id}`);
+        this.logger.info(`Checking conditions for ${stepNode.step.id}`, {
+          stepId: stepNode.step.id,
+          runId: this.#runId,
+        });
 
-        this.log(LogLevel.INFO, `Attempt count for ${stepNode.step.id}`, {
+        this.logger.info(`Attempt count for ${stepNode.step.id}`, {
           attemptCount,
           attempts: context.attempts,
           runId: this.#runId,
+          stepId: stepNode.step.id,
         });
 
         // if step has no attempts left, suspend or fail

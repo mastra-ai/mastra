@@ -3,5 +3,4 @@ export default {
   logger: "Logger",
   "otel-config": "OTelConfig",
   "create-logger": ".createLogger()",
-  "combine-loggers": ".combineLoggers()",
 };
