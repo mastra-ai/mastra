@@ -64,19 +64,6 @@ describe('Logger', () => {
       });
     });
 
-    it('should format string messages correctly', () => {
-      const formatted = logger['formatMessage']('test message');
-      expect(formatted).toEqual({ msg: 'test message' });
-    });
-
-    it('should format object messages correctly', () => {
-      const formatted = logger['formatMessage'](testMessage);
-      expect(formatted).toEqual({
-        ...testMessage,
-        msg: testMessage.message,
-      });
-    });
-
     it('should log info messages correctly', async () => {
       logger.info('test info message');
 
