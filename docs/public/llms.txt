@@ -4640,7 +4640,7 @@ const upstashLogger = createLogger({
   type: 'UPSTASH',
   url: process.env.UPSTASH_URL!,
   token: process.env.UPSTASH_TOKEN!,
-  level: 'INFO',
+  level: 'info',
   key: 'production-logs',
 });
 await upstashLogger.info({ message: 'User signed in', destinationPath: 'auth', type: 'AGENT', runId: 'run_123' });
