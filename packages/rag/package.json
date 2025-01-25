@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "0.0.2-alpha.54",
+  "version": "0.0.2-alpha.55",
   "description": "",
   "type": "module",
   "main": "dist/index.js",

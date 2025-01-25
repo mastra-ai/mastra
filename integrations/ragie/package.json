@@ -1,6 +1,6 @@
 {
   "name": "@mastra/ragie",
-  "version": "1.0.1-alpha.47",
+  "version": "1.0.1-alpha.48",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/ragie.esm.js",
