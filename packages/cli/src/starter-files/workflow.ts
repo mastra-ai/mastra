@@ -16,7 +16,9 @@ const fetchWeather = new Step({
 
     const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(triggerData.city)}&count=1`;
     const geocodingResponse = await fetch(geocodingUrl);
-    const geocodingData = await geocodingResponse.json();
+    const geocodingData = (await geocodingResponse.json()) as {
+      results: { latitude: number; longitude: number; name: string }[];
+    };
 
     if (!geocodingData.results?.[0]) {
       throw new Error(`Location '${triggerData.city}' not found`);
@@ -26,14 +28,22 @@ const fetchWeather = new Step({
 
     const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_mean,weathercode&timezone=auto`;
     const response = await fetch(weatherUrl);
-    const data = await response.json();
+    const data = (await response.json()) as {
+      daily: {
+        time: string[];
+        temperature_2m_max: number[];
+        temperature_2m_min: number[];
+        precipitation_probability_mean: number[];
+        weathercode: number[];
+      };
+    };
 
     const forecast = data.daily.time.map((date: string, index: number) => ({
       date,
       maxTemp: data.daily.temperature_2m_max[index],
       minTemp: data.daily.temperature_2m_min[index],
       precipitationChance: data.daily.precipitation_probability_mean[index],
-      condition: getWeatherCondition(data.daily.weathercode[index]),
+      condition: getWeatherCondition(data.daily.weathercode[index]!),
       location: name,
     }));
 

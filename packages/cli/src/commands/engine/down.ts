@@ -1,6 +1,6 @@
 import yoctoSpinner from 'yocto-spinner';
 
-import { DockerService } from '../../services/service.docker.js';
+import { DockerService } from '../../services/service.docker';
 
 export async function down(composePath?: string) {
   const spinner = yoctoSpinner({ text: 'Shutting down docker container\n' });

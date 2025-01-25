@@ -1,5 +1,5 @@
 import * as p from '@clack/prompts';
-import { ModelConfig } from '@mastra/core';
+import type { ModelConfig } from '@mastra/core';
 import child_process from 'node:child_process';
 import util from 'node:util';
 import path from 'path';
@@ -10,9 +10,9 @@ import yoctoSpinner from 'yocto-spinner';
 import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
 
-import { DepsService } from '../../services/service.deps.js';
-import { FileService } from '../../services/service.file.js';
-import { logger } from '../../utils/logger.js';
+import { DepsService } from '../../services/service.deps';
+import { FileService } from '../../services/service.file';
+import { logger } from '../../utils/logger';
 
 const exec = util.promisify(child_process.exec);
 

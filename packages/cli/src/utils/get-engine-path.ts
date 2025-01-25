@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { FileService } from '../services/service.file.js';
+import { FileService } from '../services/service.file';
 
 export function getEnginePath() {
   const possibleEnginePaths = [
