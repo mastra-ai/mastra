@@ -1,5 +1,17 @@
 # mastra
 
+## 0.1.57-alpha.107
+
+### Patch Changes
+
+- 1944807: Unified logger and major step in better logs
+- 6e18618: Generate tsconfig on mastra create
+- 9ade36e: Changed measure for evals, added endpoints, attached metrics to agent, added ui for evals in playground, and updated docs
+- Updated dependencies [1944807]
+- Updated dependencies [9ade36e]
+  - @mastra/deployer@0.0.1-alpha.7
+  - @mastra/core@0.1.27-alpha.69
+
 ## 0.1.57-alpha.106
 
 ### Patch Changes

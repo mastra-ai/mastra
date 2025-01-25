@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.1.27-alpha.69
+
+### Patch Changes
+
+- 1944807: Unified logger and major step in better logs
+- 9ade36e: Changed measure for evals, added endpoints, attached metrics to agent, added ui for evals in playground, and updated docs
+
 ## 0.1.27-alpha.68
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # travel-app
 
+## 0.1.1-alpha.24
+
+### Patch Changes
+
+- Updated dependencies [1944807]
+- Updated dependencies [9ade36e]
+  - @mastra/core@0.1.27-alpha.69
+  - @mastra/engine@0.0.5-alpha.63
+  - @mastra/memory@0.0.2-alpha.49
+
 ## 0.1.1-alpha.23
 
 ### Patch Changes
