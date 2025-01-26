@@ -32,7 +32,7 @@ export class CloudflareVector extends MastraVector {
       .map(record => JSON.stringify(record))
       .join('\n');
 
-    const response = await this.client.vectorize.indexes.upsert(indexName, {
+    await this.client.vectorize.indexes.upsert(indexName, {
       account_id: this.accountId,
       body: ndjson as any,
     });
