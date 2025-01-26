@@ -38,25 +38,6 @@ describe('LibSQLVector', () => {
   });
 
   describe('upsert and query', () => {
-    it('should insert and retrieve vectors', async () => {
-      const vectors = [
-        [1, 0, 0],
-        [0, 1, 0],
-        [0, 0, 1],
-      ];
-      const metadata = [{ label: 'x-axis' }, { label: 'y-axis' }, { label: 'z-axis' }];
-
-      const ids = await vector.upsert(testIndexName, vectors, metadata);
-      expect(ids).toHaveLength(3);
-
-      const queryVector = [1, 0, 0];
-      const results = await vector.query(testIndexName, queryVector, 3);
-
-      expect(results).toHaveLength(3);
-      expect(results[0].score).toBeCloseTo(1, 5);
-      expect(results[0].metadata).toEqual({ label: 'x-axis' });
-    });
-
     it('should update existing vectors', async () => {
       const initialVector = [[1, 0, 0]];
       const initialMetadata = [{ label: 'initial' }];

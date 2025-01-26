@@ -68,7 +68,7 @@ export class LibSQLVector extends MastraVector {
             WITH vector_scores AS (
                 SELECT
                     vector_id as id,
-                    1 - vector_distance_cos(embedding, '${vectorStr}') as score,
+                    1- vector_distance_cos(embedding, '${vectorStr}') as score,
                     metadata
                     ${includeVectors ? ', embedding' : ''}
                 FROM ${indexName}
@@ -86,6 +86,7 @@ export class LibSQLVector extends MastraVector {
         sql: query,
         args: filterValues,
       });
+      console.log(`YO`, query, filterValues, result);
 
       return result.rows.map(row => ({
         id: row.id as string,
