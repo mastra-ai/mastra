@@ -146,6 +146,13 @@ ON CONFLICT(vector_id) DO UPDATE SET
   metadata = ?
 `;
 
+        console.log('INSERTQ', query, [
+          vectorIds[i] as InValue,
+          JSON.stringify(vectors[i]),
+          JSON.stringify(metadata?.[i] || {}),
+          JSON.stringify(vectors[i]),
+          JSON.stringify(metadata?.[i] || {}),
+        ]);
         await tx.execute({
           sql: query,
           // @ts-ignore
@@ -217,6 +224,7 @@ ON CONFLICT(vector_id) DO UPDATE SET
         args: [],
       });
     } catch (error: any) {
+      console.error('Failed to delete vector table:', error);
       throw new Error(`Failed to delete vector table: ${error.message}`);
     } finally {
       // client.release()
@@ -282,5 +290,12 @@ ON CONFLICT(vector_id) DO UPDATE SET
     } catch (e: any) {
       throw new Error(`Failed to describe vector table: ${e.message}`);
     }
+  }
+
+  async truncateIndex(indexName: string) {
+    await this.turso.execute({
+      sql: `DELETE FROM ${indexName}`,
+      args: [],
+    });
   }
 }

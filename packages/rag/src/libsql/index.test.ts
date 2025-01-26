@@ -9,8 +9,7 @@ describe('LibSQLVector', () => {
 
   beforeAll(async () => {
     // Initialize PgVector
-    // libsqlVector = new LibSQLVector('file::memory:?cache=shared');
-    libsqlVector = new LibSQLVector('file:/tmp/test.db');
+    libsqlVector = new LibSQLVector('file::memory:?cache=shared');
   });
 
   afterAll(async () => {
@@ -98,21 +97,9 @@ describe('LibSQLVector', () => {
 
   describe('query', () => {
     const indexName = 'test_query_2';
-    beforeAll(async () => {
-      // Drop if exists first
-      try {
-        await libsqlVector.deleteIndex(indexName);
-      } catch (e) {
-        // Ignore if doesn't exist
-      }
-
-      // Create fresh
-      await libsqlVector.createIndex(indexName, 3);
-    });
 
     beforeEach(async () => {
-      // Clear the table first
-      // await libsqlVector.truncateIndex(indexName);
+      await libsqlVector.createIndex(indexName, 3);
 
       const vectors = [
         [1, 0, 0],
@@ -127,11 +114,8 @@ describe('LibSQLVector', () => {
       await libsqlVector.upsert(indexName, vectors, metadata);
     });
 
-    afterAll(async () => {
-      console.log('deleting index');
-      console.log(await libsqlVector.listIndexes());
+    afterEach(async () => {
       await libsqlVector.deleteIndex(indexName);
-      console.log(await libsqlVector.listIndexes());
     });
 
     it('should return closest vectors', async () => {
@@ -165,22 +149,8 @@ describe('LibSQLVector', () => {
   describe('query with advanced filters', () => {
     const indexName = 'test_query_filters';
 
-    beforeAll(async () => {
-      // Drop if exists first
-      try {
-        await libsqlVector.deleteIndex(indexName);
-      } catch (e) {
-        // Ignore if doesn't exist
-      }
-
-      // Create fresh
-      await libsqlVector.createIndex(indexName, 3);
-    });
-
     beforeEach(async () => {
-      // Clear the table first
-      // await libsqlVector.truncateIndex(indexName);
-
+      await libsqlVector.createIndex(indexName, 3);
       const vectors = [
         [1, 0.1, 0],
         [0.9, 0.2, 0],
@@ -200,8 +170,8 @@ describe('LibSQLVector', () => {
       await libsqlVector.upsert(indexName, vectors, metadata);
     });
 
-    afterAll(async () => {
-      // await libsqlVector.deleteIndex(indexName);
+    afterEach(async () => {
+      await libsqlVector.deleteIndex(indexName);
     });
 
     // Test numeric comparisons
