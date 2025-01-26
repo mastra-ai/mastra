@@ -57,7 +57,7 @@ describe('LibSQLVector', () => {
       expect(results[0].metadata).toEqual({ label: 'x-axis' });
     });
 
-    it.only('should update existing vectors', async () => {
+    it('should update existing vectors', async () => {
       const initialVector = [[1, 0, 0]];
       const initialMetadata = [{ label: 'initial' }];
 

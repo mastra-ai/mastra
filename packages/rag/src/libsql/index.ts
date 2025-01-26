@@ -117,15 +117,16 @@ ON CONFLICT(vector_id) DO UPDATE SET
   metadata = ?
 `;
 
-        console.log('QUERY', {
-          sql: query,
-          // @ts-ignore
-          args: [vectorIds[i] as InValue, JSON.stringify(vectors[i]), JSON.stringify(metadata?.[i] || {})],
-        });
         await tx.execute({
           sql: query,
           // @ts-ignore
-          args: [vectorIds[i] as InValue, JSON.stringify(vectors[i]), JSON.stringify(metadata?.[i] || {})],
+          args: [
+            vectorIds[i] as InValue,
+            JSON.stringify(vectors[i]),
+            JSON.stringify(metadata?.[i] || {}),
+            JSON.stringify(vectors[i]),
+            JSON.stringify(metadata?.[i] || {}),
+          ],
         });
       }
 
