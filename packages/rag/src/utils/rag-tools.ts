@@ -11,7 +11,14 @@ type VectorFilterType = 'pg' | 'astra' | 'qdrant' | 'upstash' | 'pinecone' | 'ch
 
 const createFilter = (filter: any, vectorFilterType: VectorFilterType) => {
   if (['pg', 'astra', 'pinecone'].includes(vectorFilterType)) {
-    return { [filter.keyword]: { [filter.operator]: filter.value } };
+    if ('type' in filter) {
+      return {
+        [filter.type]: filter.filters.map((f: any) => createFilter(f, vectorFilterType)),
+      };
+    }
+
+    const { keyword, operator, value } = filter;
+    return { [keyword]: { [operator]: value } };
   } else if (vectorFilterType === 'chroma') {
     return { [filter.keyword]: filter.value };
   } else if (vectorFilterType === 'qdrant') {
@@ -62,6 +69,19 @@ const vectorQuerySearch = async ({
   return { results, queryEmbedding: embedding };
 };
 
+const BasicFilter = z.object({
+  keyword: z.string(),
+  operator: z.string(),
+  value: z.string(),
+});
+
+const LogicalFilter = z.object({
+  type: z.enum(['$and', '$or']),
+  filters: z.array(BasicFilter),
+});
+
+const filter = z.union([BasicFilter, LogicalFilter]);
+
 export const createVectorQueryTool = ({
   vectorStoreName,
   indexName,
@@ -81,11 +101,7 @@ export const createVectorQueryTool = ({
     id: `VectorQuery ${vectorStoreName} ${indexName} Tool`,
     inputSchema: z.object({
       queryText: z.string(),
-      filter: z.object({
-        keyword: z.string(),
-        operator: z.string(),
-        value: z.string(),
-      }),
+      filter,
     }),
     outputSchema: z.object({
       relevantContext: z.string(),

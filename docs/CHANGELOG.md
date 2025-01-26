@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.1-alpha.21
+
+### Patch Changes
+
+- ee856f3: Updated pg filter function and updated docs and example
+
 ## 0.1.1-alpha.20
 
 ### Patch Changes
