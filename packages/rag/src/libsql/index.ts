@@ -76,6 +76,12 @@ export class LibSQLVector extends MastraVector {
             });
 
             return `(${conditions.join(' AND ')})`;
+          } else if (operator === 'in') {
+            const ary = value as any[];
+            for (const v of ary) {
+              filterValues.push(v);
+            }
+            return `json_extract(metadata, '$.${key}') IN (${Array(ary.length).fill('?').join(',')})`;
           }
           const operatorFn = FILTER_OPERATORS[operator];
 
