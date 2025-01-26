@@ -60,26 +60,28 @@ export class PgVector extends MastraVector {
 
         // Handle operator conditions
         const [[operator, operatorValue] = []] = Object.entries(value);
-        if (operator && isValidOperator(operator)) {
-          const operatorFn = FILTER_OPERATORS[operator];
-          const operatorResult = operatorFn(key, filterValues.length + 1);
-          if (operatorResult.needsValue) {
-            const transformedValue = operatorResult.transformValue
-              ? operatorResult.transformValue(operatorValue)
-              : operatorValue;
-            filterValues.push(transformedValue);
-          }
-          return operatorResult.sql;
+        if (!operator || value === undefined) {
+          throw new Error(`Invalid operator or value for key: ${key}`);
         }
-
-        return ''; // Handle unexpected cases
+        if (!isValidOperator(operator)) {
+          throw new Error(`Unsupported operator: ${operator}`);
+        }
+        const operatorFn = FILTER_OPERATORS[operator];
+        const operatorResult = operatorFn(key, filterValues.length + 1);
+        if (operatorResult.needsValue) {
+          const transformedValue = operatorResult.transformValue
+            ? operatorResult.transformValue(operatorValue)
+            : operatorValue;
+          filterValues.push(transformedValue);
+        }
+        return operatorResult.sql;
       };
 
       const filterQuery = filter
         ? Object.entries(filter)
             .map(([key, value]) => buildCondition(key, value))
             .join(' AND ')
-        : 'true';
+        : '';
 
       const query = `
             WITH vector_scores AS (
@@ -89,7 +91,7 @@ export class PgVector extends MastraVector {
                     metadata
                     ${includeVector ? ', embedding' : ''}
                 FROM ${indexName}
-                WHERE ${filterQuery}
+                WHERE ${filterQuery || 'true'}
             )
             SELECT *
             FROM vector_scores
