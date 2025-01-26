@@ -8,7 +8,6 @@ describe('LibSQLVector', () => {
   const testIndexName2 = 'test_vectors1';
 
   beforeAll(async () => {
-    // Initialize PgVector
     libsqlVector = new LibSQLVector('file::memory:?cache=shared');
   });
 

@@ -1,5 +1,6 @@
 import { Mastra, Agent, EmbedManyResult } from '@mastra/core';
-import { embed, MDocument, PgVector, createVectorQueryTool } from '@mastra/rag';
+import { embed, MDocument, createVectorQueryTool } from '@mastra/rag';
+import { PgVector } from '@mastra/vector-pg';
 
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',

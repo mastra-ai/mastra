@@ -37,7 +37,8 @@ Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
 import { Mastra, Agent, EmbedManyResult } from "@mastra/core";
-import { embed, MDocument, PgVector, createVectorQueryTool } from "@mastra/rag";
+import { PgVector } from "@mastra/vector-pg";
+import { embed, MDocument, createVectorQueryTool } from "@mastra/rag";
 ```
 
 ## Vector Query Tool Creation

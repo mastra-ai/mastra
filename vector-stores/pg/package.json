@@ -1,16 +1,16 @@
 {
-  "name": "@mastra/deployer-netlify",
-  "version": "0.0.1-alpha.8",
-  "description": "",
+  "name": "@mastra/vector-pg",
+  "version": "0.0.1",
+  "description": "Postgres Vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
-  "module": "dist/deployer-netlify.esm.js",
+  "module": "dist/vector-pg.esm.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "import": {
         "types": "./dist/index.d.ts",
-        "default": "./dist/deployer-netlify.esm.js"
+        "default": "./dist/vector-pg.esm.js"
       },
       "require": {
         "types": "./dist/index.d.ts",
@@ -24,23 +24,13 @@
     "build:dev": "dts watch",
     "test": "vitest run"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
     "@mastra/core": "workspace:*",
-    "@mastra/deployer": "workspace:*",
-    "date-fns": "^4.1.0",
-    "dotenv": "^16.3.1",
-    "execa": "^9.3.1",
-    "netlify-cli": "^18.0.1",
-    "zod": "^3.24.1"
+    "pg": "^8.13.1"
   },
   "devDependencies": {
-    "@babel/preset-env": "^7.26.0",
-    "@babel/preset-typescript": "^7.26.0",
+    "@types/pg": "^8.11.10",
     "@tsconfig/recommended": "^1.0.7",
-    "@types/jsdom": "^21.1.7",
     "@types/node": "^22.9.0",
     "dts-cli": "^2.0.5",
     "vitest": "^2.1.8"

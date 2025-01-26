@@ -43,7 +43,6 @@
     "@tsconfig/recommended": "^1.0.7",
     "@types/jsdom": "^21.1.7",
     "@types/node": "^22.9.0",
-    "@types/pg": "^8.11.10",
     "dts-cli": "^2.0.5",
     "vitest": "^2.1.8"
   }

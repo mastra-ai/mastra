@@ -38,7 +38,8 @@ Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
 import { Mastra, Agent, EmbedManyResult } from '@mastra/core';
-import { embed, MDocument, PgVector, createGraphRAGTool } from '@mastra/rag';
+import { PgVector } from '@mastra/vector-pg';
+import { embed, MDocument, createGraphRAGTool } from '@mastra/rag';
 ```
 
 ## GraphRAG Tool Creation

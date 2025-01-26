@@ -1,5 +1,6 @@
 import { Mastra, Agent, EmbedManyResult } from '@mastra/core';
-import { embed, MDocument, PgVector, createGraphRAGTool } from '@mastra/rag';
+import { embed, MDocument, createGraphRAGTool } from '@mastra/rag';
+import { PgVector } from '@mastra/vector-pg';
 
 const graphRagTool = createGraphRAGTool({
   vectorStoreName: 'pgVector',
