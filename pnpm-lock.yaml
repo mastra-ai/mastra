@@ -2593,6 +2593,9 @@ importers:
       '@rollup/plugin-commonjs':
         specifier: ^28.0.2
         version: 28.0.2(rollup@4.30.1)
+      '@rollup/plugin-json':
+        specifier: ^6.1.0
+        version: 6.1.0(rollup@4.30.1)
       '@rollup/plugin-node-resolve':
         specifier: ^16.0.0
         version: 16.0.0(rollup@4.30.1)
@@ -2974,6 +2977,9 @@ importers:
       chromadb-default-embed:
         specifier: ^2.13.2
         version: 2.13.2
+      cloudflare:
+        specifier: ^4.0.0
+        version: 4.0.0(encoding@0.1.13)
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
@@ -26727,6 +26733,12 @@ snapshots:
       '@rollup/pluginutils': 5.1.4(rollup@3.29.5)
     optionalDependencies:
       rollup: 3.29.5
+
+  '@rollup/plugin-json@6.1.0(rollup@4.30.1)':
+    dependencies:
+      '@rollup/pluginutils': 5.1.4(rollup@4.30.1)
+    optionalDependencies:
+      rollup: 4.30.1
 
   '@rollup/plugin-node-resolve@15.3.1(rollup@3.29.5)':
     dependencies:

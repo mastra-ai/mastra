@@ -6,7 +6,6 @@ import color from 'picocolors';
 import fs from 'fs/promises';
 
 import { DepsService } from '../../services/service.deps.js';
-import { logger } from '../../utils/logger.js';
 
 const exec = util.promisify(child_process.exec);
 
@@ -82,7 +81,7 @@ export const createMastraProject = async () => {
   s.stop('.gitignore added');
 
   p.outro('Project created successfully');
-  logger.break();
+  console.log('');
 
   return { projectName };
 };

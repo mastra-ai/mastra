@@ -11,6 +11,8 @@ import { fileURLToPath } from 'url';
 import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
 
+import { logger } from '../utils/logger.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -65,8 +67,9 @@ const bundleTools = async (mastraPath: string, dotMastraPath: string, toolsDirs?
 const startServer = async (dotMastraPath: string, port: number, MASTRA_TOOLS_PATH: string) => {
   try {
     // Restart server
-    console.log('[Mastra Dev] - Starting server...');
-    currentServerProcess = execa('node', ['index.mjs'], {
+    logger.info('[Mastra Dev] - Starting server...');
+
+    currentServerProcess = (await execa('node', ['index.mjs'], {
       cwd: dotMastraPath,
       env: {
         PORT: port.toString() || '4111',
@@ -74,7 +77,11 @@ const startServer = async (dotMastraPath: string, port: number, MASTRA_TOOLS_PAT
       },
       stdio: 'inherit',
       reject: false,
-    });
+    })) as any as ChildProcess;
+
+    if (!currentServerProcess) {
+      throw new Error(`Server failed to start with error: ${currentServerProcess.stderr}`);
+    }
 
     // Wait for server to be ready
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -103,13 +110,13 @@ const startServer = async (dotMastraPath: string, port: number, MASTRA_TOOLS_PAT
     }
 
     if (currentServerProcess.exitCode !== null) {
-      console.error('Server failed to start with error:', currentServerProcess.stderr);
+      logger.error('Server failed to start with error:', { message: currentServerProcess.stderr });
       return;
     }
   } catch (err) {
     const execaError = err as { stderr?: string; stdout?: string };
-    if (execaError.stderr) console.error('Server error output:', execaError.stderr);
-    if (execaError.stdout) console.error('Server output:', execaError.stdout);
+    if (execaError.stderr) logger.error('Server error output:', { stderr: execaError.stderr });
+    if (execaError.stdout) logger.debug('Server output:', { stdout: execaError.stdout });
   }
 };
 
@@ -129,7 +136,7 @@ async function rebundleAndRestart(
   try {
     // If current server process is running, stop it
     if (currentServerProcess) {
-      console.log('Stopping current server...');
+      logger.debug('Stopping current server...');
       currentServerProcess.kill();
       await new Promise(resolve => setTimeout(resolve, 1000));
     }

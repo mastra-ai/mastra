@@ -60,10 +60,12 @@
     "@mastra/deployer-vercel": "0.0.0",
     "@mastra/deployer": "0.0.0",
     "generate-text-with-deepseek": "0.0.1-alpha.6",
-    "yc-directory": "1.0.0"
+    "yc-directory": "1.0.0",
+    "@mastra/loggers": "0.0.0"
   },
   "changesets": [
     "afraid-papayas-shake",
+    "big-fireants-wave",
     "big-goats-try",
     "blue-bags-hang",
     "blue-rules-brush",
@@ -123,6 +125,7 @@
     "giant-falcons-sneeze",
     "giant-pears-taste",
     "gold-deers-peel",
+    "good-buttons-care",
     "good-days-explode",
     "good-seas-confess",
     "gorgeous-panthers-grin",
@@ -168,6 +171,7 @@
     "mighty-avocados-cheat",
     "mighty-pets-wave",
     "moody-ligers-peel",
+    "moody-penguins-rest",
     "neat-suns-sip",
     "nervous-bulldogs-move",
     "new-lizards-lick",
@@ -205,6 +209,8 @@
     "selfish-pandas-kick",
     "selfish-snakes-think",
     "serious-bananas-rush",
+    "serious-dancers-juggle",
+    "seven-icons-smile",
     "seven-mayflies-impress",
     "seven-teachers-talk",
     "shaggy-buckets-rescue",
@@ -228,6 +234,7 @@
     "stale-eels-rush",
     "stale-trees-add",
     "stupid-cows-exist",
+    "tall-masks-flash",
     "tame-waves-hide",
     "tasty-ants-watch",
     "tasty-peas-give",
@@ -272,6 +279,7 @@
     "wise-singers-promise",
     "wise-swans-shout",
     "wise-taxis-wink",
+    "witty-nails-tap",
     "yellow-nails-add",
     "yellow-roses-run"
   ]

@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.0-alpha.25
+
+### Patch Changes
+
+- b425845: Logger and execa logs
+
 ## 0.1.0-alpha.24
 
 ### Minor Changes

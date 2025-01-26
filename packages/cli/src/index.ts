@@ -204,8 +204,8 @@ engine
         if (dbUrl) {
           await migrate(dbUrl);
         } else {
-          logger.log('Please add DB_URL to your .env.development file');
-          logger.log(
+          logger.debug('Please add DB_URL to your .env.development file');
+          logger.debug(
             `Run ${color.blueBright('mastra engine add')} to get started with a Postgres DB in a docker container`,
           );
         }

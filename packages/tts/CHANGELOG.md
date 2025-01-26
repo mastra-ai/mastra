@@ -1,5 +1,13 @@
 # @mastra/tts
 
+## 0.0.1-alpha.16
+
+### Patch Changes
+
+- Updated dependencies [1944807]
+- Updated dependencies [9ade36e]
+  - @mastra/core@0.1.27-alpha.69
+
 ## 0.0.1-alpha.15
 
 ### Patch Changes

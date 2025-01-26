@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "0.0.2-alpha.54",
+  "version": "0.0.2-alpha.56",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -40,6 +40,7 @@
     "@upstash/vector": "^1.1.7",
     "chromadb": "^1.9.4",
     "chromadb-default-embed": "^2.13.2",
+    "cloudflare": "^4.0.0",
     "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",
     "js-tiktoken": "^1.0.15",

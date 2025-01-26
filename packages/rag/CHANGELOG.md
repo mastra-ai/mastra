@@ -1,5 +1,21 @@
 # @mastra/rag
 
+## 0.0.2-alpha.56
+
+### Patch Changes
+
+- ee856f3: Updated pg filter function and updated docs and example
+- c3047a7: Added tests
+
+## 0.0.2-alpha.55
+
+### Patch Changes
+
+- 1944807: Unified logger and major step in better logs
+- Updated dependencies [1944807]
+- Updated dependencies [9ade36e]
+  - @mastra/core@0.1.27-alpha.69
+
 ## 0.0.2-alpha.54
 
 ### Patch Changes

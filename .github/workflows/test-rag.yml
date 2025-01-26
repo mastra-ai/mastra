@@ -66,3 +66,5 @@ jobs:
           ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
           UPSTASH_VECTOR_TOKEN: ${{ secrets.UPSTASH_VECTOR_TOKEN }}
           UPSTASH_VECTOR_URL: ${{ secrets.UPSTASH_VECTOR_URL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}
