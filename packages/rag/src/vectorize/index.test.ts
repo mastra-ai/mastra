@@ -5,7 +5,7 @@ import { CloudflareVector } from './';
 describe('CloudflareVector', () => {
   let vectorStore: CloudflareVector;
   const VECTOR_DIMENSION = 1536;
-  const testIndexName = 'default';
+  const testIndexName = `default-${randomUUID()}`;
 
   // Helper function to create a normalized vector
   const createVector = (primaryDimension: number, value: number = 1.0): number[] => {
@@ -30,13 +30,13 @@ describe('CloudflareVector', () => {
     vectorStore = new CloudflareVector({ accountId, apiToken });
   });
 
-  // afterAll(async () => {
-  //     try {
-  //         await vectorStore.deleteIndex(testIndexName);
-  //     } catch (error) {
-  //         console.warn('Failed to delete test index:', error);
-  //     }
-  // });
+  afterAll(async () => {
+    try {
+      await vectorStore.deleteIndex(testIndexName);
+    } catch (error) {
+      console.warn('Failed to delete test index:', error);
+    }
+  });
 
   describe('Index Operations', () => {
     const tempIndexName = 'test_temp_index';
