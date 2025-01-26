@@ -1,6 +1,8 @@
 import { createClient, type Client as TursoClient, type InValue } from '@libsql/client';
 import { MastraVector, type IndexStats, type QueryResult } from '@mastra/core';
 
+import { Filter, FILTER_OPERATORS, isValidOperator } from './filter';
+
 export class LibSQLVector extends MastraVector {
   private turso: TursoClient;
 
@@ -25,24 +27,48 @@ export class LibSQLVector extends MastraVector {
   ): Promise<QueryResult[]> {
     try {
       let filterQuery = '';
-      let filterValues: InValue[] = [minScore];
+      let filterValues: InValue[] = [];
       const vectorStr = `[${queryVector.join(',')}]`;
 
       if (filter) {
-        const conditions = Object.entries(filter).map(([key, value]) => {
-          filterValues.push(value);
-          return `metadata->>'${key}' = ?`; // +2 because $1 is minScore
+        const conditions = Object.entries(filter).map(([key, condition]) => {
+          // If condition is not a FilterCondition object, assume it's an equality check
+          if (!condition || typeof condition !== 'object') {
+            filterValues.push(condition);
+            return `metadata->>'${key}' = ?`;
+          }
+
+          const [[operator, value] = []] = Object.entries(condition ?? {});
+          if (!operator || value === undefined) {
+            throw new Error(`Invalid operator or value for key: ${key}`);
+          }
+          if (!isValidOperator(operator)) {
+            throw new Error(`Unsupported operator: ${operator}`);
+          }
+          // Get operation function
+          const operatorFn = FILTER_OPERATORS[operator];
+
+          const operatorResult = operatorFn(key, filterValues.length + 1);
+
+          // Handle operator cases and check if value is needed
+          if (operatorResult.needsValue) {
+            // Transform value if needed
+            const transformedValue = operatorResult.transformValue ? operatorResult.transformValue(value) : value;
+            filterValues.push(transformedValue);
+          }
+
+          // return sql condition
+          return operatorResult.sql;
         });
         if (conditions.length > 0) {
           filterQuery = 'AND ' + conditions.join(' AND ');
         }
       }
-
       const query = `
             WITH vector_scores AS (
                 SELECT
                     vector_id as id,
-                    1 - (embedding <=> '${vectorStr}'::vector) as score,
+                    1 - vector_distance_cos(embedding, '${vectorStr}') as score,
                     metadata
                     ${includeVectors ? ', embedding' : ''}
                 FROM ${indexName}
@@ -54,6 +80,8 @@ export class LibSQLVector extends MastraVector {
             ORDER BY score DESC
             LIMIT ${topK};
         `;
+      filterValues.push(minScore);
+
       const result = await this.turso.execute({
         sql: query,
         args: filterValues,
@@ -82,30 +110,30 @@ export class LibSQLVector extends MastraVector {
 
       for (let i = 0; i < vectors.length; i++) {
         const query = `
-            INSERT INTO ${indexName} (vector_id, embedding, metadata)
-            VALUES (:vec_id, :embed, :metadata)
-            ON CONFLICT (vector_id)
-            DO UPDATE SET
-                embedding = :embed,
-                metadata = :metadata
-            RETURNING embedding::text
-        `;
+INSERT INTO ${indexName} (vector_id, embedding, metadata)
+VALUES (?, vector32(?), ?)
+ON CONFLICT(vector_id) DO UPDATE SET
+  embedding = vector32(?),
+  metadata = ?
+`;
 
+        console.log('QUERY', {
+          sql: query,
+          // @ts-ignore
+          args: [vectorIds[i] as InValue, JSON.stringify(vectors[i]), JSON.stringify(metadata?.[i] || {})],
+        });
         await tx.execute({
           sql: query,
-          args: {
-            vec_id: vectorIds[i] as InValue,
-            embedding: `[${vectors[i]?.join(',')}]`,
-            metadata: JSON.stringify(metadata?.[i] || {}),
-          },
+          // @ts-ignore
+          args: [vectorIds[i] as InValue, JSON.stringify(vectors[i]), JSON.stringify(metadata?.[i] || {})],
         });
       }
+
+      await tx.commit();
       return vectorIds;
     } catch (error) {
       await tx.rollback();
       throw error;
-    } finally {
-      // client.release()
     }
   }
 
@@ -155,7 +183,7 @@ export class LibSQLVector extends MastraVector {
     try {
       // Drop the table
       await this.turso.execute({
-        sql: `DROP TABLE IF EXISTS ${indexName} CASCADE`,
+        sql: `DROP TABLE IF EXISTS ${indexName}`,
         args: [],
       });
     } catch (error: any) {
