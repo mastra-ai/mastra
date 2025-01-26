@@ -81,7 +81,7 @@ describe('CloudflareVector', () => {
       expect(vectorIds).toHaveLength(3);
 
       // Wait for vectors to be indexed
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, 10000));
       const stats = await vectorStore.describeIndex(testIndexName);
       expect(stats.count).toBeGreaterThan(0);
 
