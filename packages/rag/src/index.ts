@@ -1,5 +1,6 @@
 export * from './document/document';
 export * from './pg';
+export * from './libsql';
 export * from './pinecone';
 export * from './astra-db';
 export * from './qdrant';
