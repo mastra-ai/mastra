@@ -46,7 +46,7 @@ Ideal for production deployments needing scalability:
 
 ``` ts showLineNumbers copy
 
-import { PineconeVector } from '@mastra/rag';
+import { PineconeVector } from '@mastra/vector-pinecone';
 
 const pinecone = new PineconeVector(process.env.PINECONE_API_KEY);
 
@@ -67,7 +67,7 @@ Best for high-performance vector search:
 
 ``` ts showLineNumbers copy
 
-import { QdrantVector } from '@mastra/rag';
+import { QdrantVector } from '@mastra/vector-qdrant';
 
 const qdrant = new QdrantVector({
   url: process.env.QDRANT_URL,
@@ -75,10 +75,115 @@ const qdrant = new QdrantVector({
 });
 
 // Create collection
-await qdrant.createCollection("my-collection", 1536);
+await qdrant.createIndex("my-collection", 1536);
 
 // Store embeddings
 await qdrant.upsert(
+  "my-collection",
+  embeddings,
+  chunks.map(chunk => ({ text: chunk.text }))
+);
+```
+
+### Chroma
+
+``` ts showLineNumbers copy
+
+import { ChromaVector } from '@mastra/vector-chroma';
+
+const chroma = new ChromaVector();
+
+// Create collection
+await chroma.createIndex("my-collection", 1536);
+
+// Store embeddings
+await chroma.upsert(
+  "my-collection",
+  embeddings,
+  chunks.map(chunk => ({ text: chunk.text }))
+);
+```
+
+### Astra DB
+
+``` ts showLineNumbers copy
+
+import { AstraVector } from '@mastra/vector-astra';
+
+const astra = new AstraVector({
+  token: process.env.ASTRA_DB_TOKEN,
+  endpoint: process.env.ASTRA_DB_ENDPOINT,
+  keyspace: process.env.ASTRA_DB_KEYSPACE,
+});
+
+// Create collection
+await astra.createIndex("my-collection", 1536);
+
+// Store embeddings
+await astra.upsert(
+  "my-collection",
+  embeddings,
+  chunks.map(chunk => ({ text: chunk.text }))
+);
+```
+
+### LibSQL
+
+``` ts showLineNumbers copy
+
+import { LibSQLVector } from '@mastra/vector-libsql';
+
+const libsql = new LibSQLVector(process.env.DATABASE_URL);
+
+// Create collection
+await libsql.createIndex("my-collection", 1536);
+
+// Store embeddings
+await libsql.upsert(
+  "my-collection",
+  embeddings,
+  chunks.map(chunk => ({ text: chunk.text }))
+);
+```
+
+### Upstash
+
+``` ts showLineNumbers copy
+
+import { UpstashVector } from '@mastra/vector-upstash';
+
+const upstash = new UpstashVector({
+  url: process.env.UPSTASH_URL,
+  token: process.env.UPSTASH_TOKEN,
+});
+
+// Create collection
+await upstash.createIndex("my-collection", 1536);
+
+// Store embeddings
+await upstash.upsert(
+  "my-collection",
+  embeddings,
+  chunks.map(chunk => ({ text: chunk.text }))
+);
+```
+
+### Cloudflare Vectorize
+
+``` ts showLineNumbers copy
+
+import { CloudflareVector } from '@mastra/vector-vectorize';
+
+const vectorize = new CloudflareVector({
+  accountId: process.env.CF_ACCOUNT_ID,
+  apiToken: process.env.CF_API_TOKEN,
+});
+
+// Create collection
+await vectorize.createIndex("my-collection", 1536);
+
+// Store embeddings
+await vectorize.upsert(
   "my-collection",
   embeddings,
   chunks.map(chunk => ({ text: chunk.text }))
@@ -115,4 +220,10 @@ For complete examples of different vector store implementations, see:
 
 - [Insert Embedding in PgVector](../../examples/rag/insert-embedding-in-pgvector.mdx)
 - [Insert Embedding in Pinecone](../../examples/rag/insert-embedding-in-pinecone.mdx)
+- [Insert Embedding in Qdrant](../../examples/rag/insert-embedding-in-qdrant.mdx)
+- [Insert Embedding in Chroma](../../examples/rag/insert-embedding-in-chroma.mdx)
+- [Insert Embedding in Astra DB](../../examples/rag/insert-embedding-in-astra.mdx)
+- [Insert Embedding in LibSQL](../../examples/rag/insert-embedding-in-libsql.mdx)
+- [Insert Embedding in Upstash](../../examples/rag/insert-embedding-in-upstash.mdx)
+- [Insert Embedding in Cloudflare Vectorize](../../examples/rag/insert-embedding-in-vectorize.mdx)
 - [Basic RAG with Vector Storage](../../examples/rag/basic-rag.mdx)

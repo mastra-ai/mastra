@@ -10,7 +10,8 @@ import { GithubLink } from '../../../components/github-link';
 After generating embeddings, you need to store them in a vector database for similarity search. The `PineconeVector` class provides methods to create indexes and insert embeddings into Pinecone, a managed vector database service. This example shows how to store embeddings in Pinecone for later retrieval.
 
 ```tsx copy
-import { MDocument, embed, PineconeVector } from '@mastra/rag';
+import { PineconeVector } from '@mastra/vector-pinecone';
+import { MDocument, embed } from '@mastra/rag';
 
 const doc = MDocument.fromText('Your text content...');
 

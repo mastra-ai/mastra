@@ -1,0 +1,45 @@
+---
+title: "Example: Insert Embeddings in Cloudflare Vectorize | RAG | Mastra Docs"
+description: Example of using Mastra to store embeddings in Cloudflare Vectorize for similarity search.
+---
+
+import { GithubLink } from '../../../components/github-link';
+
+# Insert Embedding in Cloudflare Vectorize
+
+After generating embeddings, you need to store them in a vector database for similarity search. The `CloudflareVector` class provides methods to create collections and insert embeddings into Cloudflare Vectorize, a serverless vector database service. This example shows how to store embeddings in Vectorize for later retrieval.
+
+```tsx copy
+import { CloudflareVector } from '@mastra/vector-vectorize';
+import { MDocument, embed } from '@mastra/rag';
+
+const doc = MDocument.fromText('Your text content...');
+
+const chunks = await doc.chunk();
+
+const { embeddings } = await embed(chunks, {
+  provider: 'OPEN_AI',
+  model: 'text-embedding-ada-002',
+  maxRetries: 3,
+});
+
+const vectorize = new CloudflareVector({
+  accountId: process.env.CF_ACCOUNT_ID,
+  apiToken: process.env.CF_API_TOKEN,
+});
+
+await vectorize.createIndex('test_collection', 1536);
+
+await vectorize.upsert(
+  'test_collection',
+  embeddings,
+  chunks?.map(chunk => ({ text: chunk.text })),
+);
+```
+{/* 
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-vectorize'} /> */}
