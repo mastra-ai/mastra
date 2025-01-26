@@ -73,27 +73,34 @@ await vectorStore.createIndex('embeddings', 1536);
 await vectorStore.upsert(
   'embeddings',
   embeddings,
-  chunks?.map((chunk: any) => ({
+  chunks?.map((chunk: any, index: number) => ({
     text: chunk.text,
     ...chunk.metadata,
+    nested: {
+      keywords: chunk.metadata.excerptKeywords
+        .replace('KEYWORDS:', '')
+        .split(',')
+        .map(k => k.trim()),
+      id: index,
+    },
   })),
 );
 
-async function generateResponse(
-  query: string,
-  filter: {
-    keyword: string;
-    operator: string;
-    value: string;
-  },
-) {
-  const { keyword, operator, value } = filter;
+async function generateResponse(query: string, filter: any) {
+  const buildFilterString = (f: any): string => {
+    if ('type' in f) {
+      return `type:${f.type} condition with filters: [${f.filters.map(buildFilterString).join(', ')}]`;
+    }
+    return `keyword: ${f.keyword} operator: ${f.operator} value: ${f.value}`;
+  };
+  const filterDescription = buildFilterString(filter);
   const prompt = `
       Please answer the following question:
       ${query}
 
-      Please base your answer only on the context provided in the tool using this keyword: ${keyword}, this operator: ${operator}, and this value: ${value}.
-      If the context doesn't contain enough information to fully answer the question, please state that explicitly.
+    Please base your answer only on the context provided in the tool using this filter:
+    ${filterDescription}
+    If the context doesn't contain enough information to fully answer the question, please state that explicitly.
       `;
 
   // Call the agent to generate a response
@@ -105,11 +112,7 @@ async function generateResponse(
 async function answerQueries(
   queries: {
     query: string;
-    filter: {
-      keyword: string;
-      operator: string;
-      value: string;
-    };
+    filter: any;
   }[],
 ) {
   for (const { query, filter } of queries) {
@@ -134,15 +137,47 @@ const queries = [
     },
   },
   {
-    query: 'How do temperatures affect crop yields specifically?',
-    filter: { keyword: 'excerptKeywords', operator: 'ilike', value: `%crop%` },
+    query: 'Show me recent sections',
+    filter: {
+      keyword: 'nested.id',
+      operator: 'gt',
+      value: 2,
+    },
   },
   {
-    query: 'What are the future challenges?',
+    query: 'Find sections about drought and irrigation',
     filter: {
-      keyword: 'excerptKeywords',
-      operator: 'ilike',
-      value: `%technologies%`,
+      type: '$and',
+      filters: [
+        {
+          keyword: 'text',
+          operator: 'ilike',
+          value: '%drought%',
+        },
+        {
+          keyword: 'text',
+          operator: 'ilike',
+          value: '%irrigation%',
+        },
+      ],
+    },
+  },
+  {
+    query: 'Find sections about wheat or rice',
+    filter: {
+      type: '$or',
+      filters: [
+        {
+          keyword: 'text',
+          operator: 'ilike',
+          value: '%wheat%',
+        },
+        {
+          keyword: 'text',
+          operator: 'ilike',
+          value: '%rice%',
+        },
+      ],
     },
   },
 ];

@@ -130,6 +130,13 @@ await vectorStore.upsert(
   chunks?.map((chunk: any) => ({
     text: chunk.text,
     ...chunk.metadata,
+    nested: {
+      keywords: chunk.metadata.excerptKeywords
+        .replace("KEYWORDS:", "")
+        .split(",")
+        .map((k) => k.trim()),
+      id: index,
+    },
   })),
 );
 ```
@@ -139,21 +146,23 @@ await vectorStore.upsert(
 Function to generate responses based on retrieved context:
 
 ```typescript copy showLineNumbers{65} filename="src/mastra/index.ts"
-async function generateResponse(
-  query: string,
-  filter: {
-    keyword: string;
-    operator: string;
-    value: string;
-  },
-) {
-  const { keyword, operator, value } = filter;
+async function generateResponse(query: string, filter: any) {
+  const buildFilterString = (f: any): string => {
+    if ("type" in f) {
+      return `type:${f.type} condition with filters: [${f.filters
+        .map(buildFilterString)
+        .join(", ")}]`;
+    }
+    return `keyword: ${f.keyword} operator: ${f.operator} value: ${f.value}`;
+  };
+  const filterDescription = buildFilterString(filter);
   const prompt = `
       Please answer the following question:
       ${query}
 
-      Please base your answer only on the context provided in the tool using this keyword: ${keyword}, this operator: ${operator}, and this value: ${value}.
-      If the context doesn't contain enough information to fully answer the question, please state that explicitly.
+    Please base your answer only on the context provided in the tool using these filter conditions:
+    ${filterDescription}
+    If the context doesn't contain enough information to fully answer the question, please state that explicitly.
       `;
 
   // Call the agent to generate a response
@@ -165,15 +174,11 @@ async function generateResponse(
 
 ## Example Usage
 
-```typescript copy showLineNumbers{87} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{89} filename="src/mastra/index.ts"
 async function answerQueries(
   queries: {
     query: string;
-    filter: {
-      keyword: string;
-      operator: string;
-      value: string;
-    };
+    filter: any;
   }[],
 ) {
   for (const { query, filter } of queries) {
@@ -192,27 +197,118 @@ const queries = [
   {
     query: "What adaptation strategies are mentioned?",
     filter: {
-      keyword: "excerptKeywords",
+      keyword: "nested.keywords",
       operator: "ilike",
-      value: `%adaptation%`,
-    },
+      value: "adaptation"
+    }
   },
   {
-    query: "How do temperatures affect crop yields specifically?",
-    filter: { keyword: "excerptKeywords", operator: "ilike", value: `%crop%` },
-  },
-  {
-    query: "What are the future challenges?",
+    query: "Show me recent sections",
     filter: {
-      keyword: "excerptKeywords",
-      operator: "ilike",
-      value: `%technologies%`,
-    },
+      keyword: "nested.id",
+      operator: "gt",
+      value: "2"
+    }
   },
+  {
+    query: "Find sections about drought and irrigation",
+    filter: {
+      type: "$and",
+      filters: [
+        {
+          keyword: "text",
+          operator: "ilike",
+          value: "drought"
+        },
+        {
+          keyword: "text",
+          operator: "ilike",
+          value: "irrigation"
+        }
+      ]
+    }
+  },
+  {
+    query: "Find sections about wheat or rice",
+    filter: {
+      type: "$or",
+      filters: [
+        {
+          keyword: "text",
+          operator: "ilike",
+          value: "wheat"
+        },
+        {
+          keyword: "text",
+          operator: "ilike",
+          value: "rice"
+        }
+      ]
+    }
+  }
 ];
 
 await answerQueries(queries);
 ```
+
+### Filter Types
+
+PGVector supports these filter types:
+
+1. Basic comparison operators:
+```typescript
+{
+  "path.to.field": {
+    eq: "value",     // Equals
+    neq: "value",    // Not equals
+    gt: 25,          // Greater than
+    gte: 25,         // Greater than or equal
+    lt: 25,          // Less than
+    lte: 25          // Less than or equal
+  }
+}
+```
+
+2. Text search operators:
+```typescript
+{
+  "path.to.field": {
+    like: "value",    // Case-sensitive pattern matching
+    ilike: "value"    // Case-insensitive pattern matching
+  }
+}
+```
+
+3. Collection operators:
+```typescript
+{
+  "path.to.field": {
+    in: ["value1", "value2"],     // Match any value in array
+    contains: "value",            // JSONB containment
+    exists: true                  // Check if field exists
+  }
+}
+```
+
+4. Logical operators:
+```typescript
+{
+  type: "$and",  // or "$or"
+  filters: [
+    { "path.to.field": { ilike: "value1" } },
+    { "path.to.field": { ilike: "value2" } }
+  ]
+}
+```
+
+### Available Operators
+
+PGVector implements the following operators:
+
+- Basic: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`
+- Text: `like`, `ilike`
+- Collection: `in`, `contains`, `exists`
+- Logical: `$and`, `$or`
 
 <br />
 <br />
