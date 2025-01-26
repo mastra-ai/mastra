@@ -24,50 +24,49 @@ const getPacakgesToPublish = new Step({
     }
 
     const result = await agent.generate(`
-        Please analyze the following monorepo directories and identify packages that need npm publishing:
+        Please analyze the following monorepo directories and identify packages that need pnpm publishing:
+
+        CRITICAL: All packages MUST be built before publishing, in the correct order.
 
         1. Directory Structure:
            - packages/      : Contains core modules (format: @mastra/{name})
            - integrations/ : Contains integration packages (format: @mastra/{name})
            - deployers/    : Contains deployer packages (format: @mastra/deployer-{name})
-           - vector-stores/: Contains vector store packages (format: @mastra/vector-{name})
+           - vector-stores/: Contains vector store packages with following mapping:
+             * @mastra/vector-astra -> vector-stores/astra-db/
+             * @mastra/vector-{name} -> vector-stores/{name}/ (for all other vector stores)
 
-        2. Requirements:
-           - Identify packages that have changes requiring a new pnpm publis
+        2. Publish Requirements:
+           - Build @mastra/core first, MUST be built before any other package
+           - Build all packages in correct dependency order before publishing
+           - Identify packages that have changes requiring a new pnpm publish
            - Include create-mastra in the packages list if changes exist
            - EXCLUDE @mastra/dane from consideration
 
-        Please list all packages that need publishing, grouped by their directory.
+        Please list all packages that need building grouped by their directory.
     `);
 
     const resultObj = await agent.generate(
       `
-      Please format the following package list according to these strict requirements:
+      Please organize the following packages for building and publishing:
 
       Input Text: ${result.text}
 
-      1. Output Structure:
-         - Return empty arrays if no publishable packages are found
-         - Group packages into these arrays: packages[], integrations[], deployers[], vector_stores[]
-      
-      2. Package Ordering Rules (Strict Priority):
-         a. Core Packages (in packages[]):
-            1. @mastra/core MUST be first
-            2. @mastra/deployer MUST be second
-            3. mastra MUST be third
-            4. create-mastra (if changes exist)
-            5. All other packages from 'packages' directory
-         
-         b. Special Package Types:
-            - deployers[]: All @mastra/deployer-{name} packages
-            - vector_stores[]: All @mastra/vector-{name} packages
-            - integrations[]: Remaining integration packages
+      1. Build Order Requirements:
+         - ALL packages MUST be built before publishing
+         - @mastra/core MUST be built first
+         - Dependencies must be built before dependents
+         - Group parallel builds by directory type
 
-      3. Critical Requirements:
-         - ONLY include packages that need building
-         - EXCLUDE any package not explicitly mentioned in the input text
-         - ENSURE create-mastra is in packages[] array, not integrations[]
-         - MAINTAIN specified order within packages[]
+      2. Output Format:
+         - Group into: packages[], integrations[], deployers[], vector_stores[]
+         - Place create-mastra in packages[] array
+         - Maintain correct build order within each group
+
+      3. Critical Rules:
+         - Never publish without building first
+         - Only include packages that need updates
+         - Follow dependency order strictly
     `,
       {
         output: z.object({
@@ -135,8 +134,8 @@ const assemblePackages = new Step({
       payload.vector_stores.forEach((pkg: string) => {
         let pkgName = pkg.replace('@mastra/vector-', '');
 
-        if (pkgName === 'mastra') {
-          pkgName = 'cli';
+        if (pkgName === 'astra') {
+          pkgName = 'astra-db';
         }
 
         const pkgPath = path.join(process.cwd(), 'vector-stores', pkgName);

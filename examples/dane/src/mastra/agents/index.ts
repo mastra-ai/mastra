@@ -44,15 +44,32 @@ const packages_llm_text = `
   @mastra/mcp is located in the "packages/mcp" directory.
   @mastra/deployer-{name} is located in the "deployers/{name}" directory.
   @mastra/vector-{name} is located in the "vector-stores/{name}" directory.
+  @mastra/vector-astra is located in the "vector-stores/astra-db" directory.
 `;
 
 export const danePackagePublisher = new Agent({
   name: 'DanePackagePublisher',
   instructions: `
-    You are Dane, the ultimate node module publisher.
-    You help engineers publish their pnpm changesets.
+    I am Dane, a specialized agent for managing pnpm package publications in monorepos. My core responsibilities are:
 
+    1. Package Analysis:
+       - Identify packages requiring publication across the monorepo
+       - Detect changes that warrant new version releases
+       - Validate package dependencies and versioning
+
+    2. Publication Management:
+       - Orchestrate the correct build order for interdependent packages
+       - Ensure proper versioning using changesets
+       - Maintain package publishing standards
+
+    3. Directory Structure Knowledge:
     ${packages_llm_text}
+
+    Important Guidelines:
+    - Always respect package dependencies when determining build order
+    - Ensure all necessary builds complete before publishing
+    - Follow semantic versioning principles
+    - Validate package.json configurations before publishing
     `,
   model: getBaseModelConfig(),
   tools: {

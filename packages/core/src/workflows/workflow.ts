@@ -5,7 +5,6 @@ import { z } from 'zod';
 
 import { IAction, MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
-import { LogLevel } from '../logger';
 
 import { WorkflowSnapshot } from './snapshot';
 import { Step } from './step';
@@ -303,7 +302,7 @@ export class Workflow<
     if (runId) {
       this.#runId = runId;
       // First, let's log the incoming snapshot for debugging
-      this.log(LogLevel.DEBUG, 'Incoming snapshot', {
+      this.logger.debug('Incoming snapshot', {
         snapshot: snapshot,
         runId: this.#runId,
       });
@@ -324,7 +323,7 @@ export class Workflow<
           ),
         };
 
-    this.log(LogLevel.DEBUG, 'Machine input prepared', {
+    this.logger.debug('Machine input prepared', {
       machineInput,
       runId: this.#runId,
     });
@@ -336,7 +335,7 @@ export class Workflow<
         }
       : undefined;
 
-    this.log(LogLevel.DEBUG, 'Creating actor with configuration', {
+    this.logger.debug('Creating actor with configuration', {
       machineInput,
       actorSnapshot,
       machineStates: this.#machine.config.states,
@@ -345,7 +344,7 @@ export class Workflow<
 
     this.#actor = createActor(this.#machine, {
       inspect: (inspectionEvent: any) => {
-        this.log(LogLevel.DEBUG, 'XState inspection event', {
+        this.logger.debug('XState inspection event', {
           type: inspectionEvent.type,
           event: inspectionEvent.event,
           runId: this.#runId,
@@ -361,7 +360,7 @@ export class Workflow<
       this.#actor.send({ type: 'RESET_TO_PENDING', stepId });
     }
 
-    this.log(LogLevel.INFO, 'Actor started', { runId: this.#runId });
+    this.logger.debug('Actor started', { runId: this.#runId });
 
     return new Promise((resolve, reject) => {
       if (!this.#actor) {
@@ -385,7 +384,7 @@ export class Workflow<
           path: '',
         });
 
-        this.log(LogLevel.DEBUG, 'State completion check', {
+        this.logger.debug('State completion check', {
           allStatesComplete,
           suspendedPaths: Array.from(suspendedPaths),
           runId: this.#runId,
@@ -406,7 +405,7 @@ export class Workflow<
         } catch (error) {
           // If snapshot persistence fails, we should still resolve
           // but maybe log the error
-          this.log(LogLevel.ERROR, 'Failed to persist final snapshot', { error });
+          this.logger.debug('Failed to persist final snapshot', { error });
 
           this.#cleanup();
           resolve({
@@ -490,10 +489,10 @@ export class Workflow<
       states: {
         pending: {
           entry: () => {
-            this.log(LogLevel.INFO, `Step ${stepNode.step.id} pending`);
+            this.logger.debug(`Step ${stepNode.step.id} pending`);
           },
           exit: () => {
-            this.log(LogLevel.INFO, `Step ${stepNode.step.id} finished pending`);
+            this.logger.debug(`Step ${stepNode.step.id} finished pending`);
           },
           invoke: {
             src: 'conditionCheck',
@@ -564,7 +563,7 @@ export class Workflow<
                   stepResults: ({ context, event }) => {
                     if (event.output.type !== 'CONDITION_FAILED') return context.stepResults;
 
-                    this.log(LogLevel.ERROR, `workflow condition check failed`, {
+                    this.logger.debug(`workflow condition check failed`, {
                       error: event.output.error,
                       stepId: stepNode.step.id,
                     });
@@ -584,10 +583,10 @@ export class Workflow<
         },
         waiting: {
           entry: () => {
-            this.log(LogLevel.INFO, `Step ${stepNode.step.id} waiting ${new Date().toISOString()}`);
+            this.logger.debug(`Step ${stepNode.step.id} waiting ${new Date().toISOString()}`);
           },
           exit: () => {
-            this.log(LogLevel.INFO, `Step ${stepNode.step.id} finished waiting ${new Date().toISOString()}`);
+            this.logger.debug(`Step ${stepNode.step.id} finished waiting ${new Date().toISOString()}`);
           },
           after: {
             [stepNode.step.id]: {
@@ -599,10 +598,10 @@ export class Workflow<
           type: 'final',
           entry: [
             () => {
-              this.log(LogLevel.INFO, `Step ${stepNode.step.id} suspended`);
+              this.logger.debug(`Step ${stepNode.step.id} suspended`);
             },
             assign({
-              stepResults: ({ context }) => ({
+              stepResults: ({ context }: { context: WorkflowContext }) => ({
                 ...context.stepResults,
                 [stepNode.step.id]: {
                   ...(context?.stepResults?.[stepNode.step.id] || {}),
@@ -616,7 +615,7 @@ export class Workflow<
           //     target: 'pending',
           //     actions: [
           //       assign({
-          //         attempts: ({ context }) => ({
+          //         attempts: ({ context }: { context: WorkflowContext }) => ({
           //           ...context.attempts,
           //           [stepNode.step.id]: this.#steps[stepNode.step.id]?.retryConfig?.attempts || 3,
           //         }),
@@ -625,10 +624,10 @@ export class Workflow<
           //   }
           // },
           // entry: () => {
-          //   this.log(LogLevel.INFO, `Step ${stepNode.step.id} suspended ${new Date().toISOString()}`);
+          //   this.logger.debug(`Step ${stepNode.step.id} suspended ${new Date().toISOString()}`);
           // },
           // exit: () => {
-          //   this.log(LogLevel.INFO, `Step ${stepNode.step.id} finished suspended ${new Date().toISOString()}`);
+          //   this.logger.debug(`Step ${stepNode.step.id} finished suspended ${new Date().toISOString()}`);
           // },
           // after: {
           //   [stepNode.step.id]: {
@@ -638,14 +637,14 @@ export class Workflow<
         },
         executing: {
           entry: () => {
-            this.log(LogLevel.INFO, `Step ${stepNode.step.id} executing`);
+            this.logger.debug(`Step ${stepNode.step.id} executing`);
           },
           on: {
             SUSPENDED: {
               target: 'suspended',
               actions: [
                 assign({
-                  stepResults: ({ context }) => ({
+                  stepResults: ({ context }: { context: WorkflowContext }) => ({
                     ...context.stepResults,
                     [stepNode.step.id]: {
                       status: 'suspended',
@@ -665,7 +664,7 @@ export class Workflow<
               target: 'runningSubscribers',
               actions: [
                 ({ event }: { event: any }) =>
-                  this.log(LogLevel.INFO, `Step ${stepNode.step.id} finished executing`, { output: event.output }),
+                  this.logger.debug(`Step ${stepNode.step.id} finished executing`, { output: event.output }),
                 { type: 'updateStepResult', params: { stepId: stepNode.step.id } },
                 { type: 'spawnSubscribers', params: { stepId: stepNode.step.id } },
               ],
@@ -678,10 +677,10 @@ export class Workflow<
         },
         runningSubscribers: {
           entry: () => {
-            this.log(LogLevel.INFO, `Step ${stepNode.step.id} running subscribers`);
+            this.logger.debug(`Step ${stepNode.step.id} running subscribers`);
           },
           exit: () => {
-            this.log(LogLevel.INFO, `Step ${stepNode.step.id} finished running subscribers`);
+            this.logger.debug(`Step ${stepNode.step.id} finished running subscribers`);
           },
           invoke: {
             src: 'spawnSubscriberFunction',
@@ -693,18 +692,18 @@ export class Workflow<
               target: nextStep ? nextStep.step.id : 'completed',
               actions: [
                 assign({
-                  stepResults: ({ context, event }) => ({
+                  stepResults: ({ context, event }: { context: WorkflowContext; event: any }) => ({
                     ...context.stepResults,
                     ...event.output.stepResults,
                   }),
                 }),
-                () => this.log(LogLevel.DEBUG, `Subscriber execution completed`, { stepId: stepNode.step.id }),
+                () => this.logger.debug(`Subscriber execution completed`, { stepId: stepNode.step.id }),
               ],
             },
             onError: {
               target: nextStep ? nextStep.step.id : 'completed',
               actions: ({ event }: { context: WorkflowContext; event: any }) => {
-                this.log(LogLevel.ERROR, `Subscriber execution failed`, {
+                this.logger.debug(`Subscriber execution failed`, {
                   error: event.error,
                   stepId: stepNode.step.id,
                 });
@@ -760,7 +759,7 @@ export class Workflow<
   #getDefaultActions() {
     return {
       updateStepResult: assign({
-        stepResults: ({ context, event }) => {
+        stepResults: ({ context, event }: { context: WorkflowContext; event: any }) => {
           if (!isTransitionEvent(event)) return context.stepResults;
 
           const { stepId, result } = event.output as ResolverFunctionOutput;
@@ -775,7 +774,7 @@ export class Workflow<
         },
       }),
       setStepError: assign({
-        stepResults: ({ context, event }, params: WorkflowActionParams) => {
+        stepResults: ({ context, event }: { context: WorkflowContext; event: any }, params: WorkflowActionParams) => {
           if (!isErrorEvent(event)) return context.stepResults;
 
           const { stepId } = params;
@@ -793,7 +792,7 @@ export class Workflow<
       }),
       notifyStepCompletion: async (_: any, params: WorkflowActionParams) => {
         const { stepId } = params;
-        this.log(LogLevel.INFO, `Step ${stepId} completed`);
+        this.logger.debug(`Step ${stepId} completed`);
       },
       snapshotStep: assign({
         _snapshot: ({}, params: WorkflowActionParams) => {
@@ -809,7 +808,7 @@ export class Workflow<
         return;
       },
       decrementAttemptCount: assign({
-        attempts: ({ context, event }, params: WorkflowActionParams) => {
+        attempts: ({ context, event }: { context: WorkflowContext; event: any }, params: WorkflowActionParams) => {
           if (!isTransitionEvent(event)) return context.attempts;
 
           const { stepId } = params;
@@ -841,7 +840,7 @@ export class Workflow<
           stepId: stepNode.step.id,
         });
 
-        this.log(LogLevel.DEBUG, `Resolved variables for ${stepNode.step.id}`, {
+        this.logger.debug(`Resolved variables for ${stepNode.step.id}`, {
           resolvedData,
           runId: this.#runId,
         });
@@ -858,16 +857,16 @@ export class Workflow<
                 status: 'suspended',
               };
               await this.#persistWorkflowSnapshot();
-              this.log(LogLevel.INFO, `Sending SUSPENDED event for step ${stepNode.step.id}`);
+              this.logger.debug(`Sending SUSPENDED event for step ${stepNode.step.id}`);
               this.#actor?.send({ type: 'SUSPENDED', stepId: stepNode.step.id });
             } else {
-              this.log(LogLevel.ERROR, `Actor not available for step ${stepNode.step.id}`);
+              this.logger.debug(`Actor not available for step ${stepNode.step.id}`);
             }
           },
           ...injectables,
         });
 
-        this.log(LogLevel.DEBUG, `Step ${stepNode.step.id} result`, {
+        this.logger.debug(`Step ${stepNode.step.id} result`, {
           result,
           runId: this.#runId,
         });
@@ -882,12 +881,12 @@ export class Workflow<
         const stepConfig = stepNode.config;
         const attemptCount = context.attempts[stepNode.step.id];
 
-        this.logger.info(`Checking conditions for ${stepNode.step.id}`, {
+        this.logger.debug(`Checking conditions for ${stepNode.step.id}`, {
           stepId: stepNode.step.id,
           runId: this.#runId,
         });
 
-        this.logger.info(`Attempt count for ${stepNode.step.id}`, {
+        this.logger.debug(`Attempt count for ${stepNode.step.id}`, {
           attemptCount,
           attempts: context.attempts,
           runId: this.#runId,
@@ -907,12 +906,12 @@ export class Workflow<
           return { type: 'CONDITIONS_MET' as const };
         }
 
-        this.log(LogLevel.INFO, `Checking conditions for ${stepNode.step.id}`);
+        this.logger.debug(`Checking conditions for ${stepNode.step.id}`);
 
         if (typeof stepConfig?.when === 'function') {
           const conditionMet = await stepConfig.when({ context });
           if (conditionMet) {
-            this.log(LogLevel.INFO, `Condition met for ${stepNode.step.id}`);
+            this.logger.debug(`Condition met for ${stepNode.step.id}`);
             return { type: 'CONDITIONS_MET' as const };
           }
           if (!attemptCount || attemptCount < 0) {
@@ -1004,18 +1003,18 @@ export class Workflow<
   async #persistWorkflowSnapshot() {
     const snapshotFromActor = this.#actor?.getPersistedSnapshot();
     if (!this.snapshot) {
-      this.log(LogLevel.DEBUG, 'Snapshot cannot be persisted. Mastra engine is not initialized', {
+      this.logger.debug('Snapshot cannot be persisted. Mastra engine is not initialized', {
         runId: this.#runId,
       });
       return;
     }
 
     if (!snapshotFromActor) {
-      this.log(LogLevel.ERROR, 'Snapshot cannot be persisted. No snapshot received.', { runId: this.#runId });
+      this.logger.debug('Snapshot cannot be persisted. No snapshot received.', { runId: this.#runId });
       return;
     }
 
-    this.log(LogLevel.INFO, 'Persisting workflow snapshot', {
+    this.logger.debug('Persisting workflow snapshot', {
       snapshot: snapshotFromActor,
       runId: this.#runId,
     });
@@ -1027,17 +1026,17 @@ export class Workflow<
       connectionId: this.#connectionId,
     });
 
-    this.log(LogLevel.INFO, 'Successfully persisted workflow snapshot', { runId: this.#runId });
+    this.logger.debug('Successfully persisted workflow snapshot', { runId: this.#runId });
     return this.#runId;
   }
 
   async #loadWorkflowSnapshot(runId: string) {
     if (!this.snapshot) {
-      this.log(LogLevel.ERROR, 'Snapshot cannot be loaded. Mastra engine is not initialized', { runId });
+      this.logger.debug('Snapshot cannot be loaded. Mastra engine is not initialized', { runId });
       return;
     }
 
-    this.log(LogLevel.INFO, 'Loading workflow snapshot', {
+    this.logger.debug('Loading workflow snapshot', {
       runId,
       entityName: this.#entityName,
       connectionId: this.#connectionId,
@@ -1049,7 +1048,7 @@ export class Workflow<
       connectionId: this.#connectionId,
     });
 
-    this.log(LogLevel.INFO, 'Retrieved workflow state from storage', {
+    this.logger.debug('Retrieved workflow state from storage', {
       snapshot: snapshotData,
       runId,
     });
@@ -1078,7 +1077,7 @@ export class Workflow<
   }): Record<string, any> {
     const resolvedData: Record<string, any> = {};
 
-    this.log(LogLevel.DEBUG, `Resolving variables for ${stepId}`, {
+    this.logger.debug(`Resolving variables for ${stepId}`, {
       runId: this.#runId,
     });
 
@@ -1102,8 +1101,7 @@ export class Workflow<
       const sourceData =
         variable.step === 'trigger' ? context.triggerData : getStepResult(context.stepResults[variable.step.id]);
 
-      this.log(
-        LogLevel.DEBUG,
+      this.logger.debug(
         `Got source data for ${key} variable from ${variable.step === 'trigger' ? 'trigger' : variable.step.id}`,
         {
           sourceData,
@@ -1120,7 +1118,7 @@ export class Workflow<
       // If path is empty or '.', return the entire source data
       const value = variable.path === '' || variable.path === '.' ? sourceData : get(sourceData, variable.path);
 
-      this.log(LogLevel.DEBUG, `Resolved variable ${key}`, {
+      this.logger.debug(`Resolved variable ${key}`, {
         value,
         runId: this.#runId,
       });
@@ -1152,7 +1150,7 @@ export class Workflow<
       const sourceData =
         stepId === 'trigger' ? context.triggerData : getStepResult(context.stepResults[stepId as string]);
 
-      this.log(LogLevel.DEBUG, `Got condition data from ${stepId}`, {
+      this.logger.debug(`Got condition data from ${stepId}`, {
         sourceData,
         runId: this.#runId,
       });
@@ -1184,7 +1182,7 @@ export class Workflow<
       const { ref, query } = condition;
       const sourceData = ref.step === 'trigger' ? context.triggerData : getStepResult(context.stepResults[ref.step.id]);
 
-      this.log(LogLevel.DEBUG, `Got condition data from ${ref.step === 'trigger' ? 'trigger' : ref.step.id}`, {
+      this.logger.debug(`Got condition data from ${ref.step === 'trigger' ? 'trigger' : ref.step.id}`, {
         sourceData,
         runId: this.#runId,
       });
@@ -1207,7 +1205,7 @@ export class Workflow<
     // AND condition
     if ('and' in condition) {
       andBranchResult = condition.and.every(cond => this.#evaluateCondition(cond, context));
-      this.log(LogLevel.DEBUG, `Evaluated AND condition`, {
+      this.logger.debug(`Evaluated AND condition`, {
         andBranchResult,
         runId: this.#runId,
       });
@@ -1216,7 +1214,7 @@ export class Workflow<
     // OR condition
     if ('or' in condition) {
       orBranchResult = condition.or.some(cond => this.#evaluateCondition(cond, context));
-      this.log(LogLevel.DEBUG, `Evaluated OR condition`, {
+      this.logger.debug(`Evaluated OR condition`, {
         orBranchResult,
         runId: this.#runId,
       });
@@ -1224,7 +1222,7 @@ export class Workflow<
 
     const finalResult = baseResult && andBranchResult && orBranchResult;
 
-    this.log(LogLevel.DEBUG, `Evaluated condition`, {
+    this.logger.debug(`Evaluated condition`, {
       finalResult,
       runId: this.#runId,
     });
@@ -1511,7 +1509,7 @@ export class Workflow<
     try {
       parsedSnapshot = JSON.parse(snapshot as unknown as string);
     } catch (error) {
-      this.log(LogLevel.ERROR, 'Failed to parse workflow snapshot for resume', { error, runId });
+      this.logger.debug('Failed to parse workflow snapshot for resume', { error, runId });
       throw new Error('Failed to parse workflow snapshot');
     }
 
@@ -1575,7 +1573,7 @@ export class Workflow<
         this.#steps[stepId]?.retryConfig?.attempts || this.#retryConfig?.attempts || 3;
     }
 
-    this.log(LogLevel.INFO, 'Resuming workflow with updated snapshot', {
+    this.logger.debug('Resuming workflow with updated snapshot', {
       updatedSnapshot: parsedSnapshot,
       runId,
       stepId,
