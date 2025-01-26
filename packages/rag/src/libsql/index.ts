@@ -63,7 +63,12 @@ export class LibSQLVector extends MastraVector {
               }
             }
 
-            traverse(value);
+            if (typeof value === 'object') {
+              traverse(value);
+            } else {
+              filterValues.push(value as any);
+              return `json_extract(metadata, '$.${key}') = ?`;
+            }
 
             const conditions = paths.map((path, i) => {
               filterValues.push(values[i]);
