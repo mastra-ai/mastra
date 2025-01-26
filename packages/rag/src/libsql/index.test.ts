@@ -9,12 +9,12 @@ describe('LibSQLVector', () => {
 
   beforeAll(async () => {
     // Initialize PgVector
-    libsqlVector = new LibSQLVector('file::memory:?cache=shared');
+    // libsqlVector = new LibSQLVector('file::memory:?cache=shared');
+    libsqlVector = new LibSQLVector('file:/tmp/test.db');
   });
 
   afterAll(async () => {
     // Clean up test tables
-
     await libsqlVector.deleteIndex(testIndexName);
   });
 
@@ -201,7 +201,7 @@ describe('LibSQLVector', () => {
     });
 
     afterAll(async () => {
-      await libsqlVector.deleteIndex(indexName);
+      // await libsqlVector.deleteIndex(indexName);
     });
 
     // Test numeric comparisons

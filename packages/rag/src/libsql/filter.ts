@@ -12,13 +12,13 @@ type FilterOperator = {
 };
 
 type FilterOperatorMap = {
-  [K in OperatorType]: (key: string, paramIndex: number) => FilterOperator;
+  [K in OperatorType]: (key: string) => FilterOperator;
 };
 
 // Helper functions to create operators
 const createBasicOperator = (symbol: string) => {
-  return (key: string, paramIndex: number): FilterOperator => ({
-    sql: `metadata->>'${key}' ${symbol} $${paramIndex}`,
+  return (key: string): FilterOperator => ({
+    sql: `metadata->>'${key}' ${symbol} ?`,
     needsValue: true,
     transformValue: (value: any) => {
       if (Array.isArray(value)) {
@@ -30,8 +30,8 @@ const createBasicOperator = (symbol: string) => {
 };
 
 const createNumericOperator = (symbol: string) => {
-  return (key: string, paramIndex: number): FilterOperator => ({
-    sql: `(metadata->>'${key}') ${symbol} $${paramIndex}`,
+  return (key: string): FilterOperator => ({
+    sql: `(metadata->>'${key}') ${symbol} ?`,
     needsValue: true,
   });
 };
@@ -58,16 +58,16 @@ export const FILTER_OPERATORS: FilterOperatorMap = {
   ilike: createBasicOperator('ILIKE'),
 
   // IN array of values
-  in: (key: string, paramIndex: number): FilterOperator => ({
-    sql: `metadata->>'${key}' = ANY($${paramIndex})`,
+  in: (key: string): FilterOperator => ({
+    sql: `metadata->>'${key}' = ANY(?)`,
     needsValue: true,
   }),
   // JSONB contains
-  contains: (key: string, paramIndex: number): FilterOperator => ({
-    sql: `json_extract(metadata, '$."${key}"') = $${paramIndex}`,
+  contains: (key: string): FilterOperator => ({
+    sql: `json_extract(metadata, '$."${key}"') = ?`,
     needsValue: true,
     transformValue: (value: any) => {
-      if (Array.isArray(value)) {
+      if (typeof value === 'object') {
         return JSON.stringify(value);
       }
       return value;

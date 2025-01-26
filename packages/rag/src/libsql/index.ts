@@ -46,9 +46,35 @@ export class LibSQLVector extends MastraVector {
             throw new Error(`Unsupported operator: ${operator}`);
           }
           // Get operation function
+          if (operator === 'contains') {
+            // Handle contains operator for nested objects
+            const paths: string[] = [];
+            const values: any[] = [];
+
+            function traverse(obj: any, path: string[] = []) {
+              for (const [k, v] of Object.entries(obj)) {
+                const currentPath = [...path, k];
+                if (v && typeof v === 'object') {
+                  traverse(v, currentPath);
+                } else {
+                  paths.push(currentPath.join('.'));
+                  values.push(v);
+                }
+              }
+            }
+
+            traverse(value);
+
+            const conditions = paths.map((path, i) => {
+              filterValues.push(values[i]);
+              return `json_extract(metadata, '$.${key}.${path}') = ?`;
+            });
+
+            return `(${conditions.join(' AND ')})`;
+          }
           const operatorFn = FILTER_OPERATORS[operator];
 
-          const operatorResult = operatorFn(key, filterValues.length + 1);
+          const operatorResult = operatorFn(key);
 
           // Handle operator cases and check if value is needed
           if (operatorResult.needsValue) {
@@ -68,7 +94,7 @@ export class LibSQLVector extends MastraVector {
             WITH vector_scores AS (
                 SELECT
                     vector_id as id,
-                    1- vector_distance_cos(embedding, '${vectorStr}') as score,
+                    (1-vector_distance_cos(embedding, '${vectorStr}')) as score,
                     metadata
                     ${includeVectors ? ', embedding' : ''}
                 FROM ${indexName}
