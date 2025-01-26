@@ -55,12 +55,20 @@ export const FILTER_OPERATORS: FilterOperatorMap = {
   // Pattern matching (LIKE)
   like: createBasicOperator('LIKE'),
   // Case-insensitive pattern matching (ILIKE)
-  ilike: createBasicOperator('ILIKE'),
-
+  ilike: (key: string): FilterOperator => ({
+    sql: `UPPER(metadata->>'${key}') LIKE ?`,
+    needsValue: true,
+  }),
   // IN array of values
   in: (key: string): FilterOperator => ({
-    sql: `metadata->>'${key}' = ANY(?)`,
+    sql: `metadata->>'${key}' IN (?)`,
     needsValue: true,
+    transformValue: (value: any) => {
+      if (Array.isArray(value)) {
+        return value.join(',');
+      }
+      return value;
+    },
   }),
   // JSONB contains
   contains: (key: string): FilterOperator => ({
