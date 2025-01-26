@@ -32,15 +32,10 @@ export class CloudflareVector extends MastraVector {
       .map(record => JSON.stringify(record))
       .join('\n');
 
-    console.log(ndjson);
-
     const response = await this.client.vectorize.indexes.upsert(indexName, {
       account_id: this.accountId,
       body: ndjson as any,
     });
-
-    // Note: response includes mutationId which could be useful for tracking the upsert status
-    console.log('Upsert mutation ID:', response);
 
     return generatedIds;
   }
