@@ -15,10 +15,11 @@ export class Deployer extends MastraBase {
   type: 'Deploy' | 'Dev';
 
   constructor({ dir, type }: { dir: string; type: 'Deploy' | 'Dev' }) {
-    super({ component: 'DEPLOYER', name: 'DEPLOYER' });
+    super({ component: 'DEPLOYER', name: `Mastra ${type}` });
     this.projectPath = dir;
     this.dotMastraPath = join(dir, '.mastra');
     this.type = type;
+    this.deps.__setLogger(this.logger);
   }
 
   getMastraPath() {
@@ -30,7 +31,7 @@ export class Deployer extends MastraBase {
   }
 
   async writePackageJson() {
-    this.logger.info(`[Mastra ${this.type}] - Writing package.json`);
+    this.logger.debug(`[Mastra ${this.type}] - Writing package.json`);
     let projectPkg: any = {
       dependencies: {},
     };
