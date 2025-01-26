@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.1-alpha.22
+
+### Patch Changes
+
+- 0d5a03d: Vector store modules
+
 ## 0.1.1-alpha.21
 
 ### Patch Changes

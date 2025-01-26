@@ -1,5 +1,11 @@
 # @mastra/deployer-netlify
 
+## 0.0.1-alpha.9
+
+### Patch Changes
+
+- 0d5a03d: Vector store modules
+
 ## 0.0.1-alpha.8
 
 ### Patch Changes

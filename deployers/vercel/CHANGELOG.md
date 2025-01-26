@@ -1,5 +1,11 @@
 # @mastra/deployer-vercel
 
+## 0.0.1-alpha.12
+
+### Patch Changes
+
+- 0d5a03d: Vector store modules
+
 ## 0.0.1-alpha.11
 
 ### Patch Changes
