@@ -1,5 +1,16 @@
 # @mastra/deployer-cloudflare
 
+## 0.0.1-alpha.8
+
+### Patch Changes
+
+- 1944807: Unified logger and major step in better logs
+- c7abf8e: Optional CF worker tagging
+- Updated dependencies [1944807]
+- Updated dependencies [9ade36e]
+  - @mastra/deployer@0.0.1-alpha.7
+  - @mastra/core@0.1.27-alpha.69
+
 ## 0.0.1-alpha.7
 
 ### Patch Changes

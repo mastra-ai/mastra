@@ -1,5 +1,15 @@
 # @mastra/evals
 
+## 0.1.0-alpha.9
+
+### Patch Changes
+
+- 1944807: Unified logger and major step in better logs
+- 9ade36e: Changed measure for evals, added endpoints, attached metrics to agent, added ui for evals in playground, and updated docs
+- Updated dependencies [1944807]
+- Updated dependencies [9ade36e]
+  - @mastra/core@0.1.27-alpha.69
+
 ## 0.1.0-alpha.8
 
 ### Patch Changes
