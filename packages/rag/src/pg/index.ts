@@ -37,44 +37,51 @@ export class PgVector extends MastraVector {
   ): Promise<QueryResult[]> {
     const client = await this.pool.connect();
     try {
-      let filterQuery = '';
       let filterValues: any[] = [minScore];
       const vectorStr = `[${queryVector.join(',')}]`;
 
-      if (filter) {
-        const conditions = Object.entries(filter).map(([key, condition]) => {
-          // If condition is not a FilterCondition object, assume it's an equality check
-          if (!condition || typeof condition !== 'object') {
-            filterValues.push(condition);
-            return `metadata->>'${key}' = $${filterValues.length}`;
-          }
-
-          const [[operator, value] = []] = Object.entries(condition ?? {});
-          if (!operator || value === undefined) {
-            throw new Error(`Invalid operator or value for key: ${key}`);
-          }
-          if (!isValidOperator(operator)) {
-            throw new Error(`Unsupported operator: ${operator}`);
-          }
-          // Get operation function
-          const operatorFn = FILTER_OPERATORS[operator];
-
-          const operatorResult = operatorFn(key, filterValues.length + 1);
-
-          // Handle operator cases and check if value is needed
-          if (operatorResult.needsValue) {
-            // Transform value if needed
-            const transformedValue = operatorResult.transformValue ? operatorResult.transformValue(value) : value;
-            filterValues.push(transformedValue);
-          }
-
-          // return sql condition
-          return operatorResult.sql;
-        });
-        if (conditions.length > 0) {
-          filterQuery = 'AND ' + conditions.join(' AND ');
+      const buildCondition = (key: string, value: any): string => {
+        // Handle logical operators ($and/$or)
+        if (key === '$and' || key === '$or') {
+          const conditions = value.map((f: Filter) =>
+            Object.entries(f)
+              .map(([k, v]) => buildCondition(k, v))
+              .join(' AND '),
+          );
+          const operatorFn = FILTER_OPERATORS[key];
+          return operatorFn(conditions.join(` ${key === '$or' ? 'OR' : 'AND'} `), 0).sql;
         }
-      }
+
+        // If condition is not a FilterCondition object, assume it's an equality check
+        if (!value || typeof value !== 'object') {
+          filterValues.push(value);
+          return `metadata#>>'{${key}}' = $${filterValues.length}`;
+        }
+
+        // Handle operator conditions
+        const [[operator, operatorValue] = []] = Object.entries(value);
+        if (!operator || value === undefined) {
+          throw new Error(`Invalid operator or value for key: ${key}`);
+        }
+        if (!isValidOperator(operator)) {
+          throw new Error(`Unsupported operator: ${operator}`);
+        }
+        const operatorFn = FILTER_OPERATORS[operator];
+        const operatorResult = operatorFn(key, filterValues.length + 1);
+        if (operatorResult.needsValue) {
+          const transformedValue = operatorResult.transformValue
+            ? operatorResult.transformValue(operatorValue)
+            : operatorValue;
+          filterValues.push(transformedValue);
+        }
+        return operatorResult.sql;
+      };
+
+      const filterQuery = filter
+        ? Object.entries(filter)
+            .map(([key, value]) => buildCondition(key, value))
+            .join(' AND ')
+        : '';
 
       const query = `
             WITH vector_scores AS (
@@ -84,7 +91,7 @@ export class PgVector extends MastraVector {
                     metadata
                     ${includeVector ? ', embedding' : ''}
                 FROM ${indexName}
-                WHERE true ${filterQuery}
+                WHERE ${filterQuery || 'true'}
             )
             SELECT *
             FROM vector_scores
