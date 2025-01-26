@@ -1,5 +1,11 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.8
+
+### Patch Changes
+
+- b425845: Logger and execa logs
+
 ## 0.0.1-alpha.7
 
 ### Patch Changes
