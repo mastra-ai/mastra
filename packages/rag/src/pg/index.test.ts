@@ -357,6 +357,77 @@ describe('PgVector', () => {
         expect(result.score).toBeGreaterThan(0.9);
       });
     });
+
+    // Test nested field filters
+    it('should filter with nested field path', async () => {
+      // First insert a record with nested structure
+      await pgVector.upsert(
+        indexName,
+        [[1, 0.1, 0]],
+        [
+          {
+            nested: {
+              keywords: 'test value',
+              count: 42,
+            },
+          },
+        ],
+      );
+
+      const results = await pgVector.query(indexName, [1, 0.1, 0], 10, {
+        'nested.keywords': {
+          ilike: 'test',
+        },
+      });
+
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.metadata?.nested?.keywords).toContain('test');
+    });
+
+    // Test logical AND
+    it('should handle AND filter conditions', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        $and: [
+          {
+            category: {
+              eq: 'electronics',
+            },
+          },
+          {
+            price: {
+              gt: 75,
+            },
+          },
+        ],
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.metadata?.category).toBe('electronics');
+      expect(results[0]?.metadata?.price).toBeGreaterThan(75);
+    });
+
+    // Test logical OR
+    it('should handle OR filter conditions', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        $or: [
+          {
+            category: {
+              eq: 'electronics',
+            },
+          },
+          {
+            category: {
+              eq: 'books',
+            },
+          },
+        ],
+      });
+
+      expect(results.length).toBeGreaterThan(1);
+      results.forEach(result => {
+        expect(['electronics', 'books']).toContain(result?.metadata?.category);
+      });
+    });
   });
 
   describe('listIndexes', () => {
