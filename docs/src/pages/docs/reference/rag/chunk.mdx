@@ -1,11 +1,43 @@
 ---
-title: "Reference: chunk() | Document Processing | RAG | Mastra Docs"
+title: "Reference: .chunk() | Document Processing | RAG | Mastra Docs"
 description: Documentation for the chunk function in Mastra, which splits documents into smaller segments using various strategies.
 ---
 
-# Chunk Function Reference
+# Reference: .chunk()
 
-The `chunk` function splits documents into smaller segments using various strategies and options.
+The `.chunk()` function splits documents into smaller segments using various strategies and options.
+
+## Example
+
+```typescript
+import { Document } from '@mastra/core';
+
+const doc = new Document(`
+# Introduction
+This is a sample document that we want to split into chunks.
+
+## Section 1
+Here is the first section with some content.
+
+## Section 2 
+Here is another section with different content.
+`);
+
+// Basic chunking with defaults
+const chunks = await doc.chunk();
+
+// Markdown-specific chunking with header extraction
+const chunksWithMetadata = await doc.chunk({
+  strategy: 'markdown',
+  headers: [['#', 'title'], ['##', 'section']],
+  extract: {
+    fields: [
+      { name: 'summary', description: 'A brief summary of the chunk content' },
+      { name: 'keywords', description: 'Key terms found in the chunk' }
+    ]
+  }
+});
+```
 
 ## Parameters
 
@@ -16,7 +48,7 @@ The `chunk` function splits documents into smaller segments using various strate
       type: "'recursive' | 'character' | 'token' | 'markdown' | 'html' | 'json' | 'latex'",
       isOptional: true,
       description:
-        "The chunking strategy to use. If not specified, defaults based on document type.",
+        "The chunking strategy to use. If not specified, defaults based on document type. Depending on the chunking strategy, there are additional optionals. Defaults: .md files → 'markdown', .html/.htm → 'html', .json → 'json', .tex → 'latex', others → 'recursive'",
     },
      {
       name: "size",
@@ -30,13 +62,14 @@ The `chunk` function splits documents into smaller segments using various strate
       type: "number",
       isOptional: true,
       defaultValue: "50",
-      description: "Number of characters/tokens that overlap between chunks",
+      description: "Number of characters/tokens that overlap between chunks.",
     },
     {
       name: "separator",
       type: "string",
       isOptional: true,
-      description: "Character(s) to split on",
+      defaultValue: "\\n\\n",
+      description: "Character(s) to split on. Defaults to double newline for text content.",
     },
     {
       name: "isSeparatorRegex",
@@ -56,12 +89,100 @@ The `chunk` function splits documents into smaller segments using various strate
       name: "extract",
       type: "ExtractParams",
       isOptional: true,
-      description: "Metadata extraction options (requires OpenAI API key)",
+      description: "Metadata extraction options (requires OpenAI API key). See ExtractParams section below.",
     },
   ]}
 />
 
+## ExtractParams
+
+`ExtractParams` configures automatic metadata extraction from chunks using LLM analysis.
+
+<PropertiesTable
+  content={[
+    {
+      name: "fields",
+      type: "Array<{ name: string, description: string }>",
+      description: "Array of fields to extract from each chunk. Each field must include a name and description that guides the LLM's extraction.",
+      isOptional: false
+    },
+    {
+      name: "model",
+      type: "string",
+      description: "OpenAI model to use for extraction",
+      defaultValue: "gpt-3.5-turbo",
+      isOptional: true
+    }
+  ]}
+/>
+
+The fields are flexible - you can define any metadata fields you want to extract. Common field types include:
+
+- `summary`: Brief overview of chunk content
+- `keywords`: Key terms or concepts
+- `topics`: Main subjects discussed
+- `entities`: Named entities (people, places, organizations)
+- `sentiment`: Emotional tone
+- `language`: Detected language
+- `timestamp`: Temporal references
+- `categories`: Content classification
+
+Example:
+
+```typescript showLineNumbers copy
+const doc = new Document(text);
+const chunks = await doc.chunk({
+  extract: {
+    fields: [
+      { 
+        name: 'summary', 
+        description: 'A 1-2 sentence summary of the main points' 
+      },
+      { 
+        name: 'entities', 
+        description: 'List of companies, people, and locations mentioned' 
+      },
+      {
+        name: 'custom_field',
+        description: 'Any other metadata you want to extract, guided by this description'
+      }
+    ],
+    model: 'gpt-4' // Optional: specify a different model
+  }
+});
+```
+
 ## Strategy-Specific Options
+
+Strategy-specific options are passed as top-level parameters alongside the strategy parameter. For example:
+
+```typescript showLineNumbers copy
+// HTML strategy example
+const chunks = await doc.chunk({
+  strategy: 'html',
+  headers: [['h1', 'title'], ['h2', 'subtitle']], // HTML-specific option
+  sections: [['div.content', 'main']], // HTML-specific option
+  size: 500 // general option
+});
+
+// Markdown strategy example
+const chunks = await doc.chunk({
+  strategy: 'markdown',
+  headers: [['#', 'title'], ['##', 'section']], // Markdown-specific option
+  stripHeaders: true, // Markdown-specific option
+  overlap: 50 // general option
+});
+
+// Token strategy example
+const chunks = await doc.chunk({
+  strategy: 'token',
+  encodingName: 'gpt2', // Token-specific option
+  modelName: 'gpt-3.5-turbo', // Token-specific option
+  size: 1000 // general option
+});
+```
+
+The options documented below are passed directly at the top level of the configuration object, not nested within a separate options object.
 
 ### HTML
 
