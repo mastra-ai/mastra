@@ -1,5 +1,13 @@
 # mastra
 
+## 0.1.57-alpha.108
+
+### Patch Changes
+
+- b425845: Logger and execa logs
+- Updated dependencies [b425845]
+  - @mastra/deployer@0.0.1-alpha.8
+
 ## 0.1.57-alpha.107
 
 ### Patch Changes
