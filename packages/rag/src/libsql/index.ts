@@ -22,7 +22,7 @@ export class LibSQLVector extends MastraVector {
     queryVector: number[],
     topK: number = 10,
     filter?: Record<string, any>,
-    includeVectors: boolean = false,
+    includeVector: boolean = false,
     minScore: number = 0, // Optional minimum score threshold
   ): Promise<QueryResult[]> {
     try {
@@ -107,7 +107,7 @@ export class LibSQLVector extends MastraVector {
                     vector_id as id,
                     (1-vector_distance_cos(embedding, '${vectorStr}')) as score,
                     metadata
-                    ${includeVectors ? ', embedding' : ''}
+                    ${includeVector ? ', vector_extract(embedding) as embedding' : ''}
                 FROM ${indexName}
                 WHERE true ${filterQuery}
             )
@@ -131,6 +131,7 @@ export class LibSQLVector extends MastraVector {
         id: row.id as string,
         score: row.score as number,
         metadata: JSON.parse((row.metadata as string) ?? '{}'),
+        ...(includeVector && row.embedding && { vector: JSON.parse(row.embedding as string) }),
       }));
     } finally {
       // client.release()
