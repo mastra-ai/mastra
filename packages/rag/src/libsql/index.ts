@@ -47,35 +47,49 @@ export class LibSQLVector extends MastraVector {
           }
           // Get operation function
           if (operator === 'contains') {
-            // Handle contains operator for nested objects
-            const paths: string[] = [];
-            const values: any[] = [];
+            // If value is an array, we want to check if the metadata array contains any of these values
+            if (Array.isArray(value)) {
+              filterValues.push(JSON.stringify(value));
+              return `(
+                SELECT json_valid(json_extract(metadata, '$.${key}')) 
+                AND json_type(json_extract(metadata, '$.${key}')) = 'array'
+                AND EXISTS (
+                  SELECT 1 
+                  FROM json_each(json_extract(metadata, '$.${key}')) as m
+                  WHERE m.value IN (SELECT value FROM json_each(?))
+                )
+              )`;
+            }
+            // If value is an object, handle nested object traversal
+            else if (value && typeof value === 'object') {
+              const paths: string[] = [];
+              const values: any[] = [];
 
-            function traverse(obj: any, path: string[] = []) {
-              for (const [k, v] of Object.entries(obj)) {
-                const currentPath = [...path, k];
-                if (v && typeof v === 'object') {
-                  traverse(v, currentPath);
-                } else {
-                  paths.push(currentPath.join('.'));
-                  values.push(v);
+              function traverse(obj: any, path: string[] = []) {
+                for (const [k, v] of Object.entries(obj)) {
+                  const currentPath = [...path, k];
+                  if (v && typeof v === 'object' && !Array.isArray(v)) {
+                    traverse(v, currentPath);
+                  } else {
+                    paths.push(currentPath.join('.'));
+                    values.push(v);
+                  }
                 }
               }
-            }
 
-            if (typeof value === 'object') {
               traverse(value);
-            } else {
+              const conditions = paths.map((path, i) => {
+                filterValues.push(values[i]);
+                return `json_extract(metadata, '$.${key}.${path}') = ?`;
+              });
+
+              return `(${conditions.join(' AND ')})`;
+            }
+            // If value is primitive
+            else {
               filterValues.push(value as any);
               return `json_extract(metadata, '$.${key}') = ?`;
             }
-
-            const conditions = paths.map((path, i) => {
-              filterValues.push(values[i]);
-              return `json_extract(metadata, '$.${key}.${path}') = ?`;
-            });
-
-            return `(${conditions.join(' AND ')})`;
           } else if (operator === 'in') {
             const ary = value as any[];
             for (const v of ary) {
