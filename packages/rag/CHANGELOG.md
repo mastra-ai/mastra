@@ -1,5 +1,12 @@
 # @mastra/rag
 
+## 0.0.2-alpha.56
+
+### Patch Changes
+
+- ee856f3: Updated pg filter function and updated docs and example
+- c3047a7: Added tests
+
 ## 0.0.2-alpha.55
 
 ### Patch Changes
