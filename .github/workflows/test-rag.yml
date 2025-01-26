@@ -55,6 +55,9 @@ jobs:
       - name: Build rag
         run: pnpm build:rag
 
+      - name: Build vector stores
+        run: pnpm build:vector-stores
+
       - name: Run RAG tests
         run: pnpm test:rag
         env:
