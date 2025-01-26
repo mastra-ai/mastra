@@ -44,7 +44,6 @@ const packages_llm_text = `
   @mastra/mcp is located in the "packages/mcp" directory.
   @mastra/deployer-{name} is located in the "deployers/{name}" directory.
   @mastra/vector-{name} is located in the "vector-stores/{name}" directory.
-  dane or @mastra/dane is located in the "exampeles/dane" directory.
 `;
 
 export const danePackagePublisher = new Agent({
