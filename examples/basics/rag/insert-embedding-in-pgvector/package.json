@@ -5,6 +5,7 @@
     "start": "pnpx tsx index.ts"
   },
   "dependencies": {
-    "@mastra/rag": "workspace:*"
+    "@mastra/rag": "workspace:*",
+    "@mastra/vector-pg": "workspace:*"
   }
 }

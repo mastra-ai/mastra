@@ -23,6 +23,7 @@ Mastra provides flexible retrieval options with support for semantic search, fil
 The simplest approach is direct semantic search. This method uses vector similarity to find chunks that are semantically similar to the query:
 
 ```ts showLineNumbers copy
+import { PgVector } from "@mastra/vector-pg";
 import { embed, EmbedResult } from "@mastra/rag";
 
 // Convert query to embedding

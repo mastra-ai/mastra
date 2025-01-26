@@ -1,6 +1,7 @@
 packages:
   - "packages/*"
   - "deployers/*"
+  - "vector-stores/*"
   - "!packages/cli/admin"
   - "integration-generator/*"
   - "integrations/*"

@@ -1,5 +1,6 @@
 import { Mastra, Agent, EmbedManyResult, Step, Workflow } from '@mastra/core';
-import { createVectorQueryTool, embed, MDocument, PgVector } from '@mastra/rag';
+import { createVectorQueryTool, embed, MDocument } from '@mastra/rag';
+import { PgVector } from '@mastra/vector-pg';
 import { z } from 'zod';
 
 export const ragWorkflow = new Workflow({

@@ -6,6 +6,7 @@
   },
   "dependencies": {
     "@mastra/rag": "workspace:*",
+    "@mastra/vector-pg": "workspace:*",
     "zod": "^3.24.1"
   }
 }

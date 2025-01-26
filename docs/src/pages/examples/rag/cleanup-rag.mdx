@@ -41,10 +41,10 @@ Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
 import { Mastra, Agent, EmbedResult, EmbedManyResult } from "@mastra/core";
+import { PgVector } from "@mastra/vector-pg";
 import {
   embed,
   MDocument,
-  PgVector,
   createVectorQueryTool,
   createDocumentChunkerTool,
 } from "@mastra/rag";
