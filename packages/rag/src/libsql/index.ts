@@ -81,6 +81,7 @@ export class LibSQLVector extends MastraVector {
             LIMIT ${topK};
         `;
       filterValues.push(minScore);
+      console.log(query);
 
       const result = await this.turso.execute({
         sql: query,
