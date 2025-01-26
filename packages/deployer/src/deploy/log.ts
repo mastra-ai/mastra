@@ -37,32 +37,34 @@ export function createExecaLogger({ logger, root }: { logger: Logger; root: stri
   };
 }
 
-// export function runWithChildProcess(
-//     cmd: string,
-//     args: string[]
-// ): { stdout?: string; stderr?: string } {
-//     const pinoStream = createPinoStream()
+export function createChildProcessLogger({ logger, root }: { logger: Logger; root: string }) {
+  const pinoStream = createPinoStream(logger);
+  return async ({ cmd, args, env }: { cmd: string; args: string[]; env: Record<string, string> }) => {
+    try {
+      const subprocess = require('child_process').spawnSync(cmd, args, {
+        cwd: root,
+        encoding: 'utf8',
+        shell: true,
+        env,
+        maxBuffer: 1024 * 1024 * 10, // 10MB buffer
+      });
 
-//     try {
-//         const { stdout, stderr } = require('child_process').spawnSync(cmd, args, {
-//             cwd: PROJECT_ROOT,
-//             encoding: 'utf8',
-//             shell: true,
-//             maxBuffer: 1024 * 1024 * 10, // 10MB buffer
-//         })
+      // Pipe stdout and stderr through the Pino stream
+      if (subprocess.stdout) {
+        pinoStream.write(subprocess.stdout);
+      }
 
-//         if (stdout) {
-//             pinoStream.write(stdout)
-//         }
-//         if (stderr) {
-//             pinoStream.write(stderr)
-//         }
+      if (subprocess.stderr) {
+        pinoStream.write(subprocess.stderr);
+      }
 
-//         pinoStream.end()
-//         return { stdout, stderr }
-//     } catch (error) {
-//         logger.error(error, 'Process failed')
-//         pinoStream.end()
-//         return {}
-//     }
-// }
+      pinoStream.end();
+
+      return { stdout: subprocess.stdout, stderr: subprocess.stderr };
+    } catch (error) {
+      logger.error('Process failed', { error });
+      pinoStream.end();
+      return {};
+    }
+  };
+}
