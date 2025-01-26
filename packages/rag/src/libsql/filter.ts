@@ -83,7 +83,7 @@ export const FILTER_OPERATORS: FilterOperatorMap = {
   }),
   // Key exists
   exists: (key: string): FilterOperator => ({
-    sql: `metadata->>'${key} IS NOT NULL'`,
+    sql: `json_extract(metadata, '$."${key}"') IS NOT NULL`,
     needsValue: false,
   }),
 };
