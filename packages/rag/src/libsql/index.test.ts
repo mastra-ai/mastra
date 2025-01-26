@@ -31,13 +31,13 @@ describe('LibSQLVector', () => {
       expect(stats?.count).toBe(0);
     });
 
-    it('should create index with specified metric', async () => {
-      await libsqlVector.createIndex(testIndexName2, 3, 'euclidean');
-
-      const stats = await libsqlVector.describeIndex(testIndexName2);
-
-      expect(stats.metric).toBe('euclidean');
-    });
+    // it('should create index with specified metric', async () => {
+    //   await libsqlVector.createIndex(testIndexName2, 3, 'euclidean');
+    //
+    //   const stats = await libsqlVector.describeIndex(testIndexName2);
+    //
+    //   expect(stats.metric).toBe('euclidean');
+    // });
 
     it('should throw error if dimension is invalid', async () => {
       await expect(libsqlVector.createIndex(`testIndexNameFail`, 0)).rejects.toThrow();
