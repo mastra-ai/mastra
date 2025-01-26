@@ -20,12 +20,18 @@ const createBasicOperator = (symbol: string) => {
   return (key: string, paramIndex: number): FilterOperator => ({
     sql: `metadata->>'${key}' ${symbol} $${paramIndex}`,
     needsValue: true,
+    transformValue: (value: any) => {
+      if (Array.isArray(value)) {
+        return JSON.stringify(value);
+      }
+      return value;
+    },
   });
 };
 
 const createNumericOperator = (symbol: string) => {
   return (key: string, paramIndex: number): FilterOperator => ({
-    sql: `(metadata->>'${key}')::numeric ${symbol} $${paramIndex}`,
+    sql: `(metadata->>'${key}') ${symbol} $${paramIndex}`,
     needsValue: true,
   });
 };
@@ -58,13 +64,18 @@ export const FILTER_OPERATORS: FilterOperatorMap = {
   }),
   // JSONB contains
   contains: (key: string, paramIndex: number): FilterOperator => ({
-    sql: `metadata @> $${paramIndex}::jsonb`,
+    sql: `json_extract(metadata, '$."${key}"') = $${paramIndex}`,
     needsValue: true,
-    transformValue: (value: any) => JSON.stringify({ [key]: value }),
+    transformValue: (value: any) => {
+      if (Array.isArray(value)) {
+        return JSON.stringify(value);
+      }
+      return value;
+    },
   }),
   // Key exists
   exists: (key: string): FilterOperator => ({
-    sql: `metadata ? '${key}'`,
+    sql: `metadata->>'${key} IS NOT NULL'`,
     needsValue: false,
   }),
 };

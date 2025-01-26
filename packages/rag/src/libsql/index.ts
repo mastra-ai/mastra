@@ -80,6 +80,7 @@ export class LibSQLVector extends MastraVector {
             ORDER BY score DESC
             LIMIT ${topK};
         `;
+      console.log(query, filterValues);
       filterValues.push(minScore);
       console.log(query);
 
