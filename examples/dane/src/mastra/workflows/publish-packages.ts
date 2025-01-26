@@ -27,6 +27,7 @@ const getPacakgesToPublish = new Step({
         * My core modules are in the 'packages' directory.
         * My integrations are in the 'integrations' directory.
         * My deployers are in the 'deployers' directory.
+        * My vector stores are in the 'vector-stores' directory.
 
         Can you tell me which packages within these folders need to be published to npm?
     `);
@@ -40,6 +41,7 @@ const getPacakgesToPublish = new Step({
       * @mastra/core must be first. 
       * @mastra/deployer must be second.
       * mastra must be third.
+      * @mastra/deployers-{name} and @mastra/vector-{name} must be fourth.
       
       Text: ${result.text}
 
@@ -47,6 +49,7 @@ const getPacakgesToPublish = new Step({
       * Do not include packages if we do not need to build them.
       * create-mastra is a package (not an integration) and should be listed in packages array.
       * @mastra/deployers-{name} should be listed after packages.
+      * @mastra/vector-{name} should be listed after packages.
       * @mastra/dane should be listed after packages and integrations.    
     `,
       {
@@ -65,6 +68,7 @@ const getPacakgesToPublish = new Step({
       packages: resultObj?.object?.packages!,
       integrations: resultObj?.object?.integrations!,
       deployers: resultObj?.object?.deployers!,
+      vector_stores: resultObj?.object?.vector_stores!,
       danePackage: resultObj?.object?.danePackage!,
     };
   },
@@ -107,6 +111,19 @@ const assemblePackages = new Step({
         }
 
         const pkgPath = path.join(process.cwd(), 'deployers', pkgName);
+        packagesToBuild.add(pkgPath);
+      });
+    }
+
+    if (payload?.vector_stores) {
+      payload.vector_stores.forEach((pkg: string) => {
+        let pkgName = pkg.replace('@mastra/vector-', '');
+
+        if (pkgName === 'mastra') {
+          pkgName = 'cli';
+        }
+
+        const pkgPath = path.join(process.cwd(), 'vector-stores', pkgName);
         packagesToBuild.add(pkgPath);
       });
     }
