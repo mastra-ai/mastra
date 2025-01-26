@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 import { CloudflareVector } from './';
