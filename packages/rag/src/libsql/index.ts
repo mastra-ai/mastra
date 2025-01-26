@@ -1,7 +1,7 @@
 import { createClient, type Client as TursoClient, type InValue } from '@libsql/client';
 import { MastraVector, type IndexStats, type QueryResult } from '@mastra/core';
 
-import { Filter, FILTER_OPERATORS, isValidOperator } from './filter';
+import { FILTER_OPERATORS, isValidOperator } from './filter';
 
 export class LibSQLVector extends MastraVector {
   private turso: TursoClient;
