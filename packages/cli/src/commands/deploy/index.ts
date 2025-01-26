@@ -13,7 +13,7 @@ export async function deploy({ dir, token }: { dir?: string; token?: string }) {
     });
 
     if (!v) {
-      logger.log('No token provided, exiting...');
+      logger.debug('No token provided, exiting...');
       return;
     }
     tokenToUse = v as string;
@@ -22,7 +22,7 @@ export async function deploy({ dir, token }: { dir?: string; token?: string }) {
   }
 
   if (!tokenToUse || tokenToUse === 'clack:cancel') {
-    logger.log('No token provided, exiting...');
+    logger.debug('No token provided, exiting...');
     return;
   }
 
