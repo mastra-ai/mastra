@@ -1,5 +1,17 @@
 # @mastra/dane
 
+## 0.0.2-alpha.77
+
+### Patch Changes
+
+- 0d5a03d: Vector store modules
+- Updated dependencies [ab1dc59]
+- Updated dependencies [0d5a03d]
+- Updated dependencies [4769753]
+  - @mastra/rag@0.0.2-alpha.57
+  - @mastra/mcp@0.0.1-alpha.10
+  - @mastra/firecrawl@1.0.4-alpha.59
+
 ## 0.0.2-alpha.76
 
 ### Patch Changes

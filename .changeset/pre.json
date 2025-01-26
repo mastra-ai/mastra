@@ -61,7 +61,15 @@
     "@mastra/deployer": "0.0.0",
     "generate-text-with-deepseek": "0.0.1-alpha.6",
     "yc-directory": "1.0.0",
-    "@mastra/loggers": "0.0.0"
+    "@mastra/loggers": "0.0.0",
+    "@mastra/vector-astra": "0.0.0",
+    "@mastra/vector-chroma": "0.0.0",
+    "@mastra/vector-libsql": "0.0.0",
+    "@mastra/vector-pg": "0.0.0",
+    "@mastra/vector-pinecone": "0.0.0",
+    "@mastra/vector-qdrant": "0.0.0",
+    "@mastra/vector-upstash": "0.0.0",
+    "@mastra/vector-vectorize": "0.0.0"
   },
   "changesets": [
     "afraid-papayas-shake",
@@ -123,6 +131,7 @@
     "fuzzy-eels-protect",
     "gentle-suits-complain",
     "giant-falcons-sneeze",
+    "giant-pants-sit",
     "giant-pears-taste",
     "gold-deers-peel",
     "good-buttons-care",
@@ -165,6 +174,7 @@
     "lovely-avocados-repeat",
     "lovely-shoes-switch",
     "mean-gorillas-look",
+    "mean-seals-dance",
     "metal-ads-enjoy",
     "metal-carrots-call",
     "metal-toes-dream",
@@ -280,6 +290,7 @@
     "wise-swans-shout",
     "wise-taxis-wink",
     "witty-nails-tap",
+    "yellow-mangos-press",
     "yellow-nails-add",
     "yellow-roses-run"
   ]
