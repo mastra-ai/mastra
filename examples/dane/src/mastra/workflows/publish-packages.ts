@@ -4,7 +4,7 @@ import { existsSync } from 'fs';
 import path from 'path';
 import { z } from 'zod';
 
-import { BUILD_PACKAGES_PROMPT, PACKAGES_LIST_PROMPT, PUBLISH_PACKAGES_PROMPT } from '../agents/package-publisher';
+import { BUILD_PACKAGES_PROMPT, PACKAGES_LIST_PROMPT, PUBLISH_PACKAGES_PROMPT } from '../agents/package-publisher.js';
 
 export const packagePublisher = new Workflow({
   name: 'pnpm-changset-publisher',

@@ -1,8 +1,8 @@
 import { Agent } from '@mastra/core';
 
-import { pnpmChangesetStatus, pnpmBuild, pnpmChangesetPublish, activeDistTag } from '../tools/pnpm';
+import { pnpmChangesetStatus, pnpmBuild, pnpmChangesetPublish, activeDistTag } from '../tools/pnpm.js';
 
-import { getBaseModelConfig } from './model';
+import { getBaseModelConfig } from './model.js';
 
 const packages_llm_text = `
   # PACKAGE LOCATION RULES - FOLLOW THESE EXACTLY:
