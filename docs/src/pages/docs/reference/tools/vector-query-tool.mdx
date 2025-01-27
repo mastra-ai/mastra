@@ -17,7 +17,7 @@ const queryTool = createVectorQueryTool({
   indexName: "docs",
   options: {
     provider: "OPEN_AI",
-    model: "text-embedding-ada-002",
+    model: "text-embedding-3-small",
     maxRetries: 3
   }
 });
@@ -91,7 +91,7 @@ const queryTool = createVectorQueryTool({
   indexName: "docs",
   options: {
     provider: "OPEN_AI",
-    model: "text-embedding-ada-002",
+    model: "text-embedding-3-small",
     maxRetries: 3
   },
   vectorFilterType: "pinecone",
@@ -110,7 +110,7 @@ const queryTool = createVectorQueryTool({
   indexName: "documentation",
   options: {
     provider: "OPEN_AI",
-    model: "text-embedding-ada-002",
+    model: "text-embedding-3-small",
     maxRetries: 3
   },
   topK: 5,

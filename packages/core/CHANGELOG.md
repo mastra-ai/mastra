@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.73
+
+### Patch Changes
+
+- 3427b95: Updated docs to include intermediate rag examples (metadata filtering, query filters, etc)
+
 ## 0.1.27-alpha.72
 
 ### Patch Changes

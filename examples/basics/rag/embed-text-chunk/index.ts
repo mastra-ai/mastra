@@ -6,7 +6,7 @@ const chunks = await doc.chunk();
 
 const { embedding } = await embed(chunks[0], {
   provider: 'OPEN_AI',
-  model: 'text-embedding-ada-002',
+  model: 'text-embedding-3-small',
   maxRetries: 3,
 });
 

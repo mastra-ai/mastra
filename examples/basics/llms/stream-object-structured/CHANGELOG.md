@@ -1,5 +1,12 @@
 # stream-object-structured
 
+## 0.0.1-alpha.14
+
+### Patch Changes
+
+- Updated dependencies [3427b95]
+  - @mastra/core@0.1.27-alpha.73
+
 ## 0.0.1-alpha.13
 
 ### Patch Changes

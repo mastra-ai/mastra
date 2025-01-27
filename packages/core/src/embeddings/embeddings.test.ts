@@ -55,7 +55,7 @@ describe('Embedding Tests', () => {
       const maxRetries = 3;
 
       await expect(
-        embed(value, { provider: 'INVALID_PROVIDER' as any, model: 'text-embedding-ada-002', maxRetries }),
+        embed(value, { provider: 'INVALID_PROVIDER' as any, model: 'text-embedding-3-small', maxRetries }),
       ).rejects.toThrow('Invalid embedding model');
     });
   });

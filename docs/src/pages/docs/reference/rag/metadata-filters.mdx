@@ -1,0 +1,150 @@
+---
+title: "Reference: Metadata Filters | Metadata Filtering | RAG | Mastra Docs"
+description: Documentation for PGVector's metadata filtering capabilities in Mastra, which allow for precise querying of vector search results.
+---
+
+# Metadata Filters Reference (PGVector)
+
+PGVector filters allow you to narrow down vector search results based on metadata conditions. These filters support nested paths, comparisons, text search, and logical operations.
+
+## Usage Example
+
+```typescript
+import { PgVector } from '@mastra/vector-pg';
+
+const pgVector = new PgVector(connectionString);
+const results = await pgVector.query(
+  "my_index",
+  queryVector,
+  10,
+  {
+    "metadata.category": {
+      eq: "electronics"
+    }
+  }
+);
+```
+
+## Filter Structure
+
+<PropertiesTable
+  content={[
+    {
+      name: "field",
+      type: "object",
+      description: "An object where the key is the metadata field path and the value is the filter condition",
+      isOptional: false,
+    }
+  ]}
+/>
+
+### Operators
+
+<PropertiesTable
+  content={[
+    {
+      name: "eq",
+      type: "string",
+      description: "Exact match comparison",
+    },
+    {
+      name: "neq",
+      type: "string",
+      description: "Not equal comparison",
+    },
+    {
+      name: "gt",
+      type: "string",
+      description: "Greater than comparison",
+    },
+    {
+      name: "gte",
+      type: "string",
+      description: "Greater than or equal comparison",
+    },
+    {
+      name: "lt",
+      type: "string",
+      description: "Less than comparison",
+    },
+    {
+      name: "lte",
+      type: "string",
+      description: "Less than or equal comparison",
+    },
+    {
+      name: "like",
+      type: "string",
+      description: "Case-sensitive pattern matching",
+    },
+    {
+      name: "ilike",
+      type: "string",
+      description: "Case-insensitive pattern matching",
+    },
+    {
+      name: "in",
+      type: "array",
+      description: "Match any value in array",
+    },
+    {
+      name: "contains",
+      type: "any",
+      description: "JSONB containment check",
+    },
+    {
+      name: "exists",
+      type: "boolean",
+      description: "Check if field exists",
+    },
+  ]}
+/>
+
+## Additional Examples
+
+### Basic Comparison
+```typescript
+// Greater than comparison
+{
+  "metadata.price": {
+    gt: "100"
+  }
+}
+```
+
+### Text Search
+```typescript
+// Case-insensitive search
+{
+  "metadata.description": {
+    ilike: "electronics"
+  }
+}
+```
+
+### Logical Operations
+```typescript
+// AND condition
+{
+  "$and": [
+    {
+      "metadata.category": {
+        eq: "electronics"
+      }
+    },
+    {
+      "metadata.price": {
+        lt: "1000"
+      }
+    }
+  ]
+}
+```
+
+### Notes
+- Text search operators (`like`, `ilike`) automatically add `%` wildcards
+- All numeric values should be passed as strings
+- Nested fields are accessed using dot notation
+
+### Related
+- [PgStore](./pgstore)

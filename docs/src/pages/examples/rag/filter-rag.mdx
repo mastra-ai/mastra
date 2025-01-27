@@ -52,7 +52,7 @@ const vectorQueryTool = createVectorQueryTool({
   indexName: "embeddings",
   options: {
     provider: "OPEN_AI",
-    model: "text-embedding-ada-002",
+    model: "text-embedding-3-small",
     maxRetries: 3,
   },
   topK: 3,
@@ -119,7 +119,7 @@ Generate embeddings for the chunks and store them in the vector database:
 ```typescript copy showLineNumbers{48} filename="src/mastra/index.ts"
 const { embeddings } = (await embed(chunks, {
   provider: "OPEN_AI",
-  model: "text-embedding-ada-002",
+  model: "text-embedding-3-small",
   maxRetries: 3,
 })) as EmbedManyResult<string>;
 
@@ -251,69 +251,6 @@ const queries = [
 
 await answerQueries(queries);
 ```
-
-### Filter Types
-
-PGVector supports these filter types:
-
-1. Basic comparison operators:
-
-```typescript
-{
-  "path.to.field": {
-    eq: "value",     // Equals
-    neq: "value",    // Not equals
-    gt: 25,          // Greater than
-    gte: 25,         // Greater than or equal
-    lt: 25,          // Less than
-    lte: 25          // Less than or equal
-  }
-}
-```
-
-2. Text search operators:
-
-```typescript
-{
-  "path.to.field": {
-    like: "value",    // Case-sensitive pattern matching
-    ilike: "value"    // Case-insensitive pattern matching
-  }
-}
-```
-
-3. Collection operators:
-
-```typescript
-{
-  "path.to.field": {
-    in: ["value1", "value2"],     // Match any value in array
-    contains: "value",            // JSONB containment
-    exists: true                  // Check if field exists
-  }
-}
-```
-
-4. Logical operators:
-
-```typescript
-{
-  type: "$and",  // or "$or"
-  filters: [
-    { "path.to.field": { ilike: "value1" } },
-    { "path.to.field": { ilike: "value2" } }
-  ]
-}
-```
-
-### Available Operators
-
-PGVector implements the following operators:
-
-- Basic: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`
-- Text: `like`, `ilike`
-- Collection: `in`, `contains`, `exists`
-- Logical: `$and`, `$or`
 
 <br />
 <br />

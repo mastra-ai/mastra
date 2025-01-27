@@ -31,7 +31,7 @@ const { embedding } = await embed(
   "What are the main points in the article?",
   {
     provider: "OPEN_AI",
-    model: "text-embedding-ada-002",
+    model: "text-embedding-3-small",
     maxRetries: 3,
   }
 );
@@ -91,7 +91,7 @@ const vectorQueryTool = createVectorQueryTool({
   indexName: 'embeddings',
   options: {
     provider: 'OPEN_AI',
-    model: 'text-embedding-ada-002'
+    model: 'text-embedding-3-small'
   },
   topK: 10,
   reranker: {
