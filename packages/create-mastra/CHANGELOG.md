@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.0-alpha.27
+
+### Patch Changes
+
+- 932d86c: Fix build
+
 ## 0.1.0-alpha.26
 
 ### Patch Changes
