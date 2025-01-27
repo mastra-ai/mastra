@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.117
+
+### Patch Changes
+
+- 884793d: Fix 500 error in memory call, fix threads sidebar in playground agent chat
+
 ## 0.1.57-alpha.116
 
 ### Patch Changes
