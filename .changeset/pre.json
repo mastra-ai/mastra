@@ -6,7 +6,6 @@
     "@mastra/ashby": "1.0.0",
     "@mastra/claude": "1.0.0",
     "@mastra/coda": "1.0.0",
-    "@mastra/elevenlabs": "1.0.0",
     "@mastra/firecrawl": "1.0.4-alpha.4",
     "@mastra/github": "1.0.3-alpha.3",
     "@mastra/openai": "1.0.0",
