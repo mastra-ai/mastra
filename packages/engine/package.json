@@ -3,25 +3,28 @@
   "version": "0.0.5-alpha.71",
   "description": "",
   "main": "dist/index.js",
-  "module": "dist/engine.esm.js",
   "types": "dist/index.d.ts",
   "type": "module",
   "exports": {
     ".": {
       "import": {
         "types": "./dist/index.d.ts",
-        "default": "./dist/engine.esm.js"
-      },
-      "require": {
-        "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      }
+    },
+    "./postgres": {
+      "import": {
+        "types": "./dist/postgres/engine.d.ts",
+        "default": "./dist/postgres/engine.js"
       }
     },
     "./package.json": "./package.json"
   },
   "scripts": {
     "copy:drizzle": "cp -r src/postgres/drizzle dist/postgres",
-    "build": "dts build && tsc -p tsconfig.build.json",
+    "build": "pnpm run build:lib && pnpm run build:postgres",
+    "build:lib": "tsup src/index.ts --format esm --clean --dts --treeshake",
+    "build:postgres": "tsup src/postgres/engine.ts --out-dir=dist/postgres/ --format esm --dts --treeshake",
     "build:dev": "dts watch",
     "generate-pg": "drizzle-kit generate --out=./dist/postgres/drizzle --dialect=postgresql --schema=./dist/postgres/db/schema.js",
     "migrate-pg": "pnpx tsx ./dist/postgres/migrate.js",
@@ -57,7 +60,8 @@
     "drizzle-kit": "^0.30.1",
     "dts-bundle-generator": "^9.5.1",
     "dts-cli": "^2.0.5",
-    "vitest": "^2.1.8",
-    "typescript": "^5.6.3"
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }
