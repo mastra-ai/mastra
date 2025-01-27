@@ -1,8 +1,8 @@
-import { Context } from 'hono';
+import type { Context } from 'hono';
 
 const clients = new Set<ReadableStreamDefaultController>();
 
-export function handleClientsRefresh(c: Context) {
+export function handleClientsRefresh(c: Context): Response {
   const stream = new ReadableStream({
     start(controller) {
       clients.add(controller);
