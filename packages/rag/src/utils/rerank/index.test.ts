@@ -18,6 +18,22 @@ describe('rerank', () => {
     vi.clearAllMocks();
   });
 
+  it('should throw an error if weights do not add up to 1', async () => {
+    const results = [
+      { id: '1', metadata: { text: 'Test result 1' }, score: 0.5 },
+      { id: '2', metadata: { text: 'Test result 2' }, score: 0.4 },
+      { id: '3', metadata: { text: 'Test result 3' }, score: 0.9 },
+    ];
+    await expect(
+      rerank(
+        results,
+        'test query',
+        { method: 'cohere', config: { apiKey: 'mock-api-key' } },
+        { weights: { semantic: 0.5, vector: 0.3, position: 0.5 } },
+      ),
+    ).rejects.toThrow('Weights must add up to 1');
+  });
+
   it('should rerank results with default weights', async () => {
     const results = [
       { id: '1', metadata: { text: 'Test result 1' }, score: 0.5 },
@@ -80,8 +96,8 @@ describe('rerank', () => {
       },
       {
         weights: {
-          semantic: 0.3,
-          vector: 0.2,
+          semantic: 0.5,
+          vector: 0.4,
           position: 0.1,
         },
         topK: 2,
@@ -91,7 +107,7 @@ describe('rerank', () => {
     expect(rerankedResults).toHaveLength(2);
     expect(rerankedResults[0]).toStrictEqual({
       result: { id: '3', metadata: { text: 'Test result 3' }, score: 0.9 },
-      score: 0.5133333333333333,
+      score: 0.8933333333333334,
       details: {
         semantic: 1,
         vector: 0.9,
@@ -100,7 +116,7 @@ describe('rerank', () => {
     });
     expect(rerankedResults[1]).toStrictEqual({
       result: { id: '1', metadata: { text: 'Test result 1' }, score: 0.5 },
-      score: 0.5,
+      score: 0.7999999999999999,
       details: {
         semantic: 1,
         vector: 0.5,
@@ -109,7 +125,7 @@ describe('rerank', () => {
     });
     const { scoreSpread1, scoreSpread2 } = getScoreSpreads(results, rerankedResults);
     expect(scoreSpread1).toBe(0.5);
-    expect(scoreSpread2).toBe(0.013333333333333308);
+    expect(scoreSpread2).toBe(0.09333333333333349);
   });
 
   it('should handle query embedding when provided', async () => {

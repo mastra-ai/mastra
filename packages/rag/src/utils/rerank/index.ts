@@ -1,6 +1,6 @@
 import { MastraAgentRelevanceScorer, CohereRelevanceScorer, RelevanceScoreProvider, QueryResult } from '@mastra/core';
 
-// Default weights for different scoring components
+// Default weights for different scoring components (must add up to 1)
 const DEFAULT_WEIGHTS = {
   semantic: 0.4,
   vector: 0.4,
@@ -13,7 +13,7 @@ type WeightConfig = {
   position?: number;
 };
 
-interface RerankDetails {
+interface ScoringDetails {
   semantic: number;
   vector: number;
   position: number;
@@ -26,7 +26,7 @@ interface RerankDetails {
 export interface RerankResult {
   result: QueryResult;
   score: number;
-  details: RerankDetails;
+  details: ScoringDetails;
 }
 
 // For use in the vector store tool
@@ -114,6 +114,13 @@ export async function rerank(
     ...DEFAULT_WEIGHTS,
     ...options.weights,
   };
+
+  //weights must add up to 1
+  const totalWeights = Object.values(weights).reduce((sum, weight) => sum + weight, 0);
+  if (totalWeights !== 1) {
+    throw new Error('Weights must add up to 1');
+  }
+
   const resultLength = results.length;
 
   const queryAnalysis = queryEmbedding ? analyzeQueryEmbedding(queryEmbedding) : null;

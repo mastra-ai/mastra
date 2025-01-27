@@ -7,6 +7,15 @@ description: Documentation for the rerank function in Mastra, which provides adv
 
 The `rerank()` function provides advanced reranking capabilities for vector search results by combining semantic relevance, vector similarity, and position-based scoring. 
 
+```typescript
+function rerank(
+  results: QueryResult[],
+  query: string,
+  modelConfig: RerankMethod,
+  options?: RerankerFunctionOptions
+): Promise<RerankResult[]>
+```
+
 ## Usage Example
 
 ```typescript
@@ -136,7 +145,7 @@ const rerankedResults = await rerank(
     {
       name: "weights",
       type: "WeightConfig",
-      description: "Weights for different scoring components",
+      description: "Weights for different scoring components (must add up to 1)",
       isOptional: true,
       properties: [
         {
@@ -208,13 +217,13 @@ The function returns an array of `RerankResult` objects:
     },
     {
       name: "details",
-      type: "RerankDetails",
+      type: "ScoringDetails",
       description: "Detailed scoring information",
     }
   ]}
 />
 
-### RerankDetails
+### ScoringDetails
 
 <PropertiesTable
   content={[
