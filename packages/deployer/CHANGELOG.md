@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.15
+
+### Patch Changes
+
+- d9c8dd0: Logger changes for default transports
+- Updated dependencies [d9c8dd0]
+  - @mastra/core@0.1.27-alpha.71
+
 ## 0.0.1-alpha.14
 
 ### Patch Changes

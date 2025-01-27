@@ -57,33 +57,46 @@ export class Logger {
       name?: string;
       level?: LogLevel;
       transports?: TransportMap;
+      overrideDefaultTransports?: boolean;
     } = {},
   ) {
     this.transports = options.transports || {};
 
     // Create Pino logger with multiple streams
+    const transportsAry = Object.entries(this.transports);
     this.logger = pino(
       {
         name: options.name || 'app',
         level: options.level || LogLevel.INFO,
       },
-      pino.multistream([
-        ...Object.entries(this.transports).map(([_, transport]) => ({
-          stream: transport,
-          level: options.level || LogLevel.INFO,
-        })),
-        {
-          stream: pretty({
-            colorize: true,
-            levelFirst: true,
-            ignore: 'pid,hostname',
-            colorizeObjects: true,
-            translateTime: 'SYS:standard',
-            singleLine: false,
-          }),
-          level: options.level || LogLevel.INFO,
-        },
-      ]),
+      options.overrideDefaultTransports
+        ? options?.transports?.default
+        : transportsAry.length === 0
+          ? pretty({
+              colorize: true,
+              levelFirst: true,
+              ignore: 'pid,hostname',
+              colorizeObjects: true,
+              translateTime: 'SYS:standard',
+              singleLine: false,
+            })
+          : pino.multistream([
+              ...transportsAry.map(([_, transport]) => ({
+                stream: transport,
+                level: options.level || LogLevel.INFO,
+              })),
+              {
+                stream: pretty({
+                  colorize: true,
+                  levelFirst: true,
+                  ignore: 'pid,hostname',
+                  colorizeObjects: true,
+                  translateTime: 'SYS:standard',
+                  singleLine: false,
+                }),
+                level: options.level || LogLevel.INFO,
+              },
+            ]),
     );
   }
 
