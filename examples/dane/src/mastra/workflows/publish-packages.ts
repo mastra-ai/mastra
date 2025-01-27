@@ -55,6 +55,7 @@ const getPacakgesToPublish = new Step({
       1. Build Order Requirements:
          - ALL packages MUST be built before publishing
          - @mastra/core MUST be built first
+         - @mastra/deployer MUST be built second
          - Dependencies must be built before dependents
          - Group parallel builds by directory type
 
