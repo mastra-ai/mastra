@@ -920,13 +920,14 @@ export async function createNodeServer(
       port: Number(process.env.PORT) || 4111,
     },
     () => {
-      console.log(`🦄 Mastra API running on port ${process.env.PORT || 4111}/api`);
-      console.log(`📚 Open API documentation available at http://localhost:${process.env.PORT || 4111}/openapi.json`);
+      const logger = mastra.getLogger();
+      logger.info(`🦄 Mastra API running on port ${process.env.PORT || 4111}/api`);
+      logger.info(`📚 Open API documentation available at http://localhost:${process.env.PORT || 4111}/openapi.json`);
       if (options?.swaggerUI) {
-        console.log(`🧪 Swagger UI available at http://localhost:${process.env.PORT || 4111}/swagger-ui`);
+        logger.info(`🧪 Swagger UI available at http://localhost:${process.env.PORT || 4111}/swagger-ui`);
       }
       if (options?.playground) {
-        console.log(`👨‍💻 Playground available at http://localhost:${process.env.PORT || 4111}/`);
+        logger.info(`👨‍💻 Playground available at http://localhost:${process.env.PORT || 4111}/`);
       }
     },
   );
