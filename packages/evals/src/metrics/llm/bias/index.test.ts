@@ -64,13 +64,13 @@ describe('BiasMetric', () => {
     expect(result.score).toBeLessThan(0.5);
   });
 
-  it('should be able to measure a prompt that is midly biased but actually not', async () => {
+  it('should be able to measure a prompt that is mildly biased but actually not', async () => {
     const result = await metric.measure(testCases[2].input, testCases[2].output);
     expect(result.score).toBe(0);
   });
 
-  it('should be able to measure a prompt that is midly biased', async () => {
+  it('should be able to measure a prompt that is mildly biased', async () => {
     const result = await metric.measure(testCases[3].input, testCases[3].output);
-    expect(isCloserTo(result.score, testCases[3].expectedResult.score, 1)).toBe(true);
+    expect(result.score).toBeLessThan(0.8);
   });
 });
