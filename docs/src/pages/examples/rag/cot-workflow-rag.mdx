@@ -1,9 +1,9 @@
 ---
-title: "Example: Chain of Thought Workflow | RAG | Mastra Docs"
+title: 'Example: Chain of Thought Workflow | RAG | Mastra Docs'
 description: Example of implementing a RAG system in Mastra with chain-of-thought reasoning using OpenAI and PGVector.
 ---
 
-import { GithubLink } from "../../../components/github-link";
+import { GithubLink } from '../../../components/github-link';
 
 # Chain of Thought Workflow RAG
 
@@ -35,10 +35,10 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
-import { Mastra, Agent, Step, Workflow } from "@mastra/core";
-import { PgVector } from "@mastra/vector-pg";
-import { createVectorQueryTool, embedMany, MDocument } from "@mastra/rag";
-import { z } from "zod";
+import { Mastra, Agent, Step, Workflow } from '@mastra/core';
+import { createVectorQueryTool, embedMany, MDocument } from '@mastra/rag';
+import { PgVector } from '@mastra/vector-pg';
+import { z } from 'zod';
 ```
 
 ## Workflow Definition
@@ -47,7 +47,7 @@ First, define the workflow with its trigger schema:
 
 ```typescript copy showLineNumbers{5} filename="src/mastra/index.ts"
 export const ragWorkflow = new Workflow({
-  name: "rag-workflow",
+  name: 'rag-workflow',
   triggerSchema: z.object({
     query: z.string(),
   }),
@@ -60,11 +60,11 @@ Create a tool for querying the vector database:
 
 ```typescript copy showLineNumbers{12} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: "pgVector",
-  indexName: "embeddings",
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
   options: {
-    provider: "OPEN_AI",
-    model: "text-embedding-3-small",
+    provider: 'OPEN_AI',
+    model: 'text-embedding-3-small',
     maxRetries: 3,
   },
   topK: 3,
@@ -77,11 +77,11 @@ Set up the Mastra agent:
 
 ```typescript copy showLineNumbers{23} filename="src/mastra/index.ts"
 export const ragAgent = new Agent({
-  name: "RAG Agent",
+  name: 'RAG Agent',
   instructions: `You are a helpful assistant that answers questions based on the provided context.`,
   model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
+    provider: 'OPEN_AI',
+    name: 'gpt-4o-mini',
   },
   tools: {
     vectorQueryTool,
@@ -97,23 +97,21 @@ The workflow is divided into multiple steps for chain-of-thought reasoning:
 
 ```typescript copy showLineNumbers{35} filename="src/mastra/index.ts"
 const analyzeContext = new Step({
-  id: "analyzeContext",
+  id: 'analyzeContext',
   outputSchema: z.object({
     initialAnalysis: z.string(),
   }),
   execute: async ({ context, mastra }) => {
-    console.log("---------------------------");
+    console.log('---------------------------');
     const ragAgent = mastra?.agents?.ragAgent;
-    const query = context?.machineContext?.getStepPayload<{ query: string }>(
-      "trigger",
-    )?.query;
+    const query = context?.machineContext?.getStepPayload<{ query: string }>('trigger')?.query;
 
     const analysisPrompt = `${query} 1. First, carefully analyze the retrieved context chunks and identify key information.`;
 
     const analysis = await ragAgent?.generate(analysisPrompt);
     console.log(analysis?.text);
     return {
-      initialAnalysis: analysis?.text ?? "",
+      initialAnalysis: analysis?.text ?? '',
     };
   },
 });
@@ -123,16 +121,16 @@ const analyzeContext = new Step({
 
 ```typescript copy showLineNumbers{55} filename="src/mastra/index.ts"
 const breakdownThoughts = new Step({
-  id: "breakdownThoughts",
+  id: 'breakdownThoughts',
   outputSchema: z.object({
     breakdown: z.string(),
   }),
   execute: async ({ context, mastra }) => {
-    console.log("---------------------------");
+    console.log('---------------------------');
     const ragAgent = mastra?.agents?.ragAgent;
     const analysis = context?.machineContext?.getStepPayload<{
       initialAnalysis: string;
-    }>("analyzeContext")?.initialAnalysis;
+    }>('analyzeContext')?.initialAnalysis;
 
     const connectionPrompt = `
       Based on the initial analysis: ${analysis}
@@ -143,7 +141,7 @@ const breakdownThoughts = new Step({
     const connectionAnalysis = await ragAgent?.generate(connectionPrompt);
     console.log(connectionAnalysis?.text);
     return {
-      breakdown: connectionAnalysis?.text ?? "",
+      breakdown: connectionAnalysis?.text ?? '',
     };
   },
 });
@@ -153,16 +151,16 @@ const breakdownThoughts = new Step({
 
 ```typescript copy showLineNumbers{78} filename="src/mastra/index.ts"
 const connectPieces = new Step({
-  id: "connectPieces",
+  id: 'connectPieces',
   outputSchema: z.object({
     connections: z.string(),
   }),
   execute: async ({ context, mastra }) => {
-    console.log("---------------------------");
+    console.log('---------------------------');
     const ragAgent = mastra?.agents?.ragAgent;
     const process = context?.machineContext?.getStepPayload<{
       breakdown: string;
-    }>("breakdownThoughts")?.breakdown;
+    }>('breakdownThoughts')?.breakdown;
     const connectionPrompt = `
         Based on the breakdown: ${process}
 
@@ -172,7 +170,7 @@ const connectPieces = new Step({
     const connections = await ragAgent?.generate(connectionPrompt);
     console.log(connections?.text);
     return {
-      connections: connections?.text ?? "",
+      connections: connections?.text ?? '',
     };
   },
 });
@@ -182,16 +180,16 @@ const connectPieces = new Step({
 
 ```typescript copy showLineNumbers{101} filename="src/mastra/index.ts"
 const drawConclusions = new Step({
-  id: "drawConclusions",
+  id: 'drawConclusions',
   outputSchema: z.object({
     conclusions: z.string(),
   }),
   execute: async ({ context, mastra }) => {
-    console.log("---------------------------");
+    console.log('---------------------------');
     const ragAgent = mastra?.agents?.ragAgent;
     const evidence = context?.machineContext?.getStepPayload<{
       connections: string;
-    }>("connectPieces")?.connections;
+    }>('connectPieces')?.connections;
     const conclusionPrompt = `
         Based on the connections: ${evidence}
 
@@ -201,7 +199,7 @@ const drawConclusions = new Step({
     const conclusions = await ragAgent?.generate(conclusionPrompt);
     console.log(conclusions?.text);
     return {
-      conclusions: conclusions?.text ?? "",
+      conclusions: conclusions?.text ?? '',
     };
   },
 });
@@ -211,16 +209,16 @@ const drawConclusions = new Step({
 
 ```typescript copy showLineNumbers{124} filename="src/mastra/index.ts"
 const finalAnswer = new Step({
-  id: "finalAnswer",
+  id: 'finalAnswer',
   outputSchema: z.object({
     finalAnswer: z.string(),
   }),
   execute: async ({ context, mastra }) => {
-    console.log("---------------------------");
+    console.log('---------------------------');
     const ragAgent = mastra?.agents?.ragAgent;
     const conclusions = context?.machineContext?.getStepPayload<{
       conclusions: string;
-    }>("drawConclusions")?.conclusions;
+    }>('drawConclusions')?.conclusions;
     const answerPrompt = `
         Based on the conclusions: ${conclusions}
         Format your response as:
@@ -235,7 +233,7 @@ const finalAnswer = new Step({
     const finalAnswer = await ragAgent?.generate(answerPrompt);
     console.log(finalAnswer?.text);
     return {
-      finalAnswer: finalAnswer?.text ?? "",
+      finalAnswer: finalAnswer?.text ?? '',
     };
   },
 });
@@ -246,12 +244,7 @@ const finalAnswer = new Step({
 Connect all the steps in the workflow:
 
 ```typescript copy showLineNumbers{154} filename="src/mastra/index.ts"
-ragWorkflow
-  .step(analyzeContext)
-  .then(breakdownThoughts)
-  .then(connectPieces)
-  .then(drawConclusions)
-  .then(finalAnswer);
+ragWorkflow.step(analyzeContext).then(breakdownThoughts).then(connectPieces).then(drawConclusions).then(finalAnswer);
 
 ragWorkflow.commit();
 ```
@@ -278,10 +271,10 @@ Process and chunks the document:
 const doc = MDocument.fromText(`Your document text here...`);
 
 const chunks = await doc.chunk({
-  strategy: "recursive",
+  strategy: 'recursive',
   size: 512,
   overlap: 50,
-  separator: "\n",
+  separator: '\n',
 });
 ```
 
@@ -291,15 +284,15 @@ Generate and store embeddings:
 
 ```typescript copy showLineNumbers{215} filename="src/mastra/index.ts"
 const { embeddings } = await embedMany(chunks, {
-  provider: "OPEN_AI",
-  model: "text-embedding-3-small",
+  provider: 'OPEN_AI',
+  model: 'text-embedding-3-small',
   maxRetries: 3,
 });
 
-const vectorStore = mastra.getVector("pgVector");
-await vectorStore.createIndex("embeddings", 1536);
+const vectorStore = mastra.getVector('pgVector');
+await vectorStore.createIndex('embeddings', 1536);
 await vectorStore.upsert(
-  "embeddings",
+  'embeddings',
   embeddings,
   chunks?.map((chunk: any) => ({ text: chunk.text })),
 );
@@ -333,10 +326,10 @@ async function generateResponse(query: string) {
 ## Example Usage
 
 ```typescript copy showLineNumbers{246} filename="src/mastra/index.ts"
-const query = "What are the main benefits of telemedicine?";
-console.log("\nQuery:", query);
+const query = 'What are the main benefits of telemedicine?';
+console.log('\nQuery:', query);
 const result = await generateResponse(query);
-console.log("\nThought Process:");
+console.log('\nThought Process:');
 console.log(result.results);
 ```
 
@@ -345,8 +338,4 @@ console.log(result.results);
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cot-workflow-rag"
-  }
-/>
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cot-workflow-rag'} />
