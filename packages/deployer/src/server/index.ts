@@ -9,6 +9,7 @@ import { pathToFileURL } from 'url';
 
 import { readFile } from 'fs/promises';
 import { cors } from 'hono/cors';
+import { logger } from 'hono/logger';
 
 import {
   generateHandler,
@@ -19,6 +20,7 @@ import {
   streamGenerateHandler,
 } from './handlers/agents.js';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client.js';
+import { errorHandler } from './handlers/error.js';
 import { getLogsByRunIdHandler, getLogsHandler } from './handlers/logs.js';
 import {
   createThreadHandler,
@@ -53,7 +55,7 @@ type Variables = {
 
 export async function createHonoServer(
   mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; evalStore?: any } = {},
+  options: { playground?: boolean; swaggerUI?: boolean; evalStore?: any; apiReqLogs?: boolean } = {},
 ) {
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -77,6 +79,12 @@ export async function createHonoServer(
 
   // Middleware
   app.use('*', cors());
+
+  if (options.apiReqLogs) {
+    app.use(logger());
+  }
+
+  app.onError(errorHandler);
 
   // Add Mastra to context
   app.use('*', async (c, next) => {
@@ -903,7 +911,7 @@ export async function createHonoServer(
 
 export async function createNodeServer(
   mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; evalStore?: any } = {},
+  options: { playground?: boolean; swaggerUI?: boolean; evalStore?: any; apiReqLogs?: boolean } = {},
 ) {
   const app = await createHonoServer(mastra, options);
   return serve(
