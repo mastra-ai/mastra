@@ -1,5 +1,11 @@
 # @mastra/evals
 
+## 0.1.0-alpha.11
+
+### Patch Changes
+
+- bdaf834: publish packages
+
 ## 0.1.0-alpha.10
 
 ### Patch Changes
