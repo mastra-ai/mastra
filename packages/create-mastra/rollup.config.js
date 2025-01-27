@@ -38,12 +38,19 @@ export default defineConfig({
     commonjs(),
     {
       name: 'copy-starter-files',
-      buildEnd: async () => {
-        await fsExtra.remove('./starter-files')
+      buildEnd: async () => {  
         
-        const mastraPath = path.dirname(fileURLToPath(import.meta.resolve('mastra/package.json')))
-        await fsExtra.copy(path.join(mastraPath, 'dist', 'starter-files'), './starter-files')
-        await fsExtra.copy(path.join(mastraPath, 'dist', 'templates'), './templates')
+        const mastraPath = path.dirname(fileURLToPath(import.meta.resolve('mastra/package.json')));
+        
+        // Copy to dist directory instead of root
+        await fsExtra.copy(
+          path.join(mastraPath, 'dist', 'starter-files'), 
+          './dist/starter-files'
+        );
+        await fsExtra.copy(
+          path.join(mastraPath, 'dist', 'templates'), 
+          './dist/templates'
+        );
       },
     },
   ],
