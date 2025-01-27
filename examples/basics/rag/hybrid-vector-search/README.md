@@ -1,6 +1,6 @@
 # Retrieve results
 
-A simple example showing how to filter results from a vector store.
+A simple example showing how to use hybrid vector search with Mastra and PGVector.
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@ A simple example showing how to filter results from a vector store.
 
    ```bash
    git clone https://github.com/mastra-ai/mastra
-   cd examples/basics/rag/filter-store
+   cd examples/basics/rag/hybrid-vector-search
    ```
 
 2. Copy the environment variables file and add your OpenAI API key:
