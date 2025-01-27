@@ -4,6 +4,7 @@ const meta = {
   "extract-params": "ExtractParams",
   reranker: "Reranker",
   document: "MDocument",
+  "metadata-filters": "Metadata Filters",
   "graph-rag": "GraphRAG",
   pgstore: "PGStore",
   pinecone: "PineconeStore",

@@ -8,6 +8,8 @@ const meta = {
   "adjust-chunk-size": "Adjust Chunk Size",
   "adjust-chunk-delimiters": "Adjust Chunk Delimiters",
   "embed-text-with-cohere": "Embed Text with Cohere",
+  "metadata-extraction": "Metadata Extraction",
+  "hybrid-vector-search": "Hybrid Vector Search",
   "insert-embedding-in-pinecone": "Insert Embedding in Pinecone",
   "insert-embedding-in-pgvector": "Insert Embedding in PgVector",
   "insert-embedding-in-upstash": "Insert Embedding in Upstash",
