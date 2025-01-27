@@ -638,7 +638,7 @@ export class Agent<
         }
 
         if (Object.keys(this.metrics || {}).length > 0) {
-          const input = messages.map(message => message).join('\n');
+          const input = messages.map(message => message.content).join('\n');
           const runIdToUse = runId || crypto.randomUUID();
           for (const metric of Object.values(this.metrics || {})) {
             executeHook(AvailableHooks.ON_GENERATION, {
