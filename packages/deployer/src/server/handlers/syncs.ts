@@ -1,4 +1,4 @@
-import { Context } from 'hono';
+import type { Context } from 'hono';
 
 import { handleError } from './error';
 import { validateBody } from './utils';

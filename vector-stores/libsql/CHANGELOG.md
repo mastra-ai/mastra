@@ -1,5 +1,11 @@
 # @mastra/vector-libsql
 
+## 0.0.1-alpha.3
+
+### Patch Changes
+
+- 3c9a389: Added more connection options
+
 ## 0.0.1-alpha.2
 
 ### Patch Changes
