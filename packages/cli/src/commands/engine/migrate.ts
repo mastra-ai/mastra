@@ -3,7 +3,7 @@ import { execa, ExecaError } from 'execa';
 import path from 'path';
 import color from 'picocolors';
 
-import { getEnginePath } from '../../utils/get-engine-path.js';
+import { getEnginePath } from '../../utils/get-engine-path';
 
 const s = spinner();
 

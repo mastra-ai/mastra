@@ -2,7 +2,7 @@ import * as prompts from '@clack/prompts';
 import { Deployer } from '@mastra/deployer';
 import { join } from 'path';
 
-import { logger } from '../../utils/logger.js';
+import { logger } from '../../utils/logger';
 
 export async function deploy({ dir, token }: { dir?: string; token?: string }) {
   let tokenToUse;

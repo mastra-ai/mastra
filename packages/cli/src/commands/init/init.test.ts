@@ -1,6 +1,6 @@
 import { describe, beforeEach, expect, vi, test } from 'vitest';
 import { fs, vol } from 'memfs';
-import { DepsService } from '../../services/service.deps.js';
+import { DepsService } from '../../services/service.deps';
 
 beforeEach(() => {
   vol.reset();
@@ -32,7 +32,7 @@ vi.mock('../../utils/logger', () => ({
 const utils = await import('./utils');
 const { init } = await import('./init');
 
-vi.mock('../../services/service.deps.js', () => {
+vi.mock('../../services/service.deps', () => {
   return {
     DepsService: vi.fn().mockImplementation(() => {
       return {

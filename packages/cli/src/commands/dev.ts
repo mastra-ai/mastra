@@ -64,7 +64,7 @@ const bundleTools = async (mastraPath: string, dotMastraPath: string, toolsDirs?
   return MASTRA_TOOLS_PATH;
 };
 
-const startServer = async (dotMastraPath: string, port: number, MASTRA_TOOLS_PATH: string) => {
+const startServer = async (dotMastraPath: string, port: number, MASTRA_TOOLS_PATH?: string) => {
   try {
     // Restart server
     logger.info('[Mastra Dev] - Starting server...');
@@ -203,7 +203,7 @@ export async function dev({
   /*
     Copy playground dist files
   */
-  await fsExtra.copy(join(path.dirname(path.dirname(__dirname)), 'src/playground/dist'), playgroundServePath, {
+  await fsExtra.copy(join(path.dirname(__dirname), 'src/playground/dist'), playgroundServePath, {
     overwrite: true,
   });
 
@@ -236,7 +236,7 @@ export async function dev({
   */
   const MASTRA_TOOLS_PATH = await bundleTools(mastraDir, dotMastraPath, toolsDirs);
 
-  writeFileSync(join(dotMastraPath, 'index.mjs'), readFileSync(join(__dirname, '../templates/dev.entry.js'), 'utf8'));
+  writeFileSync(join(dotMastraPath, 'index.mjs'), readFileSync(join(__dirname, 'templates', 'dev.entry.js'), 'utf8'));
 
   writeFileSync(join(dotMastraPath, 'evals.json'), ``);
 
