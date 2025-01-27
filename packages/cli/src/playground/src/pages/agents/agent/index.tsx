@@ -75,7 +75,9 @@ function Agent() {
         <main
           className={cn(
             'flex-1 relative grid divide-x',
-            sidebar && memory?.result ? 'grid-cols-[256px_1fr_400px]' : 'grid-cols-[1fr_400px]',
+            sidebar && memory?.result
+              ? 'grid-cols-[256px_1fr_400px] overflow-y-hidden h-full'
+              : 'grid-cols-[1fr_400px]',
           )}
         >
           {sidebar && memory?.result ? <AgentSidebar agentId={agentId!} threadId={threadId!} /> : null}

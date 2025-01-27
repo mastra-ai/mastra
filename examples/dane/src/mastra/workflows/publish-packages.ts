@@ -184,7 +184,7 @@ const verifyBuild = new Step({
   outputSchema: z.object({
     packages: z.array(z.string()),
   }),
-  execute: async ({ context }) => {
+  execute: async ({ mastra, context }) => {
     if (context.machineContext?.stepResults.buildPackages?.status !== 'success') {
       return {
         packages: [],
@@ -195,11 +195,38 @@ const verifyBuild = new Step({
 
     const pkgSet = context.machineContext.stepResults.buildPackages.payload.packages;
 
-    for (const pkg of pkgSet) {
-      if (!existsSync(`${pkg}/dist`)) {
-        console.error(chalk.red(`Failed to build ${pkg}.`));
-        throw new Error(`Failed to build ${pkg}.`);
+    function checkMissingPackages(pkgSet: string[]) {
+      const missingPackages = [];
+
+      for (const pkg of pkgSet) {
+        if (!existsSync(`${pkg}/dist`)) {
+          console.error(chalk.red(`We did not find the dist folder for ${pkg}.`));
+          missingPackages.push(pkg);
+        }
       }
+
+      return missingPackages;
+    }
+
+    let missingPackages = checkMissingPackages(pkgSet);
+
+    if (missingPackages.length > 0) {
+      const agent = mastra?.agents?.['danePackagePublisher'];
+
+      if (!agent) {
+        throw new Error('Agent not found');
+      }
+
+      let res = await agent.generate(`These packages were not built but need to be: ${missingPackages.join(', ')}.`);
+
+      console.log(chalk.green(res.text));
+    }
+
+    missingPackages = checkMissingPackages(pkgSet);
+
+    if (missingPackages.length > 0) {
+      console.error(chalk.red(`Missing packages: ${missingPackages.join(', ')}`));
+      throw new Error('Failed to build one or more packages');
     }
 
     return {
