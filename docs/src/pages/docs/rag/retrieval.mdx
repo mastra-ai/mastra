@@ -96,8 +96,11 @@ const vectorQueryTool = createVectorQueryTool({
   topK: 10,
   reranker: {
     model: {
-      provider: 'OPEN_AI',
-      model: 'text-embedding-ada-002'
+      rerankProvider: 'agent',
+      agentProvider: {
+        provider: 'OPEN_AI',
+        name: 'gpt-4o-mini',
+      },
     },
   }
 });

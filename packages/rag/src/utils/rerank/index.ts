@@ -43,7 +43,7 @@ export interface RerankerFunctionOptions {
 }
 
 export interface RerankModelConfig {
-  provider: 'cohere' | 'agent';
+  rerankProvider: 'cohere' | 'agent';
   cohereApiKey?: string;
   cohereModel?: string;
   agentProvider?: {
@@ -96,9 +96,9 @@ export async function rerank(
   modelConfig: RerankModelConfig,
   options: RerankerFunctionOptions,
 ): Promise<RerankResult[]> {
-  const { provider, cohereApiKey, cohereModel, agentProvider } = modelConfig;
+  const { rerankProvider, cohereApiKey, cohereModel, agentProvider } = modelConfig;
   let semanticProvider: RelevanceScoreProvider;
-  if (provider === 'cohere') {
+  if (rerankProvider === 'cohere') {
     if (!cohereApiKey) {
       throw new Error('Cohere API key required when using Cohere provider');
     }

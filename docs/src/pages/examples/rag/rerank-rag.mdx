@@ -55,11 +55,13 @@ const vectorQueryTool = createVectorQueryTool({
     maxRetries: 3,
   },
   topK: 5,
-  rerankOptions: {
-    semanticProvider: "agent",
-    agentProvider: {
-      provider: "OPEN_AI",
-      name: "gpt-4o-mini",
+  reranker: {
+    model: {
+      rerankProvider: "agent",
+      agentProvider: {
+        provider: "OPEN_AI",
+        name: "gpt-4o-mini",
+      },
     },
   },
 });
