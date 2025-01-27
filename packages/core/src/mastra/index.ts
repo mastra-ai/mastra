@@ -57,14 +57,15 @@ export class Mastra<
       Logger
     */
 
+    let logger: TLogger;
     if (config?.logger === false) {
-      this.logger = noopLogger as unknown as TLogger;
+      logger = noopLogger as unknown as TLogger;
     } else {
       if (config?.logger) {
-        this.logger = config.logger;
+        logger = config.logger;
       } else {
         const levleOnEnv = process.env.NODE_ENV === 'production' ? LogLevel.WARN : LogLevel.INFO;
-        this.logger = createLogger({ name: 'Mastra', level: levleOnEnv }) as unknown as TLogger;
+        logger = createLogger({ name: 'Mastra', level: levleOnEnv }) as unknown as TLogger;
       }
     }
 
@@ -86,7 +87,6 @@ export class Mastra<
         });
         this.deployer.__setTelemetry(this.telemetry);
       }
-      this.deployer.__setLogger(this.logger);
     }
 
     /*
@@ -101,7 +101,6 @@ export class Mastra<
       } else {
         this.engine = config.engine;
       }
-      this.engine.__setLogger(this.logger);
     }
 
     /*
@@ -118,8 +117,6 @@ export class Mastra<
         } else {
           vectors[key] = vector;
         }
-
-        vectors[key].__setLogger(this.logger);
       });
 
       this.vectors = vectors as TVectors;
@@ -156,10 +153,6 @@ export class Mastra<
         });
         this.memory.__setTelemetry(this.telemetry);
       }
-
-      if (this.memory) {
-        this.memory.__setLogger(this.logger);
-      }
     }
 
     if (config?.tts) {
@@ -173,7 +166,6 @@ export class Mastra<
             });
             this.tts[key].__setTelemetry(this.telemetry);
           }
-          this.tts[key].__setLogger(this.logger);
         }
       });
     }
@@ -228,6 +220,9 @@ export class Mastra<
         this.workflows[key] = workflow;
       });
     }
+
+    this.logger = logger;
+    this.setLogger({ logger });
   }
 
   LLM(modelConfig: ModelConfig) {
@@ -341,6 +336,29 @@ export class Mastra<
 
   public setLogger({ logger }: { logger: TLogger }) {
     this.logger = logger;
+
+    if (this.memory) {
+      this.memory.__setLogger(this.logger);
+    }
+
+    if (this.deployer) {
+      this.deployer.__setLogger(this.logger);
+    }
+
+    if (this.tts) {
+      Object.keys(this.tts).forEach(key => {
+        this.tts?.[key]?.__setLogger(this.logger);
+      });
+    }
+    if (this.engine) {
+      this.engine.__setLogger(this.logger);
+    }
+
+    if (this.vectors) {
+      Object.keys(this.vectors).forEach(key => {
+        this.vectors?.[key]?.__setLogger(this.logger);
+      });
+    }
   }
 
   public getLogger() {
