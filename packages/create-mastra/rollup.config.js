@@ -42,7 +42,7 @@ export default defineConfig({
         await fsExtra.remove('./starter-files')
         
         const mastraPath = path.dirname(fileURLToPath(import.meta.resolve('mastra/package.json')))
-        await fsExtra.copy(path.join(mastraPath, 'dist', 'starter-files'), './starter-files')
+        await fsExtra.copy(path.join(mastraPath, 'dist', 'templates', 'starter-files'), './starter-files')
       },
     },
   ],
