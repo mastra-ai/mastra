@@ -24,7 +24,7 @@
     "copy:drizzle": "cp -r src/postgres/drizzle dist/postgres",
     "build": "pnpm run build:lib && pnpm run build:postgres",
     "build:lib": "tsup src/index.ts --format esm --clean --dts --treeshake",
-    "build:postgres": "tsup src/postgres/engine.ts src/postgres/migrate.ts --out-dir=dist/postgres/ --format esm --dts --treeshake",
+    "build:postgres": "tsup src/postgres/engine.ts src/postgres/migrate.ts src/postgres/db/schema.ts --out-dir=dist/postgres/ --format esm --dts --treeshake",
     "build:dev": "dts watch",
     "generate-pg": "drizzle-kit generate --out=./dist/postgres/drizzle --dialect=postgresql --schema=./dist/postgres/db/schema.js",
     "migrate-pg": "pnpx tsx ./dist/postgres/migrate.js",
