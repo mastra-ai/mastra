@@ -75,12 +75,36 @@ export class DeepgramTTS extends MastraTTS {
   }
 
   async stream({ voice, text }: { voice?: string; text: string }) {
-    const { audioResult } = await this.generate({ voice, text });
-    const stream = new PassThrough();
-    stream.end(audioResult);
-    return {
-      audioResult: stream,
-    };
+    return this.traced(async () => {
+      const parsedModel = `${this.defaultModel}-${voice || this.defaultVoice}`;
+      const response = await this.client.speak.request({ text }, { model: parsedModel, ...this.properties });
+
+      const webStream = await response.getStream();
+      if (!webStream) {
+        throw new Error('No stream returned from Deepgram');
+      }
+
+      const reader = webStream.getReader();
+      const nodeStream = new PassThrough();
+
+      // Read from web stream and write to node stream
+      (async () => {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              nodeStream.end();
+              break;
+            }
+            nodeStream.write(value);
+          }
+        } catch (error) {
+          nodeStream.destroy(error as Error);
+        }
+      })();
+
+      return { audioResult: nodeStream };
+    }, 'tts.deepgram.stream')();
   }
 }
 

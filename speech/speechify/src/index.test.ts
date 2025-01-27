@@ -1,3 +1,4 @@
+import { createWriteStream } from 'fs';
 import { join } from 'path';
 import { describe, expect, it } from 'vitest';
 
@@ -35,6 +36,13 @@ describe('SpeechifyTTS', () => {
   it('should stream audio content', async () => {
     const result = await tts.stream({ text: 'Hello world' });
     expect(result).toHaveProperty('audioResult');
-    expect(result.audioResult).toHaveProperty('pipe');
+
+    // Write the audio to a file using pipe
+    const outputPath = join(__dirname, '../test-outputs', 'test-audio-stream.mp3');
+    const writeStream = createWriteStream(outputPath);
+
+    await new Promise((resolve, reject) => {
+      result.audioResult.pipe(writeStream).on('finish', resolve).on('error', reject);
+    });
   });
 });

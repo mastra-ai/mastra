@@ -1,6 +1,6 @@
 import { MastraTTS } from '@mastra/core';
-import { type AudioSpeechRequest, Speechify, VoiceModelName } from '@speechify/api-sdk';
-import { PassThrough } from 'stream';
+import { type AudioSpeechRequest, type AudioStreamRequest, Speechify, VoiceModelName } from '@speechify/api-sdk';
+import { Readable } from 'stream';
 
 import { SPEECHIFY_VOICES, type SpeechifyVoice } from './voices';
 
@@ -8,13 +8,11 @@ interface SpeechifyConfig {
   name: VoiceModelName;
   apiKey?: string;
   voice?: SpeechifyVoice;
-  properties?: Omit<AudioSpeechRequest, 'model' | 'voiceId' | 'input'>;
 }
 
 export class SpeechifyTTS extends MastraTTS {
   client: Speechify;
   defaultVoice: SpeechifyVoice;
-  properties?: Omit<AudioSpeechRequest, 'model' | 'voiceId' | 'input'>;
 
   constructor({ model }: { model: SpeechifyConfig }) {
     super({
@@ -31,21 +29,28 @@ export class SpeechifyTTS extends MastraTTS {
 
     this.client = new Speechify({ apiKey });
     this.defaultVoice = model.voice || 'george';
-    this.properties = model.properties;
   }
 
   async voices() {
     return this.traced(() => SPEECHIFY_VOICES.map(voice => ({ voice_id: voice })), 'tts.speechify.voices')();
   }
 
-  async generate({ voice, text }: { voice?: string; text: string }) {
+  async generate({
+    voice,
+    text,
+    properties,
+  }: {
+    voice?: string;
+    text: string;
+    properties?: Omit<AudioSpeechRequest, 'model' | 'voiceId' | 'input'>;
+  }) {
     const audio = await this.traced(async () => {
       const response = await this.client.audioGenerate({
         input: text,
         voiceId: (voice || this.defaultVoice) as SpeechifyVoice,
         model: this.model.name as VoiceModelName,
         audioFormat: 'mp3',
-        ...this.properties,
+        ...properties,
       });
 
       // Convert Blob to Buffer
@@ -58,16 +63,49 @@ export class SpeechifyTTS extends MastraTTS {
     };
   }
 
-  // Note: Speechify doesn't support streaming directly, so we'll convert the buffer to a stream
-  async stream({ voice, text }: { voice?: string; text: string }) {
-    const { audioResult } = await this.generate({ voice, text });
+  async stream({
+    voice,
+    text,
+    properties,
+  }: {
+    voice?: string;
+    text: string;
+    properties?: Omit<AudioStreamRequest, 'model' | 'voiceId' | 'input'>;
+  }) {
+    return this.traced(async () => {
+      const request: AudioStreamRequest = {
+        input: text,
+        model: this.model.name as VoiceModelName,
+        voiceId: (voice || this.defaultVoice) as SpeechifyVoice,
+        ...properties,
+      };
 
-    const stream = new PassThrough();
-    stream.end(audioResult);
+      const webStream = await this.client.audioStream(request);
+      const reader = webStream.getReader();
 
-    return {
-      audioResult: stream,
-    };
+      // Convert Web ReadableStream to Node Readable stream
+      const nodeStream = new Readable({
+        read: async function () {
+          try {
+            const { done, value } = await reader.read();
+            if (done) {
+              this.push(null);
+            } else {
+              this.push(value);
+            }
+          } catch (error) {
+            this.destroy(error as Error);
+          }
+        },
+      });
+
+      // Clean up the reader when the stream ends
+      nodeStream.on('end', () => {
+        reader.releaseLock();
+      });
+
+      return { audioResult: nodeStream };
+    }, 'tts.speechify.stream')();
   }
 }
 

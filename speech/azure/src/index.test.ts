@@ -1,21 +1,21 @@
 import { join } from 'path';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { writeFile } from 'fs/promises';
 
-import { GoogleTTS, VoiceId } from './index';
+import { AzureTTS, VoiceId } from './index';
 
-describe('GoogleTTS', () => {
+describe('AzureTTS', () => {
   it('should return a list of available voices', async () => {
-    const tts = new GoogleTTS({ model: { name: 'en-US-Casual-K' as VoiceId } });
+    const tts = new AzureTTS({ model: { name: 'en-US-AriaNeural' as VoiceId } });
     const voices = await tts.voices();
     expect(voices.length).toBeGreaterThan(0);
     expect(voices[0]).toHaveProperty('voice_id');
   });
 
   it('should generate audio content', async () => {
-    const tts = new GoogleTTS({ model: { name: 'en-US-Casual-K' as VoiceId } });
-    const result = await tts.generate({ voice: 'en-US-Casual-K', text: 'Hello from Mastra T T S - Google' });
+    const tts = new AzureTTS({ model: { name: 'en-US-AriaNeural' as VoiceId } });
+    const result = await tts.generate({ voice: 'en-US-AriaNeural', text: 'Hello from Mastra T T S - Azure' });
 
     expect(result).toHaveProperty('audioResult');
     expect(Buffer.isBuffer(result.audioResult)).toBe(true);
