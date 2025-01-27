@@ -1,5 +1,11 @@
 # @mastra/mcp
 
+## 0.0.1-alpha.12
+
+### Patch Changes
+
+- bdaf834: publish packages
+
 ## 0.0.1-alpha.11
 
 ### Patch Changes

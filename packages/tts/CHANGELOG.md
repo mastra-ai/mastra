@@ -1,5 +1,11 @@
 # @mastra/tts
 
+## 0.0.1-alpha.19
+
+### Patch Changes
+
+- bdaf834: publish packages
+
 ## 0.0.1-alpha.18
 
 ### Patch Changes

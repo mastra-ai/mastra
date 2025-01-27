@@ -1,5 +1,11 @@
 # @mastra/rag
 
+## 0.0.2-alpha.59
+
+### Patch Changes
+
+- bdaf834: publish packages
+
 ## 0.0.2-alpha.58
 
 ### Patch Changes

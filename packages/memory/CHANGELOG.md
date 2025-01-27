@@ -1,5 +1,11 @@
 # @mastra/memory
 
+## 0.0.2-alpha.51
+
+### Patch Changes
+
+- bdaf834: publish packages
+
 ## 0.0.2-alpha.50
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # @mastra/deployer-vercel
 
+## 0.0.1-alpha.15
+
+### Patch Changes
+
+- bdaf834: publish packages
+- Updated dependencies [bdaf834]
+  - @mastra/deployer@0.0.1-alpha.11
+
 ## 0.0.1-alpha.14
 
 ### Patch Changes

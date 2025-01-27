@@ -1,5 +1,11 @@
 # @mastra/engine
 
+## 0.0.5-alpha.65
+
+### Patch Changes
+
+- bdaf834: publish packages
+
 ## 0.0.5-alpha.64
 
 ### Patch Changes

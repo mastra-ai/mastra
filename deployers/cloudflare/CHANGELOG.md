@@ -1,5 +1,13 @@
 # @mastra/deployer-cloudflare
 
+## 0.0.1-alpha.13
+
+### Patch Changes
+
+- bdaf834: publish packages
+- Updated dependencies [bdaf834]
+  - @mastra/deployer@0.0.1-alpha.11
+
 ## 0.0.1-alpha.12
 
 ### Patch Changes
