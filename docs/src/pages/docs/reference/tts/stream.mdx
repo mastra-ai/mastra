@@ -40,7 +40,7 @@ The `stream()` method is used to interact with the TTS model to produce an audio
 
 ## Examples
 
-### Basic Audio Stream (ElevenLabs)
+### ElevenLabs Streaming
 
 ```typescript
 import { ElevenLabsTTS } from '@mastra/tts'
@@ -83,7 +83,7 @@ for await (const chunk of audioResult) {
 writeStream.end()
 ```
 
-### Basic Audio Stream (OpenAI)
+### OpenAI Streaming
 
 ```typescript
 import { OpenAITTS } from '@mastra/tts'
@@ -126,7 +126,7 @@ for await (const chunk of audioResult) {
 writeStream.end()
 ```
 
-### Basic Audio Stream (PlayAI)
+### PlayAI Streaming
 
 ```typescript
 import { PlayAITTS } from '@mastra/tts'
@@ -168,4 +168,117 @@ for await (const chunk of audioResult) {
 }
 
 writeStream.end()
+```
+
+### Azure Streaming
+
+```typescript
+import { AzureTTS } from '@mastra/tts'
+
+const tts = new AzureTTS({
+  model: {
+    name: 'en-US-JennyNeural',
+    apiKey: process.env.AZURE_API_KEY,
+    region: process.env.AZURE_REGION,
+  },
+});
+
+const { audioResult } = await tts.stream({ text: "What is AI?" });
+
+// Create a write stream
+const outputPath = path.join(process.cwd(), '/test-outputs/azure-stream.mp3');
+const writeStream = createWriteStream(outputPath);
+
+// Pipe the audio stream to the file
+audioResult.pipe(writeStream);
+```
+
+### Deepgram Streaming
+
+```typescript
+import { DeepgramTTS } from '@mastra/tts'
+
+const tts = new DeepgramTTS({
+  model: {
+    name: 'aura',
+    voice: 'asteria-en',
+    apiKey: process.env.DEEPGRAM_API_KEY,
+  },
+});
+
+const { audioResult } = await tts.stream({ text: "What is AI?" });
+
+// Create a write stream
+const outputPath = path.join(process.cwd(), '/test-outputs/deepgram-stream.mp3');
+const writeStream = createWriteStream(outputPath);
+
+// Pipe the audio stream to the file
+audioResult.pipe(writeStream);
+```
+
+### Google Streaming
+
+```typescript
+import { GoogleTTS } from '@mastra/tts'
+
+const tts = new GoogleTTS({
+  model: {
+    name: 'en-US-Standard-A',
+    credentials: process.env.GOOGLE_CREDENTIALS,
+  },
+});
+
+const { audioResult } = await tts.stream({ text: "What is AI?" });
+
+// Create a write stream
+const outputPath = path.join(process.cwd(), '/test-outputs/google-stream.mp3');
+const writeStream = createWriteStream(outputPath);
+
+// Pipe the audio stream to the file
+audioResult.pipe(writeStream);
+```
+
+### IBM Streaming
+
+```typescript
+import { IbmTTS } from '@mastra/tts'
+
+const tts = new IbmTTS({
+  model: {
+    voice: 'en-US_AllisonV3Voice',
+    apiKey: process.env.IBM_API_KEY,
+  },
+});
+
+const { audioResult } = await tts.stream({ text: "What is AI?" });
+
+// Create a write stream
+const outputPath = path.join(process.cwd(), '/test-outputs/ibm-stream.mp3');
+const writeStream = createWriteStream(outputPath);
+
+// Pipe the audio stream to the file
+audioResult.pipe(writeStream);
+```
+
+### Murf Streaming
+
+```typescript
+import { MurfTTS } from '@mastra/tts'
+
+const tts = new MurfTTS({
+  model: {
+    name: 'GEN2',
+    voice: 'en-US-natalie',
+    apiKey: process.env.MURF_API_KEY,
+  },
+});
+
+const { audioResult } = await tts.stream({ text: "What is AI?" });
+
+// Create a write stream
+const outputPath = path.join(process.cwd(), '/test-outputs/murf-stream.mp3');
+const writeStream = createWriteStream(outputPath);
+
+// Pipe the audio stream to the file
+audioResult.pipe(writeStream);
 ```
