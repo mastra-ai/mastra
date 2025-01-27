@@ -1,5 +1,11 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.9
+
+### Patch Changes
+
+- 9066f95: CF deployer fixes
+
 ## 0.0.1-alpha.8
 
 ### Patch Changes
