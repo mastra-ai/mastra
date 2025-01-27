@@ -236,7 +236,7 @@ export async function dev({
   */
   const MASTRA_TOOLS_PATH = await bundleTools(mastraDir, dotMastraPath, toolsDirs);
 
-  writeFileSync(join(dotMastraPath, 'index.mjs'), readFileSync(join(__dirname, '../templates/dev.entry.js'), 'utf8'));
+  writeFileSync(join(dotMastraPath, 'index.mjs'), readFileSync(join(__dirname, 'templates', 'dev.entry.js'), 'utf8'));
 
   writeFileSync(join(dotMastraPath, 'evals.json'), ``);
 
