@@ -1,0 +1,135 @@
+---
+title: "Reference: Rerank | Document Retrieval | RAG | Mastra Docs"
+description: Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
+---
+
+# rerank()
+
+The `rerank()` function provides advanced reranking capabilities for vector search results by combining semantic relevance, vector similarity, and position-based scoring. 
+
+## Usage Example
+
+```typescript
+import { rerank } from "@mastra/rag";
+
+const rerankedResults = await rerank(
+  vectorSearchResults,
+  "How do I deploy to production?",
+  {
+    provider: "agent",
+    agentProvider: {
+      provider: "openai",
+      name: "gpt-4"
+    }
+  },
+  {
+    weights: {
+      semantic: 0.5,
+      vector: 0.3,
+      position: 0.2
+    },
+    topK: 3
+  }
+);
+```
+
+## Parameters
+
+### Core Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "results",
+      type: "QueryResult[]",
+      description: "The vector search results to rerank",
+      isOptional: false,
+    },
+    {
+      name: "query",
+      type: "string",
+      description: "The search query text used to evaluate relevance",
+      isOptional: false,
+    }
+  ]}
+/>
+
+### Model Configuration
+
+<PropertiesTable
+  content={[
+    {
+      name: "provider",
+      type: "'cohere' | 'agent'",
+      description: "Provider to use for semantic scoring",
+      isOptional: false,
+    },
+    {
+      name: "cohereApiKey",
+      type: "string",
+      description: "Required when using Cohere provider",
+      isOptional: true,
+    },
+    {
+      name: "cohereModel",
+      type: "string",
+      description: "Specific Cohere model to use",
+      isOptional: true,
+    },
+    {
+      name: "agentProvider",
+      type: "{ provider: string; name: string }",
+      description: "Required when using Agent provider",
+      isOptional: true,
+    }
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "weights",
+      type: "WeightConfig",
+      description: "Weights for different scoring components",
+      isOptional: true,
+      defaultValue: "{ semantic: 0.4, vector: 0.4, position: 0.2 }",
+    },
+    {
+      name: "topK",
+      type: "number",
+      description: "Number of top results to return",
+      isOptional: true,
+      defaultValue: "3",
+    }
+  ]}
+/>
+
+## Returns
+
+The function returns an array of `RerankResult` objects:
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "QueryResult",
+      description: "The original query result",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "Combined reranking score (0-1)",
+    },
+    {
+      name: "details",
+      type: "RerankDetails",
+      description: "Detailed scoring information",
+    }
+  ]}
+/>
+
+## Related
+
+- [createVectorQueryTool](../tools/vector-query-tool)

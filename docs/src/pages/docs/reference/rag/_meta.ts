@@ -2,7 +2,7 @@ const meta = {
   chunk: ".chunk()",
   embeddings: ".embed()",
   "extract-params": "ExtractParams",
-  reranker: "Reranker",
+  rerank: "rerank()",
   document: "MDocument",
   "graph-rag": "GraphRAG",
   pgstore: "PGStore",

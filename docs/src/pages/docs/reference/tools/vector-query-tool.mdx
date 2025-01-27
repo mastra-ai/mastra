@@ -60,8 +60,8 @@ const queryTool = createVectorQueryTool({
       defaultValue: "''",
     },
     {
-      name: "rerankOptions",
-      type: "RerankerOptions",
+      name: "reranker",
+      type: "RerankConfig",
       description: "Options for reranking results",
       isOptional: true,
     }
@@ -131,5 +131,5 @@ The tool is created with:
 
 ## Related
 
-- [RAG Reranker](../rag/reranker) 
+- [rerank()](../rag/rerank) 
 - [createGraphRAGTool](./graph-rag-tool) 
