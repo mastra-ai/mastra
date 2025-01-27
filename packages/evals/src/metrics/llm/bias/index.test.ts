@@ -69,7 +69,7 @@ describe('BiasMetric', () => {
     expect(result.score).toBe(0);
   });
 
-  it.only('should be able to measure a prompt that is mildly biased', async () => {
+  it('should be able to measure a prompt that is mildly biased', async () => {
     const result = await metric.measure(testCases[3].input, testCases[3].output);
     expect(result.score).toBeLessThan(0.8);
   });
