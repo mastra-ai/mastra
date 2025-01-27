@@ -68,7 +68,10 @@ export const BUILD_PACKAGES_PROMPT = (packages: string[]) => `
             <!-- After core packages, build remaining packages by directory -->
             <parallel_phase name="packages">
               <description>Build remaining packages/ directory packages</description>
-              <action>Use pnpmBuild for each remaining @mastra/* package</action>
+              <action>Use pnpmBuild for each remaining package:
+                - All @mastra/* packages
+                - create-mastra package (in packages/create-mastra)
+              </action>
             </parallel_phase>
             
             <parallel_phase name="integrations">
