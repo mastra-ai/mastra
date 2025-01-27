@@ -43,6 +43,7 @@ export const useMessages = ({ threadId, memory }: { threadId: string; memory: bo
     {
       fallbackData: { uiMessages: [], messages: [] },
       revalidateOnFocus: false,
+      isPaused: () => !threadId,
       shouldRetryOnError: false,
     },
   );

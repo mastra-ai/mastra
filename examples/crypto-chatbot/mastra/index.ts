@@ -22,6 +22,6 @@ export const createMastra = ({
   });
 
 export const mastra = createMastra({
-  modelProvider: 'ANTHROPIC',
-  modelName: 'claude-3-haiku-20240307',
+  modelProvider: 'OPEN_AI',
+  modelName: 'gpt-4o-mini',
 });
