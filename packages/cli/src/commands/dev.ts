@@ -180,17 +180,20 @@ export async function dev({
   port,
   env,
   dir,
+  root,
   toolsDirs,
 }: {
   dir?: string;
+  root?: string;
   port: number;
   env: Record<string, any>;
   toolsDirs?: string;
 }) {
-  const dirSelected = dir || process.cwd();
+  const rootDir = root || process.cwd();
+  const mastraDir = join(rootDir, dir || 'src/mastra');
 
   const deployer = new Deployer({
-    dir: dirSelected,
+    dir: rootDir,
     type: 'Dev',
   });
 
@@ -223,17 +226,16 @@ export async function dev({
     await fs.writeFile(path.join(process.cwd(), '.env'), `${key}=${value}`);
   }
 
-  const mastraDir = join(dirSelected, 'src/mastra');
   /*
     Bundle mastra
   */
   await deployer.prepare({
-    dir: join(dirSelected, 'src/mastra'),
+    dir: mastraDir,
     playground: true,
     useBanner: false,
   });
 
-  const envPaths = [path.join(dirSelected, '.env'), path.join(dirSelected, '.env.development')];
+  const envPaths = [path.join(rootDir, '.env'), path.join(rootDir, '.env.development')];
   /*
     Bundle tools
   */
@@ -252,7 +254,7 @@ export async function dev({
 
   watcher.on('change', async () => {
     console.log(`Changes detected, rebundling and restarting server...`);
-    await rebundleAndRestart(dirSelected, mastraDir, dotMastraPath, port, envFile, toolsDirs);
+    await rebundleAndRestart(rootDir, mastraDir, dotMastraPath, port, envFile, toolsDirs);
   });
 
   process.on('SIGINT', () => {

@@ -9,7 +9,8 @@
   },
   "files": [
     "dist",
-    "starter-files"
+    "starter-files",
+    "templates"
   ],
   "scripts": {
     "build": "rollup -c",
