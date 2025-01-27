@@ -114,9 +114,14 @@ const queryTool = createVectorQueryTool({
     maxRetries: 3
   },
   topK: 5,
-  rerankOptions: {
-    model: "cross-encoder",
-    threshold: 0.7
+  reranker: {
+    model: {
+      rerankProvider: "agent",
+      agentProvider: {
+        provider: "OPEN_AI",
+        name: "gpt-4o-mini",
+      },
+    },
   }
 });
 ```
