@@ -1,5 +1,26 @@
 # @mastra/rag
 
+## 0.0.2-alpha.59
+
+### Patch Changes
+
+- bdaf834: publish packages
+
+## 0.0.2-alpha.58
+
+### Patch Changes
+
+- Updated dependencies [dd6d87f]
+- Updated dependencies [04434b6]
+  - @mastra/core@0.1.27-alpha.70
+
+## 0.0.2-alpha.57
+
+### Patch Changes
+
+- ab1dc59: Add Cloudflare vectorize
+- 4769753: Added turso/libsql support for RAG
+
 ## 0.0.2-alpha.56
 
 ### Patch Changes

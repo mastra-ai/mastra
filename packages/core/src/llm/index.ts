@@ -27,7 +27,6 @@ import 'dotenv/config';
 import { ToolsInput } from '../agent/types';
 import { MastraBase } from '../base';
 import { LogLevel, RegisteredLogger } from '../logger';
-import { Run } from '../run/types';
 import { InstrumentClass } from '../telemetry/telemetry.decorators';
 import { CoreTool } from '../tools/types';
 import { delay } from '../utils';
@@ -36,11 +35,14 @@ import {
   CustomModelConfig,
   GenerateReturn,
   GoogleGenerativeAISettings,
+  LLMInnerStreamOptions,
   LLMProvider,
+  LLMStreamObjectOptions,
+  LLMStreamOptions,
+  LLMTextObjectOptions,
+  LLMTextOptions,
   ModelConfig,
-  OutputType,
   StreamReturn,
-  StructuredOutput,
 } from './types';
 
 @InstrumentClass({
@@ -383,15 +385,8 @@ export class LLM extends MastraBase {
       convertedTools,
       runId,
       output = 'text',
-    }: {
-      runId?: string;
-      onFinish?: (result: string) => Promise<void> | void;
-      onStepFinish?: (step: string) => void;
-      maxSteps?: number;
-      tools?: ToolsInput;
-      convertedTools?: Record<string, CoreTool>;
-      output?: OutputType | Z;
-    } = {},
+      temperature,
+    }: LLMStreamOptions<Z> = {},
   ): Promise<GenerateReturn<Z>> {
     const msgs = this.convertToMessages(messages);
 
@@ -403,6 +398,7 @@ export class LLM extends MastraBase {
         tools,
         convertedTools,
         runId,
+        temperature,
       })) as unknown as GenerateReturn<Z>;
     }
 
@@ -427,15 +423,8 @@ export class LLM extends MastraBase {
       convertedTools,
       runId,
       output = 'text',
-    }: {
-      runId?: string;
-      onFinish?: (result: string) => Promise<void> | void;
-      onStepFinish?: (step: string) => void;
-      maxSteps?: number;
-      tools?: ToolsInput;
-      convertedTools?: Record<string, CoreTool>;
-      output?: OutputType | Z;
-    } = {},
+      temperature,
+    }: LLMStreamOptions<Z> = {},
   ): Promise<StreamReturn<Z>> {
     const msgs = this.convertToMessages(messages);
 
@@ -448,6 +437,7 @@ export class LLM extends MastraBase {
         tools,
         convertedTools,
         runId,
+        temperature,
       })) as unknown as StreamReturn<Z>;
     }
 
@@ -460,23 +450,11 @@ export class LLM extends MastraBase {
       tools,
       convertedTools,
       runId,
+      temperature,
     })) as unknown as StreamReturn<Z>;
   }
 
-  async __text({
-    messages,
-    onStepFinish,
-    maxSteps = 5,
-    tools,
-    runId,
-    convertedTools,
-  }: {
-    tools?: ToolsInput;
-    convertedTools?: Record<string, CoreTool>;
-    messages: CoreMessage[];
-    onStepFinish?: (step: string) => void;
-    maxSteps?: number;
-  } & Run) {
+  async __text({ messages, onStepFinish, maxSteps = 5, tools, runId, convertedTools, temperature }: LLMTextOptions) {
     const model = this.#model;
     this.logger.debug(`[LLM] - Generating text`, {
       runId,
@@ -507,6 +485,7 @@ export class LLM extends MastraBase {
 
     const argsForExecute = {
       model: params.modelDef,
+      temperature,
       tools: {
         ...params.toolsConverted,
         ...params.answerTool,
@@ -550,14 +529,8 @@ export class LLM extends MastraBase {
     convertedTools,
     structuredOutput,
     runId,
-  }: {
-    structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
-    tools?: ToolsInput;
-    convertedTools?: Record<string, CoreTool>;
-    messages: CoreMessage[];
-    onStepFinish?: (step: string) => void;
-    maxSteps?: number;
-  } & Run) {
+    temperature,
+  }: LLMTextObjectOptions<T>) {
     const model = this.#model;
     this.logger.debug(`[LLM] - Generating a text object`, { runId });
     let modelToPass;
@@ -582,6 +555,7 @@ export class LLM extends MastraBase {
 
     const argsForExecute = {
       model: params.modelDef,
+      temperature,
       tools: {
         ...params.toolsConverted,
         ...params.answerTool,
@@ -638,14 +612,8 @@ export class LLM extends MastraBase {
     tools,
     runId,
     convertedTools,
-  }: {
-    tools?: ToolsInput;
-    convertedTools?: Record<string, CoreTool>;
-    messages: CoreMessage[];
-    onStepFinish?: (step: string) => void;
-    onFinish?: (result: string) => Promise<void> | void;
-    maxSteps?: number;
-  } & Run) {
+    temperature,
+  }: LLMInnerStreamOptions) {
     const model = this.#model;
     this.log(LogLevel.DEBUG, `Streaming text with ${messages.length} messages`, { runId });
     let modelToPass;
@@ -668,6 +636,7 @@ export class LLM extends MastraBase {
     });
 
     const argsForExecute = {
+      temperature,
       model: params.modelDef,
       tools: {
         ...params.toolsConverted,
@@ -722,15 +691,8 @@ export class LLM extends MastraBase {
     convertedTools,
     structuredOutput,
     runId,
-  }: {
-    structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
-    tools?: ToolsInput;
-    convertedTools?: Record<string, CoreTool>;
-    messages: CoreMessage[];
-    onStepFinish?: (step: string) => void;
-    onFinish?: (result: string) => Promise<void> | void;
-    maxSteps?: number;
-  } & Run) {
+    temperature,
+  }: LLMStreamObjectOptions<T>) {
     const model = this.#model;
     this.log(LogLevel.DEBUG, `Streaming text with ${messages.length} messages`, { runId });
     let modelToPass;
@@ -753,6 +715,7 @@ export class LLM extends MastraBase {
     });
 
     const argsForExecute = {
+      temperature,
       model: params.modelDef,
       tools: {
         ...params.toolsConverted,

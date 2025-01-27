@@ -1,5 +1,5 @@
 import * as p from '@clack/prompts';
-import { ModelConfig } from '@mastra/core';
+import type { ModelConfig } from '@mastra/core';
 import child_process from 'node:child_process';
 import util from 'node:util';
 import path from 'path';
@@ -10,9 +10,9 @@ import yoctoSpinner from 'yocto-spinner';
 import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
 
-import { DepsService } from '../../services/service.deps.js';
-import { FileService } from '../../services/service.file.js';
-import { logger } from '../../utils/logger.js';
+import { DepsService } from '../../services/service.deps';
+import { FileService } from '../../services/service.file';
+import { logger } from '../../utils/logger';
 
 const exec = util.promisify(child_process.exec);
 
@@ -125,7 +125,8 @@ export const mastra = new Mastra()
     await fs.writeFile(
       destPath,
       `
-import { Mastra, createLogger } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import { createLogger } from '@mastra/core/logger';
 ${addWorkflow ? `import { weatherWorkflow } from './workflows';` : ''}
 ${addAgent ? `import { weatherAgent } from './agents';` : ''}
 
@@ -336,6 +337,6 @@ export const checkPkgJson = async () => {
     return;
   }
 
-  logger.info('no package.json found, create one or run "mastra create" to create a new project');
+  logger.debug('no package.json found, create one or run "mastra create" to create a new project');
   process.exit(0);
 };

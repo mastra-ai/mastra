@@ -10,6 +10,12 @@ const meta = {
   "embed-text-with-cohere": "Embed Text with Cohere",
   "insert-embedding-in-pinecone": "Insert Embedding in Pinecone",
   "insert-embedding-in-pgvector": "Insert Embedding in PgVector",
+  "insert-embedding-in-upstash": "Insert Embedding in Upstash",
+  "insert-embedding-in-vectorize": "Insert Embedding in Vectorize",
+  "insert-embedding-in-libsql": "Insert Embedding in LibSQL",
+  "insert-embedding-in-chroma": "Insert Embedding in Chroma",
+  "insert-embedding-in-qdrant": "Insert Embedding in Qdrant",
+  "insert-embedding-in-astra": "Insert Embedding in Astra",
   "retrieve-results": "Retrieve Results",
   "basic-rag": "Basic RAG",
   "cleanup-rag": "Optimizing Information Density",
@@ -18,6 +24,7 @@ const meta = {
   "cot-rag": "Chain of Thought Prompting",
   "cot-workflow-rag": "Chain of Thought Prompting w/Workflow",
   "graph-rag": "Graph RAG",
+  "reranking-with-cohere": "Re-ranking results with Cohere",
 };
 
 export default meta;

@@ -17,16 +17,15 @@ import 'dotenv/config';
 import { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 import { Metric } from '../eval';
-import { executeHook } from '../hooks';
-import { AvailableHooks } from '../hooks';
+import { AvailableHooks, executeHook } from '../hooks';
 import { LLM } from '../llm';
-import { GenerateReturn, ModelConfig, OutputType, StreamReturn } from '../llm/types';
+import { GenerateReturn, ModelConfig, StreamReturn } from '../llm/types';
 import { LogLevel, RegisteredLogger } from '../logger';
 import { ThreadType } from '../memory';
 import { InstrumentClass } from '../telemetry';
 import { CoreTool, ToolAction } from '../tools/types';
 
-import { ToolsetsInput } from './types';
+import { AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
 
 @InstrumentClass({
   prefix: 'agent',
@@ -666,16 +665,8 @@ export class Agent<
       runId,
       toolsets,
       output = 'text',
-    }: {
-      toolsets?: ToolsetsInput;
-      resourceid?: string;
-      context?: CoreMessage[];
-      threadId?: string;
-      runId?: string;
-      onStepFinish?: (step: string) => void;
-      maxSteps?: number;
-      output?: OutputType | Z;
-    } = {},
+      temperature,
+    }: AgentGenerateOptions<Z> = {},
   ): Promise<GenerateReturn<Z>> {
     let messagesToUse: CoreMessage[] = [];
 
@@ -719,6 +710,7 @@ export class Agent<
         onStepFinish,
         maxSteps,
         runId: runIdToUse,
+        temperature,
       });
 
       const outputText = result.text;
@@ -736,6 +728,7 @@ export class Agent<
       onStepFinish,
       maxSteps,
       runId: runIdToUse,
+      temperature,
     });
 
     const outputText = JSON.stringify(result.object);
@@ -757,17 +750,8 @@ export class Agent<
       runId,
       toolsets,
       output = 'text',
-    }: {
-      toolsets?: ToolsetsInput;
-      resourceid?: string;
-      context?: CoreMessage[];
-      threadId?: string;
-      runId?: string;
-      onFinish?: (result: string) => Promise<void> | void;
-      onStepFinish?: (step: string) => void;
-      maxSteps?: number;
-      output?: OutputType | Z;
-    } = {},
+      temperature,
+    }: AgentStreamOptions<Z> = {},
   ): Promise<StreamReturn<Z>> {
     const runIdToUse = runId || randomUUID();
 
@@ -809,6 +793,7 @@ export class Agent<
       });
       return this.llm.__stream({
         messages: messageObjects,
+        temperature,
         tools: this.tools,
         convertedTools,
         onStepFinish,
@@ -836,6 +821,7 @@ export class Agent<
     return this.llm.__streamObject({
       messages: messageObjects,
       tools: this.tools,
+      temperature,
       structuredOutput: output,
       convertedTools,
       onStepFinish,

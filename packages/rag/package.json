@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "0.0.2-alpha.56",
+  "version": "0.0.2-alpha.59",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -30,6 +30,7 @@
   "dependencies": {
     "@datastax/astra-db-ts": "^1.5.0",
     "@date-fns/utc": "^1.2.0",
+    "@libsql/client": "^0.14.0",
     "@llamaindex/core": "^0.4.10",
     "@llamaindex/env": "^0.1.20",
     "@mastra/core": "workspace:*",
@@ -39,6 +40,7 @@
     "@upstash/vector": "^1.1.7",
     "chromadb": "^1.9.4",
     "chromadb-default-embed": "^2.13.2",
+    "cloudflare": "^4.0.0",
     "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",
     "js-tiktoken": "^1.0.15",

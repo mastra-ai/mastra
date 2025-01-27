@@ -1,4 +1,4 @@
-import { execa } from 'execa';
+import { MastraBase } from '@mastra/core';
 import fs from 'fs';
 import path, { dirname } from 'path';
 import { PackageJson } from 'type-fest';
@@ -7,10 +7,13 @@ import { fileURLToPath } from 'url';
 import fsExtra from 'fs-extra/esm';
 import fsPromises from 'fs/promises';
 
-export class Deps {
+import { createExecaLogger } from '../deploy/log.js';
+
+export class Deps extends MastraBase {
   private packageManager: string;
 
   constructor() {
+    super({ component: 'DEPLOYER', name: 'DEPS' });
     this.packageManager = this.getPackageManager();
   }
 
@@ -50,11 +53,15 @@ export class Deps {
       runCommand = `${this.packageManager} ${packages?.length > 0 ? `add` : `install`}`;
     }
 
-    return execa(`${runCommand}`, packages, {
-      cwd: dir,
-      all: true,
-      shell: true,
-      stdio: 'inherit',
+    const execaLogger = createExecaLogger({
+      logger: this.logger,
+      root: dir,
+    });
+
+    return execaLogger({
+      cmd: runCommand,
+      args: packages,
+      env: {},
     });
   }
 
@@ -66,11 +73,15 @@ export class Deps {
       runCommand = `${this.packageManager} add`;
     }
 
-    const packageList = packages.join(' ');
-    return execa(`${runCommand} ${packageList}`, {
-      all: true,
-      shell: true,
-      stdio: 'inherit',
+    const execaLogger = createExecaLogger({
+      logger: this.logger,
+      root: '',
+    });
+
+    return execaLogger({
+      cmd: `${runCommand}`,
+      args: packages,
+      env: {},
     });
   }
 

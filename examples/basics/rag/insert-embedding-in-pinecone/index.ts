@@ -1,4 +1,5 @@
-import { MDocument, embed, PineconeVector } from '@mastra/rag';
+import { MDocument, embed } from '@mastra/rag';
+import { PineconeVector } from '@mastra/vector-pinecone';
 
 const doc = MDocument.fromText('Your text content...');
 

@@ -1,6 +1,6 @@
 {
   "name": "stock-price-tool",
-  "version": "1.0.1-alpha.40",
+  "version": "1.0.1-alpha.41",
   "main": "index.js",
   "type": "module",
   "private": true,

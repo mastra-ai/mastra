@@ -4,7 +4,7 @@ import path from 'path';
 import { check } from 'tcp-port-used';
 import { fileURLToPath } from 'url';
 
-import { FileService } from './service.file.js';
+import { FileService } from './service.file';
 
 export class DockerService {
   sanitizeName(name: string): string {
@@ -132,7 +132,7 @@ export class DockerService {
   }) {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
-    const filePath = path.resolve(__dirname, '..', 'starter-files', 'mastra-pg.docker-compose.yaml');
+    const filePath = path.resolve(__dirname, 'templates', 'starter-files', 'mastra-pg.docker-compose.yaml');
 
     const fileService = new FileService();
     fileService.replaceValuesInFile({
@@ -144,7 +144,7 @@ export class DockerService {
     });
   }
 
-  getComposeFile(composePath: string) {
+  getComposeFile(composePath?: string) {
     const fileService = new FileService();
     let composeFile: string;
     if (composePath) {

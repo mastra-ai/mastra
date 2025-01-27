@@ -3,42 +3,44 @@ title: "Example: Calling an Agent from a Workflow | Mastra Docs"
 description: Example of using Mastra to call an AI agent from within a workflow step.
 ---
 
-import { GithubLink } from '../../../components/github-link';
+import { GithubLink } from "../../../components/github-link";
 
 # Calling an Agent From a Workflow
 
 This example demonstrates how to create a workflow that calls an AI agent to process messages and generate responses, and execute it within a workflow step.
 
 ```ts showLineNumbers copy
-import { Agent, Mastra, Step, Workflow } from '@mastra/core';
-import { z } from 'zod';
+import { Agent, Mastra, Step, Workflow } from "@mastra/core";
+import { z } from "zod";
 
 const penguin = new Agent({
-  name: 'agent skipper',
+  name: "agent skipper",
   instructions: `You are skipper from penguin of madagascar, reply as that`,
   model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o',
+    provider: "OPEN_AI",
+    name: "gpt-4o-mini",
   },
 });
 
 const newWorkflow = new Workflow({
-  name: 'pass message to the workflow',
+  name: "pass message to the workflow",
   triggerSchema: z.object({
     message: z.string(),
   }),
 });
 
 const replyAsSkipper = new Step({
-  id: 'reply',
+  id: "reply",
   outputSchema: z.object({
     reply: z.string(),
   }),
   execute: async ({ context, mastra }) => {
     const kowalski = mastra?.agents?.penguin;
 
-    const res = await kowalski?.generate(context.machineContext?.triggerData?.message);
-    return { reply: res?.text || '' };
+    const res = await kowalski?.generate(
+      context.machineContext?.triggerData?.message,
+    );
+    return { reply: res?.text || "" };
   },
 });
 
@@ -50,11 +52,11 @@ const mastra = new Mastra({
   workflows: { newWorkflow },
 });
 
-const { runId, start } = await mastra
-  .getWorkflow('newWorkflow')
-  .createRun()
+const { runId, start } = await mastra.getWorkflow("newWorkflow").createRun();
 
-const runResult = await start({ triggerData: { message: 'Give me a run down of the mission to save private' } });
+const runResult = await start({
+  triggerData: { message: "Give me a run down of the mission to save private" },
+});
 
 console.log(runResult.results);
 ```
@@ -65,5 +67,7 @@ console.log(runResult.results);
 <br />
 <br />
 <GithubLink
-  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/calling-agent-from-workflow'}
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/calling-agent-from-workflow"
+  }
 />

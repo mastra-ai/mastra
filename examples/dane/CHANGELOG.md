@@ -1,5 +1,43 @@
 # @mastra/dane
 
+## 0.0.2-alpha.80
+
+### Patch Changes
+
+- Updated dependencies [bdaf834]
+  - @mastra/engine@0.0.5-alpha.65
+  - @mastra/mcp@0.0.1-alpha.12
+  - @mastra/memory@0.0.2-alpha.51
+  - @mastra/rag@0.0.2-alpha.59
+  - @mastra/firecrawl@1.0.4-alpha.61
+
+## 0.0.2-alpha.79
+
+### Patch Changes
+
+- Updated dependencies [dd6d87f]
+- Updated dependencies [04434b6]
+  - @mastra/core@0.1.27-alpha.70
+  - @mastra/firecrawl@1.0.4-alpha.60
+  - @mastra/github@1.0.3-alpha.54
+  - @mastra/stabilityai@1.0.1-alpha.45
+  - @mastra/engine@0.0.5-alpha.64
+  - @mastra/mcp@0.0.1-alpha.11
+  - @mastra/memory@0.0.2-alpha.50
+  - @mastra/rag@0.0.2-alpha.58
+
+## 0.0.2-alpha.77
+
+### Patch Changes
+
+- 0d5a03d: Vector store modules
+- Updated dependencies [ab1dc59]
+- Updated dependencies [0d5a03d]
+- Updated dependencies [4769753]
+  - @mastra/rag@0.0.2-alpha.57
+  - @mastra/mcp@0.0.1-alpha.10
+  - @mastra/firecrawl@1.0.4-alpha.59
+
 ## 0.0.2-alpha.76
 
 ### Patch Changes

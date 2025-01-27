@@ -1,4 +1,5 @@
 import commonjs from '@rollup/plugin-commonjs';
+import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import { defineConfig } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
@@ -8,7 +9,7 @@ import fsExtra from 'fs-extra/esm';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-const external = ['commander', 'fs-extra', 'execa', 'prettier', 'posthog-node'];
+const external = ['commander', 'fs-extra', 'execa', 'prettier', 'posthog-node', 'pino', 'pino-pretty'];
 external.forEach(pkg => {
   if (!pkgJson.dependencies[pkg]) {
     throw new Error(`${pkg} is not in the dependencies of create-mastra`);
@@ -24,6 +25,7 @@ export default defineConfig({
   },
   treeshake: true,
   plugins: [
+    json(),
     nodeResolve({
       preferBuiltins: true,
       exportConditions: ['node', 'default', 'module', 'import'],
@@ -44,5 +46,15 @@ export default defineConfig({
       },
     },
   ],
-  external,
+  onwarn(warning, warn) {
+    // Ignore specific warnings
+    if (warning.code === 'CIRCULAR_DEPENDENCY') return;
+    if (warning.code === 'EVAL') return;
+    warn(warning);
+  },
+  external: [
+    ...external,
+    // External dependencies that don't need bundling
+    /^@opentelemetry\/.*$/,
+  ],
 });

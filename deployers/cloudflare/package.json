@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "0.0.1-alpha.8",
+  "version": "0.0.1-alpha.13",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -43,7 +43,6 @@
     "@tsconfig/recommended": "^1.0.7",
     "@types/jsdom": "^21.1.7",
     "@types/node": "^22.9.0",
-    "@types/pg": "^8.11.10",
     "dts-cli": "^2.0.5",
     "vitest": "^2.1.8"
   }

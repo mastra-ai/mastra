@@ -110,7 +110,7 @@ export const stockAgent = new Agent<typeof tools>({
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
   model: {
     provider: "OPEN_AI",
-    name: "gpt-4o",
+    name: "gpt-4o-mini",
   },
   tools: {
     stockPrices: tools.stockPrices,

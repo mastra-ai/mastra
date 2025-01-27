@@ -1,5 +1,38 @@
 # mastra
 
+## 0.1.57-alpha.111
+
+### Patch Changes
+
+- Updated dependencies [bdaf834]
+  - @mastra/deployer@0.0.1-alpha.11
+
+## 0.1.57-alpha.110
+
+### Patch Changes
+
+- 04434b6: Create separate logger file
+- Updated dependencies [dd6d87f]
+- Updated dependencies [04434b6]
+  - @mastra/core@0.1.27-alpha.70
+  - @mastra/deployer@0.0.1-alpha.10
+
+## 0.1.57-alpha.109
+
+### Patch Changes
+
+- 9066f95: CF deployer fixes
+- Updated dependencies [9066f95]
+  - @mastra/deployer@0.0.1-alpha.9
+
+## 0.1.57-alpha.108
+
+### Patch Changes
+
+- b425845: Logger and execa logs
+- Updated dependencies [b425845]
+  - @mastra/deployer@0.0.1-alpha.8
+
 ## 0.1.57-alpha.107
 
 ### Patch Changes

@@ -1,0 +1,79 @@
+import { Logger } from '@mastra/core';
+import { spawn } from 'child_process';
+import { execa } from 'execa';
+import { Transform } from 'stream';
+
+export const createPinoStream = (logger: Logger) => {
+  return new Transform({
+    transform(chunk, _encoding, callback) {
+      // Convert Buffer/string to string and trim whitespace
+      const line = chunk.toString().trim();
+
+      if (line) {
+        console.log(line);
+        // Log each line through Pino
+        logger.info(line);
+      }
+
+      // Pass through the original data
+      callback(null, chunk);
+    },
+  });
+};
+
+export function createExecaLogger({ logger, root }: { logger: Logger; root: string }) {
+  const pinoStream = createPinoStream(logger);
+  return async ({ cmd, args, env }: { cmd: string; args: string[]; env: Record<string, string> }) => {
+    const subprocess = execa(cmd, args, {
+      cwd: root,
+      env,
+      shell: true,
+    });
+
+    // Pipe stdout and stderr through the Pino stream
+    subprocess.stdout?.pipe(pinoStream);
+    subprocess.stderr?.pipe(pinoStream);
+
+    return await subprocess;
+  };
+}
+
+export function createChildProcessLogger({ logger, root }: { logger: Logger; root: string }) {
+  const pinoStream = createPinoStream(logger);
+  return async ({ cmd, args, env }: { cmd: string; args: string[]; env: Record<string, string> }) => {
+    try {
+      const subprocess = spawn(cmd, args, {
+        cwd: root,
+        shell: true,
+        env,
+      });
+
+      // Pipe stdout and stderr through the Pino stream
+      subprocess.stdout?.pipe(pinoStream);
+      subprocess.stderr?.pipe(pinoStream);
+
+      // Wait for the process to complete
+      return new Promise((resolve, reject) => {
+        subprocess.on('close', code => {
+          pinoStream.end();
+          if (code === 0) {
+            resolve({ success: true });
+          } else {
+            reject(new Error(`Process exited with code ${code}`));
+          }
+        });
+
+        subprocess.on('error', error => {
+          pinoStream.end();
+          logger.error('Process failed', { error });
+          reject(error);
+        });
+      });
+    } catch (error) {
+      console.log(error);
+      logger.error('Process failed', { error });
+      pinoStream.end();
+      return { success: false, error };
+    }
+  };
+}

@@ -1,6 +1,6 @@
 import { Step, Workflow } from '@mastra/core';
 import chalk from 'chalk';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync } from 'fs';
 import path from 'path';
 import { z } from 'zod';
 
@@ -13,7 +13,8 @@ const getPacakgesToPublish = new Step({
   outputSchema: z.object({
     packages: z.array(z.string()),
     integrations: z.array(z.string()),
-    danePackage: z.string(),
+    deployers: z.array(z.string()),
+    vector_stores: z.array(z.string()),
   }),
   execute: async ({ mastra }) => {
     const agent = mastra?.agents?.['danePackagePublisher'];
@@ -23,38 +24,57 @@ const getPacakgesToPublish = new Step({
     }
 
     const result = await agent.generate(`
-        Here is my project structure in my monorepo.
-        * My core modules are in the 'packages' directory.
-        * My integrations are in the 'integrations' directory.
-        * My deployers are in the 'deployers' directory.
+        Please analyze the following monorepo directories and identify packages that need pnpm publishing:
 
-        Can you tell me which packages within these folders need to be published to npm?
+        CRITICAL: All packages MUST be built before publishing, in the correct order.
+
+        1. Directory Structure:
+           - packages/      : Contains core modules (format: @mastra/{name})
+           - integrations/ : Contains integration packages (format: @mastra/{name})
+           - deployers/    : Contains deployer packages (format: @mastra/deployer-{name})
+           - vector-stores/: Contains vector store packages with following mapping:
+             * @mastra/vector-astra -> vector-stores/astra-db/
+             * @mastra/vector-{name} -> vector-stores/{name}/ (for all other vector stores)
+
+        2. Publish Requirements:
+           - Build @mastra/core first, MUST be built before any other package
+           - Build all packages in correct dependency order before publishing
+           - Identify packages that have changes requiring a new pnpm publish
+           - Include create-mastra in the packages list if changes exist
+           - EXCLUDE @mastra/dane from consideration
+
+        Please list all packages that need building grouped by their directory.
     `);
 
     const resultObj = await agent.generate(
       `
-      Can you format the following text with my described format?
+      Please organize the following packages for building and publishing:
 
-      Formatting Rules:
-      * If the text I am giving you says there are no publishable packages, return empty arrays.
-      * @mastra/core must be first. 
-      * @mastra/deployer must be second.
-      * mastra must be third.
-      
-      Text: ${result.text}
+      Input Text: ${result.text}
 
-      Very Important:
-      * Do not include packages if we do not need to build them.
-      * create-mastra is a package (not an integration) and should be listed in packages array.
-      * @mastra/deployers-{name} should be listed after packages.
-      * @mastra/dane should be listed after packages and integrations.    
+      1. Build Order Requirements:
+         - ALL packages MUST be built before publishing
+         - @mastra/core MUST be built first
+         - @mastra/deployer MUST be built second
+         - Dependencies must be built before dependents
+         - Group parallel builds by directory type
+
+      2. Output Format:
+         - Group into: packages[], integrations[], deployers[], vector_stores[]
+         - Place create-mastra in packages[] array
+         - Maintain correct build order within each group
+
+      3. Critical Rules:
+         - Never publish without building first
+         - Only include packages that need updates
+         - Follow dependency order strictly
     `,
       {
         output: z.object({
           packages: z.array(z.string()),
           integrations: z.array(z.string()),
           deployers: z.array(z.string()),
-          danePackage: z.string(),
+          vector_stores: z.array(z.string()),
         }),
       },
     );
@@ -65,7 +85,7 @@ const getPacakgesToPublish = new Step({
       packages: resultObj?.object?.packages!,
       integrations: resultObj?.object?.integrations!,
       deployers: resultObj?.object?.deployers!,
-      danePackage: resultObj?.object?.danePackage!,
+      vector_stores: resultObj?.object?.vector_stores!,
     };
   },
 });
@@ -111,6 +131,19 @@ const assemblePackages = new Step({
       });
     }
 
+    if (payload?.vector_stores) {
+      payload.vector_stores.forEach((pkg: string) => {
+        let pkgName = pkg.replace('@mastra/vector-', '');
+
+        if (pkgName === 'astra') {
+          pkgName = 'astra-db';
+        }
+
+        const pkgPath = path.join(process.cwd(), 'vector-stores', pkgName);
+        packagesToBuild.add(pkgPath);
+      });
+    }
+
     if (payload?.integrations) {
       const integrations = payload.integrations;
       integrations.forEach((integration: string) => {
@@ -119,31 +152,6 @@ const assemblePackages = new Step({
 
         packagesToBuild.add(integrationPath);
       });
-    }
-
-    if (payload?.danePackage) {
-      const danePackage = payload.danePackage;
-      let pkgName = danePackage.replace('@mastra/', '');
-      const danePackageMapped = path.join(process.cwd(), 'examples', pkgName);
-      const pkgJsonPath = readFileSync(path.join(danePackageMapped, 'package.json'), 'utf-8');
-      const pkgJson = JSON.parse(pkgJsonPath);
-      const dependencies = Object.keys(pkgJson.dependencies || {}).filter((dep: string) => dep.startsWith('@mastra/'));
-      dependencies.forEach((dep: string) => {
-        const pkgName = dep.replace('@mastra/', '');
-        const pkgPath = path.join(process.cwd(), 'packages', pkgName);
-        const integrationPath = path.join(process.cwd(), 'integrations', pkgName);
-        try {
-          if (existsSync(pkgPath)) {
-            packagesToBuild.add(pkgPath);
-          } else {
-            packagesToBuild.add(integrationPath);
-          }
-        } catch (e) {
-          console.error(e);
-        }
-      });
-
-      packagesToBuild.add(path.join(process.cwd(), 'examples', 'dane'));
     }
 
     const pkgSet = Array.from(packagesToBuild.keys());
@@ -188,17 +196,21 @@ const buildPackages = new Step({
     let res = await agent.generate(`
       Here are the packages that need to be built: ${pkgSet.join(',')}.
 
-      ## Follow the rules:
-      * @mastra/core must be first. 
-      * @mastra/deployer must be second.
-      * mastra must be third.
+      Please organize the build order following these strict requirements:
 
-      Packages found within the 'packages' directory should be built next in parallel.
-      Packages found within the 'integrations' directory should be built in parallel.
-      Packages found within the 'deployers' directory should be built in parallel.
+      1. Core Dependencies (Must be built in this exact order):
+         - @mastra/core MUST be built first
+         - @mastra/deployer MUST be built second
+         - mastra MUST be built third
 
-      Build @mastra/dane last.
-      `);
+      2. Parallel Builds (After core dependencies):
+         - Build all remaining packages in 'packages' directory in parallel
+         - Build all packages in 'integrations' directory in parallel
+         - Build all packages in 'deployers' directory in parallel
+         - Build all packages in 'vector-stores' directory in parallel
+
+      Note: Do not proceed to the next group until the current group is fully built.
+    `);
 
     console.log(chalk.green(res.text));
 

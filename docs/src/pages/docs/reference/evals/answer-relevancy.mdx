@@ -15,18 +15,18 @@ import { AnswerRelevancyMetric } from "@mastra/evals/llm";
 // Configure the model for evaluation
 const model = {
   provider: "OPEN_AI",
-  name: "gpt-4o",
-  apiKey: process.env.OPENAI_API_KEY
+  name: "gpt-4o-mini",
+  apiKey: process.env.OPENAI_API_KEY,
 };
 
 const metric = new AnswerRelevancyMetric(model, {
   uncertaintyWeight: 0.3,
-  scale: 1
+  scale: 1,
 });
 
 const result = await metric.measure(
   "What is the capital of France?",
-  "Paris is the capital of France."
+  "Paris is the capital of France.",
 );
 
 console.log(result.score); // Score from 0-1
@@ -49,7 +49,7 @@ console.log(result.info.reason); // Explanation of the score
       description: "Configuration options for the metric",
       isOptional: true,
       defaultValue: "{ uncertaintyWeight: 0.3, scale: 1 }",
-    }
+    },
   ]}
 />
 
@@ -70,7 +70,7 @@ console.log(result.info.reason); // Explanation of the score
       description: "Maximum score value",
       isOptional: true,
       defaultValue: "1",
-    }
+    },
   ]}
 />
 
@@ -89,7 +89,7 @@ console.log(result.info.reason); // Explanation of the score
       type: "string",
       description: "The LLM's response to evaluate",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -114,23 +114,25 @@ console.log(result.info.reason); // Explanation of the score
               name: "reason",
               type: "string",
               description: "Explanation of the score",
-            }
-          ]
-        }
-      ]
-    }
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
 ## Scoring Details
 
 The metric evaluates relevancy through multiple verdicts and calculates a score based on:
+
 - Direct relevance to the query
 - Completeness of the answer
 - Accuracy of information
 - Appropriate level of detail
 
 Score interpretation:
+
 - 1.0: Perfect relevance
 - 0.7-0.9: High relevance with minor issues
 - 0.4-0.6: Moderate relevance with significant gaps
@@ -143,28 +145,28 @@ Score interpretation:
 const metric = new AnswerRelevancyMetric(
   {
     provider: "OPEN_AI",
-    name: "gpt-4o",
-    apiKey: process.env.OPENAI_API_KEY
+    name: "gpt-4o-mini",
+    apiKey: process.env.OPENAI_API_KEY,
   },
   {
     uncertaintyWeight: 0.5, // Higher weight for uncertain verdicts
-    scale: 5 // Use 0-5 scale instead of 0-1
-  }
+    scale: 5, // Use 0-5 scale instead of 0-1
+  },
 );
 
 const result = await metric.measure(
   "What are the benefits of exercise?",
-  "Regular exercise improves cardiovascular health, builds strength, and boosts mental wellbeing."
+  "Regular exercise improves cardiovascular health, builds strength, and boosts mental wellbeing.",
 );
 
 // Example output:
 // {
 //   score: 4.5,
 //   info: {
-//     reason: "The score is 4.5 out of 5 because the response directly addresses the query 
-//           with specific, accurate benefits of exercise. It covers multiple aspects 
-//           (cardiovascular, muscular, and mental health) in a clear and concise manner. 
-//           The answer is highly relevant and provides appropriate detail without 
+//     reason: "The score is 4.5 out of 5 because the response directly addresses the query
+//           with specific, accurate benefits of exercise. It covers multiple aspects
+//           (cardiovascular, muscular, and mental health) in a clear and concise manner.
+//           The answer is highly relevant and provides appropriate detail without
 //           including unnecessary information."
 //   }
 // }

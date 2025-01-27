@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 
-import { EnvService } from './service.env.js';
+import { EnvService } from './service.env';
 
 // TODO: Refactor (copied from admin)
 export class FileEnvService extends EnvService {

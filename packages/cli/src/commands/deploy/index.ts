@@ -2,7 +2,7 @@ import * as prompts from '@clack/prompts';
 import { Deployer } from '@mastra/deployer';
 import { join } from 'path';
 
-import { logger } from '../../utils/logger.js';
+import { logger } from '../../utils/logger';
 
 export async function deploy({ dir, token }: { dir?: string; token?: string }) {
   let tokenToUse;
@@ -13,7 +13,7 @@ export async function deploy({ dir, token }: { dir?: string; token?: string }) {
     });
 
     if (!v) {
-      logger.log('No token provided, exiting...');
+      logger.debug('No token provided, exiting...');
       return;
     }
     tokenToUse = v as string;
@@ -22,7 +22,7 @@ export async function deploy({ dir, token }: { dir?: string; token?: string }) {
   }
 
   if (!tokenToUse || tokenToUse === 'clack:cancel') {
-    logger.log('No token provided, exiting...');
+    logger.debug('No token provided, exiting...');
     return;
   }
 
@@ -41,11 +41,12 @@ export async function deploy({ dir, token }: { dir?: string; token?: string }) {
 
   const resDeployer = mastra.getDeployer();
 
+  resDeployer.__setLogger(logger);
+
   if (!resDeployer) {
     // If no deployer, we are deploying to Mastra Cloud
   } else {
     resDeployer.writeFiles({ dir: deployer.getMastraPath() });
-
     try {
       await resDeployer.deploy({
         dir: deployer.getMastraPath(),
