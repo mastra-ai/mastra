@@ -1,5 +1,12 @@
 # workflow-with-separate-steps
 
+## 1.0.1-alpha.19
+
+### Patch Changes
+
+- Updated dependencies [3427b95]
+  - @mastra/core@0.1.27-alpha.73
+
 ## 1.0.1-alpha.18
 
 ### Patch Changes
