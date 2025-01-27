@@ -15,8 +15,8 @@
     "src/playground/dist"
   ],
   "scripts": {
-    "build": "npm-run-all build:lib copy-starter-files build:playground",
-    "build:lib": "tsup src/index.ts --format esm --treeshake --clean --dts",
+    "build": "npm-run-all --serial build:lib copy-starter-files build:playground",
+    "build:lib": "tsup-node --config tsup.config.js",
     "build:watch": "pnpm run build:lib --watch --onSuccess \"pnpm run copy-starter-files\"",
     "copy-starter-files": "cpy 'src/starter-files/**/*' dist/starter-files",
     "build:playground": "cd src/playground && pnpm build",
@@ -66,6 +66,7 @@
     "@types/tcp-port-used": "^1.0.4",
     "cpy-cli": "^5.0.0",
     "memfs": "^4.14.0",
+    "npm-run-all": "^4.1.5",
     "tsup": "^8.3.5",
     "type-fest": "^4.30.0",
     "vitest": "^2.1.8"
