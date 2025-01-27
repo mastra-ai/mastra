@@ -1,9 +1,9 @@
 ---
-title: "Example: Re-ranking Results | Retrieval | RAG | Mastra Docs"
+title: 'Example: Re-ranking Results | Retrieval | RAG | Mastra Docs'
 description: Example of implementing a RAG system with re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 
-import { GithubLink } from "../../../components/github-link";
+import { GithubLink } from '../../../components/github-link';
 
 # Re-ranking Results
 
@@ -36,10 +36,10 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Agent } from "@mastra/core/agent";
-import { PgVector } from "@mastra/vector-pg";
-import { embedMany, MDocument, createVectorQueryTool } from "@mastra/rag";
+import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { embedMany, MDocument, createVectorQueryTool } from '@mastra/rag';
+import { PgVector } from '@mastra/vector-pg';
 ```
 
 ## Vector Query Tool Creation with Re-ranking
@@ -48,17 +48,17 @@ Using createVectorQueryTool imported from @mastra/rag, you can create a tool tha
 
 ```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: "pgVector",
-  indexName: "embeddings",
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
   options: {
-    provider: "OPEN_AI",
-    model: "text-embedding-3-small",
+    provider: 'OPEN_AI',
+    model: 'text-embedding-3-small',
     maxRetries: 3,
   },
   reranker: {
     model: {
-      provider: "OPEN_AI",
-      name: "gpt-4o-mini",
+      provider: 'OPEN_AI',
+      name: 'gpt-4o-mini',
     },
   },
 });
@@ -70,12 +70,12 @@ Set up the Mastra agent that will handle the responses:
 
 ```typescript copy showLineNumbers{22} filename="src/mastra/index.ts"
 export const ragAgent = new Agent({
-  name: "RAG Agent",
+  name: 'RAG Agent',
   instructions:
-    "You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.",
+    'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
   model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
+    provider: 'OPEN_AI',
+    name: 'gpt-4o-mini',
   },
   tools: {
     vectorQueryTool,
@@ -95,7 +95,7 @@ export const mastra = new Mastra({
   vectors: { pgVector },
 });
 
-const agent = mastra.getAgent("ragAgent");
+const agent = mastra.getAgent('ragAgent');
 ```
 
 ## Document Processing
@@ -125,10 +125,10 @@ rare cards appreciate yearly.
 `);
 
 const chunks = await doc1.chunk({
-  strategy: "recursive",
+  strategy: 'recursive',
   size: 150,
   overlap: 20,
-  separator: "\n",
+  separator: '\n',
 });
 ```
 
@@ -138,15 +138,15 @@ Generate embeddings for the chunks and store them in the vector database:
 
 ```typescript copy showLineNumbers{72} filename="src/mastra/index.ts"
 const { embeddings } = await embedMany(chunks, {
-  provider: "OPEN_AI",
-  model: "text-embedding-3-small",
+  provider: 'OPEN_AI',
+  model: 'text-embedding-3-small',
   maxRetries: 3,
 });
 
-const vectorStore = mastra.getVector("pgVector");
-await vectorStore.createIndex("embeddings", 1536);
+const vectorStore = mastra.getVector('pgVector');
+await vectorStore.createIndex('embeddings', 1536);
 await vectorStore.upsert(
-  "embeddings",
+  'embeddings',
   embeddings,
   chunks?.map((chunk: any) => ({ text: chunk.text })),
 );
@@ -178,8 +178,8 @@ async function answerQueries(queries: string[]) {
   for (const query of queries) {
     try {
       const answer = await generateResponse(query);
-      console.log("\nQuery:", query);
-      console.log("Response:", answer);
+      console.log('\nQuery:', query);
+      console.log('Response:', answer);
     } catch (error) {
       console.error(`Error processing query "${query}":`, error);
     }
@@ -187,9 +187,9 @@ async function answerQueries(queries: string[]) {
 }
 
 const queries = [
-  "explain technical trading analysis",
-  "explain trading card valuation",
-  "how do you analyze market resistance",
+  'explain technical trading analysis',
+  'explain trading card valuation',
+  'how do you analyze market resistance',
 ];
 
 await answerQueries(queries);

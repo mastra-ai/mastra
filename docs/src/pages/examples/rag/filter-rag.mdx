@@ -1,9 +1,9 @@
 ---
-title: "Example: Metadata Filtering | Retrieval | RAG | Mastra Docs"
+title: 'Example: Metadata Filtering | Retrieval | RAG | Mastra Docs'
 description: Example of implementing a RAG system in Mastra using metadata filters to search for relevant chunks in the vector store.
 ---
 
-import { GithubLink } from "../../../components/github-link";
+import { GithubLink } from '../../../components/github-link';
 
 # Metadata Filtering
 
@@ -51,8 +51,8 @@ Using createVectorQueryTool imported from @mastra/rag, you can create a tool tha
 ```typescript copy showLineNumbers{7} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
   id: 'vectorQueryTool',
-  vectorStoreName: "pgVector",
-  indexName: "embeddings",
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
   options: {
     provider: 'OPEN_AI',
     model: 'text-embedding-3-small',
@@ -67,9 +67,7 @@ const vectorQueryTool = createVectorQueryTool({
 Create a document and process it into chunks:
 
 ```typescript copy showLineNumbers{19} filename="src/mastra/index.ts"
-const doc = MDocument.fromText(
-  `The Impact of Climate Change on Global Agriculture...`
-);
+const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`);
 
 const chunks = await doc.chunk({
   strategy: 'recursive',
@@ -77,7 +75,7 @@ const chunks = await doc.chunk({
   overlap: 50,
   separator: '\n',
   extract: {
-    keywords: true,  // Extracts keywords from each chunk
+    keywords: true, // Extracts keywords from each chunk
   },
 });
 ```
@@ -114,7 +112,7 @@ export const ragAgent = new Agent({
   You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
 
   Use the vectorQueryTool to filter the context by searching the metadata.
-  
+
   The metadata is structured as follows:
 
   {
@@ -220,8 +218,4 @@ await answerQueries();
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/filter-rag"
-  }
-/>
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/filter-rag'} />
