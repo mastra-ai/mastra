@@ -1,5 +1,17 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.13
+
+### Patch Changes
+
+- a1774e7: Improve bundling
+
+## 0.0.1-alpha.12
+
+### Patch Changes
+
+- 28dceab: Catch apiKey error in dev
+
 ## 0.0.1-alpha.11
 
 ### Patch Changes

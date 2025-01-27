@@ -1,5 +1,21 @@
 # mastra
 
+## 0.1.57-alpha.113
+
+### Patch Changes
+
+- Updated dependencies [a1774e7]
+  - @mastra/deployer@0.0.1-alpha.13
+
+## 0.1.57-alpha.112
+
+### Patch Changes
+
+- e604ddb: Change bundling architecture
+- 28dceab: Catch apiKey error in dev
+- Updated dependencies [28dceab]
+  - @mastra/deployer@0.0.1-alpha.12
+
 ## 0.1.57-alpha.111
 
 ### Patch Changes

@@ -6,14 +6,24 @@ import { FILTER_OPERATORS, isValidOperator } from './filter';
 export class LibSQLVector extends MastraVector {
   private turso: TursoClient;
 
-  constructor(connectionUrl: string) {
+  constructor({
+    connectionUrl,
+    authToken,
+    syncUrl,
+    syncInterval,
+  }: {
+    connectionUrl: string;
+    authToken?: string;
+    syncUrl?: string;
+    syncInterval?: number;
+  }) {
     super();
 
     this.turso = createClient({
       url: connectionUrl,
-      // syncUrl: process.env.TURSO_DATABASE_URL,
-      // authToken: process.env.TURSO_AUTH_TOKEN,
-      // syncInterval: 60000,
+      syncUrl: syncUrl,
+      authToken,
+      syncInterval,
     });
   }
 
