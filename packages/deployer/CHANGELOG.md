@@ -1,5 +1,11 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.14
+
+### Patch Changes
+
+- ad2cd74: Deploy fix
+
 ## 0.0.1-alpha.13
 
 ### Patch Changes
