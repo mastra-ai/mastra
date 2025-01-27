@@ -1,5 +1,13 @@
 # ai-chatbot
 
+## 0.1.1-alpha.51
+
+### Patch Changes
+
+- Updated dependencies [d9c8dd0]
+  - @mastra/core@0.1.27-alpha.71
+  - @mastra/memory@0.0.2-alpha.52
+
 ## 0.1.1-alpha.50
 
 ### Patch Changes

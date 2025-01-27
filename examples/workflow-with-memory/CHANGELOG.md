@@ -1,5 +1,13 @@
 # workflow
 
+## 1.0.1-alpha.31
+
+### Patch Changes
+
+- Updated dependencies [d9c8dd0]
+  - @mastra/core@0.1.27-alpha.71
+  - @mastra/memory@0.0.2-alpha.52
+
 ## 1.0.1-alpha.30
 
 ### Patch Changes
