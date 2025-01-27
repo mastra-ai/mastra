@@ -13,7 +13,7 @@ This example demonstrates how to implement a Retrieval-Augmented Generation (RAG
 
 The system implements RAG using Mastra and OpenAI with chain-of-thought prompting. Here's what it does:
 
-1. Sets up a Mastra agent with GPT-4o-mini for response generation
+1. Sets up a Mastra agent with gpt-4o-mini for response generation
 2. Creates a vector query tool to manage vector store interactions
 3. Chunks text documents into smaller segments
 4. Creates embeddings for these chunks
@@ -37,7 +37,7 @@ Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
 import { Mastra, Agent, EmbedManyResult } from "@mastra/core";
-import { PgVector } from '@mastra/vector-pg';
+import { PgVector } from "@mastra/vector-pg";
 import { createVectorQueryTool, embed, MDocument } from "@mastra/rag";
 ```
 

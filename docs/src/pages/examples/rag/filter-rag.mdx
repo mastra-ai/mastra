@@ -14,7 +14,7 @@ This system uses metadata filters to search for relevant chunks in the vector st
 
 The system implements RAG using Mastra and OpenAI. Here's what it does:
 
-1. Sets up a Mastra agent with GPT-4o-mini for response generation
+1. Sets up a Mastra agent with gpt-4o-mini for response generation
 2. Creates a vector query tool to manage vector store interactions
 3. Chunks text documents into smaller segments
 4. Creates embeddings for these chunks
@@ -38,7 +38,7 @@ Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
 import { Mastra, Agent, EmbedResult, EmbedManyResult } from "@mastra/core";
-import { PgVector } from '@mastra/vector-pg';
+import { PgVector } from "@mastra/vector-pg";
 import { createVectorQueryTool, embed, MDocument } from "@mastra/rag";
 ```
 
@@ -200,16 +200,16 @@ const queries = [
     filter: {
       keyword: "nested.keywords",
       operator: "ilike",
-      value: "adaptation"
-    }
+      value: "adaptation",
+    },
   },
   {
     query: "Show me recent sections",
     filter: {
       keyword: "nested.id",
       operator: "gt",
-      value: "2"
-    }
+      value: "2",
+    },
   },
   {
     query: "Find sections about drought and irrigation",
@@ -219,15 +219,15 @@ const queries = [
         {
           keyword: "text",
           operator: "ilike",
-          value: "drought"
+          value: "drought",
         },
         {
           keyword: "text",
           operator: "ilike",
-          value: "irrigation"
-        }
-      ]
-    }
+          value: "irrigation",
+        },
+      ],
+    },
   },
   {
     query: "Find sections about wheat or rice",
@@ -237,16 +237,16 @@ const queries = [
         {
           keyword: "text",
           operator: "ilike",
-          value: "wheat"
+          value: "wheat",
         },
         {
           keyword: "text",
           operator: "ilike",
-          value: "rice"
-        }
-      ]
-    }
-  }
+          value: "rice",
+        },
+      ],
+    },
+  },
 ];
 
 await answerQueries(queries);
@@ -257,6 +257,7 @@ await answerQueries(queries);
 PGVector supports these filter types:
 
 1. Basic comparison operators:
+
 ```typescript
 {
   "path.to.field": {
@@ -271,6 +272,7 @@ PGVector supports these filter types:
 ```
 
 2. Text search operators:
+
 ```typescript
 {
   "path.to.field": {
@@ -281,6 +283,7 @@ PGVector supports these filter types:
 ```
 
 3. Collection operators:
+
 ```typescript
 {
   "path.to.field": {
@@ -292,6 +295,7 @@ PGVector supports these filter types:
 ```
 
 4. Logical operators:
+
 ```typescript
 {
   type: "$and",  // or "$or"

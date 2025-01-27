@@ -50,7 +50,7 @@ const gatherCandidateInfo = new Step({
       resumeText: string;
     }>("trigger")?.resumeText;
 
-    const llm = mastra.llm({ provider: "OPEN_AI", name: "gpt-4o" });
+    const llm = mastra.llm({ provider: "OPEN_AI", name: "gpt-4o-mini" });
 
     const prompt = `
           You are given this resume text:
@@ -96,7 +96,7 @@ const askAboutSpecialty = new Step({
       "gatherCandidateInfo",
     );
 
-    const llm = mastra.llm({ provider: "OPEN_AI", name: "gpt-4o" });
+    const llm = mastra.llm({ provider: "OPEN_AI", name: "gpt-4o-mini" });
     const prompt = `
           You are a recruiter. Given the resume below, craft a short question
           for ${candidateInfo?.candidateName} about how they got into "${candidateInfo?.specialty}".
@@ -126,7 +126,7 @@ const askAboutRole = new Step({
       "gatherCandidateInfo",
     );
 
-    const llm = mastra.llm({ provider: "OPEN_AI", name: "gpt-4o" });
+    const llm = mastra.llm({ provider: "OPEN_AI", name: "gpt-4o-mini" });
     const prompt = `
           You are a recruiter. Given the resume below, craft a short question
           for ${candidateInfo?.candidateName} asking what interests them most about this role.

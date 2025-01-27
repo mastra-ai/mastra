@@ -3,7 +3,7 @@ title: "Example: Re-ranking Results | Retrieval | RAG | Mastra Docs"
 description: Example of implementing a RAG system with re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 
-import { GithubLink } from '../../../components/github-link';
+import { GithubLink } from "../../../components/github-link";
 
 # Re-ranking Results
 
@@ -12,7 +12,8 @@ This example demonstrates how to implement a Retrieval-Augmented Generation (RAG
 ## Overview
 
 The system implements RAG with re-ranking using Mastra and OpenAI. Here's what it does:
-1. Sets up a Mastra agent with GPT-4o-mini for response generation
+
+1. Sets up a Mastra agent with gpt-4o-mini for response generation
 2. Creates a vector query tool with re-ranking capabilities
 3. Chunks text documents into smaller segments
 4. Creates embeddings for these chunks
@@ -20,7 +21,7 @@ The system implements RAG with re-ranking using Mastra and OpenAI. Here's what i
 6. Retrieves and re-ranks relevant chunks based on queries
 7. Generates context-aware responses using the Mastra agent
 
-## Setup 
+## Setup
 
 ### Environment Setup
 
@@ -35,9 +36,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
-import { Mastra, Agent, EmbedManyResult } from '@mastra/core';
-import { PgVector } from '@mastra/vector-pg';
-import { embed, MDocument, createVectorQueryTool } from '@mastra/rag';
+import { Mastra, Agent, EmbedManyResult } from "@mastra/core";
+import { PgVector } from "@mastra/vector-pg";
+import { embed, MDocument, createVectorQueryTool } from "@mastra/rag";
 ```
 
 ## Vector Query Tool Creation with Re-ranking
@@ -46,19 +47,19 @@ Using createVectorQueryTool imported from @mastra/rag, you can create a tool tha
 
 ```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'embeddings',
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
   options: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-ada-002',
+    provider: "OPEN_AI",
+    model: "text-embedding-ada-002",
     maxRetries: 3,
   },
   topK: 5,
   rerankOptions: {
-    semanticProvider: 'agent',
+    semanticProvider: "agent",
     agentProvider: {
-      provider: 'OPEN_AI',
-      name: 'gpt-4o-mini',
+      provider: "OPEN_AI",
+      name: "gpt-4o-mini",
     },
   },
 });
@@ -70,17 +71,17 @@ Set up the Mastra agent that will handle the responses:
 
 ```typescript copy showLineNumbers{22} filename="src/mastra/index.ts"
 export const ragAgent = new Agent({
-  name: 'RAG Agent',
+  name: "RAG Agent",
   instructions:
-    'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
+    "You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.",
   model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o-mini',
+    provider: "OPEN_AI",
+    name: "gpt-4o-mini",
   },
   tools: {
     vectorQueryTool,
   },
-})
+});
 ```
 
 ## Instantiate PgVector and Mastra
@@ -93,9 +94,9 @@ const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 export const mastra = new Mastra({
   agents: { ragAgent },
   vectors: { pgVector },
-})
+});
 
-const agent = mastra.getAgent('ragAgent')
+const agent = mastra.getAgent("ragAgent");
 ```
 
 ## Document Processing
@@ -122,14 +123,14 @@ chart patterns predict movements.
 mint condition doubles card worth.
 resistance breaks trigger orders.
 rare cards appreciate yearly.
-`)
+`);
 
 const chunks = await doc1.chunk({
-  strategy: 'recursive',
+  strategy: "recursive",
   size: 150,
   overlap: 20,
-  separator: '\n',
-})
+  separator: "\n",
+});
 ```
 
 ## Creating and Storing Embeddings
@@ -137,19 +138,19 @@ const chunks = await doc1.chunk({
 Generate embeddings for the chunks and store them in the vector database:
 
 ```typescript copy showLineNumbers{72} filename="src/mastra/index.ts"
-const { embeddings } = await embed(chunks, {
+const { embeddings } = (await embed(chunks, {
   provider: "OPEN_AI",
   model: "text-embedding-ada-002",
   maxRetries: 3,
-}) as EmbedManyResult<string>
+})) as EmbedManyResult<string>;
 
-const vectorStore = mastra.getVector('pgVector');
-await vectorStore.createIndex("embeddings", 1536)
+const vectorStore = mastra.getVector("pgVector");
+await vectorStore.createIndex("embeddings", 1536);
 await vectorStore.upsert(
   "embeddings",
   embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text }))
-)
+  chunks?.map((chunk: any) => ({ text: chunk.text })),
+);
 ```
 
 ## Response Generation
@@ -164,10 +165,10 @@ async function generateResponse(query: string) {
 
       Please base your answer only on the context provided in the tool. If the context doesn't 
       contain enough information to fully answer the question, please state that explicitly.
-      `
+      `;
 
-  const completion = await agent.generate(prompt)
-  return completion.text
+  const completion = await agent.generate(prompt);
+  return completion.text;
 }
 ```
 
@@ -177,11 +178,11 @@ async function generateResponse(query: string) {
 async function answerQueries(queries: string[]) {
   for (const query of queries) {
     try {
-      const answer = await generateResponse(query)
-      console.log('\nQuery:', query)
-      console.log('Response:', answer)
+      const answer = await generateResponse(query);
+      console.log("\nQuery:", query);
+      console.log("Response:", answer);
     } catch (error) {
-      console.error(`Error processing query "${query}":`, error)
+      console.error(`Error processing query "${query}":`, error);
     }
   }
 }
@@ -192,5 +193,5 @@ const queries = [
   "how do you analyze market resistance",
 ];
 
-await answerQueries(queries)
+await answerQueries(queries);
 ```

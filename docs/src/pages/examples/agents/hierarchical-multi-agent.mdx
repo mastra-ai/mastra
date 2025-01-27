@@ -54,7 +54,7 @@ const editorAgent = new Agent({
   instructions: "You are an editor agent that edits blog post copy.",
   model: {
     provider: "OPEN_AI",
-    name: "gpt-4o",
+    name: "gpt-4o-mini",
   },
 });
 
@@ -94,7 +94,8 @@ const mastra = new Mastra({
   agents: { publisherAgent },
 });
 ```
-To use the entire system: 
+
+To use the entire system:
 
 ```ts showLineNumbers copy
 async function main() {
@@ -106,8 +107,7 @@ async function main() {
 }
 
 main();
-``` 
-
+```
 
 <br />
 <br />
