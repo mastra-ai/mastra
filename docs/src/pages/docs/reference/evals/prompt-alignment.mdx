@@ -15,24 +15,24 @@ import { PromptAlignmentMetric } from "@mastra/evals/llm";
 // Configure the model for evaluation
 const model = {
   provider: "OPEN_AI",
-  name: "gpt-4o",
-  apiKey: process.env.OPENAI_API_KEY
+  name: "gpt-4o-mini",
+  apiKey: process.env.OPENAI_API_KEY,
 };
 
 const instructions = [
   "Start sentences with capital letters",
   "End each sentence with a period",
-  "Use present tense"
+  "Use present tense",
 ];
 
 const metric = new PromptAlignmentMetric(model, {
   instructions,
-  scale: 1
+  scale: 1,
 });
 
 const result = await metric.measure(
   "describe the weather",
-  "The sun is shining. Clouds float in the sky. A gentle breeze blows."
+  "The sun is shining. Clouds float in the sky. A gentle breeze blows.",
 );
 
 console.log(result.score); // Alignment score from 0-1
@@ -46,7 +46,8 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "model",
       type: "ModelConfig",
-      description: "Configuration for the model used to evaluate instruction alignment",
+      description:
+        "Configuration for the model used to evaluate instruction alignment",
       isOptional: false,
     },
     {
@@ -54,7 +55,7 @@ console.log(result.info.reason); // Explanation of the score
       type: "PromptAlignmentOptions",
       description: "Configuration options for the metric",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -74,7 +75,7 @@ console.log(result.info.reason); // Explanation of the score
       description: "Maximum score value",
       isOptional: true,
       defaultValue: "1",
-    }
+    },
   ]}
 />
 
@@ -93,7 +94,7 @@ console.log(result.info.reason); // Explanation of the score
       type: "string",
       description: "The LLM's response to evaluate",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -109,7 +110,8 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "info",
       type: "object",
-      description: "Object containing detailed metrics about instruction compliance",
+      description:
+        "Object containing detailed metrics about instruction compliance",
       properties: [
         {
           type: "string",
@@ -117,30 +119,34 @@ console.log(result.info.reason); // Explanation of the score
             {
               name: "reason",
               type: "string",
-              description: "Detailed explanation of the score and instruction compliance",
-            }
-          ]
-        }
-      ]
-    }
+              description:
+                "Detailed explanation of the score and instruction compliance",
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
 ## Scoring Details
 
 The metric evaluates instruction alignment through:
+
 - Individual assessment of each instruction's compliance
 - Strict binary verdicts (yes/no) for each instruction
 - Detailed reasoning for any non-compliance
 - Equal weighting of all instructions
 
 The scoring process:
+
 1. Evaluates each instruction independently
 2. Assigns binary scores (1 for compliant, 0 for non-compliant)
 3. Calculates percentage of followed instructions
 4. Scales to configured range (default 0-1)
 
 Score interpretation:
+
 - 1.0: All instructions followed perfectly
 - 0.7-0.9: Most instructions followed with minor deviations
 - 0.4-0.6: Mixed compliance with instructions
@@ -170,8 +176,8 @@ const result = await metric.measure(
 // {
 //   score: 1.0,
 //   info: {
-//     reason: "The score is 1.0 because all instructions were followed exactly: 
-//           bullet points were used, exactly three examples were provided, and 
+//     reason: "The score is 1.0 because all instructions were followed exactly:
+//           bullet points were used, exactly three examples were provided, and
 //           each point ends with a semicolon."
 //   }
 // }
@@ -187,7 +193,7 @@ const result2 = await metric.measure(
 // {
 //   score: 0.33,
 //   info: {
-//     reason: "The score is 0.33 because: numbered lists were used instead of bullet points, 
+//     reason: "The score is 0.33 because: numbered lists were used instead of bullet points,
 //           no semicolons were used, and four fruits were listed instead of exactly three."
 //   }
 // }
@@ -197,4 +203,4 @@ const result2 = await metric.measure(
 
 - [Answer Relevancy Metric](./answer-relevancy)
 - [Completeness Metric](./completeness)
-- [Context Precision Metric](./context-precision) 
+- [Context Precision Metric](./context-precision)

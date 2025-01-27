@@ -15,16 +15,16 @@ import { ContextPrecisionMetric } from "@mastra/evals/llm";
 // Configure the model for evaluation
 const model = {
   provider: "OPEN_AI",
-  name: "gpt-4o",
-  apiKey: process.env.OPENAI_API_KEY
+  name: "gpt-4o-mini",
+  apiKey: process.env.OPENAI_API_KEY,
 };
 
 const metric = new ContextPrecisionMetric(model, {
   context: [
     "Photosynthesis is a biological process used by plants to create energy from sunlight.",
     "Plants need water and nutrients from the soil to grow.",
-    "The process of photosynthesis produces oxygen as a byproduct."
-  ]
+    "The process of photosynthesis produces oxygen as a byproduct.",
+  ],
 });
 
 const result = await metric.measure(
@@ -43,7 +43,8 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "model",
       type: "ModelConfig",
-      description: "Configuration for the model used to evaluate context relevance",
+      description:
+        "Configuration for the model used to evaluate context relevance",
       isOptional: false,
     },
     {
@@ -51,7 +52,7 @@ console.log(result.info.reason); // Explanation of the score
       type: "ContextPrecisionMetricOptions",
       description: "Configuration options for the metric",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -71,7 +72,7 @@ console.log(result.info.reason); // Explanation of the score
       type: "string[]",
       description: "Array of context pieces in their retrieval order",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -90,7 +91,7 @@ console.log(result.info.reason); // Explanation of the score
       type: "string",
       description: "The generated response to evaluate",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -115,29 +116,32 @@ console.log(result.info.reason); // Explanation of the score
               name: "reason",
               type: "string",
               description: "Detailed explanation of the score",
-            }
-          ]
-        }
-      ]
-    }
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
 ## Scoring Details
 
 The metric evaluates context precision through:
+
 - Individual assessment of each context piece's relevance
 - Position-weighted scoring (earlier positions weighted more heavily)
 - Binary relevance verdicts (yes/no) with detailed reasoning
 - Consideration of context ordering
 
 The final score is calculated using Mean Average Precision (MAP):
+
 1. Converts verdicts to binary scores (1 for relevant, 0 for not)
 2. Calculates precision at each position
 3. Weights earlier positions more heavily
 4. Normalizes to the configured scale (default 0-1)
 
 Score interpretation:
+
 - 1.0: All relevant context in optimal order
 - 0.7-0.9: Mostly relevant context with good ordering
 - 0.4-0.6: Mixed relevance or suboptimal ordering
@@ -152,8 +156,8 @@ const metric = new ContextPrecisionMetric(model, {
     "Exercise strengthens the heart and improves blood circulation.",
     "A balanced diet is important for health.",
     "Regular physical activity reduces stress and anxiety.",
-    "Exercise equipment can be expensive."
-  ]
+    "Exercise equipment can be expensive.",
+  ],
 });
 
 const result = await metric.measure(
@@ -165,9 +169,9 @@ const result = await metric.measure(
 // {
 //   score: 0.75,
 //   info: {
-//     reason: "The score is 0.75 because the first and third contexts are highly relevant 
-//           to the benefits mentioned in the output, while the second and fourth contexts 
-//           are not directly related to exercise benefits. The relevant contexts are well-positioned 
+//     reason: "The score is 0.75 because the first and third contexts are highly relevant
+//           to the benefits mentioned in the output, while the second and fourth contexts
+//           are not directly related to exercise benefits. The relevant contexts are well-positioned
 //           at the beginning and middle of the sequence."
 //   }
 // }
@@ -177,4 +181,4 @@ const result = await metric.measure(
 
 - [Answer Relevancy Metric](./answer-relevancy)
 - [Context Position Metric](./context-position)
-- [Completeness Metric](./completeness) 
+- [Completeness Metric](./completeness)

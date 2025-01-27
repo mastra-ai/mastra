@@ -15,16 +15,16 @@ import { ContextPositionMetric } from "@mastra/evals/llm";
 // Configure the model for evaluation
 const model = {
   provider: "OPEN_AI",
-  name: "gpt-4o",
-  apiKey: process.env.OPENAI_API_KEY
+  name: "gpt-4o-mini",
+  apiKey: process.env.OPENAI_API_KEY,
 };
 
 const metric = new ContextPositionMetric(model, {
   context: [
     "Photosynthesis is a biological process used by plants to create energy from sunlight.",
     "The process of photosynthesis produces oxygen as a byproduct.",
-    "Plants need water and nutrients from the soil to grow."
-   ]
+    "Plants need water and nutrients from the soil to grow.",
+  ],
 });
 
 const result = await metric.measure(
@@ -43,7 +43,8 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "model",
       type: "ModelConfig",
-      description: "Configuration for the model used to evaluate context positioning",
+      description:
+        "Configuration for the model used to evaluate context positioning",
       isOptional: false,
     },
     {
@@ -51,7 +52,7 @@ console.log(result.info.reason); // Explanation of the score
       type: "ContextPositionMetricOptions",
       description: "Configuration options for the metric",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -71,7 +72,7 @@ console.log(result.info.reason); // Explanation of the score
       type: "string[]",
       description: "Array of context pieces in their retrieval order",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -90,7 +91,7 @@ console.log(result.info.reason); // Explanation of the score
       type: "string",
       description: "The generated response to evaluate",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -115,23 +116,25 @@ console.log(result.info.reason); // Explanation of the score
               name: "reason",
               type: "string",
               description: "Detailed explanation of the score",
-            }
-          ]
-        }
-      ]
-    }
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
 ## Scoring Details
 
 The metric evaluates context positioning through:
+
 - Individual assessment of each context piece's relevance
 - Position-based weighting (1/position)
 - Binary relevance verdicts (yes/no) with detailed reasoning
 - Normalization against optimal ordering
 
 The scoring process:
+
 1. Evaluates relevance of each context piece
 2. Applies position weights (earlier positions weighted more heavily)
 3. Sums weighted relevance scores
@@ -139,6 +142,7 @@ The scoring process:
 5. Scales to configured range (default 0-1)
 
 Score interpretation:
+
 - 1.0: Most relevant context at the beginning, optimal ordering
 - 0.7-0.9: Relevant context mostly at the beginning
 - 0.4-0.6: Mixed ordering of relevant context
@@ -153,8 +157,8 @@ const metric = new ContextPositionMetric(model, {
     "A balanced diet is important for health.",
     "Exercise strengthens the heart and improves blood circulation.",
     "Regular physical activity reduces stress and anxiety.",
-    "Exercise equipment can be expensive."
-  ]
+    "Exercise equipment can be expensive.",
+  ],
 });
 
 const result = await metric.measure(
@@ -166,9 +170,9 @@ const result = await metric.measure(
 // {
 //   score: 0.5,
 //   info: {
-//     reason: "The score is 0.5 because while the second and third contexts are highly 
-//           relevant to the benefits of exercise, they are not optimally positioned at 
-//           the beginning of the sequence. The first and last contexts are not relevant 
+//     reason: "The score is 0.5 because while the second and third contexts are highly
+//           relevant to the benefits of exercise, they are not optimally positioned at
+//           the beginning of the sequence. The first and last contexts are not relevant
 //           to the query, which impacts the position-weighted scoring."
 //   }
 // }
@@ -178,4 +182,4 @@ const result = await metric.measure(
 
 - [Context Precision Metric](./context-precision)
 - [Answer Relevancy Metric](./answer-relevancy)
-- [Completeness Metric](./completeness) 
+- [Completeness Metric](./completeness)

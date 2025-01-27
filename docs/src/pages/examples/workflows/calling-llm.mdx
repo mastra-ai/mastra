@@ -3,38 +3,40 @@ title: "Example: Calling an LLM from a Workflow | Mastra Docs"
 description: Example of using Mastra to stream responses from an LLM within a workflow.
 ---
 
-import { GithubLink } from '../../../components/github-link';
+import { GithubLink } from "../../../components/github-link";
 
 # Calling an LLM from a Workflow
 
 This example demonstrates how to create a workflow that streams responses from an LLM, showing both real-time output and final text handling.
 
 ```ts showLineNumbers copy
-import { Mastra, Step, Workflow } from '@mastra/core';
-import { z } from 'zod';
+import { Mastra, Step, Workflow } from "@mastra/core";
+import { z } from "zod";
 
 const newWorkflow = new Workflow({
-  name: 'pass message to the workflow',
+  name: "pass message to the workflow",
   triggerSchema: z.object({
     message: z.string(),
   }),
 });
 
 const replyAsPenguin = new Step({
-  id: 'reply',
+  id: "reply",
   outputSchema: z.object({
     reply: z.string(),
   }),
   execute: async ({ context, mastra }) => {
     const penguinCharacter = mastra?.llm?.({
-      provider: 'OPEN_AI',
-      name: 'gpt-4o',
+      provider: "OPEN_AI",
+      name: "gpt-4o-mini",
     });
 
-    const res = await penguinCharacter?.stream(context.machineContext?.triggerData?.message);
+    const res = await penguinCharacter?.stream(
+      context.machineContext?.triggerData?.message,
+    );
 
     if (!res) {
-      return { reply: '' };
+      return { reply: "" };
     }
 
     for await (const chunk of res?.textStream) {
@@ -53,11 +55,13 @@ const mastra = new Mastra({
   workflows: { newWorkflow },
 });
 
-const { runId = start } = mastra
-  .getWorkflow('newWorkflow')
-  .createRun();
+const { runId = start } = mastra.getWorkflow("newWorkflow").createRun();
 
-await start({ triggerData: { message: 'Give me a speech as skipper from penguin of madagascar' } });
+await start({
+  triggerData: {
+    message: "Give me a speech as skipper from penguin of madagascar",
+  },
+});
 ```
 
 <br />
@@ -66,5 +70,7 @@ await start({ triggerData: { message: 'Give me a speech as skipper from penguin 
 <br />
 <br />
 <GithubLink
-  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/calling-llm-from-workflow'}
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/calling-llm-from-workflow"
+  }
 />

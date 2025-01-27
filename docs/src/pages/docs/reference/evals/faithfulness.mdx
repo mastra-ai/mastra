@@ -15,17 +15,20 @@ import { FaithfulnessMetric } from "@mastra/evals/llm";
 // Configure the model for evaluation
 const model = {
   provider: "OPEN_AI",
-  name: "gpt-4o",
-  apiKey: process.env.OPENAI_API_KEY
+  name: "gpt-4o-mini",
+  apiKey: process.env.OPENAI_API_KEY,
 };
 
 const metric = new FaithfulnessMetric(model, {
-  context: ["The company was established in 1995.", "Currently employs around 450-550 people."]
+  context: [
+    "The company was established in 1995.",
+    "Currently employs around 450-550 people.",
+  ],
 });
 
 const result = await metric.measure(
   "Tell me about the company.",
-  "The company was founded in 1995 and has 500 employees."
+  "The company was founded in 1995 and has 500 employees.",
 );
 
 console.log(result.score); // 1.0
@@ -58,16 +61,18 @@ console.log(result.info.reason); // "All claims are supported by the context."
     {
       name: "scale",
       type: "number",
-      description: "The maximum score value. The final score will be normalized to this scale.",
+      description:
+        "The maximum score value. The final score will be normalized to this scale.",
       isOptional: false,
       defaultValue: "1",
     },
     {
       name: "context",
       type: "string[]",
-      description: "Array of context chunks against which the output's claims will be verified.",
+      description:
+        "Array of context chunks against which the output's claims will be verified.",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -86,7 +91,7 @@ console.log(result.info.reason); // "All claims are supported by the context."
       type: "string",
       description: "The LLM's response to be evaluated for faithfulness.",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -97,7 +102,8 @@ console.log(result.info.reason); // "All claims are supported by the context."
     {
       name: "score",
       type: "number",
-      description: "A score between 0 and the configured scale, representing the proportion of claims that are supported by the context.",
+      description:
+        "A score between 0 and the configured scale, representing the proportion of claims that are supported by the context.",
     },
     {
       name: "info",
@@ -110,23 +116,26 @@ console.log(result.info.reason); // "All claims are supported by the context."
             {
               name: "reason",
               type: "string",
-              description: "A detailed explanation of the score, including which claims were supported, contradicted, or marked as unsure.",
-            }
-          ]
-        }
-      ]
-    }
+              description:
+                "A detailed explanation of the score, including which claims were supported, contradicted, or marked as unsure.",
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
 ## Scoring Details
 
 The FaithfulnessMetric evaluates the output by:
+
 1. Extracting all claims from the output (both factual and speculative)
 2. Verifying each claim against the provided context
 3. Calculating a score based on the proportion of supported claims
 
 Claims can receive one of three verdicts:
+
 - "yes" - The claim is supported by the context
 - "no" - The claim contradicts the context
 - "unsure" - The claim cannot be verified using the context (e.g., future predictions or claims outside the context scope)
@@ -134,6 +143,7 @@ Claims can receive one of three verdicts:
 The final score is calculated as: `(number of supported claims / total number of claims) * scale`
 
 Score interpretation:
+
 - 1.0: All claims are supported by the context
 - 0.67: Two-thirds of claims are supported
 - 0.5: Half of the claims are supported
@@ -144,7 +154,10 @@ Score interpretation:
 
 ```typescript
 const metric = new FaithfulnessMetric(model, {
-  context: ["The company had 100 employees in 2020.", "Current employee count is approximately 500."]
+  context: [
+    "The company had 100 employees in 2020.",
+    "Current employee count is approximately 500.",
+  ],
 });
 
 // Example with mixed claim types
@@ -157,9 +170,9 @@ const result = await metric.measure(
 // {
 //   score: 0.67,
 //   info: {
-//     reason: "The score is 0.67 because two claims are supported by the context 
-//           (initial employee count of 100 in 2020 and current count of 500), 
-//           while the future expansion claim is marked as unsure as it cannot 
+//     reason: "The score is 0.67 because two claims are supported by the context
+//           (initial employee count of 100 in 2020 and current count of 500),
+//           while the future expansion claim is marked as unsure as it cannot
 //           be verified against the context."
 //   }
 // }
@@ -168,4 +181,4 @@ const result = await metric.measure(
 ### Related
 
 - [Answer Relevancy Metric](./answer-relevancy)
-- [Context Precision Metric](./context-precision) 
+- [Context Precision Metric](./context-precision)
