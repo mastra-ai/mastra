@@ -132,7 +132,7 @@ export class DockerService {
   }) {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
-    const filePath = path.resolve(__dirname, 'templates', 'starter-files', 'mastra-pg.docker-compose.yaml');
+    const filePath = path.resolve(__dirname, 'starter-files', 'mastra-pg.docker-compose.yaml');
 
     const fileService = new FileService();
     fileService.replaceValuesInFile({
