@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.1.27-alpha.72
+
+### Patch Changes
+
+- e4d4ede: Better setLogger()
+- 06b2c0a: Update summarization prompt and fix eval input
+
 ## 0.1.27-alpha.71
 
 ### Patch Changes
