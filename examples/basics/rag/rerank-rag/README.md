@@ -7,7 +7,7 @@ A simple example showing how to do result re ranking with RAG using Mastra, Open
 - Node.js v20.0+
 - pnpm (recommended) or npm
 - OpenAI API key
-- Pinecone API key
+- Postgres connection string
 
 ## Getting Started
 

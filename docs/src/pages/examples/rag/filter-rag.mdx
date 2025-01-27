@@ -252,69 +252,6 @@ const queries = [
 await answerQueries(queries);
 ```
 
-### Filter Types
-
-PGVector supports these filter types:
-
-1. Basic comparison operators:
-
-```typescript
-{
-  "path.to.field": {
-    eq: "value",     // Equals
-    neq: "value",    // Not equals
-    gt: 25,          // Greater than
-    gte: 25,         // Greater than or equal
-    lt: 25,          // Less than
-    lte: 25          // Less than or equal
-  }
-}
-```
-
-2. Text search operators:
-
-```typescript
-{
-  "path.to.field": {
-    like: "value",    // Case-sensitive pattern matching
-    ilike: "value"    // Case-insensitive pattern matching
-  }
-}
-```
-
-3. Collection operators:
-
-```typescript
-{
-  "path.to.field": {
-    in: ["value1", "value2"],     // Match any value in array
-    contains: "value",            // JSONB containment
-    exists: true                  // Check if field exists
-  }
-}
-```
-
-4. Logical operators:
-
-```typescript
-{
-  type: "$and",  // or "$or"
-  filters: [
-    { "path.to.field": { ilike: "value1" } },
-    { "path.to.field": { ilike: "value2" } }
-  ]
-}
-```
-
-### Available Operators
-
-PGVector implements the following operators:
-
-- Basic: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`
-- Text: `like`, `ilike`
-- Collection: `in`, `contains`, `exists`
-- Logical: `$and`, `$or`
-
 <br />
 <br />
 <hr className="dark:border-[#404040] border-gray-300" />
