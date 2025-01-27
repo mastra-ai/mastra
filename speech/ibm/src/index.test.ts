@@ -3,13 +3,12 @@ import { describe, expect, it } from 'vitest';
 
 import { writeFile } from 'fs/promises';
 
-import { SpeechifyTTS } from './index';
+import { IbmTTS } from './index';
 
-describe('SpeechifyTTS', () => {
-  const tts = new SpeechifyTTS({
+describe('IbmTTS', () => {
+  const tts = new IbmTTS({
     model: {
-      name: 'simba-multilingual',
-      voice: 'george',
+      voice: 'en-US_AllisonV3Voice',
     },
   });
 
@@ -21,13 +20,12 @@ describe('SpeechifyTTS', () => {
   });
 
   it('should generate audio content', async () => {
-    const result = await tts.generate({ text: 'Mastra T T S - Speechify' });
+    const result = await tts.generate({ text: 'Hello world' });
     expect(result).toHaveProperty('audioResult');
-
     expect(Buffer.isBuffer(result.audioResult)).toBe(true);
 
     // Write the audio to a file
-    const outputPath = join(__dirname, '../test-outputs', 'test-audio.mp3');
+    const outputPath = join(__dirname, '..', 'test-output', 'test-audio.mp3');
     await writeFile(outputPath, result.audioResult);
     console.log(`Audio file written to: ${outputPath}`);
   });

@@ -1,5 +1,8 @@
+import { join } from 'path';
 import { PassThrough } from 'stream';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+
+import { writeFile } from 'fs/promises';
 
 import { ReplicateTTS } from './index';
 
@@ -15,7 +18,11 @@ describe('ReplicateTTS', () => {
 
   it('should generate audio content', async () => {
     const tts = new ReplicateTTS({ model: { name: MODEL_ID } });
-    const result = await tts.generate({ text: 'Hello' });
+    const result = await tts.generate({ text: 'Hello from Mastra T T S - Replicate' });
+
+    // Write the audio to a file
+    const outputPath = join(__dirname, '../test-outputs', 'test-audio.mp3');
+    await writeFile(outputPath, result.audioResult);
 
     expect(result).toHaveProperty('audioResult');
     expect(Buffer.isBuffer(result.audioResult)).toBe(true);
