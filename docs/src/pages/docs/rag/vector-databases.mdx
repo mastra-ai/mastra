@@ -28,7 +28,7 @@ import { PgVector } from '@mastra/vector-pg';
 
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING);
 
-// Create an index (dimension = 1536 for text-embedding-ada-002)
+// Create an index (dimension = 1536 for text-embedding-3-small)
 await pgVector.createIndex("embeddings", 1536);
 
 // Store embeddings with metadata
@@ -213,7 +213,7 @@ await vectorStore.upsert(
 - **Indexing:** Create appropriate indexes before bulk insertions 
 - **Batch Size:** Use batch operations for large insertions
 - **Metadata:** Only store metadata you'll query against
-- **Dimensions:** Match embedding dimensions to your model (eg., 1536 for `text-embedding-ada-002`)
+- **Dimensions:** Match embedding dimensions to your model (eg., 1536 for `text-embedding-3-small`)
 
 ## Examples
 For complete examples of different vector store implementations, see:

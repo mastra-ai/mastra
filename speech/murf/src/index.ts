@@ -8,7 +8,6 @@ type MurfConfig = {
   name: 'GEN1' | 'GEN2';
   voice?: MurfVoice;
   apiKey?: string;
-  provider?: 'MURF';
   properties?: Omit<SpeechCreateParams, 'modelVersion' | 'voiceId' | 'text'>;
 };
 
@@ -49,12 +48,13 @@ type SpeechCreateResponse = {
 export class MurfTTS extends MastraTTS {
   private client: typeof ky;
   private defaultVoice: MurfVoice;
-  private properties?: Omit<SpeechCreateParams, 'modelVersion' | 'voiceId' | 'text'>;
-  private model: MurfConfig;
 
   constructor({ model }: { model: MurfConfig }) {
     super({
-      model: model,
+      model: {
+        provider: 'MURF',
+        ...model,
+      },
     });
 
     const apiKey = process.env.MURF_API_KEY || model.apiKey;
@@ -70,8 +70,6 @@ export class MurfTTS extends MastraTTS {
     });
 
     this.defaultVoice = model.voice || 'en-US-natalie';
-    this.properties = model.properties;
-    this.model = model;
   }
 
   async voices() {
@@ -85,7 +83,15 @@ export class MurfTTS extends MastraTTS {
     }, 'tts.murf.voices')();
   }
 
-  async generate({ voice, text }: { voice?: string; text: string }) {
+  async generate({
+    voice,
+    text,
+    properties,
+  }: {
+    voice?: string;
+    text: string;
+    properties?: Omit<SpeechCreateParams, 'modelVersion' | 'voiceId' | 'text'>;
+  }) {
     const audio = await this.traced(async () => {
       const response = await this.client
         .post('v1/speech/generate', {
@@ -93,7 +99,7 @@ export class MurfTTS extends MastraTTS {
             voiceId: (voice || this.defaultVoice) as MurfVoice,
             text,
             modelVersion: this.model.name,
-            ...this.properties,
+            ...properties,
           },
         })
         .json<SpeechCreateResponse>();
@@ -109,13 +115,55 @@ export class MurfTTS extends MastraTTS {
     };
   }
 
-  async stream({ voice, text }: { voice?: string; text: string }) {
-    const { audioResult } = await this.generate({ voice, text });
-    const stream = new PassThrough();
-    stream.end(audioResult);
-    return {
-      audioResult: stream,
-    };
+  async stream({
+    voice,
+    text,
+    properties,
+  }: {
+    voice?: string;
+    text: string;
+    properties?: Omit<SpeechCreateParams, 'modelVersion' | 'voiceId' | 'text'>;
+  }) {
+    return this.traced(async () => {
+      const response = await this.client
+        .post('v1/speech/generate', {
+          json: {
+            voiceId: (voice || this.defaultVoice) as MurfVoice,
+            text,
+            modelVersion: this.model.name,
+            ...properties,
+          },
+        })
+        .json<SpeechCreateResponse>();
+
+      // Create a PassThrough stream for the audio
+      const stream = new PassThrough();
+
+      // Get the audio file as a stream
+      const audioResponse = await fetch(response.audioFile);
+      if (!audioResponse.body) {
+        throw new Error('No response body received');
+      }
+
+      // Process the stream
+      const reader = audioResponse.body.getReader();
+      (async () => {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              stream.end();
+              break;
+            }
+            stream.write(value);
+          }
+        } catch (error) {
+          stream.destroy(error as Error);
+        }
+      })();
+
+      return { audioResult: stream };
+    }, 'tts.murf.stream')();
   }
 }
 

@@ -5,7 +5,7 @@ import { PassThrough } from 'stream';
 import { DEEPGRAM_VOICES, type DeepgramVoice, type DeepgramModel } from './voices';
 
 type DeepgramConfig = {
-  model?: DeepgramModel;
+  name: DeepgramModel;
   voice?: DeepgramVoice;
   apiKey?: string;
   properties?: Omit<SpeakSchema, 'model'>;
@@ -32,7 +32,7 @@ export class DeepgramTTS extends MastraTTS {
 
     this.client = createClient(apiKey);
     this.defaultVoice = model.voice || 'asteria-en';
-    this.defaultModel = model.model || 'aura';
+    this.defaultModel = model.name || 'aura';
     this.properties = model.properties;
   }
 

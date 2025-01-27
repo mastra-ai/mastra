@@ -7,7 +7,7 @@ const vectorQueryTool = createVectorQueryTool({
   indexName: 'embeddings',
   options: {
     provider: 'OPEN_AI',
-    model: 'text-embedding-ada-002',
+    model: 'text-embedding-3-small',
     maxRetries: 3,
   },
 });
@@ -17,7 +17,7 @@ const cleanedVectorQueryTool = createVectorQueryTool({
   indexName: 'cleanedEmbeddings',
   options: {
     provider: 'OPEN_AI',
-    model: 'text-embedding-ada-002',
+    model: 'text-embedding-3-small',
     maxRetries: 3,
   },
 });
@@ -153,13 +153,13 @@ const updatedChunks = await updatedDoc.chunk({
 
 const { embeddings } = (await embed(chunks, {
   provider: 'OPEN_AI',
-  model: 'text-embedding-ada-002',
+  model: 'text-embedding-3-small',
   maxRetries: 3,
 })) as EmbedManyResult<string>;
 
 const { embeddings: cleanedEmbeddings } = (await embed(updatedChunks, {
   provider: 'OPEN_AI',
-  model: 'text-embedding-ada-002',
+  model: 'text-embedding-3-small',
   maxRetries: 3,
 })) as EmbedManyResult<string>;
 

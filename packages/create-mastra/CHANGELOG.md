@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.0-alpha.29
+
+### Patch Changes
+
+- 255fc56: create mastra bundle correctly
+
 ## 0.1.0-alpha.28
 
 ### Patch Changes

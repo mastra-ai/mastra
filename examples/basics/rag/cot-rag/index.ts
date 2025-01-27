@@ -7,7 +7,7 @@ const vectorQueryTool = createVectorQueryTool({
   indexName: 'embeddings',
   options: {
     provider: 'OPEN_AI',
-    model: 'text-embedding-ada-002',
+    model: 'text-embedding-3-small',
     maxRetries: 3,
   },
   topK: 3,
@@ -76,7 +76,7 @@ const chunks = await doc.chunk({
 
 const { embeddings } = (await embed(chunks, {
   provider: 'OPEN_AI',
-  model: 'text-embedding-ada-002',
+  model: 'text-embedding-3-small',
   maxRetries: 3,
 })) as EmbedManyResult<string>;
 

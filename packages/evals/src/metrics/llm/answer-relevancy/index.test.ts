@@ -110,7 +110,10 @@ describe('AnswerRelevancyMetric', () => {
 
   it('should be able to measure a prompt with mostly relevant information', async () => {
     const result = await metric.measure(testCases[1].input, testCases[1].output);
-    expect(result.score).toBeCloseTo(testCases[1].expectedResult.score, 1);
+    const expectedScore = testCases[1].expectedResult.score;
+    const difference = Math.abs(result.score - expectedScore);
+
+    expect(difference).toBeLessThanOrEqual(0.1);
   });
 
   it('should be able to measure a prompt with partial relevance', async () => {

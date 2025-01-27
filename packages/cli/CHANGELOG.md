@@ -1,5 +1,23 @@
 # mastra
 
+## 0.1.57-alpha.119
+
+### Patch Changes
+
+- Updated dependencies [3427b95]
+  - @mastra/core@0.1.27-alpha.73
+  - @mastra/deployer@0.0.1-alpha.17
+
+## 0.1.57-alpha.118
+
+### Patch Changes
+
+- 255fc56: create mastra bundle correctly
+- Updated dependencies [e4d4ede]
+- Updated dependencies [06b2c0a]
+  - @mastra/core@0.1.27-alpha.72
+  - @mastra/deployer@0.0.1-alpha.16
+
 ## 0.1.57-alpha.117
 
 ### Patch Changes

@@ -22,8 +22,8 @@ export class AzureTTS extends MastraTTS {
       },
     });
 
-    const apiKey = process.env.AZURE_API_KEY || this.model.apiKey;
-    const region = process.env.AZURE_REGION || this.model.region;
+    const apiKey = process.env.AZURE_API_KEY || model.apiKey;
+    const region = process.env.AZURE_REGION || model.region;
 
     if (!apiKey) {
       throw new Error('AZURE_API_KEY is not set');
@@ -85,7 +85,7 @@ export class AzureTTS extends MastraTTS {
           stream.end();
         },
         error => {
-          stream.destroy(error);
+          stream.destroy(error as unknown as Error);
         },
       );
 
