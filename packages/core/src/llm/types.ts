@@ -1,9 +1,9 @@
 import {
+  CoreAssistantMessage as AiCoreAssistantMessage,
   CoreMessage as AiCoreMessage,
   CoreSystemMessage as AiCoreSystemMessage,
-  CoreAssistantMessage as AiCoreAssistantMessage,
-  CoreUserMessage as AiCoreUserMessage,
   CoreToolMessage as AiCoreToolMessage,
+  CoreUserMessage as AiCoreUserMessage,
   EmbedManyResult as AiEmbedManyResult,
   EmbedResult as AiEmbedResult,
   GenerateObjectResult,
@@ -13,7 +13,11 @@ import {
   StreamTextResult,
 } from 'ai';
 import { JSONSchema7 } from 'json-schema';
-import { ZodSchema } from 'zod';
+import { z, ZodSchema } from 'zod';
+
+import { ToolsInput } from '../agent/types';
+import { Run } from '../run/types';
+import { CoreTool } from '../tools/types';
 
 export type OpenAIModel =
   | 'gpt-4'
@@ -588,3 +592,41 @@ export type StreamReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefin
   : StreamObjectResult<any, any, any>;
 
 export type OutputType = 'text' | StructuredOutput;
+
+export type LLMStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+  runId?: string;
+  onFinish?: (result: string) => Promise<void> | void;
+  onStepFinish?: (step: string) => void;
+  maxSteps?: number;
+  tools?: ToolsInput;
+  convertedTools?: Record<string, CoreTool>;
+  output?: OutputType | Z;
+  temperature?: number;
+};
+
+export type LLMTextOptions = {
+  tools?: ToolsInput;
+  convertedTools?: Record<string, CoreTool>;
+  messages: CoreMessage[];
+  onStepFinish?: (step: string) => void;
+  maxSteps?: number;
+  temperature?: number;
+} & Run;
+
+export type LLMTextObjectOptions<T> = LLMTextOptions & {
+  structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
+}
+
+export type LLMInnerStreamOptions = {
+  tools?: ToolsInput;
+  convertedTools?: Record<string, CoreTool>;
+  messages: CoreMessage[];
+  onStepFinish?: (step: string) => void;
+  onFinish?: (result: string) => Promise<void> | void;
+  maxSteps?: number;
+  temperature?: number;
+} & Run;
+
+export type LLMStreamObjectOptions<T> = LLMInnerStreamOptions & {
+  structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
+}
