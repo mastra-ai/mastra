@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.115
+
+### Patch Changes
+
+- 215a1c2: Fix bad cli create starter files copying
+
 ## 0.1.57-alpha.114
 
 ### Patch Changes
