@@ -9,6 +9,13 @@ import fsExtra from 'fs-extra/esm';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+const external = ['commander', 'fs-extra', 'execa', 'prettier', 'posthog-node', 'pino', 'pino-pretty'];
+external.forEach(pkg => {
+  if (!pkgJson.dependencies[pkg]) {
+    throw new Error(`${pkg} is not in the dependencies of create-mastra`);
+  }
+});
+
 export default defineConfig({
   input: 'src/index.ts',
   output: {
@@ -46,11 +53,7 @@ export default defineConfig({
     warn(warning);
   },
   external: [
-    'commander', 
-    'fs-extra', 
-    'execa', 
-    'prettier', 
-    'posthog-node',
+    ...external,
     // External dependencies that don't need bundling
     /^@opentelemetry\/.*$/,
   ],

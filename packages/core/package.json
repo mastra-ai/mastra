@@ -3,8 +3,7 @@
   "version": "0.1.27-alpha.69",
   "license": "MIT",
   "type": "module",
-  "main": "dist/index.js",
-  "module": "dist/core.esm.js",
+  "main": "dist/core.esm.js",
   "types": "dist/index.d.ts",
   "files": [
     "dist"
@@ -14,10 +13,12 @@
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/core.esm.js"
-      },
-      "require": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
+      }
+    },
+    "./logger": {
+      "import": {
+        "types": "./dist/logger/index.d.ts",
+        "default": "./dist/logger.esm.js"
       }
     },
     "./package.json": "./package.json"
@@ -25,7 +26,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
-    "build": "dts build",
+    "build": "dts build --format esm",
     "build:dev": "dts watch",
     "lint": "dts lint",
     "size": "size-limit",

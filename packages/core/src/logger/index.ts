@@ -2,7 +2,7 @@ import pino from 'pino';
 import pretty from 'pino-pretty';
 import { Transform } from 'stream';
 
-import { Run } from '../run/types';
+import type { Run } from '../run/types';
 
 // Constants and Types (keeping from original implementation)
 export const RegisteredLogger = {
