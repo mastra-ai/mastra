@@ -18,7 +18,7 @@ export class Deps extends MastraBase {
   }
 
   private findLockFile(dir: string): string | null {
-    const lockFiles = ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock'];
+    const lockFiles = ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'bun.lock'];
     for (const file of lockFiles) {
       if (fs.existsSync(path.join(dir, file))) {
         return file;
@@ -40,6 +40,8 @@ export class Deps extends MastraBase {
         return 'npm';
       case 'yarn.lock':
         return 'yarn';
+      case 'bun.lock':
+        return 'bun';
       default:
         return 'npm';
     }
