@@ -42,6 +42,7 @@
     "test:engine": "pnpm --filter ./packages/engine test",
     "test:rag": "pnpm --filter ./packages/rag test",
     "test:vector-stores": "pnpm test ./vector-stores",
+    "test:stores": "pnpm test ./storage",
     "test:memory": "pnpm --filter ./packages/memory test",
     "test:evals": "pnpm --filter ./packages/evals test",
     "lint-staged": "lint-staged",

@@ -26,6 +26,7 @@ import {
   WorkflowActors,
   WorkflowContext,
   WorkflowEvent,
+  WorkflowRunState,
   WorkflowState,
 } from './types';
 import { getStepResult, isErrorEvent, isTransitionEvent, isVariableReference } from './utils';
@@ -37,33 +38,6 @@ interface WorkflowResultReturn<T extends z.ZodType<any>> {
     results: Record<string, StepResult<any>>;
     runId: string;
   }>;
-}
-
-interface WorkflowRunState {
-  // Core state info
-  value: Record<string, string>;
-  context: {
-    stepResults: Record<
-      string,
-      {
-        status: 'success' | 'failed' | 'suspended' | 'waiting';
-        payload?: any;
-        error?: string;
-      }
-    >;
-    triggerData: Record<string, any>;
-    attempts: Record<string, number>;
-  };
-
-  activePaths: Array<{
-    stepPath: string[];
-    stepId: string;
-    status: string;
-  }>;
-
-  // Metadata
-  runId: string;
-  timestamp: number;
 }
 
 export class Workflow<
