@@ -1,4 +1,5 @@
 import { Logger } from '@mastra/core';
+import { spawn } from 'child_process';
 import { execa } from 'execa';
 import { Transform } from 'stream';
 
@@ -41,30 +42,38 @@ export function createChildProcessLogger({ logger, root }: { logger: Logger; roo
   const pinoStream = createPinoStream(logger);
   return async ({ cmd, args, env }: { cmd: string; args: string[]; env: Record<string, string> }) => {
     try {
-      const subprocess = require('child_process').spawnSync(cmd, args, {
+      const subprocess = spawn(cmd, args, {
         cwd: root,
-        encoding: 'utf8',
         shell: true,
         env,
-        maxBuffer: 1024 * 1024 * 10, // 10MB buffer
       });
 
       // Pipe stdout and stderr through the Pino stream
-      if (subprocess.stdout) {
-        pinoStream.write(subprocess.stdout);
-      }
+      subprocess.stdout?.pipe(pinoStream);
+      subprocess.stderr?.pipe(pinoStream);
 
-      if (subprocess.stderr) {
-        pinoStream.write(subprocess.stderr);
-      }
+      // Wait for the process to complete
+      return new Promise((resolve, reject) => {
+        subprocess.on('close', code => {
+          pinoStream.end();
+          if (code === 0) {
+            resolve({ success: true });
+          } else {
+            reject(new Error(`Process exited with code ${code}`));
+          }
+        });
 
-      pinoStream.end();
-
-      return { stdout: subprocess.stdout, stderr: subprocess.stderr };
+        subprocess.on('error', error => {
+          pinoStream.end();
+          logger.error('Process failed', { error });
+          reject(error);
+        });
+      });
     } catch (error) {
+      console.log(error);
       logger.error('Process failed', { error });
       pinoStream.end();
-      return {};
+      return { success: false, error };
     }
   };
 }

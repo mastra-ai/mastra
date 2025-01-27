@@ -1,5 +1,5 @@
 import { MastraDeployer } from '@mastra/core';
-import * as child_process from 'child_process';
+import { createChildProcessLogger } from '@mastra/deployer';
 import { Cloudflare } from 'cloudflare';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
@@ -93,14 +93,20 @@ export class CloudflareDeployer extends MastraDeployer {
     const cmd = this.workerNamespace
       ? `npm exec -- wrangler deploy --dispatch-namespace ${this.workerNamespace}`
       : 'npm exec -- wrangler deploy';
-    child_process.execSync(cmd, {
-      cwd: dir,
-      stdio: 'inherit',
+
+    const cpLogger = createChildProcessLogger({
+      logger: this.logger,
+      root: dir,
+    });
+
+    await cpLogger({
+      cmd,
+      args: [],
       env: {
         CLOUDFLARE_API_TOKEN: token,
         CLOUDFLARE_ACCOUNT_ID: this.scope,
         ...this.env,
-        PATH: process.env.PATH,
+        PATH: process.env.PATH!,
       },
     });
   }
