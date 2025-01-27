@@ -1,13 +1,12 @@
 # Retrieve results
 
-A simple example showing how to use Chain of Thought Prompting with RAG using Mastra, OpenAI, and PGVector.
+A simple example showing how to use hybrid vector search with Mastra and PGVector.
 
 ## Prerequisites
 
 - Node.js v20.0+
 - pnpm (recommended) or npm
 - OpenAI API key
-- Postgres connection string
 
 ## Getting Started
 
@@ -15,7 +14,7 @@ A simple example showing how to use Chain of Thought Prompting with RAG using Ma
 
    ```bash
    git clone https://github.com/mastra-ai/mastra
-   cd examples/basics/rag/cot-rag
+   cd examples/basics/rag/hybrid-vector-search
    ```
 
 2. Copy the environment variables file and add your OpenAI API key:
