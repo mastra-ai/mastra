@@ -8,7 +8,9 @@ describe('LibSQLVector', () => {
   const testIndexName2 = 'test_vectors1';
 
   beforeAll(async () => {
-    libsqlVector = new LibSQLVector('file::memory:?cache=shared');
+    libsqlVector = new LibSQLVector({
+      connectionUrl: 'file::memory:?cache=shared',
+    });
   });
 
   afterAll(async () => {
