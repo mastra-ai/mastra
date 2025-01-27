@@ -11,7 +11,7 @@ export class Deployer extends MastraBase {
   deps: Deps = new Deps();
   dotMastraPath: string;
   projectPath: string;
-  name: string = '';
+  override name: string = '';
   type: 'Deploy' | 'Dev';
 
   constructor({ dir, type }: { dir: string; type: 'Deploy' | 'Dev' }) {

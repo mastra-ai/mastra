@@ -1,4 +1,4 @@
-import { Context } from 'hono';
+import type { Context } from 'hono';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 
@@ -128,7 +128,7 @@ export async function generateHandler(c: Context) {
   }
 }
 
-export async function streamGenerateHandler(c: Context) {
+export async function streamGenerateHandler(c: Context): Promise<Response> {
   try {
     const mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
