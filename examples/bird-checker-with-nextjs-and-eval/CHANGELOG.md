@@ -1,5 +1,13 @@
 # bird-checker-with-nextjs-and-eval
 
+## 0.1.1-alpha.48
+
+### Patch Changes
+
+- Updated dependencies [dd6d87f]
+- Updated dependencies [04434b6]
+  - @mastra/core@0.1.27-alpha.70
+
 ## 0.1.1-alpha.47
 
 ### Patch Changes

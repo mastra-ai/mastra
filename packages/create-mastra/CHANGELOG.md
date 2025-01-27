@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.0-alpha.26
+
+### Patch Changes
+
+- 04434b6: Create separate logger file
+
 ## 0.1.0-alpha.25
 
 ### Patch Changes

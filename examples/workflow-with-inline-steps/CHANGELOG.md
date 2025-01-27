@@ -1,5 +1,13 @@
 # workflow-with-inline-steps
 
+## 1.0.1-alpha.16
+
+### Patch Changes
+
+- Updated dependencies [dd6d87f]
+- Updated dependencies [04434b6]
+  - @mastra/core@0.1.27-alpha.70
+
 ## 1.0.1-alpha.15
 
 ### Patch Changes
