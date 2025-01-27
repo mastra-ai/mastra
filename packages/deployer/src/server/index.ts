@@ -1,7 +1,7 @@
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
-import { type Mastra } from '@mastra/core';
+import type { Mastra } from '@mastra/core';
 import { Hono } from 'hono';
 import { describeRoute, openAPISpecs } from 'hono-openapi';
 import { join } from 'path';

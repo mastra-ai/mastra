@@ -1,7 +1,7 @@
 import { MastraBase } from '@mastra/core';
 import fs from 'fs';
 import path, { dirname } from 'path';
-import { PackageJson } from 'type-fest';
+import type { PackageJson } from 'type-fest';
 import { fileURLToPath } from 'url';
 
 import fsExtra from 'fs-extra/esm';
