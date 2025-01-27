@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.71
+
+### Patch Changes
+
+- d9c8dd0: Logger changes for default transports
+
 ## 0.1.27-alpha.70
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # mastra-examples-integrations
 
+## 1.0.1-alpha.44
+
+### Patch Changes
+
+- Updated dependencies [d9c8dd0]
+  - @mastra/core@0.1.27-alpha.71
+  - @mastra/composio@0.0.1-alpha.37
+  - @mastra/firecrawl@1.0.4-alpha.62
+
 ## 1.0.1-alpha.43
 
 ### Patch Changes

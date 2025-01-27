@@ -1,5 +1,12 @@
 # @mastra/claude
 
+## 1.0.1-alpha.50
+
+### Patch Changes
+
+- Updated dependencies [d9c8dd0]
+  - @mastra/core@0.1.27-alpha.71
+
 ## 1.0.1-alpha.49
 
 ### Patch Changes
