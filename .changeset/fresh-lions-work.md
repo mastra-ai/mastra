@@ -1,12 +1,10 @@
 ---
 '@mastra/apollo': patch
 '@mastra/ashby': patch
-'@mastra/claude': patch
 '@mastra/coda': patch
 '@mastra/composio': patch
 '@mastra/firecrawl': patch
 '@mastra/github': patch
-'@mastra/openai': patch
 '@mastra/ragie': patch
 '@mastra/resend': patch
 '@mastra/sendgrid': patch
