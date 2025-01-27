@@ -47,11 +47,10 @@ export const pnpmChangesetStatus = createTool({
   }),
   execute: async () => {
     try {
-      console.log('Checking');
+      console.log(chalk.green(`\nRunning command: pnpm publish -r --dry-run --no-git-checks`));
       const { stdout } = await execa('pnpm', ['publish', '-r', '--dry-run', '--no-git-checks'], {
         all: true,
         // We want to see stderr too since pnpm sometimes puts important info there
-        stderr: 'inherit',
       });
 
       const lines = stdout.split('\n');
@@ -99,8 +98,8 @@ export const pnpmChangesetPublish = createTool({
 
 export const activeDistTag = createTool({
   id: 'activeDistTag',
-  name: 'PNPM Changeset set active tag',
-  description: 'Used to set active tag on the pnpm module',
+  name: 'PNPM Active Dist Tag Tool',
+  description: 'Set active dist tag on pnpm module',
   inputSchema: z.object({
     packagePath: z.string(),
   }),

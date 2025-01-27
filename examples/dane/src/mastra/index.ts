@@ -2,15 +2,9 @@ import { Mastra } from '@mastra/core';
 import { PostgresEngine } from '@mastra/engine';
 import { UpstashKVMemory } from '@mastra/memory';
 
-import {
-  dane,
-  daneChangeLog,
-  daneCommitMessage,
-  daneIssueLabeler,
-  daneLinkChecker,
-  danePackagePublisher,
-} from './agents/index.js';
+import { dane, daneChangeLog, daneCommitMessage, daneIssueLabeler, daneLinkChecker } from './agents/index.js';
 import { daneNewContributor } from './agents/new-contributor.js';
+import { danePackagePublisher } from './agents/package-publisher.js';
 import { firecrawl } from './integrations/index.js';
 import { changelogWorkflow } from './workflows/changelog.js';
 import { githubFirstContributorMessage } from './workflows/first-contributor.js';
