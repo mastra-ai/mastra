@@ -28,7 +28,7 @@ const packages_llm_text = `
   ## 3. Vector store packages - STRICT RULES:
   - ALL vector packages must be directly under vector-stores/
   - Format: @mastra/vector-{name} -> vector-stores/{name}
-  - Special case: @mastra/vector-astra -> vector-stores/astra-db
+  - Special case: @mastra/vector-astra -> vector-stores/astra
 
   ## 4. Integrations - STRICT RULES:
   - ALL integration packages are under integrations/
