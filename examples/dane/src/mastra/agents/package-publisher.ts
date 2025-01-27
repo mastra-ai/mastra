@@ -17,6 +17,7 @@ const packages_llm_text = `
   @mastra/tts -> packages/tts
   @mastra/memory -> packages/memory
   @mastra/mcp -> packages/mcp
+  @mastra/loggers -> packages/loggers
 
   ## 2. Deployer packages - STRICT RULES:
   @mastra/deployer-cloudflare -> deployers/cloudflare

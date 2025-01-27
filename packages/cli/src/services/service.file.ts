@@ -17,7 +17,7 @@ export class FileService {
   public async copyStarterFile(inputFile: string, outputFilePath: string, replaceIfExists?: boolean) {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
-    const filePath = path.resolve(__dirname, 'templates', 'starter-files', inputFile);
+    const filePath = path.resolve(__dirname, 'starter-files', inputFile);
     const fileString = fs.readFileSync(filePath, 'utf8');
 
     if (fs.existsSync(outputFilePath) && !replaceIfExists) {
