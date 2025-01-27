@@ -1,5 +1,5 @@
 import { Mastra, createLogger } from "@mastra/core";
-import { PostgresEngine } from "@mastra/engine";
+import { PostgresEngine } from "@mastra/engine/postgres";
 import { PgMemory } from "@mastra/memory";
 
 import { travelAgent, travelAnalyzer } from "./agents";

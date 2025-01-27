@@ -1,6 +1,6 @@
 import { createLogger, Mastra } from "@mastra/core";
 import { UpstashTransport } from "@mastra/loggers";
-import { PostgresEngine } from "@mastra/engine";
+import { PostgresEngine } from "@mastra/engine/postgres";
 import { agentOne } from "./agents";
 import * as syncs from "./syncs";
 import { makePRToMastraWorkflow, openApiSpecGenWorkflow } from "./workflows";

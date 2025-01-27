@@ -1,5 +1,5 @@
 import { Mastra } from '@mastra/core';
-import { PostgresEngine } from '@mastra/engine';
+import { PostgresEngine } from '@mastra/engine/postgres';
 import { UpstashKVMemory } from '@mastra/memory';
 
 import { dane, daneChangeLog, daneCommitMessage, daneIssueLabeler, daneLinkChecker } from './agents/index.js';
