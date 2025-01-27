@@ -16,8 +16,8 @@ const rerankedResults = await rerank(
   vectorSearchResults,
   "How do I deploy to production?",
   {
-    rerankProvider: "agent",
-    agentModel: {
+    method: "llm",
+    config: {
       provider: "openai",
       name: "gpt-4"
     }
@@ -35,8 +35,6 @@ const rerankedResults = await rerank(
 
 ## Parameters
 
-### Core Parameters
-
 <PropertiesTable
   content={[
     {
@@ -50,42 +48,88 @@ const rerankedResults = await rerank(
       type: "string",
       description: "The search query text used to evaluate relevance",
       isOptional: false,
+    },
+    {
+      name: "modelConfig",
+      type: "RerankModel",
+      description: "Rerank model configuration",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "RerankerFunctionOptions",
+      description: "Options for the reranking model",
+      isOptional: true,
     }
   ]}
 />
 
-### Model Configuration
+### RerankModel
 
 <PropertiesTable
   content={[
     {
-      name: "rerankProvider",
-      type: "'cohere' | 'agent'",
-      description: "Provider to use for semantic scoring",
+      name: "method",
+      type: "'cohere' | 'llm'",
+      description: "Method to use for reranking",
       isOptional: false,
     },
     {
-      name: "cohereApiKey",
-      type: "string",
-      description: "Required when using Cohere provider",
-      isOptional: true,
+      name: "config",
+      type: "object",
+      description: "Model configuration for llm reranking",
+      isOptional: false,
+      properties: [
+        {
+          type: "object",
+          isOptional: false,
+          parameters: [
+            {
+              name: "provider",
+              description: "Provider to use for reranking",
+              isOptional: false,
+              type: "string",
+            },
+            {
+              name: "name",
+              description: "Name of the reranking model",
+              isOptional: false,
+              type: "string",
+            }
+          ]
+        },
+      ]
     },
     {
-      name: "cohereModel",
-      type: "string",
-      description: "Specific Cohere model to use",
-      isOptional: true,
+      name: "config (cohere)",
+      type: "object",
+      description: "Model configuration for cohere reranking",
+      isOptional: false,
+      properties: [
+        {
+          type: "object",
+          isOptional: false,
+          parameters: [
+            {
+              name: "apiKey",
+              description: "API key for the reranking model",
+              isOptional: false,
+              type: "string",
+            },
+            {
+              name: "model",
+              description: "Model to use for reranking",
+              isOptional: true,
+              type: "string",
+            },
+          ]
+        }
+      ]
     },
-    {
-      name: "agentModel",
-      type: "{ provider: string; name: string }",
-      description: "Required when using Agent provider",
-      isOptional: true,
-    }
   ]}
 />
 
-### Options
+### RerankerFunctionOptions
 
 <PropertiesTable
   content={[
@@ -94,7 +138,47 @@ const rerankedResults = await rerank(
       type: "WeightConfig",
       description: "Weights for different scoring components",
       isOptional: true,
-      defaultValue: "{ semantic: 0.4, vector: 0.4, position: 0.2 }",
+      properties: [
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "semantic",
+              description: "Weight for semantic relevance",
+              isOptional: true,
+              type: "number (default: 0.4)",
+            }
+          ]
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "vector",
+              description: "Weight for vector similarity",
+              isOptional: true,
+              type: "number (default: 0.4)",
+            }
+          ]
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "position",
+              description: "Weight for position-based scoring",
+              isOptional: true,
+              type: "number (default: 0.2)",
+            }
+          ]
+        }
+      ],
+    },
+    {
+      name: "queryEmbedding",
+      type: "number[]",
+      description: "Embedding of the query",
+      isOptional: true,
     },
     {
       name: "topK",

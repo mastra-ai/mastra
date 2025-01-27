@@ -68,6 +68,62 @@ const queryTool = createVectorQueryTool({
   ]}
 />
 
+### RerankConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "RerankMethod",
+      description: "Configuration for the reranking method",
+      isOptional: false,
+      properties: [
+        {
+          type: "union",
+          parameters: [
+            {
+              name: "cohere",
+              description: "Cohere reranking configuration",
+              type: "{ method: 'cohere', config: { apiKey: string, model?: string } }",
+            },
+            {
+              name: "llm",
+              description: "LLM-based reranking configuration",
+              type: "{ method: 'llm', config: { provider: string, name: string } }",
+            }
+          ]
+        }
+      ]
+    },
+    {
+      name: "options",
+      type: "RerankerOptions",
+      description: "Options for the reranking process",
+      isOptional: true,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "weights",
+              description: "Weights for scoring components (semantic: 0.4, vector: 0.4, position: 0.2)",
+              isOptional: true,
+              type: "WeightConfig",
+            },
+            {
+              name: "topK",
+              description: "Number of top results to return",
+              isOptional: true,
+              type: "number",
+              defaultValue: "3"
+            }
+          ]
+        }
+      ]
+    }
+  ]}
+/>
+
 ## Returns
 
 The tool returns an object with:
@@ -116,8 +172,8 @@ const queryTool = createVectorQueryTool({
   topK: 5,
   reranker: {
     model: {
-      rerankProvider: "agent",
-      agentModel: {
+      method: "llm",
+      config: {
         provider: "OPEN_AI",
         name: "gpt-4o-mini",
       },
