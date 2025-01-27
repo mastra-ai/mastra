@@ -58,9 +58,9 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
   }
 
   return (
-    <ScrollArea className="h-full p-4 w-[256px]">
+    <ScrollArea className="h-full px-4 pb-4 w-[256px]">
       <div className="space-y-2">
-        <div className="flex justify-between items-center pl-2">
+        <div className="flex justify-between items-center pl-2 sticky top-0 bg-mastra-bg-2 pt-4">
           <div className="text-sm text-mastra-el-5">Chat history</div>
           <Button variant="primary" size="icon" onClick={() => navigate(`/agents/${agentId}`)}>
             <Plus />
