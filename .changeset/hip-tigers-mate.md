@@ -1,6 +1,5 @@
 ---
 '@mastra/stabilityai': patch
-'@mastra/elevenlabs': patch
 '@mastra/firecrawl': patch
 'create-mastra': patch
 '@mastra/composio': patch

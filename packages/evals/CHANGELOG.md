@@ -1,5 +1,14 @@
 # @mastra/evals
 
+## 0.1.0-alpha.13
+
+### Patch Changes
+
+- 06b2c0a: Update summarization prompt and fix eval input
+- Updated dependencies [e4d4ede]
+- Updated dependencies [06b2c0a]
+  - @mastra/core@0.1.27-alpha.72
+
 ## 0.1.0-alpha.12
 
 ### Patch Changes

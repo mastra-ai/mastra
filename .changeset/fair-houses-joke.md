@@ -1,5 +1,4 @@
 ---
-'@mastra/elevenlabs': patch
 '@mastra/firecrawl': patch
 '@mastra/composio': patch
 '@mastra/sendgrid': patch

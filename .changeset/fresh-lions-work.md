@@ -4,7 +4,6 @@
 '@mastra/claude': patch
 '@mastra/coda': patch
 '@mastra/composio': patch
-'@mastra/elevenlabs': patch
 '@mastra/firecrawl': patch
 '@mastra/github': patch
 '@mastra/openai': patch

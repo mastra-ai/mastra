@@ -1,5 +1,13 @@
 # generate-text-from-image
 
+## 0.0.1-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [e4d4ede]
+- Updated dependencies [06b2c0a]
+  - @mastra/core@0.1.27-alpha.72
+
 ## 0.0.1-alpha.12
 
 ### Patch Changes
