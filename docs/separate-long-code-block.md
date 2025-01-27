@@ -50,7 +50,7 @@ const editorAgent = new Agent({
   instructions: "You are an editor agent that edits blog post copy.",
   model: {
     provider: "OPEN_AI",
-    name: "gpt-4o",
+    name: "gpt-4o-mini",
   },
 });
 
