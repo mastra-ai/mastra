@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.1.27-alpha.70
+
+### Patch Changes
+
+- dd6d87f: Update Agent and LLM config to accept temperature setting
+- 04434b6: Create separate logger file
+
 ## 0.1.27-alpha.69
 
 ### Patch Changes
