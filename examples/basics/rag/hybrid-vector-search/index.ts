@@ -8,7 +8,7 @@ const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 // Filter by metadata value
 const { embedding } = await embed('[Insert query based on document here]', {
   provider: 'OPEN_AI',
-  model: 'text-embedding-ada-002',
+  model: 'text-embedding-3-small',
   maxRetries: 3,
 });
 
