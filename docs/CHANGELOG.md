@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.1-alpha.23
+
+### Patch Changes
+
+- 3427b95: Updated docs to include intermediate rag examples (metadata filtering, query filters, etc)
+
 ## 0.1.1-alpha.22
 
 ### Patch Changes
