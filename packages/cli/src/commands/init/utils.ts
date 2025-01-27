@@ -125,7 +125,8 @@ export const mastra = new Mastra()
     await fs.writeFile(
       destPath,
       `
-import { Mastra, createLogger } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import { createLogger } from '@mastra/core/logger';
 ${addWorkflow ? `import { weatherWorkflow } from './workflows';` : ''}
 ${addAgent ? `import { weatherAgent } from './agents';` : ''}
 

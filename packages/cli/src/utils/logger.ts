@@ -1,4 +1,4 @@
-import { createLogger } from '@mastra/core';
+import { createLogger } from '@mastra/core/logger';
 
 export const logger = createLogger({
   name: 'Mastra CLI',
