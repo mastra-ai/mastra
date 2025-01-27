@@ -42,19 +42,25 @@ export interface RerankerFunctionOptions {
   topK?: number;
 }
 
-export interface RerankModelConfig {
-  rerankProvider: 'cohere' | 'agent';
-  cohereApiKey?: string;
-  cohereModel?: string;
-  agentModel?: {
-    provider: string;
-    name: string;
-  };
-}
+export type RerankModel =
+  | {
+      method: 'cohere';
+      config: {
+        apiKey: string;
+        model?: string;
+      };
+    }
+  | {
+      method: 'llm';
+      config: {
+        provider: string;
+        name: string;
+      };
+    };
 
 export interface RerankConfig {
   options?: RerankerOptions;
-  model: RerankModelConfig;
+  model: RerankModel;
 }
 
 // Calculate position score based on position in original list
@@ -93,21 +99,15 @@ function adjustScores(score: number, queryAnalysis: { magnitude: number; dominan
 export async function rerank(
   results: QueryResult[],
   query: string,
-  modelConfig: RerankModelConfig,
+  modelConfig: RerankModel,
   options: RerankerFunctionOptions,
 ): Promise<RerankResult[]> {
-  const { rerankProvider, cohereApiKey, cohereModel, agentModel } = modelConfig;
+  const { method, config } = modelConfig;
   let semanticProvider: RelevanceScoreProvider;
-  if (rerankProvider === 'cohere') {
-    if (!cohereApiKey) {
-      throw new Error('Cohere API key required when using Cohere provider');
-    }
-    semanticProvider = new CohereRelevanceScorer(cohereApiKey, cohereModel ?? '');
+  if (method === 'cohere') {
+    semanticProvider = new CohereRelevanceScorer(config.apiKey, config.model ?? '');
   } else {
-    if (!agentModel) {
-      throw new Error('Agent provider options required when using Agent provider');
-    }
-    semanticProvider = new MastraAgentRelevanceScorer(agentModel.provider, agentModel.name);
+    semanticProvider = new MastraAgentRelevanceScorer(config.provider, config.name);
   }
   const { queryEmbedding, topK = 3 } = options;
   const weights = {

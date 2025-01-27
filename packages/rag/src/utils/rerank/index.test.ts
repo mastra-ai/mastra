@@ -18,22 +18,6 @@ describe('rerank', () => {
     vi.clearAllMocks();
   });
 
-  it('should throw error if cohere API key is missing', async () => {
-    const results = [{ id: '1', metadata: { text: 'Test' }, score: 0.5 }];
-
-    await expect(rerank(results, 'test query', { rerankProvider: 'cohere' }, {})).rejects.toThrow(
-      'Cohere API key required when using Cohere provider',
-    );
-  });
-
-  it('should throw error if agent provider is missing', async () => {
-    const results = [{ id: '1', metadata: { text: 'Test' }, score: 0.5 }];
-
-    await expect(rerank(results, 'test query', { rerankProvider: 'agent' }, {})).rejects.toThrow(
-      'Agent provider options required when using Agent provider',
-    );
-  });
-
   it('should rerank results with default weights', async () => {
     const results = [
       { id: '1', metadata: { text: 'Test result 1' }, score: 0.5 },
@@ -45,8 +29,10 @@ describe('rerank', () => {
       results,
       'test query',
       {
-        rerankProvider: 'cohere',
-        cohereApiKey: 'mock-api-key',
+        method: 'cohere',
+        config: {
+          apiKey: 'mock-api-key',
+        },
       },
       { topK: 2 },
     );
@@ -87,8 +73,10 @@ describe('rerank', () => {
       results,
       'test query',
       {
-        rerankProvider: 'cohere',
-        cohereApiKey: 'mock-api-key',
+        method: 'cohere',
+        config: {
+          apiKey: 'mock-api-key',
+        },
       },
       {
         weights: {
@@ -134,8 +122,10 @@ describe('rerank', () => {
       results,
       'test query',
       {
-        rerankProvider: 'cohere',
-        cohereApiKey: 'mock-api-key',
+        method: 'cohere',
+        config: {
+          apiKey: 'mock-api-key',
+        },
       },
       {
         queryEmbedding: [0.5, 0.3, -0.2, 0.4],

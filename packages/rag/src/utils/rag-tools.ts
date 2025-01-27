@@ -5,7 +5,7 @@ import { ChunkParams, MDocument } from '../document';
 import { embed } from '../embeddings';
 
 import { GraphRAG } from './graph-rag';
-import { rerank, RerankConfig } from './rerank';
+import { rerank, RerankConfig, RerankModel } from './rerank';
 
 type VectorFilterType = 'pg' | 'astra' | 'qdrant' | 'upstash' | 'pinecone' | 'chroma' | '';
 
@@ -127,11 +127,9 @@ export const createVectorQueryTool = ({
             results,
             queryText,
             {
-              rerankProvider: reranker?.model?.rerankProvider,
-              cohereApiKey: reranker?.model?.cohereApiKey,
-              cohereModel: reranker?.model?.cohereModel,
-              agentModel: reranker?.model?.agentModel,
-            },
+              method: reranker?.model?.method,
+              config: reranker?.model?.config,
+            } as RerankModel,
             {
               ...reranker.options,
               topK: reranker.options?.topK || topK,

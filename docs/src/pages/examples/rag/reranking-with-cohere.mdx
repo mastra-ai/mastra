@@ -16,8 +16,10 @@ const results = rerank(
   searchResults,
   "deployment configuration",
   {
-    rerankProvider: "cohere",
-    cohereApiKey: "your-api-key",
+    method: "cohere",
+    config: {
+      apiKey: "your-api-key",
+    },
   },
   {
     topK: 5,

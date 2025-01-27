@@ -96,8 +96,8 @@ const vectorQueryTool = createVectorQueryTool({
   topK: 10,
   reranker: {
     model: {
-      rerankProvider: 'agent',
-      agentModel: {
+      method: 'llm',
+      config: {
         provider: 'OPEN_AI',
         name: 'gpt-4o-mini',
       },
