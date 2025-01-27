@@ -1,5 +1,5 @@
-import { Mastra, Agent, EmbedManyResult } from '@mastra/core';
-import { embed, MDocument, createVectorQueryTool } from '@mastra/rag';
+import { Mastra, Agent } from '@mastra/core';
+import { createVectorQueryTool } from '@mastra/rag';
 import { PgVector } from '@mastra/vector-pg';
 
 const vectorQueryTool = createVectorQueryTool({
@@ -35,36 +35,10 @@ export const mastra = new Mastra({
 
 const agent = mastra.getAgent('ragAgent');
 
-const doc = MDocument.fromText(`Dog Care Guide
-
-Dogs need to be fed twice a day.
-Dogs should be walked daily.
-Dogs need fresh water available at all times.
-Dogs require regular vet checkups.`);
-
-const chunks = await doc.chunk({
-  strategy: 'recursive',
-  size: 128,
-  overlap: 10,
-  separator: '\n',
-});
-
-const { embeddings } = (await embed(chunks, {
-  provider: 'OPEN_AI',
-  model: 'text-embedding-ada-002',
-  maxRetries: 3,
-})) as EmbedManyResult<string>;
-
-const vectorStore = mastra.getVector('pgVector');
-await vectorStore.createIndex('embeddings', 1536);
-await vectorStore.upsert(
-  'embeddings',
-  embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text })),
-);
+// Add in your documents, chunking and vector embedding here
 
 const prompt = `
-How often should dogs be fed?
+[Insert query based on document here]
 Please base your answer only on the context provided in the tool. 
 If the context doesn't contain enough information to fully answer the question, please state that explicitly.
 `;
