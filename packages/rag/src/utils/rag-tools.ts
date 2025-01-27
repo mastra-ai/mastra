@@ -127,10 +127,10 @@ export const createVectorQueryTool = ({
             results,
             queryText,
             {
-              provider: reranker?.model?.provider,
+              rerankProvider: reranker?.model?.rerankProvider,
               cohereApiKey: reranker?.model?.cohereApiKey,
               cohereModel: reranker?.model?.cohereModel,
-              agentProvider: reranker?.model?.agentProvider,
+              agentModel: reranker?.model?.agentModel,
             },
             {
               ...reranker.options,

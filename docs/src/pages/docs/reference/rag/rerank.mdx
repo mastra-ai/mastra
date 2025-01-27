@@ -16,8 +16,8 @@ const rerankedResults = await rerank(
   vectorSearchResults,
   "How do I deploy to production?",
   {
-    provider: "agent",
-    agentProvider: {
+    rerankProvider: "agent",
+    agentModel: {
       provider: "openai",
       name: "gpt-4"
     }
@@ -59,7 +59,7 @@ const rerankedResults = await rerank(
 <PropertiesTable
   content={[
     {
-      name: "provider",
+      name: "rerankProvider",
       type: "'cohere' | 'agent'",
       description: "Provider to use for semantic scoring",
       isOptional: false,
@@ -77,7 +77,7 @@ const rerankedResults = await rerank(
       isOptional: true,
     },
     {
-      name: "agentProvider",
+      name: "agentModel",
       type: "{ provider: string; name: string }",
       description: "Required when using Agent provider",
       isOptional: true,
@@ -126,6 +126,54 @@ The function returns an array of `RerankResult` objects:
       name: "details",
       type: "RerankDetails",
       description: "Detailed scoring information",
+    }
+  ]}
+/>
+
+### RerankDetails
+
+<PropertiesTable
+  content={[
+    {
+      name: "semantic",
+      type: "number",
+      description: "Semantic relevance score (0-1)",
+    },
+    {
+      name: "vector",
+      type: "number",
+      description: "Vector similarity score (0-1)",
+    },
+    {
+      name: "position",
+      type: "number",
+      description: "Position-based score (0-1)",
+    },
+    {
+      name: "queryAnalysis",
+      type: "object",
+      description: "Query analysis details",
+      isOptional: true,
+      properties: [
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "magnitude",
+              description: "Magnitude of the query",
+            }
+          ]
+        },
+        {
+          type: "number[]",
+          parameters: [
+            {
+              name: "dominantFeatures",
+              description: "Dominant features of the query",
+            }
+          ]
+        }
+      ]
     }
   ]}
 />

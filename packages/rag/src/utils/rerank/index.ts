@@ -46,7 +46,7 @@ export interface RerankModelConfig {
   rerankProvider: 'cohere' | 'agent';
   cohereApiKey?: string;
   cohereModel?: string;
-  agentProvider?: {
+  agentModel?: {
     provider: string;
     name: string;
   };
@@ -96,7 +96,7 @@ export async function rerank(
   modelConfig: RerankModelConfig,
   options: RerankerFunctionOptions,
 ): Promise<RerankResult[]> {
-  const { rerankProvider, cohereApiKey, cohereModel, agentProvider } = modelConfig;
+  const { rerankProvider, cohereApiKey, cohereModel, agentModel } = modelConfig;
   let semanticProvider: RelevanceScoreProvider;
   if (rerankProvider === 'cohere') {
     if (!cohereApiKey) {
@@ -104,10 +104,10 @@ export async function rerank(
     }
     semanticProvider = new CohereRelevanceScorer(cohereApiKey, cohereModel ?? '');
   } else {
-    if (!agentProvider) {
+    if (!agentModel) {
       throw new Error('Agent provider options required when using Agent provider');
     }
-    semanticProvider = new MastraAgentRelevanceScorer(agentProvider.provider, agentProvider.name);
+    semanticProvider = new MastraAgentRelevanceScorer(agentModel.provider, agentModel.name);
   }
   const { queryEmbedding, topK = 3 } = options;
   const weights = {
