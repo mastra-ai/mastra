@@ -1,5 +1,11 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.13
+
+### Patch Changes
+
+- a1774e7: Improve bundling
+
 ## 0.0.1-alpha.12
 
 ### Patch Changes
