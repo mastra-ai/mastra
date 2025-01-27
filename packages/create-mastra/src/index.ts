@@ -1,8 +1,8 @@
 #! /usr/bin/env node
 import { Command } from 'commander';
 
-import { PosthogAnalytics } from 'mastra/dist/analytics/index';
-import { create } from 'mastra/dist/commands/create/create';
+import { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
+import { create } from 'mastra/dist/commands/create/create.js';
 
 import { getPackageVersion } from './utils.js';
 

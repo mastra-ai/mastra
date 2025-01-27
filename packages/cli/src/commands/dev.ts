@@ -79,7 +79,10 @@ const startServer = async (dotMastraPath: string, port: number, MASTRA_TOOLS_PAT
       reject: false,
     })) as any as ChildProcess;
 
-    if (!currentServerProcess) {
+    if (currentServerProcess?.exitCode !== 0) {
+      if (!currentServerProcess) {
+        throw new Error(`Server failed to start`);
+      }
       throw new Error(`Server failed to start with error: ${currentServerProcess.stderr}`);
     }
 
