@@ -23,6 +23,7 @@ export class IbmTTS extends MastraTTS {
     super({
       model: {
         provider: 'IBM',
+        name: 'IBM',
         ...model,
       },
     });
@@ -79,12 +80,31 @@ export class IbmTTS extends MastraTTS {
   }
 
   async stream({ voice, text }: { voice?: string; text: string }) {
-    const { audioResult } = await this.generate({ voice, text });
-    const stream = new PassThrough();
-    stream.end(audioResult);
-    return {
-      audioResult: stream,
-    };
+    return this.traced(async () => {
+      const response = await this.client.synthesize({
+        text,
+        accept: 'audio/mpeg',
+        voice: (voice || this.defaultVoice) as IbmVoice,
+        ...this.properties,
+      });
+
+      const nodeStream = new PassThrough();
+
+      // Process the stream
+      (async () => {
+        try {
+          for await (const chunk of response.result) {
+            const part = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
+            nodeStream.write(new Uint8Array(part));
+          }
+          nodeStream.end();
+        } catch (error) {
+          nodeStream.destroy(error as Error);
+        }
+      })();
+
+      return { audioResult: nodeStream };
+    }, 'tts.ibm.stream')();
   }
 }
 

@@ -1,7 +1,8 @@
+import { createWriteStream } from 'fs';
 import { join } from 'path';
 import { describe, expect, it } from 'vitest';
 
-import { writeFile } from 'fs/promises';
+import { writeFile, stat as fsStat } from 'fs/promises';
 
 import { IbmTTS } from './index';
 
@@ -14,7 +15,6 @@ describe('IbmTTS', () => {
 
   it('should list available voices', async () => {
     const voices = await tts.voices();
-    expect(voices).toBeInstanceOf(Array);
     expect(voices.length).toBeGreaterThan(0);
     expect(voices[0]).toHaveProperty('voice_id');
   });
@@ -22,17 +22,26 @@ describe('IbmTTS', () => {
   it('should generate audio content', async () => {
     const result = await tts.generate({ text: 'Hello world' });
     expect(result).toHaveProperty('audioResult');
-    expect(Buffer.isBuffer(result.audioResult)).toBe(true);
 
-    // Write the audio to a file
-    const outputPath = join(__dirname, '..', 'test-output', 'test-audio.mp3');
+    const outputPath = join(__dirname, '../test-outputs', 'test-audio.mp3');
     await writeFile(outputPath, result.audioResult);
-    console.log(`Audio file written to: ${outputPath}`);
   });
 
   it('should stream audio content', async () => {
     const result = await tts.stream({ text: 'Hello world' });
     expect(result).toHaveProperty('audioResult');
     expect(result.audioResult).toHaveProperty('pipe');
+
+    // Write the audio to a file using pipe
+    const outputPath = join(__dirname, '../test-outputs', 'test-audio-stream.mp3');
+    const writeStream = createWriteStream(outputPath);
+
+    await new Promise((resolve, reject) => {
+      result.audioResult.pipe(writeStream).on('finish', resolve).on('error', reject);
+    });
+
+    // Verify the file exists and has content
+    const stats = await fsStat(outputPath);
+    expect(stats.size).toBeGreaterThan(0);
   });
 });

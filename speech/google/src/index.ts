@@ -21,7 +21,6 @@ export class GoogleTTS extends MastraTTS {
       },
     });
 
-    console.log(process.env.GOOGLE_API_KEY);
     this.client = new TextToSpeechClient({
       apiKey: process.env.GOOGLE_API_KEY || this.model.apiKey,
     });
@@ -49,8 +48,6 @@ export class GoogleTTS extends MastraTTS {
         throw new Error('Audio content is a string.');
       }
 
-      console.log(response);
-
       return Buffer.from(response.audioContent);
     }, 'tts.google.generate')();
 
@@ -60,12 +57,28 @@ export class GoogleTTS extends MastraTTS {
   }
 
   async stream({ voice, text }: { voice: string; text: string }) {
-    const { audioResult } = await this.generate({ voice, text });
-    const stream = new PassThrough();
-    stream.end(audioResult);
-    return {
-      audioResult: stream,
-    };
+    return this.traced(async () => {
+      const request: TextToSpeechTypes.cloud.texttospeech.v1.ISynthesizeSpeechRequest = {
+        input: { text },
+        voice: { name: voice as VoiceId, languageCode: voice.split('-').slice(0, 2).join('-') },
+        audioConfig: { audioEncoding: 'MP3' },
+      };
+
+      const [response] = await this.client.synthesizeSpeech(request);
+
+      if (!response.audioContent) {
+        throw new Error('No audio content returned.');
+      }
+
+      if (typeof response.audioContent === 'string') {
+        throw new Error('Audio content is a string.');
+      }
+
+      const stream = new PassThrough();
+      stream.end(Buffer.from(response.audioContent));
+
+      return { audioResult: stream };
+    }, 'tts.google.stream')();
   }
 }
 

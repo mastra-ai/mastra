@@ -1,12 +1,14 @@
 import { MastraTTS } from '@mastra/core';
 import ky from 'ky';
+import { PassThrough } from 'stream';
 
 import { MURF_VOICES, type MurfVoice } from './voices';
 
 type MurfConfig = {
-  model: 'GEN1' | 'GEN2';
+  name: 'GEN1' | 'GEN2';
   voice?: MurfVoice;
   apiKey?: string;
+  provider?: 'MURF';
   properties?: Omit<SpeechCreateParams, 'modelVersion' | 'voiceId' | 'text'>;
 };
 
@@ -52,10 +54,7 @@ export class MurfTTS extends MastraTTS {
 
   constructor({ model }: { model: MurfConfig }) {
     super({
-      model: {
-        provider: 'MURF',
-        ...model,
-      },
+      model: model,
     });
 
     const apiKey = process.env.MURF_API_KEY || model.apiKey;
@@ -93,7 +92,7 @@ export class MurfTTS extends MastraTTS {
           json: {
             voiceId: (voice || this.defaultVoice) as MurfVoice,
             text,
-            modelVersion: this.model.model,
+            modelVersion: this.model.name,
             ...this.properties,
           },
         })

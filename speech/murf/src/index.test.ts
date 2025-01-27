@@ -8,7 +8,7 @@ import { MurfTTS } from './index';
 describe('MurfTTS', () => {
   const tts = new MurfTTS({
     model: {
-      model: 'GEN2',
+      name: 'GEN2',
       voice: 'en-US-natalie',
     },
   });
