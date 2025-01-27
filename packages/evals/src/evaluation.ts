@@ -30,7 +30,9 @@ export async function evaluate<T extends Agent>(agent: T, input: Parameters<T['g
 
 export const getCurrentTestInfo = async () => {
   // Jest
+  // @ts-ignore
   if (typeof expect !== 'undefined' && expect.getState) {
+    // @ts-ignore
     const state = expect.getState();
     return {
       testName: state.currentTestName,
