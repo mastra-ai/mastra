@@ -1,0 +1,164 @@
+---
+title: "Example: Vector Store with Filters | RAG | Mastra Docs"
+description: Example of using metadata filters with PGVector to enhance vector search results in Mastra.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Filter Store
+
+This example demonstrates how to use metadata filters with PGVector to enhance vector search results, allowing for more precise and filtered retrieval of documents.
+
+## Overview
+
+The system implements filtered vector search using Mastra and PGVector. Here's what it does:
+
+1. Creates documents with metadata about different movie genres
+2. Chunks text and extracts metadata during chunking
+3. Creates embeddings for these chunks
+4. Stores them in PostgreSQL with metadata
+5. Demonstrates filtering by genre and document section
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+POSTGRES_CONNECTION_STRING=your_connection_string_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { EmbedManyResult } from '@mastra/core';
+import { embed, MDocument } from '@mastra/rag';
+import { PgVector } from '@mastra/vector-pg';
+```
+
+## Vector Store Initialization
+
+Initialize PgVector with your connection string:
+
+```typescript copy showLineNumbers{4} filename="src/index.ts"
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+```
+
+## Document Creation
+
+Create a document with movie genre information:
+
+```typescript copy showLineNumbers{6} filename="src/index.ts"
+const doc = MDocument.fromText(`Movies Review Guide
+
+Action Movies
+Fast cars and explosions are common in action films. The latest action movies use a lot of special effects.
+
+Comedy Movies
+Comedy films make people laugh. Recent comedies often mix humor with other genres.
+
+Horror Movies
+Horror films are designed to scare viewers. Modern horror relies heavily on suspense.`);
+```
+
+## Document Processing
+
+Process the document into chunks with metadata extraction:
+
+```typescript copy showLineNumbers{20} filename="src/index.ts"
+const chunks = await doc.chunk({
+  strategy: 'recursive',
+  size: 128,
+  overlap: 20,
+  separator: '\n',
+  extract: {
+    keywords: true,
+  },
+});
+```
+
+## Creating and Storing Embeddings
+
+Generate embeddings and store them with metadata:
+
+```typescript copy showLineNumbers{30} filename="src/index.ts"
+const { embeddings } = (await embed(chunks, {
+  provider: 'OPEN_AI',
+  model: 'text-embedding-ada-002',
+  maxRetries: 3,
+})) as EmbedManyResult<string>;
+
+await pgVector.createIndex('embeddings', 1536);
+await pgVector.upsert(
+  'embeddings',
+  embeddings,
+  chunks?.map((chunk: any, index: number) => ({
+    text: chunk.text,
+    ...chunk.metadata,
+    metadata: {
+      genre: chunk.text.toLowerCase().includes('action')
+        ? 'action'
+        : chunk.text.toLowerCase().includes('comedy')
+          ? 'comedy'
+          : 'horror',
+      id: index,
+    },
+  })),
+);
+```
+
+## Example Usage
+
+### Filter by Genre
+
+```typescript copy showLineNumbers{55} filename="src/index.ts"
+// Create embedding for the query
+const { embedding } = await embed('Tell me about action movies', {
+  provider: 'OPEN_AI',
+  model: 'text-embedding-ada-002',
+  maxRetries: 3,
+});
+
+// Query with genre filter
+const result = await pgVector.query('embeddings', embedding, 3, {
+  'metadata.genre': {
+    eq: 'action',
+  },
+});
+
+console.log('Action movies results:', result);
+```
+
+### Filter by Document Section
+
+```typescript copy showLineNumbers{70} filename="src/index.ts"
+// Create embedding for the query
+const { embedding: embedding2 } = await embed('Show me later sections', {
+  provider: 'OPEN_AI',
+  model: 'text-embedding-ada-002',
+  maxRetries: 3,
+});
+
+// Query with ID filter
+const result2 = await pgVector.query('embeddings', embedding2, 3, {
+  'metadata.id': {
+    gt: 1,
+  },
+});
+
+console.log('Later sections results:', result2);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/filter-store"
+  }
+/>
