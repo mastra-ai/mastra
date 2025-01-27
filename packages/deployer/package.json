@@ -23,7 +23,10 @@
     "build:lib": "tsup-node src/index.ts --format esm --clean --dts --treeshake --no-splitting",
     "build:server": "esbuild --platform=node --target=node20 --format=esm --bundle --outdir=dist/server src/server/index.ts",
     "types:server": "tsup src/server/index.ts --no-clean --format esm --dts-only --out-dir=dist/server",
-    "build:dev": "pnpm run build --watch",
+    "dev": "npm-run-all -p dev:lib dev:server dev:types",
+    "dev:lib": "pnpm run build:lib --watch --no-clean",
+    "dev:server": "esbuild --watch --platform=node --target=node20 --format=esm --bundle --outdir=dist/server src/server/index.ts",
+    "dev:types": "pnpm run types:server --watch --no-clean",
     "pull:openapispec": "node src/server/openapi.script.js",
     "test": "vitest run"
   },
