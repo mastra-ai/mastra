@@ -1,4 +1,4 @@
-import { MastraStore, WorkflowRunState } from '@mastra/core';
+import { MastraStorage, WorkflowRunState } from '@mastra/core';
 import { Redis } from '@upstash/redis';
 
 export interface UpstashConfig {
@@ -6,7 +6,7 @@ export interface UpstashConfig {
   token: string;
 }
 
-export class UpstashStore extends MastraStore {
+export class UpstashStore extends MastraStorage {
   private redis: Redis;
 
   constructor(config: UpstashConfig) {
