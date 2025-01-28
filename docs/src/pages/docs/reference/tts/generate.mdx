@@ -81,7 +81,7 @@ const outputPath = path.join(process.cwd(), 'test-outputs/open-aigenerate-test.m
 writeFileSync(outputPath, audioResult);
 ```
 
-### Basic Audio Generation (OpenAI)
+### Basic Audio Generation (PlayAI)
 
 ```typescript
 import { PlayAITTS } from '@mastra/tts'
@@ -101,6 +101,89 @@ const { audioResult } = await tts.generate({ text: "What is AI?", voice: voiceId
 
 const outputPath = path.join(process.cwd(), 'test-outputs/open-aigenerate-test.mp3');
 writeFileSync(outputPath, audioResult);
+```
+
+### Azure Generation
+
+```typescript
+import { AzureTTS } from '@mastra/tts'
+
+const tts = new AzureTTS({
+  model: {
+    name: 'en-US-JennyNeural',
+    apiKey: process.env.AZURE_API_KEY,
+    region: process.env.AZURE_REGION,
+  },
+});
+
+const { audioResult } = await tts.generate({ text: "What is AI?" });
+await writeFile(path.join(process.cwd(), '/test-outputs/azure-output.mp3'), audioResult);
+```
+
+### Deepgram Generation
+
+```typescript
+import { DeepgramTTS } from '@mastra/tts'
+
+const tts = new DeepgramTTS({
+  model: {
+    name: 'aura',
+    voice: 'asteria-en',
+    apiKey: process.env.DEEPGRAM_API_KEY,
+  },
+});
+
+const { audioResult } = await tts.generate({ text: "What is AI?" });
+await writeFile(path.join(process.cwd(), '/test-outputs/deepgram-output.mp3'), audioResult);
+```
+
+### Google Generation
+
+```typescript
+import { GoogleTTS } from '@mastra/tts'
+
+const tts = new GoogleTTS({
+  model: {
+    name: 'en-US-Standard-A',
+    credentials: process.env.GOOGLE_CREDENTIALS,
+  },
+});
+
+const { audioResult } = await tts.generate({ text: "What is AI?" });
+await writeFile(path.join(process.cwd(), '/test-outputs/google-output.mp3'), audioResult);
+```
+
+### IBM Generation
+
+```typescript
+import { IbmTTS } from '@mastra/tts'
+
+const tts = new IbmTTS({
+  model: {
+    voice: 'en-US_AllisonV3Voice',
+    apiKey: process.env.IBM_API_KEY,
+  },
+});
+
+const { audioResult } = await tts.generate({ text: "What is AI?" });
+await writeFile(path.join(process.cwd(), '/test-outputs/ibm-output.mp3'), audioResult);
+```
+
+### Murf Generation
+
+```typescript
+import { MurfTTS } from '@mastra/tts'
+
+const tts = new MurfTTS({
+  model: {
+    name: 'GEN2',
+    voice: 'en-US-natalie',
+    apiKey: process.env.MURF_API_KEY,
+  },
+});
+
+const { audioResult } = await tts.generate({ text: "What is AI?" });
+await writeFile(path.join(process.cwd(), '/test-outputs/murf-output.mp3'), audioResult);
 ```
 
 ## Related Methods

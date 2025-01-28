@@ -30,7 +30,11 @@ const packages_llm_text = `
   - Format: @mastra/vector-{name} -> vector-stores/{name}
   - Special case: @mastra/vector-astra -> vector-stores/astra
 
-  ## 4. Integrations - STRICT RULES:
+  ## 4. Speech packages - STRICT RULES:
+  - ALL speech packages must be directly under speech/
+  - Format: @mastra/speech-{name} -> speech/{name}
+
+  ## 5. Integrations - STRICT RULES:
   - ALL integration packages are under integrations/
   @mastra/apollos -> integrations/apollo
   @mastra/ashby -> integrations/ashby
