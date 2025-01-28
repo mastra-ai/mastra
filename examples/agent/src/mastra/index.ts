@@ -7,7 +7,7 @@ export const mastra = new Mastra({
   agents: { chefAgent },
   logger: createLogger({ name: 'Chef', level: 'debug' }),
   deployer: new CloudflareDeployer({
-    scope: '',
-    projectName: '',
+    scope: '66d175c352385eecf41cf5ac9afdcc61',
+    projectName: 'mastra-netlify-test',
   }),
 });

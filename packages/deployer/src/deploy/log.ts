@@ -1,6 +1,5 @@
 import { Logger } from '@mastra/core';
 import { spawn } from 'child_process';
-import { execa } from 'execa';
 import { Transform } from 'stream';
 
 export const createPinoStream = (logger: Logger) => {
@@ -20,23 +19,6 @@ export const createPinoStream = (logger: Logger) => {
     },
   });
 };
-
-export function createExecaLogger({ logger, root }: { logger: Logger; root: string }) {
-  const pinoStream = createPinoStream(logger);
-  return async ({ cmd, args, env }: { cmd: string; args: string[]; env: Record<string, string> }) => {
-    const subprocess = execa(cmd, args, {
-      cwd: root,
-      env,
-      shell: true,
-    });
-
-    // Pipe stdout and stderr through the Pino stream
-    subprocess.stdout?.pipe(pinoStream);
-    subprocess.stderr?.pipe(pinoStream);
-
-    return await subprocess;
-  };
-}
 
 export function createChildProcessLogger({ logger, root }: { logger: Logger; root: string }) {
   const pinoStream = createPinoStream(logger);

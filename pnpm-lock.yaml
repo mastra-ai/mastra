@@ -113,7 +113,7 @@ importers:
         version: 9.5.2
       netlify-cli:
         specifier: ^18.0.1
-        version: 18.0.1(@azure/cosmos@4.2.0)(@azure/identity@4.5.0)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.5)(@upstash/redis@1.34.3)(bufferutil@4.0.8)(encoding@0.1.13)(picomatch@4.0.2)(rollup@4.30.1)(utf-8-validate@6.0.5)
+        version: 18.0.1(@azure/cosmos@4.2.0)(@azure/identity@4.5.0)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.5)(@upstash/redis@1.34.3)(bufferutil@4.0.8)(encoding@0.1.13)(picomatch@4.0.2)(rollup@3.29.5)(utf-8-validate@6.0.5)
       zod:
         specifier: ^3.24.1
         version: 3.24.1
@@ -2431,9 +2431,6 @@ importers:
       esbuild:
         specifier: ^0.24.2
         version: 0.24.2
-      execa:
-        specifier: ^9.3.1
-        version: 9.5.2
       fs-extra:
         specifier: ^11.2.0
         version: 11.2.0
@@ -24287,20 +24284,20 @@ snapshots:
       yaml: 2.6.1
       yargs: 17.7.2
 
-  '@netlify/build@29.58.2(@opentelemetry/api@1.8.0)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.5)(encoding@0.1.13)(picomatch@4.0.2)(rollup@4.30.1)':
+  '@netlify/build@29.58.2(@opentelemetry/api@1.8.0)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.5)(encoding@0.1.13)(picomatch@4.0.2)(rollup@3.29.5)':
     dependencies:
       '@bugsnag/js': 7.25.0
       '@netlify/blobs': 7.4.0
       '@netlify/cache-utils': 5.2.0
       '@netlify/config': 20.21.2
-      '@netlify/edge-bundler': 12.3.2(encoding@0.1.13)(rollup@4.30.1)(supports-color@9.4.0)
+      '@netlify/edge-bundler': 12.3.2(encoding@0.1.13)(rollup@3.29.5)(supports-color@9.4.0)
       '@netlify/framework-info': 9.9.1
-      '@netlify/functions-utils': 5.3.4(encoding@0.1.13)(rollup@4.30.1)(supports-color@9.4.0)
+      '@netlify/functions-utils': 5.3.4(encoding@0.1.13)(rollup@3.29.5)(supports-color@9.4.0)
       '@netlify/git-utils': 5.2.0
       '@netlify/opentelemetry-utils': 1.3.0(@opentelemetry/api@1.8.0)
       '@netlify/plugins-list': 6.80.0
       '@netlify/run-utils': 5.2.0
-      '@netlify/zip-it-and-ship-it': 9.42.2(encoding@0.1.13)(rollup@4.30.1)(supports-color@9.4.0)
+      '@netlify/zip-it-and-ship-it': 9.42.2(encoding@0.1.13)(rollup@3.29.5)(supports-color@9.4.0)
       '@opentelemetry/api': 1.8.0
       '@sindresorhus/slugify': 2.2.1
       ansi-escapes: 6.2.1
@@ -24394,10 +24391,10 @@ snapshots:
       validate-npm-package-name: 4.0.0
       yargs: 17.7.2
 
-  '@netlify/edge-bundler@12.3.2(encoding@0.1.13)(rollup@4.30.1)':
+  '@netlify/edge-bundler@12.3.2(encoding@0.1.13)(rollup@3.29.5)':
     dependencies:
       '@import-maps/resolve': 1.0.1
-      '@vercel/nft': 0.27.7(encoding@0.1.13)(rollup@4.30.1)
+      '@vercel/nft': 0.27.7(encoding@0.1.13)(rollup@3.29.5)
       ajv: 8.17.1
       ajv-errors: 3.0.0(ajv@8.17.1)
       better-ajv-errors: 1.2.0(ajv@8.17.1)
@@ -24424,10 +24421,10 @@ snapshots:
       - rollup
       - supports-color
 
-  '@netlify/edge-bundler@12.3.2(encoding@0.1.13)(rollup@4.30.1)(supports-color@9.4.0)':
+  '@netlify/edge-bundler@12.3.2(encoding@0.1.13)(rollup@3.29.5)(supports-color@9.4.0)':
     dependencies:
       '@import-maps/resolve': 1.0.1
-      '@vercel/nft': 0.27.7(encoding@0.1.13)(rollup@4.30.1)(supports-color@9.4.0)
+      '@vercel/nft': 0.27.7(encoding@0.1.13)(rollup@3.29.5)(supports-color@9.4.0)
       ajv: 8.17.1
       ajv-errors: 3.0.0(ajv@8.17.1)
       better-ajv-errors: 1.2.0(ajv@8.17.1)
@@ -24469,9 +24466,9 @@ snapshots:
       read-package-up: 11.0.0
       semver: 7.6.3
 
-  '@netlify/functions-utils@5.3.4(encoding@0.1.13)(rollup@4.30.1)(supports-color@9.4.0)':
+  '@netlify/functions-utils@5.3.4(encoding@0.1.13)(rollup@3.29.5)(supports-color@9.4.0)':
     dependencies:
-      '@netlify/zip-it-and-ship-it': 9.42.4(encoding@0.1.13)(rollup@4.30.1)(supports-color@9.4.0)
+      '@netlify/zip-it-and-ship-it': 9.42.4(encoding@0.1.13)(rollup@3.29.5)(supports-color@9.4.0)
       cpy: 9.0.1
       path-exists: 5.0.0
     transitivePeerDependencies:
@@ -24574,13 +24571,13 @@ snapshots:
       '@netlify/node-cookies': 0.1.0
       urlpattern-polyfill: 8.0.2
 
-  '@netlify/zip-it-and-ship-it@9.42.2(encoding@0.1.13)(rollup@4.30.1)':
+  '@netlify/zip-it-and-ship-it@9.42.2(encoding@0.1.13)(rollup@3.29.5)':
     dependencies:
       '@babel/parser': 7.26.3
       '@babel/types': 7.26.3
       '@netlify/binary-info': 1.0.0
       '@netlify/serverless-functions-api': 1.32.0
-      '@vercel/nft': 0.27.7(encoding@0.1.13)(rollup@4.30.1)
+      '@vercel/nft': 0.27.7(encoding@0.1.13)(rollup@3.29.5)
       archiver: 7.0.1
       common-path-prefix: 3.0.0
       cp-file: 10.0.0
@@ -24615,13 +24612,13 @@ snapshots:
       - rollup
       - supports-color
 
-  '@netlify/zip-it-and-ship-it@9.42.2(encoding@0.1.13)(rollup@4.30.1)(supports-color@9.4.0)':
+  '@netlify/zip-it-and-ship-it@9.42.2(encoding@0.1.13)(rollup@3.29.5)(supports-color@9.4.0)':
     dependencies:
       '@babel/parser': 7.26.3
       '@babel/types': 7.26.3
       '@netlify/binary-info': 1.0.0
       '@netlify/serverless-functions-api': 1.32.0
-      '@vercel/nft': 0.27.7(encoding@0.1.13)(rollup@4.30.1)(supports-color@9.4.0)
+      '@vercel/nft': 0.27.7(encoding@0.1.13)(rollup@3.29.5)(supports-color@9.4.0)
       archiver: 7.0.1
       common-path-prefix: 3.0.0
       cp-file: 10.0.0
@@ -24656,13 +24653,13 @@ snapshots:
       - rollup
       - supports-color
 
-  '@netlify/zip-it-and-ship-it@9.42.4(encoding@0.1.13)(rollup@4.30.1)(supports-color@9.4.0)':
+  '@netlify/zip-it-and-ship-it@9.42.4(encoding@0.1.13)(rollup@3.29.5)(supports-color@9.4.0)':
     dependencies:
       '@babel/parser': 7.26.3
       '@babel/types': 7.26.5
       '@netlify/binary-info': 1.0.0
       '@netlify/serverless-functions-api': 1.32.0
-      '@vercel/nft': 0.27.7(encoding@0.1.13)(rollup@4.30.1)(supports-color@9.4.0)
+      '@vercel/nft': 0.27.7(encoding@0.1.13)(rollup@3.29.5)(supports-color@9.4.0)
       archiver: 7.0.1
       common-path-prefix: 3.0.0
       cp-file: 10.0.0
@@ -28978,10 +28975,10 @@ snapshots:
       - rollup
       - supports-color
 
-  '@vercel/nft@0.27.7(encoding@0.1.13)(rollup@4.30.1)':
+  '@vercel/nft@0.27.7(encoding@0.1.13)(rollup@3.29.5)':
     dependencies:
       '@mapbox/node-pre-gyp': 1.0.11(encoding@0.1.13)
-      '@rollup/pluginutils': 5.1.4(rollup@4.30.1)
+      '@rollup/pluginutils': 5.1.4(rollup@3.29.5)
       acorn: 8.14.0
       acorn-import-attributes: 1.9.5(acorn@8.14.0)
       async-sema: 3.1.1
@@ -28997,10 +28994,10 @@ snapshots:
       - rollup
       - supports-color
 
-  '@vercel/nft@0.27.7(encoding@0.1.13)(rollup@4.30.1)(supports-color@9.4.0)':
+  '@vercel/nft@0.27.7(encoding@0.1.13)(rollup@3.29.5)(supports-color@9.4.0)':
     dependencies:
       '@mapbox/node-pre-gyp': 1.0.11(encoding@0.1.13)(supports-color@9.4.0)
-      '@rollup/pluginutils': 5.1.4(rollup@4.30.1)
+      '@rollup/pluginutils': 5.1.4(rollup@3.29.5)
       acorn: 8.14.0
       acorn-import-attributes: 1.9.5(acorn@8.14.0)
       async-sema: 3.1.1
@@ -32181,7 +32178,7 @@ snapshots:
       shelljs: 0.8.5
       sort-package-json: 1.57.0
       tiny-glob: 0.2.9
-      ts-jest: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.17.19)(jest@29.7.0(@types/node@22.10.5))(typescript@5.7.3)
+      ts-jest: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.17.19)(jest@29.7.0(@types/node@22.10.5)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.5)(typescript@5.7.3)))(typescript@5.7.3)
       ts-node: 10.9.2(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.5)(typescript@5.7.3)
       tslib: 2.8.1
       type-fest: 2.19.0
@@ -32266,7 +32263,7 @@ snapshots:
       shelljs: 0.8.5
       sort-package-json: 1.57.0
       tiny-glob: 0.2.9
-      ts-jest: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.17.19)(jest@29.7.0(@types/node@22.10.5))(typescript@5.7.3)
+      ts-jest: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.17.19)(jest@29.7.0(@types/node@22.10.5)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.5)(typescript@5.7.3)))(typescript@5.7.3)
       ts-node: 10.9.2(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.5)(typescript@5.7.3)
       tslib: 2.8.1
       type-fest: 2.19.0
@@ -38167,20 +38164,20 @@ snapshots:
 
   nested-error-stacks@2.1.1: {}
 
-  netlify-cli@18.0.1(@azure/cosmos@4.2.0)(@azure/identity@4.5.0)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.5)(@upstash/redis@1.34.3)(bufferutil@4.0.8)(encoding@0.1.13)(picomatch@4.0.2)(rollup@4.30.1)(utf-8-validate@6.0.5):
+  netlify-cli@18.0.1(@azure/cosmos@4.2.0)(@azure/identity@4.5.0)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.5)(@upstash/redis@1.34.3)(bufferutil@4.0.8)(encoding@0.1.13)(picomatch@4.0.2)(rollup@3.29.5)(utf-8-validate@6.0.5):
     dependencies:
       '@bugsnag/js': 7.25.0
       '@fastify/static': 7.0.4
       '@netlify/blobs': 8.1.0
-      '@netlify/build': 29.58.2(@opentelemetry/api@1.8.0)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.5)(encoding@0.1.13)(picomatch@4.0.2)(rollup@4.30.1)
+      '@netlify/build': 29.58.2(@opentelemetry/api@1.8.0)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.5)(encoding@0.1.13)(picomatch@4.0.2)(rollup@3.29.5)
       '@netlify/build-info': 8.0.0
       '@netlify/config': 20.21.2
-      '@netlify/edge-bundler': 12.3.2(encoding@0.1.13)(rollup@4.30.1)
+      '@netlify/edge-bundler': 12.3.2(encoding@0.1.13)(rollup@3.29.5)
       '@netlify/edge-functions': 2.11.1
       '@netlify/headers-parser': 7.3.0
       '@netlify/local-functions-proxy': 1.1.1
       '@netlify/redirect-parser': 14.5.0
-      '@netlify/zip-it-and-ship-it': 9.42.2(encoding@0.1.13)(rollup@4.30.1)
+      '@netlify/zip-it-and-ship-it': 9.42.2(encoding@0.1.13)(rollup@3.29.5)
       '@octokit/rest': 20.1.1
       '@opentelemetry/api': 1.8.0
       ansi-escapes: 7.0.0
@@ -42068,7 +42065,7 @@ snapshots:
 
   ts-interface-checker@0.1.13: {}
 
-  ts-jest@29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.17.19)(jest@29.7.0(@types/node@22.10.5))(typescript@5.7.3):
+  ts-jest@29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.17.19)(jest@29.7.0(@types/node@22.10.5)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/node@22.10.5)(typescript@5.7.3)))(typescript@5.7.3):
     dependencies:
       bs-logger: 0.2.6
       ejs: 3.1.10

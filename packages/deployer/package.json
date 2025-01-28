@@ -36,7 +36,6 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "esbuild": "^0.24.2",
-    "execa": "^9.3.1",
     "fs-extra": "^11.2.0",
     "zod": "^3.24.1"
   },

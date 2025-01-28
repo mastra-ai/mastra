@@ -60,6 +60,8 @@ export class Deployer extends MastraBase {
       return;
     }
 
+    mastraDeps['@mastra/loggers'] = 'latest';
+
     writeFileSync(
       pkgPath,
       JSON.stringify(
