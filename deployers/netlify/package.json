@@ -4,24 +4,17 @@
   "description": "",
   "type": "module",
   "main": "dist/index.js",
-  "module": "dist/deployer-netlify.esm.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/deployer-netlify.esm.js"
-      },
-      "require": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      }
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "dts build",
-    "build:dev": "dts watch",
+    "build": "tsup-node src/index.ts --format esm --dts --clean --treeshake",
+    "dev": "tsup-node src/index.ts --format esm --dts --clean --treeshake --watch",
     "test": "vitest run"
   },
   "keywords": [],
@@ -42,7 +35,7 @@
     "@tsconfig/recommended": "^1.0.7",
     "@types/jsdom": "^21.1.7",
     "@types/node": "^22.9.0",
-    "dts-cli": "^2.0.5",
+    "tsup": "^8.0.1",
     "vitest": "^2.1.8"
   }
 }
