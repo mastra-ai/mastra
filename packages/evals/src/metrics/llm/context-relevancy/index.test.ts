@@ -1,5 +1,5 @@
-import { describe, it, expect, jest } from '@jest/globals';
 import { type ModelConfig } from '@mastra/core';
+import { describe, it, expect } from 'vitest';
 
 import { isCloserTo } from '../utils';
 import { TestCaseWithContext } from '../utils';
@@ -55,7 +55,6 @@ const testCases: TestCaseWithContext[] = [
 ];
 
 const SECONDS = 10000;
-jest.setTimeout(15 * SECONDS);
 
 const modelConfig: ModelConfig = {
   provider: 'OPEN_AI',
@@ -64,25 +63,31 @@ const modelConfig: ModelConfig = {
   apiKey: process.env.OPENAI_API_KEY,
 };
 
-describe('ContextPrecisionMetric', () => {
-  it('should measure perfect context relevancy with all relevant items', async () => {
-    const testCase = testCases[0]!;
-    const metric = new ContextRelevancyMetric(modelConfig, { context: testCase.context });
-    const result = await metric.measure(testCase.input, testCase.output);
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
-  });
+describe(
+  'ContextPrecisionMetric',
+  () => {
+    it('should measure perfect context relevancy with all relevant items', async () => {
+      const testCase = testCases[0]!;
+      const metric = new ContextRelevancyMetric(modelConfig, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
+    });
 
-  it('should measure mixed relevancy where only some contexts are relevant', async () => {
-    const testCase = testCases[1]!;
-    const metric = new ContextRelevancyMetric(modelConfig, { context: testCase.context });
-    const result = await metric.measure(testCase.input, testCase.output);
-    expect(isCloserTo(result.score, testCase.expectedResult.score, 0)).toBe(true);
-  });
+    it('should measure mixed relevancy where only some contexts are relevant', async () => {
+      const testCase = testCases[1]!;
+      const metric = new ContextRelevancyMetric(modelConfig, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(isCloserTo(result.score, testCase.expectedResult.score, 0)).toBe(true);
+    });
 
-  it('should measure no relevancy where contexts are completely unrelated', async () => {
-    const testCase = testCases[2]!;
-    const metric = new ContextRelevancyMetric(modelConfig, { context: testCase.context });
-    const result = await metric.measure(testCase.input, testCase.output);
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
-  });
-});
+    it('should measure no relevancy where contexts are completely unrelated', async () => {
+      const testCase = testCases[2]!;
+      const metric = new ContextRelevancyMetric(modelConfig, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
+    });
+  },
+  {
+    timeout: 15 * SECONDS,
+  },
+);

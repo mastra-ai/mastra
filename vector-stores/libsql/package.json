@@ -25,13 +25,13 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@mastra/core": "workspace:*",
-    "@libsql/client": "^0.14.0"
+    "@libsql/client": "^0.14.0",
+    "@mastra/core": "workspace:*"
   },
   "devDependencies": {
     "@tsconfig/recommended": "^1.0.7",
     "@types/node": "^22.9.0",
     "dts-cli": "^2.0.5",
-    "vitest": "^2.1.8"
+    "vitest": "^3.0.4"
   }
 }

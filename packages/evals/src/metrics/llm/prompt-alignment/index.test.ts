@@ -1,5 +1,5 @@
-import { describe, it, expect, jest } from '@jest/globals';
 import { type ModelConfig } from '@mastra/core';
+import { describe, it, expect } from 'vitest';
 
 import { TestCaseWithInstructions } from '../utils';
 
@@ -69,7 +69,6 @@ const testCases: TestCaseWithInstructions[] = [
 ];
 
 const SECONDS = 10000;
-jest.setTimeout(15 * SECONDS);
 
 const modelConfig: ModelConfig = {
   provider: 'OPEN_AI',
@@ -78,69 +77,75 @@ const modelConfig: ModelConfig = {
   apiKey: process.env.OPENAI_API_KEY,
 };
 
-describe('PromptAlignmentMetric', () => {
-  it('should measure perfect alignment with single instruction', async () => {
-    const testCase = testCases[0]!;
-    const metric = new PromptAlignmentMetric(modelConfig, {
-      instructions: testCase.instructions,
+describe(
+  'PromptAlignmentMetric',
+  () => {
+    it('should measure perfect alignment with single instruction', async () => {
+      const testCase = testCases[0]!;
+      const metric = new PromptAlignmentMetric(modelConfig, {
+        instructions: testCase.instructions,
+      });
+
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBe(testCase.expectedResult.score);
     });
 
-    const result = await metric.measure(testCase.input, testCase.output);
-    expect(result.score).toBe(testCase.expectedResult.score);
-  });
+    it('should measure zero alignment with single instruction', async () => {
+      const testCase = testCases[1]!;
+      const metric = new PromptAlignmentMetric(modelConfig, {
+        instructions: testCase.instructions,
+      });
 
-  it('should measure zero alignment with single instruction', async () => {
-    const testCase = testCases[1]!;
-    const metric = new PromptAlignmentMetric(modelConfig, {
-      instructions: testCase.instructions,
+      const result = await metric.measure(testCase.input, testCase.output);
+
+      expect(result.score).toBe(testCase.expectedResult.score);
     });
 
-    const result = await metric.measure(testCase.input, testCase.output);
+    it('should measure perfect alignment with multiple instructions', async () => {
+      const testCase = testCases[2]!;
+      const metric = new PromptAlignmentMetric(modelConfig, {
+        instructions: testCase.instructions,
+      });
 
-    expect(result.score).toBe(testCase.expectedResult.score);
-  });
+      const result = await metric.measure(testCase.input, testCase.output);
 
-  it('should measure perfect alignment with multiple instructions', async () => {
-    const testCase = testCases[2]!;
-    const metric = new PromptAlignmentMetric(modelConfig, {
-      instructions: testCase.instructions,
+      expect(result.score).toBe(testCase.expectedResult.score);
     });
 
-    const result = await metric.measure(testCase.input, testCase.output);
+    it('should measure partial alignment with multiple instructions', async () => {
+      const testCase = testCases[3]!;
+      const metric = new PromptAlignmentMetric(modelConfig, {
+        instructions: testCase.instructions,
+      });
 
-    expect(result.score).toBe(testCase.expectedResult.score);
-  });
+      const result = await metric.measure(testCase.input, testCase.output);
 
-  it('should measure partial alignment with multiple instructions', async () => {
-    const testCase = testCases[3]!;
-    const metric = new PromptAlignmentMetric(modelConfig, {
-      instructions: testCase.instructions,
+      expect(result.score).toBe(testCase.expectedResult.score);
     });
 
-    const result = await metric.measure(testCase.input, testCase.output);
+    it('should measure alignment with complex formatting instructions', async () => {
+      const testCase = testCases[4]!;
+      const metric = new PromptAlignmentMetric(modelConfig, {
+        instructions: testCase.instructions,
+      });
 
-    expect(result.score).toBe(testCase.expectedResult.score);
-  });
+      const result = await metric.measure(testCase.input, testCase.output);
 
-  it('should measure alignment with complex formatting instructions', async () => {
-    const testCase = testCases[4]!;
-    const metric = new PromptAlignmentMetric(modelConfig, {
-      instructions: testCase.instructions,
+      expect(result.score).toBe(testCase.expectedResult.score);
     });
 
-    const result = await metric.measure(testCase.input, testCase.output);
+    it('should handle empty output', async () => {
+      const testCase = testCases[5]!;
+      const metric = new PromptAlignmentMetric(modelConfig, {
+        instructions: testCase.instructions,
+      });
 
-    expect(result.score).toBe(testCase.expectedResult.score);
-  });
+      const result = await metric.measure(testCase.input, testCase.output);
 
-  it('should handle empty output', async () => {
-    const testCase = testCases[5]!;
-    const metric = new PromptAlignmentMetric(modelConfig, {
-      instructions: testCase.instructions,
+      expect(result.score).toBe(testCase.expectedResult.score);
     });
-
-    const result = await metric.measure(testCase.input, testCase.output);
-
-    expect(result.score).toBe(testCase.expectedResult.score);
-  });
-});
+  },
+  {
+    timeout: 15 * SECONDS,
+  },
+);

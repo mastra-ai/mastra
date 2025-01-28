@@ -14,7 +14,6 @@ const packages_llm_text = `
   @mastra/engine -> packages/engine
   @mastra/evals -> packages/evals
   @mastra/rag -> packages/rag
-  @mastra/tts -> packages/tts
   @mastra/memory -> packages/memory
   @mastra/mcp -> packages/mcp
   @mastra/loggers -> packages/loggers

@@ -1,7 +1,7 @@
 import { createTool, jsonSchemaToModel } from '@mastra/core';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport, StdioServerParameters } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { ClientCapabilities, ListResourcesResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import { StdioClientTransport, type StdioServerParameters } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { type ClientCapabilities, ListResourcesResultSchema } from '@modelcontextprotocol/sdk/types.js';
 
 export class MastraMCPClient {
   name: string;
