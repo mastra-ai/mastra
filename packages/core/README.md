@@ -20,21 +20,9 @@ npm install @mastra/core
 - Telemetry and logging infrastructure
 - Text-to-speech capabilities
 
+For comprehensive documentation, visit our [official documentation](https://mastra.ai/docs).
+
 ## Core Components
-
-### Actions (`/action`)
-
-Actions are the fundamental building blocks of Mastra workflows. They represent discrete, executable tasks with well-defined inputs and outputs. Each action can validate its inputs using Zod schemas and can access Mastra's core services through the execution context.
-
-```typescript
-interface IAction<TId, TSchemaIn, TSchemaOut, TContext> {
-  id: TId;
-  description?: string;
-  inputSchema?: TSchemaIn;
-  outputSchema?: TSchemaOut;
-  execute: (context: TContext) => Promise<TSchemaOut>;
-}
-```
 
 ### Agents (`/agent`)
 
@@ -54,6 +42,8 @@ const agent = new Agent({
 });
 ```
 
+[More agent documentation →](https://mastra.ai/docs/reference/agents/overview)
+
 ### Embeddings (`/embeddings`)
 
 The embeddings module provides a unified interface for converting text into vector representations across multiple AI providers. These vectors are essential for semantic search, similarity comparisons, and other NLP tasks.
@@ -67,14 +57,9 @@ const embeddings = await embed('text to embed', {
 });
 ```
 
-Supported providers:
+Supported providers right now are OpenAI, Cohere, Amazon Bedrock, Google AI, Mistral, and Voyage.
 
-- OpenAI: State-of-the-art embeddings
-- Cohere: Multilingual support
-- Amazon Bedrock: Enterprise-grade embeddings
-- Google AI: PaLM-based embeddings
-- Mistral: Open-source alternative
-- Voyage: Specialized embeddings
+[More embeddings documentation →](https://mastra.ai/docs/reference/embeddings/overview)
 
 ### Evaluations (`/eval`)
 
@@ -91,22 +76,7 @@ class CustomMetric extends Metric {
 }
 ```
 
-### Hooks (`/hooks`)
-
-Hooks provide an event system for monitoring and extending Mastra's functionality. They allow you to react to key events in the AI pipeline, enabling logging, monitoring, and custom behavior injection.
-
-```typescript
-import { AvailableHooks, registerHook } from '@mastra/core';
-
-registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName }) => {
-  // Handle generation event
-});
-```
-
-Available hooks:
-
-- `ON_EVALUATION`: Triggered after evaluation, useful for logging and analysis
-- `ON_GENERATION`: Triggered after text generation, perfect for monitoring outputs
+[More evaluations documentation →](https://mastra.ai/docs/reference/eval/overview)
 
 ### Memory (`/memory`)
 
@@ -120,6 +90,8 @@ const memory = new MastraMemory({
 });
 ```
 
+[More memory documentation →](https://mastra.ai/docs/reference/memory/overview)
+
 ### Vector Stores (`/vector`)
 
 Vector stores provide the infrastructure for storing and querying vector embeddings. They support semantic search, similarity matching, and efficient vector operations across different backend implementations.
@@ -131,6 +103,8 @@ class CustomVectorStore extends MastraVector {
   // Vector store implementation
 }
 ```
+
+[More vector stores documentation →](https://mastra.ai/docs/reference/vector/overview)
 
 ### Workflows (`/workflows`)
 
@@ -146,6 +120,8 @@ const workflow = new Workflow({
   ],
 });
 ```
+
+[More workflows documentation →](https://mastra.ai/docs/reference/workflows/overview)
 
 ### Tools (`/tools`)
 
@@ -163,6 +139,8 @@ const tool = new ToolAction({
 });
 ```
 
+[More tools documentation →](https://mastra.ai/docs/reference/tools/overview)
+
 ### Logger (`/logger`)
 
 The logging system provides structured, leveled logging with multiple transport options. It supports debug information, performance monitoring, and error tracking across your AI applications.
@@ -176,6 +154,8 @@ const logger = createLogger({
 });
 ```
 
+[More logging documentation →](https://mastra.ai/docs/reference/observability/logging)
+
 ### Telemetry (`/telemetry`)
 
 Telemetry provides OpenTelemetry integration for comprehensive monitoring of your AI systems. Track latency, success rates, and system health with distributed tracing and metrics collection.
@@ -187,3 +167,12 @@ const telemetry = Telemetry.init({
   serviceName: 'my-service',
 });
 ```
+
+[More Telemetry documentation →](https://mastra.ai/docs/reference/observability/telemetry)
+
+## Additional Resources
+
+- [Getting Started Guide](https://mastra.ai/docs/getting-started/installation)
+- [API Reference](https://mastra.ai/docs/reference)
+- [Examples](https://mastra.ai/docs/examples)
+- [Deployment Guide](https://mastra.ai/docs/deployment/overview)
