@@ -124,6 +124,8 @@ export class LLM extends MastraBase {
       toolChoice?: 'auto' | 'required';
       baseURL?: string;
       fetch?: typeof globalThis.fetch;
+      apiVersion?: string;
+      headers?: Record<string, string>;
       apiKey?: string;
     };
   }): LanguageModelV1 {
@@ -237,7 +239,10 @@ export class LLM extends MastraBase {
       const azure = createAzure({
         resourceName: process.env.AZURE_RESOURCE_NAME || '',
         apiKey: model?.apiKey || process.env.AZURE_API_KEY || '',
+        apiVersion: model?.apiVersion,
         baseURL: model?.baseURL,
+        headers: model?.headers,
+        fetch: model?.fetch,
       });
       modelDef = azure(model.name || 'gpt-35-turbo-instruct');
     } else if (model.type === 'amazon') {
@@ -288,6 +293,8 @@ export class LLM extends MastraBase {
           toolChoice?: 'auto' | 'required';
           baseURL?: string;
           apiKey?: string;
+          apiVersion?: string;
+          headers?: Record<string, string>;
           fetch?: typeof globalThis.fetch;
         } & GoogleGenerativeAISettings)
       | CustomModelConfig;

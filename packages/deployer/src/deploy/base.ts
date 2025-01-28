@@ -54,8 +54,6 @@ export class Deployer extends MastraBase {
         return acc;
       }, {});
 
-    mastraDeps['@mastra/loggers'] = 'latest';
-
     const pkgPath = join(this.dotMastraPath, 'package.json');
 
     if (this.type === 'Dev' && existsSync(pkgPath)) {
