@@ -28,7 +28,7 @@ export class PostgresStore extends MastraStorage {
 
   protected async createTable(tableName: TABLE_NAMES, schema: Record<string, StorageColumn>): Promise<void> {
     const columns = Object.entries(schema).map(([name, column]) => {
-      let definition = `${name} ${column.type === 'text' ? 'TEXT' : 'TIMESTAMP WITH TIME ZONE'}`;
+      let definition = `${this.pgp.as.name(name)} ${column.type === 'text' ? 'TEXT' : 'TIMESTAMP WITH TIME ZONE'}`;
       if (!column.nullable) {
         definition += ' NOT NULL';
       }
@@ -37,10 +37,10 @@ export class PostgresStore extends MastraStorage {
 
     const primaryKeys = Object.entries(schema)
       .filter(([_, column]) => column.primaryKey)
-      .map(([name]) => name);
+      .map(([name]) => this.pgp.as.name(name));
 
     const tableQuery = `
-      CREATE TABLE IF NOT EXISTS ${tableName} (
+      CREATE TABLE IF NOT EXISTS ${this.pgp.as.name(tableName)} (
         ${columns.join(',\n        ')}${primaryKeys.length > 0 ? `,\n        PRIMARY KEY (${primaryKeys.join(', ')})` : ''}
       );
     `;
@@ -54,7 +54,8 @@ export class PostgresStore extends MastraStorage {
   }
 
   async clearTable(tableName: string): Promise<void> {
-    await this.db.none(`TRUNCATE TABLE ${tableName}`);
+    await this.db.none(`TRUNCATE TABLE ${this.pgp.as.name(tableName)}`);
+  }
   }
 
   async persistWorkflowSnapshot(params: {
@@ -67,7 +68,7 @@ export class PostgresStore extends MastraStorage {
 
     await this.db.none(
       `
-      INSERT INTO ${tableName}
+      INSERT INTO ${this.pgp.as.name(tableName)}
         (workflow_name, run_id, snapshot, updated_at)
       VALUES
         ($1, $2, $3, CURRENT_TIMESTAMP)
@@ -90,7 +91,7 @@ export class PostgresStore extends MastraStorage {
     const result = await this.db.oneOrNone(
       `
       SELECT snapshot
-      FROM ${tableName}
+      FROM ${this.pgp.as.name(tableName)}
       WHERE workflow_name = $1
         AND run_id = $2
     `,
