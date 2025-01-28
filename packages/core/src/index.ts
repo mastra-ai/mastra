@@ -10,7 +10,6 @@ export * from './logger';
 export * from './mastra';
 export * from './memory';
 export * from './relevance';
-export * from './sync';
 export * from './telemetry';
 export * from './tools';
 export * from './tools/types';

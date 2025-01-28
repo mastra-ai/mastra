@@ -1,4 +1,4 @@
-import { createSync, Integration } from '@mastra/core';
+import { Integration, Step, Workflow } from '@mastra/core';
 import { MDocument } from '@mastra/rag'
 import * as integrationClient from './client/sdk.gen';
 // @ts-ignore
@@ -6,6 +6,9 @@ import * as integrationClient from './client/sdk.gen';
 import { FirecrawlToolset } from './toolset';
 import { FirecrawlConfig } from './types';
 import { z } from 'zod';
+
+
+
 export class FirecrawlIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'FIRECRAWL';
   readonly logoUrl = '';
@@ -23,38 +26,33 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
       config: this.config,
     })
 
-    this.registerSync(createSync({
-      id: 'FIRECRAWL:CRAWL_AND_SYNC',
+    const crawlAndSyncWorkflow = new Workflow({
       name: 'Crawl and Sync',
-      description: 'Crawl and Sync',
-      outputSchema: z.object({
-        success: z.boolean(),
-        entityType: z.string(),
-        crawlData: z.array(z.object({
-          markdown: z.string(),
-          metadata: z.object({
-            sourceURL: z.string(),
-          }),
-        })),
-      }),
-      inputSchema: z.object({
+      triggerSchema: z.object({
         url: z.string(),
         limit: z.number().default(3),
         pathRegex: z.string().nullable(),
       }),
-      execute: async ({ context: { url, pathRegex, limit }, engine }) => {
-        console.log("Starting crawl", url);
+    })
 
-        const entityType = `CRAWL_${url}`;
+    const syncStep = new Step({
+      id: 'FIRECRAWL:CRAWL_AND_SYNC',
+      name: 'Crawl and Sync',
+      description: 'Crawl and Sync',
+      execute: async ({ context, mastra }) => {
+        const triggerData = context.machineContext?.triggerData;
+        console.log("Starting crawl", triggerData?.url);
+
+        const entityType = `CRAWL_${triggerData?.url}`;
 
         try {
           const client = await this.openapi.getApiClient();
 
           const res = await client.crawlUrls({
             body: {
-              url: url,
-              limit: limit || 3,
-              includePaths: pathRegex ? [pathRegex] : [],
+              url: triggerData?.url,
+              limit: triggerData?.limit || 3,
+              includePaths: triggerData?.pathRegex ? [triggerData.pathRegex] : [],
               scrapeOptions: {
                 formats: ["markdown"],
                 includeTags: ["main", "body"],
@@ -131,7 +129,7 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
             })
           );
 
-          await engine?.syncRecords({
+          await mastra?.engine?.syncRecords({
             connectionId: "SYSTEM",
             records: recordsToPersist.flatMap((r) => r),
             name: entityType,
@@ -151,37 +149,36 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
           };
         }
       }
-    }))
+    })
 
-    this.registerSync(createSync({
+    crawlAndSyncWorkflow.step(syncStep).commit();
+
+    this.registerWorkflow('FIRECRAWL:CRAWL_AND_SYNC', crawlAndSyncWorkflow)
+
+    const crawlAndSyncOnceWorkflow = new Workflow({
+      name: "Crawl and Sync Once",
+      triggerSchema: z.object({
+        url: z.string().describe("The URL of the website to crawl"),
+        limit: z.number().default(3),
+        pathRegex: z.string().optional().describe("The regex to match the paths"),
+      }),
+    })
+
+    const syncOnceStep = new Step({
       id: 'FIRECRAWL:CRAWL_AND_SYNC_ONCE',
       name: 'Crawl and Sync Once',
       description: 'Crawl and Sync if the entity type does not exist',
-      outputSchema: z.object({
-        success: z.boolean(),
-        entityType: z.string(),
-        crawlData: z.array(z.object({
-          markdown: z.string(),
-          metadata: z.object({
-            sourceURL: z.string(),
-          }),
-        })),
-      }),
-      inputSchema: z.object({
-        url: z.string(),
-        limit: z.number().default(3),
-        pathRegex: z.string().nullable(),
-      }),
-      execute: async ({ context: { url, pathRegex, limit }, engine }) => {
-        const entityType = `CRAWL_${url}`;
+      execute: async ({ context, mastra }) => {
+        const triggerData = context.machineContext?.triggerData;
+        const entityType = `CRAWL_${triggerData?.url}`;
 
-        const existingCrawl = await engine?.getRecordsByEntityName({
+        const existingCrawl = await mastra?.engine?.getRecordsByEntityName({
           connectionId: "SYSTEM",
           name: entityType,
         });
 
-        if (existingCrawl?.length > 0) {
-          console.log("Crawl already exists", url);
+        if (!existingCrawl || existingCrawl?.length > 0) {
+          console.log("Crawl already exists", triggerData?.url);
           return {
             success: true,
             entityType,
@@ -189,15 +186,15 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
           };
         }
 
-        console.log("Starting crawl", url);
+        console.log("Starting crawl", triggerData?.url);
         try {
           const client = await this.openapi.getApiClient();
 
           const res = await client.crawlUrls({
             body: {
-              url: url,
-              limit: limit || 3,
-              includePaths: pathRegex ? [pathRegex] : [],
+              url: triggerData?.url,
+              limit: triggerData?.limit || 3,
+              includePaths: triggerData?.pathRegex ? [triggerData.pathRegex] : [],
               scrapeOptions: {
                 formats: ["markdown"],
                 includeTags: ["main", "body"],
@@ -274,7 +271,7 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
             })
           );
 
-          await engine?.syncRecords({
+          await mastra?.engine?.syncRecords({
             connectionId: "SYSTEM",
             records: recordsToPersist.flatMap((r) => r),
             name: entityType,
@@ -294,7 +291,11 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
           };
         }
       }
-    }))
+    })
+
+    crawlAndSyncOnceWorkflow.step(syncOnceStep).commit();
+
+    this.registerWorkflow('FIRECRAWL:CRAWL_AND_SYNC_ONCE', crawlAndSyncOnceWorkflow)
   }
 
   getStaticTools() {

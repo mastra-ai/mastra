@@ -1,5 +1,3 @@
-import { z } from 'zod';
-
 import 'dotenv/config';
 
 import { Agent } from '../agent';
@@ -9,21 +7,16 @@ import { LLM } from '../llm';
 import { ModelConfig } from '../llm/types';
 import { LogLevel, Logger, createLogger, noopLogger } from '../logger';
 import { MastraMemory } from '../memory';
-import { Run } from '../run/types';
-import { SyncAction } from '../sync';
 import { InstrumentClass, OtelConfig, Telemetry } from '../telemetry';
 import { MastraTTS } from '../tts';
 import { MastraVector } from '../vector';
 import { Workflow } from '../workflows';
-
-import { StripUndefined } from './types';
 
 @InstrumentClass({
   prefix: 'mastra',
   excludeMethods: ['getLogger', 'getTelemetry'],
 })
 export class Mastra<
-  TSyncs extends Record<string, SyncAction<any, any, any, any>> = Record<string, SyncAction<any, any, any, any>>,
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
@@ -33,7 +26,6 @@ export class Mastra<
   private vectors?: TVectors;
   private agents: TAgents;
   private logger: TLogger;
-  private syncs: TSyncs;
   private workflows: TWorkflows;
   private telemetry?: Telemetry;
   private tts?: TTTS;
@@ -43,7 +35,6 @@ export class Mastra<
 
   constructor(config?: {
     memory?: MastraMemory;
-    syncs?: TSyncs;
     agents?: TAgents;
     engine?: MastraEngine;
     vectors?: TVectors;
@@ -122,21 +113,6 @@ export class Mastra<
       this.vectors = vectors as TVectors;
     }
 
-    /*
-    Syncs
-    */
-    if (config?.syncs && !config.engine) {
-      throw new Error('Engine is required to run syncs');
-    }
-
-    this.syncs = (config?.syncs || {}) as TSyncs;
-
-    if (config?.syncs && !config?.engine) {
-      throw new Error('Engine is required to run syncs');
-    }
-
-    this.syncs = (config?.syncs || {}) as TSyncs;
-
     if (config?.engine) {
       this.engine = config.engine;
     }
@@ -185,7 +161,6 @@ export class Mastra<
           telemetry: this.telemetry,
           engine: this.engine,
           memory: this.memory,
-          syncs: this.syncs,
           agents: agents,
           tts: this.tts,
           vectors: this.vectors,
@@ -209,7 +184,6 @@ export class Mastra<
           telemetry: this.telemetry,
           engine: this.engine,
           memory: this.memory,
-          syncs: this.syncs,
           agents: this.agents,
           tts: this.tts,
           vectors: this.vectors,
@@ -239,43 +213,6 @@ export class Mastra<
     }
 
     return llm;
-  }
-
-  public async sync<K extends keyof TSyncs>(
-    key: K,
-    params: TSyncs[K] extends SyncAction<any, infer TSchemaIn, any, any>
-      ? TSchemaIn extends z.ZodSchema
-        ? z.infer<TSchemaIn>
-        : never
-      : never,
-    runId?: Run['runId'],
-  ): Promise<StripUndefined<TSyncs[K]['outputSchema']>['_input']> {
-    if (!this.engine) {
-      throw new Error(`Engine is required to run syncs`);
-    }
-
-    const sync = this.syncs?.[key];
-    if (!sync) {
-      throw new Error(`Sync function ${key as string} not found`);
-    }
-
-    const syncFn = sync['execute'];
-    if (!syncFn) {
-      throw new Error(`Sync function ${key as string} not found`);
-    }
-
-    return await syncFn({
-      context: params,
-      mastra: {
-        engine: this.engine,
-        memory: this.memory,
-        agents: this.agents,
-        vectors: this.vectors,
-        llm: this.LLM,
-        tts: this.tts,
-      },
-      runId,
-    });
   }
 
   public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName] {

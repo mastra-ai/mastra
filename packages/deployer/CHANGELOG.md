@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.22
+
+### Patch Changes
+
+- 685108a: Remove syncs and excess rag
+- 685108a: Removing mastra syncs
+- Updated dependencies [685108a]
+- Updated dependencies [685108a]
+  - @mastra/core@0.1.27-alpha.78
+
 ## 0.0.1-alpha.21
 
 ### Patch Changes

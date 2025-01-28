@@ -1,5 +1,14 @@
 # @mastra/rag
 
+## 0.0.2-alpha.68
+
+### Patch Changes
+
+- 685108a: Remove syncs and excess rag
+- Updated dependencies [685108a]
+- Updated dependencies [685108a]
+  - @mastra/core@0.1.27-alpha.78
+
 ## 0.0.2-alpha.67
 
 ### Patch Changes

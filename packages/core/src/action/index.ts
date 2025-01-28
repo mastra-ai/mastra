@@ -6,7 +6,6 @@ import { LLM } from '../llm';
 import { ModelConfig } from '../llm/types';
 import { Logger } from '../logger';
 import { MastraMemory } from '../memory';
-import { SyncAction } from '../sync';
 import { Telemetry } from '../telemetry';
 import { MastraTTS } from '../tts';
 import { MastraVector } from '../vector';
@@ -20,7 +19,6 @@ export type MastraPrimitives = {
   tts?: Record<string, MastraTTS>;
   vectors?: Record<string, MastraVector>;
   memory?: MastraMemory;
-  syncs?: Record<string, SyncAction<any, any, any, any>>;
   llm?: (model: ModelConfig) => LLM;
 };
 export interface IExecutionContext<
