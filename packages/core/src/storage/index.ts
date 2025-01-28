@@ -1,4 +1,5 @@
 import { MastraBase } from '../base';
+import { MessageType, ThreadType } from '../memory';
 import { WorkflowRunState } from '../workflows';
 
 export interface StorageColumn {
@@ -121,4 +122,14 @@ export abstract class MastraStorage extends MastraBase {
 
     return data;
   }
+
+  // Memory Methods
+
+  abstract getThreadById(params: { threadId: string }): Promise<ThreadType | null>;
+  abstract getThreadsByResourceId(params: { resourceid: string }): Promise<ThreadType[]>;
+  abstract saveThread(params: { thread: ThreadType }): Promise<ThreadType>;
+  abstract updateThread(id: string, title: string, metadata: Record<string, unknown>): Promise<ThreadType>;
+  abstract deleteThread(id: string): Promise<void>;
+  abstract getMessages<T = unknown>(params: { threadId: string }): Promise<T>;
+  abstract saveMessages(params: { messages: MessageType[] }): Promise<MessageType[]>;
 }
