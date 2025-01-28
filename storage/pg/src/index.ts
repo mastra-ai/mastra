@@ -260,7 +260,7 @@ export class PostgresStore extends MastraStorage {
       await client.query('BEGIN');
       for (const message of messages) {
         const { id, content, role, createdAt, threadId, toolCallIds, toolCallArgs, type } = message;
-        
+
         await client.query(
           `
           INSERT INTO mastra_messages (
@@ -324,6 +324,7 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
+  // TODO: This should be handled by the init method of MastraStorage instead
   async ensureTablesExist(): Promise<void> {
     if (this.hasTables) {
       return;
