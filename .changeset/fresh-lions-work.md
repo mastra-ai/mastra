@@ -1,8 +1,5 @@
 ---
 '@mastra/apollo': patch
-'@mastra/ashby': patch
-'@mastra/coda': patch
-'@mastra/composio': patch
 '@mastra/firecrawl': patch
 '@mastra/github': patch
 '@mastra/ragie': patch

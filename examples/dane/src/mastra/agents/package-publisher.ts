@@ -35,16 +35,9 @@ const packages_llm_text = `
 
   ## 5. Integrations - STRICT RULES:
   - ALL integration packages are under integrations/
-  @mastra/apollos -> integrations/apollo
-  @mastra/ashby -> integrations/ashby
+  @mastra/composio -> integrations/composio
   @mastra/github -> integrations/github
-  @mastra/twilio -> integrations/twilio
-  @mastra/stripe -> integrations/stripe
   @mastra/stabilityai -> integrations/stabilityai
-  @mastra/sendgrid -> integrations/sendgrid
-  @mastra/ragie -> integrations/ragie
-  @mastra/resend -> integrations/resend
-  @mastra/coda -> integrations/coda
   @mastra/firecrawl -> integrations/firecrawl
   
   ##VALIDATION:
