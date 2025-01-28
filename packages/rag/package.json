@@ -28,26 +28,13 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@datastax/astra-db-ts": "^1.5.0",
-    "@date-fns/utc": "^1.2.0",
-    "@libsql/client": "^0.14.0",
     "@llamaindex/core": "^0.4.10",
     "@llamaindex/env": "^0.1.20",
     "@mastra/core": "workspace:*",
     "@paralleldrive/cuid2": "^2.2.2",
-    "@pinecone-database/pinecone": "^3.0.3",
-    "@qdrant/js-client-rest": "^1.12.0",
-    "@upstash/vector": "^1.1.7",
-    "chromadb": "^1.9.4",
-    "chromadb-default-embed": "^2.13.2",
-    "cloudflare": "^4.0.0",
-    "date-fns": "^4.1.0",
-    "dotenv": "^16.3.1",
     "js-tiktoken": "^1.0.15",
     "jsdom": "^25.0.1",
     "llamaindex": "^0.8.15",
-    "pg": "^8.13.1",
-    "postgres": "^3.4.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -56,7 +43,6 @@
     "@tsconfig/recommended": "^1.0.7",
     "@types/jsdom": "^21.1.7",
     "@types/node": "^22.9.0",
-    "@types/pg": "^8.11.10",
     "dts-cli": "^2.0.5",
     "vitest": "^3.0.4"
   }

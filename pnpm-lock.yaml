@@ -2689,15 +2689,6 @@ importers:
 
   packages/rag:
     dependencies:
-      '@datastax/astra-db-ts':
-        specifier: ^1.5.0
-        version: 1.5.0
-      '@date-fns/utc':
-        specifier: ^1.2.0
-        version: 1.2.0
-      '@libsql/client':
-        specifier: ^0.14.0
-        version: 0.14.0(bufferutil@4.0.8)(utf-8-validate@6.0.5)
       '@llamaindex/core':
         specifier: ^0.4.10
         version: 0.4.19(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.2.3)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)
@@ -2710,30 +2701,6 @@ importers:
       '@paralleldrive/cuid2':
         specifier: ^2.2.2
         version: 2.2.2
-      '@pinecone-database/pinecone':
-        specifier: ^3.0.3
-        version: 3.0.3
-      '@qdrant/js-client-rest':
-        specifier: ^1.12.0
-        version: 1.12.0(typescript@5.7.3)
-      '@upstash/vector':
-        specifier: ^1.1.7
-        version: 1.1.7
-      chromadb:
-        specifier: ^1.9.4
-        version: 1.9.4(@google/generative-ai@0.21.0)(cohere-ai@7.14.0(@aws-sdk/client-sso-oidc@3.716.0(@aws-sdk/client-sts@3.716.0))(encoding@0.1.13))(encoding@0.1.13)(openai@4.78.1(encoding@0.1.13)(zod@3.24.1))
-      chromadb-default-embed:
-        specifier: ^2.13.2
-        version: 2.13.2
-      cloudflare:
-        specifier: ^4.0.0
-        version: 4.0.0(encoding@0.1.13)
-      date-fns:
-        specifier: ^4.1.0
-        version: 4.1.0
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.4.7
       js-tiktoken:
         specifier: ^1.0.15
         version: 1.0.16
@@ -2743,12 +2710,6 @@ importers:
       llamaindex:
         specifier: ^0.8.15
         version: 0.8.30(@aws-sdk/client-sts@3.716.0)(@aws-sdk/credential-providers@3.716.0(@aws-sdk/client-sso-oidc@3.716.0(@aws-sdk/client-sts@3.716.0)))(@huggingface/transformers@3.2.3)(bufferutil@4.0.8)(encoding@0.1.13)(pg@8.13.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(socks@2.8.3)(tree-sitter@0.22.1)(typescript@5.7.3)(utf-8-validate@6.0.5)(web-tree-sitter@0.24.6)
-      pg:
-        specifier: ^8.13.1
-        version: 8.13.1
-      postgres:
-        specifier: ^3.4.5
-        version: 3.4.5
       zod:
         specifier: ^3.24.1
         version: 3.24.1
@@ -2768,9 +2729,6 @@ importers:
       '@types/node':
         specifier: ^22.9.0
         version: 22.10.2
-      '@types/pg':
-        specifier: ^8.11.10
-        version: 8.11.10
       dts-cli:
         specifier: ^2.0.5
         version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.10.2)(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5)
@@ -30219,17 +30177,6 @@ snapshots:
       onnxruntime-node: 1.14.0
 
   chromadb@1.9.2(@google/generative-ai@0.21.0)(cohere-ai@7.14.0(@aws-sdk/client-sso-oidc@3.716.0(@aws-sdk/client-sts@3.716.0))(encoding@0.1.13))(encoding@0.1.13)(openai@4.78.1(encoding@0.1.13)(zod@3.24.1)):
-    dependencies:
-      cliui: 8.0.1
-      isomorphic-fetch: 3.0.0(encoding@0.1.13)
-    optionalDependencies:
-      '@google/generative-ai': 0.21.0
-      cohere-ai: 7.14.0(@aws-sdk/client-sso-oidc@3.716.0(@aws-sdk/client-sts@3.716.0))(encoding@0.1.13)
-      openai: 4.78.1(encoding@0.1.13)(zod@3.24.1)
-    transitivePeerDependencies:
-      - encoding
-
-  chromadb@1.9.4(@google/generative-ai@0.21.0)(cohere-ai@7.14.0(@aws-sdk/client-sso-oidc@3.716.0(@aws-sdk/client-sts@3.716.0))(encoding@0.1.13))(encoding@0.1.13)(openai@4.78.1(encoding@0.1.13)(zod@3.24.1)):
     dependencies:
       cliui: 8.0.1
       isomorphic-fetch: 3.0.0(encoding@0.1.13)
