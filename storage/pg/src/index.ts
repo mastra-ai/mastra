@@ -1,4 +1,4 @@
-import { MastraStorage, StorageColumn, TABLE_NAMES, ThreadType, WorkflowRunState } from '@mastra/core';
+import { MastraStorage, MessageType, StorageColumn, TABLE_NAMES, ThreadType, WorkflowRunState } from '@mastra/core';
 import pg from 'pg';
 import pgPromise from 'pg-promise';
 import type { IDatabase, IMain } from 'pg-promise';
