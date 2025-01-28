@@ -471,7 +471,7 @@ export type AzureModel = 'gpt-35-turbo-instruct';
 
 export type AzureConfig = {
   provider: 'AZURE';
-  name: AzureModel & (string | {});
+  name: AzureModel | (string & {});
   apiKey?: string;
   toolChoice?: 'auto' | 'required';
 };
@@ -615,7 +615,7 @@ export type LLMTextOptions = {
 
 export type LLMTextObjectOptions<T> = LLMTextOptions & {
   structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
-}
+};
 
 export type LLMInnerStreamOptions = {
   tools?: ToolsInput;
@@ -629,4 +629,4 @@ export type LLMInnerStreamOptions = {
 
 export type LLMStreamObjectOptions<T> = LLMInnerStreamOptions & {
   structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
-}
+};
