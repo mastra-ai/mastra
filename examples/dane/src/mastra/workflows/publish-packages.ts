@@ -114,10 +114,6 @@ const assemblePackages = new Step({
       payload.vector_stores.forEach((pkg: string) => {
         let pkgName = pkg.replace('@mastra/vector-', '');
 
-        if (pkgName === 'astra') {
-          pkgName = 'astra-db';
-        }
-
         const pkgPath = path.join(process.cwd(), 'vector-stores', pkgName);
         packagesToBuild.add(pkgPath);
       });

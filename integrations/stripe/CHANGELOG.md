@@ -1,5 +1,12 @@
 # @mastra/stripe
 
+## 1.0.1-alpha.53
+
+### Patch Changes
+
+- Updated dependencies [7b87567]
+  - @mastra/core@0.1.27-alpha.74
+
 ## 1.0.1-alpha.52
 
 ### Patch Changes

@@ -337,6 +337,18 @@ export class Mastra<
   public setLogger({ logger }: { logger: TLogger }) {
     this.logger = logger;
 
+    if (this.agents) {
+      Object.keys(this.agents).forEach(key => {
+        this.agents?.[key]?.__setLogger(this.logger);
+      });
+    }
+
+    if (this.workflows) {
+      Object.keys(this.workflows).forEach(key => {
+        this.workflows?.[key]?.__setLogger(this.logger);
+      });
+    }
+
     if (this.memory) {
       this.memory.__setLogger(this.logger);
     }
