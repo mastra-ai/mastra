@@ -1269,7 +1269,7 @@ importers:
         version: 29.7.0
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@3.29.5)
+        version: 3.0.3(rollup@4.30.1)
       '@size-limit/preset-small-lib':
         specifier: ^11.1.4
         version: 11.1.6(size-limit@11.1.6)
@@ -1327,7 +1327,7 @@ importers:
         version: 29.7.0
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@4.30.1)
+        version: 3.0.3(rollup@3.29.5)
       '@size-limit/preset-small-lib':
         specifier: ^11.1.4
         version: 11.1.6(size-limit@11.1.6)
@@ -2618,9 +2618,9 @@ importers:
       '@types/node':
         specifier: ^22.9.0
         version: 22.10.7
-      dts-cli:
-        specifier: ^2.0.5
-        version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.10.7)(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5)
+      tsup:
+        specifier: ^8.0.1
+        version: 8.3.6(@swc/core@1.10.2(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.6.1)
       vitest:
         specifier: ^2.1.8
         version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.7)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)

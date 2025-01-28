@@ -3,25 +3,32 @@
   "version": "0.0.1-alpha.9",
   "description": "",
   "type": "module",
-  "main": "dist/index.js",
-  "module": "dist/loggers.esm.js",
-  "types": "dist/index.d.ts",
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
   "exports": {
     ".": {
       "import": {
         "types": "./dist/index.d.ts",
-        "default": "./dist/loggers.esm.js"
-      },
-      "require": {
-        "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      }
+    },
+    "./file": {
+      "import": {
+        "types": "./dist/file/index.d.ts",
+        "default": "./dist/file/index.js"
+      }
+    },
+    "./upstash": {
+      "import": {
+        "types": "./dist/upstash/index.d.ts",
+        "default": "./dist/upstash/index.js"
       }
     },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "dts build",
-    "build:dev": "dts watch",
+    "build": "tsup src/file/index.ts src/upstash/index.ts --format esm --dts --clean --treeshake",
+    "dev": "tsup src/file/index.ts src/upstash/index.ts --format esm --dts --clean --treeshake --watch",
     "test": "vitest run"
   },
   "keywords": [],
@@ -36,7 +43,7 @@
     "@tsconfig/recommended": "^1.0.7",
     "@types/jsdom": "^21.1.7",
     "@types/node": "^22.9.0",
-    "dts-cli": "^2.0.5",
+    "tsup": "^8.0.1",
     "vitest": "^2.1.8"
   }
 }
