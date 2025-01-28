@@ -1,4 +1,4 @@
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { systemPrompt } from '@/ai/prompts';
 import {
   getCryptoPrice,

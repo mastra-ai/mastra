@@ -1,4 +1,6 @@
-import { Agent, createTool, Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 const copywriterAgent = new Agent({

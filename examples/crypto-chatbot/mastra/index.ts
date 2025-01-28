@@ -1,4 +1,5 @@
-import { createLogger, Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import { createLogger } from '@mastra/core/logger';
 import { PgMemory } from '@mastra/memory/postgres';
 import { createCryptoAgent } from './agents';
 

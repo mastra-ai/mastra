@@ -1,5 +1,9 @@
-import { Mastra, Agent, Step, Workflow } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { EmbedManyResult } from '@mastra/core/llm';
+import { Step, Workflow } from '@mastra/core/workflows';
 import { createVectorQueryTool, embedMany, MDocument } from '@mastra/rag';
+
 import { PgVector } from '@mastra/vector-pg';
 import { z } from 'zod';
 

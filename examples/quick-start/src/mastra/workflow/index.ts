@@ -1,4 +1,4 @@
-import { Workflow, Step } from '@mastra/core';
+import { Workflow, Step } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 const logCatName = new Step({

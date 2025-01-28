@@ -1,4 +1,6 @@
-import { Agent, Mastra, Step, Workflow } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { Step, Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 async function main() {
