@@ -59,7 +59,7 @@ export class LibSQLStorage extends MastraStorage {
           VALUES (${placeholders})
         `;
 
-    this.logger('insert row', {
+    this.logger.debug('insert row', {
       tableName,
       sql: insertQuery,
       args: values,
@@ -79,7 +79,7 @@ export class LibSQLStorage extends MastraStorage {
 
     const selectQuery = `SELECT * FROM ${tableName} WHERE ${conditions}`;
 
-    this.logger('select row', {
+    this.logger.debug('select row', {
       tableName,
       sql: selectQuery,
       args: values,
