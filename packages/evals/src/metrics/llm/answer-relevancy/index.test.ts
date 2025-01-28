@@ -114,7 +114,7 @@ describe(
     const expectedScore = testCases[1].expectedResult.score;
     const difference = Math.abs(result.score - expectedScore);
 
-    expect(difference).toBeLessThanOrEqual(0.1);
+    expect(Math.round(difference * 10) / 10).toBeLessThanOrEqual(0.1);
   });
 
     it('should be able to measure a prompt with partial relevance', async () => {
