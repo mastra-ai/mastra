@@ -1,5 +1,11 @@
 # @mastra/rag
 
+## 0.0.2-alpha.66
+
+### Patch Changes
+
+- 9c0d010: Deprecated Reranker in favor of rerank function (BREAKING CHANGE)
+
 ## 0.0.2-alpha.65
 
 ### Patch Changes
