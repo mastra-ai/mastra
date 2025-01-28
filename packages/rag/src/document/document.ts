@@ -252,7 +252,7 @@ export class MDocument {
     this.chunks = textSplit;
   }
 
-  async chunk(params?: ChunkParams): Promise<MDocument['chunks']> {
+  async chunk(params?: ChunkParams): Promise<Chunk[]> {
     const { strategy: passedStrategy, extract, ...chunkOptions } = params || {};
     // Determine the default strategy based on type if not specified
     const strategy = passedStrategy || this.defaultStrategy();
