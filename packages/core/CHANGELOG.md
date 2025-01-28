@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.1.27-alpha.78
+
+### Patch Changes
+
+- 685108a: Remove syncs and excess rag
+- 685108a: Removing mastra syncs
+
 ## 0.1.27-alpha.77
 
 ### Patch Changes

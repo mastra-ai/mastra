@@ -1,5 +1,21 @@
 # @mastra/dane
 
+## 0.0.2-alpha.93
+
+### Patch Changes
+
+- 685108a: Removing mastra syncs
+- Updated dependencies [685108a]
+- Updated dependencies [685108a]
+  - @mastra/firecrawl@1.0.4-alpha.70
+  - @mastra/core@0.1.27-alpha.78
+  - @mastra/rag@0.0.2-alpha.68
+  - @mastra/github@1.0.3-alpha.62
+  - @mastra/stabilityai@1.0.1-alpha.53
+  - @mastra/engine@0.0.5-alpha.73
+  - @mastra/mcp@0.0.1-alpha.20
+  - @mastra/memory@0.0.2-alpha.59
+
 ## 0.0.2-alpha.92
 
 ### Patch Changes
