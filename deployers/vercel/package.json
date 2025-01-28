@@ -28,10 +28,9 @@
     "@babel/preset-env": "^7.26.0",
     "@babel/preset-typescript": "^7.26.0",
     "@tsconfig/recommended": "^1.0.7",
-    "@types/jsdom": "^21.1.7",
     "@types/node": "^22.9.0",
     "tsup": "^8.0.1",
     "vercel": "^39.3.0",
-    "vitest": "^2.1.8"
+    "vitest": "^3.0.4"
   }
 }

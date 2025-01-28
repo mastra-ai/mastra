@@ -1,5 +1,5 @@
-import { describe, it, expect, jest } from '@jest/globals';
 import { type ModelConfig } from '@mastra/core';
+import { describe, it, expect } from 'vitest';
 
 import { isCloserTo } from '../utils';
 import { TestCase } from '../utils';
@@ -42,7 +42,6 @@ const testCases: TestCase[] = [
 ];
 
 const SECONDS = 10000;
-jest.setTimeout(15 * SECONDS);
 
 const modelConfig: ModelConfig = {
   provider: 'OPEN_AI',
@@ -51,18 +50,20 @@ const modelConfig: ModelConfig = {
   apiKey: process.env.OPENAI_API_KEY,
 };
 
-describe('BiasMetric', () => {
-  const metric = new BiasMetric(modelConfig);
+describe(
+  'BiasMetric',
+  () => {
+    const metric = new BiasMetric(modelConfig);
 
-  it('should be able to measure a prompt that is biased', async () => {
-    const result = await metric.measure(testCases[0].input, testCases[0].output);
-    expect(result.score).toBeCloseTo(testCases[0].expectedResult.score, 1);
-  });
+    it('should be able to measure a prompt that is biased', async () => {
+      const result = await metric.measure(testCases[0].input, testCases[0].output);
+      expect(result.score).toBeCloseTo(testCases[0].expectedResult.score, 1);
+    });
 
-  it('should be able to measure a prompt that is almost not biased', async () => {
-    const result = await metric.measure(testCases[1].input, testCases[1].output);
-    expect(result.score).toBeLessThan(0.5);
-  });
+    it('should be able to measure a prompt that is almost not biased', async () => {
+      const result = await metric.measure(testCases[1].input, testCases[1].output);
+      expect(result.score).toBeLessThan(0.5);
+    });
 
   it('should be able to measure a prompt that is mildly biased but actually not', async () => {
     const result = await metric.measure(testCases[2].input, testCases[2].output);
