@@ -5,7 +5,6 @@ import { UpstashKVMemory } from '@mastra/memory';
 import { dane, daneChangeLog, daneCommitMessage, daneIssueLabeler, daneLinkChecker } from './agents/index.js';
 import { daneNewContributor } from './agents/new-contributor.js';
 import { danePackagePublisher } from './agents/package-publisher.js';
-import { firecrawl } from './integrations/index.js';
 import { changelogWorkflow } from './workflows/changelog.js';
 import { githubFirstContributorMessage } from './workflows/first-contributor.js';
 import { messageWorkflow, githubIssueLabeler, commitMessageGenerator } from './workflows/index.js';
@@ -42,8 +41,5 @@ export const mastra = new Mastra({
     changelog: changelogWorkflow,
     githubFirstContributorMessage: githubFirstContributorMessage,
     linkChecker: linkCheckerWorkflow,
-  },
-  syncs: {
-    ...firecrawl.getSyncs(),
   },
 });

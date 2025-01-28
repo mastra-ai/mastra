@@ -103,13 +103,6 @@ You can think of the `Mastra` class as a top-level registry. When you register t
       example: 'const agent = mastra.getAgent("agentOne");',
     },
     {
-      name: "sync<K>(key, params)",
-      type: "Promise<void>",
-      description:
-        "Executes a sync operation. Requires engine to be configured. Throws if sync not found.",
-      example: 'await mastra.sync("googleDocs", { folder: "123" });',
-    },
-    {
       name: "setLogger({ key, logger })",
       type: "void",
       description:
