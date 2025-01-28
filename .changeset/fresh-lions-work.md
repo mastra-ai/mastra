@@ -1,7 +1,6 @@
 ---
 '@mastra/firecrawl': patch
 '@mastra/github': patch
-'@mastra/ragie': patch
 '@mastra/resend': patch
 '@mastra/sendgrid': patch
 '@mastra/stripe': patch
