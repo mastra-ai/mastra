@@ -1,5 +1,4 @@
 ---
-'@mastra/apollo': patch
 '@mastra/firecrawl': patch
 '@mastra/github': patch
 '@mastra/ragie': patch
