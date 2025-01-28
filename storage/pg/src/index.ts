@@ -221,12 +221,80 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  async getMessages<T = unknown>(_params: { threadId: string }): Promise<T> {
-    throw new Error('not implemented yet');
+  async getMessages<T = unknown>({ threadId }: { threadId: string }): Promise<T> {
+    await this.ensureTablesExist();
+
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `
+        SELECT 
+            id, 
+            content, 
+            role, 
+            type,
+            created_at AS "createdAt", 
+            thread_id AS "threadId",
+            tool_call_ids AS "toolCallIds",
+            tool_call_args AS "toolCallArgs",
+            tokens,
+            tool_call_args_expire_at AS "toolCallArgsExpireAt"
+        FROM mastra_messages
+        WHERE thread_id = $1
+        ORDER BY created_at ASC
+        `,
+        [threadId],
+      );
+
+      return result.rows as T;
+    } finally {
+      client.release();
+    }
   }
 
-  async saveMessages(_params: { messages: MessageType[] }): Promise<MessageType[]> {
-    throw new Error('not implemented yet');
+  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+    await this.ensureTablesExist();
+
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const message of messages) {
+        const { id, content, role, createdAt, threadId, toolCallIds, toolCallArgs, type } = message;
+        
+        await client.query(
+          `
+          INSERT INTO mastra_messages (
+            id, 
+            content, 
+            role, 
+            created_at, 
+            thread_id, 
+            tool_call_ids, 
+            tool_call_args,
+            type
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          `,
+          [
+            id,
+            JSON.stringify(content),
+            role,
+            createdAt.toISOString(),
+            threadId,
+            JSON.stringify(toolCallIds),
+            JSON.stringify(toolCallArgs),
+            type,
+          ],
+        );
+      }
+      await client.query('COMMIT');
+      return messages;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async validateToolCallArgs({ hashedArgs }: { hashedArgs: string }): Promise<boolean> {
