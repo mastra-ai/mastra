@@ -48,6 +48,9 @@ export type OpenAIConfig = {
   name: OpenAIModel | (string & {});
   toolChoice?: 'auto' | 'required';
   apiKey?: string;
+  baseURL?: string;
+  headers?: Record<string, string>;
+  fetch?: typeof globalThis.fetch;
 };
 
 export type GoogleModel =
@@ -64,6 +67,9 @@ export type GoogleConfig = {
   name: GoogleModel | (string & {});
   toolChoice?: 'auto' | 'required';
   apiKey?: string;
+  baseURL?: string;
+  headers?: Record<string, string>;
+  fetch?: typeof globalThis.fetch;
 };
 
 export interface GoogleGenerativeAISettings {
@@ -113,6 +119,9 @@ export type AnthropicConfig = {
   name: AnthropicModel | (string & {});
   toolChoice?: 'auto' | 'required';
   apiKey?: string;
+  baseURL?: string;
+  headers?: Record<string, string>;
+  fetch?: typeof globalThis.fetch;
 };
 
 export type GroqModel =
@@ -126,6 +135,9 @@ export type GroqConfig = {
   name: GroqModel | (string & {});
   apiKey?: string;
   toolChoice?: 'auto' | 'required';
+  baseURL?: string;
+  headers?: Record<string, string>;
+  fetch?: typeof globalThis.fetch;
 };
 
 export type PerplexityModel =
@@ -144,6 +156,9 @@ export type PerplexityConfig = {
   name: PerplexityModel | (string & {});
   apiKey?: string;
   toolChoice?: 'auto' | 'required';
+  baseURL?: string;
+  headers?: Record<string, string>;
+  fetch?: typeof globalThis.fetch;
 };
 
 export type TogetherAiModel =
@@ -328,6 +343,9 @@ export type TogetherAiConfig = {
   name: TogetherAiModel | (string & {});
   apiKey?: string;
   toolChoice?: 'auto' | 'required';
+  baseURL?: string;
+  headers?: Record<string, string>;
+  fetch?: typeof globalThis.fetch;
 };
 
 export type LMStudioModel =
@@ -373,6 +391,9 @@ export type LMStudioConfig = {
   name: LMStudioModel | (string & {});
   toolChoice?: 'auto' | 'required';
   baseURL: string;
+  apiKey?: string;
+  headers?: Record<string, string>;
+  fetch?: typeof globalThis.fetch;
 };
 
 export type BasetenModel =
@@ -411,6 +432,8 @@ export type BaseTenConfig = {
   name: BasetenModel | (string & {});
   apiKey?: string;
   toolChoice?: 'auto' | 'required';
+  baseURL?: string;
+  headers?: Record<string, string>;
   fetch?: typeof globalThis.fetch;
 };
 
@@ -425,6 +448,9 @@ export type FireworksConfig = {
   name: FireworksModel | (string & {});
   apiKey?: string;
   toolChoice?: 'auto' | 'required';
+  baseURL?: string;
+  headers?: Record<string, string>;
+  fetch?: typeof globalThis.fetch;
 };
 
 export type MistralModel =
@@ -440,6 +466,9 @@ export type MistralConfig = {
   name: MistralModel | (string & {});
   apiKey?: string;
   toolChoice?: 'auto' | 'required';
+  baseURL?: string;
+  headers?: Record<string, string>;
+  fetch?: typeof globalThis.fetch;
 };
 
 export type XGrokModel = 'grok-beta' | 'grok-vision-beta';
@@ -449,6 +478,9 @@ export type XGrokConfig = {
   name: XGrokModel | (string & {});
   toolChoice?: 'auto' | 'required';
   apiKey?: string;
+  baseURL?: string;
+  headers?: Record<string, string>;
+  fetch?: typeof globalThis.fetch;
 };
 
 export type CustomModelConfig = {
@@ -456,6 +488,9 @@ export type CustomModelConfig = {
   provider: string;
   apiKey?: string;
   toolChoice?: 'auto' | 'required';
+  baseURL?: string;
+  headers?: Record<string, string>;
+  fetch?: typeof globalThis.fetch;
 };
 
 export type CohereModel = 'command-r-plus';
@@ -465,15 +500,22 @@ export type CohereConfig = {
   name: CohereModel | (string & {});
   apiKey?: string;
   toolChoice?: 'auto' | 'required';
+  baseURL?: string;
+  headers?: Record<string, string>;
+  fetch?: typeof globalThis.fetch;
 };
 
 export type AzureModel = 'gpt-35-turbo-instruct';
 
 export type AzureConfig = {
   provider: 'AZURE';
-  name: AzureModel & (string | {});
+  name: AzureModel | (string & {});
   apiKey?: string;
   toolChoice?: 'auto' | 'required';
+  headers?: Record<string, string>;
+  apiVersion?: string;
+  baseURL?: string;
+  fetch?: typeof globalThis.fetch;
 };
 
 export type DeepseekModel = 'deepseek-chat' | 'deepseek-reasoner';
@@ -483,6 +525,9 @@ export type DeepseekConfig = {
   name: DeepseekModel | (string & {});
   apiKey?: string;
   toolChoice?: 'auto' | 'required';
+  baseURL?: string;
+  headers?: Record<string, string>;
+  fetch?: typeof globalThis.fetch;
 };
 
 export type AmazonModel =
@@ -518,6 +563,9 @@ export type AmazonConfig = {
   name: AmazonModel | (string & {});
   apiKey?: string;
   toolChoice?: 'auto' | 'required';
+  baseURL?: string;
+  headers?: Record<string, string>;
+  fetch?: typeof globalThis.fetch;
 };
 
 export type AnthropicVertexModel =
@@ -531,6 +579,9 @@ export type AnthropicVertexConfig = {
   name: AnthropicVertexModel | (string & {});
   apiKey?: string;
   toolChoice?: 'auto' | 'required';
+  baseURL?: string;
+  headers?: Record<string, string>;
+  fetch?: typeof globalThis.fetch;
 };
 
 type BuiltInModelConfig =
@@ -615,7 +666,7 @@ export type LLMTextOptions = {
 
 export type LLMTextObjectOptions<T> = LLMTextOptions & {
   structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
-}
+};
 
 export type LLMInnerStreamOptions = {
   tools?: ToolsInput;
@@ -629,4 +680,4 @@ export type LLMInnerStreamOptions = {
 
 export type LLMStreamObjectOptions<T> = LLMInnerStreamOptions & {
   structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
-}
+};

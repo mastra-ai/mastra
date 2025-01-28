@@ -124,6 +124,8 @@ export class LLM extends MastraBase {
       toolChoice?: 'auto' | 'required';
       baseURL?: string;
       fetch?: typeof globalThis.fetch;
+      apiVersion?: string;
+      headers?: Record<string, string>;
       apiKey?: string;
     };
   }): LanguageModelV1 {
@@ -237,6 +239,10 @@ export class LLM extends MastraBase {
       const azure = createAzure({
         resourceName: process.env.AZURE_RESOURCE_NAME || '',
         apiKey: model?.apiKey || process.env.AZURE_API_KEY || '',
+        apiVersion: model?.apiVersion,
+        baseURL: model?.baseURL,
+        headers: model?.headers,
+        fetch: model?.fetch,
       });
       modelDef = azure(model.name || 'gpt-35-turbo-instruct');
     } else if (model.type === 'amazon') {
@@ -287,6 +293,8 @@ export class LLM extends MastraBase {
           toolChoice?: 'auto' | 'required';
           baseURL?: string;
           apiKey?: string;
+          apiVersion?: string;
+          headers?: Record<string, string>;
           fetch?: typeof globalThis.fetch;
         } & GoogleGenerativeAISettings)
       | CustomModelConfig;
@@ -466,14 +474,7 @@ export class LLM extends MastraBase {
     let modelToPass;
 
     if ('name' in model) {
-      modelToPass = {
-        type: this.getModelType(),
-        name: model.name,
-        toolChoice: model.toolChoice,
-        apiKey: model.provider !== 'LM_STUDIO' ? model?.apiKey : undefined,
-        baseURL: model.provider === 'LM_STUDIO' ? model.baseURL : undefined,
-        fetch: model.provider === 'BASETEN' ? model.fetch : undefined,
-      };
+      modelToPass = this.__getNamedModel();
     } else {
       modelToPass = model;
     }
@@ -521,6 +522,24 @@ export class LLM extends MastraBase {
     });
   }
 
+  __getNamedModel() {
+    const model = this.#model;
+
+    if (!('name' in model)) {
+      throw new Error('Model name is required');
+    }
+
+    return {
+      type: this.getModelType(),
+      name: model.name,
+      toolChoice: model.toolChoice,
+      apiKey: model?.apiKey,
+      baseURL: model?.baseURL,
+      headers: model?.headers,
+      fetch: model?.fetch,
+    };
+  }
+
   async __textObject<T>({
     messages,
     onStepFinish,
@@ -536,14 +555,7 @@ export class LLM extends MastraBase {
     let modelToPass;
 
     if ('name' in model) {
-      modelToPass = {
-        type: this.getModelType(),
-        name: model.name,
-        toolChoice: model.toolChoice,
-        apiKey: model.provider !== 'LM_STUDIO' ? model?.apiKey : undefined,
-        baseURL: model.provider === 'LM_STUDIO' ? model.baseURL : undefined,
-        fetch: model.provider === 'BASETEN' ? model.fetch : undefined,
-      };
+      modelToPass = this.__getNamedModel();
     } else {
       modelToPass = model;
     }
@@ -618,14 +630,7 @@ export class LLM extends MastraBase {
     this.log(LogLevel.DEBUG, `Streaming text with ${messages.length} messages`, { runId });
     let modelToPass;
     if ('name' in model) {
-      modelToPass = {
-        type: this.getModelType(),
-        name: model.name,
-        toolChoice: model.toolChoice,
-        apiKey: model.provider !== 'LM_STUDIO' ? model?.apiKey : undefined,
-        baseURL: model.provider === 'LM_STUDIO' ? model.baseURL : undefined,
-        fetch: model.provider === 'BASETEN' ? model.fetch : undefined,
-      };
+      modelToPass = this.__getNamedModel();
     } else {
       modelToPass = model;
     }
@@ -697,14 +702,7 @@ export class LLM extends MastraBase {
     this.log(LogLevel.DEBUG, `Streaming text with ${messages.length} messages`, { runId });
     let modelToPass;
     if ('name' in model) {
-      modelToPass = {
-        type: this.getModelType(),
-        name: model.name,
-        toolChoice: model.toolChoice,
-        apiKey: model.provider !== 'LM_STUDIO' ? model?.apiKey : undefined,
-        baseURL: model.provider === 'LM_STUDIO' ? model.baseURL : undefined,
-        fetch: model.provider === 'BASETEN' ? model.fetch : undefined,
-      };
+      modelToPass = this.__getNamedModel();
     } else {
       modelToPass = model;
     }

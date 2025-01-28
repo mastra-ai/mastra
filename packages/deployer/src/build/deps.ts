@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 import fsExtra from 'fs-extra/esm';
 import fsPromises from 'fs/promises';
 
-import { createExecaLogger } from '../deploy/log.js';
+import { createChildProcessLogger } from '../deploy/log.js';
 
 export class Deps extends MastraBase {
   private packageManager: string;
@@ -55,15 +55,17 @@ export class Deps extends MastraBase {
       runCommand = `${this.packageManager} ${packages?.length > 0 ? `add` : `install`}`;
     }
 
-    const execaLogger = createExecaLogger({
+    const cpLogger = createChildProcessLogger({
       logger: this.logger,
       root: dir,
     });
 
-    return execaLogger({
+    return cpLogger({
       cmd: runCommand,
       args: packages,
-      env: {},
+      env: {
+        PATH: process.env.PATH!,
+      },
     });
   }
 
@@ -75,15 +77,17 @@ export class Deps extends MastraBase {
       runCommand = `${this.packageManager} add`;
     }
 
-    const execaLogger = createExecaLogger({
+    const cpLogger = createChildProcessLogger({
       logger: this.logger,
       root: '',
     });
 
-    return execaLogger({
+    return cpLogger({
       cmd: `${runCommand}`,
       args: packages,
-      env: {},
+      env: {
+        PATH: process.env.PATH!,
+      },
     });
   }
 
