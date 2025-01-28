@@ -1,4 +1,5 @@
-import { MastraStorage, WorkflowRunState } from '@mastra/core';
+import { MastraStorage, ThreadType, WorkflowRunState } from '@mastra/core';
+import pg from 'pg';
 import pgPromise from 'pg-promise';
 import type { IDatabase, IMain } from 'pg-promise';
 
@@ -15,11 +16,14 @@ export interface PostgresConfig {
 export class PostgresStore extends MastraStorage {
   private db: IDatabase<any>;
   private pgp: IMain;
+  private pool: pg.Pool;
+  hasTables: boolean = false;
 
   constructor(config: PostgresConfig) {
     super('Postgres');
     this.pgp = pgPromise();
     this.db = this.pgp(config);
+    this.pool = new pg.Pool({ connectionString: config.connectionString });
   }
 
   async init(tableName: string): Promise<void> {
@@ -80,6 +84,195 @@ export class PostgresStore extends MastraStorage {
     );
 
     return result?.snapshot || null;
+  }
+
+  async getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null> {
+    await this.ensureTablesExist();
+
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<ThreadType>(
+        `
+                SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, resourceid, metadata
+                FROM mastra_threads
+                WHERE id = $1
+            `,
+        [threadId],
+      );
+
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getThreadsByResourceId({ resourceid }: { resourceid: string }): Promise<ThreadType[]> {
+    await this.ensureTablesExist();
+
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<ThreadType>(
+        `
+                SELECT id, title, resourceid, created_at AS createdAt, updated_at AS updatedAt, metadata
+                FROM mastra_threads
+                WHERE resourceid = $1
+            `,
+        [resourceid],
+      );
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType> {
+    await this.ensureTablesExist();
+
+    const client = await this.pool.connect();
+    try {
+      const { id, title, createdAt, updatedAt, resourceid, metadata } = thread;
+      const result = await client.query<ThreadType>(
+        `
+                INSERT INTO mastra_threads (id, title, created_at, updated_at, resourceid, metadata)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (id) DO UPDATE SET title = $2, updated_at = $4, resourceid = $5, metadata = $6
+                RETURNING id, title, created_at AS createdAt, updated_at AS updatedAt, resourceid, metadata
+            `,
+        [id, title, createdAt, updatedAt, resourceid, JSON.stringify(metadata)],
+      );
+      return result?.rows?.[0]!;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateThread(id: string, title: string, metadata: Record<string, unknown>): Promise<ThreadType> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<ThreadType>(
+        `
+                UPDATE mastra_threads
+                SET title = $1, metadata = $2, updated_at = NOW()
+                WHERE id = $3
+                RETURNING *
+                `,
+        [title, JSON.stringify(metadata), id],
+      );
+      return result?.rows?.[0]!;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteThread(id: string): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query(
+        `
+                DELETE FROM mastra_messages
+                WHERE thread_id = $1
+                `,
+        [id],
+      );
+
+      await client.query(
+        `
+                DELETE FROM mastra_threads
+                WHERE id = $1
+                `,
+        [id],
+      );
+    } finally {
+      client.release();
+    }
+  }
+
+  async validateToolCallArgs({ hashedArgs }: { hashedArgs: string }): Promise<boolean> {
+    await this.ensureTablesExist();
+
+    const client = await this.pool.connect();
+
+    try {
+      const toolArgsResult = await client.query<{ toolCallIds: string; toolCallArgs: string; createdAt: string }>(
+        ` SELECT tool_call_ids as toolCallIds, 
+                tool_call_args as toolCallArgs,
+                created_at AS createdAt
+         FROM mastra_messages
+         WHERE tool_call_args::jsonb @> $1
+         AND tool_call_args_expire_at > $2
+         ORDER BY created_at ASC
+         LIMIT 1`,
+        [JSON.stringify([hashedArgs]), new Date().toISOString()],
+      );
+
+      return toolArgsResult.rows.length > 0;
+    } catch (error) {
+      console.log('error checking if valid arg exists====', error);
+      return false;
+    } finally {
+      client.release();
+    }
+  }
+
+  async ensureTablesExist(): Promise<void> {
+    if (this.hasTables) {
+      return;
+    }
+
+    const client = await this.pool.connect();
+    try {
+      // Check if the threads table exists
+      const threadsResult = await client.query<{ exists: boolean }>(`
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.tables
+                    WHERE table_name = 'mastra_threads'
+                );
+            `);
+
+      if (!threadsResult?.rows?.[0]?.exists) {
+        await client.query(`
+                    CREATE TABLE IF NOT EXISTS mastra_threads (
+                        id UUID PRIMARY KEY,
+                        resourceid TEXT,
+                        title TEXT,
+                        created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                        updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                        metadata JSONB
+                    );
+                `);
+      }
+
+      // Check if the messages table exists
+      const messagesResult = await client.query<{ exists: boolean }>(`
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.tables
+                    WHERE table_name = 'mastra_messages'
+                );
+            `);
+
+      if (!messagesResult?.rows?.[0]?.exists) {
+        await client.query(`
+                    CREATE TABLE IF NOT EXISTS mastra_messages (
+                        id UUID PRIMARY KEY,
+                        content TEXT NOT NULL,
+                        role VARCHAR(20) NOT NULL,
+                        created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                        tool_call_ids TEXT DEFAULT NULL,
+                        tool_call_args TEXT DEFAULT NULL,
+                        tool_call_args_expire_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+                        type VARCHAR(20) NOT NULL,
+                        tokens INTEGER DEFAULT NULL,
+                        thread_id UUID NOT NULL,
+                        FOREIGN KEY (thread_id) REFERENCES mastra_threads(id)
+                    );
+                `);
+      }
+    } finally {
+      client.release();
+      this.hasTables = true;
+    }
   }
 
   async close(): Promise<void> {
