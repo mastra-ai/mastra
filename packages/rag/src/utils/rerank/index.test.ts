@@ -28,7 +28,7 @@ describe('rerank', () => {
       rerank(
         results,
         'test query',
-        { method: 'cohere', config: { apiKey: 'mock-api-key' } },
+        { provider: 'COHERE', name: 'rerank-v3.5' },
         { weights: { semantic: 0.5, vector: 0.3, position: 0.5 } },
       ),
     ).rejects.toThrow('Weights must add up to 1');
@@ -45,10 +45,8 @@ describe('rerank', () => {
       results,
       'test query',
       {
-        method: 'cohere',
-        config: {
-          apiKey: 'mock-api-key',
-        },
+        provider: 'COHERE',
+        name: 'rerank-v3.5',
       },
       { topK: 2 },
     );
@@ -89,10 +87,8 @@ describe('rerank', () => {
       results,
       'test query',
       {
-        method: 'cohere',
-        config: {
-          apiKey: 'mock-api-key',
-        },
+        provider: 'COHERE',
+        name: 'rerank-v3.5',
       },
       {
         weights: {
@@ -138,10 +134,8 @@ describe('rerank', () => {
       results,
       'test query',
       {
-        method: 'cohere',
-        config: {
-          apiKey: 'mock-api-key',
-        },
+        provider: 'COHERE',
+        name: 'rerank-v3.5',
       },
       {
         queryEmbedding: [0.5, 0.3, -0.2, 0.4],

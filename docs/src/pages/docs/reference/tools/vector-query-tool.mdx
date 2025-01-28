@@ -74,26 +74,9 @@ const queryTool = createVectorQueryTool({
   content={[
     {
       name: "model",
-      type: "RerankMethod",
+      type: "ModelConfig",
       description: "Configuration for the reranking method",
       isOptional: false,
-      properties: [
-        {
-          type: "union",
-          parameters: [
-            {
-              name: "cohere",
-              description: "Cohere reranking configuration",
-              type: "{ method: 'cohere', config: { apiKey: string, model?: string } }",
-            },
-            {
-              name: "llm",
-              description: "LLM-based reranking configuration",
-              type: "{ method: 'llm', config: { provider: string, name: string } }",
-            }
-          ]
-        }
-      ]
     },
     {
       name: "options",

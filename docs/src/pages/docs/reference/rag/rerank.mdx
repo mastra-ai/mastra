@@ -11,7 +11,7 @@ The `rerank()` function provides advanced reranking capabilities for vector sear
 function rerank(
   results: QueryResult[],
   query: string,
-  modelConfig: RerankMethod,
+  modelConfig: ModelConfig,
   options?: RerankerFunctionOptions
 ): Promise<RerankResult[]>
 ```
@@ -25,11 +25,8 @@ const rerankedResults = await rerank(
   vectorSearchResults,
   "How do I deploy to production?",
   {
-    method: "llm",
-    config: {
-      provider: "openai",
-      name: "gpt-4"
-    }
+    provider: "OPEN_AI",
+    name: "gpt-4o-mini",
   },
   {
     weights: {
@@ -60,7 +57,7 @@ const rerankedResults = await rerank(
     },
     {
       name: "modelConfig",
-      type: "RerankModel",
+      type: "ModelConfig",
       description: "Rerank model configuration",
       isOptional: false,
     },

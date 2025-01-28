@@ -5,7 +5,7 @@ import { ChunkParams, MDocument } from '../document';
 import { embed } from '../embeddings';
 
 import { GraphRAG } from './graph-rag';
-import { rerank, RerankConfig, RerankModel } from './rerank';
+import { rerank, RerankConfig } from './rerank';
 
 type VectorFilterType = 'pg' | 'astra' | 'qdrant' | 'upstash' | 'pinecone' | 'chroma' | '';
 
@@ -123,18 +123,10 @@ export const createVectorQueryTool = ({
           topK,
         });
         if (reranker) {
-          const rerankedResults = await rerank(
-            results,
-            queryText,
-            {
-              method: reranker?.model?.method,
-              config: reranker?.model?.config,
-            } as RerankModel,
-            {
-              ...reranker.options,
-              topK: reranker.options?.topK || topK,
-            },
-          );
+          const rerankedResults = await rerank(results, queryText, reranker.model, {
+            ...reranker.options,
+            topK: reranker.options?.topK || topK,
+          });
           const relevantChunks = rerankedResults.map(({ result }) => result?.metadata?.text);
           relevantContext = relevantChunks.join('\n\n');
           return { relevantContext };

@@ -13,11 +13,8 @@ const vectorQueryTool = createVectorQueryTool({
   topK: 5,
   reranker: {
     model: {
-      method: 'llm',
-      config: {
-        provider: 'OPEN_AI',
-        name: 'gpt-4o-mini',
-      },
+      provider: 'OPEN_AI',
+      name: 'gpt-4o-mini',
     },
   },
 });

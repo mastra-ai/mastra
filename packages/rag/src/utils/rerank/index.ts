@@ -1,4 +1,10 @@
-import { MastraAgentRelevanceScorer, CohereRelevanceScorer, RelevanceScoreProvider, QueryResult } from '@mastra/core';
+import {
+  MastraAgentRelevanceScorer,
+  CohereRelevanceScorer,
+  RelevanceScoreProvider,
+  QueryResult,
+  ModelConfig,
+} from '@mastra/core';
 
 // Default weights for different scoring components (must add up to 1)
 const DEFAULT_WEIGHTS = {
@@ -42,25 +48,9 @@ export interface RerankerFunctionOptions {
   topK?: number;
 }
 
-export type RerankModel =
-  | {
-      method: 'cohere';
-      config: {
-        apiKey: string;
-        model?: string;
-      };
-    }
-  | {
-      method: 'llm';
-      config: {
-        provider: string;
-        name: string;
-      };
-    };
-
 export interface RerankConfig {
   options?: RerankerOptions;
-  model: RerankModel;
+  model: ModelConfig;
 }
 
 // Calculate position score based on position in original list
@@ -99,15 +89,19 @@ function adjustScores(score: number, queryAnalysis: { magnitude: number; dominan
 export async function rerank(
   results: QueryResult[],
   query: string,
-  modelConfig: RerankModel,
+  modelConfig: ModelConfig,
   options: RerankerFunctionOptions,
 ): Promise<RerankResult[]> {
-  const { method, config } = modelConfig;
+  const { provider } = modelConfig;
   let semanticProvider: RelevanceScoreProvider;
-  if (method === 'cohere') {
-    semanticProvider = new CohereRelevanceScorer(config.apiKey, config.model ?? '');
+  if ('model' in modelConfig) {
+    semanticProvider = new MastraAgentRelevanceScorer(provider, modelConfig.model);
+  } else if (provider === 'COHERE' && 'name' in modelConfig && modelConfig.name === 'rerank-v3.5') {
+    semanticProvider = new CohereRelevanceScorer(modelConfig.name);
+  } else if ('name' in modelConfig) {
+    semanticProvider = new MastraAgentRelevanceScorer(provider, modelConfig.name);
   } else {
-    semanticProvider = new MastraAgentRelevanceScorer(config.provider, config.name);
+    throw new Error('Invalid model configuration');
   }
   const { queryEmbedding, topK = 3 } = options;
   const weights = {
