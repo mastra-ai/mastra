@@ -2,7 +2,7 @@ import { createTool, EmbeddingOptions, MastraVector, QueryResult } from '@mastra
 import { z } from 'zod';
 
 import { ChunkParams, MDocument } from '../document';
-import { embed } from '../embeddings';
+import { embedSingle } from '../embeddings';
 
 import { GraphRAG } from './graph-rag';
 import { rerank, RerankConfig } from './rerank';
@@ -62,7 +62,7 @@ const vectorQuerySearch = async ({
   topK,
   includeVectors = false,
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
-  const { embedding } = await embed(queryText, options);
+  const { embedding } = await embedSingle(queryText, options);
   // Get relevant chunks from the vector database
   const results = await vectorStore.query(indexName, embedding, topK, queryFilter, includeVectors);
 
