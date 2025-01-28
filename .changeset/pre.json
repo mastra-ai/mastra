@@ -66,7 +66,17 @@
     "@mastra/vector-pinecone": "0.0.0",
     "@mastra/vector-qdrant": "0.0.0",
     "@mastra/vector-upstash": "0.0.0",
-    "@mastra/vector-vectorize": "0.0.0"
+    "@mastra/vector-vectorize": "0.0.0",
+    "@mastra/speech-azure": "0.0.0",
+    "@mastra/speech-deepgram": "0.0.0",
+    "@mastra/speech-elevenlabs": "0.0.0",
+    "@mastra/speech-google": "0.0.0",
+    "@mastra/speech-ibm": "0.0.0",
+    "@mastra/speech-murf": "0.0.0",
+    "@mastra/speech-openai": "0.0.0",
+    "@mastra/speech-playai": "0.0.0",
+    "@mastra/speech-replicate": "0.0.0",
+    "@mastra/speech-speechify": "0.0.0"
   },
   "changesets": [
     "afraid-papayas-shake",
@@ -245,6 +255,7 @@
     "sixty-fishes-tickle",
     "small-lions-punch",
     "smart-kings-smile",
+    "smart-ligers-dream",
     "smooth-queens-rhyme",
     "smooth-rivers-sniff",
     "sour-carpets-marry",
