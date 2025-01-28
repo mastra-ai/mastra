@@ -3155,7 +3155,7 @@ importers:
         specifier: ^2.1.8
         version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.10)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
 
-  vector-stores/astra-db:
+  vector-stores/astra:
     dependencies:
       '@datastax/astra-db-ts':
         specifier: ^1.5.0
@@ -3169,13 +3169,13 @@ importers:
         version: 1.0.8
       '@types/node':
         specifier: ^22.9.0
-        version: 22.10.7
+        version: 22.10.10
       dts-cli:
         specifier: ^2.0.5
-        version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.10.7)(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5)
+        version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.10.10)(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5)
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.7)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.10)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
 
   vector-stores/chroma:
     dependencies:
@@ -34961,7 +34961,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.7.9(debug@4.4.0))
+      retry-axios: 2.6.0(axios@1.7.9)
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -40675,7 +40675,7 @@ snapshots:
       retext-stringify: 4.0.0
       unified: 11.0.5
 
-  retry-axios@2.6.0(axios@1.7.9(debug@4.4.0)):
+  retry-axios@2.6.0(axios@1.7.9):
     dependencies:
       axios: 1.7.9(debug@4.4.0)
 

@@ -1,5 +1,19 @@
 # generate-text-system-prompt
 
+## 0.0.1-alpha.16
+
+### Patch Changes
+
+- Updated dependencies [23dcb23]
+  - @mastra/core@0.1.27-alpha.75
+
+## 0.0.1-alpha.15
+
+### Patch Changes
+
+- Updated dependencies [7b87567]
+  - @mastra/core@0.1.27-alpha.74
+
 ## 0.0.1-alpha.14
 
 ### Patch Changes

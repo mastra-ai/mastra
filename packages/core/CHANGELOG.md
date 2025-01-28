@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 0.1.27-alpha.75
+
+### Patch Changes
+
+- 23dcb23: Redeploy core
+
+## 0.1.27-alpha.74
+
+### Patch Changes
+
+- 7b87567: Propagate setLogger calls to more places
+
 ## 0.1.27-alpha.73
 
 ### Patch Changes

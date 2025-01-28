@@ -1,5 +1,21 @@
 # yc-directory
 
+## 1.0.1-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [23dcb23]
+  - @mastra/core@0.1.27-alpha.75
+  - @mastra/evals@0.1.0-alpha.16
+
+## 1.0.1-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [7b87567]
+  - @mastra/core@0.1.27-alpha.74
+  - @mastra/evals@0.1.0-alpha.15
+
 ## 1.0.1-alpha.7
 
 ### Patch Changes
