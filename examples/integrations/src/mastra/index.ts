@@ -16,8 +16,5 @@ const agent = new Agent({
 
 export const mastra = new Mastra({
   agents: { agent },
-  syncs: {
-    ...sample.getSyncs(),
-  },
   workflows: { ...sample.getWorkflows() }
 });

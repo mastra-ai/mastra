@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { createLogger } from '../logger';
-import { createSync } from '../sync';
 import { createTool } from '../tools';
 
 import { Step } from './step';
@@ -925,15 +924,6 @@ describe('Workflow', () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ name: 'step1' });
       const step1 = new Step({ id: 'step1', execute: step1Action, outputSchema: z.object({ name: z.string() }) });
 
-      const syncAction = vi.fn<any>().mockResolvedValue({ brightness: 'sync-action' });
-      const randomSync = createSync({
-        id: 'sync-action',
-        execute: syncAction,
-        description: 'sync-action',
-        inputSchema: z.object({ color: z.string() }),
-        outputSchema: z.object({ brightness: z.string() }),
-      });
-
       const toolAction = vi.fn<any>().mockResolvedValue({ age: 100 });
       const randomTool = createTool({
         id: 'random-tool',
@@ -944,20 +934,10 @@ describe('Workflow', () => {
       });
 
       const workflow = new Workflow({ name: 'test-workflow' });
-      workflow
-        .step(randomSync)
-        .then(step1, {
-          variables: {
-            name: { step: randomSync, path: 'brightness' },
-          },
-        })
-        .after(step1)
-        .step(randomTool)
-        .commit();
+      workflow.after(step1).step(randomTool).commit();
 
       await workflow.execute();
 
-      expect(syncAction).toHaveBeenCalled();
       expect(step1Action).toHaveBeenCalled();
       expect(toolAction).toHaveBeenCalled();
     });
