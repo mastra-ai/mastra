@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.1.27-alpha.76
+
+### Patch Changes
+
+- ae7bf94: Fix loggers messing up deploys
+- ae7bf94: Changeset
+
 ## 0.1.27-alpha.75
 
 ### Patch Changes
