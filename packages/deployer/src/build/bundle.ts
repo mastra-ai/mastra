@@ -1,4 +1,5 @@
-import { Workflow, Step, noopLogger, Logger, createLogger } from '@mastra/core';
+import { noopLogger, Logger, createLogger } from '@mastra/core/logger';
+import { Workflow, Step } from '@mastra/core/workflows';
 import * as esbuild from 'esbuild';
 import { type BuildOptions } from 'esbuild';
 import { join } from 'path';

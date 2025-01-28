@@ -21,7 +21,18 @@
         "default": "./dist/*/index.js"
       }
     },
-    "./llm": null,
+    "./utils": {
+      "import": {
+        "types": "./dist/utils/index.d.ts",
+        "default": "./dist/utils.js"
+      }
+    },
+    "./llm": {
+      "import": {
+        "types": "./dist/llm/index.d.ts",
+        "default": null
+      }
+    },
     "./action": null,
     "./queue": null,
     "./run": null,
@@ -30,7 +41,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
-    "build": "tsup-node src/index.ts src/*/index.ts --format esm --clean --dts --treeshake",
+    "build": "tsup-node src/index.ts src/utils.ts src/*/index.ts --format esm --clean --dts --treeshake",
     "build:dev": "pnpm build --watch",
     "size": "size-limit",
     "test": "vitest run"

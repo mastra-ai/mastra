@@ -16,7 +16,7 @@ import { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 import { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
-import { LLM } from '../llm';
+import { LLM } from '../llm/llm';
 import { GenerateReturn, ModelConfig, StreamReturn } from '../llm/types';
 import { LogLevel, RegisteredLogger } from '../logger';
 import { ThreadType } from '../memory';

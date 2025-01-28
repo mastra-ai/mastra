@@ -1,4 +1,4 @@
-import { MessageType, ThreadType } from '@mastra/core';
+import { MessageType, ThreadType } from '@mastra/core/memory';
 import { randomUUID } from 'crypto';
 import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';

@@ -1,4 +1,5 @@
-import { MastraEngine, BaseEntity, BaseRecord, QueryOptions } from '@mastra/core';
+import { MastraEngine } from '@mastra/core/engine';
+import type { BaseEntity, BaseRecord, QueryOptions } from '@mastra/core/engine';
 import { eq, SQL, sql } from 'drizzle-orm';
 import postgres from 'postgres';
 

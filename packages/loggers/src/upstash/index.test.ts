@@ -1,4 +1,4 @@
-import { createLogger, LogLevel } from '@mastra/core';
+import { createLogger, LogLevel } from '@mastra/core/logger';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { UpstashTransport } from './index.js';
