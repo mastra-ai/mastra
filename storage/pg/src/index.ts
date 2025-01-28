@@ -1,4 +1,4 @@
-import { MastraStore, WorkflowRunState } from '@mastra/core';
+import { MastraStorage, WorkflowRunState } from '@mastra/core';
 import pgPromise from 'pg-promise';
 import type { IDatabase, IMain } from 'pg-promise';
 
@@ -12,7 +12,7 @@ export interface PostgresConfig {
   ssl?: boolean;
 }
 
-export class PostgresStore extends MastraStore {
+export class PostgresStore extends MastraStorage {
   private db: IDatabase<any>;
   private pgp: IMain;
 
