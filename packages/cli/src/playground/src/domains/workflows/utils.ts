@@ -24,9 +24,7 @@ export function extractConditions(group?: StepCondition<any, any>) {
   function recurse(group: StepCondition<any, any>, conj?: 'and' | 'or') {
     const simpleCondition = Object.entries(group).find(([key]) => key.includes('.'));
     if (simpleCondition) {
-      console.log('simpleCondition===', simpleCondition);
       const [key, queryValue] = simpleCondition;
-      console.log('key and queryValue===', { key, queryValue });
       const [stepId, ...pathParts] = key.split('.');
       const ref = {
         step: {
