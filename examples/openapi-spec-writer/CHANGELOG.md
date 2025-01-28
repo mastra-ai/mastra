@@ -1,5 +1,77 @@
 # openapi-spec-writer
 
+## 0.1.1-alpha.61
+
+### Patch Changes
+
+- Updated dependencies [7b87567]
+  - @mastra/core@0.1.27-alpha.74
+  - @mastra/firecrawl@1.0.4-alpha.65
+  - @mastra/github@1.0.3-alpha.58
+  - @mastra/engine@0.0.5-alpha.69
+  - @mastra/loggers@0.0.1-alpha.7
+  - @mastra/rag@0.0.2-alpha.63
+
+## 0.1.1-alpha.60
+
+### Patch Changes
+
+- Updated dependencies [3427b95]
+  - @mastra/core@0.1.27-alpha.73
+  - @mastra/firecrawl@1.0.4-alpha.64
+  - @mastra/github@1.0.3-alpha.57
+  - @mastra/engine@0.0.5-alpha.68
+  - @mastra/loggers@0.0.1-alpha.6
+  - @mastra/rag@0.0.2-alpha.62
+
+## 0.1.1-alpha.59
+
+### Patch Changes
+
+- Updated dependencies [e4d4ede]
+- Updated dependencies [06b2c0a]
+  - @mastra/core@0.1.27-alpha.72
+  - @mastra/firecrawl@1.0.4-alpha.63
+  - @mastra/github@1.0.3-alpha.56
+  - @mastra/engine@0.0.5-alpha.67
+  - @mastra/loggers@0.0.1-alpha.5
+  - @mastra/rag@0.0.2-alpha.61
+
+## 0.1.1-alpha.58
+
+### Patch Changes
+
+- Updated dependencies [d9c8dd0]
+  - @mastra/core@0.1.27-alpha.71
+  - @mastra/firecrawl@1.0.4-alpha.62
+  - @mastra/github@1.0.3-alpha.55
+  - @mastra/engine@0.0.5-alpha.66
+  - @mastra/loggers@0.0.1-alpha.4
+  - @mastra/rag@0.0.2-alpha.60
+
+## 0.1.1-alpha.57
+
+### Patch Changes
+
+- Updated dependencies [bdaf834]
+  - @mastra/engine@0.0.5-alpha.65
+  - @mastra/loggers@0.0.1-alpha.3
+  - @mastra/rag@0.0.2-alpha.59
+  - @mastra/firecrawl@1.0.4-alpha.61
+
+## 0.1.1-alpha.56
+
+### Patch Changes
+
+- Updated dependencies [dd6d87f]
+- Updated dependencies [04434b6]
+  - @mastra/core@0.1.27-alpha.70
+  - @mastra/firecrawl@1.0.4-alpha.60
+  - @mastra/github@1.0.3-alpha.54
+  - @mastra/engine@0.0.5-alpha.64
+  - @mastra/loggers@0.0.1-alpha.2
+  - @mastra/rag@0.0.2-alpha.58
+
 ## 0.1.1-alpha.55
 
 ### Patch Changes

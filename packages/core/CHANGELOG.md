@@ -1,5 +1,37 @@
 # @mastra/core
 
+## 0.1.27-alpha.74
+
+### Patch Changes
+
+- 7b87567: Propagate setLogger calls to more places
+
+## 0.1.27-alpha.73
+
+### Patch Changes
+
+- 3427b95: Updated docs to include intermediate rag examples (metadata filtering, query filters, etc)
+
+## 0.1.27-alpha.72
+
+### Patch Changes
+
+- e4d4ede: Better setLogger()
+- 06b2c0a: Update summarization prompt and fix eval input
+
+## 0.1.27-alpha.71
+
+### Patch Changes
+
+- d9c8dd0: Logger changes for default transports
+
+## 0.1.27-alpha.70
+
+### Patch Changes
+
+- dd6d87f: Update Agent and LLM config to accept temperature setting
+- 04434b6: Create separate logger file
+
 ## 0.1.27-alpha.69
 
 ### Patch Changes

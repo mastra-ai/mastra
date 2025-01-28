@@ -73,3 +73,11 @@ export class UpstashStore extends MastraStore {
     // No explicit cleanup needed for Upstash Redis
   }
 }
+
+new MastraMemory({
+  storage: new UpstashStore({
+    url: process.env.UPSTASH_REDIS_URL,
+    token: process.env.UPSTASH_REDIS_TOKEN,
+  }),
+  vector: new PineconeVector(process.env.PINECONE_API_KEY),
+});

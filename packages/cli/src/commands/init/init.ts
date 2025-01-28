@@ -2,15 +2,15 @@ import * as p from '@clack/prompts';
 import color from 'picocolors';
 
 import {
-  Components,
+  type Components,
   createComponentsDir,
   createMastraDir,
   getAPIKey,
-  LLMProvider,
+  type LLMProvider,
   writeAPIKey,
   writeCodeSample,
   writeIndexFile,
-} from './utils.js';
+} from './utils';
 
 const s = p.spinner();
 

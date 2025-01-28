@@ -7,7 +7,6 @@ import { execaTool } from '../tools/execa.js';
 import { fsTool } from '../tools/fs.js';
 import { imageTool } from '../tools/image.js';
 import { readPDF } from '../tools/pdf.js';
-import { activeDistTag, pnpmBuild, pnpmChangesetPublish, pnpmChangesetStatus } from '../tools/pnpm.js';
 
 import { getBaseModelConfig } from './model.js';
 
@@ -30,71 +29,6 @@ export const daneIssueLabeler = new Agent({
     You help engineers label their issues.
     `,
   model: getBaseModelConfig(),
-});
-
-const packages_llm_text = `
-  // PACKAGE LOCATION RULES - FOLLOW THESE EXACTLY:
-  
-  // 1. Core packages - all must be directly under packages/:
-  @mastra/core -> packages/core
-  @mastra/deployer -> packages/deployer
-  mastra -> packages/cli
-  @mastra/engine -> packages/engine
-  @mastra/evals -> packages/evals
-  @mastra/rag -> packages/rag
-  @mastra/tts -> packages/tts
-  @mastra/memory -> packages/memory
-  @mastra/mcp -> packages/mcp
-
-  // 2. Deployer packages - STRICT RULES:
-  // - ALL deployer packages must be directly under deployers/
-  // - Format: @mastra/deployer-{name} -> deployers/{name}
-  // - Example: @mastra/deployer-cloudflare -> deployers/cloudflare
-  // - NEVER in any other directory (not in integrations/, examples/, packages/, etc)
-
-  // 3. Vector store packages - STRICT RULES:
-  // - ALL vector packages must be directly under vector-stores/
-  // - Format: @mastra/vector-{name} -> vector-stores/{name}
-  // - Special case: @mastra/vector-astra -> vector-stores/astra-db
-
-  // VALIDATION:
-  // 1. Never mix examples/ or integrations/ with package paths
-  // 2. Package paths must exactly match these patterns
-  // 3. No additional subdirectories allowed
-`;
-
-export const danePackagePublisher = new Agent({
-  name: 'DanePackagePublisher',
-  instructions: `
-    I am Dane, a specialized agent for managing pnpm package publications in monorepos. My core responsibilities are:
-
-    1. Package Analysis:
-       - Identify packages requiring publication across the monorepo
-       - Detect changes that warrant new version releases
-       - Validate package dependencies and versioning
-
-    2. Publication Management:
-       - Orchestrate the correct build order for interdependent packages
-       - Ensure proper versioning using changesets
-       - Maintain package publishing standards
-
-    3. Directory Structure Knowledge:
-    ${packages_llm_text}
-
-    Important Guidelines:
-    - Always respect package dependencies when determining build order
-    - Ensure all necessary builds complete before publishing
-    - Follow semantic versioning principles
-    - Validate package.json configurations before publishing
-    `,
-  model: getBaseModelConfig(),
-  tools: {
-    execaTool,
-    pnpmBuild,
-    pnpmChangesetPublish,
-    pnpmChangesetStatus,
-    activeDistTag,
-  },
 });
 
 export const daneLinkChecker = new Agent({

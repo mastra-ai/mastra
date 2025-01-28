@@ -1,5 +1,72 @@
 # examples-agent
 
+## 1.0.1-alpha.62
+
+### Patch Changes
+
+- Updated dependencies [7b87567]
+  - @mastra/core@0.1.27-alpha.74
+  - @mastra/deployer-cloudflare@0.0.1-alpha.20
+
+## 1.0.1-alpha.61
+
+### Patch Changes
+
+- Updated dependencies [3427b95]
+  - @mastra/core@0.1.27-alpha.73
+  - @mastra/deployer-cloudflare@0.0.1-alpha.19
+
+## 1.0.1-alpha.60
+
+### Patch Changes
+
+- Updated dependencies [e4d4ede]
+- Updated dependencies [06b2c0a]
+  - @mastra/core@0.1.27-alpha.72
+  - @mastra/deployer-cloudflare@0.0.1-alpha.18
+
+## 1.0.1-alpha.59
+
+### Patch Changes
+
+- Updated dependencies [d9c8dd0]
+  - @mastra/core@0.1.27-alpha.71
+  - @mastra/deployer-cloudflare@0.0.1-alpha.17
+
+## 1.0.1-alpha.58
+
+### Patch Changes
+
+- @mastra/deployer-cloudflare@0.0.1-alpha.16
+
+## 1.0.1-alpha.57
+
+### Patch Changes
+
+- @mastra/deployer-cloudflare@0.0.1-alpha.15
+
+## 1.0.1-alpha.56
+
+### Patch Changes
+
+- @mastra/deployer-cloudflare@0.0.1-alpha.14
+
+## 1.0.1-alpha.55
+
+### Patch Changes
+
+- Updated dependencies [bdaf834]
+  - @mastra/deployer-cloudflare@0.0.1-alpha.13
+
+## 1.0.1-alpha.54
+
+### Patch Changes
+
+- Updated dependencies [dd6d87f]
+- Updated dependencies [04434b6]
+  - @mastra/core@0.1.27-alpha.70
+  - @mastra/deployer-cloudflare@0.0.1-alpha.12
+
 ## 1.0.1-alpha.53
 
 ### Patch Changes

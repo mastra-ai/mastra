@@ -1,7 +1,7 @@
 import { execa } from 'execa';
 import fs from 'fs';
 import path, { dirname } from 'path';
-import { PackageJson } from 'type-fest';
+import type { PackageJson } from 'type-fest';
 import { fileURLToPath } from 'url';
 
 import fsExtra from 'fs-extra/esm';
@@ -15,7 +15,7 @@ export class DepsService {
   }
 
   private findLockFile(dir: string): string | null {
-    const lockFiles = ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock'];
+    const lockFiles = ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'bun.lock'];
     for (const file of lockFiles) {
       if (fs.existsSync(path.join(dir, file))) {
         return file;
@@ -37,6 +37,8 @@ export class DepsService {
         return 'npm';
       case 'yarn.lock':
         return 'yarn';
+      case 'bun.lock':
+        return 'bun';
       default:
         return 'npm';
     }
@@ -96,7 +98,7 @@ export class DepsService {
   public async getPackageVersion() {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
-    const pkgJsonPath = path.join(__dirname, '..', '..', 'package.json');
+    const pkgJsonPath = path.join(__dirname, '..', 'package.json');
 
     const content = (await fsExtra.readJSON(pkgJsonPath)) as PackageJson;
     return content.version;

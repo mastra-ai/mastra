@@ -2,22 +2,22 @@
 import { Command } from 'commander';
 import color from 'picocolors';
 
-import { PosthogAnalytics } from './analytics/index.js';
-import { build } from './commands/build.js';
-import { create } from './commands/create/create.js';
-import { deploy } from './commands/deploy/index.js';
-import { dev } from './commands/dev.js';
-import { add } from './commands/engine/add.js';
-import { down } from './commands/engine/down.js';
-import { generate } from './commands/engine/generate.js';
-import { migrate } from './commands/engine/migrate.js';
-import { up } from './commands/engine/up.js';
-import { init } from './commands/init/init.js';
-import { checkAndInstallCoreDeps, checkPkgJson, interactivePrompt } from './commands/init/utils.js';
-import { DepsService } from './services/service.deps.js';
-import { findApiKeys } from './utils/find-api-keys.js';
-import { getEnv } from './utils/get-env.js';
-import { logger } from './utils/logger.js';
+import { PosthogAnalytics } from './analytics/index';
+import { build } from './commands/build';
+import { create } from './commands/create/create';
+import { deploy } from './commands/deploy/index';
+import { dev } from './commands/dev';
+import { add } from './commands/engine/add';
+import { down } from './commands/engine/down';
+import { generate } from './commands/engine/generate';
+import { migrate } from './commands/engine/migrate';
+import { up } from './commands/engine/up';
+import { init } from './commands/init/init';
+import { checkAndInstallCoreDeps, checkPkgJson, interactivePrompt } from './commands/init/utils';
+import { DepsService } from './services/service.deps';
+import { findApiKeys } from './utils/find-api-keys';
+import { getEnv } from './utils/get-env';
+import { logger } from './utils/logger';
 
 const depsService = new DepsService();
 const version = await depsService.getPackageVersion();
@@ -125,6 +125,7 @@ program
   .command('dev')
   .description('Start mastra server')
   .option('-d, --dir <dir>', 'Path to your mastra folder')
+  .option('-r, --root <root>', 'Path to your root folder')
   .option('-e, --env <env>', 'Environment File to use (defaults to .env.development)')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .option('-p, --port <port>', 'Port number for the development server (defaults to 4111)')
@@ -133,7 +134,13 @@ program
       command: 'dev',
     });
     const apiKeys = findApiKeys();
-    dev({ port: args?.port ? parseInt(args.port) : 4111, env: apiKeys, dir: args?.dir, toolsDirs: args?.tools });
+    dev({
+      port: args?.port ? parseInt(args.port) : 4111,
+      env: apiKeys,
+      dir: args?.dir,
+      toolsDirs: args?.tools,
+      root: args?.root,
+    });
   });
 
 const engine = program.command('engine').description('Manage the mastra engine');
@@ -243,5 +250,5 @@ program
 
 program.parse(process.argv);
 
-export { create } from './commands/create/create.js';
-export { PosthogAnalytics } from './analytics/index.js';
+export { create } from './commands/create/create';
+export { PosthogAnalytics } from './analytics/index';

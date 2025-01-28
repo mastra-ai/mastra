@@ -1,4 +1,4 @@
-import { Context } from 'hono';
+import type { Context } from 'hono';
 
 // Root handler
 export async function rootHandler(c: Context) {

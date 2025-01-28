@@ -1,4 +1,4 @@
-import { Context } from 'hono';
+import type { Context } from 'hono';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 
@@ -128,7 +128,7 @@ export async function generateHandler(c: Context) {
   }
 }
 
-export async function streamGenerateHandler(c: Context) {
+export async function streamGenerateHandler(c: Context): Promise<Response> {
   try {
     const mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
@@ -148,15 +148,20 @@ export async function streamGenerateHandler(c: Context) {
 
     const streamResult = await agent.stream(messages, { threadId, resourceid, output });
 
-    return new Response(streamResult.toDataStream(), {
-      headers: {
-        'Content-Type': 'text/x-unknown',
-        'content-encoding': 'identity',
-        'transfer-encoding': 'chunked',
-      },
-    });
+    for await (const part of streamResult.fullStream) {
+      if (part.type === 'error') {
+        throw new Error(part.error);
+      } else {
+        return new Response(streamResult.toDataStream(), {
+          headers: {
+            'Content-Type': 'text/x-unknown',
+            'content-encoding': 'identity',
+            'transfer-encoding': 'chunked',
+          },
+        });
+      }
+    }
   } catch (error) {
-    console.log(error);
     return handleError(error, 'Error streaming from agent');
   }
 }

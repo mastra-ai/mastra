@@ -11,7 +11,7 @@ export class Deployer extends MastraBase {
   deps: Deps = new Deps();
   dotMastraPath: string;
   projectPath: string;
-  name: string = '';
+  override name: string = '';
   type: 'Deploy' | 'Dev';
 
   constructor({ dir, type }: { dir: string; type: 'Deploy' | 'Dev' }) {
@@ -53,6 +53,8 @@ export class Deployer extends MastraBase {
 
         return acc;
       }, {});
+
+    mastraDeps['@mastra/loggers'] = 'latest';
 
     const pkgPath = join(this.dotMastraPath, 'package.json');
 

@@ -1,9 +1,9 @@
 import * as p from '@clack/prompts';
 import yoctoSpinner from 'yocto-spinner';
 
-import { DepsService } from '../../services/service.deps.js';
-import { DockerService } from '../../services/service.docker.js';
-import { FileService } from '../../services/service.file.js';
+import { DepsService } from '../../services/service.deps';
+import { DockerService } from '../../services/service.docker';
+import { FileService } from '../../services/service.file';
 
 const DOCKER_COMPOSE_FILE = 'mastra-pg.docker-compose.yaml';
 

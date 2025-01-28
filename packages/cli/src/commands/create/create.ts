@@ -1,10 +1,10 @@
 import * as p from '@clack/prompts';
 import color from 'picocolors';
 
-import { init } from '../init/init.js';
-import { interactivePrompt, LLMProvider } from '../init/utils.js';
+import { init } from '../init/init';
+import { interactivePrompt, type LLMProvider } from '../init/utils';
 
-import { createMastraProject } from './utils.js';
+import { createMastraProject } from './utils';
 
 export const create = async (args: {
   components?: string[];

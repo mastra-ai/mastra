@@ -7,7 +7,7 @@ A simple example showing how to work with Graph RAG using Mastra, OpenAI, and PG
 - Node.js v20.0+
 - pnpm (recommended) or npm
 - OpenAI API key
-- Pinecone API key
+- Postgres connection string
 
 ## Getting Started
 

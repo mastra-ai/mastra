@@ -1,7 +1,7 @@
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
-import { type Mastra } from '@mastra/core';
+import type { Mastra } from '@mastra/core';
 import { Hono } from 'hono';
 import { describeRoute, openAPISpecs } from 'hono-openapi';
 import { join } from 'path';
@@ -9,6 +9,7 @@ import { pathToFileURL } from 'url';
 
 import { readFile } from 'fs/promises';
 import { cors } from 'hono/cors';
+import { logger } from 'hono/logger';
 
 import {
   generateHandler,
@@ -19,6 +20,7 @@ import {
   streamGenerateHandler,
 } from './handlers/agents.js';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client.js';
+import { errorHandler } from './handlers/error.js';
 import { getLogsByRunIdHandler, getLogsHandler } from './handlers/logs.js';
 import {
   createThreadHandler,
@@ -53,7 +55,7 @@ type Variables = {
 
 export async function createHonoServer(
   mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; evalStore?: any } = {},
+  options: { playground?: boolean; swaggerUI?: boolean; evalStore?: any; apiReqLogs?: boolean } = {},
 ) {
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -77,6 +79,12 @@ export async function createHonoServer(
 
   // Middleware
   app.use('*', cors());
+
+  if (options.apiReqLogs) {
+    app.use(logger());
+  }
+
+  app.onError(errorHandler);
 
   // Add Mastra to context
   app.use('*', async (c, next) => {
@@ -903,7 +911,7 @@ export async function createHonoServer(
 
 export async function createNodeServer(
   mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; evalStore?: any } = {},
+  options: { playground?: boolean; swaggerUI?: boolean; evalStore?: any; apiReqLogs?: boolean } = {},
 ) {
   const app = await createHonoServer(mastra, options);
   return serve(
@@ -912,13 +920,14 @@ export async function createNodeServer(
       port: Number(process.env.PORT) || 4111,
     },
     () => {
-      console.log(`🦄 Mastra API running on port ${process.env.PORT || 4111}/api`);
-      console.log(`📚 Open API documentation available at http://localhost:${process.env.PORT || 4111}/openapi.json`);
+      const logger = mastra.getLogger();
+      logger.info(`🦄 Mastra API running on port ${process.env.PORT || 4111}/api`);
+      logger.info(`📚 Open API documentation available at http://localhost:${process.env.PORT || 4111}/openapi.json`);
       if (options?.swaggerUI) {
-        console.log(`🧪 Swagger UI available at http://localhost:${process.env.PORT || 4111}/swagger-ui`);
+        logger.info(`🧪 Swagger UI available at http://localhost:${process.env.PORT || 4111}/swagger-ui`);
       }
       if (options?.playground) {
-        console.log(`👨‍💻 Playground available at http://localhost:${process.env.PORT || 4111}/`);
+        logger.info(`👨‍💻 Playground available at http://localhost:${process.env.PORT || 4111}/`);
       }
     },
   );

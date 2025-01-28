@@ -1,5 +1,76 @@
 # @mastra/deployer-vercel
 
+## 0.0.1-alpha.22
+
+### Patch Changes
+
+- Updated dependencies [7b87567]
+  - @mastra/core@0.1.27-alpha.74
+  - @mastra/deployer@0.0.1-alpha.18
+
+## 0.0.1-alpha.21
+
+### Patch Changes
+
+- Updated dependencies [3427b95]
+  - @mastra/core@0.1.27-alpha.73
+  - @mastra/deployer@0.0.1-alpha.17
+
+## 0.0.1-alpha.20
+
+### Patch Changes
+
+- Updated dependencies [e4d4ede]
+- Updated dependencies [06b2c0a]
+  - @mastra/core@0.1.27-alpha.72
+  - @mastra/deployer@0.0.1-alpha.16
+
+## 0.0.1-alpha.19
+
+### Patch Changes
+
+- Updated dependencies [d9c8dd0]
+  - @mastra/deployer@0.0.1-alpha.15
+  - @mastra/core@0.1.27-alpha.71
+
+## 0.0.1-alpha.18
+
+### Patch Changes
+
+- Updated dependencies [ad2cd74]
+  - @mastra/deployer@0.0.1-alpha.14
+
+## 0.0.1-alpha.17
+
+### Patch Changes
+
+- Updated dependencies [a1774e7]
+  - @mastra/deployer@0.0.1-alpha.13
+
+## 0.0.1-alpha.16
+
+### Patch Changes
+
+- Updated dependencies [28dceab]
+  - @mastra/deployer@0.0.1-alpha.12
+
+## 0.0.1-alpha.15
+
+### Patch Changes
+
+- bdaf834: publish packages
+- Updated dependencies [bdaf834]
+  - @mastra/deployer@0.0.1-alpha.11
+
+## 0.0.1-alpha.14
+
+### Patch Changes
+
+- Updated dependencies [dd6d87f]
+- Updated dependencies [04434b6]
+  - @mastra/core@0.1.27-alpha.70
+  - @mastra/deployer@0.0.1-alpha.10
+
 ## 0.0.1-alpha.13
 
 ### Patch Changes

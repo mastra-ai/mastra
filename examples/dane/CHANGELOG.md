@@ -1,5 +1,88 @@
 # @mastra/dane
 
+## 0.0.2-alpha.88
+
+### Patch Changes
+
+- Updated dependencies [7b87567]
+  - @mastra/core@0.1.27-alpha.74
+  - @mastra/firecrawl@1.0.4-alpha.65
+  - @mastra/github@1.0.3-alpha.58
+  - @mastra/stabilityai@1.0.1-alpha.49
+  - @mastra/engine@0.0.5-alpha.69
+  - @mastra/mcp@0.0.1-alpha.16
+  - @mastra/memory@0.0.2-alpha.55
+  - @mastra/rag@0.0.2-alpha.63
+
+## 0.0.2-alpha.87
+
+### Patch Changes
+
+- Updated dependencies [3427b95]
+  - @mastra/core@0.1.27-alpha.73
+  - @mastra/firecrawl@1.0.4-alpha.64
+  - @mastra/github@1.0.3-alpha.57
+  - @mastra/stabilityai@1.0.1-alpha.48
+  - @mastra/engine@0.0.5-alpha.68
+  - @mastra/mcp@0.0.1-alpha.15
+  - @mastra/memory@0.0.2-alpha.54
+  - @mastra/rag@0.0.2-alpha.62
+
+## 0.0.2-alpha.86
+
+### Patch Changes
+
+- Updated dependencies [e4d4ede]
+- Updated dependencies [06b2c0a]
+  - @mastra/core@0.1.27-alpha.72
+  - @mastra/firecrawl@1.0.4-alpha.63
+  - @mastra/github@1.0.3-alpha.56
+  - @mastra/stabilityai@1.0.1-alpha.47
+  - @mastra/engine@0.0.5-alpha.67
+  - @mastra/mcp@0.0.1-alpha.14
+  - @mastra/memory@0.0.2-alpha.53
+  - @mastra/rag@0.0.2-alpha.61
+
+## 0.0.2-alpha.84
+
+### Patch Changes
+
+- Updated dependencies [d9c8dd0]
+  - @mastra/core@0.1.27-alpha.71
+  - @mastra/firecrawl@1.0.4-alpha.62
+  - @mastra/github@1.0.3-alpha.55
+  - @mastra/stabilityai@1.0.1-alpha.46
+  - @mastra/engine@0.0.5-alpha.66
+  - @mastra/mcp@0.0.1-alpha.13
+  - @mastra/memory@0.0.2-alpha.52
+  - @mastra/rag@0.0.2-alpha.60
+
+## 0.0.2-alpha.80
+
+### Patch Changes
+
+- Updated dependencies [bdaf834]
+  - @mastra/engine@0.0.5-alpha.65
+  - @mastra/mcp@0.0.1-alpha.12
+  - @mastra/memory@0.0.2-alpha.51
+  - @mastra/rag@0.0.2-alpha.59
+  - @mastra/firecrawl@1.0.4-alpha.61
+
+## 0.0.2-alpha.79
+
+### Patch Changes
+
+- Updated dependencies [dd6d87f]
+- Updated dependencies [04434b6]
+  - @mastra/core@0.1.27-alpha.70
+  - @mastra/firecrawl@1.0.4-alpha.60
+  - @mastra/github@1.0.3-alpha.54
+  - @mastra/stabilityai@1.0.1-alpha.45
+  - @mastra/engine@0.0.5-alpha.64
+  - @mastra/mcp@0.0.1-alpha.11
+  - @mastra/memory@0.0.2-alpha.50
+  - @mastra/rag@0.0.2-alpha.58
+
 ## 0.0.2-alpha.77
 
 ### Patch Changes

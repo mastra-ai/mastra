@@ -1,5 +1,92 @@
 # mastra
 
+## 0.1.57-alpha.120
+
+### Patch Changes
+
+- Updated dependencies [7b87567]
+  - @mastra/core@0.1.27-alpha.74
+  - @mastra/deployer@0.0.1-alpha.18
+
+## 0.1.57-alpha.119
+
+### Patch Changes
+
+- Updated dependencies [3427b95]
+  - @mastra/core@0.1.27-alpha.73
+  - @mastra/deployer@0.0.1-alpha.17
+
+## 0.1.57-alpha.118
+
+### Patch Changes
+
+- 255fc56: create mastra bundle correctly
+- Updated dependencies [e4d4ede]
+- Updated dependencies [06b2c0a]
+  - @mastra/core@0.1.27-alpha.72
+  - @mastra/deployer@0.0.1-alpha.16
+
+## 0.1.57-alpha.117
+
+### Patch Changes
+
+- 884793d: Fix 500 error in memory call, fix threads sidebar in playground agent chat
+
+## 0.1.57-alpha.116
+
+### Patch Changes
+
+- Updated dependencies [d9c8dd0]
+  - @mastra/deployer@0.0.1-alpha.15
+  - @mastra/core@0.1.27-alpha.71
+
+## 0.1.57-alpha.115
+
+### Patch Changes
+
+- 215a1c2: Fix bad cli create starter files copying
+
+## 0.1.57-alpha.114
+
+### Patch Changes
+
+- ad2cd74: Deploy fix
+- Updated dependencies [ad2cd74]
+  - @mastra/deployer@0.0.1-alpha.14
+
+## 0.1.57-alpha.113
+
+### Patch Changes
+
+- Updated dependencies [a1774e7]
+  - @mastra/deployer@0.0.1-alpha.13
+
+## 0.1.57-alpha.112
+
+### Patch Changes
+
+- e604ddb: Change bundling architecture
+- 28dceab: Catch apiKey error in dev
+- Updated dependencies [28dceab]
+  - @mastra/deployer@0.0.1-alpha.12
+
+## 0.1.57-alpha.111
+
+### Patch Changes
+
+- Updated dependencies [bdaf834]
+  - @mastra/deployer@0.0.1-alpha.11
+
+## 0.1.57-alpha.110
+
+### Patch Changes
+
+- 04434b6: Create separate logger file
+- Updated dependencies [dd6d87f]
+- Updated dependencies [04434b6]
+  - @mastra/core@0.1.27-alpha.70
+  - @mastra/deployer@0.0.1-alpha.10
+
 ## 0.1.57-alpha.109
 
 ### Patch Changes

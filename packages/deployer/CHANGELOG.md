@@ -1,5 +1,68 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.18
+
+### Patch Changes
+
+- Updated dependencies [7b87567]
+  - @mastra/core@0.1.27-alpha.74
+
+## 0.0.1-alpha.17
+
+### Patch Changes
+
+- Updated dependencies [3427b95]
+  - @mastra/core@0.1.27-alpha.73
+
+## 0.0.1-alpha.16
+
+### Patch Changes
+
+- e4d4ede: Better setLogger()
+- Updated dependencies [e4d4ede]
+- Updated dependencies [06b2c0a]
+  - @mastra/core@0.1.27-alpha.72
+
+## 0.0.1-alpha.15
+
+### Patch Changes
+
+- d9c8dd0: Logger changes for default transports
+- Updated dependencies [d9c8dd0]
+  - @mastra/core@0.1.27-alpha.71
+
+## 0.0.1-alpha.14
+
+### Patch Changes
+
+- ad2cd74: Deploy fix
+
+## 0.0.1-alpha.13
+
+### Patch Changes
+
+- a1774e7: Improve bundling
+
+## 0.0.1-alpha.12
+
+### Patch Changes
+
+- 28dceab: Catch apiKey error in dev
+
+## 0.0.1-alpha.11
+
+### Patch Changes
+
+- bdaf834: publish packages
+
+## 0.0.1-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [dd6d87f]
+- Updated dependencies [04434b6]
+  - @mastra/core@0.1.27-alpha.70
+
 ## 0.0.1-alpha.9
 
 ### Patch Changes
