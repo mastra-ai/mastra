@@ -95,8 +95,10 @@ const vectorQueryTool = createVectorQueryTool({
   },
   topK: 10,
   reranker: {
-    type: 'cross-encoder',
-    model: 'cross-encoder/ms-marco-MiniLM-L-6-v2'
+    model: {
+      provider: 'OPEN_AI',
+      name: 'gpt-4o-mini',
+    },
   }
 });
 ```
