@@ -2,6 +2,7 @@ packages:
   - "packages/*"
   - "deployers/*"
   - "vector-stores/*"
+  - "speech/*"
   - "!packages/cli/admin"
   - "integration-generator/*"
   - "integrations/*"

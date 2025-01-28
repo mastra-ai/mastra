@@ -26,7 +26,9 @@ export async function getAgentsHandler(c: Context) {
         return acc;
       }, {});
       acc[_id] = {
-        ...agent,
+        name: agent.name,
+        model: agent.model,
+        instructions: agent.instructions,
         tools: serializedAgentTools,
       };
       return acc;
@@ -59,7 +61,9 @@ export async function getAgentByIdHandler(c: Context) {
     }, {});
 
     return c.json({
-      ...agent,
+      name: agent.name,
+      model: agent.model,
+      instructions: agent.instructions,
       tools: serializedAgentTools,
     });
   } catch (error) {
