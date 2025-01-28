@@ -56,6 +56,23 @@ export class PostgresStore extends MastraStorage {
   async clearTable(tableName: string): Promise<void> {
     await this.db.none(`TRUNCATE TABLE ${this.pgp.as.name(tableName)}`);
   }
+
+  protected async insert(tableName: TABLE_NAMES, record: Record<string, any>): Promise<void> {
+    const columns = Object.keys(record);
+    const placeholders = columns.map((_, i) => `$${i + 1}`);
+    const values = Object.values(record);
+
+    const query = `INSERT INTO ${this.pgp.as.name(tableName)} (${columns.map(col => this.pgp.as.name(col)).join(', ')}) VALUES (${placeholders.join(', ')})`;
+    await this.db.none(query, values);
+  }
+
+  protected async load<R>(tableName: TABLE_NAMES, keys: Record<string, string>): Promise<R | null> {
+    const columns = Object.keys(keys);
+    const values = Object.values(keys);
+    const conditions = columns.map((col, i) => `${this.pgp.as.name(col)} = $${i + 1}`).join(' AND ');
+    const query = `SELECT * FROM ${this.pgp.as.name(tableName)} WHERE ${conditions}`;
+    const result = await this.db.oneOrNone(query, values);
+    return result as R | null;
   }
 
   async persistWorkflowSnapshot(params: {
