@@ -219,6 +219,14 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
+  async getMessages<T = unknown>(_params: { threadId: string }): Promise<T> {
+    throw new Error('not implemented yet');
+  }
+
+  async saveMessages(_params: { messages: MessageType[] }): Promise<MessageType[]> {
+    throw new Error('not implemented yet');
+  }
+
   async validateToolCallArgs({ hashedArgs }: { hashedArgs: string }): Promise<boolean> {
     await this.ensureTablesExist();
 
