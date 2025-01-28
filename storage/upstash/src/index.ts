@@ -10,7 +10,7 @@ export class UpstashStore extends MastraStore {
   private redis: Redis;
 
   constructor(config: UpstashConfig) {
-    super();
+    super('Upstash');
     this.redis = new Redis({
       url: config.url,
       token: config.token,

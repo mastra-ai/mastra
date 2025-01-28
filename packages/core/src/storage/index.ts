@@ -1,3 +1,4 @@
+import { MastraBase } from '../base';
 import { WorkflowRunState } from '../workflows';
 
 export interface StorageColumn {
@@ -16,9 +17,16 @@ export interface WorkflowRow {
 
 export type TABLE_NAMES = typeof MastraStorage.TABLE_WORKFLOWS | typeof MastraStorage.TABLE_EVALS;
 
-export abstract class MastraStorage {
+export abstract class MastraStorage extends MastraBase {
   static readonly TABLE_WORKFLOWS = 'workflows';
   static readonly TABLE_EVALS = 'evals';
+
+  constructor(name: string) {
+    super({
+      component: 'STORAGE',
+      name,
+    });
+  }
 
   protected abstract createTable(tableName: TABLE_NAMES, schema: Record<string, StorageColumn>): Promise<void>;
   protected abstract clearTable(tableName: TABLE_NAMES): Promise<void>;
@@ -30,7 +38,7 @@ export abstract class MastraStorage {
     tableName: typeof MastraStorage.TABLE_WORKFLOWS,
     keys: { workflow_name: string; run_id: string },
   ): Promise<R>;
-  protected abstract load<R>(tableName: TABLE_NAMES, keys: Record<string, string>): Promise<R>;
+  protected abstract load<R>(tableName: TABLE_NAMES, keys: Record<string, string>): Promise<R | null>;
 
   async init(): Promise<void> {
     await this.createTable('workflows', {

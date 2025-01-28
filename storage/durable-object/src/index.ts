@@ -12,7 +12,7 @@ export class DurableObjectStorage extends MastraStorage {
   private objectNamespace: DurableObjectNamespace;
 
   constructor(config: DurableObjectConfig) {
-    super();
+    super('DURABLE_OBJECT');
     this.objectId = config.durableObjectId;
     this.objectNamespace = config.durableObjectNamespace;
   }

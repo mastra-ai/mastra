@@ -17,7 +17,7 @@ export class PostgresStore extends MastraStore {
   private pgp: IMain;
 
   constructor(config: PostgresConfig) {
-    super();
+    super('Postgres');
     this.pgp = pgPromise();
     this.db = this.pgp(config);
   }
