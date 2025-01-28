@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import { describe, expect, it } from 'vitest';
 
-import { embed } from './index';
+import { embed, embedMany } from './index';
 
 // Load environment variables
 dotenv.config();
@@ -40,7 +40,7 @@ describe('Embedding Tests', () => {
       const value = ['String 1', 'String 2', 'String 3'];
       const maxRetries = 3;
 
-      const embeddings = await embed(value, {
+      const embeddings = await embedMany(value, {
         provider: 'OPEN_AI',
         model: 'text-embedding-3-small',
         maxRetries,

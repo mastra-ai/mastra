@@ -1,5 +1,5 @@
-import { Mastra, Agent, EmbedManyResult, Step, Workflow } from '@mastra/core';
-import { createVectorQueryTool, embed, MDocument } from '@mastra/rag';
+import { Mastra, Agent, Step, Workflow } from '@mastra/core';
+import { createVectorQueryTool, embedMany, MDocument } from '@mastra/rag';
 import { PgVector } from '@mastra/vector-pg';
 import { z } from 'zod';
 
@@ -196,11 +196,11 @@ const chunks = await doc.chunk({
   separator: '\n',
 });
 
-const { embeddings } = (await embed(chunks, {
+const { embeddings } = await embedMany(chunks, {
   provider: 'OPEN_AI',
   model: 'text-embedding-3-small',
   maxRetries: 3,
-})) as EmbedManyResult<string>;
+});
 
 const vectorStore = mastra.getVector('pgVector');
 await vectorStore.createIndex('embeddings', 1536);
