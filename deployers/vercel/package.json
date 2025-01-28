@@ -13,8 +13,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup-node --config tsup.config.js",
-    "dev": "tsup-node --config tsup.config.js --watch",
+    "build": "tsup-node src/index.ts --format esm --dts --clean --treeshake",
+    "dev": "tsup-node src/index.ts --format esm --dts --clean --treeshake --watch",
     "test": "vitest run"
   },
   "keywords": [],
