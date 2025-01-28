@@ -1,5 +1,11 @@
 # @mastra/deployer-netlify
 
+## 0.0.1-alpha.24
+
+### Patch Changes
+
+- 44c7c26: Rebuild
+
 ## 0.0.1-alpha.23
 
 ### Patch Changes

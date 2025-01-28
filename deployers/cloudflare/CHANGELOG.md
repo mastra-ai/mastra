@@ -1,5 +1,11 @@
 # @mastra/deployer-cloudflare
 
+## 0.0.1-alpha.25
+
+### Patch Changes
+
+- 44c7c26: Rebuild
+
 ## 0.0.1-alpha.24
 
 ### Patch Changes
