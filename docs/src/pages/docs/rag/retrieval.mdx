@@ -24,7 +24,7 @@ The simplest approach is direct semantic search. This method uses vector similar
 
 ```ts showLineNumbers copy
 import { PgVector } from "@mastra/vector-pg";
-import { embed, EmbedResult } from "@mastra/rag";
+import { embed } from "@mastra/rag";
 
 // Convert query to embedding
 const { embedding } = await embed(

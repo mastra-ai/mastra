@@ -1,16 +1,22 @@
-import { embed as embedCore, EmbeddingOptions } from '@mastra/core';
+import {
+  embed as embedCore,
+  embedMany as embedManyCore,
+  EmbeddingOptions,
+  EmbedManyResult,
+  EmbedResult,
+} from '@mastra/core';
 import { Document as Chunk } from 'llamaindex';
 
-export const embed = (chunk: Chunk | string | string[] | Chunk[], options: EmbeddingOptions) => {
-  let value: string | string[];
+function getText(input: Chunk | string): string {
+  return input instanceof Chunk ? input.getText() : input;
+}
 
-  if (Array.isArray(chunk)) {
-    value = chunk.map(chunk => (typeof chunk === 'string' ? chunk : chunk.getText()));
-  } else if (chunk instanceof Chunk) {
-    value = chunk.getText();
-  } else {
-    value = chunk;
-  }
+// Added explicit return type as it was not being inferred correctly
+export function embed(chunk: Chunk | string, options: EmbeddingOptions): Promise<EmbedResult<string>> {
+  return embedCore(getText(chunk), options);
+}
 
-  return embedCore(value, options);
-};
+// Added explicit return type as it was not being inferred correctly
+export function embedMany(chunks: (Chunk | string)[], options: EmbeddingOptions): Promise<EmbedManyResult<string>> {
+  return embedManyCore(chunks.map(getText), options);
+}

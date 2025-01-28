@@ -1,4 +1,4 @@
-import { createTool, EmbeddingOptions, EmbedResult, MastraVector, QueryResult } from '@mastra/core';
+import { createTool, EmbeddingOptions, MastraVector, QueryResult } from '@mastra/core';
 import { z } from 'zod';
 
 import { ChunkParams, MDocument } from '../document';
@@ -62,7 +62,7 @@ const vectorQuerySearch = async ({
   topK,
   includeVectors = false,
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
-  const { embedding } = (await embed(queryText, options)) as EmbedResult<string>;
+  const { embedding } = await embed(queryText, options);
   // Get relevant chunks from the vector database
   const results = await vectorStore.query(indexName, embedding, topK, queryFilter, includeVectors);
 

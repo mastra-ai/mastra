@@ -3,7 +3,7 @@ import { createCohere } from '@ai-sdk/cohere';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createMistral } from '@ai-sdk/mistral';
 import { createOpenAI } from '@ai-sdk/openai';
-import { embed as embedAi, EmbeddingModel, embedMany } from 'ai';
+import { embed as embedAi, EmbeddingModel, embedMany as embedManyAi } from 'ai';
 import { createVoyage } from 'voyage-ai-provider';
 
 import 'dotenv/config';
@@ -12,9 +12,9 @@ import { EmbeddingOptions } from './types';
 
 export * from './types';
 
-export async function embed(value: string | string[], embeddingOptions: EmbeddingOptions) {
+function getEmbeddingModel(embeddingOptions: EmbeddingOptions) {
   let embeddingModel: EmbeddingModel<string>;
-  const { provider, model, apiKey, maxRetries } = embeddingOptions;
+  const { provider, model, apiKey } = embeddingOptions;
 
   if (provider === 'OPEN_AI') {
     const openai = createOpenAI({
@@ -56,17 +56,27 @@ export async function embed(value: string | string[], embeddingOptions: Embeddin
     throw new Error(`Invalid embedding model`);
   }
 
-  if (value instanceof Array) {
-    return await embedMany({
-      model: embeddingModel,
-      values: value,
-      maxRetries,
-    });
-  }
+  return embeddingModel;
+}
+
+export async function embed(value: string, embeddingOptions: EmbeddingOptions) {
+  const embeddingModel = await getEmbeddingModel(embeddingOptions);
+  const { maxRetries } = embeddingOptions;
 
   return await embedAi({
     model: embeddingModel,
     value,
+    maxRetries,
+  });
+}
+
+export async function embedMany(value: string[], embeddingOptions: EmbeddingOptions) {
+  const embeddingModel = await getEmbeddingModel(embeddingOptions);
+  const { maxRetries } = embeddingOptions;
+
+  return await embedManyAi({
+    model: embeddingModel,
+    values: value,
     maxRetries,
   });
 }
