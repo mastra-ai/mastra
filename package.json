@@ -14,7 +14,7 @@
     "prettier-plugin-tailwindcss": "^0.6.6",
     "turbo": "^2.1.3",
     "typescript": "^5.6.3",
-    "vitest": "^2.1.8"
+    "vitest": "^3.0.4"
   },
   "scripts": {
     "ci:publish": "pnpm publish -r",
@@ -41,7 +41,7 @@
     "test:core": "pnpm --filter ./packages/core test",
     "test:engine": "pnpm --filter ./packages/engine test",
     "test:rag": "pnpm --filter ./packages/rag test",
-    "test:vector-stores": "pnpm test ./vector-stores",
+    "test:vector-stores": "pnpm --filter ./vector-stores/* test",
     "test:memory": "pnpm --filter ./packages/memory test",
     "test:evals": "pnpm --filter ./packages/evals test",
     "lint-staged": "lint-staged",

@@ -1,5 +1,5 @@
-import { describe, it, expect, jest } from '@jest/globals';
 import { type ModelConfig } from '@mastra/core';
+import { describe, it, expect } from 'vitest';
 
 import { TestCaseWithContext } from '../utils';
 
@@ -150,7 +150,6 @@ const testCases: TestCaseWithContext[] = [
 ];
 
 const SECONDS = 10000;
-jest.setTimeout(15 * SECONDS);
 
 const modelConfig: ModelConfig = {
   provider: 'OPEN_AI',
@@ -159,88 +158,94 @@ const modelConfig: ModelConfig = {
   apiKey: process.env.OPENAI_API_KEY,
 };
 
-describe('ContextPositionMetric', () => {
-  it('should handle perfect ordering with all relevant pieces', async () => {
-    const testCase = testCases[0]!;
-    const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
-    const result = await metric.measure(testCase.input, testCase.output);
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
-  });
+describe(
+  'ContextPositionMetric',
+  () => {
+    it('should handle perfect ordering with all relevant pieces', async () => {
+      const testCase = testCases[0]!;
+      const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
+    });
 
-  it('should handle mixed relevance case', async () => {
-    const testCase = testCases[1]!;
-    const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
-    const result = await metric.measure(testCase.input, testCase.output);
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
-  });
+    it('should handle mixed relevance case', async () => {
+      const testCase = testCases[1]!;
+      const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
+    });
 
-  it('should handle domain knowledge relevance', async () => {
-    const testCase = testCases[2]!;
-    const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
-    const result = await metric.measure(testCase.input, testCase.output);
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
-  });
+    it('should handle domain knowledge relevance', async () => {
+      const testCase = testCases[2]!;
+      const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
+    });
 
-  it('should handle mixed relevance with good ordering', async () => {
-    const testCase = testCases[3]!;
-    const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
-    const result = await metric.measure(testCase.input, testCase.output);
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
-  });
+    it('should handle mixed relevance with good ordering', async () => {
+      const testCase = testCases[3]!;
+      const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
+    });
 
-  it('should handle single relevant piece at start', async () => {
-    const testCase = testCases[4]!;
-    const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
-    const result = await metric.measure(testCase.input, testCase.output);
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
-  });
+    it('should handle single relevant piece at start', async () => {
+      const testCase = testCases[4]!;
+      const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
+    });
 
-  it('should handle single relevant piece in middle', async () => {
-    const testCase = testCases[5]!;
-    const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
-    const result = await metric.measure(testCase.input, testCase.output);
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
-  });
+    it('should handle single relevant piece in middle', async () => {
+      const testCase = testCases[5]!;
+      const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
+    });
 
-  it('should handle single relevant piece at end', async () => {
-    const testCase = testCases[6]!;
-    const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
-    const result = await metric.measure(testCase.input, testCase.output);
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
-  });
+    it('should handle single relevant piece at end', async () => {
+      const testCase = testCases[6]!;
+      const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
+    });
 
-  it('should handle empty context', async () => {
-    const testCase = testCases[7]!;
-    const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
-    const result = await metric.measure(testCase.input, testCase.output);
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
-  });
+    it('should handle empty context', async () => {
+      const testCase = testCases[7]!;
+      const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
+    });
 
-  it('should handle all irrelevant context', async () => {
-    const testCase = testCases[8]!;
-    const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
-    const result = await metric.measure(testCase.input, testCase.output);
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
-  });
+    it('should handle all irrelevant context', async () => {
+      const testCase = testCases[8]!;
+      const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
+    });
 
-  it('should handle complex interdependent context', async () => {
-    const testCase = testCases[9]!;
-    const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
-    const result = await metric.measure(testCase.input, testCase.output);
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
-  });
+    it('should handle complex interdependent context', async () => {
+      const testCase = testCases[9]!;
+      const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
+    });
 
-  it('should handle single piece context', async () => {
-    const testCase = testCases[10]!;
-    const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
-    const result = await metric.measure(testCase.input, testCase.output);
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
-  });
+    it('should handle single piece context', async () => {
+      const testCase = testCases[10]!;
+      const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
+    });
 
-  it('should handle two relevant pieces at end', async () => {
-    const testCase = testCases[11]!;
-    const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
-    const result = await metric.measure(testCase.input, testCase.output);
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
-  });
-});
+    it('should handle two relevant pieces at end', async () => {
+      const testCase = testCases[11]!;
+      const metric = new ContextPositionMetric(modelConfig, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
+    });
+  },
+  {
+    timeout: 15 * SECONDS,
+  },
+);
