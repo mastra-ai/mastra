@@ -1,5 +1,13 @@
 # generate-text-with-deepseek
 
+## 0.0.1-alpha.16
+
+### Patch Changes
+
+- Updated dependencies [ae7bf94]
+- Updated dependencies [ae7bf94]
+  - @mastra/core@0.1.27-alpha.76
+
 ## 0.0.1-alpha.15
 
 ### Patch Changes

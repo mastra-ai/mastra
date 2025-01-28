@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.20
+
+### Patch Changes
+
+- ae7bf94: Fix loggers messing up deploys
+- ae7bf94: Changeset
+- Updated dependencies [ae7bf94]
+- Updated dependencies [ae7bf94]
+  - @mastra/core@0.1.27-alpha.76
+
 ## 0.0.1-alpha.19
 
 ### Patch Changes
