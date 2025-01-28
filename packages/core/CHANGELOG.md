@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.75
+
+### Patch Changes
+
+- 23dcb23: Redeploy core
+
 ## 0.1.27-alpha.74
 
 ### Patch Changes
