@@ -92,7 +92,7 @@ importers:
         version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.10.5)(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(esbuild@0.17.19)(utf-8-validate@6.0.5)
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.5)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.5)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
 
   deployers/netlify:
     dependencies:
@@ -138,7 +138,7 @@ importers:
         version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.10.5)(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(esbuild@0.17.19)(utf-8-validate@6.0.5)
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.5)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.5)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
 
   deployers/vercel:
     dependencies:
@@ -172,7 +172,7 @@ importers:
         version: 39.3.0(@swc/core@1.10.2(@swc/helpers@0.5.15))(encoding@0.1.13)(rollup@4.30.1)
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.5)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.5)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
 
   docs:
     dependencies:
@@ -2476,7 +2476,7 @@ importers:
         version: 5.7.3
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.5)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.5)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
       zod-to-json-schema:
         specifier: ^3.24.1
         version: 3.24.1(zod@3.24.1)
@@ -2666,7 +2666,7 @@ importers:
         version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.10.5)(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5)
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.5)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.5)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
 
   packages/memory:
     dependencies:
@@ -2846,9 +2846,9 @@ importers:
         version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.10.5)(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(esbuild@0.17.19)(utf-8-validate@6.0.5)
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.5)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.5)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
 
-  vector-stores/astra-db:
+  vector-stores/astra:
     dependencies:
       '@datastax/astra-db-ts':
         specifier: ^1.5.0
@@ -2862,13 +2862,13 @@ importers:
         version: 1.0.8
       '@types/node':
         specifier: ^22.9.0
-        version: 22.10.7
+        version: 22.10.10
       dts-cli:
         specifier: ^2.0.5
-        version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.10.7)(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5)
+        version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.2(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.10.10)(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5)
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.7)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.10)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
 
   vector-stores/chroma:
     dependencies:
@@ -28556,6 +28556,14 @@ snapshots:
       chai: 5.1.2
       tinyrainbow: 1.2.0
 
+  '@vitest/mocker@2.1.8(vite@5.4.11(@types/node@22.10.10)(terser@5.37.0))':
+    dependencies:
+      '@vitest/spy': 2.1.8
+      estree-walker: 3.0.3
+      magic-string: 0.30.17
+    optionalDependencies:
+      vite: 5.4.11(@types/node@22.10.10)(terser@5.37.0)
+
   '@vitest/mocker@2.1.8(vite@5.4.11(@types/node@22.10.2)(terser@5.37.0))':
     dependencies:
       '@vitest/spy': 2.1.8
@@ -41703,6 +41711,24 @@ snapshots:
       d3-time: 3.1.0
       d3-timer: 3.0.1
 
+  vite-node@2.1.8(@types/node@22.10.10)(terser@5.37.0):
+    dependencies:
+      cac: 6.7.14
+      debug: 4.4.0(supports-color@8.1.1)
+      es-module-lexer: 1.6.0
+      pathe: 1.1.2
+      vite: 5.4.11(@types/node@22.10.10)(terser@5.37.0)
+    transitivePeerDependencies:
+      - '@types/node'
+      - less
+      - lightningcss
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+
   vite-node@2.1.8(@types/node@22.10.2)(terser@5.37.0):
     dependencies:
       cac: 6.7.14
@@ -41757,6 +41783,16 @@ snapshots:
       - supports-color
       - terser
 
+  vite@5.4.11(@types/node@22.10.10)(terser@5.37.0):
+    dependencies:
+      esbuild: 0.21.5
+      postcss: 8.4.49
+      rollup: 4.29.1
+    optionalDependencies:
+      '@types/node': 22.10.10
+      fsevents: 2.3.3
+      terser: 5.37.0
+
   vite@5.4.11(@types/node@22.10.2)(terser@5.37.0):
     dependencies:
       esbuild: 0.21.5
@@ -41800,6 +41836,43 @@ snapshots:
       tsx: 4.19.2
       yaml: 2.6.1
 
+  vitest@2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.10)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0):
+    dependencies:
+      '@vitest/expect': 2.1.8
+      '@vitest/mocker': 2.1.8(vite@5.4.11(@types/node@22.10.10)(terser@5.37.0))
+      '@vitest/pretty-format': 2.1.8
+      '@vitest/runner': 2.1.8
+      '@vitest/snapshot': 2.1.8
+      '@vitest/spy': 2.1.8
+      '@vitest/utils': 2.1.8
+      chai: 5.1.2
+      debug: 4.4.0(supports-color@8.1.1)
+      expect-type: 1.1.0
+      magic-string: 0.30.17
+      pathe: 1.1.2
+      std-env: 3.8.0
+      tinybench: 2.9.0
+      tinyexec: 0.3.1
+      tinypool: 1.0.2
+      tinyrainbow: 1.2.0
+      vite: 5.4.11(@types/node@22.10.10)(terser@5.37.0)
+      vite-node: 2.1.8(@types/node@22.10.10)(terser@5.37.0)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@edge-runtime/vm': 3.2.0
+      '@types/node': 22.10.10
+      jsdom: 25.0.1(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5)
+    transitivePeerDependencies:
+      - less
+      - lightningcss
+      - msw
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+
   vitest@2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.2)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0):
     dependencies:
       '@vitest/expect': 2.1.8
@@ -41837,7 +41910,7 @@ snapshots:
       - supports-color
       - terser
 
-  vitest@2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.5)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0):
+  vitest@2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.10.5)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0):
     dependencies:
       '@vitest/expect': 2.1.8
       '@vitest/mocker': 2.1.8(vite@5.4.11(@types/node@22.10.5)(terser@5.37.0))
