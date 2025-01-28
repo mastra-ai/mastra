@@ -1,6 +1,6 @@
 {
   "name": "workflow-with-inline-steps",
-  "version": "1.0.1-alpha.20",
+  "version": "1.0.1-alpha.21",
   "main": "index.js",
   "private": true,
   "scripts": {
