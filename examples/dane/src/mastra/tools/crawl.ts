@@ -1,6 +1,8 @@
 import { createTool } from '@mastra/core';
 import { z } from 'zod';
 
+import { firecrawl } from '../integrations';
+
 export const crawl = createTool({
   id: 'crawler',
   name: 'Crawler Tool',
@@ -14,10 +16,11 @@ export const crawl = createTool({
     message: z.string(),
     crawlData: z.any(),
   }),
-  execute: async ({ context, mastra }) => {
-    const crawlData = await mastra?.syncs?.['FIRECRAWL:CRAWL_AND_SYNC']?.execute({
-      context,
-      engine: mastra?.engine,
+  execute: async ({ context }) => {
+    const crawlData = firecrawl.getWorkflows({})?.['FIRECRAWL:CRAWL_AND_SYNC']?.createRun();
+
+    await crawlData?.start({
+      triggerData: context,
     });
 
     return {
