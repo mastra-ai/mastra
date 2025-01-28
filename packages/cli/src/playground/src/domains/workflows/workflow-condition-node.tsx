@@ -33,19 +33,16 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                 </Text>
 
                 <Text size={'xs'} className=" text-mastra-el-3">
-                  {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}
+                  {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}{' '}
+                  {Object.entries(condition.query).map(([key, value]) => (
+                    <span className="flex items-center gap-0.5" key={`${key}-${value}`}>
+                      <Text size={'xs'} className="lowercase">
+                        {key}
+                      </Text>
+                      <Text size={'xs'}>{value}</Text>
+                    </span>
+                  ))}
                 </Text>
-
-                {Object.entries(condition.query).map(([key, value]) => (
-                  <div className="flex items-center gap-0.5" key={`${key}-${value}`}>
-                    <Text size={'xs'} className=" text-mastra-el-3 lowercase">
-                      {key}
-                    </Text>
-                    <Text size={'xs'} className="text-mastra-el-3  py-[0.19rem]">
-                      {value}
-                    </Text>
-                  </div>
-                ))}
               </div>
             ) : null}
           </Fragment>

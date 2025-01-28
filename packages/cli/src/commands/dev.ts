@@ -69,7 +69,7 @@ const startServer = async (dotMastraPath: string, port: number, MASTRA_TOOLS_PAT
     // Restart server
     logger.info('[Mastra Dev] - Starting server...');
 
-    currentServerProcess = (await execa('node', ['index.mjs'], {
+    currentServerProcess = execa('node', ['index.mjs'], {
       cwd: dotMastraPath,
       env: {
         PORT: port.toString() || '4111',
@@ -77,9 +77,9 @@ const startServer = async (dotMastraPath: string, port: number, MASTRA_TOOLS_PAT
       },
       stdio: 'inherit',
       reject: false,
-    })) as any as ChildProcess;
+    }) as any as ChildProcess;
 
-    if (currentServerProcess?.exitCode !== 0) {
+    if (currentServerProcess?.exitCode && currentServerProcess?.exitCode !== 0) {
       if (!currentServerProcess) {
         throw new Error(`Server failed to start`);
       }
@@ -253,12 +253,12 @@ export async function dev({
   });
 
   watcher.on('change', async () => {
-    console.log(`Changes detected, rebundling and restarting server...`);
+    logger.info('[Mastra Dev] - Changes detected, rebundling and restarting server...');
     await rebundleAndRestart(rootDir, mastraDir, dotMastraPath, port, envFile, toolsDirs);
   });
 
   process.on('SIGINT', () => {
-    console.log('Stopping server...');
+    logger.info('[Mastra Dev] - Stopping server...');
     if (currentServerProcess) {
       currentServerProcess.kill();
     }
