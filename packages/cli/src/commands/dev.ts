@@ -232,7 +232,7 @@ export async function dev({
   await deployer.prepare({
     dir: mastraDir,
     playground: true,
-    useBanner: false,
+    useBanner: true, // temp fix to make mastra dev work until we have a better solution
   });
 
   const envPaths = [path.join(rootDir, '.env'), path.join(rootDir, '.env.development')];
