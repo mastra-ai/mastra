@@ -12,8 +12,6 @@ import { randomUUID } from 'crypto';
 import { JSONSchema7 } from 'json-schema';
 import { z, ZodSchema } from 'zod';
 
-import 'dotenv/config';
-
 import { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 import { Metric } from '../eval';
@@ -26,6 +24,18 @@ import { InstrumentClass } from '../telemetry';
 import { CoreTool, ToolAction } from '../tools/types';
 
 import { AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
+
+export type AgentConfig<
+  TTools extends Record<string, ToolAction<any, any, any, any>> = Record<string, ToolAction<any, any, any, any>>,
+  TMetrics extends Record<string, Metric> = Record<string, Metric>,
+> = {
+  name: string;
+  instructions: string;
+  model: ModelConfig;
+  tools?: TTools;
+  mastra?: MastraPrimitives;
+  metrics?: TMetrics;
+};
 
 @InstrumentClass({
   prefix: 'agent',
@@ -43,14 +53,7 @@ export class Agent<
   tools: TTools;
   metrics: TMetrics;
 
-  constructor(config: {
-    name: string;
-    instructions: string;
-    model: ModelConfig;
-    tools?: TTools;
-    mastra?: MastraPrimitives;
-    metrics?: TMetrics;
-  }) {
+  constructor(config: AgentConfig<TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;

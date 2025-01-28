@@ -1,7 +1,6 @@
-import { type ModelConfig } from '@mastra/core';
+import type { ModelConfig } from '@mastra/core/llm';
 import { describe, it, expect } from 'vitest';
 
-import { isCloserTo } from '../utils';
 import { TestCase } from '../utils';
 
 import { BiasMetric } from './index';
