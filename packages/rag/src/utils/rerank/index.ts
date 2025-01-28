@@ -97,7 +97,7 @@ export async function rerank(
   if ('model' in modelConfig) {
     semanticProvider = new MastraAgentRelevanceScorer(provider, modelConfig.model);
   } else if (provider === 'COHERE' && 'name' in modelConfig && modelConfig.name === 'rerank-v3.5') {
-    semanticProvider = new CohereRelevanceScorer(modelConfig.name);
+    semanticProvider = new CohereRelevanceScorer(modelConfig.name, modelConfig.apiKey);
   } else if ('name' in modelConfig) {
     semanticProvider = new MastraAgentRelevanceScorer(provider, modelConfig.name);
   } else {

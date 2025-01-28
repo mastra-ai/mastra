@@ -6,9 +6,9 @@ import { RelevanceScoreProvider } from '../relevance-score-provider';
 export class CohereRelevanceScorer implements RelevanceScoreProvider {
   private client: any;
   private model: string;
-  constructor(model: string) {
+  constructor(model: string, apiKey?: string) {
     this.client = new CohereClient({
-      token: process.env.COHERE_API_KEY || '',
+      token: apiKey || process.env.COHERE_API_KEY || '',
     });
 
     this.model = model;

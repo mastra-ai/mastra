@@ -70,68 +70,36 @@ const rerankedResults = await rerank(
   ]}
 />
 
-### RerankModel
+### ModelConfig
+
+The rerank function accepts any standard Mastra `ModelConfig`. When using Cohere's provider with the model name `rerank-v3.5`, it will automatically use Cohere's reranking capabilities.
 
 <PropertiesTable
   content={[
     {
-      name: "method",
-      type: "'cohere' | 'llm'",
-      description: "Method to use for reranking",
+      name: "provider",
+      type: "LLMProvider | string",
+      description: "Provider to use for reranking (use 'COHERE' with name 'rerank-v3.5' for Cohere's reranker)",
       isOptional: false,
     },
     {
-      name: "config",
-      type: "object",
-      description: "Model configuration for llm reranking",
+      name: "name",
+      type: "string",
+      description: "Name of the model to use",
       isOptional: false,
-      properties: [
-        {
-          type: "object",
-          isOptional: false,
-          parameters: [
-            {
-              name: "provider",
-              description: "Provider to use for reranking",
-              isOptional: false,
-              type: "string",
-            },
-            {
-              name: "name",
-              description: "Name of the reranking model",
-              isOptional: false,
-              type: "string",
-            }
-          ]
-        },
-      ]
     },
     {
-      name: "config (cohere)",
-      type: "object",
-      description: "Model configuration for cohere reranking",
-      isOptional: false,
-      properties: [
-        {
-          type: "object",
-          isOptional: false,
-          parameters: [
-            {
-              name: "apiKey",
-              description: "API key for the reranking model",
-              isOptional: false,
-              type: "string",
-            },
-            {
-              name: "model",
-              description: "Model to use for reranking",
-              isOptional: true,
-              type: "string",
-            },
-          ]
-        }
-      ]
+      name: "apiKey",
+      type: "string",
+      description: "API key for the provider",
+      isOptional: true,
     },
+    {
+      name: "model",
+      type: "LanguageModelV1 | (() => Promise<LanguageModelV1>)",
+      description: "Custom model implementation",
+      isOptional: true,
+    }
   ]}
 />
 
