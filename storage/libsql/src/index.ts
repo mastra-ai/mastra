@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
-import { MastraStorage, StorageColumn, TABLE_NAMES } from '@mastra/core';
+import { MastraStorage, StorageColumn, TABLE_NAMES, ThreadType, MessageType } from '@mastra/core';
 
 export interface LibSQLConfig {
   url: string;
@@ -105,6 +105,34 @@ export class LibSQLStorage extends MastraStorage {
     }
 
     return row as R;
+  }
+
+  async getThreadById(_params: { threadId: string }): Promise<ThreadType | null> {
+    throw new Error('not implemented yet');
+  }
+
+  async getThreadsByResourceId(_params: { resourceid: string }): Promise<ThreadType[]> {
+    throw new Error('not implemented yet');
+  }
+
+  async saveThread(_params: { thread: ThreadType }): Promise<ThreadType> {
+    throw new Error('not implemented yet');
+  }
+
+  async updateThread(_id: string, _title: string, _metadata: Record<string, unknown>): Promise<ThreadType> {
+    throw new Error('not implemented yet');
+  }
+
+  async deleteThread(_id: string): Promise<void> {
+    throw new Error('not implemented yet');
+  }
+
+  async getMessages<T = unknown>(_params: { threadId: string }): Promise<T> {
+    throw new Error('not implemented yet');
+  }
+
+  async saveMessages(_params: { messages: MessageType[] }): Promise<MessageType[]> {
+    throw new Error('not implemented yet');
   }
 
   async close(): Promise<void> {
