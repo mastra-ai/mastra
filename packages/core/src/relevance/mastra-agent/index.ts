@@ -6,10 +6,10 @@ import { RelevanceScoreProvider, createSimilarityPrompt } from '../relevance-sco
 export class MastraAgentRelevanceScorer implements RelevanceScoreProvider {
   private agent: Agent;
 
-  constructor(provider: string, name: string | CustomModelConfig['model']) {
+  constructor(provider: string, name: string, model?: CustomModelConfig['model']) {
     const modelConfig = {
       provider,
-      name,
+      ...(model ? { model } : { name }),
     } as ModelConfig;
     this.agent = new Agent({
       name: `Relevance Scorer ${provider} ${name}`,
