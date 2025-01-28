@@ -293,6 +293,8 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
       }
     })
 
+    crawlAndSyncOnceWorkflow.step(syncOnceStep).commit();
+
     this.registerWorkflow('FIRECRAWL:CRAWL_AND_SYNC_ONCE', crawlAndSyncOnceWorkflow)
   }
 
