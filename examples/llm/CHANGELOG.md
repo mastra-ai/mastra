@@ -1,5 +1,12 @@
 # mastra-examples-llm
 
+## 1.0.1-alpha.54
+
+### Patch Changes
+
+- Updated dependencies [8105fae]
+  - @mastra/core@0.1.27-alpha.77
+
 ## 1.0.1-alpha.53
 
 ### Patch Changes

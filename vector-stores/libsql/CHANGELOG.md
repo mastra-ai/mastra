@@ -1,5 +1,12 @@
 # @mastra/vector-libsql
 
+## 0.0.1-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [8105fae]
+  - @mastra/core@0.1.27-alpha.77
+
 ## 0.0.1-alpha.10
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # weather-agent
 
+## 1.0.1-alpha.20
+
+### Patch Changes
+
+- Updated dependencies [8105fae]
+  - @mastra/core@0.1.27-alpha.77
+
 ## 1.0.1-alpha.19
 
 ### Patch Changes

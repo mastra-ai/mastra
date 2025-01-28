@@ -1,5 +1,15 @@
 # mastra
 
+## 0.1.57-alpha.123
+
+### Patch Changes
+
+- c8a8eab: fix some workflow conditions not showing on graph and dev watcher not working
+- Updated dependencies [8105fae]
+- Updated dependencies [cfb966f]
+  - @mastra/core@0.1.27-alpha.77
+  - @mastra/deployer@0.0.1-alpha.21
+
 ## 0.1.57-alpha.122
 
 ### Patch Changes

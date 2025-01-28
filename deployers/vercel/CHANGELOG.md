@@ -1,5 +1,15 @@
 # @mastra/deployer-vercel
 
+## 0.0.1-alpha.25
+
+### Patch Changes
+
+- 2b75edf: mastra deployers tsup bundling
+- Updated dependencies [8105fae]
+- Updated dependencies [cfb966f]
+  - @mastra/core@0.1.27-alpha.77
+  - @mastra/deployer@0.0.1-alpha.21
+
 ## 0.0.1-alpha.24
 
 ### Patch Changes

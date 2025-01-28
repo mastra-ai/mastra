@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.1-alpha.25
+
+### Patch Changes
+
+- 8105fae: Split embed into embed and embedMany to handle different return types
+
 ## 0.1.1-alpha.24
 
 ### Patch Changes

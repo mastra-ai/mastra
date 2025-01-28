@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.77
+
+### Patch Changes
+
+- 8105fae: Split embed into embed and embedMany to handle different return types
+
 ## 0.1.27-alpha.76
 
 ### Patch Changes
