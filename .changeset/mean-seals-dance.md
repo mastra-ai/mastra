@@ -13,7 +13,6 @@
 '@mastra/vector-pg': patch
 '@mastra/dane': patch
 '@mastra/mcp': patch
-'@mastra/tts': patch
 'docs': patch
 ---
 

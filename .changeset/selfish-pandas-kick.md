@@ -1,6 +1,5 @@
 ---
 '@mastra/core': patch
-'@mastra/tts': patch
 
 ---
 
