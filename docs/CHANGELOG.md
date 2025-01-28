@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.1-alpha.24
+
+### Patch Changes
+
+- 9c0d010: Deprecated Reranker in favor of rerank function (BREAKING CHANGE)
+
 ## 0.1.1-alpha.23
 
 ### Patch Changes
