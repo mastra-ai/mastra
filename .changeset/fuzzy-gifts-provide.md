@@ -4,4 +4,4 @@
 'docs': patch
 ---
 
-Added embedSingle and embedMany alongside embed to handle different return types
+Split embed into embed and embedMany to handle different return types
