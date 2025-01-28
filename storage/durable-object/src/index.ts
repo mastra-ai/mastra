@@ -1,5 +1,6 @@
 import { DurableObjectNamespace, Request } from '@cloudflare/workers-types';
-import { MastraStorage, WorkflowRunState } from '@mastra/core';
+import { WorkflowRow } from '@mastra/core';
+import { MastraStorage, WorkflowRunState, StorageColumn } from '@mastra/core';
 
 export interface DurableObjectConfig {
   durableObjectId: DurableObjectId;
@@ -20,8 +21,9 @@ export class DurableObjectStorage extends MastraStorage {
     return `${tableName}:${workflowName}:${runId}`;
   }
 
-  async init(_tableName: string): Promise<void> {
-    // No initialization needed for Durable Objects
+  // @ts-expect-error keep the signature alive
+  protected async createTable(tableName: string, schema: Record<string, StorageColumn>): Promise<void> {
+    // No need to create tables for Durable Objects
   }
 
   async clearTable(tableName: string): Promise<void> {
@@ -37,27 +39,30 @@ export class DurableObjectStorage extends MastraStorage {
     }
   }
 
-  async persistWorkflowSnapshot(params: {
-    tableName: string;
-    workflowName: string;
-    runId: string;
-    snapshot: WorkflowRunState;
-  }): Promise<void> {
-    const { tableName, workflowName, runId, snapshot } = params;
-    const key = this.getKey(tableName, workflowName, runId);
+  protected async insert(tableName: typeof MastraStorage.TABLE_WORKFLOWS, record: WorkflowRow): Promise<void>;
+  protected async insert(tableName: string, record: Record<string, any>): Promise<void> {
+    let payload: Record<string, any> | null = null;
+    if (tableName === 'workflows') {
+      payload = {
+        workflow_name: record.workflowName,
+        run_id: record.runId,
+        snapshot: record.snapshot,
+        _metadata: {
+          createdAt: record.createdAt.toISOString(),
+          updatedAt: record.updatedAt.toISOString(),
+        },
+      };
+    }
 
-    const data = {
-      ...snapshot,
-      _metadata: {
-        updatedAt: new Date().toISOString(),
-      },
-    };
+    if (!payload) {
+      throw new Error('Invalid payload');
+    }
 
     const obj = this.objectNamespace.get(this.objectId);
     const stub = await obj.fetch(
       new Request(`https://dummy/snapshot/${key}`, {
         method: 'PUT',
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       }),
     );
 
@@ -66,14 +71,16 @@ export class DurableObjectStorage extends MastraStorage {
     }
   }
 
-  async loadWorkflowSnapshot(params: {
-    tableName: string;
-    workflowName: string;
-    runId: string;
-  }): Promise<WorkflowRunState | null> {
-    const { tableName, workflowName, runId } = params;
-    const key = this.getKey(tableName, workflowName, runId);
+  protected async load(
+    tableName: typeof MastraStorage.TABLE_WORKFLOWS,
+    keys: { workflow_name: string; run_id: string },
+  ): Promise<WorkflowRow>;
+  protected async load(tableName: string, keys: Record<string, string>): Promise<WorkflowRow> {
+    if (tableName !== MastraStorage.TABLE_WORKFLOWS) {
+      return null;
+    }
 
+    const key = this.getKey(tableName, keys.workflow_name, keys.run_id);
     const obj = this.objectNamespace.get(this.objectId);
     const stub = await obj.fetch(
       new Request(`https://dummy/snapshot/${key}`, {
