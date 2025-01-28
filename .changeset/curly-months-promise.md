@@ -2,7 +2,6 @@
 '@mastra/stabilityai': patch
 '@mastra/firecrawl': patch
 '@mastra/composio': patch
-'@mastra/apollo': patch
 '@mastra/github': patch
 '@mastra/engine': patch
 '@mastra/memory': patch
