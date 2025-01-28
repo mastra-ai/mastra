@@ -1,5 +1,11 @@
 # @mastra/vector-chroma
 
+## 0.0.1-alpha.9
+
+### Patch Changes
+
+- 7a469e7: Bump vectors
+
 ## 0.0.1-alpha.8
 
 ### Patch Changes
