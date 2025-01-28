@@ -1,4 +1,4 @@
-import { MastraStorage, ThreadType, WorkflowRunState } from '@mastra/core';
+import { MastraStorage, StorageColumn, TABLE_NAMES, ThreadType, WorkflowRunState } from '@mastra/core';
 import pg from 'pg';
 import pgPromise from 'pg-promise';
 import type { IDatabase, IMain } from 'pg-promise';
@@ -26,17 +26,31 @@ export class PostgresStore extends MastraStorage {
     this.pool = new pg.Pool({ connectionString: config.connectionString });
   }
 
-  async init(tableName: string): Promise<void> {
-    await this.db.none(`
+  protected async createTable(tableName: TABLE_NAMES, schema: Record<string, StorageColumn>): Promise<void> {
+    const columns = Object.entries(schema).map(([name, column]) => {
+      let definition = `${name} ${column.type === 'text' ? 'TEXT' : 'TIMESTAMP WITH TIME ZONE'}`;
+      if (!column.nullable) {
+        definition += ' NOT NULL';
+      }
+      return definition;
+    });
+
+    const primaryKeys = Object.entries(schema)
+      .filter(([_, column]) => column.primaryKey)
+      .map(([name]) => name);
+
+    const tableQuery = `
       CREATE TABLE IF NOT EXISTS ${tableName} (
-        workflow_name TEXT NOT NULL,
-        run_id TEXT NOT NULL,
-        snapshot JSONB NOT NULL,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (workflow_name, run_id)
+        ${columns.join(',\n        ')}${primaryKeys.length > 0 ? `,\n        PRIMARY KEY (${primaryKeys.join(', ')})` : ''}
       );
-    `);
+    `;
+
+    this.logger.debug('Creating table', {
+      tableName,
+      tableQuery,
+    });
+
+    await this.db.none(tableQuery);
   }
 
   async clearTable(tableName: string): Promise<void> {
