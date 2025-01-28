@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.125
+
+### Patch Changes
+
+- 6b518fc: Add js banner to mastra dev bundle to fix dynamic import errors
+
 ## 0.1.57-alpha.124
 
 ### Patch Changes
