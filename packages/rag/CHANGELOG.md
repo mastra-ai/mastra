@@ -1,5 +1,14 @@
 # @mastra/rag
 
+## 0.0.2-alpha.67
+
+### Patch Changes
+
+- 8105fae: Split embed into embed and embedMany to handle different return types
+- ecdee97: Update return type for chunk to Chunk[]
+- Updated dependencies [8105fae]
+  - @mastra/core@0.1.27-alpha.77
+
 ## 0.0.2-alpha.66
 
 ### Patch Changes

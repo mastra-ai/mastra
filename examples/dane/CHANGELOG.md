@@ -1,5 +1,22 @@
 # @mastra/dane
 
+## 0.0.2-alpha.92
+
+### Patch Changes
+
+- cfb966f: Deprecate @mastra/tts for mastra speech providers
+- Updated dependencies [8105fae]
+- Updated dependencies [8468b7f]
+- Updated dependencies [ecdee97]
+  - @mastra/core@0.1.27-alpha.77
+  - @mastra/rag@0.0.2-alpha.67
+  - @mastra/mcp@0.0.1-alpha.19
+  - @mastra/firecrawl@1.0.4-alpha.69
+  - @mastra/github@1.0.3-alpha.61
+  - @mastra/stabilityai@1.0.1-alpha.52
+  - @mastra/engine@0.0.5-alpha.72
+  - @mastra/memory@0.0.2-alpha.58
+
 ## 0.0.2-alpha.91
 
 ### Patch Changes

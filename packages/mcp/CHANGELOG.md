@@ -1,5 +1,13 @@
 # @mastra/mcp
 
+## 0.0.1-alpha.19
+
+### Patch Changes
+
+- 8468b7f: @mastra/mcp tsup bundling
+- Updated dependencies [8105fae]
+  - @mastra/core@0.1.27-alpha.77
+
 ## 0.0.1-alpha.18
 
 ### Patch Changes

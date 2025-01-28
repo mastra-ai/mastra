@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.21
+
+### Patch Changes
+
+- cfb966f: Deprecate @mastra/tts for mastra speech providers
+- Updated dependencies [8105fae]
+  - @mastra/core@0.1.27-alpha.77
+
 ## 0.0.1-alpha.20
 
 ### Patch Changes

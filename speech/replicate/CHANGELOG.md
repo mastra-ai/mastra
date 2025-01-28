@@ -1,5 +1,13 @@
 # @mastra/speech-replicate
 
+## 0.0.1-alpha.2
+
+### Patch Changes
+
+- cfb966f: Deprecate @mastra/tts for mastra speech providers
+- Updated dependencies [8105fae]
+  - @mastra/core@0.1.27-alpha.77
+
 ## 0.0.1-alpha.1
 
 ### Patch Changes

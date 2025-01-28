@@ -1,6 +1,6 @@
 {
   "name": "workflow-with-separate-steps",
-  "version": "1.0.1-alpha.22",
+  "version": "1.0.1-alpha.23",
   "main": "index.js",
   "private": true,
   "scripts": {
