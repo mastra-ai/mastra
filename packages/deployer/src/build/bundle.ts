@@ -159,6 +159,8 @@ const bundleStep = new Step({
         '@mastra/speech-google',
         '@mastra/speech-ibm',
         '@mastra/speech-murf',
+        '@mastra/speech-speechify',
+        '@mastra/speech-replicate',
 
         // Your vector store packages
         '@mastra/vector-astra',
