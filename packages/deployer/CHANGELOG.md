@@ -1,5 +1,11 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.23
+
+### Patch Changes
+
+- 88f18d7: Update cors support
+
 ## 0.0.1-alpha.22
 
 ### Patch Changes
