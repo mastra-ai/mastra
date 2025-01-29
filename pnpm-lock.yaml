@@ -296,6 +296,60 @@ importers:
         specifier: ^5.7.3
         version: 5.7.3
 
+  examples/basics/agents/agentic-workflows:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/agents/bird-checker:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/agents/hierarchical-multi-agent:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/agents/multi-agent-workflow:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/agents/system-prompt:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/agents/using-a-tool:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
   examples/basics/llms/generate-object-structured:
     dependencies:
       '@mastra/core':
@@ -361,6 +415,272 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
+
+  examples/basics/rag/adjust-chunk-delimiters:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/adjust-chunk-size:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/basic-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/chunk-html:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/chunk-json:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/chunk-markdown:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/chunk-text:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/cleanup-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/cot-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/cot-workflow-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/rag/embed-chunk-array:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/embed-text-chunk:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/embed-text-with-cohere:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/filter-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/graph-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/hybrid-vector-search:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/insert-embedding-in-pgvector:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+
+  examples/basics/rag/insert-embedding-in-pinecone:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pinecone':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pinecone
+
+  examples/basics/rag/metadata-extraction:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/rerank-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/retrieve-results:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pinecone':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pinecone
+
+  examples/basics/workflows/calling-agent-from-workflow:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/calling-llm-from-workflow:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/create-workflow:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/tool-as-workflow-step:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/workflow-with-branching-paths:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/workflow-with-cyclical-deps:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/workflow-with-parallel-steps:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/workflow-with-sequential-steps:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
 
   examples/bird-checker-with-express:
     dependencies:
