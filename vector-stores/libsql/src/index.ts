@@ -41,6 +41,10 @@ export class LibSQLVector extends MastraVector {
       const buildCondition = (key: string, value: any): FilterResult => {
         // Handle logical operators ($and/$or)
         if (key === '$and' || key === '$or') {
+          if (!value || value.length === 0) {
+            return { sql: key === '$and' ? 'true' : 'false', values: [] };
+          }
+
           const values: InValue[] = [];
           const joinOperator = key === '$or' ? 'OR' : 'AND';
           const conditions = value.map((f: Filter) => {

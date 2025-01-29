@@ -197,7 +197,7 @@ describe('LibSQLVector', () => {
     // Test string operations
     it('should filter with like operator', async () => {
       const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-        category: { like: 'elect%' },
+        category: { like: 'elect' },
       });
       expect(results).toHaveLength(2);
       results.forEach(result => {
@@ -323,6 +323,228 @@ describe('LibSQLVector', () => {
       expect(results.length).toBeGreaterThan(0);
       results.forEach(result => {
         expect(result.score).toBeGreaterThan(0.9);
+      });
+    });
+
+    // Test nested field filters
+    it('should filter with nested field path', async () => {
+      // First insert a record with nested structure
+      await libsqlVector.upsert(
+        indexName,
+        [[1, 0.1, 0]],
+        [
+          {
+            nested: {
+              keywords: 'test value',
+              count: 42,
+            },
+          },
+        ],
+      );
+
+      const results = await libsqlVector.query(indexName, [1, 0.1, 0], 10, {
+        'nested.keywords': {
+          ilike: 'test',
+        },
+      });
+
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.metadata?.nested?.keywords).toContain('test');
+    });
+
+    // Test logical AND
+    it('should handle AND filter conditions', async () => {
+      const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        $and: [
+          {
+            category: {
+              eq: 'electronics',
+            },
+          },
+          {
+            price: {
+              gt: 75,
+            },
+          },
+        ],
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.metadata?.category).toBe('electronics');
+      expect(results[0]?.metadata?.price).toBeGreaterThan(75);
+    });
+
+    // Test logical OR
+    it('should handle OR filter conditions', async () => {
+      const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        $or: [
+          {
+            category: {
+              eq: 'electronics',
+            },
+          },
+          {
+            category: {
+              eq: 'books',
+            },
+          },
+        ],
+      });
+
+      expect(results.length).toBeGreaterThan(1);
+      results.forEach(result => {
+        expect(['electronics', 'books']).toContain(result?.metadata?.category);
+      });
+    });
+
+    // Test remaining comparison operators
+    it('should filter with lt operator', async () => {
+      const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        price: { lt: 60 },
+      });
+      expect(results).toHaveLength(2);
+      results.forEach(result => {
+        expect(result.metadata?.price).toBeLessThan(60);
+      });
+    });
+
+    it('should filter with gte operator', async () => {
+      const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        price: { gte: 75 },
+      });
+      expect(results).toHaveLength(2);
+      results.forEach(result => {
+        expect(result.metadata?.price).toBeGreaterThanOrEqual(75);
+      });
+    });
+
+    it('should filter with ne operator', async () => {
+      const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        category: { ne: 'electronics' },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.category).not.toBe('electronics');
+      });
+    });
+
+    // Test complex logical nesting
+    it('should handle complex nested logical operators with mixed conditions', async () => {
+      const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        $or: [
+          {
+            $and: [{ category: 'electronics' }, { price: { gt: 90 } }, { active: true }],
+          },
+          {
+            $and: [{ category: 'books' }, { tags: { exists: 'used' } }, { price: { lt: 30 } }],
+          },
+        ],
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        const isValidElectronics =
+          result.metadata?.category === 'electronics' &&
+          result.metadata?.price > 90 &&
+          result.metadata?.active === true;
+        const isValidBooks =
+          result.metadata?.category === 'books' &&
+          result.metadata?.tags.includes('used') &&
+          result.metadata?.price < 30;
+        expect(isValidElectronics || isValidBooks).toBe(true);
+      });
+    });
+
+    it('should handle deeply nested metadata paths', async () => {
+      await libsqlVector.upsert(
+        indexName,
+        [[1, 0.1, 0]],
+        [
+          {
+            level1: {
+              level2: {
+                level3: 'deep value',
+              },
+            },
+          },
+        ],
+      );
+
+      const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        'level1.level2.level3': 'deep value',
+      });
+      expect(results).toHaveLength(1);
+      expect(results[0]?.metadata?.level1?.level2?.level3).toBe('deep value');
+    });
+
+    it('should handle non-existent nested paths', async () => {
+      const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        'nonexistent.path': 'value',
+      });
+      expect(results).toHaveLength(0);
+    });
+
+    it('should handle empty filter object', async () => {
+      const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {});
+      expect(results.length).toBeGreaterThan(0);
+    });
+
+    it('should filter with nin operator', async () => {
+      const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        category: { nin: ['electronics', 'books'] },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(['electronics', 'books']).not.toContain(result.metadata?.category);
+      });
+    });
+
+    it('should handle numeric string comparisons', async () => {
+      // Insert a record with numeric string
+      await libsqlVector.upsert(indexName, [[1, 0.1, 0]], [{ numericString: '123' }]);
+
+      const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        numericString: { gt: '100' }, // Compare strings numerically
+      });
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.metadata?.numericString).toBe('123');
+    });
+
+    it('should handle empty arrays in in/nin operators', async () => {
+      // Should return no results for empty IN
+      const resultsIn = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        category: { in: [] },
+      });
+      expect(resultsIn).toHaveLength(0);
+
+      // Should return all results for empty NIN
+      const resultsNin = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        category: { nin: [] },
+      });
+      expect(resultsNin.length).toBeGreaterThan(0);
+    });
+
+    // Test mixing $and/$or at the same level
+    it('should handle multiple logical operators at root level', async () => {
+      const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        $and: [{ category: 'electronics' }],
+        $or: [{ price: { lt: 100 } }, { price: { gt: 20 } }],
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.category).toBe('electronics');
+        expect(result.metadata?.price < 100 || result.metadata?.price > 20).toBe(true);
+      });
+    });
+
+    // Test empty conditions in logical operators
+    it('should handle empty conditions in logical operators', async () => {
+      const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        $and: [],
+        category: 'electronics',
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.category).toBe('electronics');
       });
     });
   });

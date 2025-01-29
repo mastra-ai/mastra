@@ -229,7 +229,7 @@ describe('PgVector', () => {
     // Test string operations
     it('should filter with like operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        category: { like: 'elect%' },
+        category: { like: 'elect' },
       });
       expect(results).toHaveLength(2);
       results.forEach(result => {

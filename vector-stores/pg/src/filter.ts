@@ -42,7 +42,7 @@ type FilterOperatorMap = {
 const createBasicOperator = (symbol: string) => {
   const isLikeOperator = symbol.toLowerCase().includes('like');
   return (key: string, paramIndex: number): FilterOperator => ({
-    sql: `metadata#>>'{${key.replace(/\./g, ',')}}' ${symbol} $${paramIndex}`,
+    sql: `metadata#>>'{${handleKey(key)}}' ${symbol} $${paramIndex}`,
     needsValue: true,
     transformValue: isLikeOperator ? (value: string) => `%${value}%` : undefined,
   });
@@ -50,7 +50,7 @@ const createBasicOperator = (symbol: string) => {
 
 const createNumericOperator = (symbol: string) => {
   return (key: string, paramIndex: number): FilterOperator => ({
-    sql: `(metadata#>>'{${key.replace(/\./g, ',')}}')::numeric ${symbol} $${paramIndex}`,
+    sql: `(metadata#>>'{${handleKey(key)}}')::numeric ${symbol} $${paramIndex}`,
     needsValue: true,
   });
 };
@@ -78,12 +78,12 @@ export const FILTER_OPERATORS: FilterOperatorMap = {
 
   // IN array of values
   in: (key: string, paramIndex: number): FilterOperator => ({
-    sql: `metadata#>>'{${key.replace(/\./g, ',')}}' = ANY($${paramIndex}::text[])`,
+    sql: `metadata#>>'{${handleKey(key)}}' = ANY($${paramIndex}::text[])`,
     needsValue: true,
     transformValue: (value: string) => (Array.isArray(value) ? value : value.split(',')),
   }),
   nin: (key: string, paramIndex: number): FilterOperator => ({
-    sql: `metadata#>>'{${key.replace(/\./g, ',')}}' != ALL($${paramIndex}::text[])`,
+    sql: `metadata#>>'{${handleKey(key)}}' != ALL($${paramIndex}::text[])`,
     needsValue: true,
     transformValue: (value: string) => (Array.isArray(value) ? value : value.split(',')),
   }),
@@ -99,7 +99,7 @@ export const FILTER_OPERATORS: FilterOperatorMap = {
   }),
   // Contains any
   containsAny: (key: string, paramIndex: number): FilterOperator => ({
-    sql: `(metadata#>'{${key.replace(/\./g, ',')}}')::jsonb ?| $${paramIndex}::text[]`,
+    sql: `(metadata#>'{${handleKey(key)}}')::jsonb ?| $${paramIndex}::text[]`,
     needsValue: true,
     transformValue: (value: string | string[]) => (Array.isArray(value) ? value : [value]),
   }),
@@ -107,7 +107,7 @@ export const FILTER_OPERATORS: FilterOperatorMap = {
   containsAll: (key: string, paramIndex: number): FilterOperator => ({
     sql: `CASE 
       WHEN array_length($${paramIndex}::text[], 1) IS NULL THEN false 
-      ELSE (metadata#>'{${key.replace(/\./g, ',')}}')::jsonb ?& $${paramIndex}::text[] 
+      ELSE (metadata#>'{${handleKey(key)}}')::jsonb ?& $${paramIndex}::text[] 
     END`,
     needsValue: true,
     transformValue: (value: string | string[]) => (Array.isArray(value) ? value : [value]),
@@ -129,6 +129,10 @@ type FilterCondition = {
 };
 
 export type Filter = Record<string, FilterCondition | any>;
+
+export const handleKey = (key: string) => {
+  return key.replace(/\./g, ',');
+};
 
 export class FilterBuilder {
   private values: any[] = [];
@@ -175,7 +179,7 @@ export class FilterBuilder {
 
   private handleEqualityOperator(key: string, value: any): string {
     this.values.push(value);
-    return `metadata#>>'{${key.replace(/\./g, ',')}}' = $${this.values.length}`;
+    return `metadata#>>'{${handleKey(key)}}' = $${this.values.length}`;
   }
 
   private handleOperator(key: string, value: Record<string, any>): string {
