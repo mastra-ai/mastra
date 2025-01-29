@@ -1,26 +1,19 @@
 import {
   MastraMemory,
-  MastraStorage,
-  MastraVector,
   MessageType,
   StorageGetMessagesArg,
   MemoryConfig,
   ThreadType,
-  embed,
+  SharedMemoryConfig,
 } from '@mastra/core';
 import { Message as AiMessage } from 'ai';
-
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
  * and message injection.
  */
 export class Memory extends MastraMemory {
-  constructor(
-    config: {
-      threads?: MemoryConfig;
-    } & ({ storage: MastraStorage; vector?: MastraVector } | { storage: MastraStorage; vector: MastraVector }),
-  ) {
+  constructor(config: SharedMemoryConfig) {
     super({ name: 'Memory', ...config });
   }
 
@@ -58,14 +51,9 @@ export class Memory extends MastraMemory {
           };
 
     if (selectBy?.vectorSearchString && this.vector) {
-      // @ts-ignore
-      const { embedding } = await embed(selectBy.vectorSearchString, {
-        provider: 'OPEN_AI',
-        model: 'text-embedding-ada-002',
-        maxRetries: 3,
-      });
+      const { embeddings } = await this.vector.embed(selectBy.vectorSearchString, this.parseEmbeddingOptions());
 
-      vectorResults = await this.vector.query('memory_messages', embedding, vectorConfig.includeResults, {
+      vectorResults = await this.vector.query('memory_messages', embeddings[0]!, vectorConfig.includeResults, {
         thread_id: threadId,
       });
     }
@@ -167,23 +155,16 @@ export class Memory extends MastraMemory {
   async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
     if (this.vector) {
       for (const message of messages) {
-        if (typeof message.content !== `string`) continue; // TODO: is this ok?
-        // @ts-ignore
-        const { embeddings } = await embed([message.content], {
-          provider: 'OPEN_AI', // TODO: wouldn't work of course - not everyone is using open ai (POC)
-          model: 'text-embedding-ada-002',
-          maxRetries: 3,
-        });
+        if (typeof message.content !== `string`) continue;
+        const { embeddings } = await this.vector.embed(message.content, this.parseEmbeddingOptions());
         await this.vector.createIndex('memory_messages', 1536);
-        await this.vector.upsert(
-          'memory_messages',
-          embeddings,
-          embeddings.map((_: any) => ({
+        await this.vector.upsert('memory_messages', embeddings, [
+          {
             text: message.content,
             message_id: message.id,
             thread_id: message.threadId,
-          })),
-        );
+          },
+        ]);
       }
     }
     return this.storage.saveMessages({ messages });

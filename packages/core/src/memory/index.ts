@@ -10,6 +10,7 @@ import {
 } from 'ai';
 
 import { MastraBase } from '../base';
+import { EmbeddingOptions } from '../embeddings';
 import { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { MastraVector } from '../vector';
 
@@ -55,11 +56,19 @@ export type MemoryConfig = {
   // injectWorkingMemory?: boolean;
 };
 
-export type SharedMemoryConfig = {
-  storage: MastraStorage;
-  vector?: MastraVector;
-  threads?: MemoryConfig;
-};
+export type SharedMemoryConfig =
+  | {
+      storage: MastraStorage;
+      threads?: MemoryConfig;
+      vector?: MastraVector;
+      embeddingOptions?: EmbeddingOptions;
+    }
+  | {
+      storage: MastraStorage;
+      threads?: MemoryConfig;
+      vector: MastraVector;
+      embeddingOptions: EmbeddingOptions;
+    };
 
 /**
  * Abstract Memory class that defines the interface for storing and retrieving
@@ -70,6 +79,7 @@ export abstract class MastraMemory extends MastraBase {
 
   storage: MastraStorage;
   vector?: MastraVector;
+  embeddingOptions?: EmbeddingOptions;
 
   protected threadConfig: MemoryConfig = {
     injectRecentMessages: 40,
@@ -85,9 +95,20 @@ export abstract class MastraMemory extends MastraBase {
       this.vector = config.vector;
       this.threadConfig.injectVectorHistorySearch = true;
     }
+    if (`embeddingOptions` in config) {
+      this.embeddingOptions = config.embeddingOptions;
+    }
     if (config.threads) {
       this.threadConfig = this.getMergedThreadConfig(config.threads);
     }
+  }
+
+  protected parseEmbeddingOptions() {
+    if (!this.embeddingOptions) {
+      throw new Error(`Cannot use vector features without setting new Memory({ embeddingOptions: { ... } })`);
+    }
+
+    return this.embeddingOptions;
   }
 
   protected getMergedThreadConfig(config: MemoryConfig): MemoryConfig {
@@ -230,7 +251,13 @@ export abstract class MastraMemory extends MastraBase {
    * @param messages - Array of messages to save
    * @returns Promise resolving to the saved messages
    */
-  abstract saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]>;
+  abstract saveMessages({
+    messages,
+    memoryConfig,
+  }: {
+    messages: MessageType[];
+    memoryConfig: MemoryConfig | undefined;
+  }): Promise<MessageType[]>;
 
   /**
    * Retrieves all messages for a specific thread
@@ -290,6 +317,7 @@ export abstract class MastraMemory extends MastraBase {
    */
   async addMessage({
     threadId,
+    config,
     content,
     role,
     type,
@@ -298,6 +326,7 @@ export abstract class MastraMemory extends MastraBase {
     toolCallIds,
   }: {
     threadId: string;
+    config: MemoryConfig;
     content: UserContent | AssistantContent;
     role: 'user' | 'assistant';
     type: 'text' | 'tool-call' | 'tool-result';
@@ -317,7 +346,7 @@ export abstract class MastraMemory extends MastraBase {
       toolCallIds,
     };
 
-    const savedMessages = await this.saveMessages({ messages: [message] });
+    const savedMessages = await this.saveMessages({ messages: [message], memoryConfig: config });
     return savedMessages[0]!;
   }
 

@@ -259,7 +259,7 @@ export class Agent<
               ).messages
             : [];
 
-        await this.#mastra.memory.saveMessages({ messages });
+        await this.#mastra.memory.saveMessages({ messages, memoryConfig });
 
         this.log(LogLevel.DEBUG, 'Saved messages to memory', {
           threadId: thread.id,
@@ -281,7 +281,17 @@ export class Agent<
     return { threadId: threadId || '', messages: userMessages };
   }
 
-  async saveResponse({ result, threadId, runId }: { runId: string; result: Record<string, any>; threadId: string }) {
+  async saveResponse({
+    result,
+    threadId,
+    runId,
+    memoryConfig,
+  }: {
+    runId: string;
+    result: Record<string, any>;
+    threadId: string;
+    memoryConfig: MemoryConfig | undefined;
+  }) {
     const { response } = result;
     try {
       if (response.messages) {
@@ -293,6 +303,7 @@ export class Agent<
           this.log(LogLevel.DEBUG, 'Saving response to memory', { threadId, runId });
 
           await this.#mastra.memory.saveMessages({
+            memoryConfig,
             messages: responseMessagesWithoutIncompleteToolCalls.map((message: CoreMessage | CoreAssistantMessage) => {
               const messageId = randomUUID();
               let toolCallIds: string[] | undefined;
@@ -592,12 +603,14 @@ export class Agent<
       after: async ({
         result,
         threadId,
+        memoryConfig,
         outputText,
         runId,
       }: {
         runId: string;
         result: Record<string, any>;
         threadId: string;
+        memoryConfig: MemoryConfig | undefined;
         outputText: string;
       }) => {
         const resToLog = {
@@ -631,6 +644,7 @@ export class Agent<
             await this.saveResponse({
               result,
               threadId,
+              memoryConfig,
               runId,
             });
           } catch (e) {
@@ -731,7 +745,7 @@ export class Agent<
 
       const outputText = result.text;
 
-      await after({ result, threadId, outputText, runId: runIdToUse });
+      await after({ result, threadId, memoryConfig: memory, outputText, runId: runIdToUse });
 
       return result as unknown as GenerateReturn<Z>;
     }
@@ -749,7 +763,7 @@ export class Agent<
 
     const outputText = JSON.stringify(result.object);
 
-    await after({ result, threadId, outputText, runId: runIdToUse });
+    await after({ result, threadId, memoryConfig: memory, outputText, runId: runIdToUse });
 
     return result as unknown as GenerateReturn<Z>;
   }
@@ -819,7 +833,7 @@ export class Agent<
           try {
             const res = JSON.parse(result) || {};
             const outputText = res.text;
-            await after({ result: res, threadId, outputText, runId: runIdToUse });
+            await after({ result: res, threadId, memoryConfig: memory, outputText, runId: runIdToUse });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
               error: e,
@@ -847,7 +861,7 @@ export class Agent<
         try {
           const res = JSON.parse(result) || {};
           const outputText = JSON.stringify(res.object);
-          await after({ result: res, threadId, outputText, runId: runIdToUse });
+          await after({ result: res, threadId, memoryConfig: memory, outputText, runId: runIdToUse });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {
             error: e,

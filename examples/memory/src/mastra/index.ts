@@ -14,6 +14,10 @@ if (!connectionString) {
 }
 
 const memory = new Memory({
+  storage: new PostgresStore({
+    connectionString,
+  }),
+  vector: new PgVector(connectionString),
   threads: {
     injectRecentMessages: 10,
     injectVectorHistorySearch: {
@@ -22,10 +26,11 @@ const memory = new Memory({
       includeNext: 2,
     },
   },
-  storage: new PostgresStore({
-    connectionString,
-  }),
-  vector: new PgVector(connectionString),
+  embeddingOptions: {
+    provider: 'OPEN_AI',
+    model: 'text-embedding-ada-002',
+    maxRetries: 3,
+  },
 });
 
 export const mastra = new Mastra({
