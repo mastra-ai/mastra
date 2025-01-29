@@ -1,5 +1,60 @@
 # @mastra/rag
 
+## 0.0.2-alpha.70
+
+### Patch Changes
+
+- 327ece7: Updates for ts versions
+- Updated dependencies [327ece7]
+  - @mastra/core@0.1.27-alpha.80
+
+## 0.0.2-alpha.69
+
+### Patch Changes
+
+- 21fe536: add keyword tags for packages and update readmes
+- Updated dependencies [21fe536]
+  - @mastra/core@0.1.27-alpha.79
+
+## 0.0.2-alpha.68
+
+### Patch Changes
+
+- 685108a: Remove syncs and excess rag
+- Updated dependencies [685108a]
+- Updated dependencies [685108a]
+  - @mastra/core@0.1.27-alpha.78
+
+## 0.0.2-alpha.67
+
+### Patch Changes
+
+- 8105fae: Split embed into embed and embedMany to handle different return types
+- ecdee97: Update return type for chunk to Chunk[]
+- Updated dependencies [8105fae]
+  - @mastra/core@0.1.27-alpha.77
+
+## 0.0.2-alpha.66
+
+### Patch Changes
+
+- 9c0d010: Deprecated Reranker in favor of rerank function (BREAKING CHANGE)
+
+## 0.0.2-alpha.65
+
+### Patch Changes
+
+- Updated dependencies [ae7bf94]
+- Updated dependencies [ae7bf94]
+  - @mastra/core@0.1.27-alpha.76
+
+## 0.0.2-alpha.64
+
+### Patch Changes
+
+- Updated dependencies [23dcb23]
+  - @mastra/core@0.1.27-alpha.75
+
 ## 0.0.2-alpha.63
 
 ### Patch Changes

@@ -1,4 +1,4 @@
-import { Metric, MetricResult } from '@mastra/core';
+import { Metric, type MetricResult } from '@mastra/core';
 import keyword_extractor from 'keyword-extractor';
 
 interface KeywordCoverageResult extends MetricResult {

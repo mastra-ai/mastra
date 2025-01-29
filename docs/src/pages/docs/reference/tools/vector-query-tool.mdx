@@ -60,10 +60,49 @@ const queryTool = createVectorQueryTool({
       defaultValue: "''",
     },
     {
-      name: "rerankOptions",
-      type: "RerankerOptions",
+      name: "reranker",
+      type: "RerankConfig",
       description: "Options for reranking results",
       isOptional: true,
+    }
+  ]}
+/>
+
+### RerankConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "ModelConfig",
+      description: "Configuration for the reranking method",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "RerankerOptions",
+      description: "Options for the reranking process",
+      isOptional: true,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "weights",
+              description: "Weights for scoring components (semantic: 0.4, vector: 0.4, position: 0.2)",
+              isOptional: true,
+              type: "WeightConfig",
+            },
+            {
+              name: "topK",
+              description: "Number of top results to return",
+              isOptional: true,
+              type: "number",
+              defaultValue: "3"
+            }
+          ]
+        }
+      ]
     }
   ]}
 />
@@ -114,9 +153,11 @@ const queryTool = createVectorQueryTool({
     maxRetries: 3
   },
   topK: 5,
-  rerankOptions: {
-    model: "cross-encoder",
-    threshold: 0.7
+  reranker: {
+    model: {
+      provider: "OPEN_AI",
+      name: "gpt-4o-mini",
+    },
   }
 });
 ```
@@ -131,5 +172,5 @@ The tool is created with:
 
 ## Related
 
-- [RAG Reranker](../rag/reranker) 
+- [rerank()](../rag/rerank) 
 - [createGraphRAGTool](./graph-rag-tool) 

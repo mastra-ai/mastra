@@ -1,5 +1,50 @@
 # @mastra/composio
 
+## 0.0.1-alpha.46
+
+### Patch Changes
+
+- 327ece7: Updates for ts versions
+- Updated dependencies [327ece7]
+  - @mastra/core@0.1.27-alpha.80
+
+## 0.0.1-alpha.45
+
+### Patch Changes
+
+- Updated dependencies [21fe536]
+  - @mastra/core@0.1.27-alpha.79
+
+## 0.0.1-alpha.44
+
+### Patch Changes
+
+- Updated dependencies [685108a]
+- Updated dependencies [685108a]
+  - @mastra/core@0.1.27-alpha.78
+
+## 0.0.1-alpha.43
+
+### Patch Changes
+
+- Updated dependencies [8105fae]
+  - @mastra/core@0.1.27-alpha.77
+
+## 0.0.1-alpha.42
+
+### Patch Changes
+
+- Updated dependencies [ae7bf94]
+- Updated dependencies [ae7bf94]
+  - @mastra/core@0.1.27-alpha.76
+
+## 0.0.1-alpha.41
+
+### Patch Changes
+
+- Updated dependencies [23dcb23]
+  - @mastra/core@0.1.27-alpha.75
+
 ## 0.0.1-alpha.40
 
 ### Patch Changes

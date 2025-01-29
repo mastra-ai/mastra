@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.1.27-alpha.74",
+  "version": "0.1.27-alpha.80",
   "license": "MIT",
   "type": "module",
   "main": "dist/core.esm.js",
@@ -106,7 +106,25 @@
     "size-limit": "^11.1.4",
     "ts-node": "^10.9.2",
     "tslib": "^2.6.3",
-    "typescript": "5.5.4",
-    "vitest": "^2.1.8"
-  }
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.4"
+  },
+  "keywords": [
+    "ai",
+    "llm",
+    "llms",
+    "agent",
+    "agents",
+    "vectorstore",
+    "embeddings",
+    "rag",
+    "evals",
+    "memory",
+    "tools",
+    "telemetry",
+    "typescript",
+    "opentelemetry",
+    "otel",
+    "framework"
+  ]
 }

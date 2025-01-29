@@ -1,5 +1,73 @@
 # mastra
 
+## 0.1.57-alpha.128
+
+### Patch Changes
+
+- 327ece7: Updates for ts versions
+- Updated dependencies [327ece7]
+  - @mastra/core@0.1.27-alpha.80
+  - @mastra/deployer@0.0.1-alpha.25
+
+## 0.1.57-alpha.127
+
+### Patch Changes
+
+- 21fe536: add keyword tags for packages and update readmes
+- Updated dependencies [21fe536]
+  - @mastra/core@0.1.27-alpha.79
+  - @mastra/deployer@0.0.1-alpha.24
+
+## 0.1.57-alpha.126
+
+### Patch Changes
+
+- Updated dependencies [88f18d7]
+  - @mastra/deployer@0.0.1-alpha.23
+
+## 0.1.57-alpha.125
+
+### Patch Changes
+
+- 6b518fc: Add js banner to mastra dev bundle to fix dynamic import errors
+
+## 0.1.57-alpha.124
+
+### Patch Changes
+
+- Updated dependencies [685108a]
+- Updated dependencies [685108a]
+  - @mastra/deployer@0.0.1-alpha.22
+  - @mastra/core@0.1.27-alpha.78
+
+## 0.1.57-alpha.123
+
+### Patch Changes
+
+- c8a8eab: fix some workflow conditions not showing on graph and dev watcher not working
+- Updated dependencies [8105fae]
+- Updated dependencies [cfb966f]
+  - @mastra/core@0.1.27-alpha.77
+  - @mastra/deployer@0.0.1-alpha.21
+
+## 0.1.57-alpha.122
+
+### Patch Changes
+
+- Updated dependencies [ae7bf94]
+- Updated dependencies [ae7bf94]
+  - @mastra/deployer@0.0.1-alpha.20
+  - @mastra/core@0.1.27-alpha.76
+
+## 0.1.57-alpha.121
+
+### Patch Changes
+
+- Updated dependencies [23dcb23]
+- Updated dependencies [7064554]
+  - @mastra/core@0.1.27-alpha.75
+  - @mastra/deployer@0.0.1-alpha.19
+
 ## 0.1.57-alpha.120
 
 ### Patch Changes

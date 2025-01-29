@@ -1,5 +1,67 @@
 # mastra-examples-integrations
 
+## 1.0.1-alpha.54
+
+### Patch Changes
+
+- Updated dependencies [327ece7]
+  - @mastra/firecrawl@1.0.4-alpha.72
+  - @mastra/composio@0.0.1-alpha.46
+  - @mastra/core@0.1.27-alpha.80
+
+## 1.0.1-alpha.53
+
+### Patch Changes
+
+- Updated dependencies [21fe536]
+  - @mastra/core@0.1.27-alpha.79
+  - @mastra/composio@0.0.1-alpha.45
+  - @mastra/firecrawl@1.0.4-alpha.71
+
+## 1.0.1-alpha.52
+
+### Patch Changes
+
+- Updated dependencies [685108a]
+- Updated dependencies [685108a]
+  - @mastra/firecrawl@1.0.4-alpha.70
+  - @mastra/core@0.1.27-alpha.78
+  - @mastra/composio@0.0.1-alpha.44
+
+## 1.0.1-alpha.51
+
+### Patch Changes
+
+- Updated dependencies [8105fae]
+  - @mastra/core@0.1.27-alpha.77
+  - @mastra/composio@0.0.1-alpha.43
+  - @mastra/firecrawl@1.0.4-alpha.69
+
+## 1.0.1-alpha.50
+
+### Patch Changes
+
+- @mastra/firecrawl@1.0.4-alpha.68
+
+## 1.0.1-alpha.49
+
+### Patch Changes
+
+- Updated dependencies [ae7bf94]
+- Updated dependencies [ae7bf94]
+  - @mastra/core@0.1.27-alpha.76
+  - @mastra/composio@0.0.1-alpha.42
+  - @mastra/firecrawl@1.0.4-alpha.67
+
+## 1.0.1-alpha.48
+
+### Patch Changes
+
+- Updated dependencies [23dcb23]
+  - @mastra/core@0.1.27-alpha.75
+  - @mastra/composio@0.0.1-alpha.41
+  - @mastra/firecrawl@1.0.4-alpha.66
+
 ## 1.0.1-alpha.47
 
 ### Patch Changes

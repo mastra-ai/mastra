@@ -582,8 +582,7 @@ export class Agent<
         if (
           (toolsets && Object.keys(toolsets || {}).length > 0) ||
           (this.#mastra?.memory && resourceid) ||
-          this.#mastra?.engine ||
-          this.#mastra?.syncs
+          this.#mastra?.engine
         ) {
           convertedTools = this.convertTools({
             toolsets,

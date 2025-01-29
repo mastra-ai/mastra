@@ -1,5 +1,55 @@
 # yc-directory
 
+## 1.0.1-alpha.14
+
+### Patch Changes
+
+- Updated dependencies [327ece7]
+  - @mastra/core@0.1.27-alpha.80
+  - @mastra/evals@0.1.0-alpha.21
+
+## 1.0.1-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [21fe536]
+  - @mastra/core@0.1.27-alpha.79
+  - @mastra/evals@0.1.0-alpha.20
+
+## 1.0.1-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [685108a]
+- Updated dependencies [685108a]
+  - @mastra/core@0.1.27-alpha.78
+  - @mastra/evals@0.1.0-alpha.19
+
+## 1.0.1-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [8105fae]
+  - @mastra/core@0.1.27-alpha.77
+  - @mastra/evals@0.1.0-alpha.18
+
+## 1.0.1-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [ae7bf94]
+- Updated dependencies [ae7bf94]
+  - @mastra/core@0.1.27-alpha.76
+  - @mastra/evals@0.1.0-alpha.17
+
+## 1.0.1-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [23dcb23]
+  - @mastra/core@0.1.27-alpha.75
+  - @mastra/evals@0.1.0-alpha.16
+
 ## 1.0.1-alpha.8
 
 ### Patch Changes

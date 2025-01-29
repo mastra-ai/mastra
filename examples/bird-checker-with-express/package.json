@@ -1,6 +1,6 @@
 {
   "name": "bird-checker-with-express",
-  "version": "1.0.1-alpha.55",
+  "version": "1.0.1-alpha.61",
   "description": "",
   "type": "module",
   "main": "index.js",
@@ -20,7 +20,7 @@
     "nodemon": "^3.1.7",
     "ts-node": "^10.9.2",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.3"
   },
   "dependencies": {
     "@mastra/core": "workspace:*",

@@ -1,5 +1,5 @@
-import { Mastra, Agent, EmbedManyResult } from '@mastra/core';
-import { embed, MDocument, createVectorQueryTool } from '@mastra/rag';
+import { Mastra, Agent } from '@mastra/core';
+import { embedMany, MDocument, createVectorQueryTool } from '@mastra/rag';
 import { PgVector } from '@mastra/vector-pg';
 
 const vectorQueryTool = createVectorQueryTool({
@@ -11,9 +11,8 @@ const vectorQueryTool = createVectorQueryTool({
     maxRetries: 3,
   },
   topK: 5,
-  rerankOptions: {
-    semanticProvider: 'agent',
-    agentProvider: {
+  reranker: {
+    model: {
       provider: 'OPEN_AI',
       name: 'gpt-4o-mini',
     },
@@ -69,11 +68,11 @@ const chunks = await doc1.chunk({
   separator: '\n',
 });
 
-const { embeddings } = (await embed(chunks, {
+const { embeddings } = await embedMany(chunks, {
   provider: 'OPEN_AI',
   model: 'text-embedding-3-small',
   maxRetries: 3,
-})) as EmbedManyResult<string>;
+});
 
 const vectorStore = mastra.getVector('pgVector');
 await vectorStore.createIndex('embeddings', 1536);

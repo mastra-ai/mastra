@@ -1,5 +1,5 @@
-import { describe, it, expect, jest } from '@jest/globals';
 import { type ModelConfig } from '@mastra/core';
+import { describe, it, expect } from 'vitest';
 
 import { isCloserTo } from '../utils';
 import { TestCaseWithContext } from '../utils';
@@ -51,7 +51,6 @@ const testCases: TestCaseWithContext[] = [
 ];
 
 const SECONDS = 10000;
-jest.setTimeout(15 * SECONDS);
 
 const modelConfig: ModelConfig = {
   provider: 'OPEN_AI',
@@ -60,27 +59,33 @@ const modelConfig: ModelConfig = {
   apiKey: process.env.OPENAI_API_KEY,
 };
 
-describe('ContextualRecallMetric', () => {
-  it('should succeed when context is relevant', async () => {
-    const testCase = testCases[0]!;
-    const metric = new ContextualRecallMetric(modelConfig, { context: testCase.context });
-    const result = await metric.measure(testCase.input, testCase.output);
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
-  });
+describe(
+  'ContextualRecallMetric',
+  () => {
+    it('should succeed when context is relevant', async () => {
+      const testCase = testCases[0]!;
+      const metric = new ContextualRecallMetric(modelConfig, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
+    });
 
-  it('should be mixed', async () => {
-    const testCase = testCases[1]!;
-    const metric = new ContextualRecallMetric(modelConfig, { context: testCase.context });
-    const result = await metric.measure(testCase.input, testCase.output);
+    it('should be mixed', async () => {
+      const testCase = testCases[1]!;
+      const metric = new ContextualRecallMetric(modelConfig, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
 
-    expect(isCloserTo(result.score, testCase.expectedResult.score, 1)).toBe(true);
-    expect(result.score - testCase.expectedResult.score).toBeGreaterThan(0);
-  });
+      expect(isCloserTo(result.score, testCase.expectedResult.score, 1)).toBe(true);
+      expect(result.score - testCase.expectedResult.score).toBeGreaterThan(0);
+    });
 
-  it('should be none', async () => {
-    const testCase = testCases[2]!;
-    const metric = new ContextualRecallMetric(modelConfig, { context: testCase.context });
-    const result = await metric.measure(testCase.input, testCase.output);
-    expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
-  });
-});
+    it('should be none', async () => {
+      const testCase = testCases[2]!;
+      const metric = new ContextualRecallMetric(modelConfig, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
+    });
+  },
+  {
+    timeout: 15 * SECONDS,
+  },
+);

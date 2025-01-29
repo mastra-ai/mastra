@@ -1,5 +1,66 @@
 # @mastra/firecrawl
 
+## 1.0.4-alpha.72
+
+### Patch Changes
+
+- 327ece7: Updates for ts versions
+- Updated dependencies [327ece7]
+  - @mastra/core@0.1.27-alpha.80
+  - @mastra/rag@0.0.2-alpha.70
+
+## 1.0.4-alpha.71
+
+### Patch Changes
+
+- Updated dependencies [21fe536]
+  - @mastra/core@0.1.27-alpha.79
+  - @mastra/rag@0.0.2-alpha.69
+
+## 1.0.4-alpha.70
+
+### Patch Changes
+
+- 685108a: Remove syncs and excess rag
+- 685108a: Removing mastra syncs
+- Updated dependencies [685108a]
+- Updated dependencies [685108a]
+  - @mastra/core@0.1.27-alpha.78
+  - @mastra/rag@0.0.2-alpha.68
+
+## 1.0.4-alpha.69
+
+### Patch Changes
+
+- Updated dependencies [8105fae]
+- Updated dependencies [ecdee97]
+  - @mastra/core@0.1.27-alpha.77
+  - @mastra/rag@0.0.2-alpha.67
+
+## 1.0.4-alpha.68
+
+### Patch Changes
+
+- Updated dependencies [9c0d010]
+  - @mastra/rag@0.0.2-alpha.66
+
+## 1.0.4-alpha.67
+
+### Patch Changes
+
+- Updated dependencies [ae7bf94]
+- Updated dependencies [ae7bf94]
+  - @mastra/core@0.1.27-alpha.76
+  - @mastra/rag@0.0.2-alpha.65
+
+## 1.0.4-alpha.66
+
+### Patch Changes
+
+- Updated dependencies [23dcb23]
+  - @mastra/core@0.1.27-alpha.75
+  - @mastra/rag@0.0.2-alpha.64
+
 ## 1.0.4-alpha.65
 
 ### Patch Changes

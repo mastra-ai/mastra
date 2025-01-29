@@ -121,7 +121,7 @@ export class ChromaVector extends MastraVector {
 
   async listIndexes(): Promise<string[]> {
     const collections = await this.client.listCollections();
-    return collections.map(collection => collection.name);
+    return collections.map(collection => collection);
   }
 
   async describeIndex(indexName: string): Promise<IndexStats> {

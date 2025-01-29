@@ -9,7 +9,6 @@
 '@mastra/mcp': patch
 '@mastra/memory': patch
 '@mastra/rag': patch
-'@mastra/tts': patch
 '@mastra/vector-astra': patch
 '@mastra/vector-chroma': patch
 '@mastra/vector-libsql': patch

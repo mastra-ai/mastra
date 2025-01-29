@@ -1,4 +1,4 @@
-import { createSync, createTool, Integration, Step, Workflow } from "@mastra/core";
+import { createTool, Integration, Step, Workflow } from "@mastra/core";
 import { z } from "zod";
 
 const step = new Step({
@@ -29,22 +29,6 @@ workflow.then(step)
 export class SampleIntegration extends Integration {
     constructor() {
         super();
-
-        this.registerSync(createSync({
-            id: 'SAMPLE_SYNC',
-            description: 'Sample Sync Description',
-            inputSchema: z.object({}),
-            outputSchema: z.object({
-                message: z.string()
-            }),
-            execute: async (props) => {
-                console.log(props)
-                return {
-                    message: 'Hello World'
-                }
-            },
-        }))
-
 
         this.registerWorkflow('SAMPLE_WORKFLOW', workflow)
     }
