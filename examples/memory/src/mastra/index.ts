@@ -5,7 +5,7 @@ import { PostgresStore } from '@mastra/store-pg';
 
 import 'dotenv/config';
 
-import { chefAgent } from './agents';
+import { chefAgent, memoryAgent } from './agents';
 
 const connectionString = process.env.POSTGRES_CONNECTION_STRING;
 
@@ -24,6 +24,6 @@ const memory = new Memory({
 });
 
 export const mastra = new Mastra({
-  agents: { chefAgent },
+  agents: { chefAgent, memoryAgent },
   memory,
 });
