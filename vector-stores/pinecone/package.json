@@ -1,6 +1,6 @@
 {
   "name": "@mastra/vector-pinecone",
-  "version": "0.0.1-alpha.12",
+  "version": "0.0.1-alpha.13",
   "description": "Pinecone vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",

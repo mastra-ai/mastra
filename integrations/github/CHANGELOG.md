@@ -1,5 +1,13 @@
 # @mastra/github
 
+## 1.0.3-alpha.64
+
+### Patch Changes
+
+- 327ece7: Updates for ts versions
+- Updated dependencies [327ece7]
+  - @mastra/core@0.1.27-alpha.80
+
 ## 1.0.3-alpha.63
 
 ### Patch Changes

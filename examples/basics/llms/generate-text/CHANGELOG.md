@@ -1,5 +1,12 @@
 # generate-text
 
+## 0.0.1-alpha.18
+
+### Patch Changes
+
+- Updated dependencies [327ece7]
+  - @mastra/core@0.1.27-alpha.80
+
 ## 0.0.1-alpha.17
 
 ### Patch Changes

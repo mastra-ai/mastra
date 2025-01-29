@@ -1,5 +1,20 @@
 # @mastra/dane
 
+## 0.0.2-alpha.96
+
+### Patch Changes
+
+- 327ece7: Updates for ts versions
+- Updated dependencies [327ece7]
+  - @mastra/stabilityai@1.0.1-alpha.55
+  - @mastra/firecrawl@1.0.4-alpha.72
+  - @mastra/github@1.0.3-alpha.64
+  - @mastra/engine@0.0.5-alpha.75
+  - @mastra/core@0.1.27-alpha.80
+  - @mastra/rag@0.0.2-alpha.70
+  - @mastra/mcp@0.0.1-alpha.22
+  - @mastra/memory@0.0.2-alpha.61
+
 ## 0.0.2-alpha.95
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # @mastra/engine
 
+## 0.0.5-alpha.75
+
+### Patch Changes
+
+- 327ece7: Updates for ts versions
+- Updated dependencies [327ece7]
+  - @mastra/core@0.1.27-alpha.80
+
 ## 0.0.5-alpha.74
 
 ### Patch Changes
