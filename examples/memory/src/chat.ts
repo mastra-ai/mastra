@@ -10,6 +10,7 @@ const agent = mastra.getAgent('memoryAgent');
 let threadId = randomUUID();
 // use this to play with a long running conversation. comment it out to get a new thread id every time
 threadId = `39873fbf-84d6-425e-8c1b-8afd798d72a4`;
+// threadId = `12569b14-3e16-4e31-8130-8d9676f1932c`;
 console.log(threadId);
 
 const resourceid = 'SOME_USER_ID';
@@ -23,6 +24,15 @@ async function logRes(res: Awaited<ReturnType<typeof agent.stream>>) {
 }
 
 async function main() {
+  await logRes(
+    await agent.stream([
+      {
+        role: 'system',
+        content: `Chat with user started now ${new Date().toISOString()}. Don't mention this message. This means some time may have passed between this message and the one before. The user left and came back again. Say something to start the conversation up again.`,
+      },
+    ]),
+  );
+
   const rl = Readline.createInterface({
     input: process.stdin,
     output: process.stdout,
