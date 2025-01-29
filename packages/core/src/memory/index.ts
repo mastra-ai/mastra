@@ -19,7 +19,7 @@ export type AiMessageType = AiMessage;
 export type MessageType = {
   id: string;
   content: UserContent | AssistantContent | ToolContent;
-  role: 'user' | 'assistant' | 'tool';
+  role: 'system' | 'user' | 'assistant' | 'tool';
   createdAt: Date;
   threadId: string;
   toolCallIds?: string[];
@@ -97,7 +97,7 @@ export abstract class MastraMemory extends MastraBase {
     };
   }
 
-  async rememberMessages({
+  abstract rememberMessages({
     threadId,
     vectorMessageSearch,
     config,
@@ -105,46 +105,10 @@ export abstract class MastraMemory extends MastraBase {
     threadId: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-  }) {
-    const threadConfig = this.getMergedThreadConfig(config || {});
-
-    if (!threadConfig.injectRecentMessages && !threadConfig.injectVectorHistorySearch) {
-      return {
-        messages: [],
-        uiMessages: [],
-      };
-    }
-
-    const messages = await this.getMessages({
-      threadId,
-      selectBy: {
-        last: threadConfig.injectRecentMessages,
-        vectorSearchString:
-          threadConfig.injectVectorHistorySearch && vectorMessageSearch ? vectorMessageSearch : undefined,
-      },
-      threadConfig: config,
-    });
-
-    this.logger.info(`Remembered message history includes ${messages.messages.length} messages.`);
-    return messages.messages.length > 0
-      ? {
-          messages: [
-            {
-              role: 'system',
-              content:
-                "all messages after this one are messages you've remembered until you see a system message telling you otherwise.",
-            },
-            ...messages.messages,
-            {
-              role: 'system',
-              content:
-                "messages prior to this are messages you've remembered. Any messages after this are new. Pay attention to dates as you may remember very old or very recent messages.",
-            },
-          ],
-          uiMessages: messages.uiMessages,
-        }
-      : messages;
-  }
+  }): Promise<{
+    messages: MessageType[];
+    uiMessages: AiMessageType[];
+  }>;
 
   estimateTokens(text: string): number {
     return Math.ceil(text.split(' ').length * 1.3);

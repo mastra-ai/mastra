@@ -97,6 +97,63 @@ export class Memory extends MastraMemory {
     return { messages, uiMessages };
   }
 
+  async rememberMessages({
+    threadId,
+    vectorMessageSearch,
+    config,
+  }: {
+    threadId: string;
+    vectorMessageSearch?: string;
+    config?: MemoryConfig;
+  }) {
+    const threadConfig = this.getMergedThreadConfig(config || {});
+
+    if (!threadConfig.injectRecentMessages && !threadConfig.injectVectorHistorySearch) {
+      return {
+        messages: [],
+        uiMessages: [],
+      } satisfies Awaited<ReturnType<typeof this.getMessages>>;
+    }
+
+    const messages = await this.getMessages({
+      threadId,
+      selectBy: {
+        last: threadConfig.injectRecentMessages,
+        vectorSearchString:
+          threadConfig.injectVectorHistorySearch && vectorMessageSearch ? vectorMessageSearch : undefined,
+      },
+      threadConfig: config,
+    });
+
+    this.logger.info(`Remembered message history includes ${messages.messages.length} messages.`);
+    return messages.messages.length > 0
+      ? {
+          messages: [
+            {
+              id: `system-remember-start-${Date.now()}`,
+              role: 'system',
+              content:
+                "all messages after this one are messages you've remembered until you see a system message telling you otherwise.",
+              type: 'text',
+              threadId,
+              createdAt: new Date(),
+            } satisfies MessageType,
+            ...messages.messages,
+            {
+              id: `system-remember-end-${Date.now()}`,
+              role: 'system',
+              content:
+                "messages prior to this are messages you've remembered. Any messages after this are new. Pay attention to dates as you may remember very old or very recent messages.",
+              type: 'text',
+              threadId,
+              createdAt: new Date(),
+            } satisfies MessageType,
+          ],
+          uiMessages: messages.uiMessages,
+        }
+      : messages;
+  }
+
   async getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null> {
     return this.storage.getThreadById({ threadId });
   }
