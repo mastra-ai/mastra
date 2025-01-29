@@ -67,7 +67,7 @@
     "superjson": "^2.2.2",
     "swr": "^2.2.5",
     "tcp-port-used": "^1.0.2",
-    "typescript": "^5.5.4",
+    "typescript": "^5.7.3",
     "yocto-spinner": "^0.1.1",
     "zod": "^3.24.1",
     "zod-to-json-schema": "^3.24.1"

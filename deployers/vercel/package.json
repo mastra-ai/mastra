@@ -30,6 +30,7 @@
     "@tsconfig/recommended": "^1.0.7",
     "@types/node": "^22.9.0",
     "tsup": "^8.0.1",
+    "typescript": "^5.3.3",
     "vercel": "^39.3.0",
     "vitest": "^3.0.4"
   }

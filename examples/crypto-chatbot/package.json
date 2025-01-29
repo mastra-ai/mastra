@@ -83,6 +83,6 @@
     "prettier": "^3.3.3",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.19.1",
-    "typescript": "^5"
+    "typescript": "^5.7.3"
   }
 }
