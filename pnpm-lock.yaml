@@ -46,7 +46,7 @@ importers:
         version: 5.7.3
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   deployers/cloudflare:
     dependencies:
@@ -92,7 +92,7 @@ importers:
         version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   deployers/netlify:
     dependencies:
@@ -135,7 +135,7 @@ importers:
         version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   deployers/vercel:
     dependencies:
@@ -169,7 +169,7 @@ importers:
         version: 39.3.0(@swc/core@1.10.11(@swc/helpers@0.5.15))(encoding@0.1.13)(rollup@4.32.1)
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   docs:
     dependencies:
@@ -296,60 +296,6 @@ importers:
         specifier: ^5.7.3
         version: 5.7.3
 
-  examples/basics/agents/agentic-workflows:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
-      zod:
-        specifier: ^3.24.1
-        version: 3.24.1
-
-  examples/basics/agents/bird-checker:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
-      zod:
-        specifier: ^3.24.1
-        version: 3.24.1
-
-  examples/basics/agents/hierarchical-multi-agent:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
-      zod:
-        specifier: ^3.24.1
-        version: 3.24.1
-
-  examples/basics/agents/multi-agent-workflow:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
-      zod:
-        specifier: ^3.24.1
-        version: 3.24.1
-
-  examples/basics/agents/system-prompt:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
-      zod:
-        specifier: ^3.24.1
-        version: 3.24.1
-
-  examples/basics/agents/using-a-tool:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
-      zod:
-        specifier: ^3.24.1
-        version: 3.24.1
-
   examples/basics/llms/generate-object-structured:
     dependencies:
       '@mastra/core':
@@ -415,272 +361,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
-
-  examples/basics/rag/adjust-chunk-delimiters:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-
-  examples/basics/rag/adjust-chunk-size:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-
-  examples/basics/rag/basic-rag:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-      '@mastra/vector-pg':
-        specifier: workspace:*
-        version: link:../../../../vector-stores/pg
-    devDependencies:
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.4.7
-
-  examples/basics/rag/chunk-html:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-
-  examples/basics/rag/chunk-json:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-
-  examples/basics/rag/chunk-markdown:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-
-  examples/basics/rag/chunk-text:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-
-  examples/basics/rag/cleanup-rag:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-      '@mastra/vector-pg':
-        specifier: workspace:*
-        version: link:../../../../vector-stores/pg
-    devDependencies:
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.4.7
-
-  examples/basics/rag/cot-rag:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-      '@mastra/vector-pg':
-        specifier: workspace:*
-        version: link:../../../../vector-stores/pg
-    devDependencies:
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.4.7
-
-  examples/basics/rag/cot-workflow-rag:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-      '@mastra/vector-pg':
-        specifier: workspace:*
-        version: link:../../../../vector-stores/pg
-      zod:
-        specifier: ^3.24.1
-        version: 3.24.1
-
-  examples/basics/rag/embed-chunk-array:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-
-  examples/basics/rag/embed-text-chunk:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-
-  examples/basics/rag/embed-text-with-cohere:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-
-  examples/basics/rag/filter-rag:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-      '@mastra/vector-pg':
-        specifier: workspace:*
-        version: link:../../../../vector-stores/pg
-    devDependencies:
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.4.7
-
-  examples/basics/rag/graph-rag:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-      '@mastra/vector-pg':
-        specifier: workspace:*
-        version: link:../../../../vector-stores/pg
-    devDependencies:
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.4.7
-
-  examples/basics/rag/hybrid-vector-search:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-      '@mastra/vector-pg':
-        specifier: workspace:*
-        version: link:../../../../vector-stores/pg
-    devDependencies:
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.4.7
-
-  examples/basics/rag/insert-embedding-in-pgvector:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-      '@mastra/vector-pg':
-        specifier: workspace:*
-        version: link:../../../../vector-stores/pg
-
-  examples/basics/rag/insert-embedding-in-pinecone:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-      '@mastra/vector-pinecone':
-        specifier: workspace:*
-        version: link:../../../../vector-stores/pinecone
-
-  examples/basics/rag/metadata-extraction:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-    devDependencies:
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.4.7
-
-  examples/basics/rag/rerank-rag:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-      '@mastra/vector-pg':
-        specifier: workspace:*
-        version: link:../../../../vector-stores/pg
-    devDependencies:
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.4.7
-
-  examples/basics/rag/retrieve-results:
-    dependencies:
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../../../packages/rag
-      '@mastra/vector-pinecone':
-        specifier: workspace:*
-        version: link:../../../../vector-stores/pinecone
-
-  examples/basics/workflows/calling-agent-from-workflow:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
-      zod:
-        specifier: ^3.24.1
-        version: 3.24.1
-
-  examples/basics/workflows/calling-llm-from-workflow:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
-      zod:
-        specifier: ^3.24.1
-        version: 3.24.1
-
-  examples/basics/workflows/create-workflow:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
-      zod:
-        specifier: ^3.24.1
-        version: 3.24.1
-
-  examples/basics/workflows/tool-as-workflow-step:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
-      zod:
-        specifier: ^3.24.1
-        version: 3.24.1
-
-  examples/basics/workflows/workflow-with-branching-paths:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
-      zod:
-        specifier: ^3.24.1
-        version: 3.24.1
-
-  examples/basics/workflows/workflow-with-cyclical-deps:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
-      zod:
-        specifier: ^3.24.1
-        version: 3.24.1
-
-  examples/basics/workflows/workflow-with-parallel-steps:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
-      zod:
-        specifier: ^3.24.1
-        version: 3.24.1
-
-  examples/basics/workflows/workflow-with-sequential-steps:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
-      zod:
-        specifier: ^3.24.1
-        version: 3.24.1
 
   examples/bird-checker-with-express:
     dependencies:
@@ -1954,7 +1634,7 @@ importers:
         version: 4.33.0
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   packages/cli/src/playground:
     dependencies:
@@ -2265,7 +1945,7 @@ importers:
         version: 5.7.3
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   packages/create-mastra:
     dependencies:
@@ -2433,7 +2113,7 @@ importers:
         version: 5.7.3
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   packages/evals:
     dependencies:
@@ -2488,7 +2168,7 @@ importers:
         version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.7))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.7))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.12.0)(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5)
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   packages/loggers:
     dependencies:
@@ -2513,7 +2193,7 @@ importers:
         version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   packages/mcp:
     dependencies:
@@ -2550,7 +2230,7 @@ importers:
         version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   packages/memory:
     dependencies:
@@ -2596,7 +2276,7 @@ importers:
         version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   packages/rag:
     dependencies:
@@ -2617,7 +2297,7 @@ importers:
         version: 1.0.16
       jsdom:
         specifier: ^25.0.1
-        version: 25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5)
+        version: 25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5)
       llamaindex:
         specifier: ^0.8.15
         version: 0.8.31(@aws-sdk/credential-providers@3.734.0)(@huggingface/transformers@3.3.2)(bufferutil@4.0.9)(encoding@0.1.13)(pg@8.13.1)(socks@2.8.3)(tree-sitter@0.22.4)(typescript@5.7.3)(utf-8-validate@6.0.5)(web-tree-sitter@0.24.7)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))
@@ -2645,7 +2325,7 @@ importers:
         version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   speech/azure:
     dependencies:
@@ -2974,7 +2654,7 @@ importers:
         version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   vector-stores/chroma:
     dependencies:
@@ -2996,7 +2676,7 @@ importers:
         version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   vector-stores/libsql:
     dependencies:
@@ -3018,7 +2698,7 @@ importers:
         version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   vector-stores/pg:
     dependencies:
@@ -3043,7 +2723,7 @@ importers:
         version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   vector-stores/pinecone:
     dependencies:
@@ -3065,7 +2745,7 @@ importers:
         version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   vector-stores/qdrant:
     dependencies:
@@ -3087,7 +2767,7 @@ importers:
         version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   vector-stores/upstash:
     dependencies:
@@ -3109,7 +2789,7 @@ importers:
         version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   vector-stores/vectorize:
     dependencies:
@@ -3131,7 +2811,7 @@ importers:
         version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       vitest:
         specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
 packages:
 
@@ -35021,36 +34701,6 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5):
-    dependencies:
-      cssstyle: 4.2.1
-      data-urls: 5.0.0
-      decimal.js: 10.5.0
-      form-data: 4.0.1
-      html-encoding-sniffer: 4.0.0
-      http-proxy-agent: 7.0.2
-      https-proxy-agent: 7.0.6
-      is-potential-custom-element-name: 1.0.1
-      nwsapi: 2.2.16
-      parse5: 7.2.1
-      rrweb-cssom: 0.7.1
-      saxes: 6.0.0
-      symbol-tree: 3.2.4
-      tough-cookie: 5.1.0
-      w3c-xmlserializer: 5.0.0
-      webidl-conversions: 7.0.0
-      whatwg-encoding: 3.1.1
-      whatwg-mimetype: 4.0.0
-      whatwg-url: 14.1.0
-      ws: 8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
-      xml-name-validator: 5.0.0
-    optionalDependencies:
-      canvas: 2.11.2(encoding@0.1.13)
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-
   jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@5.0.10):
     dependencies:
       cssstyle: 4.2.1
@@ -35081,6 +34731,36 @@ snapshots:
       - supports-color
       - utf-8-validate
     optional: true
+
+  jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5):
+    dependencies:
+      cssstyle: 4.2.1
+      data-urls: 5.0.0
+      decimal.js: 10.5.0
+      form-data: 4.0.1
+      html-encoding-sniffer: 4.0.0
+      http-proxy-agent: 7.0.2
+      https-proxy-agent: 7.0.6
+      is-potential-custom-element-name: 1.0.1
+      nwsapi: 2.2.16
+      parse5: 7.2.1
+      rrweb-cssom: 0.7.1
+      saxes: 6.0.0
+      symbol-tree: 3.2.4
+      tough-cookie: 5.1.0
+      w3c-xmlserializer: 5.0.0
+      webidl-conversions: 7.0.0
+      whatwg-encoding: 3.1.1
+      whatwg-mimetype: 4.0.0
+      whatwg-url: 14.1.0
+      ws: 8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
+      xml-name-validator: 5.0.0
+    optionalDependencies:
+      canvas: 2.11.2(encoding@0.1.13)
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
 
   jsdom@25.0.1(bufferutil@4.0.9)(canvas@3.1.0)(utf-8-validate@6.0.5):
     dependencies:
@@ -35294,7 +34974,7 @@ snapshots:
       fast-xml-parser: 4.4.1
       html-to-text: 9.0.5
       ignore: 5.3.2
-      jsdom: 25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5)
+      jsdom: 25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5)
       mammoth: 1.9.0
       mongodb: 6.12.0(@aws-sdk/credential-providers@3.734.0)(socks@2.8.3)
       pdf-parse: 1.1.1
@@ -41399,7 +41079,7 @@ snapshots:
     optionalDependencies:
       '@edge-runtime/vm': 3.2.0
       '@types/node': 22.12.0
-      jsdom: 25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5)
+      jsdom: 25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5)
     transitivePeerDependencies:
       - less
       - lightningcss
@@ -41448,7 +41128,7 @@ snapshots:
       - supports-color
       - terser
 
-  vitest@3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0):
+  vitest@3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0):
     dependencies:
       '@vitest/expect': 3.0.4
       '@vitest/mocker': 3.0.4(vite@6.0.11(@types/node@22.12.0)(jiti@2.4.2)(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0))
@@ -41474,7 +41154,7 @@ snapshots:
       '@edge-runtime/vm': 3.2.0
       '@types/debug': 4.1.12
       '@types/node': 22.12.0
-      jsdom: 25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5)
+      jsdom: 25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5)
     transitivePeerDependencies:
       - jiti
       - less
