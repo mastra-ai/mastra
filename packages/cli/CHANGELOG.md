@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.130
+
+### Patch Changes
+
+- ad38e98: Fix example code
+
 ## 0.1.57-alpha.129
 
 ### Patch Changes
