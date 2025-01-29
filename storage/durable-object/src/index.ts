@@ -1,5 +1,5 @@
 import { DurableObjectNamespace, Request } from '@cloudflare/workers-types';
-import { WorkflowRow } from '@mastra/core';
+import { StorageGetMessagesArg, WorkflowRow } from '@mastra/core';
 import { MastraStorage, WorkflowRunState, StorageColumn, ThreadType } from '@mastra/core';
 
 export interface DurableObjectConfig {
@@ -126,7 +126,7 @@ export class DurableObjectStorage extends MastraStorage {
     throw new Error('not implemented yet');
   }
 
-  async getMessages<T = unknown>(_params: { threadId: string }): Promise<T> {
+  async getMessages<T = unknown>(_params: StorageGetMessagesArg): Promise<T> {
     throw new Error('not implemented yet');
   }
 

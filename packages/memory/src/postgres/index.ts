@@ -1,4 +1,12 @@
-import { MastraMemory, MessageType, ThreadType, AiMessageType, MessageResponse } from '@mastra/core';
+import {
+  MastraMemory,
+  MessageType,
+  ThreadType,
+  AiMessageType,
+  MessageResponse,
+  SharedMemoryConfig,
+  StorageGetMessagesArg,
+} from '@mastra/core';
 import { ToolResultPart, TextPart } from 'ai';
 import crypto from 'crypto';
 import pg from 'pg';
@@ -8,8 +16,12 @@ const { Pool } = pg;
 export class PgMemory extends MastraMemory {
   private pool: pg.Pool;
   hasTables: boolean = false;
-  constructor(config: { connectionString: string; maxTokens?: number }) {
-    super();
+  constructor(config: { connectionString: string; maxTokens?: number } & SharedMemoryConfig) {
+    super({
+      storage: config.storage,
+      vector: config.vector,
+      name: 'PgMemory',
+    });
     this.pool = new Pool({ connectionString: config.connectionString });
     this.MAX_CONTEXT_TOKENS = config.maxTokens;
   }
@@ -298,9 +310,7 @@ export class PgMemory extends MastraMemory {
 
   async getMessages({
     threadId,
-  }: {
-    threadId: string;
-  }): Promise<{ messages: MessageType[]; uiMessages: AiMessageType[] }> {
+  }: StorageGetMessagesArg): Promise<{ messages: MessageType[]; uiMessages: AiMessageType[] }> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();

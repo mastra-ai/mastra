@@ -16,6 +16,14 @@ export interface WorkflowRow {
   updated_at: Date;
 }
 
+export type StorageGetMessagesArg = {
+  threadId: string;
+  selectBy?: {
+    vectorSearchString?: string;
+    last?: number | false;
+  };
+};
+
 export type TABLE_NAMES = typeof MastraStorage.TABLE_WORKFLOWS | typeof MastraStorage.TABLE_EVALS;
 
 export abstract class MastraStorage extends MastraBase {
@@ -130,6 +138,6 @@ export abstract class MastraStorage extends MastraBase {
   abstract saveThread(params: { thread: ThreadType }): Promise<ThreadType>;
   abstract updateThread(id: string, title: string, metadata: Record<string, unknown>): Promise<ThreadType>;
   abstract deleteThread(id: string): Promise<void>;
-  abstract getMessages<T = unknown>(params: { threadId: string }): Promise<T>;
+  abstract getMessages<T = unknown>(params: StorageGetMessagesArg): Promise<T>;
   abstract saveMessages(params: { messages: MessageType[] }): Promise<MessageType[]>;
 }

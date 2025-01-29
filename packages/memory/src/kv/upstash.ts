@@ -4,6 +4,8 @@ import {
   ThreadType,
   MessageResponse,
   AiMessageType,
+  SharedMemoryConfig,
+  StorageGetMessagesArg,
 } from '@mastra/core';
 import { Redis } from '@upstash/redis';
 import { ToolResultPart, TextPart } from 'ai';
@@ -29,8 +31,12 @@ export class UpstashKVMemory extends MastraMemory {
 
   kv: Redis;
 
-  constructor(config: { url: string; token: string; prefix?: string; maxTokens?: number }) {
-    super();
+  constructor(config: { url: string; token: string; prefix?: string; maxTokens?: number } & SharedMemoryConfig) {
+    super({
+      storage: config.storage,
+      vector: config.vector,
+      name: 'UpstashKVMemory',
+    });
     this.prefix = config.prefix || 'mastra';
     this.MAX_CONTEXT_TOKENS = config.maxTokens;
 
@@ -202,9 +208,7 @@ export class UpstashKVMemory extends MastraMemory {
 
   async getMessages({
     threadId,
-  }: {
-    threadId: string;
-  }): Promise<{ messages: MessageType[]; uiMessages: AiMessageType[] }> {
+  }: StorageGetMessagesArg): Promise<{ messages: MessageType[]; uiMessages: AiMessageType[] }> {
     const messagesKey = this.getMessagesKey(threadId);
     const messages = await this.kv.lrange<MessageType>(messagesKey, 0, -1);
     const parsedMessages = this.parseMessages(messages);

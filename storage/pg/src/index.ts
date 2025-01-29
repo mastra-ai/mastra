@@ -1,4 +1,12 @@
-import { MastraStorage, MessageType, StorageColumn, TABLE_NAMES, ThreadType, WorkflowRunState } from '@mastra/core';
+import {
+  MastraStorage,
+  MessageType,
+  StorageColumn,
+  StorageGetMessagesArg,
+  TABLE_NAMES,
+  ThreadType,
+  WorkflowRunState,
+} from '@mastra/core';
 import pg from 'pg';
 import pgPromise from 'pg-promise';
 import type { IDatabase, IMain } from 'pg-promise';
@@ -221,7 +229,7 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  async getMessages<T = unknown>({ threadId }: { threadId: string }): Promise<T> {
+  async getMessages<T = unknown>({ threadId }: StorageGetMessagesArg): Promise<T> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();

@@ -1,6 +1,13 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
-import { MastraStorage, StorageColumn, TABLE_NAMES, ThreadType, MessageType } from '@mastra/core';
+import {
+  MastraStorage,
+  StorageColumn,
+  TABLE_NAMES,
+  ThreadType,
+  MessageType,
+  StorageGetMessagesArg,
+} from '@mastra/core';
 
 export interface LibSQLConfig {
   url: string;
@@ -127,7 +134,7 @@ export class LibSQLStorage extends MastraStorage {
     throw new Error('not implemented yet');
   }
 
-  async getMessages<T = unknown>(_params: { threadId: string }): Promise<T> {
+  async getMessages<T = unknown>(_params: StorageGetMessagesArg): Promise<T> {
     throw new Error('not implemented yet');
   }
 
