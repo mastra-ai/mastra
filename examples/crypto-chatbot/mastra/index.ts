@@ -1,5 +1,5 @@
 import { createLogger, Mastra } from '@mastra/core';
-import { PgMemory } from '@mastra/memory';
+import { PgMemory } from '@mastra/memory/postgres';
 import { createCryptoAgent } from './agents';
 
 const connectionString = process.env.POSTGRES_URL!;

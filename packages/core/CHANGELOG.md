@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.80
+
+### Patch Changes
+
+- 327ece7: Updates for ts versions
+
 ## 0.1.27-alpha.79
 
 ### Patch Changes

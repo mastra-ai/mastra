@@ -1,5 +1,5 @@
 import { Mastra } from '@mastra/core';
-import { UpstashKVMemory } from '@mastra/memory';
+import { UpstashKVMemory } from '@mastra/memory/kv-upstash';
 
 import { chefAgent } from './agents';
 

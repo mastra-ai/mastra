@@ -125,8 +125,8 @@ export async function runAgent(formData: FormData) {
     If description contains "4.5 out of 5 stars" → return rating: 4.5
     If description contains "3 out of 5 stars" → return rating: 3
 
-    IMPORTANT 3: for <UKNOWN> values:
-    - make sure to replace all instane of <UNKNOWN> with empty strings
+    IMPORTANT: for <UKNOWN> values:
+    - make sure to replace all instances of <UNKNOWN> with empty strings
     ${JSON.stringify(data)}
   `;
 

@@ -1,5 +1,5 @@
 import { Mastra, createLogger } from '@mastra/core';
-import { PgMemory } from '@mastra/memory';
+import { PgMemory } from '@mastra/memory/postgres';
 
 import { catOne } from './agents/index';
 import { sequentialWorkflow, parallelWorkflow, branchedWorkflow, cyclicalWorkflow } from './workflows';

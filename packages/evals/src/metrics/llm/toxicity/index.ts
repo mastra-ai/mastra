@@ -1,6 +1,6 @@
-import { Metric, ModelConfig } from '@mastra/core';
+import { Metric, type ModelConfig } from '@mastra/core';
 
-import { MetricResultWithReason } from '../types';
+import { type MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';
 
 import { ToxicityJudge } from './metricJudge';
