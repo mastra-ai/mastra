@@ -14,7 +14,8 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@mastra/rag": "workspace:*"
+    "@mastra/rag": "workspace:*",
+    "@mastra/store-pg": "workspace:*"
   },
   "devDependencies": {
     "dotenv": "^16.4.7",
