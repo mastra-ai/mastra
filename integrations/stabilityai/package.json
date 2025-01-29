@@ -65,7 +65,7 @@
     "size-limit": "^11.1.4",
     "ts-jest": "^29.2.4",
     "tslib": "^2.6.3",
-    "typescript": "^5.5.4"
+    "typescript": "^5.7.3"
   },
   "keywords": [],
   "author": "",
