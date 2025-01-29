@@ -108,5 +108,23 @@
     "tslib": "^2.6.3",
     "typescript": "5.5.4",
     "vitest": "^3.0.4"
-  }
+  },
+  "keywords": [
+    "ai",
+    "llm",
+    "llms",
+    "agent",
+    "agents",
+    "vectorstore",
+    "embeddings",
+    "rag",
+    "evals",
+    "memory",
+    "tools",
+    "telemetry",
+    "typescript",
+    "opentelemetry",
+    "otel",
+    "framework"
+  ]
 }

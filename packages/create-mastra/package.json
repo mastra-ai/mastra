@@ -18,8 +18,20 @@
   },
   "keywords": [
     "mastra",
+    "create",
     "cli",
-    "ai"
+    "starter",
+    "boilerplate",
+    "template",
+    "init",
+    "generator",
+    "scaffold",
+    "ai",
+    "llm",
+    "llms",
+    "agent",
+    "typescript",
+    "project"
   ],
   "dependencies": {
     "commander": "^12.0.0",

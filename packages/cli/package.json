@@ -71,5 +71,23 @@
     "tsup": "^8.3.5",
     "type-fest": "^4.30.0",
     "vitest": "^3.0.4"
-  }
+  },
+  "keywords": [
+    "mastra",
+    "cli",
+    "ai",
+    "llm",
+    "llms",
+    "agent",
+    "agents",
+    "dev",
+    "development",
+    "deploy",
+    "deployment",
+    "build",
+    "workflow",
+    "typescript",
+    "command-line",
+    "devtools"
+  ]
 }
