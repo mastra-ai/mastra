@@ -1,7 +1,7 @@
 import { IndexStats, QueryResult, MastraVector } from '@mastra/core';
 import pg from 'pg';
 
-import { Filter, FILTER_OPERATORS, isValidOperator, LogicalOperatorFn } from './filter';
+import { Filter, FilterBuilder } from './filter';
 
 export class PgVector extends MastraVector {
   private pool: pg.Pool;
@@ -37,67 +37,11 @@ export class PgVector extends MastraVector {
   ): Promise<QueryResult[]> {
     const client = await this.pool.connect();
     try {
-      let filterValues: any[] = [minScore];
       const vectorStr = `[${queryVector.join(',')}]`;
 
-      const buildCondition = (key: string, value: any): string => {
-        // Handle logical operators ($and/$or)
-        if (key === '$and' || key === '$or') {
-          const joinOperator = key === '$or' ? 'OR' : 'AND';
-          const conditions = value.map((f: Filter) => {
-            // Check if the first key is a logical operator for nested conditions
-            const [firstKey, firstValue] = Object.entries(f)[0] || [];
-            if (firstKey === '$and' || firstKey === '$or') {
-              return buildCondition(firstKey, firstValue);
-            }
-            // Process all conditions in this filter
-            return Object.entries(f)
-              .map(([k, v]) => buildCondition(k, v))
-              .join(` ${joinOperator} `);
-          });
+      const filterBuilder = new FilterBuilder(minScore);
 
-          const operatorFn = FILTER_OPERATORS[key] as LogicalOperatorFn;
-          return operatorFn(conditions.join(` ${joinOperator} `)).sql;
-        }
-
-        // If condition is not a FilterCondition object, assume it's an equality check
-        if (!value || typeof value !== 'object') {
-          filterValues.push(value);
-          return `metadata#>>'{${key}}' = $${filterValues.length}`;
-        }
-
-        // Handle operator conditions
-        const [[operator, operatorValue] = []] = Object.entries(value);
-        if (!operator || value === undefined) {
-          throw new Error(`Invalid operator or value for key: ${key}`);
-        }
-        if (!isValidOperator(operator)) {
-          throw new Error(`Unsupported operator: ${operator}`);
-        }
-        const operatorFn = FILTER_OPERATORS[operator];
-        const operatorResult = operatorFn(key, filterValues.length + 1);
-        if (operatorResult.needsValue) {
-          const transformedValue = operatorResult.transformValue
-            ? operatorResult.transformValue(operatorValue)
-            : operatorValue;
-          filterValues.push(transformedValue);
-        }
-        return operatorResult.sql;
-      };
-
-      const buildFilterQuery = (filter: Filter | undefined): string => {
-        if (!filter) {
-          return '';
-        }
-
-        const conditions = Object.entries(filter)
-          .map(([key, value]) => buildCondition(key, value))
-          .join(' AND ');
-
-        return conditions ? `WHERE ${conditions}` : '';
-      };
-
-      const filterQuery = buildFilterQuery(filter);
+      const { sql: filterQuery, values: filterValues } = filterBuilder.buildFilterQuery(filter);
 
       const query = `
         WITH vector_scores AS (
