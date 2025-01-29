@@ -1,6 +1,6 @@
 import { Mastra } from '@mastra/core';
 import { PostgresEngine } from '@mastra/engine';
-import { UpstashKVMemory } from '@mastra/memory';
+import { UpstashKVMemory } from '@mastra/memory/kv-upstash';
 
 import { dane, daneChangeLog, daneCommitMessage, daneIssueLabeler, daneLinkChecker } from './agents/index.js';
 import { daneNewContributor } from './agents/new-contributor.js';
