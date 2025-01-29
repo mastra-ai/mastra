@@ -24,7 +24,6 @@
     "build:dev": "dts watch",
     "test": "vitest run"
   },
-  "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
@@ -45,5 +44,21 @@
     "@types/node": "^22.9.0",
     "dts-cli": "^2.0.5",
     "vitest": "^3.0.4"
-  }
+  },
+  "keywords": [
+    "rag",
+    "retrieval-augmented-generation",
+    "vector-search",
+    "vectorstore",
+    "embeddings",
+    "embedding",
+    "document-processing",
+    "semantic-search",
+    "text-splitting",
+    "chunking",
+    "ai",
+    "llm",
+    "llms",
+    "typescript"
+  ]
 }

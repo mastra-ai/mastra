@@ -2,7 +2,7 @@
 
 ![Mastra Cli](https://github.com/mastra-ai/mastra/blob/main/packages/cli/mastra-cli.png)
 
-The Mastra CLI enables you to get up and running with mastra quickly. It is not required to use mastra, but helpful for getting started and more advanced use cases.
+The Mastra CLI lets you initialize a new project, spin up a local dev server, and deploy it to serverless platforms like Vercel and Cloudflare Workers.
 
 ## Installing the Mastra CLI
 
@@ -10,9 +10,12 @@ The Mastra CLI enables you to get up and running with mastra quickly. It is not 
 npm i -g mastra
 ```
 
-### Setup
+## Commands
+
+### Project Setup
 
 ```bash
+# Initialize a new project
 mastra init
 ```
 
@@ -22,11 +25,11 @@ Mastra's data syncing infrastructure is designed for Next.js sites running on se
 
 Logs are stored in [Upstash](https://upstash.com/).
 
-[Full deployment docs](./docs/mastra-config.md) here.
-
 ## Commands
 
-`mastra init`
+### Init
+
+`mastra init` is used for initializing a new project.
 
 This creates a mastra directory under `src` containing an `index.ts` entrypoint and an `agent` directory containing two sample agents.
 
@@ -40,17 +43,7 @@ project-root/
        └── index.ts
 ```
 
-#### Agents
-
-`mastra agent new`
-
-This creates a new agent.
-
-`mastra agent list`
-
-This lists all available agents.
-
-#### Engine
+### Engine
 
 `mastra engine add`
 
@@ -70,28 +63,76 @@ This is a shortcut that runs the `docker-compose up` command using the `mastra-p
 
 It is useful for cases where you don't have a dockerized `postgres` db setup.
 
-#### Rest Endpoints
+### Dev
 
 `mastra dev`
 
-This spins up `REST` endpoints for all agents, all workflows, and memory.
+This spins up a local development server that hosts `REST` endpoints for all agents and workflows. It also has a chat interface for testing them.
 
-## Local development
+The server is useful for testing and developing agents, workflows, and integrations without needing to deploy your application.
 
-1. clone the repo
-2. Run `pnpm i` to install deps
+The server is available at `http://localhost:3000`.
+
+### Build
+
+`mastra build`
+
+This command builds your Mastra project for deployment to different environments. The build process:
+1. Reads your Mastra configuration
+2. Generates optimized files for your target environment
+3. Outputs them to a build directory
+
+Options:
+```bash
+--dir     Directory containing Mastra files (default: src/mastra)
+```
+
+Example usage:
+```bash
+# Build using default directory
+mastra build
+
+# Build from custom directory
+mastra build --dir path/to/mastra
+```
+
+The build output is determined by your Mastra instance's deployer configuration:
+
+```typescript
+const mastra = new Mastra({
+  deployer: {
+    type: 'HONO', // Target environment (HONO, EXPRESS, NEXT)
+    // Environment-specific options
+  }
+});
+```
+
+### Deploy
+
+`mastra deploy`
+
+This command deploys the mastra project to a serverless platform like Vercel or Cloudflare Workers.
+
+The deploy command does the following:
+
+- Initializes the mastra project
+- Builds the project
+- Deploys the built project to the platform
 
 # Telemetry
 
-This CLI collects anonymous usage data to help improve the tool. We collect:
+This CLI collects anonymous usage data (no personal/sensitive info) to help improve Mastra. This includes:
 
 - Commands used
 - Command execution time
 - Error occurrences
 - System information (OS, Node version)
 
-No personal or sensitive information is collected.
-
-To opt-out of telemetry:
+To opt-out:
 
 1. Add `NO_MASTRA_TELEMETRY=1` to commands
+
+## Local development
+
+1. clone the repo
+2. Run `pnpm i` to install deps
