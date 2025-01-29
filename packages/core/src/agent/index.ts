@@ -238,21 +238,14 @@ export class Agent<
           }
         }
 
-        let memoryMessages: CoreMessage[];
-
-        if (context?.object?.usesContext) {
-          memoryMessages = await this.#mastra.memory.getContextWindow({
-            threadId: thread.id,
-            format: 'core_message',
-            startDate: context.object?.startDate ? new Date(context.object?.startDate) : undefined,
-            endDate: context.object?.endDate ? new Date(context.object?.endDate) : undefined,
-          });
-        } else {
-          memoryMessages = await this.#mastra.memory.getContextWindow({
-            threadId: thread.id,
-            format: 'core_message',
-          });
-        }
+        const memoryMessages =
+          threadId && this.#mastra.memory
+            ? (
+                await this.#mastra.memory.getRememberedMessageHistory({
+                  threadId,
+                })
+              ).messages
+            : [];
 
         await this.#mastra.memory.saveMessages({ messages });
 
@@ -492,6 +485,28 @@ export class Agent<
   }) {
     let coreMessages: CoreMessage[] = [];
     let threadIdToUse = threadId;
+
+    let rememberedMessages: CoreMessage[] = [];
+
+    if (this.#mastra?.memory && threadId) {
+      const retrievedMessages = await this.#mastra.memory.getRememberedMessageHistory({
+        threadId,
+        vectorMessageSearch: messages
+          .slice(-1)
+          .map(m => {
+            if (typeof m === `string`) {
+              return m;
+            }
+            return m?.content || ``;
+          })
+          .join(`\n`),
+      });
+
+      if (retrievedMessages) {
+        rememberedMessages = retrievedMessages.messages as CoreMessage[];
+      }
+    }
+
     this.log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, { runId });
     const saveMessageResponse = await this.saveMemory({
       threadId,
@@ -499,9 +514,9 @@ export class Agent<
       userMessages: messages,
     });
 
-    coreMessages = saveMessageResponse.messages;
+    coreMessages = saveMessageResponse.messages as CoreMessage[];
     threadIdToUse = saveMessageResponse.threadId;
-    return { coreMessages, threadIdToUse };
+    return { coreMessages, threadIdToUse, rememberedMessages };
   }
 
   __primitive({
@@ -532,6 +547,7 @@ export class Agent<
 
         let coreMessages = messages;
         let threadIdToUse = threadId;
+        let rememberedMessages: CoreMessage[] | undefined;
 
         if (this.#mastra?.memory && resourceid) {
           const preExecuteResult = await this.preExecute({
@@ -543,6 +559,7 @@ export class Agent<
 
           coreMessages = preExecuteResult.coreMessages;
           threadIdToUse = preExecuteResult.threadIdToUse;
+          rememberedMessages = preExecuteResult.rememberedMessages;
         } else {
           this.logger.debug(
             `[Agents:${this.name}] - No memory store or resourceid identifier found. Skipping memory persistence.`,
@@ -573,7 +590,7 @@ export class Agent<
 
         const messageObjects = [systemMessage, ...(context || []), ...coreMessages];
 
-        return { messageObjects, convertedTools, threadId: threadIdToUse as string };
+        return { messageObjects, convertedTools, threadId: threadIdToUse as string, rememberedMessages };
       },
       after: async ({
         result,
@@ -700,7 +717,12 @@ export class Agent<
       toolsets,
     });
 
-    const { threadId, messageObjects, convertedTools } = await before();
+    const { threadId, messageObjects, convertedTools, rememberedMessages } = await before();
+
+    if (rememberedMessages && rememberedMessages.length > 0) {
+      context ||= [];
+      context.push(...rememberedMessages);
+    }
 
     if (output === 'text') {
       const result = await this.llm.__text({
@@ -785,7 +807,12 @@ export class Agent<
       toolsets,
     });
 
-    const { threadId, messageObjects, convertedTools } = await before();
+    const { threadId, messageObjects, convertedTools, rememberedMessages } = await before();
+
+    if (rememberedMessages && rememberedMessages.length > 0) {
+      context ||= [];
+      context.push(...rememberedMessages);
+    }
 
     if (output === 'text') {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
