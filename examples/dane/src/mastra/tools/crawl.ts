@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core';
 import { z } from 'zod';
 
-import { firecrawl } from '../integrations';
+import { firecrawl } from '../integrations/index.js';
 
 export const crawl = createTool({
   id: 'crawler',
