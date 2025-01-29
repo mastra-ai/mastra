@@ -1,7 +1,7 @@
 {
   "name": "stream-object-structured",
   "type": "module",
-  "version": "0.0.1-alpha.19",
+  "version": "0.0.1-alpha.20",
   "private": true,
   "scripts": {
     "start": "pnpx tsx index.ts"

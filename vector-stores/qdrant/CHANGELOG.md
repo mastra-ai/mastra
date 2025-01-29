@@ -1,5 +1,12 @@
 # @mastra/vector-qdrant
 
+## 0.0.1-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [21fe536]
+  - @mastra/core@0.1.27-alpha.79
+
 ## 0.0.1-alpha.11
 
 ### Patch Changes

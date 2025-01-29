@@ -1,6 +1,6 @@
 {
   "name": "@mastra/stabilityai",
-  "version": "1.0.1-alpha.53",
+  "version": "1.0.1-alpha.54",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/stabilityai.esm.js",

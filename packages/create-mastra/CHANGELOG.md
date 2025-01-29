@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.0-alpha.30
+
+### Patch Changes
+
+- 21fe536: add keyword tags for packages and update readmes
+
 ## 0.1.0-alpha.29
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.79
+
+### Patch Changes
+
+- 21fe536: add keyword tags for packages and update readmes
+
 ## 0.1.27-alpha.78
 
 ### Patch Changes
