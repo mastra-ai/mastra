@@ -44,7 +44,13 @@ export type MessageResponse<T extends 'raw' | 'core_message'> = {
 
 export type MemoryConfig = {
   injectRecentMessages?: number | false;
-  injectVectorHistorySearch?: boolean;
+  injectVectorHistorySearch?:
+    | boolean
+    | {
+        includeResults: number;
+        includePrevious: number;
+        includeNext: number;
+      };
   // TODO:
   // injectWorkingMemory?: boolean;
 };
@@ -116,6 +122,7 @@ export abstract class MastraMemory extends MastraBase {
         vectorSearchString:
           threadConfig.injectVectorHistorySearch && vectorMessageSearch ? vectorMessageSearch : undefined,
       },
+      threadConfig: config,
     });
 
     this.logger.info(`Remembered message history includes ${messages.messages.length} messages.`);

@@ -1,5 +1,5 @@
 import { MastraBase } from '../base';
-import { MessageType, ThreadType } from '../memory';
+import { MemoryConfig, MessageType, ThreadType } from '../memory';
 import { WorkflowRunState } from '../workflows';
 
 export interface StorageColumn {
@@ -21,7 +21,13 @@ export type StorageGetMessagesArg = {
   selectBy?: {
     vectorSearchString?: string;
     last?: number | false;
+    include?: {
+      id: string;
+      withPreviousMessages?: number;
+      withNextMessages?: number;
+    }[];
   };
+  threadConfig?: MemoryConfig;
 };
 
 export type TABLE_NAMES = typeof MastraStorage.TABLE_WORKFLOWS | typeof MastraStorage.TABLE_EVALS;

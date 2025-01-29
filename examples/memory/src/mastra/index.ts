@@ -1,6 +1,6 @@
 import { Mastra } from '@mastra/core';
 import { Memory } from '@mastra/memory';
-// import { PgVector } from '@mastra/rag';
+import { PgVector } from '@mastra/rag';
 import { PostgresStore } from '@mastra/store-pg';
 
 import 'dotenv/config';
@@ -16,11 +16,16 @@ if (!connectionString) {
 const memory = new Memory({
   threads: {
     injectRecentMessages: 10,
+    injectVectorHistorySearch: {
+      includeResults: 3,
+      includePrevious: 2,
+      includeNext: 2,
+    },
   },
   storage: new PostgresStore({
     connectionString,
   }),
-  // vector: new PgVector(connectionString),
+  vector: new PgVector(connectionString),
 });
 
 export const mastra = new Mastra({
