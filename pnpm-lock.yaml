@@ -113,7 +113,7 @@ importers:
         version: 9.5.2
       netlify-cli:
         specifier: ^18.0.1
-        version: 18.0.3(@azure/cosmos@4.2.0)(@azure/identity@4.6.0)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/node@22.12.0)(@upstash/redis@1.34.3)(bufferutil@4.0.9)(encoding@0.1.13)(picomatch@4.0.2)(rollup@4.32.1)(utf-8-validate@6.0.5)
+        version: 18.0.1(@azure/cosmos@4.2.0)(@azure/identity@4.6.0)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/node@22.12.0)(@upstash/redis@1.34.3)(bufferutil@4.0.9)(encoding@0.1.13)(picomatch@4.0.2)(rollup@4.32.1)(utf-8-validate@6.0.5)
       zod:
         specifier: ^3.24.1
         version: 3.24.1
@@ -296,6 +296,60 @@ importers:
         specifier: ^5.7.3
         version: 5.7.3
 
+  examples/basics/agents/agentic-workflows:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/agents/bird-checker:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/agents/hierarchical-multi-agent:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/agents/multi-agent-workflow:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/agents/system-prompt:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/agents/using-a-tool:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
   examples/basics/llms/generate-object-structured:
     dependencies:
       '@mastra/core':
@@ -361,6 +415,272 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
+
+  examples/basics/rag/adjust-chunk-delimiters:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/adjust-chunk-size:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/basic-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/chunk-html:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/chunk-json:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/chunk-markdown:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/chunk-text:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/cleanup-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/cot-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/cot-workflow-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/rag/embed-chunk-array:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/embed-text-chunk:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/embed-text-with-cohere:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/filter-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/graph-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/hybrid-vector-search:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/insert-embedding-in-pgvector:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+
+  examples/basics/rag/insert-embedding-in-pinecone:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pinecone':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pinecone
+
+  examples/basics/rag/metadata-extraction:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/rerank-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/retrieve-results:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pinecone':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pinecone
+
+  examples/basics/workflows/calling-agent-from-workflow:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/calling-llm-from-workflow:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/create-workflow:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/tool-as-workflow-step:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/workflow-with-branching-paths:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/workflow-with-cyclical-deps:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/workflow-with-parallel-steps:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/workflow-with-sequential-steps:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
 
   examples/bird-checker-with-express:
     dependencies:
@@ -2320,9 +2640,9 @@ importers:
       '@types/node':
         specifier: ^22.9.0
         version: 22.12.0
-      dts-cli:
-        specifier: ^2.0.5
-        version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.7))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.7))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.12.0)(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5)
+      tsup:
+        specifier: ^8.0.1
+        version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       vitest:
         specifier: ^3.0.4
         version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
@@ -3944,6 +4264,10 @@ packages:
 
   '@babel/types@7.17.0':
     resolution: {integrity: sha512-TmKSNO4D5rzhL5bjWFcVHHLETzfQ/AmbKpKPOSjlP0WoHZ6L911fgoOKY4Alp/emzG4cHJdyN49zpgkbXFEHHw==}
+    engines: {node: '>=6.9.0'}
+
+  '@babel/types@7.26.3':
+    resolution: {integrity: sha512-vN5p+1kl59GVKMvTHt55NzzmYVxprfJD+ql7U9NFIfKCBkYE55LYtS+WtPlaYOyzydrKI8Nezd+aZextrd+FMA==}
     engines: {node: '>=6.9.0'}
 
   '@babel/types@7.26.5':
@@ -6209,8 +6533,8 @@ packages:
     engines: {node: ^14.16.0 || >=16.0.0}
     hasBin: true
 
-  '@netlify/build@29.58.8':
-    resolution: {integrity: sha512-WzdZ8QJ5Z3aFGlWAGcQQ+JawsE8S2NcpxISlDkPQz6BSpF/8W/MwtA/N55MPelZLopZPj25f86+oYKmQAOUX0g==}
+  '@netlify/build@29.58.2':
+    resolution: {integrity: sha512-/kb5jkPifwzea26paiayiw417nqk/1Q4S1WZzjrqClEmyW9kEzJ7J3xCbpVZw7KBOCK7IaYbx+6MkiZtr7I9xQ==}
     engines: {node: ^14.16.0 || >=16.0.0}
     hasBin: true
     peerDependencies:
@@ -6223,6 +6547,11 @@ packages:
   '@netlify/cache-utils@5.2.0':
     resolution: {integrity: sha512-kKzGQ9gKNRUjqFMC1/1goeTe1WfzL6KhphwXac7tialowg10Dtmr2X+eDzfH9enGvD6vhYR4a0QMTQWkjfPVmg==}
     engines: {node: ^14.16.0 || >=16.0.0}
+
+  '@netlify/config@20.21.2':
+    resolution: {integrity: sha512-W1D3yc79VU7B8L0h4iREjaCpQbudPAQTnmkNLlJhuvLDJn6SlsDiitGDvUpp+9VYAhwX5SJgYMvDGOlbWk+tMA==}
+    engines: {node: ^14.16.0 || >=16.0.0}
+    hasBin: true
 
   '@netlify/config@20.21.7':
     resolution: {integrity: sha512-SoXHbUoJyj/XcIAmyHxJ4orD19nmjQWgycxZsVRUSpUu/JouV8nmD/kzMJinFbzgJdXXTcKWDCnDbpfRZE4q8Q==}
@@ -6356,6 +6685,11 @@ packages:
   '@netlify/serverless-functions-api@1.32.0':
     resolution: {integrity: sha512-dRKNGox2wdKb8ONoMc4mtLyUSxYvCYDFM1iyJUCb+9Nit9Azvtr8htD9D8z9bH1L4MKraHJJE756OSfLL3jduQ==}
     engines: {node: '>=18.0.0'}
+
+  '@netlify/zip-it-and-ship-it@9.42.2':
+    resolution: {integrity: sha512-2J+Nc2XkTmcb0Q3D/Mk+wmMUS6VVyLaIyn+A/GET6sKG+FSTJkH2mzgPfCUSIfSb+yae/ll8FYyH7Ym//6F/bA==}
+    engines: {node: ^14.18.0 || >=16.0.0}
+    hasBin: true
 
   '@netlify/zip-it-and-ship-it@9.42.4':
     resolution: {integrity: sha512-Oj3c8GR52H6yWjkP5EjLRP0bxGyx8UjrB0WYWF0bzFY+nTaeMBmqtmO8eGl/jgto7Jus6NaCmHYMUmT3ybjBRA==}
@@ -9597,6 +9931,10 @@ packages:
   ajv@8.6.3:
     resolution: {integrity: sha512-SMJOdDP6LqTkD0Uq8qLi+gMwSt0imXLSV080qFVwJCpH9U6Mb+SUGHAXM0KNbcBPguytWyvFxcHgMLe2D2XSpw==}
 
+  all-node-versions@11.3.0:
+    resolution: {integrity: sha512-psMkc5s3qpr+QMfires9bC4azRYciPWql1wqZKMsYRh1731qefQDH2X4+O19xSBX6u0Ra/8Y5diG6y/fEmqKsw==}
+    engines: {node: '>=14.18.0'}
+
   already@2.2.1:
     resolution: {integrity: sha512-qk6RIVMS/R1yTvBzfIL1T76PsIL7DIVCINoLuFw2YXKLpLtsTobqdChMs8m3OhuPS3CEE3+Ra5ibYiqdyogbsQ==}
 
@@ -10022,6 +10360,9 @@ packages:
   bluebird@3.4.7:
     resolution: {integrity: sha512-iD3898SR7sWVRHbiQv+sHUtHnMvC1o3nW5rAcqnq3uOn07DSAppZYUkIGslDz6gXC7HfunPe7YVBgoEJASPcHA==}
 
+  blueimp-md5@2.19.0:
+    resolution: {integrity: sha512-DRQrD6gJyy8FbiE4s+bDoXS9hiW3Vbx5uCdwvcCf3zLHL+Iv7LtGHLpr+GZV8rHG8tK766FGYBwRbu8pELTt+w==}
+
   body-parser@1.20.3:
     resolution: {integrity: sha512-7rAxByjUMqQ3/bHJy7D6OGXvx/MMc4IqBn/X0fcM1QUcAItpZrBEYhWGem+tzXH90c+G01ypMcYJBO9Y30203g==}
     engines: {node: '>= 0.8', npm: 1.2.8000 || >= 1.4.16}
@@ -10150,6 +10491,10 @@ packages:
   cacheable-request@10.2.14:
     resolution: {integrity: sha512-zkDT5WAF4hSSoUgyfg5tFIxz8XQK+25W/TLVojJTMKBaxevLBBtLxgqguAuVQB8PVW79FVjHcU+GJ9tVbDZ9mQ==}
     engines: {node: '>=14.16'}
+
+  cachedir@2.4.0:
+    resolution: {integrity: sha512-9EtFOZR8g22CL7BWjJ9BUx1+A/djkofnyW3aOXZORNW2kxoUpx2h+uN2cOqwPmFhnpVmxg+KW2OjOSgChTEvsQ==}
+    engines: {node: '>=6'}
 
   call-bind-apply-helpers@1.0.1:
     resolution: {integrity: sha512-BhYE+WDaywFg2TBWYNXAE+8B1ATnThNBqXHP5nQu0jWJdVvY2hvkpyB3qOmtmDePiS5/BDQ8wASEWGMWRG148g==}
@@ -10518,6 +10863,10 @@ packages:
     resolution: {integrity: sha512-DP3FpjsiDDvnQC1OJBsdOJZPuy7r0o6sepY2T5M3L/d2nrE23O/ErFkEqyY3ngVL1ZhTj/H0pCMNObZGkEOaaQ==}
     engines: {node: '>=12.20.0'}
 
+  colors-option@4.5.0:
+    resolution: {integrity: sha512-Soe5lerRg3erMRgYC0EC696/8dMCGpBzcQchFfi55Yrkja8F+P7cUt0LVTIg7u5ob5BexLZ/F1kO+ejmv+nq8w==}
+    engines: {node: '>=14.18.0'}
+
   colors@1.0.3:
     resolution: {integrity: sha512-pFGrxThWcWQ2MsAz6RtgeWe4NK2kUE1WfsrvvlctdII745EW9I0yflqhe7++M5LEc7bV2c/9/5zc8sFcpL0Drw==}
     engines: {node: '>=0.1.90'}
@@ -10604,6 +10953,10 @@ packages:
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
+
+  concordance@5.0.4:
+    resolution: {integrity: sha512-OAcsnTEYu1ARJqWVGwf4zh4JDfHZEaSNlNccFmt8YjB2l/n19/PF2viLINHc57vO4FKIAFl2FWASIGZZWZ2Kxw==}
+    engines: {node: '>=10.18.0 <11 || >=12.14.0 <13 || >=14'}
 
   concurrently@9.1.2:
     resolution: {integrity: sha512-H9MWcoPsYddwbOGM6difjVwVZHl63nwMEwDJG/L7VGtuaJhb12h2caPG2tVPWs7emuYix252iGfqOyrz1GczTQ==}
@@ -11030,6 +11383,10 @@ packages:
 
   date-fns@4.1.0:
     resolution: {integrity: sha512-Ukq0owbQXxa/U3EGtsdVBkR1w7KOQ5gIBqdH2hkvknzZPYvBxb/aa6E8L7tmjFtkwZBu3UXBbjIgPo/Ez4xaNg==}
+
+  date-time@3.1.0:
+    resolution: {integrity: sha512-uqCUKXE5q1PNBXjPqvwhwJf9SwMoAHBgWJ6DcrnS5o+W2JOiIILl0JEdVD8SGujrNS02GGxgwAg2PN2zONgtjg==}
+    engines: {node: '>=6'}
 
   dateformat@4.6.3:
     resolution: {integrity: sha512-2P0p0pFGzHS5EMnhdxQi7aJN+iMheud0UhG4dlE1DLAlvL8JHjJJTX/CSm4JXwV0Ka5nGk3zC5mcb5bUQUxxMA==}
@@ -12448,6 +12805,10 @@ packages:
     resolution: {integrity: sha512-Lo6UPdMKKc9Ond7yjG2vq0mnocspOLh1oV6+XZdtfdexacvMSz5xm3WoQhTAdoR2+UqPlyMNqcqfecipoD+l/A==}
     engines: {node: '>=12'}
 
+  fetch-node-website@7.3.0:
+    resolution: {integrity: sha512-/wayUHbdVUWrD72aqRNNrr6+MHnCkumZgNugN0RfiWJpbNJUdAkMk4Z18MGayGZVVqYXR1RWrV+bIFEt5HuBZg==}
+    engines: {node: '>=14.18.0'}
+
   figlet@1.8.0:
     resolution: {integrity: sha512-chzvGjd+Sp7KUvPHZv6EXV5Ir3Q7kYNpCr4aHrRW79qFtTefmQZNny+W1pW9kf5zeE6dikku2W50W/wAH2xWgw==}
     engines: {node: '>= 0.4.0'}
@@ -12871,6 +13232,10 @@ packages:
     resolution: {integrity: sha512-r8hpEjiQEYlF2QU0df3dS+nxxSIreXQS1qRhMJM0Q5NDdR386C7jb7Hwwod8Fgiuex+k0GFjgft18yvxm5XoCQ==}
     engines: {node: '>=12'}
     deprecated: Glob versions prior to v9 are no longer supported
+
+  global-cache-dir@4.4.0:
+    resolution: {integrity: sha512-bk0gI6IbbphRjAaCJJn5H+T/CcEck5B3a5KBO2BXSDzjFSV+API17w8GA7YPJ6IXJiasW8M0VsEIig1PCHdfOQ==}
+    engines: {node: '>=14.18.0'}
 
   global-directory@4.0.1:
     resolution: {integrity: sha512-wHTUcDUoZ1H5/0iVqEudYW4/kAlN5cZ3j/bXn0Dpbizl9iaUVeWSHqiOjsgk6OW2bkLclbBjzewBz6weQ1zA2Q==}
@@ -13997,6 +14362,10 @@ packages:
   js-base64@3.7.7:
     resolution: {integrity: sha512-7rCnleh0z2CkXhH67J8K1Ytz0b2Y+yxTPL+/KOJoa20hfnVQ/3/T6W/KflYI4bRHRagNeXeU2bkNGI3v1oS/lw==}
 
+  js-string-escape@1.0.1:
+    resolution: {integrity: sha512-Smw4xcfIQ5LVjAOuJCvN/zIodzA/BBSsluuoSykP+lUvScIi4U6RJLfwHet5cxFnCswUjISV8oAXaqaJDY3chg==}
+    engines: {node: '>= 0.8'}
+
   js-tiktoken@1.0.16:
     resolution: {integrity: sha512-nUVdO5k/M9llWpiaZlBBDdtmr6qWXwSD6fgaDu2zM8UP+OXxx9V37lFkI6w0/1IuaDx7WffZ37oYd9KvcWKElg==}
 
@@ -14720,6 +15089,10 @@ packages:
   md-utils-ts@2.0.0:
     resolution: {integrity: sha512-sMG6JtX0ebcRMHxYTcmgsh0/m6o8hGdQHFE2OgjvflRZlQM51CGGj/uuk056D+12BlCiW0aTpt/AdlDNtgQiew==}
 
+  md5-hex@3.0.1:
+    resolution: {integrity: sha512-BUiRtTtV39LIJwinWBjqVsU9xhdnz7/i889V859IBFpuqGAj6LuOvHv5XLbgZ2R7ptJoJaEcxkv88/h25T7Ciw==}
+    engines: {node: '>=8'}
+
   mdast-util-find-and-replace@3.0.2:
     resolution: {integrity: sha512-Tmd1Vg/m3Xz43afeNxDIhWRtFZgM2VLyaf4vSTYwudTyeuTneoL3qtWMA5jeLyz/O1vDJmmV4QuScFCA2tBPwg==}
 
@@ -15250,13 +15623,17 @@ packages:
   nested-error-stacks@2.1.1:
     resolution: {integrity: sha512-9iN1ka/9zmX1ZvLV9ewJYEk9h7RyRRtqdK0woXcqohu8EWIerfPUjYJPg0ULy0UqP7cslmdGc8xKDJcojlKiaw==}
 
-  netlify-cli@18.0.3:
-    resolution: {integrity: sha512-Eh+oalM9RhIqlSEyuxi1IVhbYZ+DJsrTajhMHCc1mWd7Xt6eWyessIAGmN4zzZ9qLLIxz/dqVbGVIc0oLqHY+w==}
+  netlify-cli@18.0.1:
+    resolution: {integrity: sha512-sH5hQKKb2q7xBqdBKh9HDyezuzfauE/D/P7O81+tkyjyQd/IGoxTp4V7O7M8+pRgQlq6fq6LCnF6umW5V1P5GA==}
     engines: {node: '>=18.14.0'}
     hasBin: true
 
   netlify-redirector@0.5.0:
     resolution: {integrity: sha512-4zdzIP+6muqPCuE8avnrgDJ6KW/2+UpHTRcTbMXCIRxiRmyrX+IZ4WSJGZdHPWF3WmQpXpy603XxecZ9iygN7w==}
+
+  netlify@13.2.1:
+    resolution: {integrity: sha512-H74wp5O8Rxv1pRHSd+Ewc9pmw4ZDaH9B3C9Wtj7LB5BeE9gZwZyrXkSoSAHZlN9R5cnkI93CwBBfTaWdWy663Q==}
+    engines: {node: ^14.16.0 || >=16.0.0}
 
   netlify@13.3.3:
     resolution: {integrity: sha512-6FKRoqzos9WZi9J2oac8+tEY5wbzhtt/JnTnCW7ymL9coJ47R9aRWFu1LUSJtYUbKq38Bi0o00T7X6XYyrEdrg==}
@@ -15572,6 +15949,10 @@ packages:
     resolution: {integrity: sha512-LN4fydt9TqhZhThkZIVQnF9cwjU3qmUH9h78Mx/K7d3VvfRqqwthLwJEUOEL0QPZ0XQmNN7be5Ggit5+4dq3Bw==}
     engines: {node: '>=0.12.0'}
 
+  node-version-alias@3.4.1:
+    resolution: {integrity: sha512-Kf3L9spAL6lEHMPyqpwHSTNG3LPkOXBfSUnBMG/YE2TdoC8Qoqf0+qg01nr6K9MFQEcXtWUyTQzLJByRixSBsA==}
+    engines: {node: '>=14.18.0'}
+
   nodemon@3.1.9:
     resolution: {integrity: sha512-hdr1oIb2p6ZSxu3PB2JWWYS7ZQ0qvaZsc3hK8DR8f02kRzc8rjYmxAIvdz+aYC+8F2IjNaB7HMcSDg8nQpJxyg==}
     engines: {node: '>=10'}
@@ -15586,6 +15967,10 @@ packages:
     resolution: {integrity: sha512-ieGu42u/Qsa4TFktmaKEwM6MQH0pOWnaB3htzh0JRtx84+Mebc0cbZYN5bC+6WTZ4+77xrL9Pn5m7CV6VIkV7A==}
     engines: {node: ^18.17.0 || >=20.5.0}
     hasBin: true
+
+  normalize-node-version@12.4.0:
+    resolution: {integrity: sha512-0oLZN5xcyKVrSHMk8/9RuNblEe7HEsXAt5Te2xmMiZD9VX7bqWYe0HMyfqSYFD3xv0949lZuXaEwjTqle1uWWQ==}
+    engines: {node: '>=14.18.0'}
 
   normalize-package-data@2.5.0:
     resolution: {integrity: sha512-/5CMN3T0R4XTj4DcGaexo+roZSdSFW/0AOOTROrjxzCG1wrWXEsGbRKevjlIL+ZDE4sZlJr5ED4YW0yqmkK+eA==}
@@ -18197,6 +18582,10 @@ packages:
     resolution: {integrity: sha512-MyqZCTGLDZ77u4k+jqg4UlrzPTPZ49NDlaekU6uuFaJLzPIN1woaRXCbGeqOfxwc3Y37ZROGAJ614Rdv7Olt+g==}
     engines: {node: '>=10'}
 
+  time-zone@1.0.0:
+    resolution: {integrity: sha512-TIsDdtKo6+XrPtiTm1ssmMngN1sAhyKnTO2kunQWqNPWIVvCm15Wmw4SWInwTVgJ5u/Tr04+8Ei9TNcw4x4ONA==}
+    engines: {node: '>=4'}
+
   tiny-glob@0.2.9:
     resolution: {integrity: sha512-g/55ssRPUjShh+xkfx9UPDXqhckHEsHr4Vd9zX55oSdGZc/MD0m3sferOkwWtp98bv+kcVfEHtRJgBVJzelrzg==}
 
@@ -19218,6 +19607,10 @@ packages:
   websocket@1.0.35:
     resolution: {integrity: sha512-/REy6amwPZl44DDzvRCkaI1q1bIiQB0mEFQLUrhz3z2EK91cp3n72rAjUlrTP0zV22HJIUOVHQGPxhFRjxjt+Q==}
     engines: {node: '>=4.0.0'}
+
+  well-known-symbols@2.0.0:
+    resolution: {integrity: sha512-ZMjC3ho+KXo0BfJb7JgtQ5IBuvnShdlACNkKkdsqBmYw3bPAaJfPeYUo6tLUaT5tG/Gkh7xkpBhKRQ9e7pyg9Q==}
+    engines: {node: '>=6'}
 
   whatwg-encoding@2.0.0:
     resolution: {integrity: sha512-p41ogyeMUrw3jWclHWTQg1k05DSVXPLcVxRTYsXUk+ZooOCZLcoYgPZ/HL/D/N+uQPOtcp1me1WhBEaX02mhWg==}
@@ -21407,6 +21800,11 @@ snapshots:
     dependencies:
       '@babel/helper-validator-identifier': 7.25.9
       to-fast-properties: 2.0.0
+
+  '@babel/types@7.26.3':
+    dependencies:
+      '@babel/helper-string-parser': 7.25.9
+      '@babel/helper-validator-identifier': 7.25.9
 
   '@babel/types@7.26.5':
     dependencies:
@@ -23659,7 +24057,7 @@ snapshots:
       yaml: 2.7.0
       yargs: 17.7.2
 
-  '@netlify/build@29.58.8(@opentelemetry/api@1.8.0)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/node@22.12.0)(encoding@0.1.13)(picomatch@4.0.2)(rollup@4.32.1)':
+  '@netlify/build@29.58.2(@opentelemetry/api@1.8.0)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/node@22.12.0)(encoding@0.1.13)(picomatch@4.0.2)(rollup@4.32.1)':
     dependencies:
       '@bugsnag/js': 7.25.0
       '@netlify/blobs': 7.4.0
@@ -23672,7 +24070,7 @@ snapshots:
       '@netlify/opentelemetry-utils': 1.3.0(@opentelemetry/api@1.8.0)
       '@netlify/plugins-list': 6.80.0
       '@netlify/run-utils': 5.2.0
-      '@netlify/zip-it-and-ship-it': 9.42.4(encoding@0.1.13)(rollup@4.32.1)(supports-color@9.4.0)
+      '@netlify/zip-it-and-ship-it': 9.42.2(encoding@0.1.13)(rollup@4.32.1)(supports-color@9.4.0)
       '@opentelemetry/api': 1.8.0
       '@sindresorhus/slugify': 2.2.1
       ansi-escapes: 6.2.1
@@ -23738,6 +24136,33 @@ snapshots:
       move-file: 3.1.0
       path-exists: 5.0.0
       readdirp: 3.6.0
+
+  '@netlify/config@20.21.2':
+    dependencies:
+      '@iarna/toml': 2.2.5
+      '@netlify/headers-parser': 7.3.0
+      '@netlify/redirect-parser': 14.5.0
+      chalk: 5.4.1
+      cron-parser: 4.9.0
+      deepmerge: 4.3.1
+      dot-prop: 7.2.0
+      execa: 7.2.0
+      fast-safe-stringify: 2.1.1
+      figures: 5.0.0
+      filter-obj: 5.1.0
+      find-up: 6.3.0
+      indent-string: 5.0.0
+      is-plain-obj: 4.1.0
+      js-yaml: 4.1.0
+      map-obj: 5.0.2
+      netlify: 13.3.3
+      node-fetch: 3.3.2
+      omit.js: 2.0.2
+      p-locate: 6.0.0
+      path-type: 5.0.0
+      tomlify-j0.4: 3.0.0
+      validate-npm-package-name: 4.0.0
+      yargs: 17.7.2
 
   '@netlify/config@20.21.7':
     dependencies:
@@ -23946,10 +24371,10 @@ snapshots:
       '@netlify/node-cookies': 0.1.0
       urlpattern-polyfill: 8.0.2
 
-  '@netlify/zip-it-and-ship-it@9.42.4(encoding@0.1.13)(rollup@4.32.1)':
+  '@netlify/zip-it-and-ship-it@9.42.2(encoding@0.1.13)(rollup@4.32.1)':
     dependencies:
       '@babel/parser': 7.26.7
-      '@babel/types': 7.26.5
+      '@babel/types': 7.26.3
       '@netlify/binary-info': 1.0.0
       '@netlify/serverless-functions-api': 1.32.0
       '@vercel/nft': 0.27.7(encoding@0.1.13)(rollup@4.32.1)
@@ -23973,6 +24398,47 @@ snapshots:
       p-map: 7.0.3
       path-exists: 5.0.0
       precinct: 11.0.5
+      require-package-name: 2.0.1
+      resolve: 2.0.0-next.5
+      semver: 7.6.3
+      tmp-promise: 3.0.3
+      toml: 3.0.0
+      unixify: 1.0.0
+      urlpattern-polyfill: 8.0.2
+      yargs: 17.7.2
+      zod: 3.24.1
+    transitivePeerDependencies:
+      - encoding
+      - rollup
+      - supports-color
+
+  '@netlify/zip-it-and-ship-it@9.42.2(encoding@0.1.13)(rollup@4.32.1)(supports-color@9.4.0)':
+    dependencies:
+      '@babel/parser': 7.26.7
+      '@babel/types': 7.26.3
+      '@netlify/binary-info': 1.0.0
+      '@netlify/serverless-functions-api': 1.32.0
+      '@vercel/nft': 0.27.7(encoding@0.1.13)(rollup@4.32.1)(supports-color@9.4.0)
+      archiver: 7.0.1
+      common-path-prefix: 3.0.0
+      cp-file: 10.0.0
+      es-module-lexer: 1.6.0
+      esbuild: 0.19.11
+      execa: 7.2.0
+      fast-glob: 3.3.3
+      filter-obj: 5.1.0
+      find-up: 6.3.0
+      glob: 8.1.0
+      is-builtin-module: 3.2.1
+      is-path-inside: 4.0.0
+      junk: 4.0.1
+      locate-path: 7.2.0
+      merge-options: 3.0.4
+      minimatch: 9.0.5
+      normalize-path: 3.0.0
+      p-map: 7.0.3
+      path-exists: 5.0.0
+      precinct: 11.0.5(supports-color@9.4.0)
       require-package-name: 2.0.1
       resolve: 2.0.0-next.5
       semver: 7.6.3
@@ -28818,6 +29284,17 @@ snapshots:
       require-from-string: 2.0.2
       uri-js: 4.4.1
 
+  all-node-versions@11.3.0:
+    dependencies:
+      fetch-node-website: 7.3.0
+      filter-obj: 5.1.0
+      get-stream: 6.0.1
+      global-cache-dir: 4.4.0
+      is-plain-obj: 4.1.0
+      path-exists: 5.0.0
+      semver: 7.6.3
+      write-file-atomic: 4.0.2
+
   already@2.2.1: {}
 
   ansi-align@3.0.1:
@@ -29292,6 +29769,8 @@ snapshots:
 
   bluebird@3.4.7: {}
 
+  blueimp-md5@2.19.0: {}
+
   body-parser@1.20.3:
     dependencies:
       bytes: 3.1.2
@@ -29485,6 +29964,8 @@ snapshots:
       mimic-response: 4.0.0
       normalize-url: 8.0.1
       responselike: 3.0.0
+
+  cachedir@2.4.0: {}
 
   call-bind-apply-helpers@1.0.1:
     dependencies:
@@ -29869,6 +30350,11 @@ snapshots:
       is-plain-obj: 4.1.0
       jest-validate: 27.5.1
 
+  colors-option@4.5.0:
+    dependencies:
+      chalk: 5.4.1
+      is-plain-obj: 4.1.0
+
   colors@1.0.3: {}
 
   colors@1.4.0: {}
@@ -30039,6 +30525,17 @@ snapshots:
   compute-scroll-into-view@3.1.1: {}
 
   concat-map@0.0.1: {}
+
+  concordance@5.0.4:
+    dependencies:
+      date-time: 3.1.0
+      esutils: 2.0.3
+      fast-diff: 1.3.0
+      js-string-escape: 1.0.1
+      lodash: 4.17.21
+      md5-hex: 3.0.1
+      semver: 7.6.3
+      well-known-symbols: 2.0.0
 
   concurrently@9.1.2:
     dependencies:
@@ -30538,6 +31035,10 @@ snapshots:
   date-fns@3.6.0: {}
 
   date-fns@4.1.0: {}
+
+  date-time@3.1.0:
+    dependencies:
+      time-zone: 1.0.0
 
   dateformat@4.6.3: {}
 
@@ -32387,6 +32888,14 @@ snapshots:
       to-arraybuffer: 1.0.1
       tough-cookie: 4.1.4
 
+  fetch-node-website@7.3.0:
+    dependencies:
+      cli-progress: 3.12.0
+      colors-option: 4.5.0
+      figures: 5.0.0
+      got: 12.6.1
+      is-plain-obj: 4.1.0
+
   figlet@1.8.0: {}
 
   figures@2.0.0:
@@ -32869,6 +33378,11 @@ snapshots:
       inherits: 2.0.4
       minimatch: 5.1.6
       once: 1.4.0
+
+  global-cache-dir@4.4.0:
+    dependencies:
+      cachedir: 2.4.0
+      path-exists: 5.0.0
 
   global-directory@4.0.1:
     dependencies:
@@ -34482,6 +34996,8 @@ snapshots:
 
   js-base64@3.7.7: {}
 
+  js-string-escape@1.0.1: {}
+
   js-tiktoken@1.0.16:
     dependencies:
       base64-js: 1.5.1
@@ -35305,6 +35821,10 @@ snapshots:
 
   md-utils-ts@2.0.0: {}
 
+  md5-hex@3.0.1:
+    dependencies:
+      blueimp-md5: 2.19.0
+
   mdast-util-find-and-replace@3.0.2:
     dependencies:
       '@types/mdast': 4.0.4
@@ -36109,23 +36629,24 @@ snapshots:
 
   nested-error-stacks@2.1.1: {}
 
-  netlify-cli@18.0.3(@azure/cosmos@4.2.0)(@azure/identity@4.6.0)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/node@22.12.0)(@upstash/redis@1.34.3)(bufferutil@4.0.9)(encoding@0.1.13)(picomatch@4.0.2)(rollup@4.32.1)(utf-8-validate@6.0.5):
+  netlify-cli@18.0.1(@azure/cosmos@4.2.0)(@azure/identity@4.6.0)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/node@22.12.0)(@upstash/redis@1.34.3)(bufferutil@4.0.9)(encoding@0.1.13)(picomatch@4.0.2)(rollup@4.32.1)(utf-8-validate@6.0.5):
     dependencies:
       '@bugsnag/js': 7.25.0
       '@fastify/static': 7.0.4
       '@netlify/blobs': 8.1.0
-      '@netlify/build': 29.58.8(@opentelemetry/api@1.8.0)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/node@22.12.0)(encoding@0.1.13)(picomatch@4.0.2)(rollup@4.32.1)
+      '@netlify/build': 29.58.2(@opentelemetry/api@1.8.0)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/node@22.12.0)(encoding@0.1.13)(picomatch@4.0.2)(rollup@4.32.1)
       '@netlify/build-info': 8.0.0
-      '@netlify/config': 20.21.7
+      '@netlify/config': 20.21.2
       '@netlify/edge-bundler': 12.3.2(encoding@0.1.13)(rollup@4.32.1)
       '@netlify/edge-functions': 2.11.1
       '@netlify/headers-parser': 7.3.0
       '@netlify/local-functions-proxy': 1.1.1
       '@netlify/redirect-parser': 14.5.0
-      '@netlify/zip-it-and-ship-it': 9.42.4(encoding@0.1.13)(rollup@4.32.1)
+      '@netlify/zip-it-and-ship-it': 9.42.2(encoding@0.1.13)(rollup@4.32.1)
       '@octokit/rest': 20.1.1
       '@opentelemetry/api': 1.8.0
       ansi-escapes: 7.0.0
+      ansi-styles: 6.2.1
       ansi-to-html: 0.7.2
       ascii-table: 0.0.9
       backoff: 2.5.0
@@ -36137,6 +36658,7 @@ snapshots:
       clean-deep: 3.4.0
       commander: 10.0.1
       comment-json: 4.2.5
+      concordance: 5.0.4
       configstore: 6.0.0
       content-type: 1.0.5
       cookie: 0.7.2
@@ -36185,9 +36707,10 @@ snapshots:
       maxstache: 1.0.7
       maxstache-stream: 1.0.4
       multiparty: 4.2.3
-      netlify: 13.3.3
+      netlify: 13.2.1
       netlify-redirector: 0.5.0
       node-fetch: 3.3.2
+      node-version-alias: 3.4.1
       ora: 8.1.1
       p-filter: 4.1.0
       p-map: 7.0.3
@@ -36250,6 +36773,16 @@ snapshots:
       - utf-8-validate
 
   netlify-redirector@0.5.0: {}
+
+  netlify@13.2.1:
+    dependencies:
+      '@netlify/open-api': 2.36.0
+      lodash-es: 4.17.21
+      micro-api-client: 3.3.0
+      node-fetch: 3.3.2
+      omit.js: 2.0.2
+      p-wait-for: 5.0.2
+      qs: 6.14.0
 
   netlify@13.3.3:
     dependencies:
@@ -36658,6 +37191,15 @@ snapshots:
 
   node-stream-zip@1.15.0: {}
 
+  node-version-alias@3.4.1:
+    dependencies:
+      all-node-versions: 11.3.0
+      filter-obj: 5.1.0
+      is-plain-obj: 4.1.0
+      normalize-node-version: 12.4.0
+      path-exists: 5.0.0
+      semver: 7.6.3
+
   nodemon@3.1.9:
     dependencies:
       chokidar: 3.6.0
@@ -36678,6 +37220,12 @@ snapshots:
   nopt@8.1.0:
     dependencies:
       abbrev: 3.0.0
+
+  normalize-node-version@12.4.0:
+    dependencies:
+      all-node-versions: 11.3.0
+      filter-obj: 5.1.0
+      semver: 7.6.3
 
   normalize-package-data@2.5.0:
     dependencies:
@@ -39896,6 +40444,8 @@ snapshots:
     dependencies:
       convert-hrtime: 3.0.0
 
+  time-zone@1.0.0: {}
+
   tiny-glob@0.2.9:
     dependencies:
       globalyzer: 0.1.0
@@ -41070,6 +41620,8 @@ snapshots:
       yaeti: 0.0.6
     transitivePeerDependencies:
       - supports-color
+
+  well-known-symbols@2.0.0: {}
 
   whatwg-encoding@2.0.0:
     dependencies:
