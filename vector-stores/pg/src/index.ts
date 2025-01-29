@@ -1,7 +1,7 @@
 import { IndexStats, QueryResult, MastraVector } from '@mastra/core';
 import pg from 'pg';
 
-import { Filter, FILTER_OPERATORS, isValidOperator } from './filter';
+import { Filter, FILTER_OPERATORS, isValidOperator, LogicalOperatorFn } from './filter';
 
 export class PgVector extends MastraVector {
   private pool: pg.Pool;
@@ -33,7 +33,7 @@ export class PgVector extends MastraVector {
     topK: number = 10,
     filter?: Filter,
     includeVector: boolean = false,
-    minScore: number = 0,
+    minScore: number = 0, // Optional minimum score threshold
   ): Promise<QueryResult[]> {
     const client = await this.pool.connect();
     try {
@@ -43,13 +43,21 @@ export class PgVector extends MastraVector {
       const buildCondition = (key: string, value: any): string => {
         // Handle logical operators ($and/$or)
         if (key === '$and' || key === '$or') {
-          const conditions = value.map((f: Filter) =>
-            Object.entries(f)
+          const joinOperator = key === '$or' ? 'OR' : 'AND';
+          const conditions = value.map((f: Filter) => {
+            // Check if the first key is a logical operator for nested conditions
+            const [firstKey, firstValue] = Object.entries(f)[0] || [];
+            if (firstKey === '$and' || firstKey === '$or') {
+              return buildCondition(firstKey, firstValue);
+            }
+            // Process all conditions in this filter
+            return Object.entries(f)
               .map(([k, v]) => buildCondition(k, v))
-              .join(' AND '),
-          );
-          const operatorFn = FILTER_OPERATORS[key];
-          return operatorFn(conditions.join(` ${key === '$or' ? 'OR' : 'AND'} `), 0).sql;
+              .join(` ${joinOperator} `);
+          });
+
+          const operatorFn = FILTER_OPERATORS[key] as LogicalOperatorFn;
+          return operatorFn(conditions.join(` ${joinOperator} `)).sql;
         }
 
         // If condition is not a FilterCondition object, assume it's an equality check
@@ -77,35 +85,42 @@ export class PgVector extends MastraVector {
         return operatorResult.sql;
       };
 
-      const filterQuery = filter
-        ? Object.entries(filter)
-            .map(([key, value]) => buildCondition(key, value))
-            .join(' AND ')
-        : '';
+      const buildFilterQuery = (filter: Filter | undefined): string => {
+        if (!filter) {
+          return '';
+        }
+
+        const conditions = Object.entries(filter)
+          .map(([key, value]) => buildCondition(key, value))
+          .join(' AND ');
+
+        return conditions ? `WHERE ${conditions}` : '';
+      };
+
+      const filterQuery = buildFilterQuery(filter);
 
       const query = `
-            WITH vector_scores AS (
-                SELECT
-                    vector_id as id,
-                    1 - (embedding <=> '${vectorStr}'::vector) as score,
-                    metadata
-                    ${includeVector ? ', embedding' : ''}
-                FROM ${indexName}
-                WHERE ${filterQuery || 'true'}
-            )
-            SELECT *
-            FROM vector_scores
-            WHERE score > $1
-            ORDER BY score DESC
-            LIMIT ${topK};
-        `;
+        WITH vector_scores AS (
+          SELECT
+            vector_id as id,
+            1 - (embedding <=> '${vectorStr}'::vector) as score,
+            metadata
+            ${includeVector ? ', embedding' : ''}
+          FROM ${indexName}
+          ${filterQuery}
+        )
+        SELECT *
+        FROM vector_scores
+        WHERE score > $1
+        ORDER BY score DESC
+        LIMIT ${topK}`;
       const result = await client.query(query, filterValues);
 
-      return result.rows.map(row => ({
-        id: row.id,
-        score: row.score,
-        metadata: row.metadata,
-        ...(includeVector && row.embedding && { vector: JSON.parse(row.embedding) }),
+      return result.rows.map(({ id, score, metadata, embedding }) => ({
+        id,
+        score,
+        metadata,
+        ...(includeVector && embedding && { vector: JSON.parse(embedding) }),
       }));
     } finally {
       client.release();

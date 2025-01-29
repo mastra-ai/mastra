@@ -8,6 +8,7 @@ export type OperatorType =
   | 'like'
   | 'ilike'
   | 'in'
+  | 'nin'
   | 'contains'
   | 'exists'
   | '$and'
@@ -24,8 +25,15 @@ type FilterOperator = {
   transformValue?: (value: any) => any;
 };
 
+// Split into two specific function types
+export type LogicalOperatorFn = (key: string) => FilterOperator;
+type StandardOperatorFn = (key: string, paramIndex: number) => FilterOperator;
+
+// Union type for the map
+type FilterOperatorFn = StandardOperatorFn | LogicalOperatorFn;
+
 type FilterOperatorMap = {
-  [K in OperatorType]: (key: string, paramIndex: number) => FilterOperator;
+  [K in OperatorType]: FilterOperatorFn;
 };
 
 // Helper functions to create operators
@@ -72,6 +80,12 @@ export const FILTER_OPERATORS: FilterOperatorMap = {
     needsValue: true,
     transformValue: (value: string) => (Array.isArray(value) ? value : value.split(',')),
   }),
+  nin: (key: string, paramIndex: number): FilterOperator => ({
+    sql: `metadata#>>'{${key.split('.').join(',')}}' != ALL($${paramIndex}::text[])`,
+    needsValue: true,
+    transformValue: (value: string) => (Array.isArray(value) ? value : value.split(',')),
+  }),
+
   // JSONB contains
   contains: (key: string, paramIndex: number): FilterOperator => ({
     sql: `metadata @> $${paramIndex}::jsonb`,
@@ -86,7 +100,9 @@ export const FILTER_OPERATORS: FilterOperatorMap = {
     sql: `metadata ? '${key}'`,
     needsValue: false,
   }),
+  // Logical AND
   $and: (key: string) => ({ sql: `(${key})`, needsValue: false }),
+  // Logical OR
   $or: (key: string) => ({ sql: `(${key})`, needsValue: false }),
 };
 

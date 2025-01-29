@@ -1,7 +1,7 @@
 import { createClient, type Client as TursoClient, type InValue } from '@libsql/client';
 import { MastraVector, type IndexStats, type QueryResult } from '@mastra/core';
 
-import { FILTER_OPERATORS, isValidOperator } from './filter';
+import { Filter, FILTER_OPERATORS, FilterResult, isValidOperator } from './filter';
 
 export class LibSQLVector extends MastraVector {
   private turso: TursoClient;
@@ -31,131 +31,134 @@ export class LibSQLVector extends MastraVector {
     indexName: string,
     queryVector: number[],
     topK: number = 10,
-    filter?: Record<string, any>,
+    filter?: Filter,
     includeVector: boolean = false,
     minScore: number = 0, // Optional minimum score threshold
   ): Promise<QueryResult[]> {
     try {
-      let filterQuery = '';
-      let filterValues: InValue[] = [];
       const vectorStr = `[${queryVector.join(',')}]`;
 
-      if (filter) {
-        const conditions = Object.entries(filter).map(([key, condition]) => {
-          // If condition is not a FilterCondition object, assume it's an equality check
-          if (!condition || typeof condition !== 'object') {
-            filterValues.push(condition);
-            return `metadata->>'${key}' = ?`;
-          }
-
-          const [[operator, value] = []] = Object.entries(condition ?? {});
-          if (!operator || value === undefined) {
-            throw new Error(`Invalid operator or value for key: ${key}`);
-          }
-          if (!isValidOperator(operator)) {
-            throw new Error(`Unsupported operator: ${operator}`);
-          }
-          // Get operation function
-          if (operator === 'contains') {
-            // If value is an array, we want to check if the metadata array contains any of these values
-            if (Array.isArray(value)) {
-              filterValues.push(JSON.stringify(value));
-              return `(
-                SELECT json_valid(json_extract(metadata, '$.${key}')) 
-                AND json_type(json_extract(metadata, '$.${key}')) = 'array'
-                AND EXISTS (
-                  SELECT 1 
-                  FROM json_each(json_extract(metadata, '$.${key}')) as m
-                  WHERE m.value IN (SELECT value FROM json_each(?))
-                )
-              )`;
+      const buildCondition = (key: string, value: any): FilterResult => {
+        // Handle logical operators ($and/$or)
+        if (key === '$and' || key === '$or') {
+          const values: InValue[] = [];
+          const joinOperator = key === '$or' ? 'OR' : 'AND';
+          const conditions = value.map((f: Filter) => {
+            // Check if the first key is a logical operator for nested conditions
+            const [firstKey, firstValue] = Object.entries(f)[0] || [];
+            if (firstKey === '$and' || firstKey === '$or') {
+              const result = buildCondition(firstKey, firstValue);
+              values.push(...result.values);
+              return result.sql;
             }
-            // If value is an object, handle nested object traversal
-            else if (value && typeof value === 'object') {
-              const paths: string[] = [];
-              const values: any[] = [];
 
-              function traverse(obj: any, path: string[] = []) {
-                for (const [k, v] of Object.entries(obj)) {
-                  const currentPath = [...path, k];
-                  if (v && typeof v === 'object' && !Array.isArray(v)) {
-                    traverse(v, currentPath);
-                  } else {
-                    paths.push(currentPath.join('.'));
-                    values.push(v);
-                  }
-                }
-              }
+            const subConditions = Object.entries(f).map(([k, v]) => {
+              const result = buildCondition(k, v);
+              values.push(...result.values);
+              return result.sql;
+            });
 
-              traverse(value);
-              const conditions = paths.map((path, i) => {
-                filterValues.push(values[i]);
-                return `json_extract(metadata, '$.${key}.${path}') = ?`;
-              });
+            return subConditions.join(` ${joinOperator} `);
+          });
 
-              return `(${conditions.join(' AND ')})`;
-            }
-            // If value is primitive
-            else {
-              filterValues.push(value as any);
-              return `json_extract(metadata, '$.${key}') = ?`;
-            }
-          } else if (operator === 'in') {
-            const ary = value as any[];
-            for (const v of ary) {
-              filterValues.push(v);
-            }
-            return `json_extract(metadata, '$.${key}') IN (${Array(ary.length).fill('?').join(',')})`;
-          }
-          const operatorFn = FILTER_OPERATORS[operator];
-
-          const operatorResult = operatorFn(key);
-
-          // Handle operator cases and check if value is needed
-          if (operatorResult.needsValue) {
-            // Transform value if needed
-            const transformedValue = operatorResult.transformValue ? operatorResult.transformValue(value) : value;
-            filterValues.push(transformedValue);
-          }
-
-          // return sql condition
-          return operatorResult.sql;
-        });
-        if (conditions.length > 0) {
-          filterQuery = 'AND ' + conditions.join(' AND ');
+          const operatorFn = FILTER_OPERATORS[key];
+          return {
+            sql: operatorFn(conditions.join(` ${joinOperator} `)).sql,
+            values,
+          };
         }
-      }
-      const query = `
-            WITH vector_scores AS (
-                SELECT
-                    vector_id as id,
-                    (1-vector_distance_cos(embedding, '${vectorStr}')) as score,
-                    metadata
-                    ${includeVector ? ', vector_extract(embedding) as embedding' : ''}
-                FROM ${indexName}
-                WHERE true ${filterQuery}
-            )
-            SELECT *
-            FROM vector_scores
-            WHERE score > ?
-            ORDER BY score DESC
-            LIMIT ${topK};
-        `;
-      console.log(query, filterValues);
+
+        // If condition is not a FilterCondition object, assume it's an equality check
+        if (!value || typeof value !== 'object') {
+          return {
+            sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}') = ?`,
+            values: [value],
+          };
+        }
+
+        // Handle operator conditions
+        const [[operator, operatorValue] = []] = Object.entries(value);
+        if (!operator || value === undefined) {
+          throw new Error(`Invalid operator or value for key: ${key}`);
+        }
+        if (!isValidOperator(operator)) {
+          throw new Error(`Unsupported operator: ${operator}`);
+        }
+
+        const operatorFn = FILTER_OPERATORS[operator];
+        const operatorResult = operatorFn(key);
+
+        if (!operatorResult.needsValue) {
+          return { sql: operatorResult.sql, values: [] };
+        }
+
+        const transformed = operatorResult.transformValue
+          ? operatorResult.transformValue(operatorValue)
+          : operatorValue;
+
+        // Handle case where transformValue returns { sql, values }
+        if (transformed && typeof transformed === 'object' && 'sql' in transformed) {
+          return {
+            sql: transformed.sql,
+            values: transformed.values,
+          };
+        }
+
+        return {
+          sql: operatorResult.sql,
+          values: [transformed],
+        };
+      };
+
+      const buildFilterQuery = (filter: Filter | undefined): FilterResult => {
+        if (!filter) {
+          return { sql: '', values: [] };
+        }
+
+        const values: InValue[] = [];
+        const conditions = Object.entries(filter)
+          .map(([key, value]) => {
+            const condition = buildCondition(key, value);
+            values.push(...condition.values);
+            return condition.sql;
+          })
+          .join(' AND ');
+
+        return {
+          sql: conditions ? `WHERE ${conditions}` : '',
+          values,
+        };
+      };
+
+      const { sql: filterQuery, values: filterValues } = buildFilterQuery(filter);
       filterValues.push(minScore);
-      console.log(query);
+
+      const query = `
+        WITH vector_scores AS (
+          SELECT
+            vector_id as id,
+            (1-vector_distance_cos(embedding, '${vectorStr}')) as score,
+            metadata
+            ${includeVector ? ', vector_extract(embedding) as embedding' : ''}
+          FROM ${indexName}
+          ${filterQuery}
+        )
+        SELECT *
+        FROM vector_scores
+        WHERE score > ?
+        ORDER BY score DESC
+        LIMIT ${topK}`;
 
       const result = await this.turso.execute({
         sql: query,
         args: filterValues,
       });
-      console.log(`YO`, query, filterValues, result);
 
-      return result.rows.map(row => ({
-        id: row.id as string,
-        score: row.score as number,
-        metadata: JSON.parse((row.metadata as string) ?? '{}'),
-        ...(includeVector && row.embedding && { vector: JSON.parse(row.embedding as string) }),
+      return result.rows.map(({ id, score, metadata, embedding }) => ({
+        id: id as string,
+        score: score as number,
+        metadata: JSON.parse((metadata as string) ?? '{}'),
+        ...(includeVector && embedding && { vector: JSON.parse(embedding as string) }),
       }));
     } finally {
       // client.release()
@@ -175,20 +178,20 @@ export class LibSQLVector extends MastraVector {
 
       for (let i = 0; i < vectors.length; i++) {
         const query = `
-INSERT INTO ${indexName} (vector_id, embedding, metadata)
-VALUES (?, vector32(?), ?)
-ON CONFLICT(vector_id) DO UPDATE SET
-  embedding = vector32(?),
-  metadata = ?
-`;
+          INSERT INTO ${indexName} (vector_id, embedding, metadata)
+          VALUES (?, vector32(?), ?)
+          ON CONFLICT(vector_id) DO UPDATE SET
+            embedding = vector32(?),
+            metadata = ?
+        `;
 
-        console.log('INSERTQ', query, [
-          vectorIds[i] as InValue,
-          JSON.stringify(vectors[i]),
-          JSON.stringify(metadata?.[i] || {}),
-          JSON.stringify(vectors[i]),
-          JSON.stringify(metadata?.[i] || {}),
-        ]);
+        // console.log('INSERTQ', query, [
+        //   vectorIds[i] as InValue,
+        //   JSON.stringify(vectors[i]),
+        //   JSON.stringify(metadata?.[i] || {}),
+        //   JSON.stringify(vectors[i]),
+        //   JSON.stringify(metadata?.[i] || {}),
+        // ]);
         await tx.execute({
           sql: query,
           // @ts-ignore
