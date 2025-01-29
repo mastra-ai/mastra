@@ -119,7 +119,24 @@ export abstract class MastraMemory extends MastraBase {
     });
 
     this.logger.info(`Remembered message history includes ${messages.messages.length} messages.`);
-    return messages;
+    return messages.messages.length > 0
+      ? {
+          messages: [
+            {
+              role: 'system',
+              content:
+                "all messages after this one are messages you've remembered until you see a system message telling you otherwise.",
+            },
+            ...messages.messages,
+            {
+              role: 'system',
+              content:
+                "messages prior to this are messages you've remembered. Any messages after this are new. Pay attention to dates as you may remember very old or very recent messages.",
+            },
+          ],
+          uiMessages: messages.uiMessages,
+        }
+      : messages;
   }
 
   estimateTokens(text: string): number {
