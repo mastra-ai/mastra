@@ -19,6 +19,7 @@ export class VercelDeployer extends MastraDeployer {
   constructor({ scope, env, projectName }: { env?: Record<string, any>; scope: string; projectName: string }) {
     super({ scope, env, projectName });
   }
+
   writeFiles({ dir }: { dir: string }): void {
     this.writeIndex({ dir });
 
