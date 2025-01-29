@@ -30,7 +30,7 @@ export const flightSchema = z.object({
       durationAtLayover: z.string(),
       airline: z.string(),
     })
-    .optional(),
+    .nullable(),
 });
 
 const accommodationSchema = z.object({
