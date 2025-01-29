@@ -1,6 +1,6 @@
 import { Mastra, createLogger } from "@mastra/core";
 import { PostgresEngine } from "@mastra/engine";
-import { PgMemory } from "@mastra/memory";
+import { PgMemory } from "@mastra/memory/postgres";
 
 import { travelAgent, travelAnalyzer } from "./agents";
 import { syncCsvDataWorkflow } from "./workflows/attractions";

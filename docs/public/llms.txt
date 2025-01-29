@@ -544,7 +544,7 @@ Then, configure your agent to use Upstash KV:
 ```typescript
 // src/mastra/index.ts
 import { Mastra } from "@mastra/core";
-import { UpstashKVMemory } from "@mastra/memory";
+import { UpstashKVMemory } from "@mastra/memory/kv-upstash";
 
 import { myAgent } from "./agents";
 
@@ -1744,7 +1744,7 @@ Configure your agent to use PostgreSQL for memory storage:
 
 ```typescript
 import { Mastra } from "@mastra/core";
-import { PgMemory } from "@mastra/memory";
+import { PgMemory } from "@mastra/memory/postgres";
 
 const pgMemory = new PgMemory({
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
@@ -8211,7 +8211,7 @@ Then, configure your agent to use PostgreSQL for memory storage:
 ```typescript
 // src/mastra/index.ts
 import { Mastra } from "@mastra/core";
-import { PgMemory } from "@mastra/memory";
+import { PgMemory } from "@mastra/memory/postgres";
 
 import { myAgent } from "./agents";
 
@@ -8254,7 +8254,7 @@ Then, configure your agent to use Upstash KV:
 ```typescript
 // src/mastra/index.ts
 import { Mastra } from "@mastra/core";
-import { UpstashKVMemory } from "@mastra/memory";
+import { UpstashKVMemory } from "@mastra/memory/kv-upstash";
 
 import { myAgent } from "./agents";
 
@@ -10241,7 +10241,7 @@ Configure your agent to use PostgreSQL for memory storage:
 
 ```typescript
 import { Mastra } from "@mastra/core";
-import { PgMemory } from "@mastra/memory";
+import { PgMemory } from "@mastra/memory/postgres";
 
 const pgMemory = new PgMemory({
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
