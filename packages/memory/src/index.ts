@@ -10,8 +10,6 @@ import {
 } from '@mastra/core';
 import { Message as AiMessage } from 'ai';
 
-export * from './postgres';
-export * from './kv/upstash';
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
