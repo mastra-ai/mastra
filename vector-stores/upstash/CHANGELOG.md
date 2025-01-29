@@ -1,5 +1,12 @@
 # @mastra/vector-upstash
 
+## 0.0.1-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [327ece7]
+  - @mastra/core@0.1.27-alpha.80
+
 ## 0.0.1-alpha.12
 
 ### Patch Changes

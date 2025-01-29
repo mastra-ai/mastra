@@ -1,5 +1,13 @@
 # @mastra/rag
 
+## 0.0.2-alpha.70
+
+### Patch Changes
+
+- 327ece7: Updates for ts versions
+- Updated dependencies [327ece7]
+  - @mastra/core@0.1.27-alpha.80
+
 ## 0.0.2-alpha.69
 
 ### Patch Changes

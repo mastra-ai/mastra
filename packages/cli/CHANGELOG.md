@@ -1,5 +1,14 @@
 # mastra
 
+## 0.1.57-alpha.128
+
+### Patch Changes
+
+- 327ece7: Updates for ts versions
+- Updated dependencies [327ece7]
+  - @mastra/core@0.1.27-alpha.80
+  - @mastra/deployer@0.0.1-alpha.25
+
 ## 0.1.57-alpha.127
 
 ### Patch Changes
