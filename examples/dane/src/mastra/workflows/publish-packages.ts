@@ -10,15 +10,25 @@ export const packagePublisher = new Workflow({
   name: 'pnpm-changset-publisher',
 });
 
+const outputSchema = z.object({
+  packages: z.array(z.string()),
+  integrations: z.array(z.string()),
+  deployers: z.array(z.string()),
+  vector_stores: z.array(z.string()),
+  speech: z.array(z.string()),
+});
+
+const defaultSet = {
+  packages: [],
+  deployers: [],
+  integrations: [],
+  vector_stores: [],
+  speech: [],
+};
+
 const getPacakgesToPublish = new Step({
   id: 'getPacakgesToPublish',
-  outputSchema: z.object({
-    packages: z.array(z.string()),
-    integrations: z.array(z.string()),
-    deployers: z.array(z.string()),
-    vector_stores: z.array(z.string()),
-    speech: z.array(z.string()),
-  }),
+  outputSchema,
   execute: async ({ mastra }) => {
     const agent = mastra?.agents?.['danePackagePublisher'];
 
@@ -74,17 +84,15 @@ const getPacakgesToPublish = new Step({
 
 const assemblePackages = new Step({
   id: 'assemblePackages',
-  outputSchema: z.object({
-    packages: z.array(z.string()),
-    integrations: z.array(z.string()),
-    deployers: z.array(z.string()),
-    vector_stores: z.array(z.string()),
-    speech: z.array(z.string()),
-  }),
+  outputSchema,
   execute: async ({ context }) => {
     if (context.machineContext?.stepResults.getPacakgesToPublish?.status !== 'success') {
       return {
         packages: [],
+        integrations: [],
+        deployers: [],
+        vector_stores: [],
+        speech: [],
       };
     }
 
@@ -157,9 +165,7 @@ const assemblePackages = new Step({
 
     if (!packagesToBuild.size && !deployersToBuild.size && !integrationsToBuild.size && !vector_storesToBuild.size) {
       console.error(chalk.red('No packages to build.'));
-      return {
-        packages: [],
-      };
+      return defaultSet;
     }
 
     console.log(chalk.green(`\nBuilding packages:\n`));
@@ -214,14 +220,10 @@ async function buildSet(agent: Agent, list: string[]) {
 
 const buildPackages = new Step({
   id: 'buildPackages',
-  outputSchema: z.object({
-    packages: z.array(z.string()),
-  }),
+  outputSchema,
   execute: async ({ context, mastra }) => {
     if (context.machineContext?.stepResults.assemblePackages?.status !== 'success') {
-      return {
-        packages: [],
-      };
+      return defaultSet;
     }
 
     const pkgSet = context.machineContext.stepResults.assemblePackages.payload.packages;
