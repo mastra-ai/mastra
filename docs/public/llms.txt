@@ -10616,9 +10616,9 @@ Transform chunks into embeddings using your preferred provider. Mastra supports 
 ### Using OpenAI
 
 ```ts showLineNumbers copy
-import { embed } from "@mastra/rag";
+import { embedMany } from "@mastra/rag";
 
-const embeddings = await embed(chunks, {
+const {embeddings} = await embedMany(chunks, {
   provider: "OPEN_AI",
   model: "text-embedding-ada-002",
   maxRetries: 3
