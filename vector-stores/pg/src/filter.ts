@@ -174,16 +174,7 @@ export class FilterBuilder {
   }
 
   private handleEqualityOperator(key: string, value: any): string {
-    console.log('key', key);
-    console.log('value', value);
     this.values.push(value);
-    // If the key contains dots and is quoted, treat it as a literal key
-    if (key.includes('.') && (key.startsWith('"') || key.includes('\\'))) {
-      console.log('literal key', key);
-      return `metadata->>'${key}' = $${this.values.length}`;
-    }
-    console.log('path key', key);
-    // Otherwise treat dots as path separators
     return `metadata#>>'{${key.replace(/\./g, ',')}}' = $${this.values.length}`;
   }
 

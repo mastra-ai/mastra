@@ -270,7 +270,6 @@ describe('PgVector', () => {
     });
 
     it('should filter with containsAny operator', async () => {
-      console.log('Input:', ['new', 'premium']); // Debug input
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
         tags: { containsAny: ['new', 'premium'] },
       });
