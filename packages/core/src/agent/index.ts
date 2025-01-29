@@ -488,27 +488,6 @@ export class Agent<
     let coreMessages: CoreMessage[] = [];
     let threadIdToUse = threadId;
 
-    let rememberedMessages: CoreMessage[] = [];
-
-    if (this.#mastra?.memory && threadId) {
-      const retrievedMessages = await this.#mastra.memory.getRememberedMessageHistory({
-        threadId,
-        vectorMessageSearch: messages
-          .slice(-1)
-          .map(m => {
-            if (typeof m === `string`) {
-              return m;
-            }
-            return m?.content || ``;
-          })
-          .join(`\n`),
-      });
-
-      if (retrievedMessages) {
-        rememberedMessages = retrievedMessages.messages as CoreMessage[];
-      }
-    }
-
     this.log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, { runId });
     const saveMessageResponse = await this.saveMemory({
       threadId,
@@ -518,7 +497,7 @@ export class Agent<
 
     coreMessages = saveMessageResponse.messages as CoreMessage[];
     threadIdToUse = saveMessageResponse.threadId;
-    return { coreMessages, threadIdToUse, rememberedMessages };
+    return { coreMessages, threadIdToUse };
   }
 
   __primitive({
@@ -549,7 +528,6 @@ export class Agent<
 
         let coreMessages = messages;
         let threadIdToUse = threadId;
-        let rememberedMessages: CoreMessage[] | undefined;
 
         if (this.#mastra?.memory && resourceid) {
           const preExecuteResult = await this.preExecute({
@@ -561,7 +539,6 @@ export class Agent<
 
           coreMessages = preExecuteResult.coreMessages;
           threadIdToUse = preExecuteResult.threadIdToUse;
-          rememberedMessages = preExecuteResult.rememberedMessages;
         } else {
           this.logger.debug(
             `[Agents:${this.name}] - No memory store or resourceid identifier found. Skipping memory persistence.`,
@@ -592,7 +569,7 @@ export class Agent<
 
         const messageObjects = [systemMessage, ...(context || []), ...coreMessages];
 
-        return { messageObjects, convertedTools, threadId: threadIdToUse as string, rememberedMessages };
+        return { messageObjects, convertedTools, threadId: threadIdToUse as string };
       },
       after: async ({
         result,
@@ -719,12 +696,7 @@ export class Agent<
       toolsets,
     });
 
-    const { threadId, messageObjects, convertedTools, rememberedMessages } = await before();
-
-    if (rememberedMessages && rememberedMessages.length > 0) {
-      context ||= [];
-      context.push(...rememberedMessages);
-    }
+    const { threadId, messageObjects, convertedTools } = await before();
 
     if (output === 'text') {
       const result = await this.llm.__text({
@@ -809,12 +781,7 @@ export class Agent<
       toolsets,
     });
 
-    const { threadId, messageObjects, convertedTools, rememberedMessages } = await before();
-
-    if (rememberedMessages && rememberedMessages.length > 0) {
-      context ||= [];
-      context.push(...rememberedMessages);
-    }
+    const { threadId, messageObjects, convertedTools } = await before();
 
     if (output === 'text') {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
