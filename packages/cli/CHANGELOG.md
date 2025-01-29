@@ -1,5 +1,12 @@
 # mastra
 
+## 0.1.57-alpha.126
+
+### Patch Changes
+
+- Updated dependencies [88f18d7]
+  - @mastra/deployer@0.0.1-alpha.23
+
 ## 0.1.57-alpha.125
 
 ### Patch Changes

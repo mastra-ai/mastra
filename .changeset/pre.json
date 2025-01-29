@@ -67,7 +67,8 @@
     "@mastra/speech-openai": "0.0.0",
     "@mastra/speech-playai": "0.0.0",
     "@mastra/speech-replicate": "0.0.0",
-    "@mastra/speech-speechify": "0.0.0"
+    "@mastra/speech-speechify": "0.0.0",
+    "assistant-ui-starter": "0.1.0"
   },
   "changesets": [
     "afraid-papayas-shake",
@@ -179,6 +180,7 @@
     "itchy-mugs-pump",
     "large-dryers-call",
     "late-parrots-own",
+    "late-pianos-mate",
     "late-ties-sniff",
     "lazy-suits-run",
     "lemon-frogs-fail",
