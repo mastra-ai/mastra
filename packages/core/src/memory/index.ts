@@ -91,7 +91,7 @@ export abstract class MastraMemory extends MastraBase {
     };
   }
 
-  async getRememberedMessageHistory({
+  async rememberMessages({
     threadId,
     vectorMessageSearch,
     config,
@@ -204,8 +204,7 @@ export abstract class MastraMemory extends MastraBase {
         }
 
         obj.chatMessages.push({
-          // @ts-ignore TODO: fix this - this is from using the type CoreMessage instead of MessageType
-          id: message.id,
+          id: (message as MessageType).id,
           role: message.role as AiMessageType['role'],
           content: textContent,
           toolInvocations,

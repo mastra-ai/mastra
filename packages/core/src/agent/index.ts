@@ -243,7 +243,7 @@ export class Agent<
         const memoryMessages =
           threadId && this.#mastra.memory
             ? (
-                await this.#mastra.memory.getRememberedMessageHistory({
+                await this.#mastra.memory.rememberMessages({
                   threadId,
                   config: memoryConfig,
                   vectorMessageSearch: messages
