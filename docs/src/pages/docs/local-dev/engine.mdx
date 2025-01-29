@@ -30,7 +30,7 @@ Configure your agent to use PostgreSQL for memory storage:
 
 ```typescript
 import { Mastra } from "@mastra/core";
-import { PgMemory } from "@mastra/memory";
+import { PgMemory } from "@mastra/memory/postgres";
 
 const pgMemory = new PgMemory({
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
