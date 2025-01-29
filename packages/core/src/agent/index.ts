@@ -246,6 +246,15 @@ export class Agent<
                 await this.#mastra.memory.getRememberedMessageHistory({
                   threadId,
                   config: memoryConfig,
+                  vectorMessageSearch: messages
+                    .slice(-1)
+                    .map(m => {
+                      if (typeof m === `string`) {
+                        return m;
+                      }
+                      return m?.content || ``;
+                    })
+                    .join(`\n`),
                 })
               ).messages
             : [];
