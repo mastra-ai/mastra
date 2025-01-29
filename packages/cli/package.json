@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.1.57-alpha.126",
+  "version": "0.1.57-alpha.127",
   "license": "MIT",
   "description": "cli for mastra",
   "type": "module",
@@ -31,7 +31,20 @@
   "keywords": [
     "mastra",
     "cli",
-    "ai"
+    "ai",
+    "llm",
+    "llms",
+    "agent",
+    "agents",
+    "dev",
+    "development",
+    "deploy",
+    "deployment",
+    "build",
+    "workflow",
+    "typescript",
+    "command-line",
+    "devtools"
   ],
   "author": "",
   "dependencies": {
@@ -71,23 +84,5 @@
     "tsup": "^8.3.5",
     "type-fest": "^4.30.0",
     "vitest": "^3.0.4"
-  },
-  "keywords": [
-    "mastra",
-    "cli",
-    "ai",
-    "llm",
-    "llms",
-    "agent",
-    "agents",
-    "dev",
-    "development",
-    "deploy",
-    "deployment",
-    "build",
-    "workflow",
-    "typescript",
-    "command-line",
-    "devtools"
-  ]
+  }
 }
