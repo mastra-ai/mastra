@@ -71,7 +71,7 @@ export class LibSQLVector extends MastraVector {
         // If condition is not a FilterCondition object, assume it's an equality check
         if (!value || typeof value !== 'object') {
           return {
-            sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}') = ?`,
+            sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}"') = ?`,
             values: [value],
           };
         }

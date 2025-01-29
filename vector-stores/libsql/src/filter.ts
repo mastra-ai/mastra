@@ -2,7 +2,7 @@ import { InValue } from '@libsql/client';
 
 export type OperatorType =
   | 'eq'
-  | 'neq'
+  | 'ne'
   | 'gt'
   | 'gte'
   | 'lt'
@@ -34,7 +34,7 @@ type FilterOperatorMap = {
 // Helper functions to create operators
 const createBasicOperator = (symbol: string) => {
   return (key: string): FilterOperator => ({
-    sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}') ${symbol} ?`,
+    sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}"') ${symbol} ?`,
     needsValue: true,
     transformValue: (value: any) => {
       if (Array.isArray(value)) {
@@ -47,7 +47,7 @@ const createBasicOperator = (symbol: string) => {
 
 const createNumericOperator = (symbol: string) => {
   return (key: string): FilterOperator => ({
-    sql: `CAST(json_extract(metadata, '$."${key.replace(/\./g, '"."')}') AS NUMERIC) ${symbol} ?`,
+    sql: `CAST(json_extract(metadata, '$."${key.replace(/\./g, '"."')}"') AS NUMERIC) ${symbol} ?`,
     needsValue: true,
   });
 };
@@ -57,7 +57,7 @@ export const FILTER_OPERATORS: FilterOperatorMap = {
   // Equal
   eq: createBasicOperator('='),
   // Not equal
-  neq: createBasicOperator('!='),
+  ne: createBasicOperator('!='),
 
   // Greater than
   gt: createNumericOperator('>'),
@@ -77,18 +77,18 @@ export const FILTER_OPERATORS: FilterOperatorMap = {
   }),
   // Contains array/object/value
   contains: (key: string): FilterOperator => ({
-    sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}') = ?`,
+    sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}"') = ?`,
     needsValue: true,
     transformValue: (value: any) => {
       // Array containment
       if (Array.isArray(value)) {
         return {
           sql: `(
-            SELECT json_valid(json_extract(metadata, '$."${key.replace(/\./g, '"."')}'))
-            AND json_type(json_extract(metadata, '$."${key.replace(/\./g, '"."')}')) = 'array'
+            SELECT json_valid(json_extract(metadata, '$."${key.replace(/\./g, '"."')}"'))
+            AND json_type(json_extract(metadata, '$."${key.replace(/\./g, '"."')}"')) = 'array'
             AND EXISTS (
               SELECT 1 
-              FROM json_each(json_extract(metadata, '$."${key.replace(/\./g, '"."')}')) as m
+              FROM json_each(json_extract(metadata, '$."${key.replace(/\./g, '"."')}"')) as m
               WHERE m.value IN (SELECT value FROM json_each(?))
             )
           )`,
@@ -127,12 +127,12 @@ export const FILTER_OPERATORS: FilterOperatorMap = {
   }),
   // IN array of values
   in: (key: string): FilterOperator => ({
-    sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}') IN (?)`,
+    sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}"') IN (?)`,
     needsValue: true,
     transformValue: (value: any) => {
       if (Array.isArray(value)) {
         return {
-          sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}') IN (${Array(value.length).fill('?').join(',')})`,
+          sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}"') IN (${Array(value.length).fill('?').join(',')})`,
           values: value,
         };
       }
@@ -141,12 +141,12 @@ export const FILTER_OPERATORS: FilterOperatorMap = {
   }),
   // NOT IN array of values
   nin: (key: string): FilterOperator => ({
-    sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}') NOT IN (?)`,
+    sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}"') NOT IN (?)`,
     needsValue: true,
     transformValue: (value: any) => {
       if (Array.isArray(value)) {
         return {
-          sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}') NOT IN (${Array(value.length)
+          sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}"') NOT IN (${Array(value.length)
             .fill('?')
             .join(',')})`,
           values: value,
@@ -157,7 +157,7 @@ export const FILTER_OPERATORS: FilterOperatorMap = {
   }),
   // Key exists
   exists: (key: string): FilterOperator => ({
-    sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}') IS NOT NULL`,
+    sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}"') IS NOT NULL`,
     needsValue: false,
   }),
   // Logical AND
