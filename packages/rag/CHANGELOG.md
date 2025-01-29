@@ -1,5 +1,11 @@
 # @mastra/rag
 
+## 0.0.2-alpha.71
+
+### Patch Changes
+
+- a944f1a: Bundle @mastra/rag package with tsup
+
 ## 0.0.2-alpha.70
 
 ### Patch Changes
