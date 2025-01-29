@@ -134,26 +134,49 @@ export const handleKey = (key: string) => {
   return key.replace(/\./g, ',');
 };
 
-export class FilterBuilder {
-  private values: any[] = [];
+export function buildFilterQuery(filter: Filter | undefined, minScore: number): { sql: string; values: any[] } {
+  const values = [minScore];
 
-  constructor(minScore: number) {
-    this.values = [minScore];
-  }
-
-  buildFilterQuery(filter: Filter | undefined): { sql: string; values: any[] } {
-    if (!filter) {
-      return { sql: '', values: this.values };
+  function buildCondition(key: string, value: any): string {
+    // Handle logical operators ($and/$or)
+    if (key === '$and' || key === '$or') {
+      return handleLogicalOperator(key, value);
     }
 
-    const conditions = Object.entries(filter)
-      .map(([key, value]) => this.buildCondition(key, value))
-      .join(' AND ');
+    // If condition is not a FilterCondition object, assume it's an equality check
+    if (!value || typeof value !== 'object') {
+      return handleEqualityOperator(key, value);
+    }
 
-    return { sql: conditions ? `WHERE ${conditions}` : '', values: this.values };
+    // Handle operator conditions
+    return handleOperator(key, value);
   }
 
-  private handleLogicalOperator(key: '$and' | '$or', value: Filter[]): string {
+  function handleEqualityOperator(key: string, value: any): string {
+    values.push(value);
+    return `metadata#>>'{${handleKey(key)}}' = $${values.length}`;
+  }
+
+  function handleOperator(key: string, value: Record<string, any>): string {
+    const [[operator, operatorValue] = []] = Object.entries(value);
+    if (!operator || value === undefined) {
+      throw new Error(`Invalid operator or value for key: ${key}`);
+    }
+    if (!isValidOperator(operator)) {
+      throw new Error(`Unsupported operator: ${operator}`);
+    }
+    const operatorFn = FILTER_OPERATORS[operator];
+    const operatorResult = operatorFn(key, values.length + 1);
+    if (operatorResult.needsValue) {
+      const transformedValue = operatorResult.transformValue
+        ? operatorResult.transformValue(operatorValue)
+        : operatorValue;
+      values.push(transformedValue);
+    }
+    return operatorResult.sql;
+  }
+
+  function handleLogicalOperator(key: '$and' | '$or', value: Filter[]): string {
     // Handle empty conditions
     if (!value || value.length === 0) {
       return key === '$and' ? 'true' : 'false';
@@ -167,52 +190,23 @@ export class FilterBuilder {
       // Check if the first key is a logical operator for nested conditions
       const [firstKey, firstValue] = entries[0] || [];
       if (firstKey === '$and' || firstKey === '$or') {
-        return this.buildCondition(firstKey, firstValue);
+        return buildCondition(firstKey, firstValue);
       }
       // Process all conditions in this filter
-      return entries.map(([k, v]) => this.buildCondition(k, v)).join(` ${joinOperator} `);
+      return entries.map(([k, v]) => buildCondition(k, v)).join(` ${joinOperator} `);
     });
 
     const operatorFn = FILTER_OPERATORS[key] as LogicalOperatorFn;
     return operatorFn(conditions.join(` ${joinOperator} `)).sql;
   }
 
-  private handleEqualityOperator(key: string, value: any): string {
-    this.values.push(value);
-    return `metadata#>>'{${handleKey(key)}}' = $${this.values.length}`;
+  if (!filter) {
+    return { sql: '', values: values };
   }
 
-  private handleOperator(key: string, value: Record<string, any>): string {
-    const [[operator, operatorValue] = []] = Object.entries(value);
-    if (!operator || value === undefined) {
-      throw new Error(`Invalid operator or value for key: ${key}`);
-    }
-    if (!isValidOperator(operator)) {
-      throw new Error(`Unsupported operator: ${operator}`);
-    }
-    const operatorFn = FILTER_OPERATORS[operator];
-    const operatorResult = operatorFn(key, this.values.length + 1);
-    if (operatorResult.needsValue) {
-      const transformedValue = operatorResult.transformValue
-        ? operatorResult.transformValue(operatorValue)
-        : operatorValue;
-      this.values.push(transformedValue);
-    }
-    return operatorResult.sql;
-  }
+  const conditions = Object.entries(filter)
+    .map(([key, value]) => buildCondition(key, value))
+    .join(' AND ');
 
-  private buildCondition(key: string, value: any): string {
-    // Handle logical operators ($and/$or)
-    if (key === '$and' || key === '$or') {
-      return this.handleLogicalOperator(key, value);
-    }
-
-    // If condition is not a FilterCondition object, assume it's an equality check
-    if (!value || typeof value !== 'object') {
-      return this.handleEqualityOperator(key, value);
-    }
-
-    // Handle operator conditions
-    return this.handleOperator(key, value);
-  }
+  return { sql: conditions ? `WHERE ${conditions}` : '', values: values };
 }

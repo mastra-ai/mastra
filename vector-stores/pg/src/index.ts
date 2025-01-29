@@ -1,7 +1,7 @@
 import { IndexStats, QueryResult, MastraVector } from '@mastra/core';
 import pg from 'pg';
 
-import { Filter, FilterBuilder } from './filter';
+import { Filter, buildFilterQuery } from './filter';
 
 export class PgVector extends MastraVector {
   private pool: pg.Pool;
@@ -39,9 +39,7 @@ export class PgVector extends MastraVector {
     try {
       const vectorStr = `[${queryVector.join(',')}]`;
 
-      const filterBuilder = new FilterBuilder(minScore);
-
-      const { sql: filterQuery, values: filterValues } = filterBuilder.buildFilterQuery(filter);
+      const { sql: filterQuery, values: filterValues } = buildFilterQuery(filter, minScore);
 
       const query = `
         WITH vector_scores AS (

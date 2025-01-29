@@ -1,7 +1,7 @@
 import { createClient, type Client as TursoClient, type InValue } from '@libsql/client';
 import { MastraVector, type IndexStats, type QueryResult } from '@mastra/core';
 
-import { Filter, FILTER_OPERATORS, FilterResult, isValidOperator } from './filter';
+import { buildFilterQuery, Filter } from './filter';
 
 export class LibSQLVector extends MastraVector {
   private turso: TursoClient;
@@ -37,102 +37,6 @@ export class LibSQLVector extends MastraVector {
   ): Promise<QueryResult[]> {
     try {
       const vectorStr = `[${queryVector.join(',')}]`;
-
-      const buildCondition = (key: string, value: any): FilterResult => {
-        // Handle logical operators ($and/$or)
-        if (key === '$and' || key === '$or') {
-          if (!value || value.length === 0) {
-            return { sql: key === '$and' ? 'true' : 'false', values: [] };
-          }
-
-          const values: InValue[] = [];
-          const joinOperator = key === '$or' ? 'OR' : 'AND';
-          const conditions = value.map((f: Filter) => {
-            // Check if the first key is a logical operator for nested conditions
-            const [firstKey, firstValue] = Object.entries(f)[0] || [];
-            if (firstKey === '$and' || firstKey === '$or') {
-              const result = buildCondition(firstKey, firstValue);
-              values.push(...result.values);
-              return result.sql;
-            }
-
-            const subConditions = Object.entries(f).map(([k, v]) => {
-              const result = buildCondition(k, v);
-              values.push(...result.values);
-              return result.sql;
-            });
-
-            return subConditions.join(` ${joinOperator} `);
-          });
-
-          const operatorFn = FILTER_OPERATORS[key];
-          return {
-            sql: operatorFn(conditions.join(` ${joinOperator} `)).sql,
-            values,
-          };
-        }
-
-        // If condition is not a FilterCondition object, assume it's an equality check
-        if (!value || typeof value !== 'object') {
-          return {
-            sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}"') = ?`,
-            values: [value],
-          };
-        }
-
-        // Handle operator conditions
-        const [[operator, operatorValue] = []] = Object.entries(value);
-        if (!operator || value === undefined) {
-          throw new Error(`Invalid operator or value for key: ${key}`);
-        }
-        if (!isValidOperator(operator)) {
-          throw new Error(`Unsupported operator: ${operator}`);
-        }
-
-        const operatorFn = FILTER_OPERATORS[operator];
-        const operatorResult = operatorFn(key);
-
-        if (!operatorResult.needsValue) {
-          return { sql: operatorResult.sql, values: [] };
-        }
-
-        const transformed = operatorResult.transformValue
-          ? operatorResult.transformValue(operatorValue)
-          : operatorValue;
-
-        // Handle case where transformValue returns { sql, values }
-        if (transformed && typeof transformed === 'object' && 'sql' in transformed) {
-          return {
-            sql: transformed.sql,
-            values: transformed.values,
-          };
-        }
-
-        return {
-          sql: operatorResult.sql,
-          values: [transformed],
-        };
-      };
-
-      const buildFilterQuery = (filter: Filter | undefined): FilterResult => {
-        if (!filter) {
-          return { sql: '', values: [] };
-        }
-
-        const values: InValue[] = [];
-        const conditions = Object.entries(filter)
-          .map(([key, value]) => {
-            const condition = buildCondition(key, value);
-            values.push(...condition.values);
-            return condition.sql;
-          })
-          .join(' AND ');
-
-        return {
-          sql: conditions ? `WHERE ${conditions}` : '',
-          values,
-        };
-      };
 
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(filter);
       filterValues.push(minScore);
