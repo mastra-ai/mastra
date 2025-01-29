@@ -42,7 +42,7 @@ export class CloudflareDeployer extends MastraDeployer {
     }
   }
 
-  writeFiles({ dir }: { dir: string }): void {
+  override writeFiles({ dir }: { dir: string }): void {
     this.loadEnvVars();
 
     this.writeIndex({ dir });
@@ -72,7 +72,7 @@ export class CloudflareDeployer extends MastraDeployer {
     writeFileSync(join(dir, 'wrangler.json'), JSON.stringify(wranglerConfig));
   }
 
-  writeIndex({ dir }: { dir: string }): void {
+  override writeIndex({ dir }: { dir: string }): void {
     writeFileSync(
       join(dir, './index.mjs'),
       `
@@ -89,7 +89,7 @@ export class CloudflareDeployer extends MastraDeployer {
     );
   }
 
-  async deploy({ dir, token }: { dir: string; token: string }): Promise<void> {
+  override async deploy({ dir, token }: { dir: string; token: string }): Promise<void> {
     const cmd = this.workerNamespace
       ? `npm exec -- wrangler deploy --dispatch-namespace ${this.workerNamespace}`
       : 'npm exec -- wrangler deploy';

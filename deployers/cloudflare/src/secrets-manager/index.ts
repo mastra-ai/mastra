@@ -33,7 +33,7 @@ export class CloudflareSecretsManager {
         }),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as { success: boolean; result: any; errors: any[] };
 
       if (!data.success) {
         throw new Error(data.errors[0].message);
@@ -72,7 +72,7 @@ export class CloudflareSecretsManager {
         },
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as { success: boolean; result: any; errors: any[] };
 
       if (!data.success) {
         throw new Error(data.errors[0].message);
@@ -95,7 +95,7 @@ export class CloudflareSecretsManager {
         },
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as { success: boolean; result: any; errors: any[] };
 
       if (!data.success) {
         throw new Error(data.errors[0].message);

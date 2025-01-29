@@ -38,9 +38,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
-import { Mastra, Agent, EmbedManyResult } from "@mastra/core";
+import { Mastra, Agent } from "@mastra/core";
 import { PgVector } from "@mastra/vector-pg";
-import { embed, MDocument, createGraphRAGTool } from "@mastra/rag";
+import { embedMany, MDocument, createGraphRAGTool } from "@mastra/rag";
 ```
 
 ## GraphRAG Tool Creation
@@ -125,11 +125,11 @@ const chunks = await doc.chunk({
 Generate embeddings for the chunks and store them in the vector database:
 
 ```typescript copy showLineNumbers{55} filename="src/mastra/index.ts"
-const { embeddings } = (await embed(chunks, {
+const { embeddings } = await embedMany(chunks, {
   provider: "OPEN_AI",
   model: "text-embedding-3-small",
   maxRetries: 3,
-})) as EmbedManyResult<string>;
+});
 
 const vectorStore = mastra.getVector("pgVector");
 await vectorStore.createIndex("embeddings", 1536);

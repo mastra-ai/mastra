@@ -1,15 +1,15 @@
 import { Agent } from '../../agent';
-import { ModelConfig } from '../../llm/types';
+import { CustomModelConfig, ModelConfig } from '../../llm/types';
 import { RelevanceScoreProvider, createSimilarityPrompt } from '../relevance-score-provider';
 
 // Mastra Agent implementation
 export class MastraAgentRelevanceScorer implements RelevanceScoreProvider {
   private agent: Agent;
 
-  constructor(provider: string, name: string) {
+  constructor(provider: string, name: string, model?: CustomModelConfig['model']) {
     const modelConfig = {
       provider,
-      name,
+      ...(model ? { model } : { name }),
     } as ModelConfig;
     this.agent = new Agent({
       name: `Relevance Scorer ${provider} ${name}`,

@@ -6,12 +6,12 @@ import { RelevanceScoreProvider } from '../relevance-score-provider';
 export class CohereRelevanceScorer implements RelevanceScoreProvider {
   private client: any;
   private model: string;
-  constructor(apiKey: string, model?: string) {
+  constructor(model: string, apiKey?: string) {
     this.client = new CohereClient({
-      token: apiKey,
+      token: apiKey || process.env.COHERE_API_KEY || '',
     });
 
-    this.model = model || 'rerank-v3.5';
+    this.model = model;
   }
 
   async getRelevanceScore(query: string, text: string): Promise<number> {

@@ -1,11 +1,11 @@
-import { createTool, EmbeddingOptions, EmbedResult, MastraVector, QueryResult } from '@mastra/core';
+import { createTool, EmbeddingOptions, MastraVector, QueryResult } from '@mastra/core';
 import { z } from 'zod';
 
 import { ChunkParams, MDocument } from '../document';
 import { embed } from '../embeddings';
 
 import { GraphRAG } from './graph-rag';
-import { Reranker, RerankerOptions } from './rerank';
+import { rerank, RerankConfig } from './rerank';
 
 type VectorFilterType = 'pg' | 'astra' | 'qdrant' | 'upstash' | 'pinecone' | 'chroma' | '';
 
@@ -62,7 +62,7 @@ const vectorQuerySearch = async ({
   topK,
   includeVectors = false,
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
-  const { embedding } = (await embed(queryText, options)) as EmbedResult<string>;
+  const { embedding } = await embed(queryText, options);
   // Get relevant chunks from the vector database
   const results = await vectorStore.query(indexName, embedding, topK, queryFilter, includeVectors);
 
@@ -88,14 +88,14 @@ export const createVectorQueryTool = ({
   topK = 10,
   options,
   vectorFilterType = '',
-  rerankOptions,
+  reranker,
 }: {
   vectorStoreName: string;
   indexName: string;
   options: EmbeddingOptions;
   topK?: number;
   vectorFilterType?: VectorFilterType;
-  rerankOptions?: RerankerOptions;
+  reranker?: RerankConfig;
 }) => {
   return createTool({
     id: `VectorQuery ${vectorStoreName} ${indexName} Tool`,
@@ -122,12 +122,10 @@ export const createVectorQueryTool = ({
           queryFilter,
           topK,
         });
-        if (rerankOptions) {
-          const reranker = new Reranker(rerankOptions);
-          const rerankedResults = await reranker.rerank({
-            query: queryText,
-            vectorStoreResults: results,
-            topK,
+        if (reranker) {
+          const rerankedResults = await rerank(results, queryText, reranker.model, {
+            ...reranker.options,
+            topK: reranker.options?.topK || topK,
           });
           const relevantChunks = rerankedResults.map(({ result }) => result?.metadata?.text);
           relevantContext = relevantChunks.join('\n\n');

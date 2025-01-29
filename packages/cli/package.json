@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.1.57-alpha.120",
+  "version": "0.1.57-alpha.128",
   "license": "MIT",
   "description": "cli for mastra",
   "type": "module",
@@ -31,7 +31,20 @@
   "keywords": [
     "mastra",
     "cli",
-    "ai"
+    "ai",
+    "llm",
+    "llms",
+    "agent",
+    "agents",
+    "dev",
+    "development",
+    "deploy",
+    "deployment",
+    "build",
+    "workflow",
+    "typescript",
+    "command-line",
+    "devtools"
   ],
   "author": "",
   "dependencies": {
@@ -54,7 +67,7 @@
     "superjson": "^2.2.2",
     "swr": "^2.2.5",
     "tcp-port-used": "^1.0.2",
-    "typescript": "^5.5.4",
+    "typescript": "^5.7.3",
     "yocto-spinner": "^0.1.1",
     "zod": "^3.24.1",
     "zod-to-json-schema": "^3.24.1"
@@ -70,6 +83,6 @@
     "npm-run-all": "^4.1.5",
     "tsup": "^8.3.5",
     "type-fest": "^4.30.0",
-    "vitest": "^2.1.8"
+    "vitest": "^3.0.4"
   }
 }

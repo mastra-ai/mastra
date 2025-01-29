@@ -1,4 +1,4 @@
-import { embed } from '../embeddings';
+import { embedMany } from '../embeddings';
 
 import { MDocument } from './document';
 import { Language } from './types';
@@ -48,7 +48,7 @@ describe('MDocument', () => {
     }, 15000);
 
     it('embed - create embedding from chunk', async () => {
-      const embeddings = await embed(chunks, {
+      const embeddings = await embedMany(chunks, {
         provider: 'OPEN_AI',
         model: 'text-embedding-3-small',
         maxRetries: 3,

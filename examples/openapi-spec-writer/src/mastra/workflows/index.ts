@@ -1,7 +1,74 @@
-import { Workflow } from "@mastra/core";
+import { Workflow, Step } from "@mastra/core";
 import { z } from "zod";
-import { siteCrawlSync } from "../syncs";
-import { addToGitHubTool, generateSpecTool } from "../tools";
+import { addToGitHubTool, generateSpecTool, siteCrawlTool } from "../tools";
+import { MDocument } from "@mastra/rag";
+
+const syncStep = new Step({
+  id: "site-crawl-sync-step",
+  outputSchema: z.object({
+    success: z.boolean(),
+    crawlData: z.array(
+      z.object({
+        markdown: z.string(),
+        metadata: z.object({
+          sourceURL: z.string(),
+        }),
+      })
+    ),
+    entityType: z.string(),
+  }),
+  description:
+    "Crawl a website and extract the markdown content and sync it to the database",
+  execute: async ({ context, mastra, runId, suspend }) => {
+    const toolResult = await siteCrawlTool.execute({
+      context: context.machineContext?.triggerData,
+      runId,
+      suspend,
+    });
+
+    const { crawlData, entityType } = toolResult;
+
+    if (!crawlData) {
+      return {
+        success: false,
+        crawlData: [],
+        entityType: "",
+      };
+    }
+
+    const recordsToPersist = await Promise.all(
+      crawlData?.flatMap(async ({ markdown, metadata }) => {
+        const doc = MDocument.fromMarkdown(markdown, metadata);
+
+        await doc.chunk({
+          strategy: "markdown",
+          maxSize: 8190,
+        });
+
+        const chunks = doc.getDocs();
+
+        return chunks.map((c, i) => {
+          return {
+            externalId: `${c.metadata?.sourceURL}_chunk_${i}`,
+            data: { markdown: c.text },
+          };
+        });
+      })
+    );
+
+    await mastra?.engine?.syncRecords({
+      connectionId: "SYSTEM",
+      records: recordsToPersist.flatMap((r) => r),
+      name: entityType,
+    });
+
+    return {
+      success: true,
+      crawlData,
+      entityType,
+    };
+  },
+});
 
 export const openApiSpecGenWorkflow = new Workflow({
   name: "openApiSpecGenWorkflow",
@@ -10,7 +77,7 @@ export const openApiSpecGenWorkflow = new Workflow({
     pathRegex: z.string().optional().describe("The regex to match the paths"),
   }),
 })
-  .step(siteCrawlSync, {
+  .step(syncStep, {
     variables: {
       pathRegex: {
         path: "pathRegex",
@@ -25,7 +92,7 @@ export const openApiSpecGenWorkflow = new Workflow({
   .then(generateSpecTool, {
     variables: {
       mastra_entity_type: {
-        step: siteCrawlSync,
+        step: syncStep,
         path: "entityType",
       },
     },

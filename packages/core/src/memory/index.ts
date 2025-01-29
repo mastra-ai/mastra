@@ -29,7 +29,7 @@ export type MessageType = {
 export type ThreadType = {
   id: string;
   title?: string;
-  resourceid: string;
+  resource_id: string;
   createdAt: Date;
   updatedAt: Date;
   metadata?: Record<string, unknown>;

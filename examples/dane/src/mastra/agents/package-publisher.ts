@@ -14,7 +14,6 @@ const packages_llm_text = `
   @mastra/engine -> packages/engine
   @mastra/evals -> packages/evals
   @mastra/rag -> packages/rag
-  @mastra/tts -> packages/tts
   @mastra/memory -> packages/memory
   @mastra/mcp -> packages/mcp
   @mastra/loggers -> packages/loggers
@@ -30,18 +29,15 @@ const packages_llm_text = `
   - Format: @mastra/vector-{name} -> vector-stores/{name}
   - Special case: @mastra/vector-astra -> vector-stores/astra
 
-  ## 4. Integrations - STRICT RULES:
+  ## 4. Speech packages - STRICT RULES:
+  - ALL speech packages must be directly under speech/
+  - Format: @mastra/speech-{name} -> speech/{name}
+
+  ## 5. Integrations - STRICT RULES:
   - ALL integration packages are under integrations/
-  @mastra/apollos -> integrations/apollo
-  @mastra/ashby -> integrations/ashby
+  @mastra/composio -> integrations/composio
   @mastra/github -> integrations/github
-  @mastra/twilio -> integrations/twilio
-  @mastra/stripe -> integrations/stripe
   @mastra/stabilityai -> integrations/stabilityai
-  @mastra/sendgrid -> integrations/sendgrid
-  @mastra/ragie -> integrations/ragie
-  @mastra/resend -> integrations/resend
-  @mastra/coda -> integrations/coda
   @mastra/firecrawl -> integrations/firecrawl
   
   ##VALIDATION:

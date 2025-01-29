@@ -1,5 +1,61 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.25
+
+### Patch Changes
+
+- Updated dependencies [327ece7]
+  - @mastra/core@0.1.27-alpha.80
+
+## 0.0.1-alpha.24
+
+### Patch Changes
+
+- Updated dependencies [21fe536]
+  - @mastra/core@0.1.27-alpha.79
+
+## 0.0.1-alpha.23
+
+### Patch Changes
+
+- 88f18d7: Update cors support
+
+## 0.0.1-alpha.22
+
+### Patch Changes
+
+- 685108a: Remove syncs and excess rag
+- 685108a: Removing mastra syncs
+- Updated dependencies [685108a]
+- Updated dependencies [685108a]
+  - @mastra/core@0.1.27-alpha.78
+
+## 0.0.1-alpha.21
+
+### Patch Changes
+
+- cfb966f: Deprecate @mastra/tts for mastra speech providers
+- Updated dependencies [8105fae]
+  - @mastra/core@0.1.27-alpha.77
+
+## 0.0.1-alpha.20
+
+### Patch Changes
+
+- ae7bf94: Fix loggers messing up deploys
+- ae7bf94: Changeset
+- Updated dependencies [ae7bf94]
+- Updated dependencies [ae7bf94]
+  - @mastra/core@0.1.27-alpha.76
+
+## 0.0.1-alpha.19
+
+### Patch Changes
+
+- 7064554: deployer fixes
+- Updated dependencies [23dcb23]
+  - @mastra/core@0.1.27-alpha.75
+
 ## 0.0.1-alpha.18
 
 ### Patch Changes

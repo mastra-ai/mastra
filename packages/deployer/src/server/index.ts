@@ -34,7 +34,6 @@ import {
   updateThreadHandler,
 } from './handlers/memory.js';
 import { rootHandler } from './handlers/root.js';
-import { executeSyncHandler } from './handlers/syncs.js';
 import {
   executeAgentToolHandler,
   executeToolHandler,
@@ -78,7 +77,17 @@ export async function createHonoServer(
   }, {});
 
   // Middleware
-  app.use('*', cors());
+  app.use(
+    '*',
+    cors({
+      origin: '*',
+      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowHeaders: ['Content-Type', 'Authorization'],
+      exposeHeaders: ['Content-Length', 'X-Requested-With'],
+      credentials: false,
+      maxAge: 3600,
+    }),
+  );
 
   if (options.apiReqLogs) {
     app.use(logger());
@@ -646,45 +655,6 @@ export async function createHonoServer(
       },
     }),
     executeWorkflowHandler,
-  );
-
-  // Sync routes
-  app.post(
-    '/api/syncs/:syncId/execute',
-    describeRoute({
-      description: 'Execute a sync',
-      tags: ['syncs'],
-      parameters: [
-        {
-          name: 'syncId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                input: { type: 'object' },
-              },
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'Sync execution result',
-        },
-        404: {
-          description: 'Sync not found',
-        },
-      },
-    }),
-    executeSyncHandler,
   );
 
   // Log routes

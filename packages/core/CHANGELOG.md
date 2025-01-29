@@ -1,5 +1,43 @@
 # @mastra/core
 
+## 0.1.27-alpha.80
+
+### Patch Changes
+
+- 327ece7: Updates for ts versions
+
+## 0.1.27-alpha.79
+
+### Patch Changes
+
+- 21fe536: add keyword tags for packages and update readmes
+
+## 0.1.27-alpha.78
+
+### Patch Changes
+
+- 685108a: Remove syncs and excess rag
+- 685108a: Removing mastra syncs
+
+## 0.1.27-alpha.77
+
+### Patch Changes
+
+- 8105fae: Split embed into embed and embedMany to handle different return types
+
+## 0.1.27-alpha.76
+
+### Patch Changes
+
+- ae7bf94: Fix loggers messing up deploys
+- ae7bf94: Changeset
+
+## 0.1.27-alpha.75
+
+### Patch Changes
+
+- 23dcb23: Redeploy core
+
 ## 0.1.27-alpha.74
 
 ### Patch Changes

@@ -1,9 +1,9 @@
 import { Mastra, createLogger } from "@mastra/core";
 import { PostgresEngine } from "@mastra/engine";
-import { PgMemory } from "@mastra/memory";
+import { PgMemory } from "@mastra/memory/postgres";
 
 import { travelAgent, travelAnalyzer } from "./agents";
-import { syncCsvData } from "./syncs/attractions";
+import { syncCsvDataWorkflow } from "./workflows/attractions";
 
 const url = "postgresql://postgres:postgres@localhost:5433/mastra";
 
@@ -17,7 +17,7 @@ const memory = new PgMemory({
 });
 
 export const mastra = new Mastra({
-  syncs: { syncCsvData },
+  workflows: { syncCsvDataWorkflow },
   engine,
   memory,
   agents: { travelAgent, travelAnalyzer },

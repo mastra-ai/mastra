@@ -10,24 +10,27 @@ When retrieving documents for RAG, initial vector similarity search may miss imp
 Cohere's reranking service helps improve result relevance by reordering documents using multiple scoring factors.
 
 ```typescript 
-const reranker = new Reranker({
-  semanticProvider: "cohere",
-  cohereApiKey: "your-api-key",
-  weights: {
-    semantic: 0.4,
-    vector: 0.4,
-    position: 0.2
-  }
-});
+import { rerank } from "@mastra/rag";
 
-const results = await reranker.rerank({
-  query: "deployment configuration",
-  vectorStoreResults: searchResults,
-  topK: 5
-});
+const results = rerank(
+  searchResults,
+  "deployment configuration",
+  {
+    provider: "COHERE",
+    name: "rerank-v3.5",
+  },
+  {
+    topK: 5,
+    weights: {
+      semantic: 0.4,
+      vector: 0.4,
+      position: 0.2
+    }
+  }
+);
 ```
 
 ## Links
 
-- [Reranker() reference](../reference/rag/reranker.mdx)
+- [rerank() reference](../reference/rag/rerank.mdx)
 - [Retrieval docs](../docs/rag/retrieve-results.mdx)

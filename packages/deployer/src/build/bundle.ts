@@ -140,14 +140,37 @@ const bundleStep = new Step({
         '@mastra/rag',
         '@mastra/evals',
         '@mastra/mcp',
-        '@mastra/tts',
         '@mastra/firecrawl',
         '@mastra/github',
         '@mastra/stabilityai',
+
+        // Your deployer packages
         '@mastra/deployer',
         '@mastra/deployer-cloudflare',
         '@mastra/deployer-netlify',
         '@mastra/deployer-vercel',
+
+        // Your speech packages
+        '@mastra/speech-elevenlabs',
+        '@mastra/speech-openai',
+        '@mastra/speech-playai',
+        '@mastra/speech-azure',
+        '@mastra/speech-deepgram',
+        '@mastra/speech-google',
+        '@mastra/speech-ibm',
+        '@mastra/speech-murf',
+        '@mastra/speech-speechify',
+        '@mastra/speech-replicate',
+
+        // Your vector store packages
+        '@mastra/vector-astra',
+        '@mastra/vector-chroma',
+        '@mastra/vector-libsql',
+        '@mastra/vector-pg',
+        '@mastra/vector-pinecone',
+        '@mastra/vector-qdrant',
+        '@mastra/vector-upstash',
+        '@mastra/vector-vectorize',
       ],
       plugins,
     };

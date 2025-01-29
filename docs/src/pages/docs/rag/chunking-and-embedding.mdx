@@ -16,7 +16,7 @@ const docFromJSON = MDocument.fromJSON(`{ "key": "value" }`);
 
 ## Step 1: Document Processing
 
-Use `chunk` to split documents into manageable pieces. Mastra supports multiple chunking strategies optimized for different document types: 
+Use `chunk` to split documents into manageable pieces. Mastra supports multiple chunking strategies optimized for different document types:
 
 - `recursive`: Smart splitting based on content structure
 - `character`: Simple character-based splits
@@ -26,9 +26,9 @@ Use `chunk` to split documents into manageable pieces. Mastra supports multiple 
 - `json`: JSON structure-aware splitting
 - `latex`: LaTeX structure-aware splitting
 
-Here's an example of how to use the `recursive` strategy: 
+Here's an example of how to use the `recursive` strategy:
 
-```ts showLineNumbers copy 
+```ts showLineNumbers copy
 const chunks = await doc.chunk({
   strategy: "recursive",
   size: 512,
@@ -36,27 +36,27 @@ const chunks = await doc.chunk({
   separator: "\n",
   extract: {
     metadata: true, // Optionally extract metadata
-  }
+  },
 });
 ```
- 
+
 **Note:** Metadata extraction may use LLM calls, so ensure your API key is set.
 
-We go deeper into chunking strategies in our [chunk documentation](/docs/reference/rag/chunk.mdx). 
+We go deeper into chunking strategies in our [chunk documentation](/docs/reference/rag/chunk.mdx).
 
-## Step 2: Embedding Generation 
+## Step 2: Embedding Generation
 
 Transform chunks into embeddings using your preferred provider. Mastra supports both OpenAI and Cohere embeddings:
 
 ### Using OpenAI
 
 ```ts showLineNumbers copy
-import { embed } from "@mastra/rag";
+import { embedMany } from "@mastra/rag";
 
-const embeddings = await embed(chunks, {
+const { embeddings } = await embedMany(chunks, {
   provider: "OPEN_AI",
   model: "text-embedding-3-small",
-  maxRetries: 3
+  maxRetries: 3,
 });
 ```
 
@@ -66,18 +66,18 @@ const embeddings = await embed(chunks, {
 const embeddings = await embed(chunks, {
   provider: "COHERE",
   model: "embed-english-v3.0",
-  maxRetries: 3
+  maxRetries: 3,
 });
 ```
 
 The embedding functions return vectors, arrays of numbers representing the semantic meaning of your text, ready for similarity searches in your vector database.
 
-## Example: Complete Pipeline 
+## Example: Complete Pipeline
 
 Here's an example showing document processing and embedding generation with both providers:
 
 ```ts showLineNumbers copy
-import { MDocument, embed } from "@mastra/rag";
+import { MDocument, embedMany } from "@mastra/rag";
 
 // Initialize document
 const doc = MDocument.fromText(`
@@ -89,19 +89,19 @@ const doc = MDocument.fromText(`
 const chunks = await doc.chunk({
   strategy: "recursive",
   size: 256,
-  overlap: 50
+  overlap: 50,
 });
 
 // Generate embeddings with OpenAI
-const openAIEmbeddings = await embed(chunks, {
+const { embeddings: openAIEmbeddings } = await embedMany(chunks, {
   provider: "OPEN_AI",
-  model: "text-embedding-3-small"
+  model: "text-embedding-3-small",
 });
 
 // Generate embeddings with Cohere
-const cohereEmbeddings = await embed(chunks, {
+const { embeddings: cohereEmbeddings } = await embedMany(chunks, {
   provider: "COHERE",
-  model: "embed-english-v3.0"
+  model: "embed-english-v3.0",
 });
 
 // Store embeddings in your vector database

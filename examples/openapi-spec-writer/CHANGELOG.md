@@ -1,5 +1,89 @@
 # openapi-spec-writer
 
+## 0.1.1-alpha.68
+
+### Patch Changes
+
+- Updated dependencies [327ece7]
+  - @mastra/firecrawl@1.0.4-alpha.72
+  - @mastra/github@1.0.3-alpha.64
+  - @mastra/engine@0.0.5-alpha.75
+  - @mastra/core@0.1.27-alpha.80
+  - @mastra/rag@0.0.2-alpha.70
+  - @mastra/loggers@0.0.1-alpha.13
+
+## 0.1.1-alpha.67
+
+### Patch Changes
+
+- Updated dependencies [21fe536]
+  - @mastra/core@0.1.27-alpha.79
+  - @mastra/rag@0.0.2-alpha.69
+  - @mastra/firecrawl@1.0.4-alpha.71
+  - @mastra/github@1.0.3-alpha.63
+  - @mastra/engine@0.0.5-alpha.74
+  - @mastra/loggers@0.0.1-alpha.12
+
+## 0.1.1-alpha.66
+
+### Patch Changes
+
+- Updated dependencies [685108a]
+- Updated dependencies [685108a]
+  - @mastra/firecrawl@1.0.4-alpha.70
+  - @mastra/core@0.1.27-alpha.78
+  - @mastra/rag@0.0.2-alpha.68
+  - @mastra/github@1.0.3-alpha.62
+  - @mastra/engine@0.0.5-alpha.73
+  - @mastra/loggers@0.0.1-alpha.11
+
+## 0.1.1-alpha.65
+
+### Patch Changes
+
+- Updated dependencies [cbaecb0]
+- Updated dependencies [8105fae]
+- Updated dependencies [ecdee97]
+  - @mastra/loggers@0.0.1-alpha.10
+  - @mastra/core@0.1.27-alpha.77
+  - @mastra/rag@0.0.2-alpha.67
+  - @mastra/firecrawl@1.0.4-alpha.69
+  - @mastra/github@1.0.3-alpha.61
+  - @mastra/engine@0.0.5-alpha.72
+
+## 0.1.1-alpha.64
+
+### Patch Changes
+
+- Updated dependencies [9c0d010]
+  - @mastra/rag@0.0.2-alpha.66
+  - @mastra/firecrawl@1.0.4-alpha.68
+
+## 0.1.1-alpha.63
+
+### Patch Changes
+
+- Updated dependencies [ae7bf94]
+- Updated dependencies [ae7bf94]
+  - @mastra/core@0.1.27-alpha.76
+  - @mastra/firecrawl@1.0.4-alpha.67
+  - @mastra/github@1.0.3-alpha.60
+  - @mastra/engine@0.0.5-alpha.71
+  - @mastra/loggers@0.0.1-alpha.9
+  - @mastra/rag@0.0.2-alpha.65
+
+## 0.1.1-alpha.62
+
+### Patch Changes
+
+- Updated dependencies [23dcb23]
+  - @mastra/core@0.1.27-alpha.75
+  - @mastra/firecrawl@1.0.4-alpha.66
+  - @mastra/github@1.0.3-alpha.59
+  - @mastra/engine@0.0.5-alpha.70
+  - @mastra/loggers@0.0.1-alpha.8
+  - @mastra/rag@0.0.2-alpha.64
+
 ## 0.1.1-alpha.61
 
 ### Patch Changes
