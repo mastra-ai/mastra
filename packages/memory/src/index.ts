@@ -4,7 +4,7 @@ import {
   MastraVector,
   MessageType,
   StorageGetMessagesArg,
-  ThreadConfig,
+  MemoryConfig,
   ThreadType,
 } from '@mastra/core';
 import { Message as AiMessage } from 'ai';
@@ -19,7 +19,7 @@ export * from './kv/upstash';
 export class Memory extends MastraMemory {
   constructor(
     config: {
-      threads?: ThreadConfig;
+      threads?: MemoryConfig;
     } & ({ storage: MastraStorage; vector?: MastraVector } | { storage: MastraStorage; vector: MastraVector }),
   ) {
     super({ name: 'Memory', ...config });

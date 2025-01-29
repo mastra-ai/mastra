@@ -42,7 +42,7 @@ export type MessageResponse<T extends 'raw' | 'core_message'> = {
   core_message: CoreMessage[];
 }[T];
 
-export type ThreadConfig = {
+export type MemoryConfig = {
   injectRecentMessages?: number | false;
   injectVectorHistorySearch?: boolean;
   // TODO:
@@ -52,7 +52,7 @@ export type ThreadConfig = {
 export type SharedMemoryConfig = {
   storage: MastraStorage;
   vector?: MastraVector;
-  threads?: ThreadConfig;
+  threads?: MemoryConfig;
 };
 
 /**
@@ -65,7 +65,7 @@ export abstract class MastraMemory extends MastraBase {
   storage: MastraStorage;
   vector?: MastraVector;
 
-  protected threadConfig: ThreadConfig = {
+  protected threadConfig: MemoryConfig = {
     injectRecentMessages: 40,
     injectVectorHistorySearch: false, // becomes true by default if a vector store is attached
     // TODO:
@@ -84,7 +84,7 @@ export abstract class MastraMemory extends MastraBase {
     }
   }
 
-  protected getMergedThreadConfig(config: ThreadConfig): ThreadConfig {
+  protected getMergedThreadConfig(config: MemoryConfig): MemoryConfig {
     return {
       ...this.threadConfig,
       ...config,
@@ -98,7 +98,7 @@ export abstract class MastraMemory extends MastraBase {
   }: {
     threadId: string;
     vectorMessageSearch?: string;
-    config?: ThreadConfig;
+    config?: MemoryConfig;
   }) {
     const threadConfig = this.getMergedThreadConfig(config || {});
 

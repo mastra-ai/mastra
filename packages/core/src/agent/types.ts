@@ -2,6 +2,7 @@ import { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
 
 import { CoreMessage, OutputType } from '../llm/types';
+import { MemoryConfig } from '../memory';
 import { ToolAction } from '../tools';
 
 export type ToolsetsInput = Record<string, Record<string, ToolAction<any, any, any, any>>>;
@@ -13,6 +14,7 @@ export interface AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefi
   resourceid?: string;
   context?: CoreMessage[];
   threadId?: string;
+  memory?: MemoryConfig;
   runId?: string;
   onStepFinish?: (step: string) => void;
   maxSteps?: number;
@@ -25,6 +27,7 @@ export interface AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefine
   resourceid?: string;
   context?: CoreMessage[];
   threadId?: string;
+  memory?: MemoryConfig;
   runId?: string;
   onFinish?: (result: string) => Promise<void> | void;
   onStepFinish?: (step: string) => void;

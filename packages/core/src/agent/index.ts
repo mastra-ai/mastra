@@ -21,7 +21,7 @@ import { AvailableHooks, executeHook } from '../hooks';
 import { LLM } from '../llm';
 import { GenerateReturn, ModelConfig, StreamReturn } from '../llm/types';
 import { LogLevel, RegisteredLogger } from '../logger';
-import { ThreadType } from '../memory';
+import { MemoryConfig, ThreadType } from '../memory';
 import { InstrumentClass } from '../telemetry';
 import { CoreTool, ToolAction } from '../tools/types';
 
@@ -146,12 +146,14 @@ export class Agent<
 
   async saveMemory({
     threadId,
+    memoryConfig,
     resourceid,
     userMessages,
     runId,
   }: {
     resourceid: string;
     threadId?: string;
+    memoryConfig?: MemoryConfig;
     userMessages: CoreMessage[];
     time?: Date;
     keyword?: string;
@@ -243,6 +245,7 @@ export class Agent<
             ? (
                 await this.#mastra.memory.getRememberedMessageHistory({
                   threadId,
+                  config: memoryConfig,
                 })
               ).messages
             : [];
@@ -478,10 +481,12 @@ export class Agent<
     resourceid,
     runId,
     threadId,
+    memoryConfig,
     messages,
   }: {
     runId?: string;
     threadId?: string;
+    memoryConfig?: MemoryConfig;
     messages: CoreMessage[];
     resourceid: string;
   }) {
@@ -493,6 +498,7 @@ export class Agent<
       threadId,
       resourceid,
       userMessages: messages,
+      memoryConfig,
     });
 
     coreMessages = saveMessageResponse.messages as CoreMessage[];
@@ -504,6 +510,7 @@ export class Agent<
     messages,
     context,
     threadId,
+    memoryConfig,
     resourceid,
     runId,
     toolsets,
@@ -511,6 +518,7 @@ export class Agent<
     toolsets?: ToolsetsInput;
     resourceid?: string;
     threadId?: string;
+    memoryConfig?: MemoryConfig;
     context?: CoreMessage[];
     runId?: string;
     messages: CoreMessage[];
@@ -534,6 +542,7 @@ export class Agent<
             resourceid,
             runId,
             threadId: threadIdToUse,
+            memoryConfig,
             messages,
           });
 
@@ -655,6 +664,7 @@ export class Agent<
     {
       context,
       threadId: threadIdInFn,
+      memory,
       resourceid,
       maxSteps = 5,
       onStepFinish,
@@ -691,6 +701,7 @@ export class Agent<
       messages: messagesToUse,
       context,
       threadId: threadIdInFn,
+      memoryConfig: memory,
       resourceid,
       runId: runIdToUse,
       toolsets,
@@ -739,6 +750,7 @@ export class Agent<
     {
       context,
       threadId: threadIdInFn,
+      memory,
       resourceid,
       maxSteps = 5,
       onFinish,
@@ -776,6 +788,7 @@ export class Agent<
       messages: messagesToUse,
       context,
       threadId: threadIdInFn,
+      memoryConfig: memory,
       resourceid,
       runId: runIdToUse,
       toolsets,
