@@ -381,7 +381,7 @@ export class Agent<
 
   convertTools({
     toolsets,
-    threadId,
+    // threadId,
     runId,
   }: {
     toolsets?: ToolsetsInput;
@@ -399,23 +399,24 @@ export class Agent<
             description: tool.description,
             parameters: tool.inputSchema,
             execute: async args => {
-              if (threadId && tool.enableCache && this.#mastra?.memory) {
-                const cachedResult = await this.#mastra.memory.getToolResult({
-                  threadId,
-                  toolArgs: args,
-                  toolName: k as string,
-                });
-                if (cachedResult) {
-                  this.logger.debug(`Cached Result ${k as string} runId: ${runId}`, {
-                    cachedResult: JSON.stringify(cachedResult, null, 2),
-                    runId,
-                  });
-                  return cachedResult;
-                }
-              }
-              this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, {
-                runId,
-              });
+              // TODO: tool call cache should be on storage classes, not memory
+              // if (threadId && tool.enableCache && this.#mastra?.memory) {
+              //   const cachedResult = await this.#mastra.memory.getToolResult({
+              //     threadId,
+              //     toolArgs: args,
+              //     toolName: k as string,
+              //   });
+              //   if (cachedResult) {
+              //     this.logger.debug(`Cached Result ${k as string} runId: ${runId}`, {
+              //       cachedResult: JSON.stringify(cachedResult, null, 2),
+              //       runId,
+              //     });
+              //     return cachedResult;
+              //   }
+              // }
+              // this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, {
+              //   runId,
+              // });
               return tool.execute({
                 context: args,
                 mastra: this.#mastra,
@@ -443,23 +444,24 @@ export class Agent<
             description: toolObj.description || '',
             parameters: toolObj.inputSchema,
             execute: async args => {
-              if (threadId && toolObj.enableCache && this.#mastra?.memory) {
-                const cachedResult = await this.#mastra.memory.getToolResult({
-                  threadId,
-                  toolArgs: args,
-                  toolName,
-                });
-                if (cachedResult) {
-                  this.logger.debug(`Cached Result ${toolName as string} runId: ${runId}`, {
-                    cachedResult: JSON.stringify(cachedResult, null, 2),
-                    runId,
-                  });
-                  return cachedResult;
-                }
-              }
-              this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, {
-                runId,
-              });
+              // TODO: tool call cache should be on storage classes, not memory
+              // if (threadId && toolObj.enableCache && this.#mastra?.memory) {
+              //   const cachedResult = await this.#mastra.memory.getToolResult({
+              //     threadId,
+              //     toolArgs: args,
+              //     toolName,
+              //   });
+              //   if (cachedResult) {
+              //     this.logger.debug(`Cached Result ${toolName as string} runId: ${runId}`, {
+              //       cachedResult: JSON.stringify(cachedResult, null, 2),
+              //       runId,
+              //     });
+              //     return cachedResult;
+              //   }
+              // }
+              // this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, {
+              //   runId,
+              // });
               return toolObj.execute!({
                 context: args,
               });
