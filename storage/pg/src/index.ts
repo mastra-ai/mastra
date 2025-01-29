@@ -229,11 +229,62 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  async getMessages<T = unknown>({ threadId }: StorageGetMessagesArg): Promise<T> {
+  async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
     try {
+      const messages: any[] = [];
+      const limit = selectBy?.last || 100;
+      const include = selectBy?.include || [];
+
+      if (include.length) {
+        const includeResult = await client.query(
+          `
+          WITH ordered_messages AS (
+            SELECT 
+              *,
+              ROW_NUMBER() OVER (ORDER BY created_at) as row_num
+            FROM mastra_messages 
+            WHERE thread_id = $1
+          )
+          SELECT DISTINCT ON (m.id)
+            m.id, 
+            m.content, 
+            m.role, 
+            m.type,
+            m.created_at AS "createdAt", 
+            m.thread_id AS "threadId",
+            m.tool_call_ids AS "toolCallIds",
+            m.tool_call_args AS "toolCallArgs",
+            m.tokens,
+            m.tool_call_args_expire_at AS "toolCallArgsExpireAt"
+          FROM ordered_messages m
+          WHERE m.id = ANY($2)
+          OR EXISTS (
+            SELECT 1 FROM ordered_messages target
+            WHERE target.id = ANY($2)
+            AND (
+              -- Get previous messages based on the max withPreviousMessages
+              (m.row_num >= target.row_num - $3 AND m.row_num < target.row_num)
+              OR
+              -- Get next messages based on the max withNextMessages
+              (m.row_num <= target.row_num + $4 AND m.row_num > target.row_num)
+            )
+          )
+          ORDER BY m.id, m.created_at
+          `,
+          [
+            threadId,
+            include.map(i => i.id),
+            Math.max(...include.map(i => i.withPreviousMessages || 0)),
+            Math.max(...include.map(i => i.withNextMessages || 0)),
+          ],
+        );
+        messages.push(...includeResult.rows);
+      }
+
+      // Then get the remaining messages, excluding the ids we just fetched
       const result = await client.query(
         `
         SELECT 
@@ -249,12 +300,19 @@ export class PostgresStore extends MastraStorage {
             tool_call_args_expire_at AS "toolCallArgsExpireAt"
         FROM mastra_messages
         WHERE thread_id = $1
-        ORDER BY created_at ASC
+        AND id != ALL($2)
+        ORDER BY created_at DESC
+        LIMIT $3
         `,
-        [threadId],
+        [threadId, messages.map(m => m.id), limit],
       );
 
-      return result.rows as T;
+      messages.push(...result.rows);
+
+      // Sort all messages by creation date
+      messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+      return messages as T;
     } finally {
       client.release();
     }
