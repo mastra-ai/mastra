@@ -61,9 +61,10 @@ program
             llmProvider: 'openai',
             addExample: false,
           });
+          return;
         }
         await create({
-          components: args.components,
+          components: args.components ? args.components.split(',') : [],
           llmProvider: args.llm,
           addExample: args.example,
           llmApiKey: args['llm-api-key'],
