@@ -19,7 +19,7 @@ import { MDocument } from '@mastra/rag';
 
 const doc = new MDocument({
   text: 'Document content',
-  metadata: { source: 'example.txt' }
+  metadata: { source: 'example.txt' },
 });
 ```
 

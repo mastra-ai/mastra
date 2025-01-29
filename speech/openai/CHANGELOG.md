@@ -1,5 +1,19 @@
 # @mastra/speech-openai
 
+## 0.0.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [327ece7]
+  - @mastra/core@0.1.27-alpha.80
+
+## 0.0.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [21fe536]
+  - @mastra/core@0.1.27-alpha.79
+
 ## 0.0.1-alpha.3
 
 ### Patch Changes

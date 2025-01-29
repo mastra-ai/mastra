@@ -1,6 +1,6 @@
 {
   "name": "travel-app",
-  "version": "0.1.1-alpha.34",
+  "version": "0.1.1-alpha.36",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -55,6 +55,6 @@
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "ts-jest": "^29.1.2",
-    "typescript": "^5"
+    "typescript": "^5.7.3"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "workflow-with-separate-steps",
-  "version": "1.0.1-alpha.24",
+  "version": "1.0.1-alpha.26",
   "main": "index.js",
   "private": true,
   "scripts": {
@@ -15,7 +15,7 @@
     "@types/node": "^22.10.5",
     "mastra": "workspace:*",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
+    "typescript": "^5.7.3",
     "zod": "^3.24.1"
   },
   "dependencies": {

@@ -1,5 +1,19 @@
 # @mastra/evals
 
+## 0.1.0-alpha.21
+
+### Patch Changes
+
+- Updated dependencies [327ece7]
+  - @mastra/core@0.1.27-alpha.80
+
+## 0.1.0-alpha.20
+
+### Patch Changes
+
+- Updated dependencies [21fe536]
+  - @mastra/core@0.1.27-alpha.79
+
 ## 0.1.0-alpha.19
 
 ### Patch Changes

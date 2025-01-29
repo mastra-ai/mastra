@@ -78,16 +78,19 @@ The server is available at `http://localhost:3000`.
 `mastra build`
 
 This command builds your Mastra project for deployment to different environments. The build process:
+
 1. Reads your Mastra configuration
 2. Generates optimized files for your target environment
 3. Outputs them to a build directory
 
 Options:
+
 ```bash
 --dir     Directory containing Mastra files (default: src/mastra)
 ```
 
 Example usage:
+
 ```bash
 # Build using default directory
 mastra build
@@ -103,7 +106,7 @@ const mastra = new Mastra({
   deployer: {
     type: 'HONO', // Target environment (HONO, EXPRESS, NEXT)
     // Environment-specific options
-  }
+  },
 });
 ```
 

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-vercel",
-  "version": "0.0.1-alpha.28",
+  "version": "0.0.1-alpha.30",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -30,6 +30,7 @@
     "@tsconfig/recommended": "^1.0.7",
     "@types/node": "^22.9.0",
     "tsup": "^8.0.1",
+    "typescript": "^5.3.3",
     "vercel": "^39.3.0",
     "vitest": "^3.0.4"
   }
