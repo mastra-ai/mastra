@@ -1,5 +1,11 @@
 # @mastra/vector-pinecone
 
+## 0.0.1-alpha.14
+
+### Patch Changes
+
+- b422ed3: Bundle vector provider packages with tsup
+
 ## 0.0.1-alpha.13
 
 ### Patch Changes

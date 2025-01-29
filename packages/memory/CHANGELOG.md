@@ -1,5 +1,11 @@
 # @mastra/memory
 
+## 0.0.2-alpha.62
+
+### Patch Changes
+
+- 7f5b1b2: @mastra/memory tsup bundling
+
 ## 0.0.2-alpha.61
 
 ### Patch Changes

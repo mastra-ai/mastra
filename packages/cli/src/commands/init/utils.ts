@@ -126,7 +126,7 @@ export const mastra = new Mastra()
       destPath,
       `
 import { Mastra } from '@mastra/core';
-import { createLogger } from '@mastra/core/logger';
+import { createLogger } from '@mastra/core';
 ${addWorkflow ? `import { weatherWorkflow } from './workflows';` : ''}
 ${addAgent ? `import { weatherAgent } from './agents';` : ''}
 
