@@ -1,5 +1,11 @@
 # @mastra/evals
 
+## 0.1.0-alpha.22
+
+### Patch Changes
+
+- cb2e997: Bundle evals package with tsup
+
 ## 0.1.0-alpha.21
 
 ### Patch Changes
