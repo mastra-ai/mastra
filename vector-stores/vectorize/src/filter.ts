@@ -1,15 +1,15 @@
-import { BaseFilterTranslator, Filter, FieldCondition } from '@mastra/core';
+import { BaseFilterTranslator, Filter, FieldCondition, ArrayOperator } from '@mastra/core';
 
 export class VectorizeFilterTranslator extends BaseFilterTranslator {
+  protected override supportedArrayOperators: ArrayOperator[] = ['$in', '$nin'];
+  protected override supportedLogicalOperators = [];
+  protected override supportedElementOperators = [];
+  protected override supportedRegexOperators = [];
+
   translate(filter: Filter): Filter {
     if (this.isEmpty(filter)) return filter;
     this.validateFilter(filter);
     return this.translateNode(filter);
-  }
-
-  protected override isValidOperator(key: string): boolean {
-    const supportedOperators = ['$eq', '$ne', '$gt', '$gte', '$lt', '$lte', '$in', '$nin'];
-    return supportedOperators.includes(key) && super.isValidOperator(key);
   }
 
   private translateNode(node: Filter | FieldCondition, currentPath: string = ''): any {

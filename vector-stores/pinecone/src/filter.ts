@@ -1,15 +1,22 @@
-import { BaseFilterTranslator, FieldCondition, Filter, QueryOperator } from '@mastra/core';
+import {
+  ArrayOperator,
+  BaseFilterTranslator,
+  FieldCondition,
+  Filter,
+  LogicalOperator,
+  QueryOperator,
+} from '@mastra/core';
 
 export class PineconeFilterTranslator extends BaseFilterTranslator {
+  protected override supportedArrayOperators: ArrayOperator[] = ['$in', '$all'];
+  protected override supportedLogicalOperators: LogicalOperator[] = ['$and', '$or'];
+  protected override supportedElementOperators = [];
+  protected override supportedRegexOperators = [];
+
   translate(filter: Filter): Filter {
     if (this.isEmpty(filter)) return filter;
     this.validateFilter(filter);
     return this.translateNode(filter);
-  }
-
-  protected override isValidOperator(key: string): boolean {
-    const supportedOperators = ['$eq', '$ne', '$gt', '$gte', '$lt', '$lte', '$in', '$and', '$or', '$all'];
-    return supportedOperators.includes(key) && super.isValidOperator(key);
   }
 
   private translateNode(node: Filter | FieldCondition, currentPath: string = ''): any {
