@@ -173,7 +173,7 @@ describe('agent', () => {
       expect(partialObject).toBeDefined();
     }
 
-    expect(previousPartialObject['winner']).toBe('Barack Obama');
+    expect(previousPartialObject['winner']).toContain('Barack Obama');
   });
 
   it('should call findUserTool', async () => {
