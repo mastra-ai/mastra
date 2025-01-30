@@ -1,0 +1,38 @@
+{
+  "name": "@mastra/storage-durable-object",
+  "version": "0.0.0-alpha.0",
+  "description": "Cloudflare Durable Objects storage provider for Mastra",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/storage-durable-object.esm.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/storage-durable-object.esm.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "dts build",
+    "build:dev": "dts watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250124.3",
+    "@tsconfig/recommended": "^1.0.7",
+    "@types/node": "^22.9.0",
+    "dts-cli": "^2.0.5",
+    "miniflare": "^3.20240117.0",
+    "vitest": "^2.1.8"
+  }
+}
