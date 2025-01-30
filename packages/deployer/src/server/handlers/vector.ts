@@ -58,8 +58,14 @@ export async function createIndex(c: Context) {
     const vectorName = c.req.param('vectorName');
     const { indexName, dimension, metric } = await c.req.json<CreateIndexRequest>();
 
-    if (!indexName || !dimension) {
-      throw new HTTPException(400, { message: 'Invalid request body. indexName and dimension are required.' });
+    if (!indexName || typeof dimension !== 'number' || dimension <= 0) {
+      throw new HTTPException(400, {
+        message: 'Invalid request body. indexName and positive dimension number are required.',
+      });
+    }
+
+    if (metric && !['cosine', 'euclidean', 'dotproduct'].includes(metric)) {
+      throw new HTTPException(400, { message: 'Invalid metric. Must be one of: cosine, euclidean, dotproduct' });
     }
 
     const vector = getVector(c, vectorName);
@@ -74,7 +80,7 @@ export async function createIndex(c: Context) {
 export async function queryVectors(c: Context) {
   try {
     const vectorName = c.req.param('vectorName');
-    const { indexName, queryVector, topK, filter, includeVector } = await c.req.json<QueryRequest>();
+    const { indexName, queryVector, topK = 10, filter, includeVector = false } = await c.req.json<QueryRequest>();
 
     if (!indexName || !queryVector || !Array.isArray(queryVector)) {
       throw new HTTPException(400, { message: 'Invalid request body. indexName and queryVector array are required.' });
@@ -95,7 +101,7 @@ export async function listIndexes(c: Context) {
     const vector = getVector(c, vectorName);
 
     const indexes = await vector.listIndexes();
-    return c.json({ indexes });
+    return c.json({ indexes: indexes.filter(Boolean) });
   } catch (error) {
     return handleError(error, 'Error listing indexes');
   }
@@ -113,7 +119,12 @@ export async function describeIndex(c: Context) {
 
     const vector = getVector(c, vectorName);
     const stats: IndexStats = await vector.describeIndex(indexName);
-    return c.json(stats);
+
+    return c.json({
+      dimension: stats.dimension,
+      count: stats.count,
+      metric: stats.metric?.toLowerCase(),
+    });
   } catch (error) {
     return handleError(error, 'Error describing index');
   }
