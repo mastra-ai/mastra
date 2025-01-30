@@ -1,3 +1,5 @@
+import { WorkflowRunState } from '../workflows';
+
 export interface StorageColumn {
   type: 'text' | 'timestamp';
   primaryKey?: boolean;

@@ -25,7 +25,7 @@ export class PgMemory extends MastraMemory {
     try {
       const result = await client.query<ThreadType>(
         `
-                SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, resourceid, metadata
+                SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, resource_id, metadata
                 FROM mastra_threads
                 WHERE id = $1
             `,
@@ -38,18 +38,18 @@ export class PgMemory extends MastraMemory {
     }
   }
 
-  async getThreadsByResourceId({ resourceid }: { resourceid: string }): Promise<ThreadType[]> {
+  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<ThreadType[]> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
     try {
       const result = await client.query<ThreadType>(
         `
-                SELECT id, title, resourceid, created_at AS createdAt, updated_at AS updatedAt, metadata
+                SELECT id, title, resource_id as resourceId, created_at AS createdAt, updated_at AS updatedAt, metadata
                 FROM mastra_threads
-                WHERE resourceid = $1
+                WHERE resource_id = $1
             `,
-        [resourceid],
+        [resourceId],
       );
       return result.rows;
     } finally {
@@ -62,15 +62,15 @@ export class PgMemory extends MastraMemory {
 
     const client = await this.pool.connect();
     try {
-      const { id, title, createdAt, updatedAt, resourceid, metadata } = thread;
+      const { id, title, createdAt, updatedAt, resourceId, metadata } = thread;
       const result = await client.query<ThreadType>(
         `
-                INSERT INTO mastra_threads (id, title, created_at, updated_at, resourceid, metadata)
+                INSERT INTO mastra_threads (id, title, created_at, updated_at, resource_id, metadata)
                 VALUES ($1, $2, $3, $4, $5, $6)
-                ON CONFLICT (id) DO UPDATE SET title = $2, updated_at = $4, resourceid = $5, metadata = $6
-                RETURNING id, title, created_at AS createdAt, updated_at AS updatedAt, resourceid, metadata
+                ON CONFLICT (id) DO UPDATE SET title = $2, updated_at = $4, resource_id = $5, metadata = $6
+                RETURNING id, title, created_at AS createdAt, updated_at AS updatedAt, resource_id, metadata
             `,
-        [id, title, createdAt, updatedAt, resourceid, JSON.stringify(metadata)],
+        [id, title, createdAt, updatedAt, resourceId, JSON.stringify(metadata)],
       );
       return result?.rows?.[0]!;
     } finally {
@@ -451,7 +451,7 @@ export class PgMemory extends MastraMemory {
         await client.query(`
                     CREATE TABLE IF NOT EXISTS mastra_threads (
                         id UUID PRIMARY KEY,
-                        resourceid TEXT,
+                        resource_id TEXT,
                         title TEXT,
                         created_at TIMESTAMP WITH TIME ZONE NOT NULL,
                         updated_at TIMESTAMP WITH TIME ZONE NOT NULL,

@@ -146,11 +146,11 @@ export class Agent<
 
   async saveMemory({
     threadId,
-    resourceid,
+    resourceId,
     userMessages,
     runId,
   }: {
-    resourceid: string;
+    resourceId: string;
     threadId?: string;
     userMessages: CoreMessage[];
     time?: Date;
@@ -168,7 +168,7 @@ export class Agent<
 
         thread = await this.#mastra.memory.createThread({
           threadId,
-          resourceid,
+          resourceId,
           title,
         });
       } else {
@@ -180,7 +180,7 @@ export class Agent<
           const title = await this.genTitle(userMessage);
           thread = await this.#mastra.memory.createThread({
             threadId,
-            resourceid,
+            resourceId,
             title,
           });
         }
@@ -480,7 +480,7 @@ export class Agent<
   }
 
   async preExecute({
-    resourceid,
+    resourceId,
     runId,
     threadId,
     messages,
@@ -488,14 +488,14 @@ export class Agent<
     runId?: string;
     threadId?: string;
     messages: CoreMessage[];
-    resourceid: string;
+    resourceId: string;
   }) {
     let coreMessages: CoreMessage[] = [];
     let threadIdToUse = threadId;
     this.log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, { runId });
     const saveMessageResponse = await this.saveMemory({
       threadId,
-      resourceid,
+      resourceId,
       userMessages: messages,
     });
 
@@ -508,12 +508,12 @@ export class Agent<
     messages,
     context,
     threadId,
-    resourceid,
+    resourceId,
     runId,
     toolsets,
   }: {
     toolsets?: ToolsetsInput;
-    resourceid?: string;
+    resourceId?: string;
     threadId?: string;
     context?: CoreMessage[];
     runId?: string;
@@ -533,9 +533,9 @@ export class Agent<
         let coreMessages = messages;
         let threadIdToUse = threadId;
 
-        if (this.#mastra?.memory && resourceid) {
+        if (this.#mastra?.memory && resourceId) {
           const preExecuteResult = await this.preExecute({
-            resourceid,
+            resourceId,
             runId,
             threadId: threadIdToUse,
             messages,
@@ -556,7 +556,7 @@ export class Agent<
 
         if (
           (toolsets && Object.keys(toolsets || {}).length > 0) ||
-          (this.#mastra?.memory && resourceid) ||
+          (this.#mastra?.memory && resourceId) ||
           this.#mastra?.engine
         ) {
           convertedTools = this.convertTools({
@@ -607,7 +607,7 @@ export class Agent<
           result: resToLog,
           threadId,
         });
-        if (this.#mastra?.memory && resourceid) {
+        if (this.#mastra?.memory && resourceId) {
           try {
             this.logger.debug(`Saving assistant message in memory for agent ${this.name}`, {
               runId,
@@ -658,7 +658,7 @@ export class Agent<
     {
       context,
       threadId: threadIdInFn,
-      resourceid,
+      resourceId,
       maxSteps = 5,
       onStepFinish,
       runId,
@@ -694,7 +694,7 @@ export class Agent<
       messages: messagesToUse,
       context,
       threadId: threadIdInFn,
-      resourceid,
+      resourceId,
       runId: runIdToUse,
       toolsets,
     });
@@ -742,7 +742,7 @@ export class Agent<
     {
       context,
       threadId: threadIdInFn,
-      resourceid,
+      resourceId,
       maxSteps = 5,
       onFinish,
       onStepFinish,
@@ -779,7 +779,7 @@ export class Agent<
       messages: messagesToUse,
       context,
       threadId: threadIdInFn,
-      resourceid,
+      resourceId,
       runId: runIdToUse,
       toolsets,
     });

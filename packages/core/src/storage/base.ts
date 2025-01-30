@@ -28,7 +28,6 @@ export abstract class MastraStorageBase extends MastraBase {
 
   protected async createTable({
     tableName,
-    schema,
   }: {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
@@ -188,8 +187,8 @@ export abstract class MastraStorageBase extends MastraBase {
     return this.threads.get(threadId) || null;
   }
 
-  async getThreadsByResourceId({ resource_id }: { resource_id: string }): Promise<ThreadType[]> {
-    return Array.from(this.threads.values()).filter(thread => thread.resource_id === resource_id);
+  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<ThreadType[]> {
+    return Array.from(this.threads.values()).filter(thread => thread.resourceId === resourceId);
   }
 
   async saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType> {
