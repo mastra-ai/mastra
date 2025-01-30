@@ -4,7 +4,7 @@ import {
   StorageColumn,
   StorageGetMessagesArg,
   TABLE_NAMES,
-  ThreadType,
+  StorageThreadType,
   WorkflowRunState,
 } from '@mastra/core';
 import pg from 'pg';
@@ -133,12 +133,12 @@ export class PostgresStore extends MastraStorage {
     return result?.snapshot || null;
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null> {
+  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
     try {
-      const result = await client.query<ThreadType>(
+      const result = await client.query<StorageThreadType>(
         `
         SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, resourceid as resourceId, metadata
         FROM mastra_threads
@@ -153,18 +153,18 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  async getThreadsByResourceId({ resource_id }: { resource_id: string }): Promise<ThreadType[]> {
+  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
     try {
-      const result = await client.query<ThreadType>(
+      const result = await client.query<StorageThreadType>(
         `
                 SELECT id, title, resourceid as resourceId, created_at AS createdAt, updated_at AS updatedAt, metadata
                 FROM mastra_threads
                 WHERE resourceid = $1
             `,
-        [resource_id],
+        [resourceId],
       );
       return result.rows;
     } finally {
@@ -172,20 +172,20 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  async saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType> {
+  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
     try {
-      const { id, title, createdAt, updatedAt, resource_id, metadata } = thread;
-      const result = await client.query<ThreadType>(
+      const { id, title, createdAt, updatedAt, resourceId, metadata } = thread;
+      const result = await client.query<StorageThreadType>(
         `
         INSERT INTO mastra_threads (id, title, created_at, updated_at, resourceid, metadata)
         VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (id) DO UPDATE SET title = $2, updated_at = $4, resourceid = $5, metadata = $6
         RETURNING id, title, created_at AS createdAt, updated_at AS updatedAt, resourceid as resourceId, metadata
         `,
-        [id, title, createdAt, updatedAt, resource_id, JSON.stringify(metadata)],
+        [id, title, createdAt, updatedAt, resourceId, JSON.stringify(metadata)],
       );
       return result?.rows?.[0]!;
     } finally {
@@ -201,10 +201,10 @@ export class PostgresStore extends MastraStorage {
     id: string;
     title: string;
     metadata: Record<string, unknown>;
-  }): Promise<ThreadType> {
+  }): Promise<StorageThreadType> {
     const client = await this.pool.connect();
     try {
-      const result = await client.query<ThreadType>(
+      const result = await client.query<StorageThreadType>(
         `
                 UPDATE mastra_threads
                 SET title = $1, metadata = $2, updated_at = NOW()

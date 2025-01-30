@@ -21,7 +21,7 @@ export type MessageType = {
   id: string;
   content: UserContent | AssistantContent | ToolContent;
   role: 'system' | 'user' | 'assistant' | 'tool';
-  created_at?: Date;
+  createdAt: Date;
   threadId: string;
   toolCallIds?: string[];
   toolCallArgs?: Record<string, unknown>[];
@@ -35,15 +35,6 @@ export type StorageThreadType = {
   resourceId: string;
   createdAt: Date;
   updatedAt: Date;
-  metadata?: Record<string, unknown>;
-};
-
-export type ThreadType = {
-  id: string;
-  title?: string;
-  resource_id: string;
-  createdAt?: Date;
-  updatedAt?: Date;
   metadata?: Record<string, unknown>;
 };
 
@@ -244,16 +235,16 @@ export abstract class MastraMemory extends MastraBase {
    * @param threadId - The unique identifier of the thread
    * @returns Promise resolving to the thread or null if not found
    */
-  abstract getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null>;
+  abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
-  abstract getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<ThreadType[]>;
+  abstract getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]>;
 
   /**
    * Saves or updates a thread
    * @param thread - The thread data to save
    * @returns Promise resolving to the saved thread
    */
-  abstract saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType>;
+  abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 
   /**
    * Saves messages to a thread
@@ -294,11 +285,11 @@ export abstract class MastraMemory extends MastraBase {
     threadId?: string;
     title?: string;
     metadata?: Record<string, unknown>;
-  }): Promise<ThreadType> {
-    const thread: ThreadType = {
+  }): Promise<StorageThreadType> {
+    const thread: StorageThreadType = {
       id: threadId || this.generateId(),
       title,
-      resource_id: resourceId,
+      resourceId,
       createdAt: new Date(),
       updatedAt: new Date(),
       metadata,
@@ -347,7 +338,7 @@ export abstract class MastraMemory extends MastraBase {
       id: this.generateId(),
       content,
       role,
-      created_at: new Date(),
+      createdAt: new Date(),
       threadId,
       type,
       toolNames,

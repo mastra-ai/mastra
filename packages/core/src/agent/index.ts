@@ -21,7 +21,7 @@ import { AvailableHooks, executeHook } from '../hooks';
 import { LLM } from '../llm';
 import { GenerateReturn, ModelConfig, StreamReturn } from '../llm/types';
 import { LogLevel, RegisteredLogger } from '../logger';
-import { MemoryConfig, ThreadType } from '../memory';
+import { MemoryConfig, StorageThreadType } from '../memory';
 import { InstrumentClass } from '../telemetry';
 import { CoreTool, ToolAction } from '../tools/types';
 
@@ -161,7 +161,7 @@ export class Agent<
   }) {
     const userMessage = this.getMostRecentUserMessage(userMessages);
     if (this.#mastra?.memory) {
-      let thread: ThreadType | null;
+      let thread: StorageThreadType | null;
       if (!threadId) {
         this.logger.debug(`No threadId, creating new thread for agent ${this.name}`, {
           runId: runId || this.name,
@@ -273,7 +273,7 @@ export class Agent<
       }
 
       return {
-        threadId: (thread as ThreadType)?.id || threadId || '',
+        threadId: (thread as StorageThreadType)?.id || threadId || '',
         messages: userMessages,
       };
     }

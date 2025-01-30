@@ -3,8 +3,8 @@ import {
   MessageType,
   StorageGetMessagesArg,
   MemoryConfig,
-  ThreadType,
   SharedMemoryConfig,
+  StorageThreadType,
 } from '@mastra/core';
 import { Message as AiMessage } from 'ai';
 
@@ -122,7 +122,7 @@ export class Memory extends MastraMemory {
                 "all messages after this one are messages you've remembered until you see a system message telling you otherwise.",
               type: 'text',
               threadId,
-              created_at: new Date(),
+              createdAt: new Date(),
             } satisfies MessageType,
             ...messages.messages,
             {
@@ -132,7 +132,7 @@ export class Memory extends MastraMemory {
                 "messages prior to this are messages you've remembered. Any messages after this are new. Pay attention to dates as you may remember very old or very recent messages.",
               type: 'text',
               threadId,
-              created_at: new Date(),
+              createdAt: new Date(),
             } satisfies MessageType,
           ],
           uiMessages: messages.uiMessages,
@@ -140,15 +140,15 @@ export class Memory extends MastraMemory {
       : messages;
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null> {
+  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     return this.storage.getThreadById({ threadId });
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<ThreadType[]> {
-    return this.storage.getThreadsByResourceId({ resource_id: resourceId });
+  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
+    return this.storage.getThreadsByResourceId({ resourceId });
   }
 
-  async saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType> {
+  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     return this.storage.saveThread({ thread });
   }
 
@@ -160,7 +160,7 @@ export class Memory extends MastraMemory {
     id: string;
     title: string;
     metadata: Record<string, unknown>;
-  }): Promise<ThreadType> {
+  }): Promise<StorageThreadType> {
     return this.storage.updateThread({
       id,
       title,
