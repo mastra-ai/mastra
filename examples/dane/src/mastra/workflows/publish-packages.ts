@@ -1,10 +1,10 @@
-import { Agent, Step, Workflow } from '@mastra/core';
+import { Step, Workflow } from '@mastra/core';
 import chalk from 'chalk';
 import { existsSync } from 'fs';
 import path from 'path';
 import { z } from 'zod';
 
-import { BUILD_PACKAGES_PROMPT, PACKAGES_LIST_PROMPT, PUBLISH_PACKAGES_PROMPT } from '../agents/package-publisher.js';
+import { PACKAGES_LIST_PROMPT, PUBLISH_PACKAGES_PROMPT } from '../agents/package-publisher.js';
 import { pnpmBuild } from '../tools/pnpm.js';
 
 export const packagePublisher = new Workflow({
