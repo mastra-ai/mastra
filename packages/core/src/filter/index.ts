@@ -28,7 +28,7 @@ type ElementOperator = '$exists'; // Matches documents that have the specified f
 type RegexOperator = '$regex' | '$options'; // Matches documents that have the specified field
 
 // Union of all supported operators
-type QueryOperator = ComparisonOperator | LogicalOperator | ArrayOperator | ElementOperator;
+type QueryOperator = ComparisonOperator | LogicalOperator | ArrayOperator | ElementOperator | RegexOperator;
 
 // Type for a field condition using an operator
 type OperatorCondition = {
@@ -131,6 +131,10 @@ abstract class BaseFilterTranslator {
       typeof value === 'number' ||
       typeof value === 'boolean'
     );
+  }
+
+  protected isRegex(value: any): boolean {
+    return value instanceof RegExp;
   }
 
   protected isEmpty(obj: any): boolean {
