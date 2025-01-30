@@ -953,7 +953,7 @@ describe('Workflow', () => {
             }),
           },
         });
-        workflow.after(step1).step(randomTool).commit();
+        workflow.step(step1).step(randomTool).commit();
 
         await workflow.execute();
 

@@ -114,7 +114,7 @@ export class PostgresEngine extends MastraEngine {
     )();
 
     if (!entity) {
-      throw new Error(`Entity not found with name: ${name} and connectionId: ${connectionId}`);
+      throw new Error(`Entity not found with name: ${entityName} and connectionId: ${connectionId}`);
     }
 
     return this.db.query.records.findMany({
