@@ -180,8 +180,22 @@ export class Deployer extends MastraBase {
     const dirPath = dir || path.join(this.projectPath, 'src/mastra');
     this.writePackageJson();
     this.writeServerFile();
-    await this.install();
-    await this.build({ dir: dirPath, useBanner });
-    await this.buildServer({ playground, swaggerUI });
+    try {
+      await this.install();
+    } catch (error) {
+      this.logger.error('Failed to install dependencies', { error });
+    }
+
+    try {
+      await this.build({ dir: dirPath, useBanner });
+    } catch (error) {
+      this.logger.error('Failed to build', { error });
+    }
+
+    try {
+      await this.buildServer({ playground, swaggerUI });
+    } catch (error) {
+      this.logger.error('Failed to build server', { error });
+    }
   }
 }

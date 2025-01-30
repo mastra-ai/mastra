@@ -1,5 +1,12 @@
 # generate-text-with-gemini
 
+## 0.0.1-alpha.23
+
+### Patch Changes
+
+- Updated dependencies [73d112c]
+  - @mastra/core@0.1.27-alpha.82
+
 ## 0.0.1-alpha.22
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @mastra/vector-pg
 
+## 0.0.1-alpha.16
+
+### Patch Changes
+
+- Updated dependencies [73d112c]
+  - @mastra/core@0.1.27-alpha.82
+
 ## 0.0.1-alpha.15
 
 ### Patch Changes

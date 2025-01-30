@@ -922,9 +922,11 @@ describe('Workflow', () => {
   describe('Interoperability (Actions)', () => {
     it('should be able to use all action types in a workflow', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ name: 'step1' });
+
       const step1 = new Step({ id: 'step1', execute: step1Action, outputSchema: z.object({ name: z.string() }) });
 
       const toolAction = vi.fn<any>().mockResolvedValue({ age: 100 });
+
       const randomTool = createTool({
         id: 'random-tool',
         execute: toolAction,
@@ -934,12 +936,13 @@ describe('Workflow', () => {
       });
 
       const workflow = new Workflow({ name: 'test-workflow' });
-      workflow.after(step1).step(randomTool).commit();
 
-      await workflow.execute();
+      workflow.step(step1).after(step1).step(randomTool).commit();
+
+      await workflow.createRun().start();
 
       expect(step1Action).toHaveBeenCalled();
       expect(toolAction).toHaveBeenCalled();
-    });
+    }, 10000);
   });
 });
