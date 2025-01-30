@@ -12,6 +12,7 @@
     "mastra:migrate": "pnpm dlx mastra engine migrate"
   },
   "dependencies": {
+    "@libsql/client": "^0.14.0",
     "@mastra/core": "workspace:*",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",

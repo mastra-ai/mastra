@@ -29,7 +29,6 @@
   "dependencies": {
     "@inquirer/prompts": "^7.2.1",
     "@mastra/core": "workspace:*",
-    "@mastra/engine": "workspace:*",
     "@mastra/firecrawl": "workspace:*",
     "@mastra/github": "workspace:*",
     "@mastra/memory": "workspace:*",

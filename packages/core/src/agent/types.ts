@@ -1,11 +1,8 @@
 import { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
 
-
-
 import { CoreMessage, OutputType } from '../llm/types';
 import { ToolAction } from '../tools';
-
 
 export type ToolsetsInput = Record<string, Record<string, ToolAction<any, any, any, any>>>;
 

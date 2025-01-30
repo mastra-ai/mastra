@@ -1,6 +1,7 @@
 packages:
   - "packages/*"
   - "deployers/*"
+  - "storage/*"
   - "vector-stores/*"
   - "speech/*"
   - "!packages/cli/admin"

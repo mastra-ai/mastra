@@ -308,3 +308,30 @@ export type PathsToStringProps<T> = T extends object
           : never;
     }[keyof T]
   : never;
+
+export interface WorkflowRunState {
+  // Core state info
+  value: Record<string, string>;
+  context: {
+    stepResults: Record<
+      string,
+      {
+        status: 'success' | 'failed' | 'suspended' | 'waiting';
+        payload?: any;
+        error?: string;
+      }
+    >;
+    triggerData: Record<string, any>;
+    attempts: Record<string, number>;
+  };
+
+  activePaths: Array<{
+    stepPath: string[];
+    stepId: string;
+    status: string;
+  }>;
+
+  // Metadata
+  runId: string;
+  timestamp: number;
+}

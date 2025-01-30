@@ -3,6 +3,7 @@ export * from './base';
 export * from './deployer';
 export * from './embeddings';
 export * from './engine';
+export * from './storage';
 export * from './eval';
 export * from './integration';
 export * from './llm/types';

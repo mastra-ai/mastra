@@ -5,6 +5,7 @@ const meta = {
   rag: "RAG",
   tools: "Tools",
   tts: "TTS",
+  storage: "Storage",
   agents: "Agents",
   workflows: "Workflows",
   observability: "Observability",

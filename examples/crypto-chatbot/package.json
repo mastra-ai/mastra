@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.60",
+    "@libsql/client": "^0.14.0",
     "@mastra/core": "workspace:^",
     "@mastra/memory": "workspace:^",
     "@radix-ui/react-alert-dialog": "^1.1.2",
