@@ -227,7 +227,7 @@ export async function bundle(
   buildWorkflow.__setLogger(noopLogger as unknown as Logger);
 
   try {
-    await start({
+    const result = await start({
       triggerData: {
         buildName,
         entry,
@@ -236,8 +236,17 @@ export async function bundle(
         devMode,
       },
     });
+
+    Object.entries(result.results).forEach(([stepName, stepResult]) => {
+      if ((stepResult as any).status !== 'success') {
+        logger.error(`${stepName}:`, stepResult);
+        throw new Error(`Step ${stepName} failed`);
+      }
+    });
   } catch (error) {
-    logger.error('Failed to build:', { error });
+    if (error instanceof Error) {
+      logger.error(error.message, { stack: error.stack, message: error.message, name: error.name });
+    }
     process.exit(1);
   }
 }

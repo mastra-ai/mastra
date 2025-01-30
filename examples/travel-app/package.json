@@ -1,6 +1,6 @@
 {
   "name": "travel-app",
-  "version": "0.1.1-alpha.37",
+  "version": "0.1.1-alpha.39",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -12,6 +12,7 @@
     "generate:city-data": "npx tsx src/scripts/generate-data.ts"
   },
   "dependencies": {
+    "@libsql/client": "^0.14.0",
     "@mastra/core": "workspace:*",
     "@mastra/engine": "workspace:*",
     "@mastra/memory": "workspace:*",

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dane",
-  "version": "0.0.2-alpha.100",
+  "version": "0.0.2-alpha.104",
   "main": "dist/index.js",
   "type": "module",
   "files": [
@@ -29,7 +29,6 @@
   "dependencies": {
     "@inquirer/prompts": "^7.2.1",
     "@mastra/core": "workspace:*",
-    "@mastra/engine": "workspace:*",
     "@mastra/firecrawl": "workspace:*",
     "@mastra/github": "workspace:*",
     "@mastra/memory": "workspace:*",

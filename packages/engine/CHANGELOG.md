@@ -1,5 +1,19 @@
 # @mastra/engine
 
+## 0.0.5-alpha.77
+
+### Patch Changes
+
+- Updated dependencies [73d112c]
+  - @mastra/core@0.1.27-alpha.82
+
+## 0.0.5-alpha.76
+
+### Patch Changes
+
+- Updated dependencies [9fb3039]
+  - @mastra/core@0.1.27-alpha.81
+
 ## 0.0.5-alpha.75
 
 ### Patch Changes

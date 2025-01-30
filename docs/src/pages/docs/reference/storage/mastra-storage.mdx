@@ -1,0 +1,286 @@
+---
+title: "MastraStorage Class Reference | Storage System | Mastra Core"
+description: Documentation for the MastraStorage class, the core interface for managing persistent data storage in Mastra applications.
+---
+
+# MastraStorage
+
+The MastraStorage class provides a unified interface for persistent storage operations in Mastra applications. It handles storage of workflow states, conversation threads, messages, and evaluation data.
+
+## Constructor Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "Name identifier for the storage instance",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## Core Tables
+
+The storage system manages four primary tables:
+<br />
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow_snapshot",
+      type: "Table",
+      description: "Stores workflow state and execution data with composite primary key (workflow_name, run_id)",
+    },
+    {
+      name: "messages",
+      type: "Table", 
+      description: "Stores conversation messages, linked to threads via thread_id",
+    },
+    {
+      name: "threads",
+      type: "Table",
+      description: "Manages conversation threads with metadata and timestamps",
+    },
+    {
+      name: "evals",
+      type: "Table",
+      description: "Stores evaluation results, input/output data, and test execution details",
+    },
+  ]}
+/>
+
+## Methods
+
+<PropertiesTable
+  content={[
+    {
+      name: "init()",
+      type: "Promise<void>",
+      description: "Initialize storage tables and connections",
+    },
+    {
+      name: "createTable(options)",
+      type: "Promise<void>",
+      description: "Create a new table with specified schema",
+      options: [
+        {
+          name: "tableName",
+          type: "TABLE_NAMES",
+          description: "Name of the table to create",
+        },
+        {
+          name: "schema",
+          type: "Record<string, StorageColumn>",
+          description: "Schema definition for the table columns",
+        }
+      ],
+    },
+    {
+      name: "clearTable(options)",
+      type: "Promise<void>",
+      description: "Clear all data from a table",
+      options: [
+        {
+          name: "tableName",
+          type: "TABLE_NAMES",
+          description: "Name of the table to clear",
+        }
+      ],
+    },
+    {
+      name: "insert(options)",
+      type: "Promise<void>",
+      description: "Insert a record into a table",
+      options: [
+        {
+          name: "tableName",
+          type: "TABLE_NAMES",
+          description: "Target table name",
+        },
+        {
+          name: "record",
+          type: "Record<string, any>",
+          description: "Record data to insert",
+        }
+      ],
+    },
+    {
+      name: "load(options)",
+      type: "Promise<R | null>",
+      description: "Load a record from a table",
+      options: [
+        {
+          name: "tableName",
+          type: "TABLE_NAMES",
+          description: "Source table name",
+        },
+        {
+          name: "keys",
+          type: "Record<string, string>",
+          description: "Key-value pairs to identify the record",
+        }
+      ],
+    },
+    {
+      name: "getThreadById(options)",
+      type: "Promise<StorageThreadType | null>",
+      description: "Retrieve a thread by its ID",
+      options: [
+        {
+          name: "threadId",
+          type: "string",
+          description: "ID of the thread to retrieve",
+        }
+      ],
+    },
+    {
+      name: "saveThread(options)",
+      type: "Promise<StorageThreadType>",
+      description: "Save or update a thread",
+      options: [
+        {
+          name: "thread",
+          type: "StorageThreadType",
+          description: "Thread data to save",
+        }
+      ],
+    },
+    {
+      name: "deleteThread(options)",
+      type: "Promise<void>",
+      description: "Delete a thread and its messages",
+      options: [
+        {
+          name: "id",
+          type: "string",
+          description: "ID of the thread to delete",
+        }
+      ],
+    },
+    {
+      name: "getMessages(options)",
+      type: "Promise<MessageType[]>",
+      description: "Get all messages for a thread",
+      options: [
+        {
+          name: "threadId",
+          type: "string",
+          description: "ID of the thread to get messages for",
+        }
+      ],
+    },
+    {
+      name: "saveMessages(options)",
+      type: "Promise<MessageType[]>",
+      description: "Save multiple messages",
+      options: [
+        {
+          name: "messages",
+          type: "MessageType[]",
+          description: "Array of messages to save",
+        }
+      ],
+    },
+    {
+      name: "persistWorkflowSnapshot(options)",
+      type: "Promise<void>",
+      description: "Save a workflow snapshot",
+      options: [
+        {
+          name: "workflowName",
+          type: "string",
+          description: "Name of the workflow",
+        },
+        {
+          name: "runId",
+          type: "string",
+          description: "ID of the workflow run",
+        },
+        {
+          name: "snapshot",
+          type: "WorkflowRunState",
+          description: "Workflow snapshot data",
+        }
+      ],
+    },
+    {
+      name: "loadWorkflowSnapshot(options)",
+      type: "Promise<WorkflowRunState | null>",
+      description: "Load a workflow snapshot",
+      options: [
+        {
+          name: "workflowName",
+          type: "string",
+          description: "Name of the workflow",
+        },
+        {
+          name: "runId",
+          type: "string",
+          description: "ID of the workflow run",
+        }
+      ],
+    },
+  ]}
+/>
+
+## Types
+
+### StorageColumn
+
+Defines the schema for table columns:
+
+```typescript
+interface StorageColumn {
+  type: 'text' | 'timestamp';
+  primaryKey?: boolean;
+  nullable?: boolean;
+}
+```
+
+### StorageThreadType
+
+Represents a conversation thread:
+
+```typescript
+interface StorageThreadType {
+  id: string;
+  title: string;
+  metadata: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
+
+## Example Usage
+
+```typescript copy filename=src/storage/index.ts
+import { MastraStorage } from "@mastra/core";
+
+class MyStorage extends MastraStorage {
+  constructor() {
+    super({ name: 'my-storage' });
+  }
+  
+  async init() {
+    // Initialize tables and set up connections
+    await this.createTable({
+      tableName: 'threads',
+      schema: {
+        id: { type: 'text', primaryKey: true },
+        title: { type: 'text' },
+        metadata: { type: 'text' },
+        created_at: { type: 'timestamp' },
+        updated_at: { type: 'timestamp' },
+      }
+    });
+  }
+  
+  // Implement other abstract methods...
+}
+
+const storage = new MyStorage();
+await storage.init();
+```
+
+For a concrete implementation, see the `MastraStorageLibSql` class which provides a SQLite-based storage solution.

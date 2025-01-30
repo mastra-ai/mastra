@@ -109,13 +109,13 @@ describe(
       expect(result.score).toBeCloseTo(testCases[0].expectedResult.score, 1);
     });
 
-  it('should be able to measure a prompt with mostly relevant information', async () => {
-    const result = await metric.measure(testCases[1].input, testCases[1].output);
-    const expectedScore = testCases[1].expectedResult.score;
-    const difference = Math.abs(result.score - expectedScore);
+    it('should be able to measure a prompt with mostly relevant information', async () => {
+      const result = await metric.measure(testCases[1].input, testCases[1].output);
+      const expectedScore = testCases[1].expectedResult.score;
+      const difference = Math.abs(result.score - expectedScore);
 
-    expect(Math.round(difference * 10) / 10).toBeLessThanOrEqual(0.1);
-  });
+      expect(Math.round(difference * 10) / 10).toBeLessThanOrEqual(0.1);
+    });
 
     it('should be able to measure a prompt with partial relevance', async () => {
       const result = await metric.measure(testCases[2].input, testCases[2].output);

@@ -50,28 +50,26 @@ const modelConfig: ModelConfig = {
   apiKey: process.env.OPENAI_API_KEY,
 };
 
-describe(
-  'BiasMetric',
-  () => {
-    const metric = new BiasMetric(modelConfig);
+describe('BiasMetric', () => {
+  const metric = new BiasMetric(modelConfig);
 
-    it('should be able to measure a prompt that is biased', async () => {
-      const result = await metric.measure(testCases[0].input, testCases[0].output);
-      expect(result.score).toBeCloseTo(testCases[0].expectedResult.score, 1);
-    });
+  it('should be able to measure a prompt that is biased', async () => {
+    const result = await metric.measure(testCases[0].input, testCases[0].output);
+    expect(result.score).toBeCloseTo(testCases[0].expectedResult.score, 1);
+  }, 10000);
 
-    it('should be able to measure a prompt that is almost not biased', async () => {
-      const result = await metric.measure(testCases[1].input, testCases[1].output);
-      expect(result.score).toBeLessThan(0.5);
-    });
+  it('should be able to measure a prompt that is almost not biased', async () => {
+    const result = await metric.measure(testCases[1].input, testCases[1].output);
+    expect(result.score).toBeLessThan(0.5);
+  }, 10000);
 
   it('should be able to measure a prompt that is mildly biased but actually not', async () => {
     const result = await metric.measure(testCases[2].input, testCases[2].output);
     expect(result.score).toBe(0);
-  });
+  }, 10000);
 
   it('should be able to measure a prompt that is mildly biased', async () => {
     const result = await metric.measure(testCases[3].input, testCases[3].output);
     expect(result.score).toBeLessThan(0.8);
-  });
+  }, 10000);
 });

@@ -1,5 +1,21 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.27
+
+### Patch Changes
+
+- 73d112c: Core and deployer fixes
+- ac8c61a: Mastra server vector operations
+- Updated dependencies [73d112c]
+  - @mastra/core@0.1.27-alpha.82
+
+## 0.0.1-alpha.26
+
+### Patch Changes
+
+- Updated dependencies [9fb3039]
+  - @mastra/core@0.1.27-alpha.81
+
 ## 0.0.1-alpha.25
 
 ### Patch Changes

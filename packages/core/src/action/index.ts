@@ -6,6 +6,7 @@ import { LLM } from '../llm';
 import { ModelConfig } from '../llm/types';
 import { Logger } from '../logger';
 import { MastraMemory } from '../memory';
+import { MastraStorage } from '../storage';
 import { Telemetry } from '../telemetry';
 import { MastraTTS } from '../tts';
 import { MastraVector } from '../vector';
@@ -15,6 +16,7 @@ export type MastraPrimitives = {
   logger?: Logger;
   telemetry?: Telemetry;
   engine?: MastraEngine;
+  storage?: MastraStorage;
   agents?: Record<string, Agent>;
   tts?: Record<string, MastraTTS>;
   vectors?: Record<string, MastraVector>;

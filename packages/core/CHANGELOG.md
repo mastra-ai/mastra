@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 0.1.27-alpha.82
+
+### Patch Changes
+
+- 73d112c: Core and deployer fixes
+
+## 0.1.27-alpha.81
+
+### Patch Changes
+
+- 9fb3039: Storage
+
 ## 0.1.27-alpha.80
 
 ### Patch Changes
