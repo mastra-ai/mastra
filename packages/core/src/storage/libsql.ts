@@ -51,8 +51,13 @@ export class MastraStorageLibSql extends MastraStorage {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
-    const sql = this.getCreateTableSQL(tableName, schema);
-    await this.client.execute(sql);
+    try {
+      const sql = this.getCreateTableSQL(tableName, schema);
+      await this.client.execute(sql);
+    } catch (error) {
+      this.logger.error(`Error creating table ${tableName}: ${error}`);
+      throw error;
+    }
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
@@ -60,14 +65,19 @@ export class MastraStorageLibSql extends MastraStorage {
   }
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    const columns = Object.keys(record);
-    const values = Object.values(record).map(v => (typeof v === 'object' ? JSON.stringify(v) : v));
-    const placeholders = values.map(() => '?').join(', ');
+    try {
+      const columns = Object.keys(record);
+      const values = Object.values(record).map(v => (typeof v === 'object' ? JSON.stringify(v) : v));
+      const placeholders = values.map(() => '?').join(', ');
 
-    await this.client.execute({
-      sql: `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`,
-      args: values,
-    });
+      await this.client.execute({
+        sql: `INSERT OR REPLACE INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`,
+        args: values,
+      });
+    } catch (error) {
+      this.logger.error(`Error upserting into table ${tableName}: ${error}`);
+      throw error;
+    }
   }
 
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {

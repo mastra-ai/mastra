@@ -248,7 +248,7 @@ describe('MastraStorageLibSql', () => {
   });
 
   describe('Workflow Snapshots', () => {
-    beforeEach(async () => {
+    beforeAll(async () => {
       // Create workflow_snapshot table
       await storage.createTable({
         tableName: 'workflow_snapshot',
