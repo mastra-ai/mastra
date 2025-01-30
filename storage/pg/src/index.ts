@@ -144,7 +144,7 @@ export class PostgresStore extends MastraStorageBase {
     try {
       const result = await client.query<ThreadType>(
         `
-        SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, resource_id, metadata
+        SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, resourceid as resourceId, metadata
         FROM mastra_threads
         WHERE id = $1
         `,
@@ -164,9 +164,9 @@ export class PostgresStore extends MastraStorageBase {
     try {
       const result = await client.query<ThreadType>(
         `
-                SELECT id, title, resource_id, created_at AS createdAt, updated_at AS updatedAt, metadata
+                SELECT id, title, resourceid as resourceId, created_at AS createdAt, updated_at AS updatedAt, metadata
                 FROM mastra_threads
-                WHERE resource_id = $1
+                WHERE resourceid = $1
             `,
         [resource_id],
       );
@@ -184,10 +184,10 @@ export class PostgresStore extends MastraStorageBase {
       const { id, title, createdAt, updatedAt, resource_id, metadata } = thread;
       const result = await client.query<ThreadType>(
         `
-        INSERT INTO mastra_threads (id, title, created_at, updated_at, resource_id, metadata)
+        INSERT INTO mastra_threads (id, title, created_at, updated_at, resourceid, metadata)
         VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (id) DO UPDATE SET title = $2, updated_at = $4, resource_id = $5, metadata = $6
-        RETURNING id, title, created_at AS createdAt, updated_at AS updatedAt, resource_id, metadata
+        ON CONFLICT (id) DO UPDATE SET title = $2, updated_at = $4, resourceid = $5, metadata = $6
+        RETURNING id, title, created_at AS createdAt, updated_at AS updatedAt, resourceid as resourceId, metadata
         `,
         [id, title, createdAt, updatedAt, resource_id, JSON.stringify(metadata)],
       );
@@ -197,7 +197,15 @@ export class PostgresStore extends MastraStorageBase {
     }
   }
 
-  async updateThread({ id, title, metadata }: { id: string; title: string; metadata: Record<string, unknown> }): Promise<ThreadType> {
+  async updateThread({
+    id,
+    title,
+    metadata,
+  }: {
+    id: string;
+    title: string;
+    metadata: Record<string, unknown>;
+  }): Promise<ThreadType> {
     const client = await this.pool.connect();
     try {
       const result = await client.query<ThreadType>(
