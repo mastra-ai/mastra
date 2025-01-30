@@ -2,6 +2,7 @@ import { BaseFilterTranslator, FieldCondition, Filter, QueryOperator } from '@ma
 
 export class PineconeFilterTranslator extends BaseFilterTranslator {
   translate(filter: Filter): Filter {
+    if (this.isEmpty(filter)) return filter;
     this.validateFilter(filter);
     return this.translateNode(filter);
   }
@@ -17,7 +18,6 @@ export class PineconeFilterTranslator extends BaseFilterTranslator {
     }
     if (this.isPrimitive(node)) return { $eq: this.normalizeComparisonValue(node) };
     if (Array.isArray(node)) return { $in: this.normalizeArrayValues(node) };
-    if (this.isEmpty(node)) return {};
 
     const entries = Object.entries(node as Record<string, any>);
     const firstEntry = entries[0];
@@ -62,17 +62,21 @@ export class PineconeFilterTranslator extends BaseFilterTranslator {
         }
 
         // Check if the nested object contains operators
-        const hasOperators = Object.keys(value).some(k => this.isOperator(k));
-        if (hasOperators) {
-          // For objects with operators, normalize each operator value
-          const normalizedValue: Record<string, any> = {};
-          for (const [op, opValue] of Object.entries(value)) {
-            normalizedValue[op] = this.isOperator(op) ? this.translateOperator(op, opValue) : opValue;
-          }
-          result[newPath] = normalizedValue;
+        if (Object.keys(value).length === 0) {
+          result[newPath] = {};
         } else {
-          // For objects without operators, flatten them
-          Object.assign(result, this.translateNode(value, newPath));
+          const hasOperators = Object.keys(value).some(k => this.isOperator(k));
+          if (hasOperators) {
+            // For objects with operators, normalize each operator value
+            const normalizedValue: Record<string, any> = {};
+            for (const [op, opValue] of Object.entries(value)) {
+              normalizedValue[op] = this.isOperator(op) ? this.translateOperator(op, opValue) : opValue;
+            }
+            result[newPath] = normalizedValue;
+          } else {
+            // For objects without operators, flatten them
+            Object.assign(result, this.translateNode(value, newPath));
+          }
         }
       } else {
         result[newPath] = this.translateNode(value);

@@ -12,6 +12,7 @@ export class AstraFilterTranslator extends BaseFilterTranslator {
    * and normalization.
    */
   translate(filter: Filter): Filter {
+    if (this.isEmpty(filter)) return filter;
     this.validateFilter(filter);
 
     return this.translateNode(filter);

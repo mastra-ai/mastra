@@ -10,6 +10,12 @@ describe('PineconeFilterTranslator', () => {
   });
 
   describe('translate', () => {
+    it('handles empty filters', () => {
+      expect(translator.translate({})).toEqual({});
+      expect(translator.translate(null as any)).toEqual(null);
+      expect(translator.translate(undefined as any)).toEqual(undefined);
+    });
+
     it('converts implicit equality to explicit $eq', () => {
       const filter = { field: 'value' };
       expect(translator.translate(filter)).toEqual({ field: { $eq: 'value' } });
@@ -192,11 +198,20 @@ describe('PineconeFilterTranslator', () => {
         expect(() => translator.translate(filter)).toThrow('Null values are not supported');
       });
     });
-    it('throws error for unsupported $elemMatch', () => {
-      const filter = {
-        array: { $elemMatch: { field: 'value' } },
-      };
-      expect(() => translator.translate(filter)).toThrow();
+    it('throws error for unsupported operators', () => {
+      const unsupportedFilters = [
+        { field: { $regex: 'pattern' } },
+        { field: { $exists: true } },
+        { field: { $elemMatch: { $gt: 5 } } },
+        { field: { $nor: [{ $eq: 'value' }] } },
+        { field: { $not: [{ $eq: 'value' }] } },
+        { field: { $regex: 'pattern', $options: 'i' } },
+        { field: { $nin: 'value' } },
+      ];
+
+      unsupportedFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).toThrow(/Unsupported operator/);
+      });
     });
 
     it('throws error for empty $all array', () => {
@@ -310,8 +325,7 @@ describe('PineconeFilterTranslator', () => {
     expect(() =>
       translator.translate({
         field1: { $in: 'not-array' },
-        field2: { $exists: 'not-boolean' },
-        field3: { $gt: 'not-number' },
+        field2: { $gt: 'not-number' },
       }),
     ).toThrow();
   });
@@ -335,5 +349,80 @@ describe('PineconeFilterTranslator', () => {
         field: { $all: 'not-an-array' },
       }),
     ).toThrow();
+  });
+
+  describe('PineconeFilterTranslator empty object handling', () => {
+    let translator: PineconeFilterTranslator;
+
+    beforeEach(() => {
+      translator = new PineconeFilterTranslator();
+    });
+
+    it('preserves empty objects as exact match conditions', () => {
+      const filter = {
+        metadata: {},
+        'user.profile': {},
+      };
+
+      expect(translator.translate(filter)).toEqual({
+        $and: [{ metadata: {} }, { 'user.profile': {} }],
+      });
+    });
+
+    it('handles empty objects in logical operators', () => {
+      const filter = {
+        $or: [{}, { status: 'active' }],
+      };
+
+      expect(translator.translate(filter)).toEqual({
+        $or: [{}, { status: { $eq: 'active' } }],
+      });
+    });
+
+    it('preserves empty objects in nested structures', () => {
+      const filter = {
+        user: {
+          profile: {
+            settings: {},
+          },
+        },
+      };
+
+      expect(translator.translate(filter)).toEqual({
+        'user.profile.settings': {},
+      });
+    });
+
+    it('handles empty objects in comparison operators', () => {
+      const filter = {
+        metadata: { $eq: {} },
+      };
+
+      expect(translator.translate(filter)).toEqual({
+        metadata: { $eq: {} },
+      });
+    });
+
+    it('handles empty objects in array operators', () => {
+      const filter = {
+        tags: { $in: [{}] },
+      };
+
+      expect(translator.translate(filter)).toEqual({
+        tags: { $in: [{}] },
+      });
+    });
+
+    it('handles multiple empty nested fields', () => {
+      const filter = {
+        metadata: {},
+        settings: {},
+        config: { nested: {} },
+      };
+
+      expect(translator.translate(filter)).toEqual({
+        $and: [{ metadata: {} }, { settings: {} }, { 'config.nested': {} }],
+      });
+    });
   });
 });
