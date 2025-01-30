@@ -68,7 +68,8 @@
     "@mastra/speech-playai": "0.0.0",
     "@mastra/speech-replicate": "0.0.0",
     "@mastra/speech-speechify": "0.0.0",
-    "assistant-ui-starter": "0.1.0"
+    "assistant-ui-starter": "0.1.0",
+    "@mastra/ragie": "1.0.1-alpha.57"
   },
   "changesets": [
     "afraid-papayas-shake",
@@ -98,6 +99,7 @@
     "chilly-wolves-matter",
     "clean-points-wink",
     "clever-donuts-run",
+    "clever-pumas-invent",
     "cold-camels-lay",
     "cold-dragons-crash",
     "cool-ducks-cheat",
@@ -108,6 +110,7 @@
     "curly-cheetahs-sit",
     "curly-mails-admire",
     "curly-months-promise",
+    "curvy-carpets-decide",
     "curvy-mirrors-march",
     "cyan-beans-fix",
     "dirty-paws-deny",

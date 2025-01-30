@@ -1,7 +1,7 @@
 {
   "name": "examples-agent",
   "type": "module",
-  "version": "1.0.1-alpha.71",
+  "version": "1.0.1-alpha.72",
   "description": "",
   "main": "index.js",
   "private": true,
