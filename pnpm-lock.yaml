@@ -407,6 +407,9 @@ importers:
 
   examples/bird-checker-with-nextjs:
     dependencies:
+      '@libsql/client':
+        specifier: ^0.14.0
+        version: 0.14.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -547,6 +550,9 @@ importers:
       '@ai-sdk/openai':
         specifier: ^0.0.60
         version: 0.0.60(zod@3.24.1)
+      '@libsql/client':
+        specifier: ^0.14.0
+        version: 0.14.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       '@mastra/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -767,9 +773,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@mastra/engine':
-        specifier: workspace:*
-        version: link:../../packages/engine
       '@mastra/firecrawl':
         specifier: workspace:*
         version: link:../../integrations/firecrawl
@@ -915,6 +918,9 @@ importers:
 
   examples/openapi-spec-writer:
     dependencies:
+      '@libsql/client':
+        specifier: ^0.14.0
+        version: 0.14.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1074,6 +1080,9 @@ importers:
 
   examples/travel-app:
     dependencies:
+      '@libsql/client':
+        specifier: ^0.14.0
+        version: 0.14.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1341,7 +1350,7 @@ importers:
         version: 29.7.0
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@3.29.5)
+        version: 3.0.3(rollup@4.32.1)
       '@size-limit/preset-small-lib':
         specifier: ^11.1.4
         version: 11.1.6(size-limit@11.1.6)
@@ -1479,6 +1488,64 @@ importers:
       cross-env:
         specifier: ^7.0.3
         version: 7.0.3
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.7))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.7))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.12.0)(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.7
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.12.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/node@22.12.0)(typescript@5.7.3))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.6
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.26.7)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.7))(jest@29.7.0(@types/node@22.12.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/node@22.12.0)(typescript@5.7.3)))(typescript@5.7.3)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.8.1
+      typescript:
+        specifier: ^5.7.3
+        version: 5.7.3
+
+  integrations/ragie:
+    dependencies:
+      '@hey-api/client-fetch':
+        specifier: ^0.3.3
+        version: 0.3.4
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      ts-to-zod:
+        specifier: ^3.13.0
+        version: 3.15.0
+      zod:
+        specifier: ^3.24.0
+        version: 3.24.1
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.5)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.6(size-limit@11.1.6)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.8
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.14
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.15
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.12.0
       dts-cli:
         specifier: ^2.0.5
         version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.7))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.7))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.12.0)(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5)
@@ -23840,7 +23907,7 @@ snapshots:
       consola: 3.4.0
       detect-libc: 2.0.3
       https-proxy-agent: 7.0.6
-      node-fetch: 2.6.9(encoding@0.1.13)
+      node-fetch: 2.7.0(encoding@0.1.13)
       nopt: 8.1.0
       semver: 7.6.3
       tar: 7.4.3
