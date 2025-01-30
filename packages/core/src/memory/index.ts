@@ -18,7 +18,7 @@ export type MessageType = {
   id: string;
   content: UserContent | AssistantContent | ToolContent;
   role: 'user' | 'assistant' | 'tool';
-  created_at?: Date;
+  createdAt: Date;
   threadId: string;
   toolCallIds?: string[];
   toolCallArgs?: Record<string, unknown>[];
@@ -29,9 +29,9 @@ export type MessageType = {
 export type ThreadType = {
   id: string;
   title?: string;
-  resource_id: string;
-  createdAt?: Date;
-  updatedAt?: Date;
+  resourceid: string;
+  createdAt: Date;
+  updatedAt: Date;
   metadata?: Record<string, unknown>;
 };
 
@@ -157,7 +157,7 @@ export abstract class MastraMemory extends MastraBase {
    */
   abstract getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null>;
 
-  abstract getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<ThreadType[]>;
+  abstract getThreadsByResourceId({ resourceid }: { resourceid: string }): Promise<ThreadType[]>;
   /**
    * Saves or updates a thread
    * @param thread - The thread data to save
@@ -234,11 +234,11 @@ export abstract class MastraMemory extends MastraBase {
    */
   async createThread({
     threadId,
-    resourceId,
+    resourceid,
     title,
     metadata,
   }: {
-    resourceId: string;
+    resourceid: string;
     threadId?: string;
     title?: string;
     metadata?: Record<string, unknown>;
@@ -246,7 +246,7 @@ export abstract class MastraMemory extends MastraBase {
     const thread: ThreadType = {
       id: threadId || this.generateId(),
       title,
-      resourceId,
+      resourceid,
       createdAt: new Date(),
       updatedAt: new Date(),
       metadata,
