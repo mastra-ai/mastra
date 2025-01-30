@@ -183,6 +183,10 @@ export abstract class MastraStorageBase extends MastraBase {
     return d ? d.snapshot : null;
   }
 
+  async getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null> {
+    return this.threads.get(threadId) || null;
+  }
+
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<ThreadType[]> {
     return Array.from(this.threads.values()).filter(thread => thread.resourceId === resourceId);
   }

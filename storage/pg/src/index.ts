@@ -165,18 +165,18 @@ export class PostgresStore extends MastraStorageBase {
     }
   }
 
-  async getThreadsByResourceId({ resource_id }: { resource_id: string }): Promise<ThreadType[]> {
+  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<ThreadType[]> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
     try {
       const result = await client.query<ThreadType>(
         `
-                SELECT id, title, resource_id, created_at AS createdAt, updated_at AS updatedAt, metadata
+                SELECT id, title, resource_id as resourceId, created_at AS createdAt, updated_at AS updatedAt, metadata
                 FROM mastra_threads
                 WHERE resource_id = $1
             `,
-        [resource_id],
+        [resourceId],
       );
       return result.rows;
     } finally {
@@ -189,7 +189,7 @@ export class PostgresStore extends MastraStorageBase {
 
     const client = await this.pool.connect();
     try {
-      const { id, title, createdAt, updatedAt, resource_id, metadata } = thread;
+      const { id, title, createdAt, updatedAt, resourceId, metadata } = thread;
       const result = await client.query<ThreadType>(
         `
         INSERT INTO mastra_threads (id, title, created_at, updated_at, resource_id, metadata)
@@ -197,7 +197,7 @@ export class PostgresStore extends MastraStorageBase {
         ON CONFLICT (id) DO UPDATE SET title = $2, updated_at = $4, resource_id = $5, metadata = $6
         RETURNING id, title, created_at AS createdAt, updated_at AS updatedAt, resource_id, metadata
         `,
-        [id, title, createdAt, updatedAt, resource_id, JSON.stringify(metadata)],
+        [id, title, createdAt, updatedAt, resourceId, JSON.stringify(metadata)],
       );
       return result?.rows?.[0]!;
     } finally {

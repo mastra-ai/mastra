@@ -144,8 +144,8 @@ export class Memory extends MastraMemory {
     return this.storage.getThreadById({ threadId });
   }
 
-  async getThreadsByResourceId({ resourceid }: { resourceid: string }): Promise<ThreadType[]> {
-    return this.storage.getThreadsByResourceId({ resourceid });
+  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<ThreadType[]> {
+    return this.storage.getThreadsByResourceId({ resourceId });
   }
 
   async saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType> {
@@ -170,8 +170,8 @@ export class Memory extends MastraMemory {
     return this.storage.saveMessages({ messages });
   }
 
-  async deleteThread(threadId: string): Promise<void> {
-    await this.storage.deleteThread(threadId);
+  async deleteThread(id: string): Promise<void> {
+    await this.storage.deleteThread({ id });
 
     // TODO: Also clean up vector storage if it exists
     // if (this.vector) {
