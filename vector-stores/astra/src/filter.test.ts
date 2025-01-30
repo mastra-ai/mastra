@@ -69,8 +69,8 @@ describe('AstraFilterTranslator', () => {
 
     it('handles empty filters', () => {
       expect(translator.translate({})).toEqual({});
-      expect(translator.translate(null as any)).toEqual({});
-      expect(translator.translate(undefined as any)).toEqual({});
+      expect(translator.translate(null as any)).toEqual(null);
+      expect(translator.translate(undefined as any)).toEqual(undefined);
     });
 
     it('handles nested logical operators', () => {
@@ -188,6 +188,46 @@ describe('AstraFilterTranslator', () => {
     it('throws on unsupported combinations', () => {
       const filter = {
         field: { $gt: 100, $lt: 200 },
+      };
+      expect(translator.translate(filter)).toEqual(filter);
+    });
+
+    // Test nested empty objects
+    it('preserves nested empty objects', () => {
+      const filter = {
+        status: 'active',
+        metadata: {},
+        user: {
+          profile: {},
+          settings: { theme: null },
+        },
+      };
+      expect(translator.translate(filter)).toEqual(filter);
+    });
+
+    // Test mixed operator and empty object cases
+    it('handles mix of operators and empty objects', () => {
+      const filter = {
+        tags: { $in: ['a', 'b'] },
+        metadata: {},
+        nested: {
+          field: { $eq: 'value' },
+          empty: {},
+        },
+      };
+      expect(translator.translate(filter)).toEqual(filter);
+    });
+
+    // Test deeply nested operators
+    it('handles deeply nested operators', () => {
+      const filter = {
+        user: {
+          profile: {
+            preferences: {
+              theme: { $in: ['dark', 'light'] },
+            },
+          },
+        },
       };
       expect(translator.translate(filter)).toEqual(filter);
     });

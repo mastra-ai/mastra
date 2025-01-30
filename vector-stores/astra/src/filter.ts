@@ -14,10 +14,6 @@ export class AstraFilterTranslator extends BaseFilterTranslator {
   translate(filter: Filter): Filter {
     this.validateFilter(filter);
 
-    if (filter === null || filter === undefined) {
-      return {};
-    }
-
     return this.translateNode(filter);
   }
 
@@ -27,13 +23,7 @@ export class AstraFilterTranslator extends BaseFilterTranslator {
       return node;
     }
 
-    // Handle empty object
-    if (this.isEmpty(node)) {
-      return {};
-    }
-
-    const nodeObj = node as Record<string, any>;
-    const entries = Object.entries(nodeObj);
+    const entries = Object.entries(node as Record<string, any>);
     const translatedEntries = entries.map(([key, value]) => {
       // Handle operators
       if (this.isOperator(key)) {
