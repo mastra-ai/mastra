@@ -1,4 +1,5 @@
-import { Agent, ModelConfig } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import type { ModelConfig } from '@mastra/core/llm';
 
 export abstract class MastraAgentJudge {
   protected readonly agent: Agent;

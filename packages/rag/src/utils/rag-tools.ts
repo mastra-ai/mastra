@@ -1,4 +1,6 @@
-import { createTool, EmbeddingOptions, MastraVector, QueryResult } from '@mastra/core';
+import { EmbeddingOptions } from '@mastra/core/embeddings';
+import { createTool } from '@mastra/core/tools';
+import { MastraVector, QueryResult } from '@mastra/core/vector';
 import { z } from 'zod';
 
 import { ChunkParams, MDocument } from '../document';

@@ -1,4 +1,5 @@
-import { Agent, createTool } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 const instructions = `You are a helpful cat expert assistant. When discussing cats, you should always include an interesting cat fact.

@@ -1,4 +1,5 @@
-import { Mastra, MastraBase } from '@mastra/core';
+import { MastraBase } from '@mastra/core';
+import { Mastra } from '@mastra/core';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import path, { join } from 'path';
 import { fileURLToPath } from 'url';

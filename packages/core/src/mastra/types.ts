@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { IExecutionContext } from '../action';
 import { Agent } from '../agent';
 import { MastraEngine } from '../engine';
-import { LLM } from '../llm';
+import { LLM } from '../llm/llm';
 import { ModelConfig } from '../llm/types';
 import { MastraMemory } from '../memory';
 import { MastraVector } from '../vector';

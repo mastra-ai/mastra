@@ -1,4 +1,4 @@
-import { createTool } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
 import chalk from 'chalk';
 import { execa, ExecaError } from 'execa';
 import { Transform } from 'stream';

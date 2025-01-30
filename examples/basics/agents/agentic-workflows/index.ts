@@ -1,4 +1,5 @@
-import { Mastra, Step, Workflow } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import { Step, Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 const fetchWeather = new Step({

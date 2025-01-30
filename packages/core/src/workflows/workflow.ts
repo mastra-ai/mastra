@@ -28,6 +28,7 @@ import {
   WorkflowEvent,
   WorkflowRunState,
   WorkflowState,
+  WorkflowOptions,
 } from './types';
 import { getStepResult, isErrorEvent, isTransitionEvent, isVariableReference } from './utils';
 
@@ -70,17 +71,7 @@ export class Workflow<
    * @param name - Identifier for the workflow (not necessarily unique)
    * @param logger - Optional logger instance
    */
-  constructor({
-    name,
-    triggerSchema,
-    retryConfig,
-    mastra,
-  }: {
-    name: string;
-    triggerSchema?: TTriggerSchema;
-    retryConfig?: RetryConfig;
-    mastra?: MastraPrimitives;
-  }) {
+  constructor({ name, triggerSchema, retryConfig, mastra }: WorkflowOptions<TTriggerSchema>) {
     super({ component: 'WORKFLOW', name });
 
     this.name = name;
@@ -344,6 +335,7 @@ export class Workflow<
 
       const suspendedPaths: Set<string> = new Set();
       this.#actor.subscribe(async state => {
+        this.logger.debug('actor subscribed again');
         this.#getSuspendedPaths({
           value: state.value as Record<string, string>,
           path: '',
