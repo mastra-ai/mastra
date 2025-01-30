@@ -13,7 +13,7 @@ threadId = `39873fbf-84d6-425e-8c1b-8afd798d72a4`;
 // threadId = `12569b14-3e16-4e31-8130-8d9676f1932c`;
 console.log(threadId);
 
-const resourceid = 'SOME_USER_ID';
+const resourceId = 'SOME_USER_ID';
 
 async function logRes(res: Awaited<ReturnType<typeof agent.stream>>) {
   console.log(`\n🤖 Agent:`);
@@ -48,7 +48,7 @@ async function main() {
     await logRes(
       await agent.stream(prompt, {
         threadId,
-        resourceid,
+        resourceId,
       }),
     );
   }
