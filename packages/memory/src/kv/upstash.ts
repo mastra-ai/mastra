@@ -57,14 +57,14 @@ export class UpstashKVMemory extends MastraMemory {
     return thread ? this.parseThread(thread) : null;
   }
 
-  async getThreadsByResourceId({ resourceid }: { resourceid: string }): Promise<ThreadType[]> {
+  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<ThreadType[]> {
     const pattern = `${this.prefix}:thread:*`;
     const keys = await this.kv.keys(pattern);
 
     const threads = await Promise.all(keys.map(key => this.kv.get<SerializedThreadType>(key)));
 
     return threads
-      .filter(thread => thread?.resourceid === resourceid)
+      .filter(thread => thread?.resourceId === resourceId)
       .map(thread => this.parseThread(thread as SerializedThreadType));
   }
 

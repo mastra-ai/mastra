@@ -157,7 +157,7 @@ export abstract class MastraMemory extends MastraBase {
    */
   abstract getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null>;
 
-  abstract getThreadsByResourceId({ resourceid }: { resourceid: string }): Promise<ThreadType[]>;
+  abstract getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<ThreadType[]>;
   /**
    * Saves or updates a thread
    * @param thread - The thread data to save
@@ -234,11 +234,11 @@ export abstract class MastraMemory extends MastraBase {
    */
   async createThread({
     threadId,
-    resourceid,
+    resourceId,
     title,
     metadata,
   }: {
-    resourceid: string;
+    resourceId: string;
     threadId?: string;
     title?: string;
     metadata?: Record<string, unknown>;
@@ -246,7 +246,7 @@ export abstract class MastraMemory extends MastraBase {
     const thread: ThreadType = {
       id: threadId || this.generateId(),
       title,
-      resourceid,
+      resourceId,
       createdAt: new Date(),
       updatedAt: new Date(),
       metadata,
