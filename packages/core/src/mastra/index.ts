@@ -7,7 +7,7 @@ import { LLM } from '../llm';
 import { ModelConfig } from '../llm/types';
 import { LogLevel, Logger, createLogger, noopLogger } from '../logger';
 import { MastraMemory } from '../memory';
-import { MastraStorage, MastraStorageLibSql } from '../storage';
+import { MastraStorage } from '../storage';
 import { InstrumentClass, OtelConfig, Telemetry } from '../telemetry';
 import { MastraTTS } from '../tts';
 import { MastraVector } from '../vector';
