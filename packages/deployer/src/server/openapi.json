@@ -27,6 +27,24 @@
         "parameters": [{ "name": "agentId", "in": "path", "required": true, "schema": { "type": "string" } }]
       }
     },
+    "/api/agents/{agentId}/evals/ci": {
+      "get": {
+        "responses": { "200": { "description": "List of evals" } },
+        "operationId": "getApiAgentsByAgentIdEvalsCi",
+        "description": "Get CI evals by agent ID",
+        "tags": ["agents"],
+        "parameters": [{ "name": "agentId", "in": "path", "required": true, "schema": { "type": "string" } }]
+      }
+    },
+    "/api/agents/{agentId}/evals/live": {
+      "get": {
+        "responses": { "200": { "description": "List of evals" } },
+        "operationId": "getApiAgentsByAgentIdEvalsLive",
+        "description": "Get live evals by agent ID",
+        "tags": ["agents"],
+        "parameters": [{ "name": "agentId", "in": "path", "required": true, "schema": { "type": "string" } }]
+      }
+    },
     "/api/agents/{agentId}/generate": {
       "post": {
         "responses": { "200": { "description": "Generated response" }, "404": { "description": "Agent not found" } },
@@ -253,21 +271,6 @@
         }
       }
     },
-    "/api/syncs/{syncId}/execute": {
-      "post": {
-        "responses": { "200": { "description": "Sync execution result" }, "404": { "description": "Sync not found" } },
-        "operationId": "postApiSyncsBySyncIdExecute",
-        "description": "Execute a sync",
-        "tags": ["syncs"],
-        "parameters": [{ "name": "syncId", "in": "path", "required": true, "schema": { "type": "string" } }],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": { "schema": { "type": "object", "properties": { "input": { "type": "object" } } } }
-          }
-        }
-      }
-    },
     "/api/logs": {
       "get": {
         "responses": { "200": { "description": "List of all logs" } },
@@ -340,6 +343,115 @@
             }
           }
         }
+      }
+    },
+    "/api/vector/{vectorName}/upsert": {
+      "post": {
+        "responses": { "200": { "description": "Vectors upserted successfully" } },
+        "operationId": "postApiVectorByVectorNameUpsert",
+        "description": "Upsert vectors into an index",
+        "tags": ["vector"],
+        "parameters": [{ "name": "vectorName", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "indexName": { "type": "string" },
+                  "vectors": { "type": "array", "items": { "type": "array", "items": { "type": "number" } } },
+                  "metadata": { "type": "array", "items": { "type": "object" } },
+                  "ids": { "type": "array", "items": { "type": "string" } }
+                },
+                "required": ["indexName", "vectors"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vector/{vectorName}/create-index": {
+      "post": {
+        "responses": { "200": { "description": "Index created successfully" } },
+        "operationId": "postApiVectorByVectorNameCreate-index",
+        "description": "Create a new vector index",
+        "tags": ["vector"],
+        "parameters": [{ "name": "vectorName", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "indexName": { "type": "string" },
+                  "dimension": { "type": "number" },
+                  "metric": { "type": "string", "enum": ["cosine", "euclidean", "dotproduct"] }
+                },
+                "required": ["indexName", "dimension"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vector/{vectorName}/query": {
+      "post": {
+        "responses": { "200": { "description": "Query results" } },
+        "operationId": "postApiVectorByVectorNameQuery",
+        "description": "Query vectors from an index",
+        "tags": ["vector"],
+        "parameters": [{ "name": "vectorName", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "indexName": { "type": "string" },
+                  "queryVector": { "type": "array", "items": { "type": "number" } },
+                  "topK": { "type": "number" },
+                  "filter": { "type": "object" },
+                  "includeVector": { "type": "boolean" }
+                },
+                "required": ["indexName", "queryVector"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vector/{vectorName}/indexes": {
+      "get": {
+        "responses": { "200": { "description": "List of indexes" } },
+        "operationId": "getApiVectorByVectorNameIndexes",
+        "description": "List all indexes for a vector store",
+        "tags": ["vector"],
+        "parameters": [{ "name": "vectorName", "in": "path", "required": true, "schema": { "type": "string" } }]
+      }
+    },
+    "/api/vector/{vectorName}/indexes/{indexName}": {
+      "get": {
+        "responses": { "200": { "description": "Index details" } },
+        "operationId": "getApiVectorByVectorNameIndexesByIndexName",
+        "description": "Get details about a specific index",
+        "tags": ["vector"],
+        "parameters": [
+          { "name": "vectorName", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "indexName", "in": "path", "required": true, "schema": { "type": "string" } }
+        ]
+      },
+      "delete": {
+        "responses": { "200": { "description": "Index deleted successfully" } },
+        "operationId": "deleteApiVectorByVectorNameIndexesByIndexName",
+        "description": "Delete a specific index",
+        "tags": ["vector"],
+        "parameters": [
+          { "name": "vectorName", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "indexName", "in": "path", "required": true, "schema": { "type": "string" } }
+        ]
       }
     }
   },

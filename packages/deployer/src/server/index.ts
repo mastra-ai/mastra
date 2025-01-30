@@ -41,6 +41,14 @@ import {
   getToolResultHandler,
   getToolsHandler,
 } from './handlers/tools.js';
+import {
+  upsertVectors,
+  createIndex,
+  queryVectors,
+  listIndexes,
+  describeIndex,
+  deleteIndex,
+} from './handlers/vector.js';
 import { executeWorkflowHandler, getWorkflowByIdHandler, getWorkflowsHandler } from './handlers/workflows.js';
 import { html } from './welcome.js';
 
@@ -804,6 +812,220 @@ export async function createHonoServer(
       },
     }),
     executeToolHandler(tools),
+  );
+
+  // Vector routes
+  app.post(
+    '/api/vector/:vectorName/upsert',
+    describeRoute({
+      description: 'Upsert vectors into an index',
+      tags: ['vector'],
+      parameters: [
+        {
+          name: 'vectorName',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                indexName: { type: 'string' },
+                vectors: {
+                  type: 'array',
+                  items: {
+                    type: 'array',
+                    items: { type: 'number' },
+                  },
+                },
+                metadata: {
+                  type: 'array',
+                  items: { type: 'object' },
+                },
+                ids: {
+                  type: 'array',
+                  items: { type: 'string' },
+                },
+              },
+              required: ['indexName', 'vectors'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Vectors upserted successfully',
+        },
+      },
+    }),
+    upsertVectors,
+  );
+
+  app.post(
+    '/api/vector/:vectorName/create-index',
+    describeRoute({
+      description: 'Create a new vector index',
+      tags: ['vector'],
+      parameters: [
+        {
+          name: 'vectorName',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                indexName: { type: 'string' },
+                dimension: { type: 'number' },
+                metric: {
+                  type: 'string',
+                  enum: ['cosine', 'euclidean', 'dotproduct'],
+                },
+              },
+              required: ['indexName', 'dimension'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Index created successfully',
+        },
+      },
+    }),
+    createIndex,
+  );
+
+  app.post(
+    '/api/vector/:vectorName/query',
+    describeRoute({
+      description: 'Query vectors from an index',
+      tags: ['vector'],
+      parameters: [
+        {
+          name: 'vectorName',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                indexName: { type: 'string' },
+                queryVector: {
+                  type: 'array',
+                  items: { type: 'number' },
+                },
+                topK: { type: 'number' },
+                filter: { type: 'object' },
+                includeVector: { type: 'boolean' },
+              },
+              required: ['indexName', 'queryVector'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Query results',
+        },
+      },
+    }),
+    queryVectors,
+  );
+
+  app.get(
+    '/api/vector/:vectorName/indexes',
+    describeRoute({
+      description: 'List all indexes for a vector store',
+      tags: ['vector'],
+      parameters: [
+        {
+          name: 'vectorName',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'List of indexes',
+        },
+      },
+    }),
+    listIndexes,
+  );
+
+  app.get(
+    '/api/vector/:vectorName/indexes/:indexName',
+    describeRoute({
+      description: 'Get details about a specific index',
+      tags: ['vector'],
+      parameters: [
+        {
+          name: 'vectorName',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'indexName',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Index details',
+        },
+      },
+    }),
+    describeIndex,
+  );
+
+  app.delete(
+    '/api/vector/:vectorName/indexes/:indexName',
+    describeRoute({
+      description: 'Delete a specific index',
+      tags: ['vector'],
+      parameters: [
+        {
+          name: 'vectorName',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'indexName',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Index deleted successfully',
+        },
+      },
+    }),
+    deleteIndex,
   );
 
   app.get(
