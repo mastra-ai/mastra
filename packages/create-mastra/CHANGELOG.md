@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.0-alpha.31
+
+### Patch Changes
+
+- 188ffa8: Fix cli create not parsing components flag
+
 ## 0.1.0-alpha.30
 
 ### Patch Changes

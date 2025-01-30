@@ -1845,6 +1845,9 @@ importers:
       '@date-fns/utc':
         specifier: ^1.2.0
         version: 1.2.0
+      '@libsql/client':
+        specifier: ^0.14.0
+        version: 0.14.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0

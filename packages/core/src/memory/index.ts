@@ -21,7 +21,7 @@ export type MessageType = {
   id: string;
   content: UserContent | AssistantContent | ToolContent;
   role: 'system' | 'user' | 'assistant' | 'tool';
-  createdAt: Date;
+  created_at?: Date;
   threadId: string;
   toolCallIds?: string[];
   toolCallArgs?: Record<string, unknown>[];
@@ -32,9 +32,9 @@ export type MessageType = {
 export type ThreadType = {
   id: string;
   title?: string;
-  resourceId: string;
-  createdAt: Date;
-  updatedAt: Date;
+  resource_id: string;
+  createdAt?: Date;
+  updatedAt?: Date;
   metadata?: Record<string, unknown>;
 };
 
@@ -289,7 +289,7 @@ export abstract class MastraMemory extends MastraBase {
     const thread: ThreadType = {
       id: threadId || this.generateId(),
       title,
-      resourceId,
+      resource_id: resourceId,
       createdAt: new Date(),
       updatedAt: new Date(),
       metadata,
@@ -338,7 +338,7 @@ export abstract class MastraMemory extends MastraBase {
       id: this.generateId(),
       content,
       role,
-      createdAt: new Date(),
+      created_at: new Date(),
       threadId,
       type,
       toolNames,
