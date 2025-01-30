@@ -10,12 +10,13 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@libsql/client": "^0.14.0",
     "@mastra/core": "workspace:*",
     "@mastra/engine": "workspace:*",
     "@mastra/firecrawl": "workspace:*",
     "@mastra/github": "workspace:*",
-    "@mastra/rag": "workspace:*",
     "@mastra/loggers": "workspace:*",
+    "@mastra/rag": "workspace:*",
     "@radix-ui/react-accordion": "^1.2.1",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-select": "^2.1.2",
