@@ -3,11 +3,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 
 import { TestIntegration } from '../integration/openapi-toolset.mock';
-import type { ModelConfig } from '../llm/types';
 import { Mastra } from '../mastra';
 import { createTool } from '../tools';
 
-import { Agent } from './index';
+import { Agent, type ModelConfig } from '..';
 
 config();
 
@@ -173,7 +172,7 @@ describe('agent', () => {
       expect(partialObject).toBeDefined();
     }
 
-    expect(previousPartialObject['winner']).toContain('Barack Obama');
+    expect(previousPartialObject['winner']).toBe('Barack Obama');
   });
 
   it('should call findUserTool', async () => {

@@ -1,5 +1,5 @@
 // @ts-ignore
-import type { Config } from '@mastra/core';
+import { Config } from '@mastra/core';
 
 export const config: Config = {
   name: 'PROJECT_NAME',

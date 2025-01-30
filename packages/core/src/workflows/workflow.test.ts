@@ -920,44 +920,26 @@ describe('Workflow', () => {
   });
 
   describe('Interoperability (Actions)', () => {
-    it.only(
-      'should be able to use all action types in a workflow',
-      {
-        timeout: 10000,
-      },
-      async () => {
-        const step1Action = vi.fn<any>().mockResolvedValue({ name: 'step1' });
-        const step1 = new Step({
-          id: 'step1',
-          execute: step1Action,
-          outputSchema: z.object({ name: z.string() }),
-        });
+    it('should be able to use all action types in a workflow', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ name: 'step1' });
+      const step1 = new Step({ id: 'step1', execute: step1Action, outputSchema: z.object({ name: z.string() }) });
 
-        const toolAction = vi.fn<any>().mockResolvedValue({ age: 100 });
-        const randomTool = createTool({
-          id: 'random-tool',
-          execute: toolAction,
-          description: 'random-tool',
-          inputSchema: z.object({ name: z.string() }),
-          outputSchema: z.object({ age: z.number() }),
-        });
+      const toolAction = vi.fn<any>().mockResolvedValue({ age: 100 });
+      const randomTool = createTool({
+        id: 'random-tool',
+        execute: toolAction,
+        description: 'random-tool',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ age: z.number() }),
+      });
 
-        const workflow = new Workflow({
-          name: 'test-workflow',
-          mastra: {
-            logger: createLogger({
-              name: 'Workflow',
-              level: 'debug',
-            }),
-          },
-        });
-        workflow.step(step1).step(randomTool).commit();
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow.after(step1).step(randomTool).commit();
 
-        await workflow.execute();
+      await workflow.execute();
 
-        expect(step1Action).toHaveBeenCalled();
-        expect(toolAction).toHaveBeenCalled();
-      },
-    );
+      expect(step1Action).toHaveBeenCalled();
+      expect(toolAction).toHaveBeenCalled();
+    });
   });
 });

@@ -1,5 +1,4 @@
-import { Mastra } from '@mastra/core';
-import { Agent } from '@mastra/core/agent';
+import { Agent, Mastra } from '@mastra/core';
 import { sample } from './integrations';
 
 const agent = new Agent({

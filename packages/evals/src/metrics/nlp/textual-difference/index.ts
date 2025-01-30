@@ -1,4 +1,4 @@
-import { Metric, type MetricResult } from '@mastra/core/eval';
+import { Metric, type MetricResult } from '@mastra/core';
 import { SequenceMatcher } from 'difflib';
 
 interface TextualDifferenceResult extends MetricResult {

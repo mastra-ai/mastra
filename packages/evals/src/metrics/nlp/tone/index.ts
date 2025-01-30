@@ -1,4 +1,4 @@
-import { Metric, type MetricResult } from '@mastra/core/eval';
+import { Metric, type MetricResult } from '@mastra/core';
 import Sentiment from 'sentiment';
 
 interface ToneConsitencyResult extends MetricResult {

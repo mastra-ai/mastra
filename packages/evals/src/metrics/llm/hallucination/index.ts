@@ -1,5 +1,4 @@
-import { Metric } from '@mastra/core/eval';
-import type { ModelConfig } from '@mastra/core/llm';
+import { Metric, ModelConfig } from '@mastra/core';
 
 import { MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';

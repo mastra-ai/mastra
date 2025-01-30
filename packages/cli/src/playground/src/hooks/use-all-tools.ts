@@ -1,4 +1,4 @@
-import { Tool } from '@mastra/core/tools';
+import { Tool } from '@mastra/core';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 

@@ -1,4 +1,4 @@
-import type { ModelConfig } from '@mastra/core/llm';
+import { ModelConfig } from '@mastra/core';
 import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';

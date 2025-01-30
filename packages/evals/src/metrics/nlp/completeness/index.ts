@@ -1,4 +1,4 @@
-import { Metric, type MetricResult } from '@mastra/core/eval';
+import { Metric, type MetricResult } from '@mastra/core';
 import nlp from 'compromise';
 
 interface CompletenessMetricResult extends MetricResult {

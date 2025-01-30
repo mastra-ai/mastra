@@ -1,5 +1,5 @@
 import * as p from '@clack/prompts';
-import type { ModelConfig } from '@mastra/core/llm';
+import type { ModelConfig } from '@mastra/core';
 import child_process from 'node:child_process';
 import util from 'node:util';
 import path from 'path';
@@ -38,7 +38,7 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
       ${addExampleTool ? 'Use the weatherTool to fetch current weather data.' : ''}
 `;
   const content = `
-import { Agent } from '@mastra/core/agent';
+import { Agent } from '@mastra/core';
 ${addExampleTool ? `import { weatherTool } from '../tools';` : ''}
 
 export const weatherAgent = new Agent({

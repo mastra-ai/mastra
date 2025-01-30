@@ -1,4 +1,4 @@
-import { createTool } from '@mastra/core/tools';
+import { createTool } from '@mastra/core';
 import chalk from 'chalk';
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';

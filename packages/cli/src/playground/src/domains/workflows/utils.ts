@@ -1,5 +1,5 @@
 import Dagre from '@dagrejs/dagre';
-import type { StepCondition } from '@mastra/core/workflows';
+import { StepCondition } from '@mastra/core';
 import { Node, Edge, MarkerType } from '@xyflow/react';
 
 export type Condition = {

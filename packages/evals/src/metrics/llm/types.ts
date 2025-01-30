@@ -1,4 +1,4 @@
-import type { MetricResult } from '@mastra/core/eval';
+import { type MetricResult } from '@mastra/core';
 
 export interface MetricResultWithReason extends MetricResult {
   info: {

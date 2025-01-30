@@ -1,5 +1,4 @@
-import { type Agent } from '@mastra/core/agent';
-import { type Metric, evaluate as coreEvaluate } from '@mastra/core/eval';
+import { type Agent, type Metric, evaluate as coreEvaluate } from '@mastra/core';
 
 import { GLOBAL_RUN_ID_ENV_KEY } from './constants';
 

@@ -1,4 +1,4 @@
-import { Workflow } from '@mastra/core/workflows';
+import { Workflow } from '@mastra/core';
 import {
   ReactFlow,
   MiniMap,

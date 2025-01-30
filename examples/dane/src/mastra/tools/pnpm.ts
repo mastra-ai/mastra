@@ -1,4 +1,4 @@
-import { createTool } from '@mastra/core/tools';
+import { createTool } from '@mastra/core';
 import chalk from 'chalk';
 import { execa, ExecaError } from 'execa';
 import { readFileSync } from 'fs';

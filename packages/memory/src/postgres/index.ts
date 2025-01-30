@@ -1,4 +1,4 @@
-import { MastraMemory, MessageType, ThreadType, AiMessageType, MessageResponse } from '@mastra/core/memory';
+import { MastraMemory, MessageType, ThreadType, AiMessageType, MessageResponse } from '@mastra/core';
 import { ToolResultPart, TextPart } from 'ai';
 import crypto from 'crypto';
 import pg from 'pg';

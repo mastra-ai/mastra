@@ -30,7 +30,7 @@ export default function Page() {
           <CodeBlock
             fileName="src/mastra/agents/index.ts"
             language="typescript"
-            code={`import { Agent } from '@mastra/core/agent';
+            code={`import { Agent } from '@mastra/core';
 
 export const travelAgent = new Agent({
   name: 'travelAgent',
