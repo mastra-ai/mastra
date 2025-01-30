@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { AstraFilterTranslator } from './';
+import { AstraFilterTranslator } from './filter';
 
 describe('AstraFilterTranslator', () => {
   let translator: AstraFilterTranslator;

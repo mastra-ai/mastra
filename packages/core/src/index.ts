@@ -16,7 +16,7 @@ export * from './tools/types';
 export * from './tts';
 export * from './utils';
 export * from './vector';
+export * from './filter';
 export * from './workflows';
 export * from './hooks';
-export * from './tts';
 export * from './deployer';
