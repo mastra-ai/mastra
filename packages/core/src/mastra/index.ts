@@ -1,9 +1,7 @@
-import 'dotenv/config';
-
 import { Agent } from '../agent';
 import { MastraDeployer } from '../deployer';
 import { MastraEngine } from '../engine';
-import { LLM } from '../llm';
+import { LLM } from '../llm/llm';
 import { ModelConfig } from '../llm/types';
 import { LogLevel, Logger, createLogger, noopLogger } from '../logger';
 import { MastraMemory } from '../memory';
@@ -12,6 +10,25 @@ import { InstrumentClass, OtelConfig, Telemetry } from '../telemetry';
 import { MastraTTS } from '../tts';
 import { MastraVector } from '../vector';
 import { Workflow } from '../workflows';
+
+export type MastraConfig<
+  TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
+  TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
+  TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
+  TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
+  TLogger extends Logger = Logger,
+> = {
+  memory?: MastraMemory;
+  agents?: TAgents;
+  engine?: MastraEngine;
+  vectors?: TVectors;
+  storage?: MastraStorage;
+  logger?: TLogger | false;
+  workflows?: TWorkflows;
+  tts?: TTTS;
+  telemetry?: OtelConfig;
+  deployer?: MastraDeployer;
+};
 
 @InstrumentClass({
   prefix: 'mastra',
@@ -26,7 +43,7 @@ export class Mastra<
 > {
   private vectors?: TVectors;
   private agents: TAgents;
-  private logger: TLogger;
+  protected logger: TLogger;
   private workflows: TWorkflows;
   private telemetry?: Telemetry;
   private tts?: TTTS;
@@ -35,18 +52,7 @@ export class Mastra<
   storage?: MastraStorage;
   memory?: MastraMemory;
 
-  constructor(config?: {
-    memory?: MastraMemory;
-    agents?: TAgents;
-    engine?: MastraEngine;
-    storage?: MastraStorage;
-    vectors?: TVectors;
-    logger?: TLogger | false;
-    workflows?: TWorkflows;
-    tts?: TTTS;
-    telemetry?: OtelConfig;
-    deployer?: MastraDeployer;
-  }) {
+  constructor(config?: MastraConfig<TAgents, TWorkflows, TVectors, TTTS, TLogger>) {
     /*
       Logger
     */

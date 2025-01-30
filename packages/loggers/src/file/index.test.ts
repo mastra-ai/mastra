@@ -1,4 +1,4 @@
-import { createLogger, LogLevel } from '@mastra/core';
+import { createLogger, LogLevel } from '@mastra/core/logger';
 import fs from 'fs';
 import path from 'path';
 import { describe, it, expect, beforeEach, afterEach, vi, afterAll } from 'vitest';

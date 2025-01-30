@@ -1,4 +1,5 @@
-import { MastraEngine, BaseEntity, BaseRecord, QueryOptions } from '@mastra/core';
+import { MastraEngine } from '@mastra/core/engine';
+import type { BaseEntity, BaseRecord, QueryOptions } from '@mastra/core/engine';
 import { eq, SQL, sql } from 'drizzle-orm';
 import postgres from 'postgres';
 
@@ -113,7 +114,7 @@ export class PostgresEngine extends MastraEngine {
     )();
 
     if (!entity) {
-      throw new Error(`Entity not found with name: ${name} and connectionId: ${connectionId}`);
+      throw new Error(`Entity not found with name: ${entityName} and connectionId: ${connectionId}`);
     }
 
     return this.db.query.records.findMany({

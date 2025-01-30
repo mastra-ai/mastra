@@ -4,7 +4,7 @@ import {
   ThreadType,
   MessageResponse,
   AiMessageType,
-} from '@mastra/core';
+} from '@mastra/core/memory';
 import { Redis } from '@upstash/redis';
 import { ToolResultPart, TextPart } from 'ai';
 import crypto from 'crypto';
