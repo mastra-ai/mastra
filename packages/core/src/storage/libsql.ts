@@ -13,8 +13,8 @@ export interface LibSQLConfig {
 export class MastraStorageLibSql extends MastraStorage {
   private client: Client;
 
-  constructor({ name, config }: { name: string; config: LibSQLConfig }) {
-    super({ name });
+  constructor({ config }: { config: LibSQLConfig }) {
+    super({ name: `MastraStorageLibSql` });
     this.client = createClient({
       url: config.url,
       authToken: config.authToken,

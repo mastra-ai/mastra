@@ -7,6 +7,7 @@ import { LLM } from '../llm';
 import { ModelConfig } from '../llm/types';
 import { LogLevel, Logger, createLogger, noopLogger } from '../logger';
 import { MastraMemory } from '../memory';
+import { MastraStorage, MastraStorageLibSql } from '../storage';
 import { InstrumentClass, OtelConfig, Telemetry } from '../telemetry';
 import { MastraTTS } from '../tts';
 import { MastraVector } from '../vector';
@@ -31,12 +32,14 @@ export class Mastra<
   private tts?: TTTS;
   private deployer?: MastraDeployer;
   engine?: MastraEngine;
+  storage?: MastraStorage;
   memory?: MastraMemory;
 
   constructor(config?: {
     memory?: MastraMemory;
     agents?: TAgents;
     engine?: MastraEngine;
+    storage?: MastraStorage;
     vectors?: TVectors;
     logger?: TLogger | false;
     workflows?: TWorkflows;
@@ -92,6 +95,18 @@ export class Mastra<
       } else {
         this.engine = config.engine;
       }
+    }
+
+    /*
+      Storage
+    */
+    this.storage = config?.storage || new MastraStorageLibSql({ config: { url: 'file:.mastra/memory:' } });
+
+    if (this.telemetry) {
+      this.storage = this.telemetry.traceClass(this.storage, {
+        excludeMethods: ['__setTelemetry', '__getTelemetry'],
+      });
+      this.storage.__setTelemetry(this.telemetry);
     }
 
     /*
@@ -160,6 +175,7 @@ export class Mastra<
           logger: this.getLogger(),
           telemetry: this.telemetry,
           engine: this.engine,
+          storage: this.storage,
           memory: this.memory,
           agents: agents,
           tts: this.tts,
@@ -183,6 +199,7 @@ export class Mastra<
           logger: this.getLogger(),
           telemetry: this.telemetry,
           engine: this.engine,
+          storage: this.storage,
           memory: this.memory,
           agents: this.agents,
           tts: this.tts,
@@ -299,8 +316,13 @@ export class Mastra<
         this.tts?.[key]?.__setLogger(this.logger);
       });
     }
+
     if (this.engine) {
       this.engine.__setLogger(this.logger);
+    }
+
+    if (this.storage) {
+      this.storage.__setLogger(this.logger);
     }
 
     if (this.vectors) {
