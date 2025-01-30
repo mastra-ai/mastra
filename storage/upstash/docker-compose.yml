@@ -1,0 +1,15 @@
+version: '3'
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass redis_password
+  serverless-redis-http:
+    image: hiett/serverless-redis-http:latest
+    ports:
+      - "8079:80"
+    environment:
+      SRH_MODE: env
+      SRH_TOKEN: test_token
+      SRH_CONNECTION_STRING: "redis://:redis_password@redis:6379"

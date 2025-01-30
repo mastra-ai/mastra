@@ -1,9 +1,13 @@
 import { WorkflowRunState } from '../workflows';
 
 export interface StorageColumn {
-  type: 'text' | 'timestamp';
+  type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer';
   primaryKey?: boolean;
   nullable?: boolean;
+  references?: {
+    table: string;
+    column: string;
+  };
 }
 
 export interface WorkflowRow {

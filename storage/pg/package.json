@@ -1,0 +1,42 @@
+{
+  "name": "@mastra/store-pg",
+  "version": "0.0.0-alpha.0",
+  "description": "Postgres store provider for Mastra",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/store-pg.esm.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/store-pg.esm.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "dts build",
+    "build:dev": "dts watch",
+    "test": "npm run db:up && vitest run && npm run db:down",
+    "test:watch": "npm run db:up && vitest watch",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down -v"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*",
+    "pg": "^8.13.1",
+    "pg-promise": "^11.5.4"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.10",
+    "@tsconfig/recommended": "^1.0.7",
+    "@types/node": "^22.9.0",
+    "dts-cli": "^2.0.5",
+    "vitest": "^2.1.8"
+  }
+}

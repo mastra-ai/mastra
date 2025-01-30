@@ -164,6 +164,8 @@ export abstract class MastraStorage extends MastraBase {
         id: { type: 'text', nullable: false, primaryKey: true },
         thread_id: { type: 'text', nullable: false },
         content: { type: 'text', nullable: false },
+        role: { type: 'text', nullable: false },
+        type: { type: 'text', nullable: false },
         createdAt: { type: 'timestamp', nullable: false },
       },
     });

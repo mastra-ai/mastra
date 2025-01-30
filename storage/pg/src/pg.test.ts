@@ -1,73 +1,68 @@
 import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { WorkflowRunState } from '@mastra/core';
 
-import { WorkflowRunState } from '../workflows';
+import { PostgresStore, type PostgresConfig } from './index';
 
-import { MastraStorageLibSql } from './libsql';
+const TEST_CONFIG: PostgresConfig = {
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: Number(process.env.POSTGRES_PORT) || 5432,
+  database: process.env.POSTGRES_DB || 'postgres',
+  user: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || 'postgres',
+};
 
-// Test database configuration
-const TEST_DB_URL = 'file:memory:'; // Use in-memory SQLite for tests
+// Sample test data factory functions
+const createSampleThread = () => ({
+  id: `thread-${randomUUID()}`,
+  resourceId: `resource-${randomUUID()}`,
+  title: 'Test Thread',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  metadata: { key: 'value' },
+});
 
-describe('MastraStorageLibSql', () => {
-  const storage = new MastraStorageLibSql({
-    config: { url: TEST_DB_URL },
-  });
+const createSampleMessage = (threadId: string) =>
+  ({
+    id: `msg-${randomUUID()}`,
+    role: 'user',
+    type: 'text',
+    threadId,
+    content: [{ type: 'text', text: 'Hello' }],
+    createdAt: new Date().toISOString(),
+  }) as any;
 
-  // Sample test data factory functions to ensure unique records
-  const createSampleThread = () => ({
-    id: `thread-${randomUUID()}`,
-    resourceId: `resource-${randomUUID()}`,
-    title: 'Test Thread',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    metadata: { key: 'value' },
-  });
-
-  const createSampleMessage = (threadId: string) =>
-    ({
-      id: `msg-${randomUUID()}`,
-      role: 'user',
-      type: 'text',
-      threadId,
-      content: [{ type: 'text', text: 'Hello' }],
-      createdAt: new Date().toISOString(),
-    }) as any;
+describe('PostgresStore', () => {
+  let store: PostgresStore;
 
   beforeAll(async () => {
-    await storage.init();
+    store = new PostgresStore(TEST_CONFIG);
+    await store.init();
   });
 
   beforeEach(async () => {
     // Clear tables before each test
-    await storage.clearTable({ tableName: 'workflow_snapshot' });
-    await storage.clearTable({ tableName: 'evals' });
-    await storage.clearTable({ tableName: 'messages' });
-    await storage.clearTable({ tableName: 'threads' });
-  });
-
-  afterAll(async () => {
-    // Clear tables after tests
-    await storage.clearTable({ tableName: 'workflow_snapshot' });
-    await storage.clearTable({ tableName: 'evals' });
-    await storage.clearTable({ tableName: 'messages' });
-    await storage.clearTable({ tableName: 'threads' });
+    await store.clearTable({ tableName: 'workflow_snapshot' });
+    await store.clearTable({ tableName: 'messages' });
+    await store.clearTable({ tableName: 'threads' });
   });
 
   describe('Thread Operations', () => {
     it('should create and retrieve a thread', async () => {
       const thread = createSampleThread();
+      console.log('Saving thread:', thread);
 
       // Save thread
-      const savedThread = await storage.__saveThread({ thread });
+      const savedThread = await store.saveThread({ thread });
       expect(savedThread).toEqual(thread);
 
       // Retrieve thread
-      const retrievedThread = await storage.__getThreadById({ threadId: thread.id });
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
       expect(retrievedThread?.title).toEqual(thread.title);
     });
 
     it('should return null for non-existent thread', async () => {
-      const result = await storage.__getThreadById({ threadId: 'non-existent' });
+      const result = await store.getThreadById({ threadId: 'non-existent' });
       expect(result).toBeNull();
     });
 
@@ -75,20 +70,21 @@ describe('MastraStorageLibSql', () => {
       const thread1 = createSampleThread();
       const thread2 = { ...createSampleThread(), resourceId: thread1.resourceId };
 
-      await storage.saveThread({ thread: thread1 });
-      await storage.saveThread({ thread: thread2 });
+      await store.saveThread({ thread: thread1 });
+      await store.saveThread({ thread: thread2 });
 
-      const threads = await storage.getThreadsByResourceId({ resourceId: thread1.resourceId });
+      const threads = await store.getThreadsByResourceId({ resourceId: thread1.resourceId });
       expect(threads).toHaveLength(2);
       expect(threads.map(t => t.id)).toEqual(expect.arrayContaining([thread1.id, thread2.id]));
     });
 
     it('should update thread title and metadata', async () => {
       const thread = createSampleThread();
-      await storage.__saveThread({ thread });
+      console.log('Saving thread:', thread);
+      await store.saveThread({ thread });
 
       const newMetadata = { newKey: 'newValue' };
-      const updatedThread = await storage.__updateThread({
+      const updatedThread = await store.updateThread({
         id: thread.id,
         title: 'Updated Title',
         metadata: newMetadata,
@@ -101,49 +97,54 @@ describe('MastraStorageLibSql', () => {
       });
 
       // Verify persistence
-      const retrievedThread = await storage.getThreadById({ threadId: thread.id });
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
       expect(retrievedThread).toEqual(updatedThread);
     });
 
-    it('should delete thread', async () => {
+    it('should delete thread and its messages', async () => {
       const thread = createSampleThread();
-      await storage.saveThread({ thread });
+      await store.saveThread({ thread });
 
-      await storage.deleteThread({ id: thread.id });
+      // Add some messages
+      const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
+      await store.saveMessages({ messages });
 
-      const retrievedThread = await storage.getThreadById({ threadId: thread.id });
+      await store.deleteThread({ id: thread.id });
+
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
       expect(retrievedThread).toBeNull();
+
+      // Verify messages were also deleted
+      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      expect(retrievedMessages).toHaveLength(0);
     });
   });
 
   describe('Message Operations', () => {
     it('should save and retrieve messages', async () => {
       const thread = createSampleThread();
-      await storage.saveThread({ thread });
+      await store.saveThread({ thread });
 
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
 
       // Save messages
-      const savedMessages = await storage.saveMessages({ messages });
-
+      const savedMessages = await store.saveMessages({ messages });
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages
-      const retrievedMessages = await storage.getMessages({ threadId: thread.id });
-
+      const retrievedMessages = await store.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(2);
-
       expect(retrievedMessages).toEqual(expect.arrayContaining(messages));
     });
 
     it('should handle empty message array', async () => {
-      const result = await storage.saveMessages({ messages: [] });
+      const result = await store.saveMessages({ messages: [] });
       expect(result).toEqual([]);
     });
 
     it('should maintain message order', async () => {
       const thread = createSampleThread();
-      await storage.saveThread({ thread });
+      await store.saveThread({ thread });
 
       const messages = [
         { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'First' }] },
@@ -151,31 +152,30 @@ describe('MastraStorageLibSql', () => {
         { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Third' }] },
       ];
 
-      await storage.saveMessages({ messages });
+      await store.saveMessages({ messages });
 
-      const retrievedMessages = await storage.getMessages({ threadId: thread.id });
-
+      const retrievedMessages = await store.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
-        // expect(msg.content[0]).toBe(messages[idx].content.text)
+        expect(msg.content[0].text).toBe(messages[idx].content[0].text);
       });
     });
 
     it('should rollback on error during message save', async () => {
       const thread = createSampleThread();
-      await storage.saveThread({ thread });
+      await store.saveThread({ thread });
 
       const messages = [
         createSampleMessage(thread.id),
         { ...createSampleMessage(thread.id), id: null }, // This will cause an error
       ];
 
-      await expect(storage.saveMessages({ messages })).rejects.toThrow();
+      await expect(store.saveMessages({ messages })).rejects.toThrow();
 
       // Verify no messages were saved
-      const savedMessages = await storage.getMessages({ threadId: thread.id });
+      const savedMessages = await store.getMessages({ threadId: thread.id });
       expect(savedMessages).toHaveLength(0);
     });
   });
@@ -193,8 +193,8 @@ describe('MastraStorageLibSql', () => {
         metadata: largeMetadata,
       };
 
-      await storage.saveThread({ thread: threadWithLargeMetadata });
-      const retrieved = await storage.getThreadById({ threadId: thread.id });
+      await store.saveThread({ thread: threadWithLargeMetadata });
+      const retrieved = await store.getThreadById({ threadId: thread.id });
 
       expect(retrieved?.metadata).toEqual(largeMetadata);
     });
@@ -205,19 +205,19 @@ describe('MastraStorageLibSql', () => {
         title: 'Special \'quotes\' and "double quotes" and emoji 🎉',
       };
 
-      await storage.saveThread({ thread });
-      const retrieved = await storage.getThreadById({ threadId: thread.id });
+      await store.saveThread({ thread });
+      const retrieved = await store.getThreadById({ threadId: thread.id });
 
       expect(retrieved?.title).toBe(thread.title);
     });
 
     it('should handle concurrent thread updates', async () => {
       const thread = createSampleThread();
-      await storage.saveThread({ thread });
+      await store.saveThread({ thread });
 
       // Perform multiple updates concurrently
       const updates = Array.from({ length: 5 }, (_, i) =>
-        storage.updateThread({
+        store.updateThread({
           id: thread.id,
           title: `Update ${i}`,
           metadata: { update: i },
@@ -227,26 +227,12 @@ describe('MastraStorageLibSql', () => {
       await expect(Promise.all(updates)).resolves.toBeDefined();
 
       // Verify final state
-      const finalThread = await storage.getThreadById({ threadId: thread.id });
+      const finalThread = await store.getThreadById({ threadId: thread.id });
       expect(finalThread).toBeDefined();
     });
   });
 
   describe('Workflow Snapshots', () => {
-    beforeAll(async () => {
-      // Create workflow_snapshot table
-      await storage.createTable({
-        tableName: 'workflow_snapshot',
-        schema: {
-          workflow_name: { type: 'text', nullable: false },
-          run_id: { type: 'text', nullable: false },
-          snapshot: { type: 'text', nullable: false },
-          created_at: { type: 'timestamp', nullable: false },
-          updated_at: { type: 'timestamp', nullable: false },
-        },
-      });
-    });
-
     it('should persist and load workflow snapshots', async () => {
       const workflowName = 'test-workflow';
       const runId = `run-${randomUUID()}`;
@@ -259,13 +245,13 @@ describe('MastraStorageLibSql', () => {
         },
       } as any;
 
-      await storage.persistWorkflowSnapshot({
+      await store.persistWorkflowSnapshot({
         workflowName,
         runId,
         snapshot,
       });
 
-      const loadedSnapshot = await storage.loadWorkflowSnapshot({
+      const loadedSnapshot = await store.loadWorkflowSnapshot({
         workflowName,
         runId,
       });
@@ -274,7 +260,7 @@ describe('MastraStorageLibSql', () => {
     });
 
     it('should return null for non-existent workflow snapshot', async () => {
-      const result = await storage.loadWorkflowSnapshot({
+      const result = await store.loadWorkflowSnapshot({
         workflowName: 'non-existent',
         runId: 'non-existent',
       });
@@ -294,7 +280,7 @@ describe('MastraStorageLibSql', () => {
         },
       };
 
-      await storage.persistWorkflowSnapshot({
+      await store.persistWorkflowSnapshot({
         workflowName,
         runId,
         snapshot: initialSnapshot as any,
@@ -311,13 +297,13 @@ describe('MastraStorageLibSql', () => {
         },
       } as any;
 
-      await storage.persistWorkflowSnapshot({
+      await store.persistWorkflowSnapshot({
         workflowName,
         runId,
         snapshot: updatedSnapshot,
       });
 
-      const loadedSnapshot = await storage.loadWorkflowSnapshot({
+      const loadedSnapshot = await store.loadWorkflowSnapshot({
         workflowName,
         runId,
       });
@@ -372,18 +358,22 @@ describe('MastraStorageLibSql', () => {
         timestamp: Date.now(),
       };
 
-      await storage.persistWorkflowSnapshot({
+      await store.persistWorkflowSnapshot({
         workflowName,
         runId,
         snapshot: complexSnapshot as WorkflowRunState,
       });
 
-      const loadedSnapshot = await storage.loadWorkflowSnapshot({
+      const loadedSnapshot = await store.loadWorkflowSnapshot({
         workflowName,
         runId,
       });
 
       expect(loadedSnapshot).toEqual(complexSnapshot);
     });
+  });
+
+  afterAll(async () => {
+    await store.close();
   });
 });
