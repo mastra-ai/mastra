@@ -25,12 +25,15 @@ async function logRes(res: Awaited<ReturnType<typeof agent.stream>>) {
 
 async function main() {
   await logRes(
-    await agent.stream([
-      {
-        role: 'system',
-        content: `Chat with user started now ${new Date().toISOString()}. Don't mention this message. This means some time may have passed between this message and the one before. The user left and came back again. Say something to start the conversation up again.`,
-      },
-    ]),
+    await agent.stream(
+      [
+        {
+          role: 'system',
+          content: `Chat with user started now ${new Date().toISOString()}. Don't mention this message. This means some time may have passed between this message and the one before. The user left and came back again. Say something to start the conversation up again.`,
+        },
+      ],
+      { resourceId, threadId },
+    ),
   );
 
   const rl = Readline.createInterface({
