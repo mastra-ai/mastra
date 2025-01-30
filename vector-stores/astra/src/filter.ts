@@ -37,8 +37,7 @@ export class AstraFilterTranslator extends BaseFilterTranslator {
     const translatedEntries = entries.map(([key, value]) => {
       // Handle operators
       if (this.isOperator(key)) {
-        this.validateOperatorValue(key as QueryOperator, value);
-        return [key, this.translateOperatorValue(key as QueryOperator, value)];
+        return [key, this.translateOperatorValue(key, value)];
       }
 
       // Handle nested paths and objects

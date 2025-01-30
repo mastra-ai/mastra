@@ -1,154 +1,120 @@
 import { BaseFilterTranslator, FieldCondition, Filter, QueryOperator } from '@mastra/core';
 
-/**
- * Translator for Pinecone/Vectorize filter queries.
- * Handles conversion to Pinecone's stricter MongoDB-like syntax.
- */
 export class PineconeFilterTranslator extends BaseFilterTranslator {
   translate(filter: Filter): Filter {
     this.validateFilter(filter);
+    return this.translateNode(filter);
+  }
 
-    if (filter === null || filter === undefined) {
-      return {};
-    }
-
-    console.log(filter);
-    // If multiple top-level fields, wrap in $and
-    const translated = this.translateNode(filter);
-    console.log('translated', translated);
-    const entries = Object.entries(translated);
-    console.log('entries', entries);
-    if (entries.length > 1 && !this.isOperator(entries[0]?.[0] as string)) {
-      return {
-        $and: entries.map(([key, value]) => ({ [key]: value })),
-      };
-    }
-
-    return translated;
+  protected override isValidOperator(key: string): boolean {
+    const supportedOperators = ['$eq', '$ne', '$gt', '$gte', '$lt', '$lte', '$in', '$and', '$or', '$all'];
+    return supportedOperators.includes(key) && super.isValidOperator(key);
   }
 
   private translateNode(node: Filter | FieldCondition, currentPath: string = ''): any {
-    console.log(node);
-    // Handle empty objects
-    if (this.isEmpty(node)) {
-      return {};
+    console.log('node', node);
+    if (node === null) {
+      throw new Error('Null values are not supported in Pinecone filters');
     }
-
-    // Handle primitive values by converting to explicit $eq
-    if (this.isPrimitive(node)) {
-      return { $eq: this.normalizeComparisonValue(node) };
-    }
-
-    // Handle arrays by converting to $in
-    if (Array.isArray(node)) {
-      return { $in: this.normalizeArrayValues(node) };
-    }
+    if (this.isPrimitive(node)) return { $eq: this.normalizeComparisonValue(node) };
+    if (Array.isArray(node)) return { $in: this.normalizeArrayValues(node) };
+    if (this.isEmpty(node)) return {};
 
     const nodeObj = node as Record<string, any>;
     const entries = Object.entries(nodeObj);
-
-    // Handle a single operator at the root level
     const firstEntry = entries[0];
+
+    // Handle single operator case
     if (entries.length === 1 && firstEntry && this.isOperator(firstEntry[0])) {
       const [operator, value] = firstEntry;
-      return this.translateOperatorValue(operator as QueryOperator, value, currentPath);
+      const translated = this.translateOperator(operator, value, currentPath);
+      return this.isLogicalOperator(operator) ? { [operator]: translated } : translated;
     }
 
-    // Special handling for top-level entries
-    const translatedEntries = entries.map(([key, value]) => {
+    // Process each entry
+    const result: Record<string, any> = {};
+    const multiOperatorConditions: any[] = [];
+
+    for (const [key, value] of entries) {
       const newPath = currentPath ? `${currentPath}.${key}` : key;
 
       if (this.isOperator(key)) {
-        return [key, this.translateOperatorValue(key as QueryOperator, value, currentPath)];
+        result[key] = this.translateOperator(key, value, currentPath);
+        continue;
       }
 
-      // Non-operator keys with primitive values need explicit $eq
-      if (this.isPrimitive(value)) {
-        return [key, { $eq: this.normalizeComparisonValue(value) }];
-      }
-
-      // Non-operator keys with object values need to be flattened
       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        // Handle nested $all
+        if (Object.keys(value).length === 1 && '$all' in value) {
+          const translated = this.translateNode(value, key);
+          if (translated.$and) {
+            return translated;
+          }
+        }
+
+        // Check for multiple operators on same field
+        const valueEntries = Object.entries(value);
+        if (valueEntries.every(([op]) => this.isOperator(op)) && valueEntries.length > 1) {
+          valueEntries.forEach(([op, opValue]) => {
+            multiOperatorConditions.push({
+              [newPath]: { [op]: this.normalizeComparisonValue(opValue) },
+            });
+          });
+          continue;
+        }
+
+        // Check if the nested object contains operators
         const hasOperators = Object.keys(value).some(k => this.isOperator(k));
-        if (!hasOperators) {
-          return Object.entries(this.flattenObject(newPath, value));
+        if (hasOperators) {
+          // For objects with operators, normalize each operator value
+          const normalizedValue: Record<string, any> = {};
+          for (const [op, opValue] of Object.entries(value)) {
+            normalizedValue[op] = this.isOperator(op) ? this.translateOperator(op, opValue) : opValue;
+          }
+          result[newPath] = normalizedValue;
+        } else {
+          // For objects without operators, flatten them
+          Object.assign(result, this.translateNode(value, newPath));
         }
+      } else {
+        result[newPath] = this.translateNode(value);
       }
-
-      return [key, this.translateNode(value)];
-    });
-
-    // Flatten any nested entries that were created
-    const flattenedEntries = translatedEntries.flatMap(entry =>
-      Array.isArray(entry) ? [entry] : Object.entries(entry),
-    );
-
-    return Object.fromEntries(flattenedEntries);
-  }
-
-  private translateOperatorValue(operator: QueryOperator, value: any, currentPath: string): any {
-    switch (operator) {
-      case '$and':
-      case '$or':
-      case '$nor':
-        if (!Array.isArray(value)) {
-          throw new Error(BaseFilterTranslator.ErrorMessages.ARRAY_REQUIRED(operator));
-        }
-        return value.map(item => this.translateNode(item));
-
-      case '$not':
-        return this.translateNode(value);
-
-      case '$all':
-        // Simulate $all using $and + $in for Pinecone
-        if (!Array.isArray(value)) {
-          throw new Error(BaseFilterTranslator.ErrorMessages.ARRAY_REQUIRED(operator));
-        }
-        return this.translateNode(this.simulateAllOperator(currentPath, value));
-
-      case '$elemMatch':
-        // Pinecone doesn't support $elemMatch, but we can try to handle simple cases
-        throw new Error('$elemMatch operator is not supported in Pinecone');
-
-      default:
-        if (this.isComparisonOperator(operator)) {
-          return this.normalizeComparisonValue(value);
-        }
     }
 
-    return value;
-  }
+    // If we have multiple operators, return them combined with $and
+    if (multiOperatorConditions.length > 0) {
+      return { $and: multiOperatorConditions };
+    }
 
-  /**
-   * Flattens nested objects using dot notation
-   * e.g., { user: { age: 25 } } becomes { "user.age": 25 }
-   */
-  private flattenObject(prefix: string, obj: Record<string, any>): Record<string, any> {
-    const result: Record<string, any> = {};
-
-    for (const [key, value] of Object.entries(obj)) {
-      const newKey = prefix ? `${prefix}.${key}` : key;
-
-      if (
-        value &&
-        typeof value === 'object' &&
-        !Array.isArray(value) &&
-        !this.isOperator(Object.keys(value)[0] as string)
-      ) {
-        Object.assign(result, this.flattenObject(newKey, value));
-      } else {
-        result[newKey] = this.translateNode(value);
-      }
+    // Wrap in $and if there are multiple top-level fields
+    if (Object.keys(result).length > 1 && !currentPath) {
+      return {
+        $and: Object.entries(result).map(([key, value]) => ({ [key]: value })),
+      };
     }
 
     return result;
   }
 
-  protected isValidOperator(key: string): boolean {
-    // Pinecone doesn't support $elemMatch
-    if (key === '$elemMatch') {
-      return false;
+  private translateOperator(operator: QueryOperator, value: any, currentPath: string = ''): any {
+    if (value === null) {
+      throw new Error('Null values are not supported in Pinecone filters');
     }
-    return super.isValidOperator(key);
+    // Handle $all specially
+    if (operator === '$all') {
+      if (!Array.isArray(value) || value.length === 0) {
+        throw new Error('Empty $all array is not supported');
+      }
+
+      return this.simulateAllOperator(currentPath, value);
+    }
+
+    // Handle logical operators
+    if (this.isLogicalOperator(operator)) {
+      return Array.isArray(value) ? value.map(item => this.translateNode(item)) : this.translateNode(value);
+    }
+
+    // Handle comparison and element operators
+    return this.normalizeComparisonValue(value);
   }
 }

@@ -47,13 +47,6 @@ abstract class BaseFilterTranslator {
   abstract translate(filter: Filter): unknown;
 
   /**
-   * Validates if all operators in the filter are supported by Astra.
-   */
-  isSupportedFilter(filter: Filter): boolean {
-    return this.validateFilterSupport(filter).supported;
-  }
-
-  /**
    * Operator type checks
    */
   protected isOperator(key: string): key is QueryOperator {
@@ -188,7 +181,7 @@ abstract class BaseFilterTranslator {
   protected simulateAllOperator(field: string, values: any[]): Filter {
     return {
       $and: values.map(value => ({
-        [field]: { $eq: value },
+        [field]: { $in: [this.normalizeComparisonValue(value)] },
       })),
     };
   }

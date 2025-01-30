@@ -389,22 +389,4 @@ describe('AstraFilterTranslator', () => {
       expect(translator.translate(filter)).toEqual(filter);
     });
   });
-
-  describe('isSupportedFilter', () => {
-    it('validates supported operators', () => {
-      const filter = {
-        field: 'value',
-        age: { $gt: 25 },
-        $or: [{ status: 'active' }, { tags: { $in: ['tag1'] } }],
-      };
-      expect(translator.isSupportedFilter(filter)).toBe(true);
-    });
-
-    it('identifies unsupported operators', () => {
-      const filter = {
-        field: { $unsupported: 'value' },
-      } as any;
-      expect(translator.isSupportedFilter(filter)).toBe(false);
-    });
-  });
 });
