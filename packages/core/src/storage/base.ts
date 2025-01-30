@@ -109,20 +109,17 @@ export abstract class MastraStorage extends MastraBase {
       schema: {
         workflow_name: {
           type: 'text',
-          primaryKey: true,
         },
         run_id: {
           type: 'text',
-          primaryKey: true,
         },
         snapshot: {
           type: 'text',
-          primaryKey: true,
         },
-        created_at: {
+        createdAt: {
           type: 'timestamp',
         },
-        updated_at: {
+        updatedAt: {
           type: 'timestamp',
         },
       },
@@ -143,7 +140,7 @@ export abstract class MastraStorage extends MastraBase {
         output: {
           type: 'text',
         },
-        created_at: {
+        createdAt: {
           type: 'timestamp',
         },
       },
@@ -156,8 +153,8 @@ export abstract class MastraStorage extends MastraBase {
         resourceId: { type: 'text', nullable: false },
         title: { type: 'text', nullable: false },
         metadata: { type: 'text', nullable: false },
-        created_at: { type: 'timestamp', nullable: false },
-        updated_at: { type: 'timestamp', nullable: false },
+        createdAt: { type: 'timestamp', nullable: false },
+        updatedAt: { type: 'timestamp', nullable: false },
       },
     });
 
@@ -167,7 +164,7 @@ export abstract class MastraStorage extends MastraBase {
         id: { type: 'text', nullable: false, primaryKey: true },
         thread_id: { type: 'text', nullable: false },
         content: { type: 'text', nullable: false },
-        created_at: { type: 'timestamp', nullable: false },
+        createdAt: { type: 'timestamp', nullable: false },
       },
     });
 
@@ -189,10 +186,10 @@ export abstract class MastraStorage extends MastraBase {
       workflow_name: workflowName,
       run_id: runId,
       snapshot,
-      created_at: new Date(),
-      updated_at: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
-
+    this.logger.debug('Persisting workflow snapshot', { workflowName, runId, data });
     await this.insert({
       tableName: MastraStorage.TABLE_WORKFLOW_SNAPSHOT,
       record: data,
@@ -209,7 +206,7 @@ export abstract class MastraStorage extends MastraBase {
     if (!this.hasInit) {
       await this.init();
     }
-
+    this.logger.debug('Loading workflow snapshot', { workflowName, runId });
     const d = await this.load<{ snapshot: WorkflowRunState }>({
       tableName: MastraStorage.TABLE_WORKFLOW_SNAPSHOT,
       keys: { workflow_name: workflowName, run_id: runId },

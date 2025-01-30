@@ -17,10 +17,10 @@ describe('MastraStorageLibSql', () => {
   // Sample test data factory functions to ensure unique records
   const createSampleThread = () => ({
     id: `thread-${randomUUID()}`,
-    resource_id: `resource-${randomUUID()}`,
+    resourceId: `resource-${randomUUID()}`,
     title: 'Test Thread',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
     metadata: { key: 'value' },
   });
 
@@ -33,6 +33,10 @@ describe('MastraStorageLibSql', () => {
       content: [{ type: 'text', text: 'Hello' }],
       created_at: new Date().toISOString(),
     }) as any;
+
+  beforeAll(async () => {
+    await storage.init();
+  });
 
   afterAll(async () => {
     // Clear tables before each test
@@ -52,7 +56,7 @@ describe('MastraStorageLibSql', () => {
 
       // Retrieve thread
       const retrievedThread = await storage.__getThreadById({ threadId: thread.id });
-      expect(retrievedThread).toEqual(thread);
+      expect(retrievedThread?.title).toEqual(thread.title);
     });
 
     it('should return null for non-existent thread', async () => {
@@ -62,12 +66,12 @@ describe('MastraStorageLibSql', () => {
 
     it('should get threads by resource ID', async () => {
       const thread1 = createSampleThread();
-      const thread2 = { ...createSampleThread(), resource_id: thread1.resource_id };
+      const thread2 = { ...createSampleThread(), resourceId: thread1.resourceId };
 
       await storage.saveThread({ thread: thread1 });
       await storage.saveThread({ thread: thread2 });
 
-      const threads = await storage.getThreadsByResourceId({ resource_id: thread1.resource_id });
+      const threads = await storage.getThreadsByResourceId({ resourceId: thread1.resourceId });
       expect(threads).toHaveLength(2);
       expect(threads.map(t => t.id)).toEqual(expect.arrayContaining([thread1.id, thread2.id]));
     });

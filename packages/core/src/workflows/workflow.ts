@@ -988,11 +988,6 @@ export class Workflow<
       return;
     }
 
-    this.logger.debug('Persisting workflow snapshot', {
-      snapshot: snapshotFromActor,
-      runId: this.#runId,
-    });
-
     await this.snapshot.persist({
       runId: this.#runId,
       snapshot: snapshotFromActor,

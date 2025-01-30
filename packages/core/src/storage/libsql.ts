@@ -35,10 +35,12 @@ export class MastraStorageLibSql extends MastraStorage {
 
     // For workflow_snapshot table, create a composite primary key
     if (tableName === MastraStorage.TABLE_WORKFLOW_SNAPSHOT) {
-      return `CREATE TABLE IF NOT EXISTS ${tableName} (
+      const stmnt = `CREATE TABLE IF NOT EXISTS ${tableName} (
                 ${columns.join(',\n')},
                 PRIMARY KEY (workflow_name, run_id)
             )`;
+      this.logger.info(stmnt);
+      return stmnt;
     }
 
     return `CREATE TABLE IF NOT EXISTS ${tableName} (${columns.join(', ')})`;
@@ -52,6 +54,7 @@ export class MastraStorageLibSql extends MastraStorage {
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
     try {
+      this.logger.debug(`Creating table ${tableName}`);
       const sql = this.getCreateTableSQL(tableName, schema);
       await this.client.execute(sql);
     } catch (error) {
