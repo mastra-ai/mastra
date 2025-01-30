@@ -1,7 +1,7 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
 import {
-  MastraStorage,
+  MastraStorageBase,
   StorageColumn,
   TABLE_NAMES,
   ThreadType,
@@ -14,11 +14,11 @@ export interface LibSQLConfig {
   authToken?: string;
 }
 
-export class LibSQLStorage extends MastraStorage {
+export class LibSQLStorage extends MastraStorageBase {
   private client: Client;
 
   constructor(config: LibSQLConfig) {
-    super('LIBSQL');
+    super({ name: 'LIBSQL' });
 
     this.client = createClient({
       url: config.url,

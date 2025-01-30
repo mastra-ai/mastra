@@ -1,7 +1,7 @@
 import { Mastra } from '@mastra/core';
 import { Memory } from '@mastra/memory';
-import { PgVector } from '@mastra/rag';
 import { PostgresStore } from '@mastra/store-pg';
+import { PgVector } from '@mastra/vector-pg';
 
 import 'dotenv/config';
 

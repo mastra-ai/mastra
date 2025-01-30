@@ -10,7 +10,7 @@ function log(message: string) {
 
 const agent = mastra.getAgent('chefAgent');
 const threadId = randomUUID();
-const resourceid = 'SOME_USER_ID';
+const resourceId = 'SOME_USER_ID';
 
 async function logRes(res: Awaited<ReturnType<typeof agent.stream>>) {
   console.log(`\n👨‍🍳 Chef:`);
@@ -28,7 +28,7 @@ async function main() {
       ),
       {
         threadId,
-        resourceid,
+        resourceId,
       },
     ),
   );
@@ -40,7 +40,7 @@ async function main() {
       ),
       {
         threadId,
-        resourceid,
+        resourceId,
       },
     ),
   );
@@ -48,7 +48,7 @@ async function main() {
   await logRes(
     await agent.stream(log('What did we cook before I went to my friends house?'), {
       threadId,
-      resourceid,
+      resourceId,
       memory: {
         injectRecentMessages: 3,
       },

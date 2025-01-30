@@ -15,7 +15,7 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@mastra/rag": "workspace:*",
+    "@mastra/vector-pg": "workspace:*",
     "@mastra/store-pg": "workspace:*"
   },
   "devDependencies": {
