@@ -84,8 +84,9 @@ export class Agent<
 
     if (p.logger) {
       this.__setLogger(p.logger);
-      this.llm.__setLogger(p.logger);
     }
+
+    this.llm.__registerPrimitives(p);
 
     this.#mastra = p;
 
