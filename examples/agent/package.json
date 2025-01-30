@@ -1,10 +1,9 @@
 {
   "name": "examples-agent",
   "type": "module",
-  "version": "1.0.1-alpha.72",
+  "private": true,
   "description": "",
   "main": "index.js",
-  "private": true,
   "scripts": {
     "start-deployed": "npx bun src/with-deployed.ts",
     "start": "npx bun src/index.ts"
@@ -15,7 +14,6 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/deployer-cloudflare": "workspace:*",
-    "@mastra/rag": "workspace:*",
     "zod": "^3.24.0"
   }
 }
