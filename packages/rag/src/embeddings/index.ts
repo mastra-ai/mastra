@@ -1,5 +1,10 @@
-import { embed as embedCore, embedMany as embedManyCore, EmbeddingOptions } from '@mastra/core/embeddings';
-import { EmbedManyResult, EmbedResult } from '@mastra/core/llm';
+import {
+  embed as embedCore,
+  embedMany as embedManyCore,
+  EmbeddingOptions,
+  EmbedManyResult,
+  EmbedResult,
+} from '@mastra/core';
 import { Document as Chunk } from 'llamaindex';
 
 function getText(input: Chunk | string): string {

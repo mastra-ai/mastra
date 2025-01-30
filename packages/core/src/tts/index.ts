@@ -7,17 +7,13 @@ interface BuiltInModelConfig {
   apiKey?: string;
 }
 
-export interface TTSConfig {
-  model: BuiltInModelConfig;
-}
-
 @InstrumentClass({
   prefix: 'tts',
   excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', '#log'],
 })
 export abstract class MastraTTS extends MastraBase {
   model: BuiltInModelConfig;
-  constructor({ model }: TTSConfig) {
+  constructor({ model }: { model: BuiltInModelConfig }) {
     super({
       component: 'TTS',
     });

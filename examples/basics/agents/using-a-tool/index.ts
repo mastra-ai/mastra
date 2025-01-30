@@ -1,6 +1,4 @@
-import { Mastra } from '@mastra/core';
-import { Agent } from '@mastra/core/agent';
-import { createTool } from '@mastra/core/tools';
+import { createTool, Agent, Mastra } from '@mastra/core';
 import { z } from 'zod';
 
 interface WeatherResponse {

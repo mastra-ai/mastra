@@ -12,41 +12,33 @@
     ".": {
       "import": {
         "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
+        "default": "./dist/core.esm.js"
       }
     },
-    "./*": {
+    "./logger": {
       "import": {
-        "types": "./dist/*/index.d.ts",
-        "default": "./dist/*/index.js"
+        "types": "./dist/logger/index.d.ts",
+        "default": "./dist/logger.esm.js"
       }
     },
-    "./utils": {
-      "import": {
-        "types": "./dist/utils/index.d.ts",
-        "default": "./dist/utils.js"
-      }
-    },
-    "./llm": {
-      "import": {
-        "types": "./dist/llm/index.d.ts",
-        "default": null
-      }
-    },
-    "./action": null,
-    "./queue": null,
-    "./run": null,
     "./package.json": "./package.json"
   },
   "scripts": {
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
-    "build": "tsup-node src/index.ts src/utils.ts src/*/index.ts --format esm --clean --dts --treeshake",
-    "build:dev": "pnpm build --watch",
+    "build": "dts build --format esm",
+    "build:dev": "dts watch",
+    "lint": "dts lint",
     "size": "size-limit",
-    "test": "vitest run"
+    "start": "dts watch",
+    "test": "vitest run",
+    "clean": "rm -rf dist && rm -rf node_modules"
   },
-  "sideEffects": false,
+  "husky": {
+    "hooks": {
+      "pre-commit": "dts lint"
+    }
+  },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^1.0.8",
     "@ai-sdk/anthropic": "^1.0.8",
@@ -110,9 +102,11 @@
     "@types/node": "^22.1.0",
     "@types/pino": "^7.0.5",
     "@types/qs": "^6.9.15",
+    "dts-cli": "^2.0.5",
+    "husky": "^9.1.4",
     "size-limit": "^11.1.4",
     "ts-node": "^10.9.2",
-    "tsup": "^8.3.6",
+    "tslib": "^2.6.3",
     "typescript": "^5.7.3",
     "vitest": "^3.0.4"
   },

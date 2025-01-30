@@ -1,4 +1,4 @@
-import { Logger } from '@mastra/core/logger';
+import { Logger } from '@mastra/core';
 import { spawn } from 'child_process';
 import { Transform } from 'stream';
 

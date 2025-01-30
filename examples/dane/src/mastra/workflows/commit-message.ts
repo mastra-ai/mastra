@@ -1,5 +1,5 @@
 import { confirm } from '@inquirer/prompts';
-import { Step, Workflow } from '@mastra/core/workflows';
+import { Step, Workflow } from '@mastra/core';
 import chalk from 'chalk';
 import { execSync } from 'child_process';
 import { z } from 'zod';

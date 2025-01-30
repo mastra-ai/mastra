@@ -1,4 +1,4 @@
-import { createTool } from '@mastra/core/tools';
+import { createTool } from '@mastra/core';
 import { z } from 'zod';
 
 import { getRandomImage } from '../../lib/utils';

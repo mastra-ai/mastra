@@ -1,4 +1,4 @@
-import { BaseLogMessage, LoggerTransport } from '@mastra/core/logger';
+import { BaseLogMessage, LoggerTransport } from '@mastra/core';
 
 export class UpstashTransport extends LoggerTransport {
   upstashUrl: string;

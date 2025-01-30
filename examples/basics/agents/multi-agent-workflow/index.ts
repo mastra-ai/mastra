@@ -1,5 +1,4 @@
-import { Agent } from '@mastra/core/agent';
-import { Step, Workflow } from '@mastra/core/workflows';
+import { Agent, Step, Workflow } from '@mastra/core';
 import { z } from 'zod';
 
 const copywriterAgent = new Agent({

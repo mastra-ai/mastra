@@ -1,4 +1,4 @@
-import { LoggerTransport, BaseLogMessage } from '@mastra/core/logger';
+import { LoggerTransport, BaseLogMessage } from '@mastra/core';
 import { createWriteStream, existsSync, readFileSync, WriteStream } from 'fs';
 
 export class FileTransport extends LoggerTransport {

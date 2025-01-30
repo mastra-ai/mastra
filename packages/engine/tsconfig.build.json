@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "outDir": "dist/postgres",
+    "outDir": "dist",
     "noEmit": false,
     "declaration": false, // Don't generate .d.ts files since dts already did
     "declarationMap": false

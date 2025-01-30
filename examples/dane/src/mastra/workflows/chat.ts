@@ -1,5 +1,5 @@
 import { input } from '@inquirer/prompts';
-import { Step, Workflow } from '@mastra/core/workflows';
+import { Step, Workflow } from '@mastra/core';
 import chalk from 'chalk';
 import { z } from 'zod';
 

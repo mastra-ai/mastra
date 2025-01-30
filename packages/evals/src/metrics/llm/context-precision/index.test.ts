@@ -1,4 +1,4 @@
-import type { ModelConfig } from '@mastra/core/llm';
+import { type ModelConfig } from '@mastra/core';
 import { describe, it, expect } from 'vitest';
 
 import { TestCaseWithContext } from '../utils';

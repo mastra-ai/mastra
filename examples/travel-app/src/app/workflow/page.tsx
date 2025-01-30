@@ -1,11 +1,11 @@
-import CodeBlock from "@/components/code-block";
-import Footer from "@/components/footer";
-import Header from "@/components/header";
-import Sidebar from "@/components/sidebar";
+import CodeBlock from '@/components/code-block';
+import Footer from '@/components/footer';
+import Header from '@/components/header';
+import Sidebar from '@/components/sidebar';
 
-import { SidebarProvider } from "@/lib/sidebar-context";
+import { SidebarProvider } from '@/lib/sidebar-context';
 
-import TravelForm from "../travel-form";
+import TravelForm from '../travel-form';
 
 export default function Page() {
   const sidebarContent = {
@@ -13,20 +13,19 @@ export default function Page() {
       <>
         <h2 className="text-xl font-bold mb-4">How It Works</h2>
         <p className="mb-4">
-          This travel planner uses a Mastra workflow and LLM calls to help plan
-          your trip. Here&apos;s how the code works:
+          This travel planner uses a Mastra workflow and LLM calls to help plan your trip. Here&apos;s how the code
+          works:
         </p>
 
         <h3 className="text-lg font-semibold mb-2">1. Assemble Agent</h3>
         <p className="mb-2">
-          The agent is is defined with a name, a set of instructions, and a
-          model. This agent is not provided any tools and is just responsible
-          for making calls to the LLM.
+          The agent is is defined with a name, a set of instructions, and a model. This agent is not provided any tools
+          and is just responsible for making calls to the LLM.
         </p>
         <CodeBlock
           fileName="src/mastra/agents/index.ts"
           language="typescript"
-          code={`import { Agent } from '@mastra/core/agent';
+          code={`import { Agent } from '@mastra/core';
 
 export const travelAnalyzer = new Agent({
   name: 'travel-analyzer',
@@ -42,10 +41,9 @@ export const travelAnalyzer = new Agent({
 
         <h3 className="text-lg font-semibold mt-6 mb-2">2. Create Workflow</h3>
         <p className="mb-2">
-          A Mastra workflow allows you to break down a complex process into more
-          deterministic steps. In this code we create a workflow that
-          parallelizes finding flights, hotels, and attractions. We start by
-          defining a schema for the data that will be passed to the workflow.
+          A Mastra workflow allows you to break down a complex process into more deterministic steps. In this code we
+          create a workflow that parallelizes finding flights, hotels, and attractions. We start by defining a schema
+          for the data that will be passed to the workflow.
         </p>
         <CodeBlock
           fileName="mastra/workflows/travel-submission.ts"
@@ -73,10 +71,7 @@ export const travelAnalyzer = new Agent({
     submitted: (
       <div className="space-y-4">
         <h2 className="text-xl font-bold">How the Form Submission Works</h2>
-        <p className="mb-4">
-          Once the form is submitted, the data is passed to the agent with a
-          detailed prompt...
-        </p>
+        <p className="mb-4">Once the form is submitted, the data is passed to the agent with a detailed prompt...</p>
       </div>
     ),
   };

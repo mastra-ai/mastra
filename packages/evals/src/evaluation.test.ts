@@ -1,6 +1,6 @@
-import { Agent } from '@mastra/core/agent';
-import { Metric } from '@mastra/core/eval';
-import type { ModelConfig } from '@mastra/core/llm';
+import { Agent } from '@mastra/core';
+import { ModelConfig } from '@mastra/core';
+import { Metric } from '@mastra/core';
 import { describe, expect, it } from 'vitest';
 
 import { evaluate } from './evaluation';

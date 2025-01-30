@@ -1,4 +1,4 @@
-import { AvailableHooks, registerHook } from '@mastra/core/hooks';
+import { AvailableHooks, registerHook } from '@mastra/core';
 import { mkdirSync, appendFile } from 'fs';
 import { join } from 'path';
 

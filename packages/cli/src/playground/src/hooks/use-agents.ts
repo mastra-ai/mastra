@@ -1,4 +1,4 @@
-import { Agent } from '@mastra/core/agent';
+import { Agent } from '@mastra/core';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 

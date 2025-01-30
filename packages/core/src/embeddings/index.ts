@@ -6,6 +6,8 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { embed as embedAi, EmbeddingModel, embedMany as embedManyAi } from 'ai';
 import { createVoyage } from 'voyage-ai-provider';
 
+import 'dotenv/config';
+
 import { EmbeddingOptions } from './types';
 
 export * from './types';

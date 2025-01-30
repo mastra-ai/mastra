@@ -1,4 +1,4 @@
-import { Agent } from '@mastra/core/agent';
+import { Agent } from '@mastra/core';
 
 export const catOne = new Agent({
   name: 'cat-one',

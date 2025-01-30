@@ -1,4 +1,4 @@
-import { Step, Workflow } from '@mastra/core/workflows';
+import { Step, Workflow } from '@mastra/core';
 import chalk from 'chalk';
 import { existsSync } from 'fs';
 import path from 'path';
