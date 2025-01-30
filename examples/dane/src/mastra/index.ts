@@ -1,5 +1,4 @@
-import { Mastra } from '@mastra/core';
-import { PostgresEngine } from '@mastra/engine';
+import { Mastra, MastraStorageLibSql } from '@mastra/core';
 import { UpstashKVMemory } from '@mastra/memory/kv-upstash';
 
 import { dane, daneChangeLog, daneCommitMessage, daneIssueLabeler, daneLinkChecker } from './agents/index.js';
@@ -12,10 +11,6 @@ import { linkCheckerWorkflow } from './workflows/link-checker.js';
 import { packagePublisher } from './workflows/publish-packages.js';
 import { telephoneGameWorkflow } from './workflows/telephone-game.js';
 
-const engine = new PostgresEngine({
-  url: 'postgres://postgres:postgres@localhost:5433/mastra',
-});
-
 export const mastra = new Mastra({
   agents: {
     dane,
@@ -26,7 +21,11 @@ export const mastra = new Mastra({
     daneChangeLog,
     daneNewContributor,
   },
-  engine,
+  storage: new MastraStorageLibSql({
+    config: {
+      url: 'file:.mastra/memory:',
+    },
+  }),
   memory: new UpstashKVMemory({
     url: 'http://localhost:8079',
     token: `example_token`,
