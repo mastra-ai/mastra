@@ -51,7 +51,7 @@ export class PgMemory extends MastraMemory {
             `,
         [resourceId],
       );
-      return result.rows;
+      return result.rows.map(thread => ({ ...thread, resourceId: thread.resourceId }));
     } finally {
       client.release();
     }
