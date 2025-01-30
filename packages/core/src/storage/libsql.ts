@@ -146,7 +146,7 @@ export class MastraStorageLibSql extends MastraStorage {
       id: thread.id,
       resource_id: thread.resource_id,
       title: thread.title,
-      created_at: thread.created_at,
+      createdAt: thread.createdAt,
       updated_at: thread.updated_at,
       metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
     })) as any as ThreadType[];
@@ -156,7 +156,6 @@ export class MastraStorageLibSql extends MastraStorage {
     await this.insert({
       tableName: MastraStorage.TABLE_THREADS,
       record: {
-        created_at: new Date(),
         ...thread,
         metadata: JSON.stringify(thread.metadata),
       },
@@ -206,7 +205,7 @@ export class MastraStorageLibSql extends MastraStorage {
 
   async getMessages({ threadId }: { threadId: string }): Promise<MessageType[]> {
     const result = await this.client.execute({
-      sql: `SELECT * FROM ${MastraStorage.TABLE_MESSAGES} WHERE thread_id = ? ORDER BY created_at ASC`,
+      sql: `SELECT * FROM ${MastraStorage.TABLE_MESSAGES} WHERE thread_id = ? ORDER BY createdAt ASC`,
       args: [threadId],
     });
 
@@ -235,9 +234,9 @@ export class MastraStorageLibSql extends MastraStorage {
 
       for (const message of messages) {
         await tx.execute({
-          sql: `INSERT INTO ${MastraStorage.TABLE_MESSAGES} (id, thread_id, content, created_at) 
+          sql: `INSERT INTO ${MastraStorage.TABLE_MESSAGES} (id, thread_id, content, createdAt) 
                               VALUES (?, ?, ?, ?)`,
-          args: [message.id, threadId, JSON.stringify(message), message.created_at || new Date().toISOString()],
+          args: [message.id, threadId, JSON.stringify(message), message.createdAt || new Date().toISOString()],
         });
       }
 
