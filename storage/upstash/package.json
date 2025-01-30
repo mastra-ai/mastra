@@ -20,9 +20,11 @@
     "./package.json": "./package.json"
   },
   "scripts": {
+    "pretest": "docker compose up -d",
+    "test": "vitest run",
+    "posttest": "docker compose down",
     "build": "dts build",
-    "build:dev": "dts watch",
-    "test": "vitest run"
+    "build:dev": "dts watch"
   },
   "dependencies": {
     "@mastra/core": "workspace:*",
