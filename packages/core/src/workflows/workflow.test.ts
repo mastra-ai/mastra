@@ -929,9 +929,7 @@ describe('Workflow', () => {
         const step1Action = vi.fn<any>().mockResolvedValue({ name: 'step1' });
         const step1 = new Step({
           id: 'step1',
-          execute: () => {
-            console.log('step1');
-          },
+          execute: step1Action,
           outputSchema: z.object({ name: z.string() }),
         });
 
