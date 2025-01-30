@@ -338,7 +338,8 @@ export class PostgresStore extends MastraStorage {
     try {
       await client.query('BEGIN');
       for (const message of messages) {
-        const { id, content, role, created_at, threadId, toolCallIds, toolCallArgs, type } = message;
+        // @ts-ignore
+        const { id, content, role, createdAt, threadId, toolCallIds, toolCallArgs, type } = message;
 
         await client.query(
           `
@@ -358,7 +359,7 @@ export class PostgresStore extends MastraStorage {
             id,
             JSON.stringify(content),
             role,
-            created_at?.toISOString(),
+            createdAt?.toISOString(),
             threadId,
             JSON.stringify(toolCallIds),
             JSON.stringify(toolCallArgs),
