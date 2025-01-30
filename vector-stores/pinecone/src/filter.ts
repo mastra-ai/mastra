@@ -12,7 +12,6 @@ export class PineconeFilterTranslator extends BaseFilterTranslator {
   }
 
   private translateNode(node: Filter | FieldCondition, currentPath: string = ''): any {
-    console.log('node', node);
     if (node === null) {
       throw new Error('Null values are not supported in Pinecone filters');
     }
@@ -20,8 +19,7 @@ export class PineconeFilterTranslator extends BaseFilterTranslator {
     if (Array.isArray(node)) return { $in: this.normalizeArrayValues(node) };
     if (this.isEmpty(node)) return {};
 
-    const nodeObj = node as Record<string, any>;
-    const entries = Object.entries(nodeObj);
+    const entries = Object.entries(node as Record<string, any>);
     const firstEntry = entries[0];
 
     // Handle single operator case
