@@ -2,6 +2,7 @@ import { BaseFilterTranslator, Filter, FieldCondition } from '@mastra/core';
 
 export class VectorizeFilterTranslator extends BaseFilterTranslator {
   translate(filter: Filter): Filter {
+    if (this.isEmpty(filter)) return filter;
     this.validateFilter(filter);
     return this.translateNode(filter);
   }
@@ -14,7 +15,6 @@ export class VectorizeFilterTranslator extends BaseFilterTranslator {
   private translateNode(node: Filter | FieldCondition, currentPath: string = ''): any {
     if (this.isPrimitive(node)) return { $eq: this.normalizeComparisonValue(node) };
     if (Array.isArray(node)) return { $in: this.normalizeArrayValues(node) };
-    if (this.isEmpty(node)) return {};
 
     const entries = Object.entries(node as Record<string, any>);
     const firstEntry = entries[0];
@@ -36,6 +36,11 @@ export class VectorizeFilterTranslator extends BaseFilterTranslator {
       }
 
       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        if (Object.keys(value).length === 0) {
+          result[newPath] = {};
+          continue;
+        }
+
         // Check if the nested object contains operators
         const hasOperators = Object.keys(value).some(k => this.isOperator(k));
         if (hasOperators) {

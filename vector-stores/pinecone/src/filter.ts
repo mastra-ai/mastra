@@ -13,9 +13,6 @@ export class PineconeFilterTranslator extends BaseFilterTranslator {
   }
 
   private translateNode(node: Filter | FieldCondition, currentPath: string = ''): any {
-    if (node === null) {
-      throw new Error('Null values are not supported in Pinecone filters');
-    }
     if (this.isPrimitive(node)) return { $eq: this.normalizeComparisonValue(node) };
     if (Array.isArray(node)) return { $in: this.normalizeArrayValues(node) };
 
@@ -99,9 +96,6 @@ export class PineconeFilterTranslator extends BaseFilterTranslator {
   }
 
   private translateOperator(operator: QueryOperator, value: any, currentPath: string = ''): any {
-    if (value === null) {
-      throw new Error('Null values are not supported in Pinecone filters');
-    }
     // Handle $all specially
     if (operator === '$all') {
       if (!Array.isArray(value) || value.length === 0) {

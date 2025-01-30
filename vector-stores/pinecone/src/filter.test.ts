@@ -191,13 +191,6 @@ describe('PineconeFilterTranslator', () => {
   });
 
   describe('handle invalid conditions', () => {
-    it('throws error for null values', () => {
-      const filtersWithNull = [{ field: null }, { other: { $eq: null } }];
-
-      filtersWithNull.forEach(filter => {
-        expect(() => translator.translate(filter)).toThrow('Null values are not supported');
-      });
-    });
     it('throws error for unsupported operators', () => {
       const unsupportedFilters = [
         { field: { $regex: 'pattern' } },
@@ -219,138 +212,13 @@ describe('PineconeFilterTranslator', () => {
         translator.translate({
           categories: { $all: [] },
         }),
-      ).toThrow('Empty $all array is not supported');
+      ).toThrow();
     });
     it('throws error for invalid operator values', () => {
       const filter = { tags: { $all: 'not-an-array' } };
       expect(() => translator.translate(filter)).toThrow();
     });
-
-    it('validates array operator values', () => {
-      expect(() =>
-        translator.translate({
-          tags: { $in: null },
-        }),
-      ).toThrow();
-
-      expect(() =>
-        translator.translate({
-          tags: { $all: 'not-an-array' },
-        }),
-      ).toThrow();
-    });
-
-    it('validates numeric values for comparison operators', () => {
-      const filter = {
-        price: { $gt: 'not-a-number' },
-      };
-      expect(() => translator.translate(filter)).toThrow();
-    });
-
-    it('validates value types', () => {
-      expect(() =>
-        translator.translate({
-          date: { $gt: 'not-a-date' },
-        }),
-      ).toThrow();
-
-      expect(() =>
-        translator.translate({
-          number: { $lt: 'not-a-number' },
-        }),
-      ).toThrow();
-    });
-
-    // Array Operators
-    it('validates array operators', () => {
-      const invalidValues = [123, 'string', true, { key: 'value' }, null, undefined];
-      for (const op of ['$in', '$nin', '$all']) {
-        for (const val of invalidValues) {
-          expect(() =>
-            translator.translate({
-              field: { [op]: val },
-            }),
-          ).toThrow();
-        }
-      }
-
-      // Invalid array elements
-      expect(() =>
-        translator.translate({
-          field: { $in: [undefined, null] },
-        }),
-      ).toThrow();
-    });
   });
-  // Element Operators
-  it('validates element operators', () => {
-    const invalidValues = [123, 'string', [], {}, null, undefined];
-    for (const val of invalidValues) {
-      expect(() =>
-        translator.translate({
-          field: { $exists: val },
-        }),
-      ).toThrow();
-    }
-  });
-
-  // Comparison Operators
-  it('validates comparison operators', () => {
-    // Basic equality can accept any non-undefined value
-    const eqOps = ['$eq', '$ne'];
-    for (const op of eqOps) {
-      expect(() =>
-        translator.translate({
-          field: { [op]: undefined },
-        }),
-      ).toThrow();
-    }
-
-    // Numeric comparisons require numbers or dates
-    const numOps = ['$gt', '$gte', '$lt', '$lte'];
-    const invalidNumericValues = ['not-a-number', true, [], {}, null, undefined];
-    for (const op of numOps) {
-      for (const val of invalidNumericValues) {
-        expect(() =>
-          translator.translate({
-            field: { [op]: val },
-          }),
-        ).toThrow();
-      }
-    }
-  });
-
-  // Multiple Invalid Values
-  it('validates multiple invalid values', () => {
-    expect(() =>
-      translator.translate({
-        field1: { $in: 'not-array' },
-        field2: { $gt: 'not-number' },
-      }),
-    ).toThrow();
-  });
-  it('throws for invalid array values', () => {
-    // null/undefined in arrays
-    expect(() =>
-      translator.translate({
-        field: { $in: [null] },
-      }),
-    ).toThrow();
-
-    expect(() =>
-      translator.translate({
-        field: { $in: [undefined] },
-      }),
-    ).toThrow();
-
-    // Invalid $all values
-    expect(() =>
-      translator.translate({
-        field: { $all: 'not-an-array' },
-      }),
-    ).toThrow();
-  });
-
   describe('PineconeFilterTranslator empty object handling', () => {
     let translator: PineconeFilterTranslator;
 

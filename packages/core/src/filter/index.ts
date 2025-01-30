@@ -83,88 +83,6 @@ abstract class BaseFilterTranslator {
   }
 
   /**
-   * Value validation for operators
-   */
-  protected validateOperatorValue(operator: QueryOperator, value: any) {
-    switch (operator) {
-      case '$in':
-      case '$nin':
-      case '$all':
-        if (!Array.isArray(value)) {
-          return {
-            valid: false,
-            message: BaseFilterTranslator.ErrorMessages.ARRAY_REQUIRED(operator),
-          };
-        }
-        if (value.some(v => v === undefined || v === null)) {
-          return {
-            valid: false,
-            message: BaseFilterTranslator.ErrorMessages.INVALID_VALUE(operator, 'non-null'),
-          };
-        }
-        break;
-      case '$exists':
-        if (typeof value !== 'boolean') {
-          return {
-            valid: false,
-            message: BaseFilterTranslator.ErrorMessages.BOOLEAN_REQUIRED(operator),
-          };
-        }
-        break;
-      case '$eq':
-      case '$ne':
-        if (value === undefined) {
-          return {
-            valid: false,
-            message: BaseFilterTranslator.ErrorMessages.VALUE_REQUIRED(operator),
-          };
-        }
-        break;
-      case '$gt':
-      case '$gte':
-      case '$lt':
-      case '$lte':
-        if (value === undefined) {
-          return {
-            valid: false,
-            message: BaseFilterTranslator.ErrorMessages.VALUE_REQUIRED(operator),
-          };
-        }
-        // Allow numbers and dates only
-        if (
-          typeof value !== 'number' &&
-          !(value instanceof Date) &&
-          (typeof value !== 'string' || (isNaN(Number(value)) && isNaN(Date.parse(value))))
-        ) {
-          return {
-            valid: false,
-            message: BaseFilterTranslator.ErrorMessages.INVALID_VALUE(operator, 'number or date'),
-          };
-        }
-        break;
-      case '$regex':
-        if (typeof value !== 'string' && !(value instanceof RegExp)) {
-          return {
-            valid: false,
-            message: BaseFilterTranslator.ErrorMessages.INVALID_REGEX(operator),
-          };
-        }
-        break;
-
-      case '$options':
-        if (typeof value !== 'string' || !value.match(/^i?$/)) {
-          // only allow '' or 'i'
-          return {
-            valid: false,
-            message: BaseFilterTranslator.ErrorMessages.INVALID_REGEX_OPTIONS(value),
-          };
-        }
-        break;
-    }
-    return { valid: true, message: '' };
-  }
-
-  /**
    * Value normalization for comparison operators
    */
   protected normalizeComparisonValue(value: any): any {
@@ -204,17 +122,7 @@ abstract class BaseFilterTranslator {
   }
 
   protected static readonly ErrorMessages = {
-    ARRAY_REQUIRED: (op: string) => `${op} requires an array value`,
-    BOOLEAN_REQUIRED: (op: string) => `${op} requires a boolean value`,
-    VALUE_REQUIRED: (op: string) => `${op} requires a non-undefined value`,
     UNSUPPORTED_OPERATOR: (op: string) => `Unsupported operator: ${op}`,
-    INVALID_NESTED: (path: string) => `Invalid nested structure at path: ${path}`,
-    INVALID_REGEX: (op: string) => `${op} requires a valid regex or string value`,
-    INVALID_REGEX_OPTIONS: (value: string) => `Invalid regex options: ${value}`,
-    NUMBER_REQUIRED: (op: string) => `${op} requires a numeric value`,
-    DATE_REQUIRED: (op: string) => `${op} requires a date value`,
-    STRING_REQUIRED: (op: string) => `${op} requires a string value`,
-    INVALID_VALUE: (op: string, type: string) => `${op} requires a ${type} value`,
   } as const;
 
   /**
@@ -267,13 +175,6 @@ abstract class BaseFilterTranslator {
           isSupported = false;
           messages.push(BaseFilterTranslator.ErrorMessages.UNSUPPORTED_OPERATOR(key));
           continue;
-        }
-
-        // Validate operator value
-        const validation = this.validateOperatorValue(key as QueryOperator, value);
-        if (!validation.valid) {
-          isSupported = false;
-          messages.push(validation.message);
         }
       }
 

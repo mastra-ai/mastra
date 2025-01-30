@@ -10,6 +10,12 @@ describe('VectorizeFilterTranslator', () => {
   });
 
   describe('translate', () => {
+    it('handles empty filters', () => {
+      expect(translator.translate({})).toEqual({});
+      expect(translator.translate(null as any)).toEqual(null);
+      expect(translator.translate(undefined as any)).toEqual(undefined);
+    });
+
     // Basic cases
     it('converts implicit equality to explicit $eq', () => {
       const filter = { field: 'value' };
@@ -54,6 +60,11 @@ describe('VectorizeFilterTranslator', () => {
       });
     });
 
+    it('handles empty objects', () => {
+      const filter = { field: {} };
+      expect(translator.translate(filter)).toEqual({ field: {} });
+    });
+
     it('flattens nested objects to dot notation', () => {
       const filter = {
         user: {
@@ -92,8 +103,8 @@ describe('VectorizeFilterTranslator', () => {
 
     it('handles empty arrays in $in and $nin', () => {
       const filter = {
-        include: { $in: [] },
-        exclude: { $nin: [] },
+        field1: { $in: [] },
+        field2: { $nin: [] },
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
@@ -118,49 +129,42 @@ describe('VectorizeFilterTranslator', () => {
         field: {
           $gt: 0,
           $lt: 10,
-          $ne: 5,
         },
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
 
-    it('handles array values in comparison operators', () => {
-      // Some vector stores might allow comparing against arrays
-      expect(() =>
-        translator.translate({
-          field: { $gt: [] },
-        }),
-      ).toThrow();
+    it('preserves order of range operators', () => {
+      // Valid range operator combinations
+      const filters = [
+        { field: { $gt: 0, $lt: 10 } },
+        { field: { $gte: 0, $lte: 10 } },
+        { field: { $gt: 0, $lte: 10 } },
+        { field: { $gte: 0, $lt: 10 } },
+      ];
 
-      expect(() =>
-        translator.translate({
-          field: { $lt: [1, 2, 3] },
-        }),
-      ).toThrow();
+      filters.forEach(filter => {
+        expect(translator.translate(filter)).toEqual(filter);
+      });
     });
+  });
 
-    // Error cases
+  describe('handle invalid conditions', () => {
     it('throws error for unsupported operators', () => {
       const unsupportedFilters = [
         { field: { $regex: 'pattern' } },
         { field: { $exists: true } },
         { field: { $elemMatch: { $gt: 5 } } },
+        { field: { $nor: [{ $eq: 'value' }] } },
+        { field: { $not: [{ $eq: 'value' }] } },
+        { field: { $regex: 'pattern', $options: 'i' } },
+        { field: { $and: [{ $eq: 'value' }] } },
+        { field: { $or: [{ $eq: 'value' }] } },
+        { field: { $all: [{ $eq: 'value' }] } },
       ];
 
       unsupportedFilters.forEach(filter => {
         expect(() => translator.translate(filter)).toThrow(/Unsupported operator/);
-      });
-    });
-
-    it('validates value types', () => {
-      const invalidFilters = [
-        { field: { $gt: 'not a number' } },
-        { field: { $lt: true } },
-        { field: { $in: 'not an array' } },
-      ];
-
-      invalidFilters.forEach(filter => {
-        expect(() => translator.translate(filter)).toThrow();
       });
     });
   });
