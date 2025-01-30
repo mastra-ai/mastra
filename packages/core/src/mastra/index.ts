@@ -100,13 +100,15 @@ export class Mastra<
     /*
       Storage
     */
-    this.storage = config?.storage || new MastraStorageLibSql({ config: { url: 'file:.mastra/memory:' } });
-
-    if (this.telemetry) {
-      this.storage = this.telemetry.traceClass(this.storage, {
-        excludeMethods: ['__setTelemetry', '__getTelemetry'],
-      });
-      this.storage.__setTelemetry(this.telemetry);
+    if (config?.storage) {
+      if (this.telemetry) {
+        this.storage = this.telemetry.traceClass(config.storage, {
+          excludeMethods: ['__setTelemetry', '__getTelemetry'],
+        });
+        this.storage.__setTelemetry(this.telemetry);
+      } else {
+        this.storage = config?.storage;
+      }
     }
 
     /*
