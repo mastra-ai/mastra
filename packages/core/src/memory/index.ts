@@ -18,7 +18,7 @@ export type MessageType = {
   id: string;
   content: UserContent | AssistantContent | ToolContent;
   role: 'user' | 'assistant' | 'tool';
-  createdAt: Date;
+  created_at?: Date;
   threadId: string;
   toolCallIds?: string[];
   toolCallArgs?: Record<string, unknown>[];
@@ -30,8 +30,8 @@ export type ThreadType = {
   id: string;
   title?: string;
   resource_id: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
   metadata?: Record<string, unknown>;
 };
 

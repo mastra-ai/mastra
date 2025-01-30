@@ -151,7 +151,7 @@ describe('MastraStorageBase', () => {
       const messages: MessageType[] = [
         {
           id: 'message-6-1',
-          createdAt: new Date(),
+          created_at: new Date(),
           type: 'text',
           threadId: 'thread-6',
           content: 'Message 1',
@@ -159,7 +159,7 @@ describe('MastraStorageBase', () => {
         },
         {
           id: 'message-6-2',
-          createdAt: new Date(),
+          created_at: new Date(),
           threadId: 'thread-6',
           type: 'text',
           content: 'Message 2',
@@ -168,6 +168,7 @@ describe('MastraStorageBase', () => {
       ];
 
       await storage.saveMessages({ messages });
+
       const retrieved = await storage.getMessages<MessageType[]>({ threadId: 'thread-6' });
 
       expect(retrieved).toHaveLength(2);
