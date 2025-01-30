@@ -1,7 +1,7 @@
 import { IndexStats, QueryResult, MastraVector } from '@mastra/core';
 import pg from 'pg';
 
-import { Filter, buildFilterQuery } from './filter';
+import { Filter, buildFilterQuery } from './sql-builder';
 
 export class PgVector extends MastraVector {
   private pool: pg.Pool;

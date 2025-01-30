@@ -232,8 +232,35 @@ describe('AstraFilterTranslator', () => {
       expect(translator.translate(filter)).toEqual(filter);
     });
   });
+
+  describe('regex support', () => {
+    it('passes through regex literals', () => {
+      const filter = { field: /pattern/i };
+      expect(translator.translate(filter)).toEqual(filter);
+    });
+
+    it('passes through regex object form', () => {
+      const filter = { field: { $regex: 'pattern', $options: 'i' } };
+      expect(translator.translate(filter)).toEqual(filter);
+    });
+
+    it('passes through start/end anchors', () => {
+      const filter = {
+        start: { $regex: '^begin' },
+        end: { $regex: 'end$' },
+        exact: { $regex: '^exact$' },
+      };
+      expect(translator.translate(filter)).toEqual(filter);
+    });
+
+    it('passes through regex patterns', () => {
+      const filter = { field: { $regex: 'pat.*ern' } };
+      expect(translator.translate(filter)).toEqual(filter);
+    });
+  });
+
   describe('validate operators', () => {
-    it.only('ensure all operator filters are supported', () => {
+    it('ensure all operator filters are supported', () => {
       const supportedFilters = [
         { field: { $eq: 'value' } },
         { field: { $ne: 'value' } },

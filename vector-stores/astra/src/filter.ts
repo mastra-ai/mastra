@@ -20,7 +20,7 @@ export class AstraFilterTranslator extends BaseFilterTranslator {
 
   private translateNode(node: Filter | FieldCondition): any {
     // Handle primitive values and arrays
-    if (this.isPrimitive(node) || Array.isArray(node)) {
+    if (this.isPrimitive(node) || Array.isArray(node) || this.isRegex(node)) {
       return node;
     }
 
