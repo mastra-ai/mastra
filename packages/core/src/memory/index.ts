@@ -26,6 +26,15 @@ export type MessageType = {
   type: 'text' | 'tool-call' | 'tool-result';
 };
 
+export type StorageThreadType = {
+  id: string;
+  title?: string;
+  resourceId: string;
+  createdAt: Date;
+  updatedAt: Date;
+  metadata?: Record<string, unknown>;
+};
+
 export type ThreadType = {
   id: string;
   title?: string;

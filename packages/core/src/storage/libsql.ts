@@ -1,6 +1,6 @@
 import { createClient, Client } from '@libsql/client';
 
-import { MessageType, ThreadType } from '../memory';
+import { MessageType, StorageThreadType } from '../memory';
 
 import { MastraStorage, TABLE_NAMES } from './base';
 import { StorageColumn } from './types';
@@ -116,8 +116,8 @@ export class MastraStorageLibSql extends MastraStorage {
     return parsed as R;
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null> {
-    const result = await this.load<ThreadType>({
+  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+    const result = await this.load<StorageThreadType>({
       tableName: MastraStorage.TABLE_THREADS,
       keys: { id: threadId },
     });
@@ -132,10 +132,10 @@ export class MastraStorageLibSql extends MastraStorage {
     };
   }
 
-  async getThreadsByResourceId({ resource_id }: { resource_id: string }): Promise<ThreadType[]> {
+  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
     const result = await this.client.execute({
-      sql: `SELECT * FROM ${MastraStorage.TABLE_THREADS} WHERE resource_id = ?`,
-      args: [resource_id],
+      sql: `SELECT * FROM ${MastraStorage.TABLE_THREADS} WHERE resourceId = ?`,
+      args: [resourceId],
     });
 
     if (!result.rows) {
@@ -144,15 +144,15 @@ export class MastraStorageLibSql extends MastraStorage {
 
     return result.rows.map(thread => ({
       id: thread.id,
-      resource_id: thread.resource_id,
+      resourceId: thread.resourceId,
       title: thread.title,
       createdAt: thread.createdAt,
-      updated_at: thread.updated_at,
+      updatedAt: thread.updatedAt,
       metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-    })) as any as ThreadType[];
+    })) as any as StorageThreadType[];
   }
 
-  async saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType> {
+  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     await this.insert({
       tableName: MastraStorage.TABLE_THREADS,
       record: {
@@ -172,7 +172,7 @@ export class MastraStorageLibSql extends MastraStorage {
     id: string;
     title: string;
     metadata: Record<string, unknown>;
-  }): Promise<ThreadType> {
+  }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
       throw new Error(`Thread ${id} not found`);

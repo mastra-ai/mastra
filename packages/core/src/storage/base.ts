@@ -1,5 +1,5 @@
 import { MastraBase } from '../base';
-import { MessageType, ThreadType } from '../memory';
+import { MessageType, StorageThreadType } from '../memory';
 import { WorkflowRunState } from '../workflows';
 
 import { StorageColumn } from './types';
@@ -33,23 +33,23 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null>;
 
-  abstract getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null>;
+  abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
-  async __getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null> {
+  async __getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     await this.init();
     return this.getThreadById({ threadId });
   }
 
-  abstract getThreadsByResourceId({ resource_id }: { resource_id: string }): Promise<ThreadType[]>;
+  abstract getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]>;
 
-  async __getThreadsByResourceId({ resource_id }: { resource_id: string }): Promise<ThreadType[]> {
+  async __getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
     await this.init();
-    return this.getThreadsByResourceId({ resource_id });
+    return this.getThreadsByResourceId({ resourceId });
   }
 
-  abstract saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType>;
+  abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 
-  async __saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType> {
+  async __saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     console.log('Saving thread:', thread);
     await this.init();
     return this.saveThread({ thread });
@@ -63,7 +63,7 @@ export abstract class MastraStorage extends MastraBase {
     id: string;
     title: string;
     metadata: Record<string, unknown>;
-  }): Promise<ThreadType>;
+  }): Promise<StorageThreadType>;
 
   async __updateThread({
     id,
@@ -73,7 +73,7 @@ export abstract class MastraStorage extends MastraBase {
     id: string;
     title: string;
     metadata: Record<string, unknown>;
-  }): Promise<ThreadType> {
+  }): Promise<StorageThreadType> {
     await this.init();
     return this.updateThread({ id, title, metadata });
   }
@@ -153,7 +153,7 @@ export abstract class MastraStorage extends MastraBase {
       tableName: 'threads',
       schema: {
         id: { type: 'text', nullable: false, primaryKey: true },
-        resource_id: { type: 'text', nullable: false },
+        resourceId: { type: 'text', nullable: false },
         title: { type: 'text', nullable: false },
         metadata: { type: 'text', nullable: false },
         created_at: { type: 'timestamp', nullable: false },
