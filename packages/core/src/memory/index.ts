@@ -11,7 +11,7 @@ import {
 
 import { MastraBase } from '../base';
 import { EmbeddingOptions } from '../embeddings';
-import { MastraStorageBase, StorageGetMessagesArg } from '../storage';
+import { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { MastraVector } from '../vector';
 
 export type AiMessageType = AiMessage;
@@ -58,13 +58,13 @@ export type MemoryConfig = {
 
 export type SharedMemoryConfig =
   | {
-      storage: MastraStorageBase;
+      storage: MastraStorage;
       threads?: MemoryConfig;
       vector?: MastraVector;
       embeddingOptions?: EmbeddingOptions;
     }
   | {
-      storage: MastraStorageBase;
+      storage: MastraStorage;
       threads?: MemoryConfig;
       vector: MastraVector;
       embeddingOptions: EmbeddingOptions;
@@ -77,7 +77,7 @@ export type SharedMemoryConfig =
 export abstract class MastraMemory extends MastraBase {
   MAX_CONTEXT_TOKENS?: number;
 
-  storage: MastraStorageBase;
+  storage: MastraStorage;
   vector?: MastraVector;
   embeddingOptions?: EmbeddingOptions;
 

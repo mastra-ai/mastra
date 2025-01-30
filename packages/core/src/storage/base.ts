@@ -2,7 +2,7 @@ import { MastraBase } from '../base';
 import { MessageType, ThreadType } from '../memory';
 import { WorkflowRunState } from '../workflows';
 
-import { StorageColumn } from './types';
+import { StorageColumn, StorageGetMessagesArg } from './types';
 
 export type TABLE_NAMES =
   | typeof MastraStorage.TABLE_WORKFLOW_SNAPSHOT
@@ -49,7 +49,7 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract deleteThread({ id }: { id: string }): Promise<void>;
 
-  abstract getMessages({ threadId }: { threadId: string }): Promise<MessageType[]>;
+  abstract getMessages({ threadId, selectBy, threadConfig }: StorageGetMessagesArg): Promise<MessageType[]>;
 
   abstract saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]>;
 

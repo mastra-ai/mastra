@@ -59,7 +59,7 @@ export class Memory extends MastraMemory {
     }
 
     // Get raw messages from storage
-    const rawMessages = await this.storage.getMessages<MessageType[]>({
+    const rawMessages = await this.storage.getMessages({
       threadId,
       selectBy: {
         ...selectBy,
@@ -122,7 +122,7 @@ export class Memory extends MastraMemory {
                 "all messages after this one are messages you've remembered until you see a system message telling you otherwise.",
               type: 'text',
               threadId,
-              createdAt: new Date(),
+              created_at: new Date(),
             } satisfies MessageType,
             ...messages.messages,
             {
@@ -132,7 +132,7 @@ export class Memory extends MastraMemory {
                 "messages prior to this are messages you've remembered. Any messages after this are new. Pay attention to dates as you may remember very old or very recent messages.",
               type: 'text',
               threadId,
-              createdAt: new Date(),
+              created_at: new Date(),
             } satisfies MessageType,
           ],
           uiMessages: messages.uiMessages,
@@ -145,7 +145,7 @@ export class Memory extends MastraMemory {
   }
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<ThreadType[]> {
-    return this.storage.getThreadsByResourceId({ resourceId });
+    return this.storage.getThreadsByResourceId({ resource_id: resourceId });
   }
 
   async saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType> {

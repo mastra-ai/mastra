@@ -1,5 +1,5 @@
 import {
-  MastraStorageBase,
+  MastraStorage,
   MessageType,
   StorageColumn,
   StorageGetMessagesArg,
@@ -21,7 +21,7 @@ export interface PostgresConfig {
   ssl?: boolean;
 }
 
-export class PostgresStore extends MastraStorageBase {
+export class PostgresStore extends MastraStorage {
   private db: IDatabase<any>;
   private pgp: IMain;
   private pool: pg.Pool;
@@ -34,7 +34,7 @@ export class PostgresStore extends MastraStorageBase {
     this.pool = new pg.Pool({ connectionString: config.connectionString });
   }
 
-  protected async createTable({
+  async createTable({
     tableName,
     schema,
   }: {
@@ -67,17 +67,11 @@ export class PostgresStore extends MastraStorageBase {
     await this.db.none(tableQuery);
   }
 
-  protected async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     await this.db.none(`TRUNCATE TABLE ${this.pgp.as.name(tableName)}`);
   }
 
-  protected async insert({
-    tableName,
-    record,
-  }: {
-    tableName: TABLE_NAMES;
-    record: Record<string, any>;
-  }): Promise<void> {
+  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     const columns = Object.keys(record);
     const placeholders = columns.map((_, i) => `$${i + 1}`);
     const values = Object.values(record);
@@ -86,13 +80,7 @@ export class PostgresStore extends MastraStorageBase {
     await this.db.none(query, values);
   }
 
-  protected async load<R>({
-    tableName,
-    keys,
-  }: {
-    tableName: TABLE_NAMES;
-    keys: Record<string, string>;
-  }): Promise<R | null> {
+  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
     const columns = Object.keys(keys);
     const values = Object.values(keys);
     const conditions = columns.map((col, i) => `${this.pgp.as.name(col)} = $${i + 1}`).join(' AND ');
@@ -112,7 +100,7 @@ export class PostgresStore extends MastraStorageBase {
   }): Promise<void> {
     await this.db.none(
       `
-      INSERT INTO ${this.pgp.as.name(MastraStorageBase.TABLE_WORKFLOWS)}
+      INSERT INTO ${this.pgp.as.name(MastraStorage.TABLE_WORKFLOW_SNAPSHOT)}
         (workflow_name, run_id, snapshot, updated_at)
       VALUES
         ($1, $2, $3, CURRENT_TIMESTAMP)
@@ -135,7 +123,7 @@ export class PostgresStore extends MastraStorageBase {
     const result = await this.db.oneOrNone(
       `
       SELECT snapshot
-      FROM ${this.pgp.as.name(MastraStorageBase.TABLE_WORKFLOWS)}
+      FROM ${this.pgp.as.name(MastraStorage.TABLE_WORKFLOW_SNAPSHOT)}
       WHERE workflow_name = $1
         AND run_id = $2
     `,
@@ -165,7 +153,7 @@ export class PostgresStore extends MastraStorageBase {
     }
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<ThreadType[]> {
+  async getThreadsByResourceId({ resource_id }: { resource_id: string }): Promise<ThreadType[]> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
@@ -176,7 +164,7 @@ export class PostgresStore extends MastraStorageBase {
                 FROM mastra_threads
                 WHERE resourceid = $1
             `,
-        [resourceId],
+        [resource_id],
       );
       return result.rows;
     } finally {
@@ -189,7 +177,7 @@ export class PostgresStore extends MastraStorageBase {
 
     const client = await this.pool.connect();
     try {
-      const { id, title, createdAt, updatedAt, resourceId, metadata } = thread;
+      const { id, title, createdAt, updatedAt, resource_id, metadata } = thread;
       const result = await client.query<ThreadType>(
         `
         INSERT INTO mastra_threads (id, title, created_at, updated_at, resourceid, metadata)
@@ -197,7 +185,7 @@ export class PostgresStore extends MastraStorageBase {
         ON CONFLICT (id) DO UPDATE SET title = $2, updated_at = $4, resourceid = $5, metadata = $6
         RETURNING id, title, created_at AS createdAt, updated_at AS updatedAt, resourceid as resourceId, metadata
         `,
-        [id, title, createdAt, updatedAt, resourceId, JSON.stringify(metadata)],
+        [id, title, createdAt, updatedAt, resource_id, JSON.stringify(metadata)],
       );
       return result?.rows?.[0]!;
     } finally {
@@ -350,7 +338,7 @@ export class PostgresStore extends MastraStorageBase {
     try {
       await client.query('BEGIN');
       for (const message of messages) {
-        const { id, content, role, createdAt, threadId, toolCallIds, toolCallArgs, type } = message;
+        const { id, content, role, created_at, threadId, toolCallIds, toolCallArgs, type } = message;
 
         await client.query(
           `
@@ -370,7 +358,7 @@ export class PostgresStore extends MastraStorageBase {
             id,
             JSON.stringify(content),
             role,
-            createdAt.toISOString(),
+            created_at?.toISOString(),
             threadId,
             JSON.stringify(toolCallIds),
             JSON.stringify(toolCallArgs),
@@ -415,7 +403,7 @@ export class PostgresStore extends MastraStorageBase {
     }
   }
 
-  // TODO: This should be handled by the init method of MastraStorageBase instead
+  // TODO: This should be handled by the init method of MastraStorage instead
   async ensureTablesExist(): Promise<void> {
     if (this.hasTables) {
       return;
