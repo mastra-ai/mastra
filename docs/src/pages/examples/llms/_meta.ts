@@ -10,6 +10,8 @@ const meta = {
   "stream-text": "Stream Text",
   "stream-object-with-structured-output":
     "Stream Objects with Structured Output",
+  "generate-text-with-deepseek-reasoner":
+    "Generate Text with Deepseek Reasoner",
 };
 
 export default meta;
