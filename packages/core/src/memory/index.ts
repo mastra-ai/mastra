@@ -326,7 +326,7 @@ export abstract class MastraMemory extends MastraBase {
     toolCallIds,
   }: {
     threadId: string;
-    config: MemoryConfig;
+    config?: MemoryConfig;
     content: UserContent | AssistantContent;
     role: 'user' | 'assistant';
     type: 'text' | 'tool-call' | 'tool-result';

@@ -152,6 +152,22 @@ export class Memory extends MastraMemory {
     return this.storage.saveThread({ thread });
   }
 
+  async updateThread({
+    id,
+    title,
+    metadata,
+  }: {
+    id: string;
+    title: string;
+    metadata: Record<string, unknown>;
+  }): Promise<ThreadType> {
+    return this.storage.updateThread({
+      id,
+      title,
+      metadata,
+    });
+  }
+
   async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
     if (this.vector) {
       for (const message of messages) {
