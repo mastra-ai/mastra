@@ -11,7 +11,7 @@ export type ToolsInput = Record<string, ToolAction<any, any, any, any>>;
 
 export interface AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> {
   toolsets?: ToolsetsInput;
-  resourceid?: string;
+  resourceId?: string;
   context?: CoreMessage[];
   threadId?: string;
   memory?: MemoryConfig;
@@ -24,7 +24,7 @@ export interface AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefi
 
 export interface AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> {
   toolsets?: ToolsetsInput;
-  resourceid?: string;
+  resourceId?: string;
   context?: CoreMessage[];
   threadId?: string;
   memory?: MemoryConfig;

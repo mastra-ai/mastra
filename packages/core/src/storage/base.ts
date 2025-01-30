@@ -28,7 +28,6 @@ export abstract class MastraStorageBase extends MastraBase {
 
   protected async createTable({
     tableName,
-    schema,
   }: {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
@@ -184,13 +183,64 @@ export abstract class MastraStorageBase extends MastraBase {
     return d ? d.snapshot : null;
   }
 
-  // Memory Methods
+  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<ThreadType[]> {
+    return Array.from(this.threads.values()).filter(thread => thread.resourceId === resourceId);
+  }
 
-  abstract getThreadById(params: { threadId: string }): Promise<ThreadType | null>;
-  abstract getThreadsByResourceId(params: { resourceid: string }): Promise<ThreadType[]>;
-  abstract saveThread(params: { thread: ThreadType }): Promise<ThreadType>;
-  abstract updateThread(id: string, title: string, metadata: Record<string, unknown>): Promise<ThreadType>;
-  abstract deleteThread(id: string): Promise<void>;
-  abstract getMessages<T = unknown>(params: StorageGetMessagesArg): Promise<T>;
-  abstract saveMessages(params: { messages: MessageType[] }): Promise<MessageType[]>;
+  async saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType> {
+    this.threads.set(thread.id, thread);
+    return thread;
+  }
+
+  async updateThread({
+    id,
+    title,
+    metadata,
+  }: {
+    id: string;
+    title: string;
+    metadata: Record<string, unknown>;
+  }): Promise<ThreadType> {
+    const thread = this.threads.get(id);
+    if (!thread) {
+      throw new Error(`Thread ${id} not found`);
+    }
+
+    const updatedThread = {
+      ...thread,
+      title,
+      metadata: {
+        ...thread.metadata,
+        ...metadata,
+      },
+    };
+    this.threads.set(id, updatedThread);
+    return updatedThread;
+  }
+
+  async deleteThread({ id }: { id: string }): Promise<void> {
+    this.threads.delete(id);
+    this.messages.delete(id);
+  }
+
+  async getMessages<T = unknown>({ threadId }: StorageGetMessagesArg): Promise<T> {
+    return (this.messages.get(threadId) || []) as T;
+  }
+
+  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+    if (messages.length === 0) return messages;
+
+    const threadId = messages?.[0]?.threadId;
+
+    if (!threadId) {
+      throw new Error('Thread ID is required');
+    }
+
+    const existingMessages = this.messages.get(threadId) || [];
+
+    const updatedMessages = [...existingMessages, ...messages];
+
+    this.messages.set(threadId, updatedMessages);
+    return messages;
+  }
 }

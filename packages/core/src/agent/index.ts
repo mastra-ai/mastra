@@ -147,11 +147,11 @@ export class Agent<
   async saveMemory({
     threadId,
     memoryConfig,
-    resourceid,
+    resourceId,
     userMessages,
     runId,
   }: {
-    resourceid: string;
+    resourceId: string;
     threadId?: string;
     memoryConfig?: MemoryConfig;
     userMessages: CoreMessage[];
@@ -170,80 +170,80 @@ export class Agent<
 
         thread = await this.#mastra.memory.createThread({
           threadId,
-          resourceid,
+          resourceId,
           title,
         });
       } else {
-        thread = await this.#mastra.memory.getThreadById({ threadId });
-        if (!thread) {
-          this.logger.debug(`Thread not found, creating new thread for agent ${this.name}`, {
-            runId: runId || this.name,
-          });
-          const title = await this.genTitle(userMessage);
-          thread = await this.#mastra.memory.createThread({
-            threadId,
-            resourceid,
-            title,
-          });
-        }
-      }
-
-      const newMessages = userMessage ? [userMessage] : userMessages;
-
-      if (thread) {
-        const messages = newMessages.map(u => {
-          return {
-            id: this.#mastra?.memory?.generateId()!,
-            createdAt: new Date(),
-            threadId: thread.id,
-            ...u,
-            content: u.content as UserContent | AssistantContent,
-            role: u.role as 'user' | 'assistant',
-            type: 'text' as 'text' | 'tool-call' | 'tool-result',
-          };
-        });
-
-        const contextCallMessages: CoreMessage[] = [
-          {
-            role: 'system',
-            content: `\n
-            Analyze this message to determine if the user is referring to a previous conversation with the LLM.
-            Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation.
-            Extract any date ranges mentioned in the user message that could help identify the previous chat.
-            Return dates in ISO format.
-            If no specific dates are mentioned but time periods are (like "last week" or "past month"), calculate the appropriate date range.
-            For the end date, return the date 1 day after the end of the time period.
-            Today's date is ${new Date().toISOString()}`,
-          },
-          ...newMessages,
-        ];
-
-        let context;
-
-        try {
-          context = await this.llm.__textObject<{ usesContext: boolean; startDate: Date; endDate: Date }>({
-            messages: contextCallMessages,
-            structuredOutput: z.object({
-              usesContext: z.boolean(),
-              startDate: z.date(),
-              endDate: z.date(),
-            }),
-          });
-
-          this.logger.debug('Text Object result', {
-            contextObject: JSON.stringify(context.object, null, 2),
-            runId: runId || this.name,
-          });
-        } catch (e) {
-          if (e instanceof Error) {
-            this.log(LogLevel.DEBUG, `No context found: ${e.message}`);
-          }
-        }
-
-        const memoryMessages =
-          threadId && this.#mastra.memory
-            ? (
-                await this.#mastra.memory.rememberMessages({
+      //  thread = await this.#mastra.memory.getThreadById({ threadId });
+      //  if (!thread) {
+      //    this.logger.debug(`Thread not found, creating new thread for agent ${this.name}`, {
+      //      runId: runId || this.name,
+      //    });
+      //    const title = await this.genTitle(userMessage);
+      //    thread = await this.#mastra.memory.createThread({
+      //      threadId,
+      //      resourceId,
+      //      title,
+      //    });
+      //  }
+      //}
+      //
+      //const newMessages = userMessage ? [userMessage] : userMessages;
+      //
+      //if (thread) {
+      //  const messages = newMessages.map(u => {
+      //    return {
+      //      id: this.#mastra?.memory?.generateId()!,
+      //      createdAt: new Date(),
+      //      threadId: thread.id,
+      //      ...u,
+      //      content: u.content as UserContent | AssistantContent,
+      //      role: u.role as 'user' | 'assistant',
+      //      type: 'text' as 'text' | 'tool-call' | 'tool-result',
+      //    };
+      //  });
+      //
+      //  const contextCallMessages: CoreMessage[] = [
+      //    {
+      //      role: 'system',
+      //      content: `\n
+      //      Analyze this message to determine if the user is referring to a previous conversation with the LLM.
+      //      Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation.
+      //      Extract any date ranges mentioned in the user message that could help identify the previous chat.
+      //      Return dates in ISO format.
+      //      If no specific dates are mentioned but time periods are (like "last week" or "past month"), calculate the appropriate date range.
+      //      For the end date, return the date 1 day after the end of the time period.
+      //      Today's date is ${new Date().toISOString()}`,
+      //    },
+      //    ...newMessages,
+      //  ];
+      //
+      //  let context;
+      //
+      //  try {
+      //    context = await this.llm.__textObject<{ usesContext: boolean; startDate: Date; endDate: Date }>({
+      //      messages: contextCallMessages,
+      //      structuredOutput: z.object({
+      //        usesContext: z.boolean(),
+      //        startDate: z.date(),
+      //        endDate: z.date(),
+      //      }),
+      //    });
+      //
+      //    this.logger.debug('Text Object result', {
+      //      contextObject: JSON.stringify(context.object, null, 2),
+      //      runId: runId || this.name,
+      //    });
+      //  } catch (e) {
+      //    if (e instanceof Error) {
+      //      this.log(LogLevel.DEBUG, `No context found: ${e.message}`);
+      //    }
+      //  }
+      //
+      //  const memoryMessages =
+      //    threadId && this.#mastra.memory
+      //      ? (
+      //          await this.#mastra.memory.rememberMessages({
                   threadId,
                   config: memoryConfig,
                   vectorMessageSearch: messages
@@ -498,7 +498,7 @@ export class Agent<
   }
 
   async preExecute({
-    resourceid,
+    resourceId,
     runId,
     threadId,
     memoryConfig,
@@ -508,7 +508,7 @@ export class Agent<
     threadId?: string;
     memoryConfig?: MemoryConfig;
     messages: CoreMessage[];
-    resourceid: string;
+    resourceId: string;
   }) {
     let coreMessages: CoreMessage[] = [];
     let threadIdToUse = threadId;
@@ -516,7 +516,7 @@ export class Agent<
     this.log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, { runId });
     const saveMessageResponse = await this.saveMemory({
       threadId,
-      resourceid,
+      resourceId,
       userMessages: messages,
       memoryConfig,
     });
@@ -531,12 +531,12 @@ export class Agent<
     context,
     threadId,
     memoryConfig,
-    resourceid,
+    resourceId,
     runId,
     toolsets,
   }: {
     toolsets?: ToolsetsInput;
-    resourceid?: string;
+    resourceId?: string;
     threadId?: string;
     memoryConfig?: MemoryConfig;
     context?: CoreMessage[];
@@ -557,9 +557,9 @@ export class Agent<
         let coreMessages = messages;
         let threadIdToUse = threadId;
 
-        if (this.#mastra?.memory && resourceid) {
+        if (this.#mastra?.memory && resourceId) {
           const preExecuteResult = await this.preExecute({
-            resourceid,
+            resourceId,
             runId,
             threadId: threadIdToUse,
             memoryConfig,
@@ -581,7 +581,7 @@ export class Agent<
 
         if (
           (toolsets && Object.keys(toolsets || {}).length > 0) ||
-          (this.#mastra?.memory && resourceid) ||
+          (this.#mastra?.memory && resourceId) ||
           this.#mastra?.engine
         ) {
           convertedTools = this.convertTools({
@@ -634,7 +634,7 @@ export class Agent<
           result: resToLog,
           threadId,
         });
-        if (this.#mastra?.memory && resourceid) {
+        if (this.#mastra?.memory && resourceId) {
           try {
             this.logger.debug(`Saving assistant message in memory for agent ${this.name}`, {
               runId,
@@ -687,7 +687,7 @@ export class Agent<
       context,
       threadId: threadIdInFn,
       memory,
-      resourceid,
+      resourceId,
       maxSteps = 5,
       onStepFinish,
       runId,
@@ -724,7 +724,7 @@ export class Agent<
       context,
       threadId: threadIdInFn,
       memoryConfig: memory,
-      resourceid,
+      resourceId,
       runId: runIdToUse,
       toolsets,
     });
@@ -773,7 +773,7 @@ export class Agent<
       context,
       threadId: threadIdInFn,
       memory,
-      resourceid,
+      resourceId,
       maxSteps = 5,
       onFinish,
       onStepFinish,
@@ -811,7 +811,7 @@ export class Agent<
       context,
       threadId: threadIdInFn,
       memoryConfig: memory,
-      resourceid,
+      resourceId,
       runId: runIdToUse,
       toolsets,
     });

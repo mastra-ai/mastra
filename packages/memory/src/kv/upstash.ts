@@ -4,8 +4,6 @@
 //   ThreadType,
 //   MessageResponse,
 //   AiMessageType,
-//   SharedMemoryConfig,
-//   StorageGetMessagesArg,
 // } from '@mastra/core';
 // import { Redis } from '@upstash/redis';
 // import { ToolResultPart, TextPart } from 'ai';
@@ -31,12 +29,8 @@
 //
 //   kv: Redis;
 //
-//   constructor(config: { url: string; token: string; prefix?: string; maxTokens?: number } & SharedMemoryConfig) {
-//     super({
-//       storage: config.storage,
-//       vector: config.vector,
-//       name: 'UpstashKVMemory',
-//     });
+//   constructor(config: { url: string; token: string; prefix?: string; maxTokens?: number }) {
+//     super();
 //     this.prefix = config.prefix || 'mastra';
 //     this.MAX_CONTEXT_TOKENS = config.maxTokens;
 //
@@ -63,14 +57,14 @@
 //     return thread ? this.parseThread(thread) : null;
 //   }
 //
-//   async getThreadsByResourceId({ resourceid }: { resourceid: string }): Promise<ThreadType[]> {
+//   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<ThreadType[]> {
 //     const pattern = `${this.prefix}:thread:*`;
 //     const keys = await this.kv.keys(pattern);
 //
 //     const threads = await Promise.all(keys.map(key => this.kv.get<SerializedThreadType>(key)));
 //
 //     return threads
-//       .filter(thread => thread?.resourceid === resourceid)
+//       .filter(thread => thread?.resourceId === resourceId)
 //       .map(thread => this.parseThread(thread as SerializedThreadType));
 //   }
 //
@@ -208,7 +202,9 @@
 //
 //   async getMessages({
 //     threadId,
-//   }: StorageGetMessagesArg): Promise<{ messages: MessageType[]; uiMessages: AiMessageType[] }> {
+//   }: {
+//     threadId: string;
+//   }): Promise<{ messages: MessageType[]; uiMessages: AiMessageType[] }> {
 //     const messagesKey = this.getMessagesKey(threadId);
 //     const messages = await this.kv.lrange<MessageType>(messagesKey, 0, -1);
 //     const parsedMessages = this.parseMessages(messages);

@@ -1,12 +1,4 @@
-// import {
-//   MastraMemory,
-//   MessageType,
-//   ThreadType,
-//   AiMessageType,
-//   MessageResponse,
-//   SharedMemoryConfig,
-//   StorageGetMessagesArg,
-// } from '@mastra/core';
+// import { MastraMemory, MessageType, ThreadType, AiMessageType, MessageResponse } from '@mastra/core';
 // import { ToolResultPart, TextPart } from 'ai';
 // import crypto from 'crypto';
 // import pg from 'pg';
@@ -16,12 +8,8 @@
 // export class PgMemory extends MastraMemory {
 //   private pool: pg.Pool;
 //   hasTables: boolean = false;
-//   constructor(config: { connectionString: string; maxTokens?: number } & SharedMemoryConfig) {
-//     super({
-//       storage: config.storage,
-//       vector: config.vector,
-//       name: 'PgMemory',
-//     });
+//   constructor(config: { connectionString: string; maxTokens?: number }) {
+//     super();
 //     this.pool = new Pool({ connectionString: config.connectionString });
 //     this.MAX_CONTEXT_TOKENS = config.maxTokens;
 //   }
@@ -37,7 +25,7 @@
 //     try {
 //       const result = await client.query<ThreadType>(
 //         `
-//                 SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, resourceid, metadata
+//                 SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, resource_id, metadata
 //                 FROM mastra_threads
 //                 WHERE id = $1
 //             `,
@@ -50,20 +38,20 @@
 //     }
 //   }
 //
-//   async getThreadsByResourceId({ resourceid }: { resourceid: string }): Promise<ThreadType[]> {
+//   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<ThreadType[]> {
 //     await this.ensureTablesExist();
 //
 //     const client = await this.pool.connect();
 //     try {
 //       const result = await client.query<ThreadType>(
 //         `
-//                 SELECT id, title, resourceid, created_at AS createdAt, updated_at AS updatedAt, metadata
+//                 SELECT id, title, resource_id as resourceId, created_at AS createdAt, updated_at AS updatedAt, metadata
 //                 FROM mastra_threads
-//                 WHERE resourceid = $1
+//                 WHERE resource_id = $1
 //             `,
-//         [resourceid],
+//         [resourceId],
 //       );
-//       return result.rows;
+//       return result.rows.map(thread => ({ ...thread, resourceId: thread.resourceId }));
 //     } finally {
 //       client.release();
 //     }
@@ -74,15 +62,15 @@
 //
 //     const client = await this.pool.connect();
 //     try {
-//       const { id, title, createdAt, updatedAt, resourceid, metadata } = thread;
+//       const { id, title, createdAt, updatedAt, resourceId, metadata } = thread;
 //       const result = await client.query<ThreadType>(
 //         `
-//                 INSERT INTO mastra_threads (id, title, created_at, updated_at, resourceid, metadata)
+//                 INSERT INTO mastra_threads (id, title, created_at, updated_at, resource_id, metadata)
 //                 VALUES ($1, $2, $3, $4, $5, $6)
-//                 ON CONFLICT (id) DO UPDATE SET title = $2, updated_at = $4, resourceid = $5, metadata = $6
-//                 RETURNING id, title, created_at AS createdAt, updated_at AS updatedAt, resourceid, metadata
+//                 ON CONFLICT (id) DO UPDATE SET title = $2, updated_at = $4, resource_id = $5, metadata = $6
+//                 RETURNING id, title, created_at AS createdAt, updated_at AS updatedAt, resource_id, metadata
 //             `,
-//         [id, title, createdAt, updatedAt, resourceid, JSON.stringify(metadata)],
+//         [id, title, createdAt, updatedAt, resourceId, JSON.stringify(metadata)],
 //       );
 //       return result?.rows?.[0]!;
 //     } finally {
@@ -310,7 +298,9 @@
 //
 //   async getMessages({
 //     threadId,
-//   }: StorageGetMessagesArg): Promise<{ messages: MessageType[]; uiMessages: AiMessageType[] }> {
+//   }: {
+//     threadId: string;
+//   }): Promise<{ messages: MessageType[]; uiMessages: AiMessageType[] }> {
 //     await this.ensureTablesExist();
 //
 //     const client = await this.pool.connect();
@@ -461,7 +451,7 @@
 //         await client.query(`
 //                     CREATE TABLE IF NOT EXISTS mastra_threads (
 //                         id UUID PRIMARY KEY,
-//                         resourceid TEXT,
+//                         resource_id TEXT,
 //                         title TEXT,
 //                         created_at TIMESTAMP WITH TIME ZONE NOT NULL,
 //                         updated_at TIMESTAMP WITH TIME ZONE NOT NULL,

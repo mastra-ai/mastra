@@ -1,4 +1,4 @@
-import { MastraStorage, WorkflowRunState } from '@mastra/core';
+import { MastraStorageBase, WorkflowRunState } from '@mastra/core';
 import { Redis } from '@upstash/redis';
 
 export interface UpstashConfig {
@@ -6,11 +6,11 @@ export interface UpstashConfig {
   token: string;
 }
 
-export class UpstashStore extends MastraStorage {
+export class UpstashStore extends MastraStorageBase {
   private redis: Redis;
 
   constructor(config: UpstashConfig) {
-    super('Upstash');
+    super({ name: 'Upstash' });
     this.redis = new Redis({
       url: config.url,
       token: config.token,
@@ -21,7 +21,7 @@ export class UpstashStore extends MastraStorage {
     return `${namespace}:${workflowName}:${runId}`;
   }
 
-  async init(_namespace: string): Promise<void> {
+  async init(): Promise<void> {
     // No initialization needed for Redis
   }
 
@@ -73,11 +73,3 @@ export class UpstashStore extends MastraStorage {
     // No explicit cleanup needed for Upstash Redis
   }
 }
-
-new MastraMemory({
-  storage: new UpstashStore({
-    url: process.env.UPSTASH_REDIS_URL,
-    token: process.env.UPSTASH_REDIS_TOKEN,
-  }),
-  vector: new PineconeVector(process.env.PINECONE_API_KEY),
-});
