@@ -7,7 +7,9 @@ type ComparisonOperator =
   | '$lt' // Less than
   | '$lte' // Less than or equal
   | '$ne' // Matches values not equal
-  | '$nin'; // Matches none of the values in array
+  | '$nin' // Matches none of the values in array
+  | '$regex' // Matches values satisfied by regular expression
+  | '$options'; // Regex options (used with $regex)
 
 // Logical Operators
 type LogicalOperator =
@@ -44,6 +46,16 @@ type Filter = {
 abstract class BaseFilterTranslator {
   abstract translate(filter: Filter): unknown;
 
+  /**
+   * Validates if all operators in the filter are supported by Astra.
+   */
+  isSupportedFilter(filter: Filter): boolean {
+    return this.validateFilterSupport(filter).supported;
+  }
+
+  /**
+   * Operator type checks
+   */
   protected isOperator(key: string): key is QueryOperator {
     return key.startsWith('$');
   }
@@ -53,7 +65,7 @@ abstract class BaseFilterTranslator {
   }
 
   protected isComparisonOperator(key: string): key is ComparisonOperator {
-    return ['$eq', '$gt', '$gte', '$in', '$lt', '$lte', '$ne', '$nin'].includes(key);
+    return ['$eq', '$gt', '$gte', '$in', '$lt', '$lte', '$ne', '$nin', '$regex', '$options'].includes(key);
   }
 
   protected isArrayOperator(key: string): key is ArrayOperator {
@@ -64,35 +76,104 @@ abstract class BaseFilterTranslator {
     return ['$exists'].includes(key);
   }
 
-  // Helper method to validate values for specific operators
-  protected validateOperatorValue(operator: QueryOperator, value: any): void {
+  /**
+   * Validate if an operator is supported by the specific vector DB.
+   * Can be overridden by implementations to specify supported operators.
+   */
+  protected isValidOperator(key: string): boolean {
+    return (
+      this.isLogicalOperator(key) ||
+      this.isComparisonOperator(key) ||
+      this.isArrayOperator(key) ||
+      this.isElementOperator(key)
+    );
+  }
+
+  /**
+   * Value validation for operators
+   */
+  protected validateOperatorValue(operator: QueryOperator, value: any) {
     switch (operator) {
       case '$in':
       case '$nin':
       case '$all':
         if (!Array.isArray(value)) {
-          throw new Error(`${operator} requires an array value`);
+          return {
+            valid: false,
+            message: BaseFilterTranslator.ErrorMessages.ARRAY_REQUIRED(operator),
+          };
+        }
+        if (value.some(v => v === undefined || v === null)) {
+          return {
+            valid: false,
+            message: BaseFilterTranslator.ErrorMessages.INVALID_VALUE(operator, 'non-null'),
+          };
         }
         break;
       case '$exists':
         if (typeof value !== 'boolean') {
-          throw new Error('$exists requires a boolean value');
+          return {
+            valid: false,
+            message: BaseFilterTranslator.ErrorMessages.BOOLEAN_REQUIRED(operator),
+          };
         }
         break;
       case '$eq':
       case '$ne':
+        if (value === undefined) {
+          return {
+            valid: false,
+            message: BaseFilterTranslator.ErrorMessages.VALUE_REQUIRED(operator),
+          };
+        }
+        break;
       case '$gt':
       case '$gte':
       case '$lt':
       case '$lte':
         if (value === undefined) {
-          throw new Error(`${operator} requires a non-undefined value`);
+          return {
+            valid: false,
+            message: BaseFilterTranslator.ErrorMessages.VALUE_REQUIRED(operator),
+          };
+        }
+        // Allow numbers and dates only
+        if (
+          typeof value !== 'number' &&
+          !(value instanceof Date) &&
+          (typeof value !== 'string' || (isNaN(Number(value)) && isNaN(Date.parse(value))))
+        ) {
+          return {
+            valid: false,
+            message: BaseFilterTranslator.ErrorMessages.INVALID_VALUE(operator, 'number or date'),
+          };
+        }
+        break;
+      case '$regex':
+        if (typeof value !== 'string' && !(value instanceof RegExp)) {
+          return {
+            valid: false,
+            message: BaseFilterTranslator.ErrorMessages.INVALID_REGEX(operator),
+          };
+        }
+        break;
+
+      case '$options':
+        if (typeof value !== 'string' || !value.match(/^i?$/)) {
+          // only allow '' or 'i'
+          return {
+            valid: false,
+            message: BaseFilterTranslator.ErrorMessages.INVALID_REGEX_OPTIONS(value),
+          };
         }
         break;
     }
+    return { valid: true, message: '' };
   }
 
-  // Helper method to normalize values for comparison operators
+  /**
+   * Value normalization for comparison operators
+   */
   protected normalizeComparisonValue(value: any): any {
     if (value instanceof Date) {
       return value.toISOString();
@@ -113,10 +194,106 @@ abstract class BaseFilterTranslator {
   }
 
   /**
-   * Determines if a filter uses only supported operators for a given vector store.
-   * Implementation should be provided by concrete classes.
+   * Utility functions for type checking
    */
-  abstract isSupportedFilter(filter: Filter): boolean;
+  protected isPrimitive(value: any): boolean {
+    return (
+      value === null ||
+      value === undefined ||
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean'
+    );
+  }
+
+  protected isEmpty(obj: any): boolean {
+    return obj === null || obj === undefined || (typeof obj === 'object' && Object.keys(obj).length === 0);
+  }
+
+  protected static readonly ErrorMessages = {
+    ARRAY_REQUIRED: (op: string) => `${op} requires an array value`,
+    BOOLEAN_REQUIRED: (op: string) => `${op} requires a boolean value`,
+    VALUE_REQUIRED: (op: string) => `${op} requires a non-undefined value`,
+    UNSUPPORTED_OPERATOR: (op: string) => `Unsupported operator: ${op}`,
+    INVALID_NESTED: (path: string) => `Invalid nested structure at path: ${path}`,
+    INVALID_REGEX: (op: string) => `${op} requires a valid regex or string value`,
+    INVALID_REGEX_OPTIONS: (value: string) => `Invalid regex options: ${value}`,
+    NUMBER_REQUIRED: (op: string) => `${op} requires a numeric value`,
+    DATE_REQUIRED: (op: string) => `${op} requires a date value`,
+    STRING_REQUIRED: (op: string) => `${op} requires a string value`,
+    INVALID_VALUE: (op: string, type: string) => `${op} requires a ${type} value`,
+  } as const;
+
+  /**
+   * Helper to handle array value normalization consistently
+   */
+  protected normalizeArrayValues(values: any[]): any[] {
+    return values.map(value => this.normalizeComparisonValue(value));
+  }
+
+  protected validateFilter(filter: Filter): void {
+    const validation = this.validateFilterSupport(filter);
+    if (!validation.supported) {
+      throw new Error(validation.messages.join(', '));
+    }
+  }
+
+  /**
+   * Validates if a filter structure is supported by the specific vector DB
+   * and returns detailed validation information.
+   */
+  private validateFilterSupport(node: Filter | FieldCondition): {
+    supported: boolean;
+    messages: string[];
+  } {
+    const messages: string[] = [];
+
+    // Handle primitives and empty values
+    if (this.isPrimitive(node) || this.isEmpty(node)) {
+      return { supported: true, messages: [] };
+    }
+
+    // Handle arrays
+    if (Array.isArray(node)) {
+      const arrayResults = node.map(item => this.validateFilterSupport(item));
+      const arrayMessages = arrayResults.flatMap(r => r.messages);
+      return {
+        supported: arrayResults.every(r => r.supported),
+        messages: arrayMessages,
+      };
+    }
+
+    // Process object entries
+    const nodeObj = node as Record<string, any>;
+    let isSupported = true;
+
+    for (const [key, value] of Object.entries(nodeObj)) {
+      // Check if the key is an operator
+      if (this.isOperator(key)) {
+        if (!this.isValidOperator(key)) {
+          isSupported = false;
+          messages.push(BaseFilterTranslator.ErrorMessages.UNSUPPORTED_OPERATOR(key));
+          continue;
+        }
+
+        // Validate operator value
+        const validation = this.validateOperatorValue(key as QueryOperator, value);
+        if (!validation.valid) {
+          isSupported = false;
+          messages.push(validation.message);
+        }
+      }
+
+      // Recursively validate nested value
+      const nestedValidation = this.validateFilterSupport(value);
+      if (!nestedValidation.supported) {
+        isSupported = false;
+        messages.push(...nestedValidation.messages);
+      }
+    }
+
+    return { supported: isSupported, messages };
+  }
 }
 
 // Export types and base class
