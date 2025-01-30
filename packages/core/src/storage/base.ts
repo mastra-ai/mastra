@@ -16,6 +16,8 @@ export abstract class MastraStorage extends MastraBase {
   static readonly TABLE_MESSAGES = 'messages';
   static readonly TABLE_THREADS = 'threads';
 
+  hasInit = false;
+
   constructor({ name }: { name: string }) {
     super({
       component: 'STORAGE',
@@ -33,9 +35,25 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null>;
 
+  async __getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null> {
+    await this.init();
+    return this.getThreadById({ threadId });
+  }
+
   abstract getThreadsByResourceId({ resource_id }: { resource_id: string }): Promise<ThreadType[]>;
 
+  async __getThreadsByResourceId({ resource_id }: { resource_id: string }): Promise<ThreadType[]> {
+    await this.init();
+    return this.getThreadsByResourceId({ resource_id });
+  }
+
   abstract saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType>;
+
+  async __saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType> {
+    console.log('Saving thread:', thread);
+    await this.init();
+    return this.saveThread({ thread });
+  }
 
   abstract updateThread({
     id,
@@ -47,13 +65,45 @@ export abstract class MastraStorage extends MastraBase {
     metadata: Record<string, unknown>;
   }): Promise<ThreadType>;
 
+  async __updateThread({
+    id,
+    title,
+    metadata,
+  }: {
+    id: string;
+    title: string;
+    metadata: Record<string, unknown>;
+  }): Promise<ThreadType> {
+    await this.init();
+    return this.updateThread({ id, title, metadata });
+  }
+
   abstract deleteThread({ id }: { id: string }): Promise<void>;
+
+  async __deleteThread({ threadId }: { threadId: string }): Promise<MessageType[]> {
+    await this.init();
+    return this.getMessages({ threadId });
+  }
 
   abstract getMessages({ threadId }: { threadId: string }): Promise<MessageType[]>;
 
+  async __getMessages({ threadId }: { threadId: string }): Promise<MessageType[]> {
+    await this.init();
+    return this.getMessages({ threadId });
+  }
+
   abstract saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]>;
 
+  async __saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+    await this.init();
+    return this.saveMessages({ messages });
+  }
+
   async init(): Promise<void> {
+    if (this.hasInit) {
+      return;
+    }
+
     await this.createTable({
       tableName: 'workflow_snapshot',
       schema: {
@@ -81,13 +131,11 @@ export abstract class MastraStorage extends MastraBase {
     await this.createTable({
       tableName: 'evals',
       schema: {
-        global_run_id: {
+        meta: {
           type: 'text',
-          primaryKey: true,
         },
-        run_id: {
+        result: {
           type: 'text',
-          primaryKey: true,
         },
         input: {
           type: 'text',
@@ -95,25 +143,35 @@ export abstract class MastraStorage extends MastraBase {
         output: {
           type: 'text',
         },
-        agent_name: {
-          type: 'text',
-        },
-        metric_name: {
-          type: 'text',
-        },
-        test_name: {
-          type: 'text',
-          nullable: true,
-        },
-        test_path: {
-          type: 'text',
-          nullable: true,
-        },
         created_at: {
           type: 'timestamp',
         },
       },
     });
+
+    await this.createTable({
+      tableName: 'threads',
+      schema: {
+        id: { type: 'text', nullable: false, primaryKey: true },
+        resource_id: { type: 'text', nullable: false },
+        title: { type: 'text', nullable: false },
+        metadata: { type: 'text', nullable: false },
+        created_at: { type: 'timestamp', nullable: false },
+        updated_at: { type: 'timestamp', nullable: false },
+      },
+    });
+
+    await this.createTable({
+      tableName: 'messages',
+      schema: {
+        id: { type: 'text', nullable: false, primaryKey: true },
+        thread_id: { type: 'text', nullable: false },
+        content: { type: 'text', nullable: false },
+        created_at: { type: 'timestamp', nullable: false },
+      },
+    });
+
+    this.hasInit = true;
   }
 
   async persistWorkflowSnapshot({
@@ -125,6 +183,8 @@ export abstract class MastraStorage extends MastraBase {
     runId: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
+    await this.init();
+
     const data = {
       workflow_name: workflowName,
       run_id: runId,
@@ -146,10 +206,15 @@ export abstract class MastraStorage extends MastraBase {
     workflowName: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
+    if (!this.hasInit) {
+      await this.init();
+    }
+
     const d = await this.load<{ snapshot: WorkflowRunState }>({
       tableName: MastraStorage.TABLE_WORKFLOW_SNAPSHOT,
       keys: { workflow_name: workflowName, run_id: runId },
     });
+
     return d ? d.snapshot : null;
   }
 }

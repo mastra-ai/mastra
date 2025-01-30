@@ -61,7 +61,13 @@ export class MastraStorageLibSql extends MastraStorage {
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.client.execute(`DELETE FROM ${tableName}`);
+    try {
+      await this.client.execute(`DELETE FROM ${tableName}`);
+    } catch (e) {
+      if (e instanceof Error) {
+        this.logger.error(e.message);
+      }
+    }
   }
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {

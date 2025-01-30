@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 
-import { MessageType } from '../memory';
+import { WorkflowRunState } from '../workflows';
 
 import { MastraStorageLibSql } from './libsql';
 
@@ -9,7 +9,10 @@ import { MastraStorageLibSql } from './libsql';
 const TEST_DB_URL = 'file:memory:'; // Use in-memory SQLite for tests
 
 describe('MastraStorageLibSql', () => {
-  let storage: MastraStorageLibSql;
+  const storage = new MastraStorageLibSql({
+    name: 'test-storage',
+    config: { url: TEST_DB_URL },
+  });
 
   // Sample test data factory functions to ensure unique records
   const createSampleThread = () => ({
@@ -31,39 +34,10 @@ describe('MastraStorageLibSql', () => {
       created_at: new Date().toISOString(),
     }) as any;
 
-  beforeAll(async () => {
-    // Initialize storage with test database
-    storage = new MastraStorageLibSql({
-      name: 'test-storage',
-      config: { url: TEST_DB_URL },
-    });
-
-    // Create required tables
-    await storage.createTable({
-      tableName: 'threads',
-      schema: {
-        id: { type: 'text', nullable: false, primaryKey: true },
-        resource_id: { type: 'text', nullable: false },
-        title: { type: 'text', nullable: false },
-        metadata: { type: 'text', nullable: false },
-        created_at: { type: 'timestamp', nullable: false },
-        updated_at: { type: 'timestamp', nullable: false },
-      },
-    });
-
-    await storage.createTable({
-      tableName: 'messages',
-      schema: {
-        id: { type: 'text', nullable: false, primaryKey: true },
-        thread_id: { type: 'text', nullable: false },
-        content: { type: 'text', nullable: false },
-        created_at: { type: 'timestamp', nullable: false },
-      },
-    });
-  });
-
-  beforeEach(async () => {
+  afterAll(async () => {
     // Clear tables before each test
+    await storage.clearTable({ tableName: 'workflow_snapshot' });
+    await storage.clearTable({ tableName: 'evals' });
     await storage.clearTable({ tableName: 'messages' });
     await storage.clearTable({ tableName: 'threads' });
   });
@@ -73,16 +47,16 @@ describe('MastraStorageLibSql', () => {
       const thread = createSampleThread();
 
       // Save thread
-      const savedThread = await storage.saveThread({ thread });
+      const savedThread = await storage.__saveThread({ thread });
       expect(savedThread).toEqual(thread);
 
       // Retrieve thread
-      const retrievedThread = await storage.getThreadById({ threadId: thread.id });
+      const retrievedThread = await storage.__getThreadById({ threadId: thread.id });
       expect(retrievedThread).toEqual(thread);
     });
 
     it('should return null for non-existent thread', async () => {
-      const result = await storage.getThreadById({ threadId: 'non-existent' });
+      const result = await storage.__getThreadById({ threadId: 'non-existent' });
       expect(result).toBeNull();
     });
 
@@ -100,10 +74,10 @@ describe('MastraStorageLibSql', () => {
 
     it('should update thread title and metadata', async () => {
       const thread = createSampleThread();
-      await storage.saveThread({ thread });
+      await storage.__saveThread({ thread });
 
       const newMetadata = { newKey: 'newValue' };
-      const updatedThread = await storage.updateThread({
+      const updatedThread = await storage.__updateThread({
         id: thread.id,
         title: 'Updated Title',
         metadata: newMetadata,
@@ -272,7 +246,7 @@ describe('MastraStorageLibSql', () => {
           attempts: {},
           triggerData: { type: 'manual' },
         },
-      };
+      } as any;
 
       await storage.persistWorkflowSnapshot({
         workflowName,
@@ -312,7 +286,7 @@ describe('MastraStorageLibSql', () => {
       await storage.persistWorkflowSnapshot({
         workflowName,
         runId,
-        snapshot: initialSnapshot,
+        snapshot: initialSnapshot as any,
       });
 
       const updatedSnapshot = {
@@ -324,7 +298,7 @@ describe('MastraStorageLibSql', () => {
           attempts: { 'step-1': 1 },
           triggerData: { type: 'manual' },
         },
-      };
+      } as any;
 
       await storage.persistWorkflowSnapshot({
         workflowName,
@@ -390,7 +364,7 @@ describe('MastraStorageLibSql', () => {
       await storage.persistWorkflowSnapshot({
         workflowName,
         runId,
-        snapshot: complexSnapshot,
+        snapshot: complexSnapshot as WorkflowRunState,
       });
 
       const loadedSnapshot = await storage.loadWorkflowSnapshot({
