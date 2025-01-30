@@ -1,5 +1,12 @@
 # generate-text-from-pdf
 
+## 0.0.1-alpha.22
+
+### Patch Changes
+
+- Updated dependencies [9fb3039]
+  - @mastra/core@0.1.27-alpha.81
+
 ## 0.0.1-alpha.21
 
 ### Patch Changes
