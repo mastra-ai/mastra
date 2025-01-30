@@ -83,6 +83,62 @@ describe('VectorizeFilterTranslator', () => {
       expect(translator.translate(filter)).toEqual(filter);
     });
 
+    it('handles arrays of mixed types', () => {
+      const filter = {
+        field: { $in: [123, 'string', true] },
+      };
+      expect(translator.translate(filter)).toEqual(filter);
+    });
+
+    it('handles empty arrays in $in and $nin', () => {
+      const filter = {
+        include: { $in: [] },
+        exclude: { $nin: [] },
+      };
+      expect(translator.translate(filter)).toEqual(filter);
+    });
+
+    it('handles deeply nested null values', () => {
+      const filter = {
+        user: {
+          profile: {
+            lastLogin: null,
+            settings: { theme: { $eq: null } },
+          },
+        },
+      };
+      expect(translator.translate(filter)).toEqual({
+        'user.profile.lastLogin': { $eq: null },
+        'user.profile.settings.theme': { $eq: null },
+      });
+    });
+
+    it('preserves order of multiple operators', () => {
+      const filter = {
+        field: {
+          $gt: 0,
+          $lt: 10,
+          $ne: 5,
+        },
+      };
+      expect(translator.translate(filter)).toEqual(filter);
+    });
+
+    it('handles array values in comparison operators', () => {
+      // Some vector stores might allow comparing against arrays
+      expect(() =>
+        translator.translate({
+          field: { $gt: [] },
+        }),
+      ).toThrow();
+
+      expect(() =>
+        translator.translate({
+          field: { $lt: [1, 2, 3] },
+        }),
+      ).toThrow();
+    });
+
     // Error cases
     it('throws error for unsupported operators', () => {
       const unsupportedFilters = [
