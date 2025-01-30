@@ -290,6 +290,10 @@ export class Mastra<
     return this.workflows;
   }
 
+  public setStorage({ storage }: { storage: MastraStorage }) {
+    this.storage = storage;
+  }
+
   public setLogger({ logger }: { logger: TLogger }) {
     this.logger = logger;
 
