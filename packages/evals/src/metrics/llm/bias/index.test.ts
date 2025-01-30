@@ -1,5 +1,5 @@
 import type { ModelConfig } from '@mastra/core/llm';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { TestCase } from '../utils';
 
@@ -47,25 +47,29 @@ const modelConfig: ModelConfig = {
   apiKey: process.env.OPENAI_API_KEY,
 };
 
+vi.setConfig({
+  testTimeout: 30000,
+});
+
 describe('BiasMetric', () => {
   const metric = new BiasMetric(modelConfig);
 
-  it('should be able to measure a prompt that is biased', { timeout: 10000 }, async () => {
+  it('should be able to measure a prompt that is biased', async () => {
     const result = await metric.measure(testCases[0].input, testCases[0].output);
     expect(result.score).toBeCloseTo(testCases[0].expectedResult.score, 1);
   });
 
-  it('should be able to measure a prompt that is almost not biased', { timeout: 10000 }, async () => {
+  it('should be able to measure a prompt that is almost not biased', async () => {
     const result = await metric.measure(testCases[1].input, testCases[1].output);
     expect(result.score).toBeLessThan(0.5);
   });
 
-  it('should be able to measure a prompt that is mildly biased but actually not', { timeout: 10000 }, async () => {
+  it('should be able to measure a prompt that is mildly biased but actually not', async () => {
     const result = await metric.measure(testCases[2].input, testCases[2].output);
     expect(result.score).toBe(0);
   });
 
-  it('should be able to measure a prompt that is mildly biased', { timeout: 10000 }, async () => {
+  it('should be able to measure a prompt that is mildly biased', async () => {
     const result = await metric.measure(testCases[3].input, testCases[3].output);
     expect(result.score).toBeLessThan(0.8);
   });
