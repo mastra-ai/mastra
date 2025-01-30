@@ -24,6 +24,7 @@ import { z, ZodSchema } from 'zod';
 
 import 'dotenv/config';
 
+import { MastraPrimitives } from '../action';
 import { ToolsInput } from '../agent/types';
 import { MastraBase } from '../base';
 import { LogLevel, RegisteredLogger } from '../logger';
@@ -51,12 +52,26 @@ import {
 })
 export class LLM extends MastraBase {
   #model: ModelConfig;
+  #mastra: MastraPrimitives;
 
   constructor({ model }: { model: ModelConfig }) {
     super({
       component: RegisteredLogger.LLM,
     });
     this.#model = model;
+    this.#mastra = {} as MastraPrimitives;
+  }
+
+  __registerPrimitives(p: MastraPrimitives) {
+    if (p.telemetry) {
+      this.__setTelemetry(p.telemetry);
+    }
+
+    if (p.logger) {
+      this.__setLogger(p.logger);
+    }
+
+    this.#mastra = p;
   }
 
   getModelType(): string {
@@ -350,6 +365,7 @@ export class LLM extends MastraBase {
               });
               return tool.execute({
                 context: props,
+                mastra: this.#mastra,
               });
             },
           };
