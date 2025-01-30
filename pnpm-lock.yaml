@@ -240,6 +240,9 @@ importers:
       '@mastra/deployer-cloudflare':
         specifier: workspace:*
         version: link:../../deployers/cloudflare
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../packages/rag
       zod:
         specifier: ^3.24.0
         version: 3.24.1

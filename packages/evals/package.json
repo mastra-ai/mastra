@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "0.1.0-alpha.23",
+  "version": "0.1.0-alpha.24",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
