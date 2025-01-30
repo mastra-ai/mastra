@@ -15,6 +15,7 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/deployer-cloudflare": "workspace:*",
+    "@mastra/rag": "workspace:*",
     "zod": "^3.24.0"
   }
 }
