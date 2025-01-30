@@ -9,21 +9,6 @@ on:
 
 jobs:
   release:
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: mastra
-        ports:
-          - 5433:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     if: contains(github.head_ref || github.ref_name, 'changeset-release') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -56,14 +41,6 @@ jobs:
       - name: Setup npm auth
         run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
-
-      - name: Build engine
-        run: pnpm build:engine && pnpm copy:drizzle
-
-      - name: Setup database
-        run: pnpm db:setup
-        env:
-          DB_URL: "postgresql://postgres:postgres@localhost:5433/mastra"
 
       - name: Install dane cli
         run: pnpm install -g @mastra/dane@alpha

@@ -10,7 +10,6 @@ const TEST_DB_URL = 'file:memory:'; // Use in-memory SQLite for tests
 
 describe('MastraStorageLibSql', () => {
   const storage = new MastraStorageLibSql({
-    name: 'test-storage',
     config: { url: TEST_DB_URL },
   });
 

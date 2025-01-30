@@ -5,6 +5,7 @@ import path from 'path';
 import { z } from 'zod';
 
 import { BUILD_PACKAGES_PROMPT, PACKAGES_LIST_PROMPT, PUBLISH_PACKAGES_PROMPT } from '../agents/package-publisher.js';
+import { pnpmBuild } from '../tools/pnpm.js';
 
 export const packagePublisher = new Workflow({
   name: 'pnpm-changset-publisher',
@@ -211,13 +212,6 @@ const assemblePackages = new Step({
   },
 });
 
-async function buildSet(agent: Agent, list: string[]) {
-  let res = await agent.generate(BUILD_PACKAGES_PROMPT(list));
-
-  console.log(chalk.green(res.text));
-  return res.text;
-}
-
 const buildPackages = new Step({
   id: 'buildPackages',
   outputSchema,
@@ -232,36 +226,56 @@ const buildPackages = new Step({
     const vectorStoreSet = context.machineContext.stepResults.assemblePackages.payload.vector_stores;
     const speechSet = context.machineContext.stepResults.assemblePackages.payload.speech;
 
+    console.log({
+      pkgSet,
+      deploySet,
+      integrationSet,
+      vectorStoreSet,
+      speechSet,
+    });
+
     const agent = mastra?.agents?.['danePackagePublisher'];
 
     if (!agent) {
       throw new Error('Agent not found');
     }
 
+    async function buildSet(list: string[]) {
+      for (const pkg of list) {
+        await pnpmBuild.execute({
+          context: {
+            name: pkg,
+            packagePath: pkg,
+          },
+          suspend: async () => {},
+        });
+      }
+    }
+
     let built = false;
 
     if (pkgSet.length > 0) {
       built = true;
-      await buildSet(agent, pkgSet);
+      await buildSet(pkgSet);
     }
 
     if (deploySet.length > 0) {
-      await buildSet(agent, deploySet);
+      await buildSet(deploySet);
       built = true;
     }
 
     if (integrationSet.length > 0) {
-      await buildSet(agent, integrationSet);
+      await buildSet(integrationSet);
       built = true;
     }
 
     if (vectorStoreSet.length > 0) {
-      await buildSet(agent, vectorStoreSet);
+      await buildSet(vectorStoreSet);
       built = true;
     }
 
     if (speechSet.length > 0) {
-      await buildSet(agent, speechSet);
+      await buildSet(speechSet);
       built = true;
     }
 

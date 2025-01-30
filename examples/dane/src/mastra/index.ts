@@ -23,7 +23,7 @@ export const mastra = new Mastra({
   },
   storage: new MastraStorageLibSql({
     config: {
-      url: 'file:.mastra/memory:',
+      url: 'file:memory:',
     },
   }),
   memory: new UpstashKVMemory({
