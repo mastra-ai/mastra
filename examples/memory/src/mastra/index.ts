@@ -7,15 +7,20 @@ import 'dotenv/config';
 
 import { chefAgent, memoryAgent } from './agents';
 
-const connectionString = process.env.POSTGRES_CONNECTION_STRING;
-
-if (!connectionString) {
-  throw new Error(`process.env.POSTGRES_CONNECTION_STRING is required for this example to work`);
-}
+const host = `localhost`;
+const port = 5432;
+const user = `postgres`;
+const database = `postgres`;
+const password = `postgres`;
+const connectionString = `postgresql://${user}:${password}@${host}:${port}`;
 
 const memory = new Memory({
   storage: new PostgresStore({
-    connectionString,
+    host,
+    port,
+    user,
+    database,
+    password,
   }),
   vector: new PgVector(connectionString),
   threads: {

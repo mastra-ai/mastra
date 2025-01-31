@@ -522,7 +522,7 @@ export class Agent<
       memoryConfig,
     });
 
-    coreMessages = saveMessageResponse.messages as CoreMessage[];
+    coreMessages = saveMessageResponse.messages;
     threadIdToUse = saveMessageResponse.threadId;
     return { coreMessages, threadIdToUse };
   }

@@ -120,7 +120,7 @@ export class PostgresStore extends MastraStorage {
           metadata,
           "createdAt",
           "updatedAt"
-        FROM ${MastraStorage.TABLE_THREADS}
+        FROM "${MastraStorage.TABLE_THREADS}"
         WHERE id = $1`,
         [threadId],
       );
@@ -151,7 +151,7 @@ export class PostgresStore extends MastraStorage {
           metadata,
           "createdAt",
           "updatedAt"
-        FROM ${MastraStorage.TABLE_THREADS}
+        FROM "${MastraStorage.TABLE_THREADS}"
         WHERE "resourceId" = $1`,
         [resourceId],
       );
@@ -171,7 +171,7 @@ export class PostgresStore extends MastraStorage {
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
       await this.db.none(
-        `INSERT INTO ${MastraStorage.TABLE_THREADS} (
+        `INSERT INTO "${MastraStorage.TABLE_THREADS}" (
           id,
           "resourceId",
           title,
@@ -185,7 +185,14 @@ export class PostgresStore extends MastraStorage {
           metadata = EXCLUDED.metadata,
           "createdAt" = EXCLUDED."createdAt",
           "updatedAt" = EXCLUDED."updatedAt"`,
-        [thread.id, thread.resourceId, thread.title, thread.metadata, thread.createdAt, thread.updatedAt],
+        [
+          thread.id,
+          thread.resourceId,
+          thread.title,
+          thread.metadata ? JSON.stringify(thread.metadata) : null,
+          thread.createdAt,
+          thread.updatedAt,
+        ],
       );
 
       return thread;
@@ -218,7 +225,7 @@ export class PostgresStore extends MastraStorage {
       };
 
       const thread = await this.db.one<StorageThreadType>(
-        `UPDATE ${MastraStorage.TABLE_THREADS}
+        `UPDATE "${MastraStorage.TABLE_THREADS}"
         SET title = $1,
             metadata = $2,
             "updatedAt" = $3
@@ -239,14 +246,14 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  async deleteThread({ id }: { id: string }): Promise<void> {
+  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     try {
       await this.db.tx(async t => {
         // First delete all messages associated with this thread
-        await t.none(`DELETE FROM ${MastraStorage.TABLE_MESSAGES} WHERE thread_id = $1`, [id]);
+        await t.none(`DELETE FROM "${MastraStorage.TABLE_MESSAGES}" WHERE thread_id = $1`, [threadId]);
 
         // Then delete the thread
-        await t.none(`DELETE FROM ${MastraStorage.TABLE_THREADS} WHERE id = $1`, [id]);
+        await t.none(`DELETE FROM "${MastraStorage.TABLE_THREADS}" WHERE id = $1`, [threadId]);
       });
     } catch (error) {
       console.error('Error deleting thread:', error);
@@ -266,8 +273,8 @@ export class PostgresStore extends MastraStorage {
           WITH ordered_messages AS (
             SELECT 
               *,
-              ROW_NUMBER() OVER (ORDER BY created_at) as row_num
-            FROM mastra_messages 
+              ROW_NUMBER() OVER (ORDER BY "createdAt") as row_num
+            FROM "${MastraStorage.TABLE_MESSAGES}"
             WHERE thread_id = $1
           )
           SELECT DISTINCT ON (m.id)
@@ -275,12 +282,8 @@ export class PostgresStore extends MastraStorage {
             m.content, 
             m.role, 
             m.type,
-            m.created_at AS "createdAt", 
-            m.thread_id AS "threadId",
-            m.tool_call_ids AS "toolCallIds",
-            m.tool_call_args AS "toolCallArgs",
-            m.tokens,
-            m.tool_call_args_expire_at AS "toolCallArgsExpireAt"
+            m."createdAt", 
+            m.thread_id AS "threadId"
           FROM ordered_messages m
           WHERE m.id = ANY($2)
           OR EXISTS (
@@ -294,7 +297,7 @@ export class PostgresStore extends MastraStorage {
               (m.row_num <= target.row_num + $4 AND m.row_num > target.row_num)
             )
           )
-          ORDER BY m.id, m.created_at
+          ORDER BY m.id, m."createdAt"
           `,
           [
             threadId,
@@ -315,16 +318,12 @@ export class PostgresStore extends MastraStorage {
             content, 
             role, 
             type,
-            created_at AS "createdAt", 
-            thread_id AS "threadId",
-            tool_call_ids AS "toolCallIds",
-            tool_call_args AS "toolCallArgs",
-            tokens,
-            tool_call_args_expire_at AS "toolCallArgsExpireAt"
-        FROM mastra_messages
+            "createdAt", 
+            thread_id AS "threadId"
+        FROM "${MastraStorage.TABLE_MESSAGES}"
         WHERE thread_id = $1
         AND id != ALL($2)
-        ORDER BY created_at DESC
+        ORDER BY "createdAt" DESC
         LIMIT $3
         `,
         [threadId, messages.map(m => m.id), limit],
@@ -354,12 +353,12 @@ export class PostgresStore extends MastraStorage {
       await this.db.tx(async t => {
         for (const message of messages) {
           await t.none(
-            `INSERT INTO ${MastraStorage.TABLE_MESSAGES} (id, thread_id, content, "createdAt", role, type) 
+            `INSERT INTO "${MastraStorage.TABLE_MESSAGES}" (id, thread_id, content, "createdAt", role, type) 
              VALUES ($1, $2, $3, $4, $5, $6)`,
             [
               message.id,
               threadId,
-              JSON.stringify(message),
+              JSON.stringify(message.content),
               message.createdAt || new Date().toISOString(),
               message.role,
               message.type,
@@ -386,7 +385,7 @@ export class PostgresStore extends MastraStorage {
   }): Promise<void> {
     try {
       await this.db.none(
-        `INSERT INTO ${MastraStorage.TABLE_WORKFLOW_SNAPSHOT} (
+        `INSERT INTO "${MastraStorage.TABLE_WORKFLOW_SNAPSHOT}" (
           workflow_name,
           run_id,
           snapshot,

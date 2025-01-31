@@ -5,8 +5,9 @@ import {
   MemoryConfig,
   SharedMemoryConfig,
   StorageThreadType,
+  CoreMessage,
 } from '@mastra/core';
-import { Message as AiMessage } from 'ai';
+import { Message as AiMessage, CoreSystemMessage } from 'ai';
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -21,7 +22,7 @@ export class Memory extends MastraMemory {
     threadId,
     selectBy,
     threadConfig,
-  }: StorageGetMessagesArg): Promise<{ messages: MessageType[]; uiMessages: AiMessage[] }> {
+  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessage[] }> {
     let vectorResults:
       | null
       | {
@@ -59,7 +60,7 @@ export class Memory extends MastraMemory {
     }
 
     // Get raw messages from storage
-    const rawMessages = await this.storage.getMessages({
+    const rawMessages = await this.storage.__getMessages({
       threadId,
       selectBy: {
         ...selectBy,
@@ -78,7 +79,7 @@ export class Memory extends MastraMemory {
 
     // Parse and convert messages
     const messages = this.parseMessages(rawMessages);
-    const uiMessages = this.convertToUIMessages(messages);
+    const uiMessages = this.convertToUIMessages(rawMessages);
 
     return { messages, uiMessages };
   }
@@ -116,24 +117,16 @@ export class Memory extends MastraMemory {
       ? {
           messages: [
             {
-              id: `system-remember-start-${Date.now()}`,
               role: 'system',
               content:
                 "all messages after this one are messages you've remembered until you see a system message telling you otherwise.",
-              type: 'text',
-              threadId,
-              createdAt: new Date(),
-            } satisfies MessageType,
+            } satisfies CoreSystemMessage,
             ...messages.messages,
             {
-              id: `system-remember-end-${Date.now()}`,
               role: 'system',
               content:
                 "messages prior to this are messages you've remembered. Any messages after this are new. Pay attention to dates as you may remember very old or very recent messages.",
-              type: 'text',
-              threadId,
-              createdAt: new Date(),
-            } satisfies MessageType,
+            } satisfies CoreSystemMessage,
           ],
           uiMessages: messages.uiMessages,
         }
@@ -141,15 +134,15 @@ export class Memory extends MastraMemory {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.storage.getThreadById({ threadId });
+    return this.storage.__getThreadById({ threadId });
   }
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    return this.storage.getThreadsByResourceId({ resourceId });
+    return this.storage.__getThreadsByResourceId({ resourceId });
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    return this.storage.saveThread({ thread });
+    return this.storage.__saveThread({ thread });
   }
 
   async updateThread({
@@ -161,7 +154,7 @@ export class Memory extends MastraMemory {
     title: string;
     metadata: Record<string, unknown>;
   }): Promise<StorageThreadType> {
-    return this.storage.updateThread({
+    return this.storage.__updateThread({
       id,
       title,
       metadata,
@@ -183,11 +176,11 @@ export class Memory extends MastraMemory {
         ]);
       }
     }
-    return this.storage.saveMessages({ messages });
+    return this.storage.__saveMessages({ messages });
   }
 
-  async deleteThread(id: string): Promise<void> {
-    await this.storage.deleteThread({ id });
+  async deleteThread(threadId: string): Promise<void> {
+    await this.storage.__deleteThread({ threadId });
 
     // TODO: Also clean up vector storage if it exists
     // if (this.vector) {

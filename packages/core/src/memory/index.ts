@@ -127,7 +127,7 @@ export abstract class MastraMemory extends MastraBase {
     vectorMessageSearch?: string;
     config?: MemoryConfig;
   }): Promise<{
-    messages: MessageType[];
+    messages: CoreMessage[];
     uiMessages: AiMessageType[];
   }>;
 
@@ -135,10 +135,10 @@ export abstract class MastraMemory extends MastraBase {
     return Math.ceil(text.split(' ').length * 1.3);
   }
 
-  protected parseMessages(messages: MessageType[]): MessageType[] {
-    return messages.map(mssg => ({
-      ...mssg,
-      content: typeof mssg.content === 'string' ? JSON.parse((mssg as MessageType).content as string) : mssg.content,
+  protected parseMessages(messages: MessageType[]): CoreMessage[] {
+    return messages.map(msg => ({
+      ...msg,
+      content: typeof msg.content === 'string' ? JSON.parse((msg as MessageType).content as string) : msg.content,
     }));
   }
 
@@ -267,7 +267,7 @@ export abstract class MastraMemory extends MastraBase {
   abstract getMessages({
     threadId,
     selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: MessageType[]; uiMessages: AiMessageType[] }>;
+  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }>;
 
   /**
    * Helper method to create a new thread
