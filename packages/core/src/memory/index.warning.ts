@@ -3,7 +3,7 @@ import { MastraMemory as BaseMemory } from './index';
 export * from './index';
 
 export abstract class MastraMemory extends BaseMemory {
-  constructor() {
+  constructor(_arg?: any) {
     // @ts-ignore
     super({ name: `Deprecated memory` });
 
