@@ -12,6 +12,10 @@ Agents in Mastra have a sophisticated memory system that stores conversation his
 The Mastra memory system is highly configurable and supports multiple storage backends. Here's a basic configuration example:
 
 ```typescript
+import { Memory } from '@mastra/memory';
+import { PostgresStore } from '@mastra/store-pg';
+import { PgVector } from '@mastra/vector-pg';
+
 const memory = new Memory({
   // Required: Storage backend for messages
   storage: new PostgresStore({
@@ -89,6 +93,17 @@ const stream = await agent.stream("Tell me about our previous conversation", {
 
 Mastra currently supports several storage backends:
 
+### LibSQL Storage
+```typescript
+import { MastraStorageLibSql } from '@mastra/core';
+
+const storage = new MastraStorageLibSql({
+  config: {
+    url: 'file:example.db',
+  },
+});
+```
+
 ### PostgreSQL Storage
 ```typescript
 import { PostgresStore } from '@mastra/store-pg';
@@ -99,17 +114,6 @@ const storage = new PostgresStore({
   user: 'postgres',
   database: 'postgres',
   password: 'postgres',
-});
-```
-
-### LibSQL Storage
-```typescript
-import { MastraStorageLibSql } from '@mastra/core';
-
-const storage = new MastraStorageLibSql({
-  config: {
-    url: 'file:example.db',
-  },
 });
 ```
 
@@ -192,6 +196,20 @@ While threads are automatically managed when using agent methods, you can also m
 Here's how to manually work with threads:
 
 ```typescript
+import { Memory } from '@mastra/memory';
+import { PostgresStore } from '@mastra/store-pg';
+
+// Initialize memory
+const memory = new Memory({
+  storage: new PostgresStore({
+    host: 'localhost',
+    port: 5432,
+    user: 'postgres',
+    database: 'postgres',
+    password: 'postgres',
+  })
+});
+
 // Create a new thread
 const thread = await memory.createThread({
   resourceId: "user_123",
