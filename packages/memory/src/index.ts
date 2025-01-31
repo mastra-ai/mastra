@@ -56,6 +56,7 @@ export class Memory extends MastraMemory {
     if (selectBy?.vectorSearchString && this.vector) {
       const { embeddings } = await this.vector.embed(selectBy.vectorSearchString, this.parseEmbeddingOptions());
 
+      await this.vector.createIndex('memory_messages', 1536);
       vectorResults = await this.vector.query('memory_messages', embeddings[0]!, vectorConfig.includeResults, {
         thread_id: threadId,
       });
@@ -165,10 +166,10 @@ export class Memory extends MastraMemory {
 
   async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
     if (this.vector) {
+      await this.vector.createIndex('memory_messages', 1536);
       for (const message of messages) {
         if (typeof message.content !== `string`) continue;
         const { embeddings } = await this.vector.embed(message.content, this.parseEmbeddingOptions());
-        await this.vector.createIndex('memory_messages', 1536);
         await this.vector.upsert('memory_messages', embeddings, [
           {
             text: message.content,
