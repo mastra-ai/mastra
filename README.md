@@ -59,7 +59,7 @@ touch src/index.ts
 Then, add this code to `src/index.ts`:
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 
 async function main() {
   const agent = new Agent({

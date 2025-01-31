@@ -1,4 +1,5 @@
-import { Mastra, MastraStorageLibSql } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import { MastraStorageLibSql } from '@mastra/core/storage';
 import { UpstashKVMemory } from '@mastra/memory/kv-upstash';
 
 import { dane, daneChangeLog, daneCommitMessage, daneIssueLabeler, daneLinkChecker } from './agents/index.js';

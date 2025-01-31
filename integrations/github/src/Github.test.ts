@@ -4,7 +4,7 @@ import {
   beforeAll,
   afterAll, //expect
 } from '@jest/globals';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 
 import { GithubIntegration } from '.';
 

@@ -7,38 +7,37 @@ import * as integrationClient from './client/services.gen';
 import * as zodSchema from './client/zodSchema';
 import { RagieConfig } from './types';
 
-
 export class RagieToolset extends OpenAPIToolset {
-    readonly name = 'RAGIE';
-    readonly logoUrl = RagieLogo;
-    config: RagieConfig;
-    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
-    categories = ['ai'];
-    description = 'Ragie is an AI assistant that helps you find information and answer questions.';
+  readonly name = 'RAGIE';
+  readonly logoUrl = RagieLogo;
+  config: RagieConfig;
+  readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
+  categories = ['ai'];
+  description = 'Ragie is an AI assistant that helps you find information and answer questions.';
 
-    constructor({ config }: { config: RagieConfig }) {
-        super();
+  constructor({ config }: { config: RagieConfig }) {
+    super();
 
-        this.config = config;
-        this.tools = this._generateIntegrationTools<typeof this.tools>();
-    }
+    this.config = config;
+    this.tools = this._generateIntegrationTools<typeof this.tools>();
+  }
 
-    protected get toolSchemas() {
-        return zodSchema;
-    }
+  protected get toolSchemas() {
+    return zodSchema;
+  }
 
-    protected get toolDocumentations() {
-        return comments;
-    }
+  protected get toolDocumentations() {
+    return comments;
+  }
 
-    protected get baseClient() {
-        integrationClient.client.setConfig({
-            baseUrl: `https://api.ragie.ai`,
-        });
-        return integrationClient;
-    }
+  protected get baseClient() {
+    integrationClient.client.setConfig({
+      baseUrl: `https://api.ragie.ai`,
+    });
+    return integrationClient;
+  }
 
-    getApiClient = async () => {
-        return integrationClient;
-    };
+  getApiClient = async () => {
+    return integrationClient;
+  };
 }

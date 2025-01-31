@@ -1,13 +1,13 @@
-import { Integration, Step, Workflow } from '@mastra/core';
-import { MDocument } from '@mastra/rag'
+import { Integration } from '@mastra/core/integration';
+import { Step, Workflow } from '@mastra/core/workflows';
+import { MDocument } from '@mastra/rag';
+import { z } from 'zod';
+
 import * as integrationClient from './client/sdk.gen';
 // @ts-ignore
 // import FirecrawlLogo from './assets/firecrawl.png';
 import { FirecrawlToolset } from './toolset';
 import { FirecrawlConfig } from './types';
-import { z } from 'zod';
-
-
 
 export class FirecrawlIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'FIRECRAWL';
@@ -24,7 +24,7 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
 
     this.openapi = new FirecrawlToolset({
       config: this.config,
-    })
+    });
 
     const crawlAndSyncWorkflow = new Workflow({
       name: 'Crawl and Sync',
@@ -33,7 +33,7 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
         limit: z.number().default(3),
         pathRegex: z.string().nullable(),
       }),
-    })
+    });
 
     const syncStep = new Step({
       id: 'FIRECRAWL:CRAWL_AND_SYNC',
@@ -41,7 +41,7 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
       description: 'Crawl and Sync',
       execute: async ({ context, mastra }) => {
         const triggerData = context.machineContext?.triggerData;
-        console.log("Starting crawl", triggerData?.url);
+        console.log('Starting crawl', triggerData?.url);
 
         const entityType = `CRAWL_${triggerData?.url}`;
 
@@ -54,16 +54,9 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
               limit: triggerData?.limit || 3,
               includePaths: triggerData?.pathRegex ? [triggerData.pathRegex] : [],
               scrapeOptions: {
-                formats: ["markdown"],
-                includeTags: ["main", "body"],
-                excludeTags: [
-                  "img",
-                  "footer",
-                  "nav",
-                  "header",
-                  "#navbar",
-                  ".table-of-contents-content",
-                ],
+                formats: ['markdown'],
+                includeTags: ['main', 'body'],
+                excludeTags: ['img', 'footer', 'nav', 'header', '#navbar', '.table-of-contents-content'],
                 onlyMainContent: true,
               },
             },
@@ -82,8 +75,8 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
             },
           });
 
-          while (crawl.data?.status === "scraping") {
-            await new Promise((resolve) => setTimeout(resolve, 5000));
+          while (crawl.data?.status === 'scraping') {
+            await new Promise(resolve => setTimeout(resolve, 5000));
 
             crawl = await client.getCrawlStatus({
               path: {
@@ -92,20 +85,19 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
             });
           }
 
-
-          const crawlData = (crawl?.data?.data || []).map((item) => ({
-            markdown: item.markdown || "",
+          const crawlData = (crawl?.data?.data || []).map(item => ({
+            markdown: item.markdown || '',
             metadata: {
-              sourceURL: item?.metadata?.sourceURL || "",
+              sourceURL: item?.metadata?.sourceURL || '',
               ...item.metadata,
             },
-          }))
+          }));
 
           if (!crawlData) {
             return {
               success: false,
               crawlData: [],
-              entityType: "",
+              entityType: '',
             };
           }
 
@@ -114,7 +106,7 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
               const doc = MDocument.fromMarkdown(markdown, metadata);
 
               await doc.chunk({
-                strategy: "markdown",
+                strategy: 'markdown',
                 maxSize: 8190,
               });
 
@@ -126,12 +118,12 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
                   data: { markdown: c.text },
                 };
               });
-            })
+            }),
           );
 
           await mastra?.engine?.syncRecords({
-            connectionId: "SYSTEM",
-            records: recordsToPersist.flatMap((r) => r),
+            connectionId: 'SYSTEM',
+            records: recordsToPersist.flatMap(r => r),
             name: entityType,
           });
 
@@ -145,24 +137,24 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
           return {
             success: false,
             crawlData: [],
-            entityType: "",
+            entityType: '',
           };
         }
-      }
-    })
+      },
+    });
 
     crawlAndSyncWorkflow.step(syncStep).commit();
 
-    this.registerWorkflow('FIRECRAWL:CRAWL_AND_SYNC', crawlAndSyncWorkflow)
+    this.registerWorkflow('FIRECRAWL:CRAWL_AND_SYNC', crawlAndSyncWorkflow);
 
     const crawlAndSyncOnceWorkflow = new Workflow({
-      name: "Crawl and Sync Once",
+      name: 'Crawl and Sync Once',
       triggerSchema: z.object({
-        url: z.string().describe("The URL of the website to crawl"),
+        url: z.string().describe('The URL of the website to crawl'),
         limit: z.number().default(3),
-        pathRegex: z.string().optional().describe("The regex to match the paths"),
+        pathRegex: z.string().optional().describe('The regex to match the paths'),
       }),
-    })
+    });
 
     const syncOnceStep = new Step({
       id: 'FIRECRAWL:CRAWL_AND_SYNC_ONCE',
@@ -173,12 +165,12 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
         const entityType = `CRAWL_${triggerData?.url}`;
 
         const existingCrawl = await mastra?.engine?.getRecordsByEntityName({
-          connectionId: "SYSTEM",
+          connectionId: 'SYSTEM',
           name: entityType,
         });
 
         if (!existingCrawl || existingCrawl?.length > 0) {
-          console.log("Crawl already exists", triggerData?.url);
+          console.log('Crawl already exists', triggerData?.url);
           return {
             success: true,
             entityType,
@@ -186,7 +178,7 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
           };
         }
 
-        console.log("Starting crawl", triggerData?.url);
+        console.log('Starting crawl', triggerData?.url);
         try {
           const client = await this.openapi.getApiClient();
 
@@ -196,16 +188,9 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
               limit: triggerData?.limit || 3,
               includePaths: triggerData?.pathRegex ? [triggerData.pathRegex] : [],
               scrapeOptions: {
-                formats: ["markdown"],
-                includeTags: ["main", "body"],
-                excludeTags: [
-                  "img",
-                  "footer",
-                  "nav",
-                  "header",
-                  "#navbar",
-                  ".table-of-contents-content",
-                ],
+                formats: ['markdown'],
+                includeTags: ['main', 'body'],
+                excludeTags: ['img', 'footer', 'nav', 'header', '#navbar', '.table-of-contents-content'],
                 onlyMainContent: true,
               },
             },
@@ -224,8 +209,8 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
             },
           });
 
-          while (crawl.data?.status === "scraping") {
-            await new Promise((resolve) => setTimeout(resolve, 5000));
+          while (crawl.data?.status === 'scraping') {
+            await new Promise(resolve => setTimeout(resolve, 5000));
 
             crawl = await client.getCrawlStatus({
               path: {
@@ -234,20 +219,19 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
             });
           }
 
-
-          const crawlData = (crawl?.data?.data || []).map((item) => ({
-            markdown: item.markdown || "",
+          const crawlData = (crawl?.data?.data || []).map(item => ({
+            markdown: item.markdown || '',
             metadata: {
-              sourceURL: item?.metadata?.sourceURL || "",
+              sourceURL: item?.metadata?.sourceURL || '',
               ...item.metadata,
             },
-          }))
+          }));
 
           if (!crawlData) {
             return {
               success: false,
               crawlData: [],
-              entityType: "",
+              entityType: '',
             };
           }
 
@@ -256,7 +240,7 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
               const doc = MDocument.fromMarkdown(markdown, metadata);
 
               await doc.chunk({
-                strategy: "markdown",
+                strategy: 'markdown',
                 maxSize: 8190,
               });
 
@@ -268,12 +252,12 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
                   data: { markdown: c.text },
                 };
               });
-            })
+            }),
           );
 
           await mastra?.engine?.syncRecords({
-            connectionId: "SYSTEM",
-            records: recordsToPersist.flatMap((r) => r),
+            connectionId: 'SYSTEM',
+            records: recordsToPersist.flatMap(r => r),
             name: entityType,
           });
 
@@ -287,20 +271,20 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
           return {
             success: false,
             crawlData: [],
-            entityType: "",
+            entityType: '',
           };
         }
-      }
-    })
+      },
+    });
 
     crawlAndSyncOnceWorkflow.step(syncOnceStep).commit();
 
-    this.registerWorkflow('FIRECRAWL:CRAWL_AND_SYNC_ONCE', crawlAndSyncOnceWorkflow)
+    this.registerWorkflow('FIRECRAWL:CRAWL_AND_SYNC_ONCE', crawlAndSyncOnceWorkflow);
   }
 
   getStaticTools() {
     return {
-      ...this.openapi.tools
+      ...this.openapi.tools,
     };
   }
 
@@ -308,4 +292,3 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
     return this.openapi.getApiClient();
   }
 }
-

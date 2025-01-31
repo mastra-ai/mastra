@@ -1,5 +1,5 @@
 import { input } from '@inquirer/prompts';
-import { Step, Workflow, getStepResult } from '@mastra/core';
+import { Step, Workflow, getStepResult } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 export const telephoneGameWorkflow = new Workflow({
