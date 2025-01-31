@@ -219,62 +219,47 @@ export class MastraStorageLibSql extends MastraStorage {
 
       // If we have specific messages to select
       if (selectBy?.include?.length) {
-        for (const include of selectBy.include) {
-          // First verify the message exists and get its timestamp
-          const messageCheck = await this.client.execute({
-            sql: `SELECT id, "createdAt" FROM "${MastraStorage.TABLE_MESSAGES}" WHERE id = ? AND thread_id = ?`,
-            args: [include.id, threadId],
-          });
+        const includeIds = selectBy.include.map(i => i.id);
+        const maxPrev = Math.max(...selectBy.include.map(i => i.withPreviousMessages || 0));
+        const maxNext = Math.max(...selectBy.include.map(i => i.withNextMessages || 0));
 
-          if (!messageCheck.rows?.length) continue;
-
-          const messageTime = messageCheck.rows[0]!.createdAt;
-
-          // Get messages around the specified ID
-          const beforeAfterResult = await this.client.execute({
-            sql: `
-              SELECT 
-                id, 
-                content, 
-                role, 
-                type,
-                "createdAt", 
-                thread_id
+        // Get messages around all specified IDs in one query
+        const includeResult = await this.client.execute({
+          sql: `
+            WITH target_messages AS (
+              SELECT id, "createdAt"
               FROM "${MastraStorage.TABLE_MESSAGES}"
-              WHERE thread_id = ?
-                AND (
-                  ("createdAt" <= ? AND "createdAt" >= datetime(?, '-' || ? || ' seconds'))
-                  OR
-                  ("createdAt" >= ? AND "createdAt" <= datetime(?, '+' || ? || ' seconds'))
-                )
-              ORDER BY "createdAt" ASC
-            `,
-            args: [
-              threadId,
-              messageTime!,
-              messageTime!,
-              include.withPreviousMessages || 0,
-              messageTime!,
-              messageTime!,
-              include.withNextMessages || 0,
-            ],
-          });
+              WHERE id IN (${includeIds.map(() => '?').join(', ')})
+              AND thread_id = ?
+            )
+            SELECT DISTINCT m.id, m.content, m.role, m.type, m."createdAt", m.thread_id
+            FROM "${MastraStorage.TABLE_MESSAGES}" m
+            CROSS JOIN target_messages t
+            WHERE m.thread_id = ?
+            AND (
+              (m."createdAt" <= t."createdAt" AND m."createdAt" >= datetime(t."createdAt", '-' || ? || ' seconds'))
+              OR
+              (m."createdAt" >= t."createdAt" AND m."createdAt" <= datetime(t."createdAt", '+' || ? || ' seconds'))
+            )
+            ORDER BY m."createdAt" ASC
+          `,
+          args: [...includeIds, threadId, threadId, maxPrev, maxNext],
+        });
 
-          if (beforeAfterResult.rows) {
-            messages.push(
-              ...beforeAfterResult.rows.map(
-                row =>
-                  ({
-                    id: row.id,
-                    content: row.content,
-                    role: row.role,
-                    type: row.type,
-                    createdAt: new Date(row.createdAt as string),
-                    threadId: row.thread_id,
-                  }) as MessageType,
-              ),
-            );
-          }
+        if (includeResult.rows) {
+          messages.push(
+            ...includeResult.rows.map(
+              row =>
+                ({
+                  id: row.id,
+                  content: row.content,
+                  role: row.role,
+                  type: row.type,
+                  createdAt: new Date(row.createdAt as string),
+                  threadId: row.thread_id,
+                }) as MessageType,
+            ),
+          );
         }
       }
 
