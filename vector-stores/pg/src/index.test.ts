@@ -919,6 +919,96 @@ describe('PgVector', () => {
       });
       expect(results).toHaveLength(1); // Exact match, not regex
     });
+
+    it('should handle $not with $and', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        $not: [
+          {
+            $and: [{ category: 'electronics' }, { price: { $gt: 50 } }],
+          },
+        ],
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.category !== 'electronics' || result.metadata?.price <= 50).toBe(true);
+      });
+    });
+
+    it('should handle $nor with $or', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        $nor: [{ $or: [{ category: 'electronics' }, { category: 'books' }] }, { price: { $gt: 75 } }],
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(['electronics', 'books']).not.toContain(result.metadata?.category);
+        expect(result.metadata?.price).toBeLessThanOrEqual(75);
+      });
+    });
+
+    it('should handle nested $and with $or and $not', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        $and: [{ $or: [{ category: 'electronics' }, { category: 'books' }] }, { $not: [{ price: { $lt: 50 } }] }],
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(['electronics', 'books']).toContain(result.metadata?.category);
+        expect(result.metadata?.price).toBeGreaterThanOrEqual(50);
+      });
+    });
+
+    it('should handle $or with multiple $not conditions', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        $or: [{ $not: [{ category: 'electronics' }] }, { $not: [{ price: { $gt: 50 } }] }],
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.category !== 'electronics' || result.metadata?.price <= 50).toBe(true);
+      });
+    });
+
+    it('should handle $nor with nested $and conditions', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        $nor: [
+          { $and: [{ category: 'electronics' }, { active: true }] },
+          { $and: [{ category: 'books' }, { price: { $lt: 30 } }] },
+        ],
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        const notElectronicsActive = !(result.metadata?.category === 'electronics' && result.metadata?.active === true);
+        const notBooksLowPrice = !(result.metadata?.category === 'books' && result.metadata?.price < 30);
+        expect(notElectronicsActive && notBooksLowPrice).toBe(true);
+      });
+    });
+
+    it('should handle deeply nested logical operators', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        $and: [
+          {
+            $or: [{ category: 'electronics' }, { $and: [{ category: 'books' }, { price: { $lt: 30 } }] }],
+          },
+          {
+            $not: [
+              {
+                $or: [{ active: false }, { price: { $gt: 100 } }],
+              },
+            ],
+          },
+        ],
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        // First condition: electronics OR (books AND price < 30)
+        const firstCondition =
+          result.metadata?.category === 'electronics' ||
+          (result.metadata?.category === 'books' && result.metadata?.price < 30);
+
+        // Second condition: NOT (active = false OR price > 100)
+        const secondCondition = result.metadata?.active !== false && result.metadata?.price <= 100;
+
+        expect(firstCondition && secondCondition).toBe(true);
+      });
+    });
   });
 
   describe('listIndexes', () => {

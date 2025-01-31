@@ -1,298 +1,97 @@
-import { InValue } from '@libsql/client';
+import { BaseFilterTranslator, FieldCondition, Filter } from '@mastra/core';
 
-export type OperatorType =
-  | 'eq'
-  | 'ne'
-  | 'gt'
-  | 'gte'
-  | 'lt'
-  | 'lte'
-  | 'like'
-  | 'ilike'
-  | 'in'
-  | 'nin'
-  | 'contains'
-  | 'exists'
-  | '$and'
-  | '$or';
-
-// Type guard to check if an operator is valid
-export function isValidOperator(operator: string): operator is OperatorType {
-  return operator in FILTER_OPERATORS;
-}
-
-type FilterOperator = {
-  sql: string;
-  needsValue: boolean;
-  transformValue?: (value: any) => any;
-};
-
-type FilterOperatorMap = {
-  [K in OperatorType]: (key: string) => FilterOperator;
-};
-
-// Helper functions to create operators
-const createBasicOperator = (symbol: string) => {
-  return (key: string): FilterOperator => ({
-    sql: `json_extract(metadata, '$."${handleKey(key)}"') ${symbol} ?`,
-    needsValue: true,
-    transformValue: (value: any) => {
-      if (Array.isArray(value)) {
-        return JSON.stringify(value);
-      }
-      return value;
-    },
-  });
-};
-
-const createNumericOperator = (symbol: string) => {
-  return (key: string): FilterOperator => ({
-    sql: `CAST(json_extract(metadata, '$."${handleKey(key)}"') AS NUMERIC) ${symbol} ?`,
-    needsValue: true,
-  });
-};
-
-const createLikeOperator = (caseSensitive: boolean = true) => {
-  return (key: string): FilterOperator => ({
-    sql: caseSensitive
-      ? `json_extract(metadata, '$."${handleKey(key)}"') LIKE ?`
-      : `UPPER(json_extract(metadata, '$."${handleKey(key)}"')) LIKE UPPER(?)`,
-    needsValue: true,
-    transformValue: (value: string) => `%${value}%`,
-  });
-};
-
-// Define all filter operators
-export const FILTER_OPERATORS: FilterOperatorMap = {
-  // Equal
-  eq: createBasicOperator('='),
-  // Not equal
-  ne: createBasicOperator('!='),
-
-  // Greater than
-  gt: createNumericOperator('>'),
-  // Greater than or equal
-  gte: createNumericOperator('>='),
-  // Less than
-  lt: createNumericOperator('<'),
-  // Less than or equal
-  lte: createNumericOperator('<='),
-
-  // Pattern matching (LIKE)
-  like: createLikeOperator(true),
-  // Case-insensitive pattern matching (ILIKE)
-  ilike: createLikeOperator(false),
-  // Contains array/object/value
-  contains: (key: string): FilterOperator => ({
-    sql: `json_extract(metadata, '$."${handleKey(key)}"') = ?`,
-    needsValue: true,
-    transformValue: (value: any) => {
-      // Array containment
-      if (Array.isArray(value)) {
-        return {
-          sql: `(
-            SELECT json_valid(json_extract(metadata, '$."${handleKey(key)}"'))
-            AND json_type(json_extract(metadata, '$."${handleKey(key)}"')) = 'array'
-            AND EXISTS (
-              SELECT 1 
-              FROM json_each(json_extract(metadata, '$."${handleKey(key)}"')) as m
-              WHERE m.value IN (SELECT value FROM json_each(?))
-            )
-          )`,
-          values: [JSON.stringify(value)],
-        };
-      }
-
-      // Nested object traversal
-      if (value && typeof value === 'object') {
-        const paths: string[] = [];
-        const values: any[] = [];
-
-        function traverse(obj: any, path: string[] = []) {
-          for (const [k, v] of Object.entries(obj)) {
-            const currentPath = [...path, k];
-            if (v && typeof v === 'object' && !Array.isArray(v)) {
-              traverse(v, currentPath);
-            } else {
-              paths.push(currentPath.join('.'));
-              values.push(v);
-            }
-          }
-        }
-
-        traverse(value);
-        return {
-          sql: `(${paths.map(path => `json_extract(metadata, '$."${handleKey(key)}"."${path}"') = ?`).join(' AND ')})`,
-          values,
-        };
-      }
-
-      return value;
-    },
-  }),
-  // IN array of values
-  in: (key: string): FilterOperator => ({
-    sql: `json_extract(metadata, '$."${handleKey(key)}"') IN (?)`,
-    needsValue: true,
-    transformValue: (value: any) => {
-      if (Array.isArray(value)) {
-        return {
-          sql: `json_extract(metadata, '$."${handleKey(key)}"') IN (${Array(value.length).fill('?').join(',')})`,
-          values: value,
-        };
-      }
-      return value;
-    },
-  }),
-  // NOT IN array of values
-  nin: (key: string): FilterOperator => ({
-    sql: `json_extract(metadata, '$."${handleKey(key)}"') NOT IN (?)`,
-    needsValue: true,
-    transformValue: (value: any) => {
-      if (Array.isArray(value)) {
-        return {
-          sql: `json_extract(metadata, '$."${handleKey(key)}"') NOT IN (${Array(value.length).fill('?').join(',')})`,
-          values: value,
-        };
-      }
-      return value;
-    },
-  }),
-  // Key exists
-  exists: (key: string): FilterOperator => ({
-    sql: `json_extract(metadata, '$."${handleKey(key)}"') IS NOT NULL`,
-    needsValue: false,
-  }),
-  // Logical AND
-  $and: (key: string): FilterOperator => ({
-    sql: `(${key})`,
-    needsValue: false,
-  }),
-  // Logical OR
-  $or: (key: string): FilterOperator => ({
-    sql: `(${key})`,
-    needsValue: false,
-  }),
-};
-
-type FilterCondition = {
-  operator: OperatorType;
-  value?: any;
-};
-
-export type Filter = Record<string, FilterCondition | any>;
-
-export interface FilterResult {
-  sql: string;
-  values: InValue[];
-}
-
-export const handleKey = (key: string) => {
-  return key.replace(/\./g, '"."');
-};
-
-export function buildFilterQuery(filter: Filter | undefined): FilterResult {
-  if (!filter) {
-    return { sql: '', values: [] };
+export class LibSQLFilterTranslator extends BaseFilterTranslator {
+  protected isLibSQLOperator(key: string): boolean {
+    return key === '$contains';
   }
 
-  const values: InValue[] = [];
-  const conditions = Object.entries(filter)
-    .map(([key, value]) => {
-      const condition = buildCondition(key, value);
-      values.push(...condition.values);
-      return condition.sql;
-    })
-    .join(' AND ');
-
-  return {
-    sql: conditions ? `WHERE ${conditions}` : '',
-    values,
-  };
-}
-
-function buildCondition(key: string, value: any): FilterResult {
-  // Handle logical operators ($and/$or)
-  if (key === '$and' || key === '$or') {
-    return handleLogicalOperator(key, value);
+  protected override isValidOperator(key: string) {
+    return super.isValidOperator(key) || this.isLibSQLOperator(key);
   }
 
-  // If condition is not a FilterCondition object, assume it's an equality check
-  if (!value || typeof value !== 'object') {
-    return handleEqualityOperator(key, value);
+  translate(filter: Filter): Filter {
+    if (this.isEmpty(filter)) {
+      return filter;
+    }
+    this.validateFilter(filter);
+    return this.translateNode(filter);
   }
 
-  // Handle operator conditions
-  return handleOperator(key, value);
-}
+  private translateNode(node: Filter | FieldCondition, currentPath: string = ''): any {
+    // Helper to wrap result with path if needed
+    const withPath = (result: any) => (currentPath ? { [currentPath]: result } : result);
 
-function handleLogicalOperator(key: '$and' | '$or', value: Filter[]): FilterResult {
-  if (!value || value.length === 0) {
-    return { sql: key === '$and' ? 'true' : 'false', values: [] };
-  }
-
-  const values: InValue[] = [];
-  const joinOperator = key === '$or' ? 'OR' : 'AND';
-  const conditions = value.map((f: Filter) => {
-    // Check if the first key is a logical operator for nested conditions
-    const [firstKey, firstValue] = Object.entries(f)[0] || [];
-    if (firstKey === '$and' || firstKey === '$or') {
-      const result = buildCondition(firstKey, firstValue);
-      values.push(...result.values);
-      return result.sql;
+    // Handle primitives
+    if (this.isPrimitive(node)) {
+      return withPath({ $eq: this.normalizeComparisonValue(node) });
     }
 
-    const subConditions = Object.entries(f).map(([k, v]) => {
-      const result = buildCondition(k, v);
-      values.push(...result.values);
-      return result.sql;
-    });
+    // Handle arrays
+    if (Array.isArray(node)) {
+      return withPath({ $in: this.normalizeArrayValues(node) });
+    }
 
-    return subConditions.join(` ${joinOperator} `);
-  });
+    // Handle regex
+    if (node instanceof RegExp) {
+      return withPath(this.translateRegexPattern(node.source, node.flags));
+    }
 
-  const operatorFn = FILTER_OPERATORS[key];
-  return {
-    sql: operatorFn(conditions.join(` ${joinOperator} `)).sql,
-    values,
-  };
-}
+    const entries = Object.entries(node as Record<string, any>);
+    const result: Record<string, any> = {};
 
-function handleEqualityOperator(key: string, value: any): FilterResult {
-  return {
-    sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}"') = ?`,
-    values: [value],
-  };
-}
+    if ('$options' in node && !('$regex' in node)) {
+      throw new Error('$options is not valid without $regex');
+    }
 
-function handleOperator(key: string, value: any): FilterResult {
-  const [[operator, operatorValue] = []] = Object.entries(value);
-  if (!operator || value === undefined) {
-    throw new Error(`Invalid operator or value for key: ${key}`);
+    // Handle special regex object format
+    if ('$regex' in node) {
+      const options = (node as any).$options || '';
+      return withPath(this.translateRegexPattern(node.$regex, options));
+    }
+
+    // Process remaining entries
+    for (const [key, value] of entries) {
+      // Skip options as they're handled with $regex
+      if (key === '$options') continue;
+
+      const newPath = currentPath ? `${currentPath}.${key}` : key;
+
+      if (this.isLogicalOperator(key)) {
+        result[key] = this.translateLogicalOperator(value);
+      } else if (this.isOperator(key)) {
+        if (this.isArrayOperator(key) && !Array.isArray(value)) {
+          result[key] = [value];
+        } else {
+          result[key] = value;
+        }
+      } else if (typeof value === 'object' && value !== null) {
+        // Handle nested objects
+        const hasOperators = Object.keys(value).some(k => this.isOperator(k));
+        if (hasOperators) {
+          result[newPath] = this.translateNode(value);
+        } else {
+          Object.assign(result, this.translateNode(value, newPath));
+        }
+      } else {
+        result[newPath] = this.translateNode(value);
+      }
+    }
+
+    return result;
   }
-  if (!isValidOperator(operator)) {
-    throw new Error(`Unsupported operator: ${operator}`);
+
+  private translateLogicalOperator(value: Filter[]): Filter[] {
+    return value.map(filter => this.translateNode(filter));
   }
 
-  const operatorFn = FILTER_OPERATORS[operator];
-  const operatorResult = operatorFn(key);
+  private translateRegexPattern(pattern: string, options: string = ''): any {
+    if (!options) return { $regex: pattern };
 
-  if (!operatorResult.needsValue) {
-    return { sql: operatorResult.sql, values: [] };
+    const flags = options
+      .split('')
+      .filter(f => 'imsux'.includes(f))
+      .join('');
+
+    return { $regex: flags ? `(?${flags})${pattern}` : pattern };
   }
-
-  const transformed = operatorResult.transformValue ? operatorResult.transformValue(operatorValue) : operatorValue;
-
-  // Handle case where transformValue returns { sql, values }
-  if (transformed && typeof transformed === 'object' && 'sql' in transformed) {
-    return {
-      sql: transformed.sql,
-      values: transformed.values,
-    };
-  }
-
-  return {
-    sql: operatorResult.sql,
-    values: [transformed],
-  };
 }
