@@ -149,7 +149,22 @@ describe('VectorizeFilterTranslator', () => {
     });
   });
 
-  describe('handle invalid conditions', () => {
+  describe('validate operators', () => {
+    it('ensure all operator filters are supported', () => {
+      const supportedFilters = [
+        { field: { $eq: 'value' } },
+        { field: { $ne: 'value' } },
+        { field: { $gt: 'value' } },
+        { field: { $gte: 'value' } },
+        { field: { $lt: 'value' } },
+        { field: { $lte: 'value' } },
+        { field: { $in: ['value'] } },
+        { field: { $nin: ['value'] } },
+      ];
+      supportedFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).not.toThrow();
+      });
+    });
     it('throws error for unsupported operators', () => {
       const unsupportedFilters = [
         { field: { $regex: 'pattern' } },
@@ -161,6 +176,7 @@ describe('VectorizeFilterTranslator', () => {
         { field: { $and: [{ $eq: 'value' }] } },
         { field: { $or: [{ $eq: 'value' }] } },
         { field: { $all: [{ $eq: 'value' }] } },
+        { field: { $contains: 'value' } },
       ];
 
       unsupportedFilters.forEach(filter => {

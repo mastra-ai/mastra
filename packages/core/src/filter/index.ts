@@ -216,6 +216,7 @@ export {
   type ComparisonOperator,
   type LogicalOperator,
   type ArrayOperator,
+  type RegexOperator,
   type ElementOperator,
   type Filter,
   type FieldCondition,

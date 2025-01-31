@@ -272,14 +272,22 @@ describe('AstraFilterTranslator', () => {
         { field: { $nin: ['value'] } },
         { field: { $regex: 'value' } },
         { field: { $exists: true } },
+        { field: { $and: [{ $eq: 'value' }] } },
         { field: { $nor: [{ $eq: 'value' }] } },
         { field: { $or: [{ $eq: 'value' }] } },
+        { field: { $not: [{ $eq: 'value' }] } },
         { field: { $all: [{ $eq: 'value' }] } },
         { field: { $elemMatch: { $gt: 5 } } },
       ];
       supportedFilters.forEach(filter => {
-        console.log('filter', filter);
         expect(() => translator.translate(filter)).not.toThrow();
+      });
+    });
+
+    it('throws error for unsupported operators', () => {
+      const unsupportedFilters = [{ field: { $contains: 'value' } }];
+      unsupportedFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).toThrow(/Unsupported operator/);
       });
     });
   });

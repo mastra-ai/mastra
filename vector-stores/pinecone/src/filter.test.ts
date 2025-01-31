@@ -190,10 +190,28 @@ describe('PineconeFilterTranslator', () => {
     });
   });
 
-  describe('handle invalid conditions', () => {
+  describe('validate operators', () => {
+    it('ensure all operator filters are supported', () => {
+      const supportedFilters = [
+        { field: { $eq: 'value' } },
+        { field: { $ne: 'value' } },
+        { field: { $gt: 'value' } },
+        { field: { $gte: 'value' } },
+        { field: { $lt: 'value' } },
+        { field: { $lte: 'value' } },
+        { field: { $in: ['value'] } },
+        { field: { $and: [{ $eq: 'value' }] } },
+        { field: { $or: [{ $eq: 'value' }] } },
+        { field: { $all: [{ $eq: 'value' }] } },
+      ];
+      supportedFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).not.toThrow();
+      });
+    });
     it('throws error for unsupported operators', () => {
       const unsupportedFilters = [
         { field: { $regex: 'pattern' } },
+        { field: { $contains: 'value' } },
         { field: { $exists: true } },
         { field: { $elemMatch: { $gt: 5 } } },
         { field: { $nor: [{ $eq: 'value' }] } },
@@ -206,7 +224,9 @@ describe('PineconeFilterTranslator', () => {
         expect(() => translator.translate(filter)).toThrow(/Unsupported operator/);
       });
     });
+  });
 
+  describe('handle invalid conditions', () => {
     it('throws error for empty $all array', () => {
       expect(() =>
         translator.translate({

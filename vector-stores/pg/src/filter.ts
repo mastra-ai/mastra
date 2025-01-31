@@ -1,6 +1,14 @@
-import { BaseFilterTranslator, FieldCondition, Filter, LogicalOperator } from '@mastra/core';
+import { BaseFilterTranslator, FieldCondition, Filter } from '@mastra/core';
 
 export class PGFilterTranslator extends BaseFilterTranslator {
+  protected isPGOperator(key: string): boolean {
+    return key === '$contains';
+  }
+
+  protected override isValidOperator(key: string) {
+    return super.isValidOperator(key) || this.isPGOperator(key);
+  }
+
   translate(filter: Filter): Filter {
     if (this.isEmpty(filter)) {
       return filter;
@@ -10,31 +18,60 @@ export class PGFilterTranslator extends BaseFilterTranslator {
   }
 
   private translateNode(node: Filter | FieldCondition, currentPath: string = ''): any {
+    // Helper to wrap result with path if needed
+    const withPath = (result: any) => (currentPath ? { [currentPath]: result } : result);
+
+    // Handle primitives
     if (this.isPrimitive(node)) {
-      return { $eq: this.normalizeComparisonValue(node) };
+      return withPath({ $eq: this.normalizeComparisonValue(node) });
     }
+
+    // Handle arrays
     if (Array.isArray(node)) {
-      return { $in: this.normalizeArrayValues(node) };
+      return withPath({ $in: this.normalizeArrayValues(node) });
+    }
+
+    // Handle regex
+    if (node instanceof RegExp) {
+      return withPath(this.translateRegexPattern(node.source, node.flags));
     }
 
     const entries = Object.entries(node as Record<string, any>);
     const result: Record<string, any> = {};
 
+    if ('$options' in node && !('$regex' in node)) {
+      throw new Error('$options is not valid without $regex');
+    }
+
+    // Handle special regex object format
+    if ('$regex' in node) {
+      const options = (node as any).$options || '';
+      return withPath(this.translateRegexPattern(node.$regex, options));
+    }
+
+    // Process remaining entries
     for (const [key, value] of entries) {
+      // Skip options as they're handled with $regex
+      if (key === '$options') continue;
+
       const newPath = currentPath ? `${currentPath}.${key}` : key;
 
-      if (this.isOperator(key)) {
-        if (this.isLogicalOperator(key)) {
-          result[key] = this.translateLogicalOperator(value);
+      if (this.isLogicalOperator(key)) {
+        result[key] = this.translateLogicalOperator(value);
+      } else if (this.isOperator(key)) {
+        if (this.isArrayOperator(key) && !Array.isArray(value)) {
+          result[key] = [value];
         } else {
-          const { operator, value: translatedValue } = this.translateOperator(key, value);
-          result[operator] = translatedValue;
+          result[key] = value;
         }
-        continue;
-      }
-
-      if (typeof value === 'object' && value !== null) {
-        result[newPath] = this.translateNode(value);
+      } else if (typeof value === 'object' && value !== null) {
+        // Handle nested objects
+        const hasOperators = Object.keys(value).some(k => this.isOperator(k));
+        if (hasOperators) {
+          result[newPath] = this.translateNode(value);
+        } else {
+          Object.assign(result, this.translateNode(value, newPath));
+        }
       } else {
         result[newPath] = this.translateNode(value);
       }
@@ -44,21 +81,16 @@ export class PGFilterTranslator extends BaseFilterTranslator {
   }
 
   private translateLogicalOperator(value: Filter[]): Filter[] {
-    if (!value || value.length === 0) {
-      return [];
-    }
     return value.map(filter => this.translateNode(filter));
   }
 
-  private translateOperator(operator: string, value: any): any {
-    if (operator === '$regex') {
-      const pattern = typeof value === 'object' ? value.pattern : value;
-      const options = typeof value === 'object' ? value.options : '';
-      return {
-        operator: options?.includes('i') ? '$ilike' : '$like',
-        value: `%${pattern}%`,
-      };
-    }
-    return { operator, value };
+  private translateRegexPattern(pattern: string, options: string = ''): any {
+    let pgFlags = '';
+    if (options.includes('i')) pgFlags += '(?i)';
+    if (options.includes('m')) pgFlags += '(?m)';
+    if (options.includes('s')) pgFlags += '(?s)';
+    if (options.includes('x')) pgFlags += '(?x)';
+
+    return { $regex: pgFlags + pattern };
   }
 }
