@@ -38,17 +38,19 @@ export class Memory extends MastraMemory {
       threadConfig,
     });
 
+    const config = this.getMergedThreadConfig(threadConfig || {});
+
     const vectorConfig =
-      typeof threadConfig?.injectVectorHistorySearch === `boolean`
+      typeof config?.injectVectorHistorySearch === `boolean`
         ? {
             includeResults: 2,
             includePrevious: 2,
             includeNext: 2,
           }
         : {
-            includeResults: threadConfig?.injectVectorHistorySearch?.includeResults || 2,
-            includePrevious: threadConfig?.injectVectorHistorySearch?.includePrevious || 2,
-            includeNext: threadConfig?.injectVectorHistorySearch?.includeNext || 2,
+            includeResults: config?.injectVectorHistorySearch?.includeResults || 2,
+            includePrevious: config?.injectVectorHistorySearch?.includePrevious || 2,
+            includeNext: config?.injectVectorHistorySearch?.includeNext || 2,
           };
 
     if (selectBy?.vectorSearchString && this.vector) {
@@ -74,7 +76,7 @@ export class Memory extends MastraMemory {
             }
           : {}),
       },
-      threadConfig,
+      threadConfig: config,
     });
 
     // Parse and convert messages
