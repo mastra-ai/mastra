@@ -1,12 +1,6 @@
-import {
-  MastraStorage,
-  StorageThreadType,
-  MessageType,
-  TABLE_NAMES,
-  StorageColumn,
-  WorkflowRunState,
-  StorageGetMessagesArg,
-} from '@mastra/core';
+import { StorageThreadType, MessageType } from '@mastra/core/memory';
+import { MastraStorage, TABLE_NAMES, StorageColumn, StorageGetMessagesArg } from '@mastra/core/storage';
+import { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
 
 export interface UpstashConfig {
@@ -184,17 +178,15 @@ export class UpstashStore extends MastraStorage {
 
     for (const message of messagesWithIndex) {
       const key = this.getMessageKey(message.threadId, message.id);
-      const score = message._index !== undefined ? 
-        message._index : 
-        new Date(message.createdAt).getTime();
+      const score = message._index !== undefined ? message._index : new Date(message.createdAt).getTime();
 
       // Store the message data
       pipeline.set(key, message);
-      
+
       // Add to sorted set for this thread
-      pipeline.zadd(this.getThreadMessagesKey(message.threadId), { 
-        score, 
-        member: message.id 
+      pipeline.zadd(this.getThreadMessagesKey(message.threadId), {
+        score,
+        member: message.id,
       });
     }
 
@@ -238,17 +230,17 @@ export class UpstashStore extends MastraStorage {
     latestIds.forEach(id => messageIds.add(id as string));
 
     // Fetch all needed messages in parallel
-    const messages = (await Promise.all(
-      Array.from(messageIds).map(async id => 
-        this.redis.get<MessageType & { _index?: number }>(this.getMessageKey(threadId, id))
+    const messages = (
+      await Promise.all(
+        Array.from(messageIds).map(async id =>
+          this.redis.get<MessageType & { _index?: number }>(this.getMessageKey(threadId, id)),
+        ),
       )
-    )).filter(msg => msg !== null) as (MessageType & { _index?: number })[];
+    ).filter(msg => msg !== null) as (MessageType & { _index?: number })[];
 
     // Sort messages by their position in the sorted set
     const messageOrder = await this.redis.zrange(threadMessagesKey, 0, -1);
-    messages.sort((a, b) => 
-      messageOrder.indexOf(a!.id) - messageOrder.indexOf(b!.id)
-    );
+    messages.sort((a, b) => messageOrder.indexOf(a!.id) - messageOrder.indexOf(b!.id));
 
     // Remove _index before returning
     return messages.map(({ _index, ...message }) => message as unknown as T);

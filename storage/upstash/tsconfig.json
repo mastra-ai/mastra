@@ -1,5 +1,15 @@
 {
   "extends": "../../tsconfig.json",
-  "include": ["src"],
-  "exclude": ["node_modules"]
+  "compilerOptions": {
+    "moduleResolution": "bundler",
+    "outDir": "./dist",
+    "rootDir": "./src"
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "**/*.test.ts"
+  ]
 }
