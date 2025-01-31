@@ -3,7 +3,6 @@
   "version": "1.0.3-alpha.66",
   "description": "",
   "main": "dist/index.js",
-  "module": "dist/github.esm.js",
   "type": "module",
   "typings": "dist/index.d.ts",
   "files": [
@@ -13,10 +12,6 @@
     ".": {
       "import": {
         "types": "./dist/index.d.ts",
-        "default": "./dist/github.esm.js"
-      },
-      "require": {
-        "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
       }
     },
@@ -24,8 +19,8 @@
   },
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "cross-env NODE_OPTIONS=--max-old-space-size=8096 dts build",
-    "build:dev": "dts watch",
+    "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
+    "build:dev": "tsup src/index.ts --format esm --dts --clean --treeshake --watch",
     "lint": "dts lint",
     "size": "size-limit",
     "start": "dts watch",
@@ -66,6 +61,7 @@
     "size-limit": "^11.1.4",
     "ts-jest": "^29.2.4",
     "tslib": "^2.6.3",
+    "tsup": "^8.0.1",
     "typescript": "^5.7.3"
   },
   "keywords": [],
