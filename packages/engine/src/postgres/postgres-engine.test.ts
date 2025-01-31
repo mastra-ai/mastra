@@ -1,4 +1,4 @@
-import { BaseEntity, FilterOperators } from '@mastra/core';
+import { BaseEntity, FilterOperators } from '@mastra/core/engine';
 import { config } from 'dotenv';
 import { expect, describe, it, afterAll, beforeAll } from 'vitest';
 

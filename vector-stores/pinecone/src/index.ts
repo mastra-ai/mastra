@@ -1,4 +1,4 @@
-import { MastraVector, QueryResult, IndexStats } from '@mastra/core';
+import { MastraVector, QueryResult, IndexStats } from '@mastra/core/vector';
 import { Pinecone } from '@pinecone-database/pinecone';
 
 export class PineconeVector extends MastraVector {

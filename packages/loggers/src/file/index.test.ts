@@ -1,4 +1,4 @@
-import { createLogger, LogLevel } from '@mastra/core';
+import { createLogger, LogLevel } from '@mastra/core/logger';
 import fs from 'fs';
 import path from 'path';
 import { describe, it, expect, beforeEach, afterEach, vi, afterAll } from 'vitest';
@@ -72,7 +72,7 @@ describe('FileTransport', () => {
   it('should properly clean up resources on destroy', () => {
     const destroySpy = vi.spyOn(fileLogger.fileStream, 'destroy');
 
-    fileLogger._destroy(null, () => {
+    fileLogger._destroy(new Error('test'), () => {
       expect(destroySpy).toHaveBeenCalled();
     });
   });

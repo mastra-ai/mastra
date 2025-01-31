@@ -936,7 +936,6 @@ describe('Workflow', () => {
       });
 
       const workflow = new Workflow({ name: 'test-workflow' });
-
       workflow.step(step1).after(step1).step(randomTool).commit();
 
       await workflow.createRun().start();

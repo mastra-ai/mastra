@@ -1,6 +1,5 @@
 {
   "name": "weather-agent",
-  "version": "1.0.1-alpha.25",
   "description": "",
   "private": true,
   "type": "module",
@@ -14,5 +13,6 @@
   "dependencies": {
     "@mastra/core": "workspace:^",
     "zod": "^3.24.1"
-  }
+  },
+  "version": "0.0.0"
 }

@@ -3,16 +3,23 @@
   "version": "1.0.1-alpha.58",
   "description": "",
   "main": "dist/index.js",
-  "module": "dist/ragie.esm.js",
   "typings": "dist/index.d.ts",
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "dts build",
-    "build:dev": "dts watch",
+    "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
+    "build:dev": "tsup src/index.ts --format esm --dts --clean --treeshake --watch",
     "lint": "dts lint",
     "size": "size-limit",
     "start": "dts watch",
@@ -52,6 +59,7 @@
     "size-limit": "^11.1.4",
     "ts-jest": "^29.2.4",
     "tslib": "^2.6.3",
+    "tsup": "^8.0.1",
     "typescript": "^5.5.4"
   },
   "keywords": [],
@@ -60,7 +68,7 @@
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.3",
     "@mastra/core": "workspace:^",
-    "zod": "^3.24.0",
-    "ts-to-zod": "^3.13.0"
+    "ts-to-zod": "^3.13.0",
+    "zod": "^3.24.0"
   }
 }

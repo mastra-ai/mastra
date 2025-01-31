@@ -1,4 +1,4 @@
-import { MastraVector, QueryResult } from '@mastra/core';
+import { MastraVector, QueryResult } from '@mastra/core/vector';
 import { Index } from '@upstash/vector';
 
 export class UpstashVector extends MastraVector {

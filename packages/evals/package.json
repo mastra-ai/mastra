@@ -46,8 +46,6 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@babel/preset-env": "^7.26.0",
-    "@babel/preset-typescript": "^7.26.0",
     "@tsconfig/recommended": "^1.0.7",
     "@types/difflib": "^0.2.7",
     "@types/fs-extra": "^11.0.4",

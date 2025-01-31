@@ -1,4 +1,6 @@
-import { createTool, EmbeddingOptions, MastraVector, QueryResult } from '@mastra/core';
+import { type EmbeddingOptions } from '@mastra/core/embeddings';
+import { createTool } from '@mastra/core/tools';
+import { type MastraVector, type QueryResult } from '@mastra/core/vector';
 import { z } from 'zod';
 
 import { ChunkParams, MDocument } from '../document';
@@ -104,11 +106,10 @@ export const createVectorQueryTool = ({
       filter,
     }),
     outputSchema: z.object({
-      relevantContext: z.string(),
+      relevantContext: z.any(),
     }),
     description: `Fetches and combines the top ${topK} relevant chunks from the ${vectorStoreName} vector store using the ${indexName} index`,
     execute: async ({ context: { queryText, filter }, mastra }) => {
-      let relevantContext = '';
       const vectorStore = mastra?.vectors?.[vectorStoreName];
 
       // Get relevant chunks from the vector database
@@ -127,19 +128,19 @@ export const createVectorQueryTool = ({
             ...reranker.options,
             topK: reranker.options?.topK || topK,
           });
-          const relevantChunks = rerankedResults.map(({ result }) => result?.metadata?.text);
-          relevantContext = relevantChunks.join('\n\n');
-          return { relevantContext };
+          const relevantChunks = rerankedResults.map(({ result }) => result?.metadata);
+          return { relevantContext: relevantChunks };
         }
 
-        const relevantChunks = results.map(result => result?.metadata?.text);
+        const relevantChunks = results.map(result => result?.metadata);
 
-        // Combine the chunks into a context string
-        relevantContext = relevantChunks.join('\n\n');
+        return {
+          relevantContext: relevantChunks,
+        };
       }
 
       return {
-        relevantContext,
+        relevantContext: [],
       };
     },
   });
@@ -185,11 +186,10 @@ export const createGraphRAGTool = ({
       }),
     }),
     outputSchema: z.object({
-      relevantContext: z.string(),
+      relevantContext: z.any(),
     }),
     description: `Fetches and reranks the top ${topK} relevant chunks using GraphRAG from the ${vectorStoreName} vector store using the ${indexName} index`,
     execute: async ({ context: { queryText, filter }, mastra }) => {
-      let relevantContext = '';
       const vectorStore = mastra?.vectors?.[vectorStoreName];
 
       if (vectorStore) {
@@ -229,11 +229,13 @@ export const createGraphRAGTool = ({
 
         // Extract and combine relevant chunks
         const relevantChunks = rerankedResults.map(result => result.content);
-        relevantContext = relevantChunks.join('\n\n');
+        return {
+          relevantContext: relevantChunks,
+        };
       }
 
       return {
-        relevantContext,
+        relevantContext: [],
       };
     },
   });

@@ -1,4 +1,4 @@
-import { MastraTTS } from '@mastra/core';
+import { MastraTTS } from '@mastra/core/tts';
 import Azure from 'microsoft-cognitiveservices-speech-sdk';
 import { PassThrough } from 'stream';
 

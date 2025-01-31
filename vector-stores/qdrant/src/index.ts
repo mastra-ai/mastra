@@ -1,4 +1,4 @@
-import { MastraVector, QueryResult, IndexStats } from '@mastra/core';
+import { MastraVector, QueryResult, IndexStats } from '@mastra/core/vector';
 import { QdrantClient, Schemas } from '@qdrant/js-client-rest';
 
 const BATCH_SIZE = 256;

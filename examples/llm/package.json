@@ -1,7 +1,6 @@
 {
   "name": "mastra-examples-llm",
   "type": "module",
-  "version": "1.0.1-alpha.59",
   "description": "",
   "private": true,
   "main": "index.js",
@@ -13,5 +12,6 @@
   "license": "ISC",
   "dependencies": {
     "@mastra/core": "workspace:*"
-  }
+  },
+  "version": "0.0.0"
 }

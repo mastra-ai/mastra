@@ -1,7 +1,7 @@
 {
   "name": "bird-checker",
-  "type": "module",
   "version": "0.0.0",
+  "type": "module",
   "private": true,
   "scripts": {
     "start": "pnpx tsx index.ts"

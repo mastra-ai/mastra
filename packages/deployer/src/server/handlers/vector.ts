@@ -1,4 +1,4 @@
-import type { MastraVector, QueryResult, IndexStats } from '@mastra/core';
+import type { MastraVector, QueryResult, IndexStats } from '@mastra/core/vector';
 import type { Context } from 'hono';
 
 import { HTTPException } from 'hono/http-exception';

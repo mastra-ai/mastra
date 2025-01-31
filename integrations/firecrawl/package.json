@@ -4,18 +4,12 @@
   "description": "",
   "type": "module",
   "main": "dist/index.js",
-  "module": "dist/firecrawl.esm.js",
-  "typings": "dist/index.d.ts",
   "files": [
     "dist"
   ],
   "exports": {
     ".": {
       "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/firecrawl.esm.js"
-      },
-      "require": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
       }
@@ -24,8 +18,8 @@
   },
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "dts build",
-    "build:dev": "dts watch",
+    "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
+    "dev": "tsup src/index.ts --format esm --dts --clean --treeshake --watch",
     "lint": "dts lint",
     "size": "size-limit",
     "start": "dts watch",
@@ -65,7 +59,8 @@
     "size-limit": "^11.1.4",
     "ts-jest": "^29.2.4",
     "tslib": "^2.6.3",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "tsup": "^8.0.1"
   },
   "keywords": [],
   "author": "",

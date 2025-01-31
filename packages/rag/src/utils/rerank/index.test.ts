@@ -1,4 +1,4 @@
-import { CohereRelevanceScorer } from '@mastra/core';
+import { CohereRelevanceScorer } from '@mastra/core/relevance';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { rerank } from '.';
