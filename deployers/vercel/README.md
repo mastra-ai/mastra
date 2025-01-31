@@ -21,7 +21,7 @@ pnpm add @mastra/deployer-vercel
 The Vercel deployer is used as part of the Mastra framework:
 
 ```typescript
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { VercelDeployer } from '@mastra/deployer-vercel';
 
 const deployer = new VercelDeployer({

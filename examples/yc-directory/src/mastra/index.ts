@@ -1,4 +1,5 @@
-import { Mastra, createLogger } from '@mastra/core';
+import { createLogger } from '@mastra/core/logger';
+import { Mastra } from '@mastra/core/mastra';
 
 import { ycAgent } from './agents';
 

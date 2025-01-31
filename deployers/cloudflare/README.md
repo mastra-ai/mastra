@@ -20,7 +20,7 @@ pnpm add @mastra/deployer-cloudflare
 The Cloudflare deployer is used as part of the Mastra framework:
 
 ```typescript
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
 
 const deployer = new CloudflareDeployer({
