@@ -8,6 +8,7 @@ packages:
   - "integration-generator/*"
   - "integrations/*"
   - "examples/*"
+  - "examples/basics/**/*"
   - "examples/basics/llms/*"
   - "docs"
   - "packages/cli/src/playground"

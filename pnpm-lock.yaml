@@ -240,9 +240,6 @@ importers:
       '@mastra/deployer-cloudflare':
         specifier: workspace:*
         version: link:../../deployers/cloudflare
-      '@mastra/rag':
-        specifier: workspace:*
-        version: link:../../packages/rag
       zod:
         specifier: ^3.24.0
         version: 3.24.1
@@ -298,6 +295,60 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.7.3
+
+  examples/basics/agents/agentic-workflows:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/agents/bird-checker:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/agents/hierarchical-multi-agent:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/agents/multi-agent-workflow:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/agents/system-prompt:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/agents/using-a-tool:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
 
   examples/basics/llms/generate-object-structured:
     dependencies:
@@ -364,6 +415,272 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
+
+  examples/basics/rag/adjust-chunk-delimiters:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/adjust-chunk-size:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/basic-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/chunk-html:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/chunk-json:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/chunk-markdown:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/chunk-text:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/cleanup-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/cot-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/cot-workflow-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/rag/embed-chunk-array:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/embed-text-chunk:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/embed-text-with-cohere:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+
+  examples/basics/rag/filter-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/graph-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/hybrid-vector-search:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/insert-embedding-in-pgvector:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+
+  examples/basics/rag/insert-embedding-in-pinecone:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pinecone':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pinecone
+
+  examples/basics/rag/metadata-extraction:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/rerank-rag:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pg':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pg
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/rag/retrieve-results:
+    dependencies:
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      '@mastra/vector-pinecone':
+        specifier: workspace:*
+        version: link:../../../../vector-stores/pinecone
+
+  examples/basics/workflows/calling-agent-from-workflow:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/calling-llm-from-workflow:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/create-workflow:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/tool-as-workflow-step:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/workflow-with-branching-paths:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/workflow-with-cyclical-deps:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/workflow-with-parallel-steps:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
+
+  examples/basics/workflows/workflow-with-sequential-steps:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.1
 
   examples/bird-checker-with-express:
     dependencies:
@@ -1412,6 +1729,9 @@ importers:
       tslib:
         specifier: ^2.6.3
         version: 2.8.1
+      tsup:
+        specifier: ^8.0.1
+        version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.7.3
@@ -1473,6 +1793,9 @@ importers:
       tslib:
         specifier: ^2.6.3
         version: 2.8.1
+      tsup:
+        specifier: ^8.0.1
+        version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.7.3
@@ -1534,6 +1857,9 @@ importers:
       tslib:
         specifier: ^2.6.3
         version: 2.8.1
+      tsup:
+        specifier: ^8.0.1
+        version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.7.3
@@ -1592,6 +1918,9 @@ importers:
       tslib:
         specifier: ^2.6.3
         version: 2.8.1
+      tsup:
+        specifier: ^8.0.1
+        version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.7.3
@@ -1647,6 +1976,9 @@ importers:
       tslib:
         specifier: ^2.6.3
         version: 2.8.1
+      tsup:
+        specifier: ^8.0.1
+        version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.7.3
@@ -2049,21 +2381,15 @@ importers:
       '@types/qs':
         specifier: ^6.9.15
         version: 6.9.18
-      dts-cli:
-        specifier: ^2.0.5
-        version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.7))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.7))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.12.0)(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5)
-      husky:
-        specifier: ^9.1.4
-        version: 9.1.7
       size-limit:
         specifier: ^11.1.4
         version: 11.1.6
       ts-node:
         specifier: ^10.9.2
         version: 10.9.2(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/node@22.12.0)(typescript@5.7.3)
-      tslib:
-        specifier: ^2.6.3
-        version: 2.8.1
+      tsup:
+        specifier: ^8.3.6
+        version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.7.3
@@ -2223,15 +2549,15 @@ importers:
       '@types/pg':
         specifier: ^8.11.10
         version: 8.11.11
+      cpy-cli:
+        specifier: ^5.0.0
+        version: 5.0.0
       drizzle-kit:
         specifier: ^0.30.1
         version: 0.30.3
-      dts-bundle-generator:
-        specifier: ^9.5.1
-        version: 9.5.1
-      dts-cli:
-        specifier: ^2.0.5
-        version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.7))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.7))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.12.0)(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5)
+      tsup:
+        specifier: ^8.3.6
+        version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.7.3
@@ -2266,12 +2592,6 @@ importers:
         specifier: ^3.24.1
         version: 3.24.1
     devDependencies:
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@tsconfig/recommended':
         specifier: ^1.0.7
         version: 1.0.8
@@ -5673,8 +5993,8 @@ packages:
     resolution: {integrity: sha512-9KsiorsdIK8+7VmlamAT7Uh90zxAhC/SeKaKc80v58JhtPYuwaJpmR/ST7XAUxrHAFqHTCoTH5aJnJDwSL6xIQ==}
     engines: {node: '>=18'}
 
-  '@huggingface/jinja@0.3.2':
-    resolution: {integrity: sha512-F2FvuIc+w1blGsaqJI/OErRbWH6bVJDCBI8Rm5D86yZ2wlwrGERsfIaru7XUv9eYC3DMP3ixDRRtF0h6d8AZcQ==}
+  '@huggingface/jinja@0.3.3':
+    resolution: {integrity: sha512-vQQr2JyWvVFba3Lj9es4q9vCl1sAc74fdgnEMoX8qHrXtswap9ge9uO3ONDzQB0cQ0PUyaKY2N6HaVbTBvSXvw==}
     engines: {node: '>=18'}
 
   '@huggingface/tasks@0.12.30':
@@ -11756,11 +12076,6 @@ packages:
         optional: true
       sqlite3:
         optional: true
-
-  dts-bundle-generator@9.5.1:
-    resolution: {integrity: sha512-DxpJOb2FNnEyOzMkG11sxO2dmxPjthoVWxfKqWYJ/bI/rT1rvTMktF5EKjAYrRZu6Z6t3NhOUZ0sZ5ZXevOfbA==}
-    engines: {node: '>=14.0.0'}
-    hasBin: true
 
   dts-cli@2.0.5:
     resolution: {integrity: sha512-1pjG5By5qng5mjzoVArptA4fCdT4Ya3yo4d0TMKDHusq3CvqlU21zgqZYn3liFIF8z9BTN7OutaWbADe+VDngw==}
@@ -22817,13 +23132,13 @@ snapshots:
 
   '@huggingface/jinja@0.1.3': {}
 
-  '@huggingface/jinja@0.3.2': {}
+  '@huggingface/jinja@0.3.3': {}
 
   '@huggingface/tasks@0.12.30': {}
 
   '@huggingface/transformers@3.3.2':
     dependencies:
-      '@huggingface/jinja': 0.3.2
+      '@huggingface/jinja': 0.3.3
       onnxruntime-node: 1.20.1
       onnxruntime-web: 1.21.0-dev.20250114-228dd16893
       sharp: 0.33.5
@@ -31255,11 +31570,6 @@ snapshots:
       postgres: 3.4.5
       react: 19.0.0
       sqlite3: 5.1.7
-
-  dts-bundle-generator@9.5.1:
-    dependencies:
-      typescript: 5.7.3
-      yargs: 17.7.2
 
   dts-cli@2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.7))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.7))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.12.0)(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5):
     dependencies:

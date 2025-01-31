@@ -1,10 +1,12 @@
 {
   "name": "chunk-markdown",
   "type": "module",
+  "private": true,
   "scripts": {
     "start": "pnpx tsx index.ts"
   },
   "dependencies": {
     "@mastra/rag": "workspace:*"
-  }
+  },
+  "version": "0.0.0"
 }

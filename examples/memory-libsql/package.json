@@ -1,7 +1,6 @@
 {
   "name": "memory-libsql",
   "type": "module",
-  "version": "1.0.1-alpha.61",
   "description": "",
   "private": true,
   "main": "index.js",
@@ -16,8 +15,5 @@
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*"
   },
-  "devDependencies": {
-    "dotenv": "^16.4.7",
-    "tsx": "^4.19.2"
-  }
+  "version": "0.0.0"
 }
