@@ -59,6 +59,7 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     sql: `json_extract(metadata, '$."${handleKey(key)}"') IN (${value.map(() => '?').join(',')})`,
     needsValue: true,
   }),
+
   $nin: (key: string, value: any) => ({
     sql: `json_extract(metadata, '$."${handleKey(key)}"') NOT IN (${value.map(() => '?').join(',')})`,
     needsValue: true,
@@ -67,19 +68,30 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     sql: `json_extract(metadata, '$."${handleKey(key)}"') = ?`,
     needsValue: true,
     transformValue: (value: any) => {
+      const arrayValue = Array.isArray(value) ? value : [value];
+      if (arrayValue.length === 0) {
+        return {
+          sql: '1 = 0',
+          values: [],
+        };
+      }
+
       return {
         sql: `(
-          SELECT ${validateJsonArray(key)}
-          AND NOT EXISTS (
-            SELECT value 
-            FROM json_each(?) 
-            WHERE value NOT IN (
-              SELECT value 
-              FROM json_each(json_extract(metadata, '$."${handleKey(key)}"'))
+          CASE
+            WHEN ${validateJsonArray(key)} THEN
+                NOT EXISTS (
+                    SELECT value 
+                    FROM json_each(?) 
+                    WHERE value NOT IN (
+                    SELECT value 
+                    FROM json_each(json_extract(metadata, '$."${handleKey(key)}"'))
+                )
             )
-          )
+            ELSE FALSE
+          END
         )`,
-        values: [JSON.stringify(Array.isArray(value) ? value : [value])],
+        values: [JSON.stringify(arrayValue)],
       };
     },
   }),
@@ -89,12 +101,15 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     transformValue: (value: any) => {
       return {
         sql: `(
-          SELECT ${validateJsonArray(key)}
-          AND EXISTS (
-            SELECT 1 
-            FROM json_each(json_extract(metadata, '$."${handleKey(key)}"')) as m
-            WHERE m.value IN (SELECT value FROM json_each(?))
-          )
+        CASE
+            WHEN ${validateJsonArray(key)} THEN
+                EXISTS (
+                    SELECT 1 
+                    FROM json_each(json_extract(metadata, '$."${handleKey(key)}"')) as m
+                    WHERE m.value IN (SELECT value FROM json_each(?))
+                )
+            ELSE FALSE
+        END
         )`,
         values: [JSON.stringify(Array.isArray(value) ? value : [value])],
       };
@@ -118,19 +133,102 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   }),
   $not: (key: string) => ({
     sql: `NOT (${key})`,
-    needsValue: false,
+    needsValue: true, // We need the nested condition
+    transformValue: (value: any) => {
+      // Get the inner operator and its value
+      const [operator, operatorValue] = Object.entries(value)[0] || [];
+      // Use the existing operator's SQL generation
+      const innerOperator = FILTER_OPERATORS[operator as string]?.(key, operatorValue);
+
+      console.log('innerOperator', innerOperator, operator, operatorValue);
+
+      const transformed = innerOperator?.transformValue ? innerOperator.transformValue(operatorValue) : operatorValue;
+
+      // Handle case where transformValue returns { sql, values }
+      if (transformed && typeof transformed === 'object' && 'sql' in transformed) {
+        return {
+          sql: transformed?.sql ? `NOT (${transformed.sql})` : '',
+          values: transformed.values,
+        };
+      }
+
+      return {
+        sql: innerOperator?.sql ? `NOT (${innerOperator.sql})` : '',
+        values: Array.isArray(transformed) ? transformed : [transformed],
+      };
+    },
   }),
   $nor: (key: string) => ({
     sql: `NOT (${key})`,
     needsValue: false,
   }),
 
-  // Regex Operators
-  $regex: (key: string) => ({
-    sql: `json_extract(metadata, '$."${handleKey(key)}"') REGEXP ?`,
-    needsValue: true,
-  }),
+  //   /**
+  //    * Regex Operators
+  //    * Supports case insensitive and multiline
+  //    */
+  //   $regex: (key: string): FilterOperator => ({
+  //     sql: `json_extract(metadata, '$."${handleKey(key)}"') = ?`,
+  //     needsValue: true,
+  //     transformValue: (value: any) => {
+  //       const pattern = typeof value === 'object' ? value.$regex : value;
+  //       const options = typeof value === 'object' ? value.$options || '' : '';
+  //       let sql = `json_extract(metadata, '$."${handleKey(key)}"')`;
 
+  //       // Handle multiline
+  //       //   if (options.includes('m')) {
+  //       //     sql = `REPLACE(${sql}, CHAR(10), '\n')`;
+  //       //   }
+
+  //       //       let finalPattern = pattern;
+  //       // if (options) {
+  //       //   finalPattern = `(\\?${options})${pattern}`;
+  //       // }
+
+  //       //   // Handle case insensitivity
+  //       //   if (options.includes('i')) {
+  //       //     sql = `LOWER(${sql}) REGEXP LOWER(?)`;
+  //       //   } else {
+  //       //     sql = `${sql} REGEXP ?`;
+  //       //   }
+
+  //       if (options.includes('m')) {
+  //         sql = `EXISTS (
+  //         SELECT 1
+  //         FROM json_each(
+  //           json_array(
+  //             ${sql},
+  //             REPLACE(${sql}, CHAR(10), CHAR(13))
+  //           )
+  //         ) as lines
+  //         WHERE lines.value REGEXP ?
+  //       )`;
+  //       } else {
+  //         sql = `${sql} REGEXP ?`;
+  //       }
+
+  //       // Handle case insensitivity
+  //       if (options.includes('i')) {
+  //         sql = sql.replace('REGEXP ?', 'REGEXP LOWER(?)');
+  //         sql = sql.replace('value REGEXP', 'LOWER(value) REGEXP');
+  //       }
+
+  //       // Handle extended - allows whitespace and comments in pattern
+  //       if (options.includes('x')) {
+  //         // Remove whitespace and comments from pattern
+  //         const cleanPattern = pattern.replace(/\s+|#.*$/gm, '');
+  //         return {
+  //           sql,
+  //           values: [cleanPattern],
+  //         };
+  //       }
+
+  //       return {
+  //         sql,
+  //         values: [pattern],
+  //       };
+  //     },
+  //   }),
   $contains: (key: string) => ({
     sql: `json_extract(metadata, '$."${handleKey(key)}"') = ?`,
     needsValue: true,
@@ -222,13 +320,39 @@ function buildCondition(key: string, value: any): FilterResult {
     };
   }
 
+  //TODO: Add regex support
+  //   if ('$regex' in value) {
+  //     return handleRegexOperator(key, value);
+  //   }
+
   // Handle operator conditions
   return handleOperator(key, value);
 }
 
+// function handleRegexOperator(key: string, value: any): FilterResult {
+//   const operatorFn = FILTER_OPERATORS['$regex']!;
+//   const operatorResult = operatorFn(key, value);
+//   const transformed = operatorResult.transformValue ? operatorResult.transformValue(value) : value;
+
+//   return {
+//     sql: transformed.sql,
+//     values: transformed.values,
+//   };
+// }
+
 function handleLogicalOperator(key: '$and' | '$or' | '$not' | '$nor', value: Filter[]): FilterResult {
   if (!value || value.length === 0) {
-    return { sql: key === '$and' ? 'true' : 'false', values: [] };
+    switch (key) {
+      case '$and':
+      case '$nor':
+        return { sql: 'true', values: [] };
+      case '$or':
+        return { sql: 'false', values: [] };
+      case '$not':
+        throw new Error('$not operator cannot be empty');
+      default:
+        return { sql: 'true', values: [] };
+    }
   }
 
   const values: InValue[] = [];
@@ -281,6 +405,6 @@ function handleOperator(key: string, value: any): FilterResult {
 
   return {
     sql: operatorResult.sql,
-    values: [transformed],
+    values: Array.isArray(transformed) ? transformed : [transformed],
   };
 }

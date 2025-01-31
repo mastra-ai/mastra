@@ -1,6 +1,19 @@
-import { BaseFilterTranslator, FieldCondition, Filter } from '@mastra/core';
+import { BaseFilterTranslator, FieldCondition, Filter, LogicalOperator } from '@mastra/core';
 
+/**
+ * Translates MongoDB-style filters to LibSQL compatible filters.
+ *
+ * Key differences from MongoDB:
+ *
+ * Logical Operators ($and, $or, $nor):
+ * - Can be used at the top level or nested within fields
+ * - Can take either a single condition or an array of conditions
+ *
+ */
 export class LibSQLFilterTranslator extends BaseFilterTranslator {
+  protected override supportedLogicalOperators: LogicalOperator[] = ['$and', '$or', '$nor'];
+  protected override supportedRegexOperators = [];
+
   protected isLibSQLOperator(key: string): boolean {
     return key === '$contains';
   }
@@ -32,9 +45,10 @@ export class LibSQLFilterTranslator extends BaseFilterTranslator {
     }
 
     // Handle regex
-    if (node instanceof RegExp) {
-      return withPath(this.translateRegexPattern(node.source, node.flags));
-    }
+    // TODO: Look more into regex support for LibSQL
+    // if (node instanceof RegExp) {
+    //   return withPath(this.translateRegexPattern(node.source, node.flags));
+    // }
 
     const entries = Object.entries(node as Record<string, any>);
     const result: Record<string, any> = {};
@@ -43,21 +57,24 @@ export class LibSQLFilterTranslator extends BaseFilterTranslator {
       throw new Error('$options is not valid without $regex');
     }
 
-    // Handle special regex object format
-    if ('$regex' in node) {
-      const options = (node as any).$options || '';
-      return withPath(this.translateRegexPattern(node.$regex, options));
-    }
+    // TODO: Look more into regex support for LibSQL
+    // // Handle special regex object format
+    // if ('$regex' in node) {
+    //   const options = (node as any).$options || '';
+    //   return withPath(this.translateRegexPattern(node.$regex, options));
+    // }
 
     // Process remaining entries
     for (const [key, value] of entries) {
-      // Skip options as they're handled with $regex
-      if (key === '$options') continue;
+      // // Skip options as they're handled with $regex
+      // if (key === '$options') continue;
 
       const newPath = currentPath ? `${currentPath}.${key}` : key;
 
       if (this.isLogicalOperator(key)) {
-        result[key] = this.translateLogicalOperator(value);
+        result[key] = Array.isArray(value)
+          ? value.map((filter: Filter) => this.translateNode(filter))
+          : this.translateNode(value);
       } else if (this.isOperator(key)) {
         if (this.isArrayOperator(key) && !Array.isArray(value)) {
           result[key] = [value];
@@ -82,18 +99,18 @@ export class LibSQLFilterTranslator extends BaseFilterTranslator {
     return result;
   }
 
-  private translateLogicalOperator(value: Filter[]): Filter[] {
-    return value.map(filter => this.translateNode(filter));
-  }
+  // TODO: Look more into regex support for LibSQL
+  // private translateRegexPattern(pattern: string, options: string = ''): any {
+  //   if (!options) return { $regex: pattern };
 
-  private translateRegexPattern(pattern: string, options: string = ''): any {
-    if (!options) return { $regex: pattern };
+  //   const flags = options
+  //     .split('')
+  //     .filter(f => 'imsux'.includes(f))
+  //     .join('');
 
-    const flags = options
-      .split('')
-      .filter(f => 'imsux'.includes(f))
-      .join('');
-
-    return { $regex: flags ? `(?${flags})${pattern}` : pattern };
-  }
+  //   return {
+  //     $regex: pattern,
+  //     $options: flags,
+  //   };
+  // }
 }
