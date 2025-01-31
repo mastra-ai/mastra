@@ -1,5 +1,6 @@
 {
   "name": "bird-checker",
+  "version": "0.0.0",
   "type": "module",
   "private": true,
   "scripts": {

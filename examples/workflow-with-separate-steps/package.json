@@ -19,5 +19,6 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:^"
-  }
+  },
+  "version": "0.0.0"
 }

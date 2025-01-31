@@ -55,5 +55,6 @@
   "peerDependencies": {
     "react": ">= 0.14.0 || 19",
     "react-dom": ">= 0.14.0 || 19"
-  }
+  },
+  "version": "0.0.0"
 }

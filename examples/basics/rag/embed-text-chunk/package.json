@@ -6,5 +6,6 @@
   },
   "dependencies": {
     "@mastra/rag": "workspace:*"
-  }
+  },
+  "version": "0.0.0"
 }

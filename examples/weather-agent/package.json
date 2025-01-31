@@ -13,5 +13,6 @@
   "dependencies": {
     "@mastra/core": "workspace:^",
     "zod": "^3.24.1"
-  }
+  },
+  "version": "0.0.0"
 }
