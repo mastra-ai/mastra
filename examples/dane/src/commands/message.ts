@@ -13,7 +13,7 @@ export async function message() {
   console.log(
     await start({
       triggerData: {
-        resourceid: 'f8b5c3a1-d6e7-4f9c-b2a3-1d8e4c7f9b5a',
+        resourceId: 'f8b5c3a1-d6e7-4f9c-b2a3-1d8e4c7f9b5a',
         threadId: '2d9e8c7f-6b5a-4d3c-8f1e-9b7d5c3a2e8h',
       },
     }),

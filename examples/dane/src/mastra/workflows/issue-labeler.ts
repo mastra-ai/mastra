@@ -38,7 +38,7 @@ const getIssue = new Step({
       },
     });
 
-    const labelNames = labels?.data?.map(label => label.name);
+    const labelNames = labels?.data?.map((label: any) => label.name);
 
     return { title: issue?.data?.title!, body: issue?.data?.body!, labelNames: labelNames! };
   },
