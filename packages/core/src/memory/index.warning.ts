@@ -4,7 +4,8 @@ export * from './index';
 
 export abstract class MastraMemory extends BaseMemory {
   constructor() {
-    super();
+    // @ts-ignore
+    super({ name: `Deprecated memory` });
 
     this.logger.warn('Please import "MastraMemory" from "@mastra/core/memory" instead of "@mastra/core"');
   }
