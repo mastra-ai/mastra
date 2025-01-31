@@ -50,7 +50,6 @@ export abstract class MastraStorage extends MastraBase {
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 
   async __saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    console.log('Saving thread:', thread);
     await this.init();
     return this.saveThread({ thread });
   }
