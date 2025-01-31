@@ -13,7 +13,6 @@
 '@mastra/vector-pg': patch
 '@mastra/dane': patch
 '@mastra/mcp': patch
-'docs': patch
 ---
 
 Vector store modules
