@@ -1,5 +1,5 @@
 import { type ModelConfig } from '@mastra/core';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 
 async function main() {
   // Configure your model

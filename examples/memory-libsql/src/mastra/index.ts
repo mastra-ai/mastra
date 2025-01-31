@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 import { MastraStorageLibSql } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 import { PgVector } from '@mastra/vector-pg';
