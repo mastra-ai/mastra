@@ -46,7 +46,6 @@
     "size": "size-limit",
     "test": "vitest run"
   },
-  "sideEffects": false,
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^1.0.8",
     "@ai-sdk/anthropic": "^1.0.8",

@@ -163,7 +163,7 @@ export const POST = handle(app);
     ];
 
     // Run the Vercel deploy command
-    child_process.execSync(`vercel ${commandArgs.join(' ')}`, {
+    child_process.execSync(`npx vercel ${commandArgs.join(' ')}`, {
       cwd: outputDirectory,
       env: {
         // ...this.env,

@@ -58,7 +58,7 @@
     "commander": "^12.1.0",
     "dotenv": "^16.3.1",
     "execa": "^9.3.1",
-    "fs-extra": "^11.2.0",
+    "fs-extra": "^11.3.0",
     "json-schema-to-zod": "^2.5.0",
     "picocolors": "^1.1.1",
     "posthog-node": "^4.3.1",
