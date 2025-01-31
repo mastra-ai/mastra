@@ -2,25 +2,21 @@ import { Mastra, MastraStorageLibSql } from '@mastra/core';
 import { Memory } from '@mastra/memory';
 import { PgVector } from '@mastra/vector-pg';
 
-import 'dotenv/config';
-
 import { chefAgent, memoryAgent } from './agents';
 
-const host = `localhost`;
-const port = 5432;
-const user = `postgres`;
-const password = `postgres`;
-const connectionString = `postgresql://${user}:${password}@${host}:${port}`;
+const storage = new MastraStorageLibSql({
+  config: {
+    url: 'file:example.db',
+  },
+});
+
+const vector = new PgVector(`postgresql://postgres:postgres@localhost:5433`);
 
 const memory = new Memory({
-  storage: new MastraStorageLibSql({
-    config: {
-      url: 'file:example.db',
-    },
-  }),
-  vector: new PgVector(connectionString),
+  storage,
+  vector,
   threads: {
-    injectRecentMessages: 1,
+    injectRecentMessages: 100,
     injectVectorHistorySearch: {
       includeResults: 2,
       includeNext: 2,

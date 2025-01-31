@@ -5,18 +5,12 @@ import { PgVector } from '@mastra/vector-pg';
 
 import { chefAgent, memoryAgent } from './agents';
 
-const host = `localhost`;
-const port = 5433;
-const user = `postgres`;
-const password = `postgres`;
-const connectionString = `postgresql://${user}:${password}@${host}:${port}`;
-
 const memory = new Memory({
   storage: new UpstashStore({
     url: 'http://localhost:8089',
     token: 'test_token',
   }),
-  vector: new PgVector(connectionString),
+  vector: new PgVector(`postgresql://postgres:postgres@localhost:5433`),
   threads: {
     injectRecentMessages: 1,
     injectVectorHistorySearch: {
