@@ -1,5 +1,6 @@
-import { CoreMessage, StorageGetMessagesArg } from '@mastra/core';
+import { CoreMessage } from '@mastra/core';
 import { MastraMemory, MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
+import { StorageGetMessagesArg } from '@mastra/core/storage';
 import { Message as AiMessage, CoreSystemMessage } from 'ai';
 
 /**
