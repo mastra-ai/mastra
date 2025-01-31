@@ -128,16 +128,22 @@ export function buildFilterQuery(filter: Filter, minScore: number): FilterResult
 
     // Special handling for nested $not
     if (operator === '$not') {
-      const [[nestedOp, nestedValue] = []] = Object.entries(operatorValue as Record<string, unknown>);
-      if (!nestedOp || !FILTER_OPERATORS[nestedOp as keyof typeof FILTER_OPERATORS]) {
-        throw new Error(`Invalid operator in $not condition: ${nestedOp}`);
-      }
-      const operatorFn = FILTER_OPERATORS[nestedOp]!;
-      const operatorResult = operatorFn(key, values.length + 1);
-      if (operatorResult.needsValue) {
-        values.push(nestedValue as number);
-      }
-      return `NOT (${operatorResult.sql})`;
+      const entries = Object.entries(operatorValue as Record<string, unknown>);
+      const conditions = entries
+        .map(([nestedOp, nestedValue]) => {
+          if (!FILTER_OPERATORS[nestedOp as keyof typeof FILTER_OPERATORS]) {
+            throw new Error(`Invalid operator in $not condition: ${nestedOp}`);
+          }
+          const operatorFn = FILTER_OPERATORS[nestedOp]!;
+          const operatorResult = operatorFn(key, values.length + 1);
+          if (operatorResult.needsValue) {
+            values.push(nestedValue as number);
+          }
+          return operatorResult.sql;
+        })
+        .join(' AND ');
+
+      return `NOT (${conditions})`;
     }
     const operatorFn = FILTER_OPERATORS[operator as string]!;
     const operatorResult = operatorFn(key, values.length + 1);
