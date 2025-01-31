@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 import { embedMany, MDocument, createVectorQueryTool, createDocumentChunkerTool } from '@mastra/rag';
 import { PgVector } from '@mastra/vector-pg';
 
