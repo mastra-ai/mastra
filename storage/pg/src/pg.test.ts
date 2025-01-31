@@ -1,4 +1,4 @@
-import { WorkflowRunState } from '@mastra/core';
+import { WorkflowRunState } from '@mastra/core/workflows';
 import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 

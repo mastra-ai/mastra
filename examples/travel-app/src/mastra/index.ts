@@ -1,4 +1,4 @@
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { createLogger } from "@mastra/core/logger";
 import { PostgresEngine } from "@mastra/engine";
 import { Memory } from "@mastra/memory";

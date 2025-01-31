@@ -7,7 +7,7 @@ import {
   LogicalOperator,
   RegexOperator,
   Filter,
-} from '@mastra/core';
+} from '@mastra/core/filter';
 
 export type OperatorType =
   | BasicOperator

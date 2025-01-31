@@ -81,7 +81,7 @@ Optional:
 Both transports implement the `LoggerTransport` interface from `@mastra/core`:
 
 ```typescript
-import { Logger } from '@mastra/core';
+import { Logger } from '@mastra/core/logger';
 import { FileTransport, UpstashTransport } from '@mastra/loggers';
 
 // Create transports

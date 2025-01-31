@@ -1,6 +1,9 @@
-import { createTool, Integration, ToolAction, jsonSchemaToModel } from '@mastra/core';
+import { Integration } from '@mastra/core/integration';
+import { createTool, ToolAction } from '@mastra/core/tools';
+import { jsonSchemaToModel } from '@mastra/core/utils';
 import { Composio } from 'composio-core';
 import { z } from 'zod';
+
 import { ComposioConfig } from './types';
 
 type ComposioToolsetParams = {
@@ -27,8 +30,9 @@ export class ComposioIntegration extends Integration<ComposioToolsetParams> {
   readonly logoUrl = '';
   config: ComposioConfig;
   categories = ['dev-tools', 'ai', 'automation'];
-  description = 'Easily Integrate LLMs with 250+ tools (Github, Salesforce, File Manager, Code Execution & More) to perform actions & subscribe to triggers.';
-  client: Composio
+  description =
+    'Easily Integrate LLMs with 250+ tools (Github, Salesforce, File Manager, Code Execution & More) to perform actions & subscribe to triggers.';
+  client: Composio;
 
   constructor({ config }: { config: ComposioConfig }) {
     super();
@@ -36,7 +40,6 @@ export class ComposioIntegration extends Integration<ComposioToolsetParams> {
 
     this.client = new Composio(config.API_KEY, config.baseUrl, 'mastra-ai');
   }
-
 
   private generateTool(schema: Record<string, any>) {
     const parameters = jsonSchemaToModel(schema.parameters);
@@ -79,4 +82,3 @@ export class ComposioIntegration extends Integration<ComposioToolsetParams> {
     return tools;
   }
 }
-

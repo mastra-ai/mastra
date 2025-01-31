@@ -6,7 +6,7 @@ import {
   ElementOperator,
   LogicalOperator,
   NumericOperator,
-} from '@mastra/core';
+} from '@mastra/core/filter';
 
 export type OperatorType =
   | BasicOperator

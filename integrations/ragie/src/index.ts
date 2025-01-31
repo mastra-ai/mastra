@@ -1,10 +1,11 @@
 import { Integration } from '@mastra/core';
-import * as integrationClient from './client/services.gen';
 
 // @ts-ignore
 import RagieLogo from './assets/ragie.png';
+import * as integrationClient from './client/services.gen';
 import { RagieToolset } from './toolset';
 import { RagieConfig } from './types';
+
 export class RagieIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'RAGIE';
   readonly logoUrl = RagieLogo;
@@ -21,7 +22,7 @@ export class RagieIntegration extends Integration<void, typeof integrationClient
   getStaticTools() {
     const openapi = new RagieToolset({
       config: this.config,
-    })
+    });
 
     return openapi.tools;
   }

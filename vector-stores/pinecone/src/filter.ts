@@ -5,7 +5,7 @@ import {
   Filter,
   LogicalOperator,
   QueryOperator,
-} from '@mastra/core';
+} from '@mastra/core/filter';
 
 export class PineconeFilterTranslator extends BaseFilterTranslator {
   protected override supportedArrayOperators: ArrayOperator[] = ['$in', '$all'];

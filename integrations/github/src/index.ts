@@ -1,9 +1,10 @@
-import { Integration } from '@mastra/core';
+import { Integration } from '@mastra/core/integration';
+
 import * as integrationClient from './client/services.gen';
+import { GithubToolset } from './toolset';
 // @ts-ignore
 // import GithubLogo from './assets/github.png';
 import { GithubConfig } from './types';
-import { GithubToolset } from './toolset';
 
 export class GithubIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'GITHUB';
@@ -22,15 +23,14 @@ export class GithubIntegration extends Integration<void, typeof integrationClien
 
     this.openapi = new GithubToolset({
       config: this.config,
-    })
+    });
   }
 
   getStaticTools() {
     return this.openapi.tools;
   }
 
-  async getApiClient () {
+  async getApiClient() {
     return this.openapi.getApiClient();
   }
 }
-

@@ -1,4 +1,4 @@
-import { Mastra, createLogger } from '@mastra/core';
+import { Mastra } from '@mastra/core';
 
 import { catOne, agentTwo } from './agents/agent';
 import { logCatWorkflow } from './workflow';

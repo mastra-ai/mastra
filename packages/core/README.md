@@ -29,7 +29,7 @@ For comprehensive documentation, visit our [official documentation](https://mast
 Agents are autonomous AI entities that can understand instructions, use tools, and complete tasks. They encapsulate LLM interactions and can maintain conversation history, use provided tools, and follow specific behavioral guidelines through instructions.
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 
 const agent = new Agent({
   name: 'my-agent',

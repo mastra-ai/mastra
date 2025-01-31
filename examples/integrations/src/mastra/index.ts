@@ -1,4 +1,6 @@
-import { Agent, Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core';
+
 import { sample } from './integrations';
 
 const agent = new Agent({
@@ -16,5 +18,5 @@ const agent = new Agent({
 
 export const mastra = new Mastra({
   agents: { agent },
-  workflows: { ...sample.getWorkflows() }
+  workflows: { ...sample.getWorkflows() },
 });
