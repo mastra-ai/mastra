@@ -46,7 +46,7 @@ export class LoggerTransport extends Transform {
   }
 }
 
-type TransportMap = Record<string, LoggerTransport>;
+export type TransportMap = Record<string, LoggerTransport>;
 
 // Base Pino Logger
 export class Logger {

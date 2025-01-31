@@ -2330,21 +2330,15 @@ importers:
       '@types/qs':
         specifier: ^6.9.15
         version: 6.9.18
-      dts-cli:
-        specifier: ^2.0.5
-        version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.7))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.7))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.12.0)(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5)
-      husky:
-        specifier: ^9.1.4
-        version: 9.1.7
       size-limit:
         specifier: ^11.1.4
         version: 11.1.6
       ts-node:
         specifier: ^10.9.2
         version: 10.9.2(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/node@22.12.0)(typescript@5.7.3)
-      tslib:
-        specifier: ^2.6.3
-        version: 2.8.1
+      tsup:
+        specifier: ^8.3.6
+        version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.7.3
@@ -2504,15 +2498,15 @@ importers:
       '@types/pg':
         specifier: ^8.11.10
         version: 8.11.11
+      cpy-cli:
+        specifier: ^5.0.0
+        version: 5.0.0
       drizzle-kit:
         specifier: ^0.30.1
         version: 0.30.3
-      dts-bundle-generator:
-        specifier: ^9.5.1
-        version: 9.5.1
-      dts-cli:
-        specifier: ^2.0.5
-        version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.7))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.7))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.12.0)(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5)
+      tsup:
+        specifier: ^8.3.6
+        version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.7.3
@@ -12031,11 +12025,6 @@ packages:
         optional: true
       sqlite3:
         optional: true
-
-  dts-bundle-generator@9.5.1:
-    resolution: {integrity: sha512-DxpJOb2FNnEyOzMkG11sxO2dmxPjthoVWxfKqWYJ/bI/rT1rvTMktF5EKjAYrRZu6Z6t3NhOUZ0sZ5ZXevOfbA==}
-    engines: {node: '>=14.0.0'}
-    hasBin: true
 
   dts-cli@2.0.5:
     resolution: {integrity: sha512-1pjG5By5qng5mjzoVArptA4fCdT4Ya3yo4d0TMKDHusq3CvqlU21zgqZYn3liFIF8z9BTN7OutaWbADe+VDngw==}
@@ -31530,11 +31519,6 @@ snapshots:
       postgres: 3.4.5
       react: 19.0.0
       sqlite3: 5.1.7
-
-  dts-bundle-generator@9.5.1:
-    dependencies:
-      typescript: 5.7.3
-      yargs: 17.7.2
 
   dts-cli@2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.7))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.7))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.12.0)(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5):
     dependencies:

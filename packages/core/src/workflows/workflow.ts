@@ -8,7 +8,7 @@ import { MastraBase } from '../base';
 
 import { WorkflowSnapshot } from './snapshot';
 import { Step } from './step';
-import {
+import type {
   ActionContext,
   DependencyCheckOutput,
   ResolverFunctionInput,
@@ -26,6 +26,7 @@ import {
   WorkflowActors,
   WorkflowContext,
   WorkflowEvent,
+  WorkflowOptions,
   WorkflowRunState,
   WorkflowState,
 } from './types';
@@ -70,17 +71,7 @@ export class Workflow<
    * @param name - Identifier for the workflow (not necessarily unique)
    * @param logger - Optional logger instance
    */
-  constructor({
-    name,
-    triggerSchema,
-    retryConfig,
-    mastra,
-  }: {
-    name: string;
-    triggerSchema?: TTriggerSchema;
-    retryConfig?: RetryConfig;
-    mastra?: MastraPrimitives;
-  }) {
+  constructor({ name, triggerSchema, retryConfig, mastra }: WorkflowOptions<TTriggerSchema>) {
     super({ component: 'WORKFLOW', name });
 
     this.name = name;

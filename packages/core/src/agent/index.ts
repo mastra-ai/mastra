@@ -25,7 +25,7 @@ import { ThreadType } from '../memory';
 import { InstrumentClass } from '../telemetry';
 import { CoreTool, ToolAction } from '../tools/types';
 
-import { AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
+import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
 
 @InstrumentClass({
   prefix: 'agent',
@@ -43,14 +43,7 @@ export class Agent<
   tools: TTools;
   metrics: TMetrics;
 
-  constructor(config: {
-    name: string;
-    instructions: string;
-    model: ModelConfig;
-    tools?: TTools;
-    mastra?: MastraPrimitives;
-    metrics?: TMetrics;
-  }) {
+  constructor(config: AgentConfig<TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
