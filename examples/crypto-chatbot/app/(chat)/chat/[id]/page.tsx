@@ -1,4 +1,3 @@
-import { CoreMessage } from 'ai';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 
@@ -38,7 +37,7 @@ export default async function Page(props: { params: Promise<any> }) {
     return notFound();
   }
 
-  if (session.user.id !== chat.resourceid) {
+  if (session.user.id !== chat.resourceId) {
     return notFound();
   }
 

@@ -24,7 +24,7 @@ export async function GET() {
   });
 
   const chats = await mastra.memory?.getThreadsByResourceId({
-    resourceid: session.user.id!,
+    resourceId: session.user.id!,
   });
 
   return Response.json(chats || []);
