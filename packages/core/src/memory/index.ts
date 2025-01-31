@@ -138,7 +138,10 @@ export abstract class MastraMemory extends MastraBase {
   protected parseMessages(messages: MessageType[]): CoreMessage[] {
     return messages.map(msg => ({
       ...msg,
-      content: typeof msg.content === 'string' ? JSON.parse((msg as MessageType).content as string) : msg.content,
+      content:
+        typeof msg.content === 'string' && (msg.content.startsWith('[') || msg.content.startsWith('{'))
+          ? JSON.parse((msg as MessageType).content as string)
+          : msg.content,
     }));
   }
 
