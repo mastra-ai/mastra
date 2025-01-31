@@ -1,37 +1,30 @@
-import {
-  MastraStorage,
-  MessageType,
-  StorageColumn,
-  StorageGetMessagesArg,
-  TABLE_NAMES,
-  StorageThreadType,
-  WorkflowRunState,
-} from '@mastra/core';
-import pg from 'pg';
+import { MastraStorage, StorageGetMessagesArg, TABLE_NAMES, WorkflowRunState } from '@mastra/core';
+import { MessageType, StorageThreadType } from '@mastra/core';
+import { StorageColumn } from '@mastra/core';
 import pgPromise from 'pg-promise';
-import type { IDatabase, IMain } from 'pg-promise';
 
 export interface PostgresConfig {
-  connectionString?: string;
-  host?: string;
-  port?: number;
-  database?: string;
-  user?: string;
-  password?: string;
-  ssl?: boolean;
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
 }
 
 export class PostgresStore extends MastraStorage {
-  private db: IDatabase<any>;
-  private pgp: IMain;
-  private pool: pg.Pool;
-  hasTables: boolean = false;
+  private db: pgPromise.IDatabase<{}>;
+  private pgp: pgPromise.IMain;
 
   constructor(config: PostgresConfig) {
-    super({ name: 'Postgres' });
+    super({ name: 'PostgresStore' });
     this.pgp = pgPromise();
-    this.db = this.pgp(config);
-    this.pool = new pg.Pool({ connectionString: config.connectionString });
+    this.db = this.pgp({
+      host: config.host,
+      port: config.port,
+      database: config.database,
+      user: config.user,
+      password: config.password,
+    });
   }
 
   async createTable({
@@ -41,155 +34,164 @@ export class PostgresStore extends MastraStorage {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
-    const columns = Object.entries(schema).map(([name, column]) => {
-      let definition = `${this.pgp.as.name(name)} ${column.type === 'text' ? 'TEXT' : 'TIMESTAMP WITH TIME ZONE'}`;
-      if (!column.nullable) {
-        definition += ' NOT NULL';
-      }
-      return definition;
-    });
+    try {
+      const columns = Object.entries(schema)
+        .map(([name, def]) => {
+          const constraints = [];
+          if (def.primaryKey) constraints.push('PRIMARY KEY');
+          if (!def.nullable) constraints.push('NOT NULL');
+          return `"${name}" ${def.type.toUpperCase()} ${constraints.join(' ')}`;
+        })
+        .join(',\n');
 
-    const primaryKeys = Object.entries(schema)
-      .filter(([_, column]) => column.primaryKey)
-      .map(([name]) => this.pgp.as.name(name));
+      const sql = `
+        CREATE TABLE IF NOT EXISTS ${tableName} (
+          ${columns}
+        )
+      `;
 
-    const tableQuery = `
-      CREATE TABLE IF NOT EXISTS ${this.pgp.as.name(tableName)} (
-        ${columns.join(',\n        ')}${primaryKeys.length > 0 ? `,\n        PRIMARY KEY (${primaryKeys.join(', ')})` : ''}
-      );
-    `;
-
-    this.logger.debug('Creating table', {
-      tableName,
-      tableQuery,
-    });
-
-    await this.db.none(tableQuery);
+      await this.db.none(sql);
+    } catch (error) {
+      console.error(`Error creating table ${tableName}:`, error);
+      throw error;
+    }
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.db.none(`TRUNCATE TABLE ${this.pgp.as.name(tableName)}`);
+    try {
+      await this.db.none(`TRUNCATE TABLE ${tableName} CASCADE`);
+    } catch (error) {
+      console.error(`Error clearing table ${tableName}:`, error);
+      throw error;
+    }
   }
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    const columns = Object.keys(record);
-    const placeholders = columns.map((_, i) => `$${i + 1}`);
-    const values = Object.values(record);
+    try {
+      const columns = Object.keys(record);
+      const values = Object.values(record);
+      const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
 
-    const query = `INSERT INTO ${this.pgp.as.name(tableName)} (${columns.map(col => this.pgp.as.name(col)).join(', ')}) VALUES (${placeholders.join(', ')})`;
-    await this.db.none(query, values);
+      await this.db.none(
+        `INSERT INTO ${tableName} (${columns.map(c => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
+        values,
+      );
+    } catch (error) {
+      console.error(`Error inserting into ${tableName}:`, error);
+      throw error;
+    }
   }
 
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    const columns = Object.keys(keys);
-    const values = Object.values(keys);
-    const conditions = columns.map((col, i) => `${this.pgp.as.name(col)} = $${i + 1}`).join(' AND ');
-    const query = `SELECT * FROM ${this.pgp.as.name(tableName)} WHERE ${conditions}`;
-    const result = await this.db.oneOrNone(query, values);
-    return result as R | null;
-  }
+    try {
+      const keyEntries = Object.entries(keys);
+      const conditions = keyEntries.map(([key], index) => `"${key}" = $${index + 1}`).join(' AND ');
+      const values = keyEntries.map(([_, value]) => value);
 
-  async persistWorkflowSnapshot({
-    workflowName,
-    runId,
-    snapshot,
-  }: {
-    workflowName: string;
-    runId: string;
-    snapshot: WorkflowRunState;
-  }): Promise<void> {
-    await this.db.none(
-      `
-      INSERT INTO ${this.pgp.as.name(MastraStorage.TABLE_WORKFLOW_SNAPSHOT)}
-        (workflow_name, run_id, snapshot, updated_at)
-      VALUES
-        ($1, $2, $3, CURRENT_TIMESTAMP)
-      ON CONFLICT (workflow_name, run_id)
-      DO UPDATE SET
-        snapshot = EXCLUDED.snapshot,
-        updated_at = CURRENT_TIMESTAMP
-    `,
-      [workflowName, runId, snapshot],
-    );
-  }
+      const result = await this.db.oneOrNone<R>(`SELECT * FROM ${tableName} WHERE ${conditions}`, values);
 
-  async loadWorkflowSnapshot({
-    workflowName,
-    runId,
-  }: {
-    workflowName: string;
-    runId: string;
-  }): Promise<WorkflowRunState | null> {
-    const result = await this.db.oneOrNone(
-      `
-      SELECT snapshot
-      FROM ${this.pgp.as.name(MastraStorage.TABLE_WORKFLOW_SNAPSHOT)}
-      WHERE workflow_name = $1
-        AND run_id = $2
-    `,
-      [workflowName, runId],
-    );
+      if (!result) {
+        return null;
+      }
 
-    return result?.snapshot || null;
+      // If this is a workflow snapshot, parse the snapshot field
+      if (tableName === MastraStorage.TABLE_WORKFLOW_SNAPSHOT) {
+        const snapshot = result as any;
+        if (typeof snapshot.snapshot === 'string') {
+          snapshot.snapshot = JSON.parse(snapshot.snapshot);
+        }
+        return snapshot;
+      }
+
+      return result;
+    } catch (error) {
+      console.error(`Error loading from ${tableName}:`, error);
+      throw error;
+    }
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    await this.ensureTablesExist();
-
-    const client = await this.pool.connect();
     try {
-      const result = await client.query<StorageThreadType>(
-        `
-        SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, resourceid as resourceId, metadata
-        FROM mastra_threads
-        WHERE id = $1
-        `,
+      const thread = await this.db.oneOrNone<StorageThreadType>(
+        `SELECT 
+          id,
+          "resourceId",
+          title,
+          metadata,
+          "createdAt",
+          "updatedAt"
+        FROM ${MastraStorage.TABLE_THREADS}
+        WHERE id = $1`,
         [threadId],
       );
 
-      return result.rows[0] || null;
-    } finally {
-      client.release();
+      if (!thread) {
+        return null;
+      }
+
+      return {
+        ...thread,
+        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
+      };
+    } catch (error) {
+      console.error(`Error getting thread ${threadId}:`, error);
+      throw error;
     }
   }
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    await this.ensureTablesExist();
-
-    const client = await this.pool.connect();
     try {
-      const result = await client.query<StorageThreadType>(
-        `
-                SELECT id, title, resourceid as resourceId, created_at AS createdAt, updated_at AS updatedAt, metadata
-                FROM mastra_threads
-                WHERE resourceid = $1
-            `,
+      const threads = await this.db.manyOrNone<StorageThreadType>(
+        `SELECT 
+          id,
+          "resourceId",
+          title,
+          metadata,
+          "createdAt",
+          "updatedAt"
+        FROM ${MastraStorage.TABLE_THREADS}
+        WHERE "resourceId" = $1`,
         [resourceId],
       );
-      return result.rows;
-    } finally {
-      client.release();
+
+      return threads.map(thread => ({
+        ...thread,
+        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
+      }));
+    } catch (error) {
+      console.error(`Error getting threads for resource ${resourceId}:`, error);
+      throw error;
     }
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    await this.ensureTablesExist();
-
-    const client = await this.pool.connect();
     try {
-      const { id, title, createdAt, updatedAt, resourceId, metadata } = thread;
-      const result = await client.query<StorageThreadType>(
-        `
-        INSERT INTO mastra_threads (id, title, created_at, updated_at, resourceid, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (id) DO UPDATE SET title = $2, updated_at = $4, resourceid = $5, metadata = $6
-        RETURNING id, title, created_at AS createdAt, updated_at AS updatedAt, resourceid as resourceId, metadata
-        `,
-        [id, title, createdAt, updatedAt, resourceId, JSON.stringify(metadata)],
+      await this.db.none(
+        `INSERT INTO ${MastraStorage.TABLE_THREADS} (
+          id,
+          "resourceId",
+          title,
+          metadata,
+          "createdAt",
+          "updatedAt"
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (id) DO UPDATE SET
+          "resourceId" = EXCLUDED."resourceId",
+          title = EXCLUDED.title,
+          metadata = EXCLUDED.metadata,
+          "createdAt" = EXCLUDED."createdAt",
+          "updatedAt" = EXCLUDED."updatedAt"`,
+        [thread.id, thread.resourceId, thread.title, thread.metadata, thread.createdAt, thread.updatedAt],
       );
-      return result?.rows?.[0]!;
-    } finally {
-      client.release();
+
+      return thread;
+    } catch (error) {
+      console.error('Error saving thread:', error);
+      throw error;
     }
   }
 
@@ -202,57 +204,64 @@ export class PostgresStore extends MastraStorage {
     title: string;
     metadata: Record<string, unknown>;
   }): Promise<StorageThreadType> {
-    const client = await this.pool.connect();
     try {
-      const result = await client.query<StorageThreadType>(
-        `
-                UPDATE mastra_threads
-                SET title = $1, metadata = $2, updated_at = NOW()
-                WHERE id = $3
-                RETURNING *
-                `,
-        [title, JSON.stringify(metadata), id],
+      // First get the existing thread to merge metadata
+      const existingThread = await this.getThreadById({ threadId: id });
+      if (!existingThread) {
+        throw new Error(`Thread ${id} not found`);
+      }
+
+      // Merge the existing metadata with the new metadata
+      const mergedMetadata = {
+        ...existingThread.metadata,
+        ...metadata,
+      };
+
+      const thread = await this.db.one<StorageThreadType>(
+        `UPDATE ${MastraStorage.TABLE_THREADS}
+        SET title = $1,
+            metadata = $2,
+            "updatedAt" = $3
+        WHERE id = $4
+        RETURNING *`,
+        [title, mergedMetadata, new Date().toISOString(), id],
       );
-      return result?.rows?.[0]!;
-    } finally {
-      client.release();
+
+      return {
+        ...thread,
+        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
+      };
+    } catch (error) {
+      console.error('Error updating thread:', error);
+      throw error;
     }
   }
 
   async deleteThread({ id }: { id: string }): Promise<void> {
-    const client = await this.pool.connect();
     try {
-      await client.query(
-        `
-                DELETE FROM mastra_messages
-                WHERE thread_id = $1
-                `,
-        [id],
-      );
+      await this.db.tx(async t => {
+        // First delete all messages associated with this thread
+        await t.none(`DELETE FROM ${MastraStorage.TABLE_MESSAGES} WHERE thread_id = $1`, [id]);
 
-      await client.query(
-        `
-                DELETE FROM mastra_threads
-                WHERE id = $1
-                `,
-        [id],
-      );
-    } finally {
-      client.release();
+        // Then delete the thread
+        await t.none(`DELETE FROM ${MastraStorage.TABLE_THREADS} WHERE id = $1`, [id]);
+      });
+    } catch (error) {
+      console.error('Error deleting thread:', error);
+      throw error;
     }
   }
 
   async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
-    await this.ensureTablesExist();
-
-    const client = await this.pool.connect();
     try {
       const messages: any[] = [];
       const limit = selectBy?.last || 100;
       const include = selectBy?.include || [];
 
       if (include.length) {
-        const includeResult = await client.query(
+        const includeResult = await this.db.manyOrNone(
           `
           WITH ordered_messages AS (
             SELECT 
@@ -294,11 +303,12 @@ export class PostgresStore extends MastraStorage {
             Math.max(...include.map(i => i.withNextMessages || 0)),
           ],
         );
-        messages.push(...includeResult.rows);
+
+        messages.push(...includeResult);
       }
 
       // Then get the remaining messages, excluding the ids we just fetched
-      const result = await client.query(
+      const result = await this.db.manyOrNone(
         `
         SELECT 
             id, 
@@ -320,153 +330,81 @@ export class PostgresStore extends MastraStorage {
         [threadId, messages.map(m => m.id), limit],
       );
 
-      messages.push(...result.rows);
+      messages.push(...result);
 
       // Sort all messages by creation date
       messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
       return messages as T;
-    } finally {
-      client.release();
+    } catch (error) {
+      console.error('Error getting messages:', error);
+      throw error;
     }
   }
 
   async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
-    await this.ensureTablesExist();
+    if (messages.length === 0) return messages;
 
-    const client = await this.pool.connect();
     try {
-      await client.query('BEGIN');
-      for (const message of messages) {
-        // @ts-ignore
-        const { id, content, role, createdAt, threadId, toolCallIds, toolCallArgs, type } = message;
-
-        await client.query(
-          `
-          INSERT INTO mastra_messages (
-            id, 
-            content, 
-            role, 
-            created_at, 
-            thread_id, 
-            tool_call_ids, 
-            tool_call_args,
-            type
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-          `,
-          [
-            id,
-            JSON.stringify(content),
-            role,
-            createdAt?.toISOString(),
-            threadId,
-            JSON.stringify(toolCallIds),
-            JSON.stringify(toolCallArgs),
-            type,
-          ],
-        );
+      const threadId = messages[0]?.threadId;
+      if (!threadId) {
+        throw new Error('Thread ID is required');
       }
-      await client.query('COMMIT');
+
+      await this.db.tx(async t => {
+        for (const message of messages) {
+          await t.none(
+            `INSERT INTO ${MastraStorage.TABLE_MESSAGES} (id, thread_id, content, "createdAt", role, type) 
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+              message.id,
+              threadId,
+              JSON.stringify(message),
+              message.createdAt || new Date().toISOString(),
+              message.role,
+              message.type,
+            ],
+          );
+        }
+      });
+
       return messages;
     } catch (error) {
-      await client.query('ROLLBACK');
+      console.error('Error saving messages:', error);
       throw error;
-    } finally {
-      client.release();
     }
   }
 
-  async validateToolCallArgs({ hashedArgs }: { hashedArgs: string }): Promise<boolean> {
-    await this.ensureTablesExist();
-
-    const client = await this.pool.connect();
-
+  async persistWorkflowSnapshot({
+    workflowName,
+    runId,
+    snapshot,
+  }: {
+    workflowName: string;
+    runId: string;
+    snapshot: WorkflowRunState;
+  }): Promise<void> {
     try {
-      const toolArgsResult = await client.query<{ toolCallIds: string; toolCallArgs: string; createdAt: string }>(
-        ` SELECT tool_call_ids as toolCallIds, 
-                tool_call_args as toolCallArgs,
-                created_at AS createdAt
-         FROM mastra_messages
-         WHERE tool_call_args::jsonb @> $1
-         AND tool_call_args_expire_at > $2
-         ORDER BY created_at ASC
-         LIMIT 1`,
-        [JSON.stringify([hashedArgs]), new Date().toISOString()],
+      await this.db.none(
+        `INSERT INTO ${MastraStorage.TABLE_WORKFLOW_SNAPSHOT} (
+          workflow_name,
+          run_id,
+          snapshot,
+          "createdAt",
+          "updatedAt"
+        ) VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (workflow_name, run_id) DO UPDATE SET
+          snapshot = EXCLUDED.snapshot,
+          "updatedAt" = EXCLUDED."updatedAt"`,
+        [workflowName, runId, JSON.stringify(snapshot), new Date(), new Date()],
       );
-
-      return toolArgsResult.rows.length > 0;
     } catch (error) {
-      console.log('error checking if valid arg exists====', error);
-      return false;
-    } finally {
-      client.release();
-    }
-  }
-
-  // TODO: This should be handled by the init method of MastraStorage instead
-  async ensureTablesExist(): Promise<void> {
-    if (this.hasTables) {
-      return;
-    }
-
-    const client = await this.pool.connect();
-    try {
-      // Check if the threads table exists
-      const threadsResult = await client.query<{ exists: boolean }>(`
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM information_schema.tables
-                    WHERE table_name = 'mastra_threads'
-                );
-            `);
-
-      if (!threadsResult?.rows?.[0]?.exists) {
-        await client.query(`
-                    CREATE TABLE IF NOT EXISTS mastra_threads (
-                        id UUID PRIMARY KEY,
-                        resourceid TEXT,
-                        title TEXT,
-                        created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-                        updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
-                        metadata JSONB
-                    );
-                `);
-      }
-
-      // Check if the messages table exists
-      const messagesResult = await client.query<{ exists: boolean }>(`
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM information_schema.tables
-                    WHERE table_name = 'mastra_messages'
-                );
-            `);
-
-      if (!messagesResult?.rows?.[0]?.exists) {
-        await client.query(`
-                    CREATE TABLE IF NOT EXISTS mastra_messages (
-                        id UUID PRIMARY KEY,
-                        content TEXT NOT NULL,
-                        role VARCHAR(20) NOT NULL,
-                        created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-                        tool_call_ids TEXT DEFAULT NULL,
-                        tool_call_args TEXT DEFAULT NULL,
-                        tool_call_args_expire_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
-                        type VARCHAR(20) NOT NULL,
-                        tokens INTEGER DEFAULT NULL,
-                        thread_id UUID NOT NULL,
-                        FOREIGN KEY (thread_id) REFERENCES mastra_threads(id)
-                    );
-                `);
-      }
-    } finally {
-      client.release();
-      this.hasTables = true;
+      console.error('Error inserting into workflow_snapshot:', error);
+      throw error;
     }
   }
 
   async close(): Promise<void> {
-    await this.db.$pool.end();
+    this.pgp.end();
   }
 }

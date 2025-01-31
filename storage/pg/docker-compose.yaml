@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    container_name: 'mastra-pg-test'
+    ports:
+      - '5433:5432'
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mastra_test
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

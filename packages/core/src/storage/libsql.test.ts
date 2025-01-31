@@ -30,15 +30,23 @@ describe('MastraStorageLibSql', () => {
       type: 'text',
       threadId,
       content: [{ type: 'text', text: 'Hello' }],
-      created_at: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
     }) as any;
 
   beforeAll(async () => {
     await storage.init();
   });
 
-  afterAll(async () => {
+  beforeEach(async () => {
     // Clear tables before each test
+    await storage.clearTable({ tableName: 'workflow_snapshot' });
+    await storage.clearTable({ tableName: 'evals' });
+    await storage.clearTable({ tableName: 'messages' });
+    await storage.clearTable({ tableName: 'threads' });
+  });
+
+  afterAll(async () => {
+    // Clear tables after tests
     await storage.clearTable({ tableName: 'workflow_snapshot' });
     await storage.clearTable({ tableName: 'evals' });
     await storage.clearTable({ tableName: 'messages' });

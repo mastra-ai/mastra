@@ -22,7 +22,10 @@
   "scripts": {
     "build": "dts build",
     "build:dev": "dts watch",
-    "test": "vitest run"
+    "test": "npm run db:up && vitest run && npm run db:down",
+    "test:watch": "npm run db:up && vitest watch",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down -v"
   },
   "dependencies": {
     "@mastra/core": "workspace:*",

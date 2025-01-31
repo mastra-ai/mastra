@@ -237,9 +237,9 @@ export class MastraStorageLibSql extends MastraStorage {
 
       for (const message of messages) {
         await tx.execute({
-          sql: `INSERT INTO ${MastraStorage.TABLE_MESSAGES} (id, thread_id, content, createdAt) 
-                              VALUES (?, ?, ?, ?)`,
-          args: [message.id, threadId, JSON.stringify(message), message.createdAt || new Date().toISOString()],
+          sql: `INSERT INTO ${MastraStorage.TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt) 
+                              VALUES (?, ?, ?, ?, ?, ?)`,
+          args: [message.id, threadId, JSON.stringify(message), message.role, message.type, message.createdAt || new Date().toISOString()],
         });
       }
 
