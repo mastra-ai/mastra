@@ -1,7 +1,9 @@
+import { Filter } from '@mastra/core/filter';
 import { IndexStats, QueryResult, MastraVector } from '@mastra/core/vector';
 import pg from 'pg';
 
-import { Filter, FILTER_OPERATORS, isValidOperator } from './filter';
+import { PGFilterTranslator } from './filter';
+import { buildFilterQuery } from './sql-builder';
 
 export class PgVector extends MastraVector {
   private pool: pg.Pool;
@@ -33,79 +35,38 @@ export class PgVector extends MastraVector {
     topK: number = 10,
     filter?: Filter,
     includeVector: boolean = false,
-    minScore: number = 0,
+    minScore: number = 0, // Optional minimum score threshold
   ): Promise<QueryResult[]> {
     const client = await this.pool.connect();
     try {
-      let filterValues: any[] = [minScore];
       const vectorStr = `[${queryVector.join(',')}]`;
 
-      const buildCondition = (key: string, value: any): string => {
-        // Handle logical operators ($and/$or)
-        if (key === '$and' || key === '$or') {
-          const conditions = value.map((f: Filter) =>
-            Object.entries(f)
-              .map(([k, v]) => buildCondition(k, v))
-              .join(' AND '),
-          );
-          const operatorFn = FILTER_OPERATORS[key];
-          return operatorFn(conditions.join(` ${key === '$or' ? 'OR' : 'AND'} `), 0).sql;
-        }
-
-        // If condition is not a FilterCondition object, assume it's an equality check
-        if (!value || typeof value !== 'object') {
-          filterValues.push(value);
-          return `metadata#>>'{${key}}' = $${filterValues.length}`;
-        }
-
-        // Handle operator conditions
-        const [[operator, operatorValue] = []] = Object.entries(value);
-        if (!operator || value === undefined) {
-          throw new Error(`Invalid operator or value for key: ${key}`);
-        }
-        if (!isValidOperator(operator)) {
-          throw new Error(`Unsupported operator: ${operator}`);
-        }
-        const operatorFn = FILTER_OPERATORS[operator];
-        const operatorResult = operatorFn(key, filterValues.length + 1);
-        if (operatorResult.needsValue) {
-          const transformedValue = operatorResult.transformValue
-            ? operatorResult.transformValue(operatorValue)
-            : operatorValue;
-          filterValues.push(transformedValue);
-        }
-        return operatorResult.sql;
-      };
-
-      const filterQuery = filter
-        ? Object.entries(filter)
-            .map(([key, value]) => buildCondition(key, value))
-            .join(' AND ')
-        : '';
+      const pgFilter = new PGFilterTranslator();
+      const translatedFilter = pgFilter.translate(filter ?? {});
+      const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter, minScore);
 
       const query = `
-            WITH vector_scores AS (
-                SELECT
-                    vector_id as id,
-                    1 - (embedding <=> '${vectorStr}'::vector) as score,
-                    metadata
-                    ${includeVector ? ', embedding' : ''}
-                FROM ${indexName}
-                WHERE ${filterQuery || 'true'}
-            )
-            SELECT *
-            FROM vector_scores
-            WHERE score > $1
-            ORDER BY score DESC
-            LIMIT ${topK};
-        `;
+        WITH vector_scores AS (
+          SELECT
+            vector_id as id,
+            1 - (embedding <=> '${vectorStr}'::vector) as score,
+            metadata
+            ${includeVector ? ', embedding' : ''}
+          FROM ${indexName}
+          ${filterQuery}
+        )
+        SELECT *
+        FROM vector_scores
+        WHERE score > $1
+        ORDER BY score DESC
+        LIMIT ${topK}`;
       const result = await client.query(query, filterValues);
 
-      return result.rows.map(row => ({
-        id: row.id,
-        score: row.score,
-        metadata: row.metadata,
-        ...(includeVector && row.embedding && { vector: JSON.parse(row.embedding) }),
+      return result.rows.map(({ id, score, metadata, embedding }) => ({
+        id,
+        score,
+        metadata,
+        ...(includeVector && embedding && { vector: JSON.parse(embedding) }),
       }));
     } finally {
       client.release();

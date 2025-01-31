@@ -1,98 +1,107 @@
-export type OperatorType =
-  | 'eq'
-  | 'neq'
-  | 'gt'
-  | 'gte'
-  | 'lt'
-  | 'lte'
-  | 'like'
-  | 'ilike'
-  | 'in'
-  | 'contains'
-  | 'exists'
-  | '$and'
-  | '$or';
+import { BaseFilterTranslator, FieldCondition, Filter, LogicalOperator } from '@mastra/core';
 
-// Type guard to check if an operator is valid
-export function isValidOperator(operator: string): operator is OperatorType {
-  return operator in FILTER_OPERATORS;
+/**
+ * Translates MongoDB-style filters to PG compatible filters.
+ *
+ * Key differences from MongoDB:
+ *
+ * Logical Operators ($and, $or, $nor):
+ * - Can be used at the top level or nested within fields
+ * - Can take either a single condition or an array of conditions
+ */
+
+export class PGFilterTranslator extends BaseFilterTranslator {
+  protected override supportedLogicalOperators: LogicalOperator[] = ['$and', '$or', '$nor'];
+
+  protected isPGOperator(key: string): boolean {
+    return key === '$contains';
+  }
+
+  protected override isValidOperator(key: string) {
+    return super.isValidOperator(key) || this.isPGOperator(key);
+  }
+
+  translate(filter: Filter): Filter {
+    if (this.isEmpty(filter)) {
+      return filter;
+    }
+    this.validateFilter(filter);
+    return this.translateNode(filter);
+  }
+
+  private translateNode(node: Filter | FieldCondition, currentPath: string = ''): any {
+    // Helper to wrap result with path if needed
+    const withPath = (result: any) => (currentPath ? { [currentPath]: result } : result);
+
+    // Handle primitives
+    if (this.isPrimitive(node)) {
+      return withPath({ $eq: this.normalizeComparisonValue(node) });
+    }
+
+    // Handle arrays
+    if (Array.isArray(node)) {
+      return withPath({ $in: this.normalizeArrayValues(node) });
+    }
+
+    // Handle regex
+    if (node instanceof RegExp) {
+      return withPath(this.translateRegexPattern(node.source, node.flags));
+    }
+
+    const entries = Object.entries(node as Record<string, any>);
+    const result: Record<string, any> = {};
+
+    if ('$options' in node && !('$regex' in node)) {
+      throw new Error('$options is not valid without $regex');
+    }
+
+    // Handle special regex object format
+    if ('$regex' in node) {
+      const options = (node as any).$options || '';
+      return withPath(this.translateRegexPattern(node.$regex, options));
+    }
+
+    // Process remaining entries
+    for (const [key, value] of entries) {
+      // Skip options as they're handled with $regex
+      if (key === '$options') continue;
+
+      const newPath = currentPath ? `${currentPath}.${key}` : key;
+
+      if (this.isLogicalOperator(key)) {
+        result[key] = Array.isArray(value)
+          ? value.map((filter: Filter) => this.translateNode(filter))
+          : this.translateNode(value);
+      } else if (this.isOperator(key)) {
+        if (this.isArrayOperator(key) && !Array.isArray(value)) {
+          result[key] = [value];
+        } else {
+          result[key] = value;
+        }
+      } else if (typeof value === 'object' && value !== null) {
+        // Handle nested objects
+        const hasOperators = Object.keys(value).some(k => this.isOperator(k));
+        if (hasOperators) {
+          result[newPath] = this.translateNode(value);
+        } else {
+          Object.assign(result, this.translateNode(value, newPath));
+        }
+      } else {
+        result[newPath] = this.translateNode(value);
+      }
+    }
+
+    return result;
+  }
+
+  private translateRegexPattern(pattern: string, options: string = ''): any {
+    if (!options) return { $regex: pattern };
+
+    const flags = options
+      .split('')
+      .filter(f => 'imsux'.includes(f))
+      .join('');
+
+    return { $regex: flags ? `(?${flags})${pattern}` : pattern };
+  }
 }
-
-type FilterOperator = {
-  sql: string;
-  needsValue: boolean;
-  transformValue?: (value: any) => any;
-};
-
-type FilterOperatorMap = {
-  [K in OperatorType]: (key: string, paramIndex: number) => FilterOperator;
-};
-
-// Helper functions to create operators
-const createBasicOperator = (symbol: string) => {
-  const isLikeOperator = symbol.toLowerCase().includes('like');
-  return (key: string, paramIndex: number): FilterOperator => ({
-    sql: `metadata#>>'{${key.replace(/\./g, ',')}}' ${symbol} $${paramIndex}`,
-    needsValue: true,
-    transformValue: isLikeOperator ? (value: string) => `%${value}%` : undefined,
-  });
-};
-
-const createNumericOperator = (symbol: string) => {
-  return (key: string, paramIndex: number): FilterOperator => ({
-    sql: `(metadata#>>'{${key.replace(/\./g, ',')}}')::numeric ${symbol} $${paramIndex}`,
-    needsValue: true,
-  });
-};
-
-// Define all filter operators
-export const FILTER_OPERATORS: FilterOperatorMap = {
-  // Equal
-  eq: createBasicOperator('='),
-  // Not equal
-  neq: createBasicOperator('!='),
-
-  // Greater than
-  gt: createNumericOperator('>'),
-  // Greater than or equal
-  gte: createNumericOperator('>='),
-  // Less than
-  lt: createNumericOperator('<'),
-  // Less than or equal
-  lte: createNumericOperator('<='),
-
-  // Pattern matching (LIKE)
-  like: createBasicOperator('LIKE'),
-  // Case-insensitive pattern matching (ILIKE)
-  ilike: createBasicOperator('ILIKE'),
-
-  // IN array of values
-  in: (key: string, paramIndex: number): FilterOperator => ({
-    sql: `metadata#>>'{${key.split('.').join(',')}}' = ANY($${paramIndex}::text[])`,
-    needsValue: true,
-    transformValue: (value: string) => (Array.isArray(value) ? value : value.split(',')),
-  }),
-  // JSONB contains
-  contains: (key: string, paramIndex: number): FilterOperator => ({
-    sql: `metadata @> $${paramIndex}::jsonb`,
-    needsValue: true,
-    transformValue: (value: any) => {
-      const parts = key.split('.');
-      return JSON.stringify(parts.reduceRight((value, key) => ({ [key]: value }), value));
-    },
-  }),
-  // Key exists
-  exists: (key: string): FilterOperator => ({
-    sql: `metadata ? '${key}'`,
-    needsValue: false,
-  }),
-  $and: (key: string) => ({ sql: `(${key})`, needsValue: false }),
-  $or: (key: string) => ({ sql: `(${key})`, needsValue: false }),
-};
-
-type FilterCondition = {
-  operator: OperatorType;
-  value?: any;
-};
-
-export type Filter = Record<string, FilterCondition | any>;

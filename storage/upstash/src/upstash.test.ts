@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { MastraStorage } from '@mastra/core';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 
 import { UpstashStore } from './index';
 

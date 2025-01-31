@@ -27,7 +27,13 @@ export class PostgresStore extends MastraStorage {
     });
   }
 
-  async createTable({ tableName, schema }: { tableName: TABLE_NAMES; schema: Record<string, StorageColumn> }): Promise<void> {
+  async createTable({
+    tableName,
+    schema,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+  }): Promise<void> {
     try {
       const columns = Object.entries(schema)
         .map(([name, def]) => {
@@ -82,10 +88,7 @@ export class PostgresStore extends MastraStorage {
       const conditions = keyEntries.map(([key], index) => `"${key}" = $${index + 1}`).join(' AND ');
       const values = keyEntries.map(([_, value]) => value);
 
-      const result = await this.db.oneOrNone<R>(
-        `SELECT * FROM ${tableName} WHERE ${conditions}`,
-        values,
-      );
+      const result = await this.db.oneOrNone<R>(`SELECT * FROM ${tableName} WHERE ${conditions}`, values);
 
       if (!result) {
         return null;
@@ -182,14 +185,7 @@ export class PostgresStore extends MastraStorage {
           metadata = EXCLUDED.metadata,
           "createdAt" = EXCLUDED."createdAt",
           "updatedAt" = EXCLUDED."updatedAt"`,
-        [
-          thread.id,
-          thread.resourceId,
-          thread.title,
-          thread.metadata,
-          thread.createdAt,
-          thread.updatedAt,
-        ],
+        [thread.id, thread.resourceId, thread.title, thread.metadata, thread.createdAt, thread.updatedAt],
       );
 
       return thread;
@@ -245,18 +241,12 @@ export class PostgresStore extends MastraStorage {
 
   async deleteThread({ id }: { id: string }): Promise<void> {
     try {
-      await this.db.tx(async (t) => {
+      await this.db.tx(async t => {
         // First delete all messages associated with this thread
-        await t.none(
-          `DELETE FROM ${MastraStorage.TABLE_MESSAGES} WHERE thread_id = $1`,
-          [id],
-        );
+        await t.none(`DELETE FROM ${MastraStorage.TABLE_MESSAGES} WHERE thread_id = $1`, [id]);
 
         // Then delete the thread
-        await t.none(
-          `DELETE FROM ${MastraStorage.TABLE_THREADS} WHERE id = $1`,
-          [id],
-        );
+        await t.none(`DELETE FROM ${MastraStorage.TABLE_THREADS} WHERE id = $1`, [id]);
       });
     } catch (error) {
       console.error('Error deleting thread:', error);
@@ -292,7 +282,7 @@ export class PostgresStore extends MastraStorage {
         throw new Error('Thread ID is required');
       }
 
-      await this.db.tx(async (t) => {
+      await this.db.tx(async t => {
         for (const message of messages) {
           await t.none(
             `INSERT INTO ${MastraStorage.TABLE_MESSAGES} (id, thread_id, content, "createdAt", role, type) 
@@ -337,13 +327,7 @@ export class PostgresStore extends MastraStorage {
         ON CONFLICT (workflow_name, run_id) DO UPDATE SET
           snapshot = EXCLUDED.snapshot,
           "updatedAt" = EXCLUDED."updatedAt"`,
-        [
-          workflowName,
-          runId,
-          JSON.stringify(snapshot),
-          new Date(),
-          new Date(),
-        ],
+        [workflowName, runId, JSON.stringify(snapshot), new Date(), new Date()],
       );
     } catch (error) {
       console.error('Error inserting into workflow_snapshot:', error);

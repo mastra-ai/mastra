@@ -1,6 +1,6 @@
+import { WorkflowRunState } from '@mastra/core';
 import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
-import { WorkflowRunState } from '@mastra/core';
 
 import { PostgresStore, type PostgresConfig } from './index';
 

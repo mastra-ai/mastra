@@ -38,7 +38,10 @@ export class UpstashStore extends MastraStorage {
     await Promise.all([
       this.createTable({ tableName: MastraStorage.TABLE_THREADS, schema: MastraStorage.THREADS_SCHEMA }),
       this.createTable({ tableName: MastraStorage.TABLE_MESSAGES, schema: MastraStorage.MESSAGES_SCHEMA }),
-      this.createTable({ tableName: MastraStorage.TABLE_WORKFLOW_SNAPSHOT, schema: MastraStorage.WORKFLOW_SNAPSHOT_SCHEMA }),
+      this.createTable({
+        tableName: MastraStorage.TABLE_WORKFLOW_SNAPSHOT,
+        schema: MastraStorage.WORKFLOW_SNAPSHOT_SCHEMA,
+      }),
       this.createTable({ tableName: MastraStorage.TABLE_EVALS, schema: MastraStorage.EVALS_SCHEMA }),
     ]);
   }
@@ -65,21 +68,21 @@ export class UpstashStore extends MastraStorage {
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     let key: string;
-    
+
     if (tableName === MastraStorage.TABLE_MESSAGES) {
       // For messages, use threadId as the primary key component
       key = this.getKey(tableName, { threadId: record.threadId, id: record.id });
     } else {
       key = this.getKey(tableName, { id: record.id });
     }
-    
+
     // Convert dates to ISO strings before storing
     const processedRecord = {
       ...record,
       createdAt: this.serializeDate(record.createdAt),
       updatedAt: this.serializeDate(record.updatedAt),
     };
-    
+
     await this.redis.set(key, processedRecord);
   }
 
@@ -171,7 +174,7 @@ export class UpstashStore extends MastraStorage {
     // Add an index to each message to maintain order
     const messagesWithIndex = messages.map((message, index) => ({
       ...message,
-      _index: index
+      _index: index,
     }));
 
     await Promise.all(
@@ -217,10 +220,10 @@ export class UpstashStore extends MastraStorage {
     snapshot: WorkflowRunState;
   }): Promise<void> {
     const { namespace, workflowName, runId, snapshot } = params;
-    const key = this.getKey(MastraStorage.TABLE_WORKFLOW_SNAPSHOT, { 
+    const key = this.getKey(MastraStorage.TABLE_WORKFLOW_SNAPSHOT, {
       namespace,
       workflow_name: workflowName,
-      run_id: runId 
+      run_id: runId,
     });
     await this.redis.set(key, snapshot); // Store snapshot directly without wrapping
   }
@@ -231,10 +234,10 @@ export class UpstashStore extends MastraStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     const { namespace, workflowName, runId } = params;
-    const key = this.getKey(MastraStorage.TABLE_WORKFLOW_SNAPSHOT, { 
+    const key = this.getKey(MastraStorage.TABLE_WORKFLOW_SNAPSHOT, {
       namespace,
       workflow_name: workflowName,
-      run_id: runId 
+      run_id: runId,
     });
     const data = await this.redis.get<WorkflowRunState>(key);
     return data || null;
