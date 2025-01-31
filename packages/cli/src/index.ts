@@ -3,10 +3,10 @@ import { Command } from 'commander';
 import color from 'picocolors';
 
 import { PosthogAnalytics } from './analytics/index';
-import { build } from './commands/build';
+import { build } from './commands/build/build';
 import { create } from './commands/create/create';
 import { deploy } from './commands/deploy/index';
-import { dev } from './commands/dev';
+import { dev } from './commands/dev/dev';
 import { add } from './commands/engine/add';
 import { down } from './commands/engine/down';
 import { generate } from './commands/engine/generate';
@@ -15,7 +15,6 @@ import { up } from './commands/engine/up';
 import { init } from './commands/init/init';
 import { checkAndInstallCoreDeps, checkPkgJson, interactivePrompt } from './commands/init/utils';
 import { DepsService } from './services/service.deps';
-import { findApiKeys } from './utils/find-api-keys';
 import { getEnv } from './utils/get-env';
 import { logger } from './utils/logger';
 
@@ -134,12 +133,9 @@ program
     analytics.trackCommand({
       command: 'dev',
     });
-    const apiKeys = findApiKeys();
     dev({
       port: args?.port ? parseInt(args.port) : 4111,
-      env: apiKeys,
       dir: args?.dir,
-      toolsDirs: args?.tools,
       root: args?.root,
     });
   });
@@ -244,7 +240,7 @@ program
       command: 'mastra deploy',
       args,
       execution: async () => {
-        await deploy({ dir: args.dir, token: args.token });
+        await deploy({ dir: args.dir });
       },
     });
   });
