@@ -6,7 +6,9 @@
   "private": true,
   "main": "index.js",
   "scripts": {
-    "start": "npx bun src/index.ts"
+    "prestart": "docker compose up -d",
+    "start": "npx bun src/index.ts",
+    "poststart": "docker compose down"
   },
   "keywords": [],
   "author": "",
