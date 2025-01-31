@@ -35,19 +35,6 @@ export class UpstashStore extends MastraStorage {
     return dateObj?.toISOString();
   }
 
-  async init(): Promise<void> {
-    // Initialize all required tables
-    await Promise.all([
-      this.createTable({ tableName: MastraStorage.TABLE_THREADS, schema: MastraStorage.THREADS_SCHEMA }),
-      this.createTable({ tableName: MastraStorage.TABLE_MESSAGES, schema: MastraStorage.MESSAGES_SCHEMA }),
-      this.createTable({
-        tableName: MastraStorage.TABLE_WORKFLOW_SNAPSHOT,
-        schema: MastraStorage.WORKFLOW_SNAPSHOT_SCHEMA,
-      }),
-      this.createTable({ tableName: MastraStorage.TABLE_EVALS, schema: MastraStorage.EVALS_SCHEMA }),
-    ]);
-  }
-
   async createTable({
     tableName,
     schema,
@@ -202,17 +189,20 @@ export class UpstashStore extends MastraStorage {
       }),
     );
 
-    return messages
-      .filter(message => message && message.threadId === threadId)
-      .sort((a, b) => {
-        // First try to sort by _index if available
-        if (a!._index !== undefined && b!._index !== undefined) {
-          return a!._index - b!._index;
-        }
-        // Fall back to createdAt if _index is not available
-        return new Date(a!.createdAt).getTime() - new Date(b!.createdAt).getTime();
-      })
-      .map(({ _index, ...message }) => message as MessageType); // Remove _index before returning
+    return (
+      messages
+        .filter(message => message && message.threadId === threadId)
+        .sort((a, b) => {
+          // First try to sort by _index if available
+          if (a!._index !== undefined && b!._index !== undefined) {
+            return a!._index - b!._index;
+          }
+          // Fall back to createdAt if _index is not available
+          return new Date(a!.createdAt).getTime() - new Date(b!.createdAt).getTime();
+        })
+        // @ts-ignore
+        .map(({ _index, ...message }) => message as MessageType)
+    ); // Remove _index before returning
   }
 
   async persistWorkflowSnapshot(params: {
