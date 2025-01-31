@@ -14,7 +14,7 @@ export interface AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefi
   resourceId?: string;
   context?: CoreMessage[];
   threadId?: string;
-  memory?: MemoryConfig;
+  thread?: MemoryConfig;
   runId?: string;
   onStepFinish?: (step: string) => void;
   maxSteps?: number;
@@ -27,7 +27,7 @@ export interface AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefine
   resourceId?: string;
   context?: CoreMessage[];
   threadId?: string;
-  memory?: MemoryConfig;
+  thread?: MemoryConfig;
   runId?: string;
   onFinish?: (result: string) => Promise<void> | void;
   onStepFinish?: (step: string) => void;

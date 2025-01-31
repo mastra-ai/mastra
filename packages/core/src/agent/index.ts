@@ -687,7 +687,7 @@ export class Agent<
     {
       context,
       threadId: threadIdInFn,
-      memory,
+      thread: memoryConfig,
       resourceId,
       maxSteps = 5,
       onStepFinish,
@@ -724,7 +724,7 @@ export class Agent<
       messages: messagesToUse,
       context,
       threadId: threadIdInFn,
-      memoryConfig: memory,
+      memoryConfig,
       resourceId,
       runId: runIdToUse,
       toolsets,
@@ -745,7 +745,7 @@ export class Agent<
 
       const outputText = result.text;
 
-      await after({ result, threadId, memoryConfig: memory, outputText, runId: runIdToUse });
+      await after({ result, threadId, memoryConfig, outputText, runId: runIdToUse });
 
       return result as unknown as GenerateReturn<Z>;
     }
@@ -763,7 +763,7 @@ export class Agent<
 
     const outputText = JSON.stringify(result.object);
 
-    await after({ result, threadId, memoryConfig: memory, outputText, runId: runIdToUse });
+    await after({ result, threadId, memoryConfig, outputText, runId: runIdToUse });
 
     return result as unknown as GenerateReturn<Z>;
   }
@@ -773,7 +773,7 @@ export class Agent<
     {
       context,
       threadId: threadIdInFn,
-      memory,
+      thread: memoryConfig,
       resourceId,
       maxSteps = 5,
       onFinish,
@@ -811,7 +811,7 @@ export class Agent<
       messages: messagesToUse,
       context,
       threadId: threadIdInFn,
-      memoryConfig: memory,
+      memoryConfig,
       resourceId,
       runId: runIdToUse,
       toolsets,
@@ -833,7 +833,7 @@ export class Agent<
           try {
             const res = JSON.parse(result) || {};
             const outputText = res.text;
-            await after({ result: res, threadId, memoryConfig: memory, outputText, runId: runIdToUse });
+            await after({ result: res, threadId, memoryConfig, outputText, runId: runIdToUse });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
               error: e,
@@ -861,7 +861,7 @@ export class Agent<
         try {
           const res = JSON.parse(result) || {};
           const outputText = JSON.stringify(res.object);
-          await after({ result: res, threadId, memoryConfig: memory, outputText, runId: runIdToUse });
+          await after({ result: res, threadId, memoryConfig, outputText, runId: runIdToUse });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {
             error: e,
