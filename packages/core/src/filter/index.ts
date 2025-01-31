@@ -46,6 +46,16 @@ type Filter = {
   [field: string]: FieldCondition | Filter;
 };
 
+type OperatorSupport = {
+  logical?: QueryOperator[];
+  array?: QueryOperator[];
+  basic?: QueryOperator[];
+  numeric?: QueryOperator[];
+  element?: QueryOperator[];
+  regex?: QueryOperator[];
+  custom?: string[];
+};
+
 // Base abstract class for filter translators
 abstract class BaseFilterTranslator {
   abstract translate(filter: Filter): unknown;
@@ -57,50 +67,58 @@ abstract class BaseFilterTranslator {
     return key.startsWith('$');
   }
 
-  protected readonly supportedBasicOperators: BasicOperator[] = ['$eq', '$ne'];
-  protected readonly supportedNumericOperators: NumericOperator[] = ['$gt', '$gte', '$lt', '$lte'];
-  protected readonly supportedArrayOperators: ArrayOperator[] = ['$in', '$nin', '$all', '$elemMatch'];
-  protected readonly supportedLogicalOperators: LogicalOperator[] = ['$and', '$or', '$not', '$nor'];
-  protected readonly supportedElementOperators: ElementOperator[] = ['$exists'];
-  protected readonly supportedRegexOperators: RegexOperator[] = ['$regex', '$options'];
+  protected static readonly BASIC_OPERATORS: BasicOperator[] = ['$eq', '$ne'];
+  protected static readonly NUMERIC_OPERATORS: NumericOperator[] = ['$gt', '$gte', '$lt', '$lte'];
+  protected static readonly ARRAY_OPERATORS: ArrayOperator[] = ['$in', '$nin', '$all', '$elemMatch'];
+  protected static readonly LOGICAL_OPERATORS: LogicalOperator[] = ['$and', '$or', '$not', '$nor'];
+  protected static readonly ELEMENT_OPERATORS: ElementOperator[] = ['$exists'];
+  protected static readonly REGEX_OPERATORS: RegexOperator[] = ['$regex', '$options'];
+
+  protected static readonly DEFAULT_OPERATORS = {
+    logical: BaseFilterTranslator.LOGICAL_OPERATORS,
+    basic: BaseFilterTranslator.BASIC_OPERATORS,
+    numeric: BaseFilterTranslator.NUMERIC_OPERATORS,
+    array: BaseFilterTranslator.ARRAY_OPERATORS,
+    element: BaseFilterTranslator.ELEMENT_OPERATORS,
+    regex: BaseFilterTranslator.REGEX_OPERATORS,
+  };
 
   protected isLogicalOperator(key: string): key is LogicalOperator {
-    return this.supportedLogicalOperators.includes(key as LogicalOperator);
+    return BaseFilterTranslator.DEFAULT_OPERATORS.logical.includes(key as LogicalOperator);
   }
 
   protected isBasicOperator(key: string): key is BasicOperator {
-    return this.supportedBasicOperators.includes(key as BasicOperator);
+    return BaseFilterTranslator.DEFAULT_OPERATORS.basic.includes(key as BasicOperator);
   }
 
   protected isNumericOperator(key: string): key is NumericOperator {
-    return this.supportedNumericOperators.includes(key as NumericOperator);
+    return BaseFilterTranslator.DEFAULT_OPERATORS.numeric.includes(key as NumericOperator);
   }
 
   protected isArrayOperator(key: string): key is ArrayOperator {
-    return this.supportedArrayOperators.includes(key as ArrayOperator);
+    return BaseFilterTranslator.DEFAULT_OPERATORS.array.includes(key as ArrayOperator);
   }
 
   protected isElementOperator(key: string): key is ElementOperator {
-    return this.supportedElementOperators.includes(key as ElementOperator);
+    return BaseFilterTranslator.DEFAULT_OPERATORS.element.includes(key as ElementOperator);
   }
 
   protected isRegexOperator(key: string): key is RegexOperator {
-    return this.supportedRegexOperators.includes(key as RegexOperator);
+    return BaseFilterTranslator.DEFAULT_OPERATORS.regex.includes(key as RegexOperator);
   }
 
-  /**
-   * Validate if an operator is supported by the specific vector DB.
-   * Can be overridden by implementations to specify supported operators.
-   */
+  protected isFieldOperator(key: string): key is QueryOperator {
+    return this.isOperator(key) && !this.isLogicalOperator(key);
+  }
+
+  protected getSupportedOperators(): OperatorSupport {
+    return BaseFilterTranslator.DEFAULT_OPERATORS;
+  }
+
   protected isValidOperator(key: string): boolean {
-    return (
-      this.isBasicOperator(key) ||
-      this.isNumericOperator(key) ||
-      this.isLogicalOperator(key) ||
-      this.isArrayOperator(key) ||
-      this.isElementOperator(key) ||
-      this.isRegexOperator(key)
-    );
+    const support = this.getSupportedOperators();
+    const allSupported = Object.values(support).flat();
+    return allSupported.includes(key as QueryOperator);
   }
 
   /**
@@ -148,6 +166,12 @@ abstract class BaseFilterTranslator {
 
   protected static readonly ErrorMessages = {
     UNSUPPORTED_OPERATOR: (op: string) => `Unsupported operator: ${op}`,
+    INVALID_LOGICAL_OPERATOR_LOCATION: (op: string, path: string) =>
+      `Logical operator ${op} cannot be used at field level: ${path}`,
+    NOT_REQUIRES_OBJECT: `$not operator requires an object`,
+    NOT_CANNOT_BE_EMPTY: `$not operator cannot be empty`,
+    INVALID_LOGICAL_OPERATOR_CONTENT: (path: string) =>
+      `Logical operators must contain field conditions, not direct operators: ${path}`,
   } as const;
 
   /**
@@ -168,7 +192,10 @@ abstract class BaseFilterTranslator {
    * Validates if a filter structure is supported by the specific vector DB
    * and returns detailed validation information.
    */
-  private validateFilterSupport(node: Filter | FieldCondition): {
+  private validateFilterSupport(
+    node: Filter | FieldCondition,
+    path: string = '',
+  ): {
     supported: boolean;
     messages: string[];
   } {
@@ -181,7 +208,7 @@ abstract class BaseFilterTranslator {
 
     // Handle arrays
     if (Array.isArray(node)) {
-      const arrayResults = node.map(item => this.validateFilterSupport(item));
+      const arrayResults = node.map(item => this.validateFilterSupport(item, path));
       const arrayMessages = arrayResults.flatMap(r => r.messages);
       return {
         supported: arrayResults.every(r => r.supported),
@@ -194,6 +221,7 @@ abstract class BaseFilterTranslator {
     let isSupported = true;
 
     for (const [key, value] of Object.entries(nodeObj)) {
+      const newPath = path ? `${path}.${key}` : key;
       // Check if the key is an operator
       if (this.isOperator(key)) {
         if (!this.isValidOperator(key)) {
@@ -201,10 +229,49 @@ abstract class BaseFilterTranslator {
           messages.push(BaseFilterTranslator.ErrorMessages.UNSUPPORTED_OPERATOR(key));
           continue;
         }
+
+        // Special validation for logical operators
+        if (this.isLogicalOperator(key)) {
+          if (key === '$not') {
+            if (Array.isArray(value) || typeof value !== 'object') {
+              isSupported = false;
+              messages.push(BaseFilterTranslator.ErrorMessages.NOT_REQUIRES_OBJECT);
+              continue;
+            }
+            if (this.isEmpty(value)) {
+              isSupported = false;
+              messages.push(BaseFilterTranslator.ErrorMessages.NOT_CANNOT_BE_EMPTY);
+              continue;
+            }
+            // $not can be used at field level or top level
+            continue;
+          }
+          // Other logical operators can only be at top level or nested in logical operators
+          if (path && !this.isLogicalOperator(path.split('.').pop()!)) {
+            isSupported = false;
+            messages.push(BaseFilterTranslator.ErrorMessages.INVALID_LOGICAL_OPERATOR_LOCATION(key, newPath));
+            continue;
+          }
+
+          if (Array.isArray(value)) {
+            const hasDirectOperators = value.some(
+              item =>
+                typeof item === 'object' &&
+                Object.keys(item).length === 1 &&
+                this.isFieldOperator(Object.keys(item)[0]!),
+            );
+
+            if (hasDirectOperators) {
+              isSupported = false;
+              messages.push(BaseFilterTranslator.ErrorMessages.INVALID_LOGICAL_OPERATOR_CONTENT(newPath));
+              continue;
+            }
+          }
+        }
       }
 
       // Recursively validate nested value
-      const nestedValidation = this.validateFilterSupport(value);
+      const nestedValidation = this.validateFilterSupport(value, newPath);
       if (!nestedValidation.supported) {
         isSupported = false;
         messages.push(...nestedValidation.messages);
@@ -227,5 +294,6 @@ export {
   type Filter,
   type FieldCondition,
   type OperatorCondition,
+  type OperatorSupport,
   BaseFilterTranslator,
 };

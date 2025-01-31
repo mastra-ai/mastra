@@ -1,17 +1,16 @@
-import {
-  ArrayOperator,
-  BaseFilterTranslator,
-  FieldCondition,
-  Filter,
-  LogicalOperator,
-  QueryOperator,
-} from '@mastra/core/filter';
+import { BaseFilterTranslator, FieldCondition, Filter, OperatorSupport, QueryOperator } from '@mastra/core/filter';
 
 export class PineconeFilterTranslator extends BaseFilterTranslator {
-  protected override supportedArrayOperators: ArrayOperator[] = ['$in', '$all'];
-  protected override supportedLogicalOperators: LogicalOperator[] = ['$and', '$or'];
-  protected override supportedElementOperators = [];
-  protected override supportedRegexOperators = [];
+  protected override getSupportedOperators(): OperatorSupport {
+    return {
+      ...BaseFilterTranslator.DEFAULT_OPERATORS,
+      logical: ['$and', '$or'],
+      array: ['$in', '$all'],
+      element: [],
+      regex: [],
+      custom: [],
+    };
+  }
 
   translate(filter: Filter): Filter {
     if (this.isEmpty(filter)) return filter;

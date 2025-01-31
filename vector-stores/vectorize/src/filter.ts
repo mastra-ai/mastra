@@ -1,10 +1,16 @@
-import { BaseFilterTranslator, Filter, FieldCondition, ArrayOperator } from '@mastra/core/filter';
+import { BaseFilterTranslator, Filter, FieldCondition, OperatorSupport } from '@mastra/core/filter';
 
 export class VectorizeFilterTranslator extends BaseFilterTranslator {
-  protected override supportedArrayOperators: ArrayOperator[] = ['$in', '$nin'];
-  protected override supportedLogicalOperators = [];
-  protected override supportedElementOperators = [];
-  protected override supportedRegexOperators = [];
+  protected override getSupportedOperators(): OperatorSupport {
+    return {
+      ...BaseFilterTranslator.DEFAULT_OPERATORS,
+      logical: [],
+      array: ['$in', '$nin'],
+      element: [],
+      regex: [],
+      custom: [],
+    };
+  }
 
   translate(filter: Filter): Filter {
     if (this.isEmpty(filter)) return filter;

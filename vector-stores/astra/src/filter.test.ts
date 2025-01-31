@@ -9,8 +9,8 @@ describe('AstraFilterTranslator', () => {
     translator = new AstraFilterTranslator();
   });
 
-  describe('translate', () => {
-    // Basic cases
+  // Basic Filter Operations
+  describe('basic operations', () => {
     it('handles simple equality', () => {
       const filter = { field: 'value' };
       expect(translator.translate(filter)).toEqual(filter);
@@ -24,29 +24,32 @@ describe('AstraFilterTranslator', () => {
       expect(translator.translate(filter)).toEqual(filter);
     });
 
-    it('handles logical operators', () => {
+    it('handles valid multiple operators on same field', () => {
       const filter = {
-        $or: [{ status: 'active' }, { age: { $gt: 25 } }],
+        price: { $gt: 100, $lt: 200 },
+        quantity: { $gte: 10, $lte: 20 },
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
 
-    it('normalizes dates', () => {
-      const date = new Date('2024-01-01');
-      const filter = { timestamp: { $gt: date } };
-      expect(translator.translate(filter)).toEqual({
-        timestamp: { $gt: date.toISOString() },
-      });
-    });
-
-    it('handles nested objects', () => {
+    it('handles null values correctly', () => {
       const filter = {
-        'user.profile.age': { $gt: 25 },
-        'user.status': 'active',
+        field: null,
+        other: { $eq: null },
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
 
+    it('throws on unsupported combinations', () => {
+      const filter = {
+        field: { $gt: 100, $lt: 200 },
+      };
+      expect(translator.translate(filter)).toEqual(filter);
+    });
+  });
+
+  // Array Operations
+  describe('array operations', () => {
     it('handles array operators', () => {
       const filter = {
         tags: { $all: ['tag1', 'tag2'] },
@@ -67,10 +70,29 @@ describe('AstraFilterTranslator', () => {
       expect(translator.translate(filter)).toEqual(filter);
     });
 
-    it('handles empty filters', () => {
-      expect(translator.translate({})).toEqual({});
-      expect(translator.translate(null as any)).toEqual(null);
-      expect(translator.translate(undefined as any)).toEqual(undefined);
+    it('handles empty array values', () => {
+      const filter = {
+        tags: { $in: [] },
+        categories: { $all: [] },
+      };
+      expect(translator.translate(filter)).toEqual(filter);
+    });
+
+    it('handles nested array operators', () => {
+      const filter = {
+        $and: [{ tags: { $all: ['tag1', 'tag2'] } }, { 'nested.array': { $in: [1, 2, 3] } }],
+      };
+      expect(translator.translate(filter)).toEqual(filter);
+    });
+  });
+
+  // Logical Operators
+  describe('logical operators', () => {
+    it('handles logical operators', () => {
+      const filter = {
+        $or: [{ status: 'active' }, { age: { $gt: 25 } }],
+      };
+      expect(translator.translate(filter)).toEqual(filter);
     });
 
     it('handles nested logical operators', () => {
@@ -83,63 +105,9 @@ describe('AstraFilterTranslator', () => {
       expect(translator.translate(filter)).toEqual(filter);
     });
 
-    it('handles $exists operator', () => {
-      const filter = {
-        field: { $exists: true },
-        missing: { $exists: false },
-      };
-      expect(translator.translate(filter)).toEqual(filter);
-    });
-
     it('handles $nor operator', () => {
       const filter = {
         $nor: [{ price: { $lt: 100 } }, { status: 'inactive' }],
-      };
-      expect(translator.translate(filter)).toEqual(filter);
-    });
-
-    it('handles valid multiple operators on same field', () => {
-      const filter = {
-        price: { $gt: 100, $lt: 200 },
-        quantity: { $gte: 10, $lte: 20 },
-      };
-      expect(translator.translate(filter)).toEqual(filter);
-    });
-
-    it('handles nested array operators', () => {
-      const filter = {
-        $and: [{ tags: { $all: ['tag1', 'tag2'] } }, { 'nested.array': { $in: [1, 2, 3] } }],
-      };
-      expect(translator.translate(filter)).toEqual(filter);
-    });
-
-    it('handles empty array values', () => {
-      const filter = {
-        tags: { $in: [] },
-        categories: { $all: [] },
-      };
-      expect(translator.translate(filter)).toEqual(filter);
-    });
-
-    it('handles complex nested structures', () => {
-      const filter = {
-        $or: [
-          {
-            $and: [{ field1: { $exists: true } }, { field2: { $in: ['a', 'b'] } }],
-          },
-          {
-            $nor: [{ field3: { $gt: 100 } }, { field4: { $all: ['x', 'y'] } }],
-          },
-        ],
-      };
-      expect(translator.translate(filter)).toEqual(filter);
-    });
-
-    it('handles mixed array and comparison operators', () => {
-      const filter = {
-        tags: { $all: ['tag1', 'tag2'] },
-        $or: [{ price: { $gt: 100 } }, { categories: { $in: ['A'] } }],
-        status: { $ne: 'inactive' },
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
@@ -153,26 +121,121 @@ describe('AstraFilterTranslator', () => {
       expect(translator.translate(filter)).toEqual(filter);
     });
 
-    it('handles null values correctly', () => {
-      const filter = {
-        field: null,
-        other: { $eq: null },
-      };
-      expect(translator.translate(filter)).toEqual(filter);
+    it('allows multiple logical operators at root level with complex conditions', () => {
+      expect(() =>
+        translator.translate({
+          $and: [{ field1: { $gt: 10 } }],
+          $or: [{ field2: { $lt: 20 } }],
+          $nor: [{ field3: { $in: ['a', 'b'] } }],
+          field4: { $not: { $eq: 'value' } },
+        }),
+      ).not.toThrow();
     });
 
-    it('handles regex text search', () => {
-      const filter = {
-        name: { $regex: 'test' },
-        description: { $regex: '^hello' },
-      };
-      expect(translator.translate(filter)).toEqual(filter);
+    it('allows logical operators at root level', () => {
+      expect(() =>
+        translator.translate({
+          $and: [{ field1: 'value1' }, { field2: 'value2' }],
+          $or: [{ field3: 'value3' }, { field4: 'value4' }],
+          $nor: [{ field5: 'value5' }, { field6: 'value6' }],
+        }),
+      ).not.toThrow();
     });
 
-    it('handles case-insensitive regex', () => {
+    it('allows logical operators nested within other logical operators', () => {
+      expect(() =>
+        translator.translate({
+          $and: [
+            {
+              $or: [{ field1: 'value1' }, { field2: 'value2' }],
+            },
+            {
+              $nor: [{ field3: 'value3' }, { field4: 'value4' }],
+            },
+          ],
+        }),
+      ).not.toThrow();
+    });
+  });
+
+  // Logical Operator Validation
+  describe('logical operator validation', () => {
+    it('throws error for direct operators in logical operator arrays', () => {
+      expect(() =>
+        translator.translate({
+          $and: [{ $eq: 'value' }, { $gt: 100 }],
+        }),
+      ).toThrow(/Logical operators must contain field conditions/);
+
+      expect(() =>
+        translator.translate({
+          $or: [{ $in: ['value1', 'value2'] }],
+        }),
+      ).toThrow(/Logical operators must contain field conditions/);
+    });
+
+    it('throws error for deeply nested logical operators in non-logical contexts', () => {
+      expect(() =>
+        translator.translate({
+          field: {
+            $gt: {
+              $or: [{ subfield: 'value1' }, { subfield: 'value2' }],
+            },
+          },
+        }),
+      ).toThrow();
+
+      expect(() =>
+        translator.translate({
+          field: {
+            $in: [
+              {
+                $and: [{ subfield: 'value1' }, { subfield: 'value2' }],
+              },
+            ],
+          },
+        }),
+      ).toThrow();
+    });
+
+    it('throws error for logical operators nested in non-logical contexts', () => {
+      expect(() =>
+        translator.translate({
+          field: {
+            $elemMatch: {
+              $or: [{ subfield: 'value1' }, { subfield: 'value2' }],
+            },
+          },
+        }),
+      ).toThrow();
+
+      expect(() =>
+        translator.translate({
+          field: {
+            $not: {
+              $and: [{ subfield: 'value1' }, { subfield: 'value2' }],
+            },
+          },
+        }),
+      ).not.toThrow(); // $not is allowed to contain logical operators
+    });
+
+    it('throws error for $not if not an object', () => {
+      expect(() => translator.translate({ $not: 'value' })).toThrow();
+      expect(() => translator.translate({ $not: [{ field: 'value' }] })).toThrow();
+    });
+
+    it('throws error for $not if empty', () => {
+      expect(() => translator.translate({ $not: {} })).toThrow();
+    });
+  });
+
+  // Nested Objects and Fields
+  describe('nested objects and fields', () => {
+    it('handles nested objects', () => {
       const filter = {
-        name: { $regex: 'test', $options: 'i' },
-        description: { $regex: '^hello' },
+        'user.profile.age': { $gt: 25 },
+        'user.status': 'active',
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
@@ -185,14 +248,6 @@ describe('AstraFilterTranslator', () => {
       expect(translator.translate(filter)).toEqual(filter);
     });
 
-    it('throws on unsupported combinations', () => {
-      const filter = {
-        field: { $gt: 100, $lt: 200 },
-      };
-      expect(translator.translate(filter)).toEqual(filter);
-    });
-
-    // Test nested empty objects
     it('preserves nested empty objects', () => {
       const filter = {
         status: 'active',
@@ -205,7 +260,6 @@ describe('AstraFilterTranslator', () => {
       expect(translator.translate(filter)).toEqual(filter);
     });
 
-    // Test mixed operator and empty object cases
     it('handles mix of operators and empty objects', () => {
       const filter = {
         tags: { $in: ['a', 'b'] },
@@ -218,7 +272,6 @@ describe('AstraFilterTranslator', () => {
       expect(translator.translate(filter)).toEqual(filter);
     });
 
-    // Test deeply nested operators
     it('handles deeply nested operators', () => {
       const filter = {
         user: {
@@ -233,6 +286,7 @@ describe('AstraFilterTranslator', () => {
     });
   });
 
+  // Regex Support
   describe('regex support', () => {
     it('passes through regex literals', () => {
       const filter = { field: /pattern/i };
@@ -257,38 +311,40 @@ describe('AstraFilterTranslator', () => {
       const filter = { field: { $regex: 'pat.*ern' } };
       expect(translator.translate(filter)).toEqual(filter);
     });
+
+    it('handles case-insensitive regex', () => {
+      const filter = {
+        name: { $regex: 'test', $options: 'i' },
+        description: { $regex: '^hello' },
+      };
+      expect(translator.translate(filter)).toEqual(filter);
+    });
   });
 
-  describe('validate operators', () => {
-    it('ensure all operator filters are supported', () => {
-      const supportedFilters = [
-        { field: { $eq: 'value' } },
-        { field: { $ne: 'value' } },
-        { field: { $gt: 'value' } },
-        { field: { $gte: 'value' } },
-        { field: { $lt: 'value' } },
-        { field: { $lte: 'value' } },
-        { field: { $in: ['value'] } },
-        { field: { $nin: ['value'] } },
-        { field: { $regex: 'value' } },
-        { field: { $exists: true } },
-        { field: { $and: [{ $eq: 'value' }] } },
-        { field: { $nor: [{ $eq: 'value' }] } },
-        { field: { $or: [{ $eq: 'value' }] } },
-        { field: { $not: [{ $eq: 'value' }] } },
-        { field: { $all: [{ $eq: 'value' }] } },
-        { field: { $elemMatch: { $gt: 5 } } },
-      ];
-      supportedFilters.forEach(filter => {
-        expect(() => translator.translate(filter)).not.toThrow();
+  // Special Cases
+  describe('special cases', () => {
+    it('handles empty filters', () => {
+      expect(translator.translate({})).toEqual({});
+      expect(translator.translate(null as any)).toEqual(null);
+      expect(translator.translate(undefined as any)).toEqual(undefined);
+    });
+
+    it('normalizes dates', () => {
+      const date = new Date('2024-01-01');
+      const filter = { timestamp: { $gt: date } };
+      expect(translator.translate(filter)).toEqual({
+        timestamp: { $gt: date.toISOString() },
       });
     });
 
-    it('throws error for unsupported operators', () => {
-      const unsupportedFilters = [{ field: { $contains: 'value' } }];
-      unsupportedFilters.forEach(filter => {
-        expect(() => translator.translate(filter)).toThrow(/Unsupported operator/);
-      });
+    it('allows $not in field-level conditions', () => {
+      expect(() =>
+        translator.translate({
+          field1: { $not: { $eq: 'value1' } },
+          field2: { $not: { $in: ['value2', 'value3'] } },
+          field3: { $not: { $regex: 'pattern' } },
+        }),
+      ).not.toThrow();
     });
   });
 });

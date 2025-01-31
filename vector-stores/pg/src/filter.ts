@@ -1,4 +1,4 @@
-import { BaseFilterTranslator, FieldCondition, Filter, LogicalOperator } from '@mastra/core/filter';
+import { BaseFilterTranslator, FieldCondition, Filter, LogicalOperator, OperatorSupport } from '@mastra/core/filter';
 
 /**
  * Translates MongoDB-style filters to PG compatible filters.
@@ -11,16 +11,12 @@ import { BaseFilterTranslator, FieldCondition, Filter, LogicalOperator } from '@
  */
 
 export class PGFilterTranslator extends BaseFilterTranslator {
-  protected override supportedLogicalOperators: LogicalOperator[] = ['$and', '$or', '$nor'];
-
-  protected isPGOperator(key: string): boolean {
-    return key === '$contains';
+  protected override getSupportedOperators(): OperatorSupport {
+    return {
+      ...BaseFilterTranslator.DEFAULT_OPERATORS,
+      custom: ['$contains'],
+    };
   }
-
-  protected override isValidOperator(key: string) {
-    return super.isValidOperator(key) || this.isPGOperator(key);
-  }
-
   translate(filter: Filter): Filter {
     if (this.isEmpty(filter)) {
       return filter;

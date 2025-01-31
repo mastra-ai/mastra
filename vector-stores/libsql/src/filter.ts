@@ -1,4 +1,4 @@
-import { BaseFilterTranslator, FieldCondition, Filter, LogicalOperator } from '@mastra/core/filter';
+import { BaseFilterTranslator, FieldCondition, Filter, LogicalOperator, OperatorSupport } from '@mastra/core/filter';
 
 /**
  * Translates MongoDB-style filters to LibSQL compatible filters.
@@ -11,8 +11,13 @@ import { BaseFilterTranslator, FieldCondition, Filter, LogicalOperator } from '@
  *
  */
 export class LibSQLFilterTranslator extends BaseFilterTranslator {
-  protected override supportedLogicalOperators: LogicalOperator[] = ['$and', '$or', '$nor'];
-  protected override supportedRegexOperators = [];
+  protected override getSupportedOperators(): OperatorSupport {
+    return {
+      ...BaseFilterTranslator.DEFAULT_OPERATORS,
+      logical: ['$and', '$or', '$nor'],
+      regex: [],
+    };
+  }
 
   protected isLibSQLOperator(key: string): boolean {
     return key === '$contains';

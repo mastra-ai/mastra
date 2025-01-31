@@ -6,7 +6,7 @@ import {
   ElementOperator,
   LogicalOperator,
   NumericOperator,
-} from '@mastra/core/filter';
+} from '@mastra/core';
 
 export type OperatorType =
   | BasicOperator
@@ -28,7 +28,10 @@ type OperatorFn = (key: string, paramIndex: number) => FilterOperator;
 // Helper functions to create operators
 const createBasicOperator = (symbol: string) => {
   return (key: string, paramIndex: number) => ({
-    sql: `metadata#>>'{${handleKey(key)}}' ${symbol} $${paramIndex}`,
+    sql: `CASE 
+      WHEN $${paramIndex}::text IS NULL THEN metadata#>>'{${handleKey(key)}}' IS ${symbol === '=' ? '' : 'NOT'} NULL
+      ELSE metadata#>>'{${handleKey(key)}}' ${symbol} $${paramIndex}::text
+    END`,
     needsValue: true,
   });
 };
@@ -108,10 +111,10 @@ export const handleKey = (key: string) => {
 export function buildFilterQuery(filter: Filter, minScore: number): FilterResult {
   const values = [minScore];
 
-  function buildCondition(key: string, value: any): string {
+  function buildCondition(key: string, value: any, parentPath: string): string {
     // Handle logical operators ($and/$or)
     if (['$and', '$or', '$not', '$nor'].includes(key)) {
-      return handleLogicalOperator(key as '$and' | '$or' | '$not' | '$nor', value);
+      return handleLogicalOperator(key as '$and' | '$or' | '$not' | '$nor', value, parentPath);
     }
 
     // If condition is not a FilterCondition object, assume it's an equality check
@@ -122,6 +125,20 @@ export function buildFilterQuery(filter: Filter, minScore: number): FilterResult
 
     // Handle operator conditions
     const [[operator, operatorValue] = []] = Object.entries(value);
+
+    // Special handling for nested $not
+    if (operator === '$not') {
+      const [[nestedOp, nestedValue] = []] = Object.entries(operatorValue as Record<string, unknown>);
+      if (!nestedOp || !FILTER_OPERATORS[nestedOp as keyof typeof FILTER_OPERATORS]) {
+        throw new Error(`Invalid operator in $not condition: ${nestedOp}`);
+      }
+      const operatorFn = FILTER_OPERATORS[nestedOp]!;
+      const operatorResult = operatorFn(key, values.length + 1);
+      if (operatorResult.needsValue) {
+        values.push(nestedValue as number);
+      }
+      return `NOT (${operatorResult.sql})`;
+    }
     const operatorFn = FILTER_OPERATORS[operator as string]!;
     const operatorResult = operatorFn(key, values.length + 1);
     if (operatorResult.needsValue) {
@@ -133,7 +150,16 @@ export function buildFilterQuery(filter: Filter, minScore: number): FilterResult
     return operatorResult.sql;
   }
 
-  function handleLogicalOperator(key: '$and' | '$or' | '$not' | '$nor', value: Filter[]): string {
+  function handleLogicalOperator(key: '$and' | '$or' | '$not' | '$nor', value: Filter[], parentPath: string): string {
+    if (key === '$not') {
+      // For top-level $not
+      const entries = Object.entries(value);
+      const conditions = entries
+        .map(([fieldKey, fieldValue]) => buildCondition(fieldKey, fieldValue, key))
+        .join(' AND ');
+      return `NOT (${conditions})`;
+    }
+
     // Handle empty conditions
     if (!value || value.length === 0) {
       switch (key) {
@@ -142,8 +168,6 @@ export function buildFilterQuery(filter: Filter, minScore: number): FilterResult
           return 'true'; // Empty $and/$nor match everything
         case '$or':
           return 'false'; // Empty $or matches nothing
-        case '$not':
-          throw new Error('$not operator cannot be empty');
         default:
           return 'true';
       }
@@ -156,9 +180,9 @@ export function buildFilterQuery(filter: Filter, minScore: number): FilterResult
 
       const [firstKey, firstValue] = entries[0] || [];
       if (['$and', '$or', '$not', '$nor'].includes(firstKey as string)) {
-        return buildCondition(firstKey as string, firstValue);
+        return buildCondition(firstKey as string, firstValue, parentPath);
       }
-      return entries.map(([k, v]) => buildCondition(k, v)).join(` ${joinOperator} `);
+      return entries.map(([k, v]) => buildCondition(k, v, parentPath)).join(` ${joinOperator} `);
     });
 
     const joined = conditions.join(` ${joinOperator} `);
@@ -171,7 +195,7 @@ export function buildFilterQuery(filter: Filter, minScore: number): FilterResult
   }
 
   const conditions = Object.entries(filter)
-    .map(([key, value]) => buildCondition(key, value))
+    .map(([key, value]) => buildCondition(key, value, ''))
     .filter(Boolean)
     .join(' AND ');
 

@@ -5,7 +5,8 @@ import { PGFilterTranslator } from './filter';
 describe('PGFilterTranslator', () => {
   const translator = new PGFilterTranslator();
 
-  describe('translate', () => {
+  // Basic Filter Translation
+  describe('Basic Filter Translation', () => {
     it('handles empty filter', () => {
       expect(translator.translate({})).toEqual({});
     });
@@ -44,6 +45,21 @@ describe('PGFilterTranslator', () => {
       });
     });
 
+    it('handles nested objects', () => {
+      expect(
+        translator.translate({
+          nested: {
+            field: 'value',
+          },
+        }),
+      ).toEqual({
+        'nested.field': { $eq: 'value' },
+      });
+    });
+  });
+
+  // Logical Operators
+  describe('Logical Operators', () => {
     it('handles logical operators', () => {
       const filter = {
         $and: [{ field1: { $eq: 'value1' } }, { field2: { $eq: 'value2' } }],
@@ -64,20 +80,119 @@ describe('PGFilterTranslator', () => {
       });
     });
 
-    it('handles nested objects', () => {
+    it('handles $nor operator', () => {
       expect(
         translator.translate({
-          nested: {
-            field: 'value',
-          },
+          $nor: [{ field1: 'value1' }, { field2: { $gt: 100 } }],
         }),
       ).toEqual({
-        'nested.field': { $eq: 'value' },
+        $nor: [{ field1: { $eq: 'value1' } }, { field2: { $gt: 100 } }],
+      });
+    });
+
+    it('handles $not operator with comparison', () => {
+      expect(
+        translator.translate({
+          field: { $not: { $eq: 'value' } },
+        }),
+      ).toEqual({
+        field: { $not: { $eq: 'value' } },
+      });
+    });
+
+    it('handles $not operator with regex', () => {
+      expect(
+        translator.translate({
+          field: { $not: { $regex: 'pattern' } },
+        }),
+      ).toEqual({
+        field: { $not: { $regex: 'pattern' } },
+      });
+    });
+
+    it('handles nested logical operators', () => {
+      expect(
+        translator.translate({
+          $and: [
+            {
+              $or: [{ field1: 'value1' }, { field2: 'value2' }],
+            },
+            {
+              $nor: [{ field3: 'value3' }, { field4: 'value4' }],
+            },
+          ],
+        }),
+      ).toEqual({
+        $and: [
+          {
+            $or: [{ field1: { $eq: 'value1' } }, { field2: { $eq: 'value2' } }],
+          },
+          {
+            $nor: [{ field3: { $eq: 'value3' } }, { field4: { $eq: 'value4' } }],
+          },
+        ],
+      });
+    });
+
+    it('handles multiple $not conditions', () => {
+      expect(
+        translator.translate({
+          $and: [{ field1: { $not: { $eq: 'value1' } } }, { field2: { $not: { $in: ['value2', 'value3'] } } }],
+        }),
+      ).toEqual({
+        $and: [{ field1: { $not: { $eq: 'value1' } } }, { field2: { $not: { $in: ['value2', 'value3'] } } }],
+      });
+    });
+
+    it('handles combination of all logical operators', () => {
+      expect(
+        translator.translate({
+          $and: [
+            {
+              $or: [{ field1: 'value1' }, { field2: { $gt: 100 } }],
+            },
+            {
+              $nor: [{ field3: { $lt: 50 } }, { field4: { $eq: 'value4' } }],
+            },
+            {
+              field5: { $not: { $in: ['value5', 'value6'] } },
+            },
+          ],
+        }),
+      ).toEqual({
+        $and: [
+          {
+            $or: [{ field1: { $eq: 'value1' } }, { field2: { $gt: 100 } }],
+          },
+          {
+            $nor: [{ field3: { $lt: 50 } }, { field4: { $eq: 'value4' } }],
+          },
+          {
+            field5: { $not: { $in: ['value5', 'value6'] } },
+          },
+        ],
+      });
+    });
+
+    it('handles logical operators with empty arrays and primitives', () => {
+      expect(
+        translator.translate({
+          $and: [],
+          $or: [{ field1: 'value1' }],
+          field2: true,
+          $nor: [],
+        }),
+      ).toEqual({
+        $and: [],
+        $or: [{ field1: { $eq: 'value1' } }],
+        field2: { $eq: true },
+        $nor: [],
       });
     });
   });
 
-  describe('regex translation', () => {
+  // Regular Expression Support
+  describe('Regular Expression Support', () => {
     it('translates string pattern', () => {
       expect(
         translator.translate({
@@ -211,6 +326,7 @@ describe('PGFilterTranslator', () => {
         'level1.level2.level3': { $regex: '(?i)pattern' },
       });
     });
+
     it('throws on $options without $regex', () => {
       expect(() =>
         translator.translate({
@@ -220,7 +336,8 @@ describe('PGFilterTranslator', () => {
     });
   });
 
-  describe('edge cases', () => {
+  // Edge Cases and Special Values
+  describe('Edge Cases and Special Values', () => {
     it('handles null values', () => {
       expect(
         translator.translate({
@@ -278,7 +395,8 @@ describe('PGFilterTranslator', () => {
     });
   });
 
-  describe('complex filter structures', () => {
+  // Complex Filter Structures
+  describe('Complex Filter Structures', () => {
     it('handles nested logical operators with mixed conditions', () => {
       expect(
         translator.translate({
@@ -348,7 +466,8 @@ describe('PGFilterTranslator', () => {
     });
   });
 
-  describe('array operator normalization', () => {
+  // Array Operator Normalization
+  describe('Array Operator Normalization', () => {
     it('normalizes single values for $all', () => {
       expect(
         translator.translate({
@@ -400,7 +519,8 @@ describe('PGFilterTranslator', () => {
     });
   });
 
-  describe('validate operators', () => {
+  // Operator Support Validation
+  describe('Operator Support Validation', () => {
     it('ensure all operator filters are supported', () => {
       const supportedFilters = [
         // Basic comparison operators
@@ -427,22 +547,116 @@ describe('PGFilterTranslator', () => {
         { $and: [{ field1: 'value1' }, { field2: 'value2' }] },
         { $or: [{ field1: 'value1' }, { field2: 'value2' }] },
         { $nor: [{ field1: 'value1' }, { field2: 'value2' }] },
-        // { $not: [{ field1: 'value1' }, { field2: 'value2' }] },
-
         { $and: { field: 'value' } },
         { $or: { field: 'value' } },
         { $nor: { field: 'value' } },
-        // { $not: { field: 'value' } },
+        { $not: { field: 'value' } },
 
-        // { $or: [{ $and: { field1: 'value1' } }, { $not: { field2: 'value2' } }] },
+        { $or: [{ $and: { field1: 'value1' } }, { $not: { field2: 'value2' } }] },
 
-        // { field: { $not: { $eq: 'value' } } },
-        // { field: { $not: { $in: ['value1', 'value2'] } } },
+        { field: { $not: { $eq: 'value' } } },
+        { field: { $not: { $in: ['value1', 'value2'] } } },
       ];
 
       supportedFilters.forEach(filter => {
         expect(() => translator.translate(filter)).not.toThrow();
       });
+    });
+
+    it('throws error for $not if not an object', () => {
+      expect(() => translator.translate({ $not: 'value' })).toThrow();
+      expect(() => translator.translate({ $not: [{ field: 'value' }] })).toThrow();
+    });
+    it('throws error for $not if empty', () => {
+      expect(() => translator.translate({ $not: {} })).toThrow();
+    });
+
+    // Add tests for logical operator placement restrictions
+    it('throws error when logical operators are used in field-level conditions', () => {
+      // $and cannot be used in field conditions
+      expect(() =>
+        translator.translate({
+          field: { $and: [{ $eq: 'value1' }, { $eq: 'value2' }] },
+        }),
+      ).toThrow();
+
+      // $or cannot be used in field conditions
+      expect(() =>
+        translator.translate({
+          field: { $or: [{ $eq: 'value1' }, { $eq: 'value2' }] },
+        }),
+      ).toThrow();
+
+      // $nor cannot be used in field conditions
+      expect(() =>
+        translator.translate({
+          field: { $nor: [{ $eq: 'value1' }, { $eq: 'value2' }] },
+        }),
+      ).toThrow();
+    });
+
+    it('allows logical operators at root level', () => {
+      // Valid root level usage
+      expect(() =>
+        translator.translate({
+          $and: [{ field1: 'value1' }, { field2: 'value2' }],
+          $or: [{ field3: 'value3' }, { field4: 'value4' }],
+          $nor: [{ field5: 'value5' }, { field6: 'value6' }],
+        }),
+      ).not.toThrow();
+    });
+
+    it('allows logical operators nested within other logical operators', () => {
+      // Valid nested usage
+      expect(() =>
+        translator.translate({
+          $and: [
+            {
+              $or: [{ field1: 'value1' }, { field2: 'value2' }],
+            },
+            {
+              $nor: [{ field3: 'value3' }, { field4: 'value4' }],
+            },
+          ],
+        }),
+      ).not.toThrow();
+    });
+
+    it('allows $not in field-level conditions', () => {
+      // $not is allowed in field conditions
+      expect(() =>
+        translator.translate({
+          field1: { $not: { $eq: 'value1' } },
+          field2: { $not: { $in: ['value2', 'value3'] } },
+          field3: { $not: { $regex: 'pattern' } },
+        }),
+      ).not.toThrow();
+    });
+
+    it('throws error for deeply nested logical operators in non-logical contexts', () => {
+      // Invalid deep nesting in comparison operators
+      expect(() =>
+        translator.translate({
+          field: {
+            $gt: {
+              $or: [{ subfield: 'value1' }, { subfield: 'value2' }],
+            },
+          },
+        }),
+      ).toThrow();
+
+      // Invalid deep nesting in array operators
+      expect(() =>
+        translator.translate({
+          field: {
+            $in: [
+              {
+                $and: [{ subfield: 'value1' }, { subfield: 'value2' }],
+              },
+            ],
+          },
+        }),
+      ).toThrow();
     });
   });
 });

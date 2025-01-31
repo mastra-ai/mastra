@@ -39,7 +39,7 @@ export class AstraFilterTranslator extends BaseFilterTranslator {
   }
 
   private translateOperatorValue(operator: QueryOperator, value: any): any {
-    if (this.isComparisonOperator(operator)) {
+    if (this.isBasicOperator(operator) || this.isNumericOperator(operator)) {
       return this.normalizeComparisonValue(value);
     }
 
