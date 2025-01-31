@@ -76,7 +76,13 @@ export class MastraStorageLibSql extends MastraStorage {
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
       const columns = Object.keys(record);
-      const values = Object.values(record).map(v => (typeof v === 'object' ? JSON.stringify(v) : v));
+      const values = Object.values(record).map(v => {
+        if (typeof v === `undefined`) {
+          // returning an undefined value will cause libsql to throw
+          return null;
+        }
+        return typeof v === 'object' ? JSON.stringify(v) : v;
+      });
       const placeholders = values.map(() => '?').join(', ');
 
       await this.client.execute({
@@ -198,10 +204,10 @@ export class MastraStorageLibSql extends MastraStorage {
     return updatedThread;
   }
 
-  async deleteThread({ id }: { id: string }): Promise<void> {
+  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     await this.client.execute({
       sql: `DELETE FROM ${MastraStorage.TABLE_THREADS} WHERE id = ?`,
-      args: [id],
+      args: [threadId],
     });
     // Messages will be automatically deleted due to CASCADE constraint
   }
@@ -216,11 +222,16 @@ export class MastraStorageLibSql extends MastraStorage {
       return [] as MessageType[];
     }
 
-    return result.rows.map(({ content }) => {
-      console.log(content);
-      const contentParsed = typeof content === 'string' ? JSON.parse(content) : content;
-      console.log(contentParsed);
-      return contentParsed;
+    return result.rows.map(row => {
+      const { id, content, role, type, createdAt, thread_id } = row;
+      return {
+        id,
+        content,
+        role,
+        type,
+        createdAt: new Date(createdAt as string),
+        threadId: thread_id,
+      };
     }) as MessageType[];
   }
 
@@ -239,7 +250,14 @@ export class MastraStorageLibSql extends MastraStorage {
         await tx.execute({
           sql: `INSERT INTO ${MastraStorage.TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt) 
                               VALUES (?, ?, ?, ?, ?, ?)`,
-          args: [message.id, threadId, JSON.stringify(message), message.role, message.type, message.createdAt || new Date().toISOString()],
+          args: [
+            message.id,
+            threadId,
+            JSON.stringify(message.content),
+            message.role,
+            message.type,
+            message.createdAt || new Date().toISOString(),
+          ],
         });
       }
 
