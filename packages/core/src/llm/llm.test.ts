@@ -1,14 +1,13 @@
-import dotenv from 'dotenv';
 import { JSONSchema7 } from 'json-schema';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { z } from 'zod';
 
+// Load environment variables
+import 'dotenv/config';
+
 import { Logger, createLogger } from '../logger';
 import { Mastra } from '../mastra';
 import { createTool } from '../tools';
-
-// Load environment variables
-dotenv.config();
 
 const calculatorTool = createTool({
   id: 'Calculator',
