@@ -1,4 +1,4 @@
-import { createLogger, LogLevel } from '@mastra/core';
+import { createLogger, LogLevel } from '@mastra/core/logger';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { UpstashTransport } from './index.js';
@@ -95,7 +95,7 @@ describe('UpstashTransport', () => {
     const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
     const flushSpy = vi.spyOn(transport, '_flush').mockImplementation(() => Promise.resolve());
 
-    transport._destroy(null, () => {
+    transport._destroy(new Error('test'), () => {
       expect(clearIntervalSpy).toHaveBeenCalled();
       if (transport.logBuffer.length > 0) {
         expect(flushSpy).toHaveBeenCalled();

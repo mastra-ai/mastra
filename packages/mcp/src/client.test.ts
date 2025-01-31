@@ -1,4 +1,5 @@
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 import { MastraMCPClient } from './client.js';
 

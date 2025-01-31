@@ -1,4 +1,4 @@
-import { MastraDeployer } from '@mastra/core';
+import { MastraDeployer } from '@mastra/core/deployer';
 import * as child_process from 'child_process';
 import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';

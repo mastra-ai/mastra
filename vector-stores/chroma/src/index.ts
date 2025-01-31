@@ -1,4 +1,4 @@
-import { MastraVector, QueryResult, IndexStats } from '@mastra/core';
+import { MastraVector, QueryResult, IndexStats } from '@mastra/core/vector';
 import { ChromaClient } from 'chromadb';
 
 export class ChromaVector extends MastraVector {

@@ -1,4 +1,4 @@
-import { MastraDeployer } from '@mastra/core';
+import { MastraDeployer } from '@mastra/core/deployer';
 import { execa } from 'execa';
 import { existsSync, mkdirSync, renameSync, writeFileSync } from 'fs';
 import { join } from 'path';

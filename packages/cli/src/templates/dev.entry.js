@@ -1,4 +1,5 @@
-import { AvailableHooks, registerHook, evaluate } from '@mastra/core';
+import { evaluate } from '@mastra/core/eval';
+import { AvailableHooks, registerHook } from '@mastra/core/hooks';
 
 // @ts-ignore
 import { mastra } from './mastra.mjs';

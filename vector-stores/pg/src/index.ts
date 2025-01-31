@@ -1,4 +1,4 @@
-import { IndexStats, QueryResult, MastraVector } from '@mastra/core';
+import { IndexStats, QueryResult, MastraVector } from '@mastra/core/vector';
 import pg from 'pg';
 
 import { Filter, FILTER_OPERATORS, isValidOperator } from './filter';

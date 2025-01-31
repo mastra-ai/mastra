@@ -1,4 +1,4 @@
-import { MastraBase } from '@mastra/core';
+import { MastraBase } from '@mastra/core/base';
 import fs from 'fs';
 import path, { dirname } from 'path';
 import type { PackageJson } from 'type-fest';

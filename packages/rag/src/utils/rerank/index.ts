@@ -1,10 +1,6 @@
-import {
-  MastraAgentRelevanceScorer,
-  CohereRelevanceScorer,
-  RelevanceScoreProvider,
-  QueryResult,
-  ModelConfig,
-} from '@mastra/core';
+import { type ModelConfig } from '@mastra/core';
+import { MastraAgentRelevanceScorer, CohereRelevanceScorer, RelevanceScoreProvider } from '@mastra/core/relevance';
+import { QueryResult } from '@mastra/core/vector';
 
 // Default weights for different scoring components (must add up to 1)
 const DEFAULT_WEIGHTS = {
