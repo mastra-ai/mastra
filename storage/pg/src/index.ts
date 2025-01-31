@@ -1,6 +1,6 @@
-import { MastraStorage, StorageGetMessagesArg, TABLE_NAMES, WorkflowRunState } from '@mastra/core';
-import { MessageType, StorageThreadType } from '@mastra/core';
-import { StorageColumn } from '@mastra/core';
+import { MessageType, StorageThreadType } from '@mastra/core/memory';
+import { StorageColumn, MastraStorage, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
+import { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 
 export type PostgresConfig =
