@@ -212,6 +212,21 @@ export class MastraStorageLibSql extends MastraStorage {
     // Messages will be automatically deleted due to CASCADE constraint
   }
 
+  private parseRow(row: any): MessageType {
+    console.log(typeof row.createdAt, row.createdAt);
+    return {
+      id: row.id,
+      content:
+        typeof row.content === `string` && (row.content.startsWith('[') || row.content.startsWith('{'))
+          ? JSON.parse(row.content)
+          : row.content,
+      role: row.role,
+      type: row.type,
+      createdAt: new Date(row.createdAt as string),
+      threadId: row.thread_id,
+    } as MessageType;
+  }
+
   async getMessages<T extends MessageType[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
     try {
       const messages: MessageType[] = [];
@@ -253,19 +268,7 @@ export class MastraStorageLibSql extends MastraStorage {
         });
 
         if (includeResult.rows) {
-          messages.push(
-            ...includeResult.rows.map(
-              row =>
-                ({
-                  id: row.id,
-                  content: row.content,
-                  role: row.role,
-                  type: row.type,
-                  createdAt: new Date(row.createdAt as string),
-                  threadId: row.thread_id,
-                }) as MessageType,
-            ),
-          );
+          messages.push(...includeResult.rows.map((row: any) => this.parseRow(row)));
         }
       }
 
@@ -293,19 +296,7 @@ export class MastraStorageLibSql extends MastraStorage {
       });
 
       if (remainingResult.rows) {
-        messages.push(
-          ...remainingResult.rows.map(
-            row =>
-              ({
-                id: row.id,
-                content: row.content,
-                role: row.role,
-                type: row.type,
-                createdAt: new Date(row.createdAt as string),
-                threadId: row.thread_id,
-              }) as MessageType,
-          ),
-        );
+        messages.push(...remainingResult.rows.map((row: any) => this.parseRow(row)));
       }
 
       // Sort all messages by creation date
@@ -330,6 +321,7 @@ export class MastraStorageLibSql extends MastraStorage {
       }
 
       for (const message of messages) {
+        const time = message.createdAt || new Date();
         await tx.execute({
           sql: `INSERT INTO ${MastraStorage.TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt) 
                               VALUES (?, ?, ?, ?, ?, ?)`,
@@ -339,7 +331,7 @@ export class MastraStorageLibSql extends MastraStorage {
             JSON.stringify(message.content),
             message.role,
             message.type,
-            message.createdAt || new Date().toISOString(),
+            time instanceof Date ? time.toISOString() : time,
           ],
         });
       }
