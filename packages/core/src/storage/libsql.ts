@@ -223,27 +223,33 @@ export class MastraStorageLibSql extends MastraStorage {
         const maxPrev = Math.max(...selectBy.include.map(i => i.withPreviousMessages || 0));
         const maxNext = Math.max(...selectBy.include.map(i => i.withNextMessages || 0));
 
-        // Get messages around all specified IDs in one query
+        // Get messages around all specified IDs in one query using row numbers
         const includeResult = await this.client.execute({
           sql: `
-            WITH target_messages AS (
-              SELECT id, "createdAt"
+            WITH numbered_messages AS (
+              SELECT 
+                id,
+                content,
+                role,
+                type,
+                "createdAt",
+                thread_id,
+                ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
               FROM "${MastraStorage.TABLE_MESSAGES}"
+              WHERE thread_id = ?
+            ),
+            target_positions AS (
+              SELECT row_num as target_pos
+              FROM numbered_messages
               WHERE id IN (${includeIds.map(() => '?').join(', ')})
-              AND thread_id = ?
             )
-            SELECT DISTINCT m.id, m.content, m.role, m.type, m."createdAt", m.thread_id
-            FROM "${MastraStorage.TABLE_MESSAGES}" m
-            CROSS JOIN target_messages t
-            WHERE m.thread_id = ?
-            AND (
-              (m."createdAt" <= t."createdAt" AND m."createdAt" >= datetime(t."createdAt", '-' || ? || ' seconds'))
-              OR
-              (m."createdAt" >= t."createdAt" AND m."createdAt" <= datetime(t."createdAt", '+' || ? || ' seconds'))
-            )
+            SELECT DISTINCT m.*
+            FROM numbered_messages m
+            CROSS JOIN target_positions t
+            WHERE m.row_num BETWEEN (t.target_pos - ?) AND (t.target_pos + ?)
             ORDER BY m."createdAt" ASC
           `,
-          args: [...includeIds, threadId, threadId, maxPrev, maxNext],
+          args: [threadId, ...includeIds, maxPrev, maxNext],
         });
 
         if (includeResult.rows) {
