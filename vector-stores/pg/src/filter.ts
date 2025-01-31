@@ -1,4 +1,4 @@
-import { BaseFilterTranslator, FieldCondition, Filter, LogicalOperator } from '@mastra/core';
+import { BaseFilterTranslator, FieldCondition, Filter, LogicalOperator } from '@mastra/core/filter';
 
 /**
  * Translates MongoDB-style filters to PG compatible filters.

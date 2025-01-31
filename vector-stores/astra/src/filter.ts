@@ -1,4 +1,4 @@
-import { BaseFilterTranslator, FieldCondition, Filter, QueryOperator } from '@mastra/core';
+import { BaseFilterTranslator, FieldCondition, Filter, QueryOperator } from '@mastra/core/filter';
 
 /**
  * Translator for Astra DB filter queries.

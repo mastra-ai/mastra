@@ -114,7 +114,7 @@ export const writeIndexFile = async ({
       await fs.writeFile(
         destPath,
         `
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 
 export const mastra = new Mastra()
         `,

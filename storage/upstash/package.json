@@ -4,15 +4,10 @@
   "description": "Upstash Redis store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
-  "module": "dist/store-upstash.esm.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/store-upstash.esm.js"
-      },
-      "require": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
       }
@@ -23,8 +18,8 @@
     "pretest": "docker compose up -d",
     "test": "vitest run",
     "posttest": "docker compose down",
-    "build": "dts build",
-    "build:dev": "dts watch"
+    "build": "tsup-node src/index.ts --format esm --dts --clean --treeshake",
+    "dev": "tsup-node src/index.ts --format esm --dts --clean --treeshake --watch"
   },
   "dependencies": {
     "@mastra/core": "workspace:*",
@@ -33,7 +28,7 @@
   "devDependencies": {
     "@tsconfig/recommended": "^1.0.7",
     "@types/node": "^22.9.0",
-    "dts-cli": "^2.0.5",
+    "tsup": "^8.0.1",
     "vitest": "^2.1.8"
   }
 }

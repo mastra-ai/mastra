@@ -1,4 +1,4 @@
-import { BaseFilterTranslator, Filter, FieldCondition, ArrayOperator } from '@mastra/core';
+import { BaseFilterTranslator, Filter, FieldCondition, ArrayOperator } from '@mastra/core/filter';
 
 export class VectorizeFilterTranslator extends BaseFilterTranslator {
   protected override supportedArrayOperators: ArrayOperator[] = ['$in', '$nin'];
