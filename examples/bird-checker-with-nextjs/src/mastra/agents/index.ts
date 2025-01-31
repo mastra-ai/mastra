@@ -1,4 +1,4 @@
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 export const birdAgent = new Agent({
   name: "Bird checker",

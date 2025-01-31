@@ -1,4 +1,4 @@
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 export const agentOne = new Agent({
   name: "openapi-spec-gen-agent",

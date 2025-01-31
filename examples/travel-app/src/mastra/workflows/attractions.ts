@@ -1,4 +1,4 @@
-import { Step, Workflow } from "@mastra/core";
+import { Step, Workflow } from "@mastra/core/workflows";
 import csvParser from "csv-parser";
 import fs from "fs";
 import path from "path";
