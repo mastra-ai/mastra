@@ -1,34 +1,37 @@
-// Comparison Operators
-type ComparisonOperator =
+type BasicOperator =
   | '$eq' // Matches values equal to specified value
+  | '$ne'; // Matches values not equal
+
+type NumericOperator =
   | '$gt' // Greater than
   | '$gte' // Greater than or equal
   | '$lt' // Less than
-  | '$lte' // Less than or equal
-  | '$ne'; // Matches values not equal
+  | '$lte'; // Less than or equal
 
-// Logical Operators
 type LogicalOperator =
   | '$and' // Joins query clauses with logical AND
   | '$not' // Inverts the effect of a query expression
   | '$nor' // Joins query clauses with logical NOR
   | '$or'; // Joins query clauses with logical OR
 
-// Array Operators
 type ArrayOperator =
   | '$all' // Matches arrays containing all elements
   | '$in' // Matches any value in array
   | '$nin' // Matches none of the values in array
   | '$elemMatch'; // Matches documents that contain an array field with at least one element that matches all the specified query criteria
 
-// Element Operators
 type ElementOperator = '$exists'; // Matches documents that have the specified field
 
-// Regex Operators
 type RegexOperator = '$regex' | '$options'; // Matches documents that have the specified field
 
 // Union of all supported operators
-type QueryOperator = ComparisonOperator | LogicalOperator | ArrayOperator | ElementOperator | RegexOperator;
+type QueryOperator =
+  | BasicOperator
+  | NumericOperator
+  | LogicalOperator
+  | ArrayOperator
+  | ElementOperator
+  | RegexOperator;
 
 // Type for a field condition using an operator
 type OperatorCondition = {
@@ -54,22 +57,23 @@ abstract class BaseFilterTranslator {
     return key.startsWith('$');
   }
 
-  protected readonly supportedComparisonOperators: ComparisonOperator[] = ['$eq', '$ne', '$gt', '$gte', '$lt', '$lte'];
-
+  protected readonly supportedBasicOperators: BasicOperator[] = ['$eq', '$ne'];
+  protected readonly supportedNumericOperators: NumericOperator[] = ['$gt', '$gte', '$lt', '$lte'];
   protected readonly supportedArrayOperators: ArrayOperator[] = ['$in', '$nin', '$all', '$elemMatch'];
-
   protected readonly supportedLogicalOperators: LogicalOperator[] = ['$and', '$or', '$not', '$nor'];
-
   protected readonly supportedElementOperators: ElementOperator[] = ['$exists'];
-
   protected readonly supportedRegexOperators: RegexOperator[] = ['$regex', '$options'];
 
   protected isLogicalOperator(key: string): key is LogicalOperator {
     return this.supportedLogicalOperators.includes(key as LogicalOperator);
   }
 
-  protected isComparisonOperator(key: string): key is ComparisonOperator {
-    return this.supportedComparisonOperators.includes(key as ComparisonOperator);
+  protected isBasicOperator(key: string): key is BasicOperator {
+    return this.supportedBasicOperators.includes(key as BasicOperator);
+  }
+
+  protected isNumericOperator(key: string): key is NumericOperator {
+    return this.supportedNumericOperators.includes(key as NumericOperator);
   }
 
   protected isArrayOperator(key: string): key is ArrayOperator {
@@ -90,8 +94,9 @@ abstract class BaseFilterTranslator {
    */
   protected isValidOperator(key: string): boolean {
     return (
+      this.isBasicOperator(key) ||
+      this.isNumericOperator(key) ||
       this.isLogicalOperator(key) ||
-      this.isComparisonOperator(key) ||
       this.isArrayOperator(key) ||
       this.isElementOperator(key) ||
       this.isRegexOperator(key)
@@ -213,7 +218,8 @@ abstract class BaseFilterTranslator {
 // Export types and base class
 export {
   type QueryOperator,
-  type ComparisonOperator,
+  type BasicOperator,
+  type NumericOperator,
   type LogicalOperator,
   type ArrayOperator,
   type RegexOperator,

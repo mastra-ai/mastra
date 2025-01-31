@@ -22,6 +22,15 @@ describe('LibSQLFilterTranslator', () => {
       });
     });
 
+    it('translates arrays to JSON for basic operators', () => {
+      expect(translator.translate({ field: { $eq: ['a', 'b'] } })).toEqual({
+        field: { $eq: JSON.stringify(['a', 'b']) },
+      });
+      expect(translator.translate({ field: { $ne: ['a', 'b'] } })).toEqual({
+        field: { $ne: JSON.stringify(['a', 'b']) },
+      });
+    });
+
     it('preserves comparison operators', () => {
       const filter = {
         field1: { $eq: 'value' },

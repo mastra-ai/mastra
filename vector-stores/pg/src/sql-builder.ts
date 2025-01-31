@@ -2,13 +2,15 @@ import {
   Filter,
   RegexOperator,
   ArrayOperator,
-  ComparisonOperator,
+  BasicOperator,
   ElementOperator,
   LogicalOperator,
+  NumericOperator,
 } from '@mastra/core';
 
 export type OperatorType =
-  | ComparisonOperator
+  | BasicOperator
+  | NumericOperator
   | ArrayOperator
   | ElementOperator
   | LogicalOperator
@@ -40,7 +42,6 @@ const createNumericOperator = (symbol: string) => {
 
 // Define all filter operators
 export const FILTER_OPERATORS: Record<string, OperatorFn> = {
-  // Comparison Operators
   $eq: createBasicOperator('='),
   $ne: createBasicOperator('!='),
   $gt: createNumericOperator('>'),
@@ -85,7 +86,6 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     needsValue: true,
   }),
 
-  // PG-specific operator
   $contains: (key, paramIndex) => ({
     sql: `metadata @> $${paramIndex}::jsonb`,
     needsValue: true,
@@ -96,11 +96,16 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   }),
 };
 
+export interface FilterResult {
+  sql: string;
+  values: any[];
+}
+
 export const handleKey = (key: string) => {
   return key.replace(/\./g, ',');
 };
 
-export function buildFilterQuery(filter: Filter, minScore: number): { sql: string; values: any[] } {
+export function buildFilterQuery(filter: Filter, minScore: number): FilterResult {
   const values = [minScore];
 
   function buildCondition(key: string, value: any): string {
@@ -152,7 +157,7 @@ export function buildFilterQuery(filter: Filter, minScore: number): { sql: strin
   }
 
   if (!filter) {
-    return { sql: '', values: values };
+    return { sql: '', values };
   }
 
   const conditions = Object.entries(filter)
@@ -160,5 +165,5 @@ export function buildFilterQuery(filter: Filter, minScore: number): { sql: strin
     .filter(Boolean)
     .join(' AND ');
 
-  return { sql: conditions ? `WHERE ${conditions}` : '', values: values };
+  return { sql: conditions ? `WHERE ${conditions}` : '', values };
 }

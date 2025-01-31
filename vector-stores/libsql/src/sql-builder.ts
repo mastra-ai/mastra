@@ -1,25 +1,22 @@
 import { InValue } from '@libsql/client';
+import {
+  BasicOperator,
+  NumericOperator,
+  ArrayOperator,
+  ElementOperator,
+  LogicalOperator,
+  RegexOperator,
+  Filter,
+} from '@mastra/core';
 
 export type OperatorType =
-  | '$eq'
-  | '$ne'
-  | '$gt'
-  | '$gte'
-  | '$lt'
-  | '$lte'
-  | '$like'
-  | '$ilike'
-  | '$in'
-  | '$nin'
+  | BasicOperator
+  | NumericOperator
+  | ArrayOperator
+  | ElementOperator
+  | LogicalOperator
   | '$contains'
-  | '$exists'
-  | '$and'
-  | '$or';
-
-// Type guard to check if an operator is valid
-export function isValidOperator(operator: string): operator is OperatorType {
-  return operator in FILTER_OPERATORS;
-}
+  | Exclude<RegexOperator, '$options'>;
 
 type FilterOperator = {
   sql: string;
@@ -27,21 +24,13 @@ type FilterOperator = {
   transformValue?: (value: any) => any;
 };
 
-type FilterOperatorMap = {
-  [K in OperatorType]: (key: string) => FilterOperator;
-};
+type OperatorFn = (key: string, value?: any) => FilterOperator;
 
 // Helper functions to create operators
 const createBasicOperator = (symbol: string) => {
   return (key: string): FilterOperator => ({
     sql: `json_extract(metadata, '$."${handleKey(key)}"') ${symbol} ?`,
     needsValue: true,
-    transformValue: (value: any) => {
-      if (Array.isArray(value)) {
-        return JSON.stringify(value);
-      }
-      return value;
-    },
   });
 };
 
@@ -52,38 +41,97 @@ const createNumericOperator = (symbol: string) => {
   });
 };
 
-const createLikeOperator = (caseSensitive: boolean = true) => {
-  return (key: string): FilterOperator => ({
-    sql: caseSensitive
-      ? `json_extract(metadata, '$."${handleKey(key)}"') LIKE ?`
-      : `UPPER(json_extract(metadata, '$."${handleKey(key)}"')) LIKE UPPER(?)`,
-    needsValue: true,
-    transformValue: (value: string) => `%${value}%`,
-  });
-};
+const validateJsonArray = (key: string) =>
+  `json_valid(json_extract(metadata, '$."${handleKey(key)}"'))
+   AND json_type(json_extract(metadata, '$."${handleKey(key)}"')) = 'array'`;
 
 // Define all filter operators
-export const FILTER_OPERATORS: FilterOperatorMap = {
-  // Equal
+export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   $eq: createBasicOperator('='),
-  // Not equal
   $ne: createBasicOperator('!='),
-
-  // Greater than
   $gt: createNumericOperator('>'),
-  // Greater than or equal
   $gte: createNumericOperator('>='),
-  // Less than
   $lt: createNumericOperator('<'),
-  // Less than or equal
   $lte: createNumericOperator('<='),
 
-  // Pattern matching (LIKE)
-  $like: createLikeOperator(true),
-  // Case-insensitive pattern matching (ILIKE)
-  $ilike: createLikeOperator(false),
-  // Contains array/object/value
-  $contains: (key: string): FilterOperator => ({
+  // Array Operators
+  $in: (key: string, value: any) => ({
+    sql: `json_extract(metadata, '$."${handleKey(key)}"') IN (${value.map(() => '?').join(',')})`,
+    needsValue: true,
+  }),
+  $nin: (key: string, value: any) => ({
+    sql: `json_extract(metadata, '$."${handleKey(key)}"') NOT IN (${value.map(() => '?').join(',')})`,
+    needsValue: true,
+  }),
+  $all: (key: string) => ({
+    sql: `json_extract(metadata, '$."${handleKey(key)}"') = ?`,
+    needsValue: true,
+    transformValue: (value: any) => {
+      return {
+        sql: `(
+          SELECT ${validateJsonArray(key)}
+          AND NOT EXISTS (
+            SELECT value 
+            FROM json_each(?) 
+            WHERE value NOT IN (
+              SELECT value 
+              FROM json_each(json_extract(metadata, '$."${handleKey(key)}"'))
+            )
+          )
+        )`,
+        values: [JSON.stringify(Array.isArray(value) ? value : [value])],
+      };
+    },
+  }),
+  $elemMatch: (key: string) => ({
+    sql: `json_extract(metadata, '$."${handleKey(key)}"') = ?`,
+    needsValue: true,
+    transformValue: (value: any) => {
+      return {
+        sql: `(
+          SELECT ${validateJsonArray(key)}
+          AND EXISTS (
+            SELECT 1 
+            FROM json_each(json_extract(metadata, '$."${handleKey(key)}"')) as m
+            WHERE m.value IN (SELECT value FROM json_each(?))
+          )
+        )`,
+        values: [JSON.stringify(Array.isArray(value) ? value : [value])],
+      };
+    },
+  }),
+
+  // Element Operators
+  $exists: (key: string) => ({
+    sql: `json_extract(metadata, '$."${handleKey(key)}"') IS NOT NULL`,
+    needsValue: false,
+  }),
+
+  // Logical Operators
+  $and: (key: string) => ({
+    sql: `(${key})`,
+    needsValue: false,
+  }),
+  $or: (key: string) => ({
+    sql: `(${key})`,
+    needsValue: false,
+  }),
+  $not: (key: string) => ({
+    sql: `NOT (${key})`,
+    needsValue: false,
+  }),
+  $nor: (key: string) => ({
+    sql: `NOT (${key})`,
+    needsValue: false,
+  }),
+
+  // Regex Operators
+  $regex: (key: string) => ({
+    sql: `json_extract(metadata, '$."${handleKey(key)}"') REGEXP ?`,
+    needsValue: true,
+  }),
+
+  $contains: (key: string) => ({
     sql: `json_extract(metadata, '$."${handleKey(key)}"') = ?`,
     needsValue: true,
     transformValue: (value: any) => {
@@ -91,8 +139,7 @@ export const FILTER_OPERATORS: FilterOperatorMap = {
       if (Array.isArray(value)) {
         return {
           sql: `(
-            SELECT json_valid(json_extract(metadata, '$."${handleKey(key)}"'))
-            AND json_type(json_extract(metadata, '$."${handleKey(key)}"')) = 'array'
+            SELECT ${validateJsonArray(key)}
             AND EXISTS (
               SELECT 1 
               FROM json_each(json_extract(metadata, '$."${handleKey(key)}"')) as m
@@ -130,39 +177,7 @@ export const FILTER_OPERATORS: FilterOperatorMap = {
       return value;
     },
   }),
-  // IN array of values
-  $in: (key: string, value: any): FilterOperator => ({
-    sql: `json_extract(metadata, '$."${handleKey(key)}"') IN (${value.map(() => '?').join(',')})`,
-    needsValue: true,
-  }),
-  // NOT IN array of values
-  $nin: (key: string, value: any): FilterOperator => ({
-    sql: `json_extract(metadata, '$."${handleKey(key)}"') NOT IN (${value.map(() => '?').join(',')})`,
-    needsValue: true,
-  }),
-  // Key exists
-  $exists: (key: string): FilterOperator => ({
-    sql: `json_extract(metadata, '$."${handleKey(key)}"') IS NOT NULL`,
-    needsValue: false,
-  }),
-  // Logical AND
-  $and: (key: string): FilterOperator => ({
-    sql: `(${key})`,
-    needsValue: false,
-  }),
-  // Logical OR
-  $or: (key: string): FilterOperator => ({
-    sql: `(${key})`,
-    needsValue: false,
-  }),
 };
-
-type FilterCondition = {
-  operator: OperatorType;
-  value?: any;
-};
-
-export type Filter = Record<string, FilterCondition | any>;
 
 export interface FilterResult {
   sql: string;
@@ -173,7 +188,7 @@ export const handleKey = (key: string) => {
   return key.replace(/\./g, '"."');
 };
 
-export function buildFilterQuery(filter: Filter | undefined): FilterResult {
+export function buildFilterQuery(filter: Filter): FilterResult {
   if (!filter) {
     return { sql: '', values: [] };
   }
@@ -195,31 +210,36 @@ export function buildFilterQuery(filter: Filter | undefined): FilterResult {
 
 function buildCondition(key: string, value: any): FilterResult {
   // Handle logical operators ($and/$or)
-  if (key === '$and' || key === '$or') {
-    return handleLogicalOperator(key, value);
+  if (['$and', '$or', '$not', '$nor'].includes(key)) {
+    return handleLogicalOperator(key as '$and' | '$or' | '$not' | '$nor', value);
   }
 
   // If condition is not a FilterCondition object, assume it's an equality check
   if (!value || typeof value !== 'object') {
-    return handleEqualityOperator(key, value);
+    return {
+      sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}"') = ?`,
+      values: [value],
+    };
   }
 
   // Handle operator conditions
   return handleOperator(key, value);
 }
 
-function handleLogicalOperator(key: '$and' | '$or', value: Filter[]): FilterResult {
+function handleLogicalOperator(key: '$and' | '$or' | '$not' | '$nor', value: Filter[]): FilterResult {
   if (!value || value.length === 0) {
     return { sql: key === '$and' ? 'true' : 'false', values: [] };
   }
 
   const values: InValue[] = [];
-  const joinOperator = key === '$or' ? 'OR' : 'AND';
+  const joinOperator = key === '$or' || key === '$nor' ? 'OR' : 'AND';
   const conditions = value.map((f: Filter) => {
-    // Check if the first key is a logical operator for nested conditions
-    const [firstKey, firstValue] = Object.entries(f)[0] || [];
-    if (firstKey === '$and' || firstKey === '$or') {
-      const result = buildCondition(firstKey, firstValue);
+    const entries = Object.entries(f);
+    if (entries.length === 0) return '';
+
+    const [firstKey, firstValue] = entries[0] || [];
+    if (['$and', '$or', '$not', '$nor'].includes(firstKey as string)) {
+      const result = buildCondition(firstKey as string, firstValue);
       values.push(...result.values);
       return result.sql;
     }
@@ -233,31 +253,17 @@ function handleLogicalOperator(key: '$and' | '$or', value: Filter[]): FilterResu
     return subConditions.join(` ${joinOperator} `);
   });
 
-  const operatorFn = FILTER_OPERATORS[key];
+  const operatorFn = FILTER_OPERATORS[key as string]!;
   return {
-    sql: operatorFn(conditions.join(` ${joinOperator} `)).sql,
+    sql: operatorFn(conditions.join(` ${joinOperator} `), values).sql,
     values,
-  };
-}
-
-function handleEqualityOperator(key: string, value: any): FilterResult {
-  return {
-    sql: `json_extract(metadata, '$."${key.replace(/\./g, '"."')}"') = ?`,
-    values: [value],
   };
 }
 
 function handleOperator(key: string, value: any): FilterResult {
   const [[operator, operatorValue] = []] = Object.entries(value);
-  if (!operator || value === undefined) {
-    throw new Error(`Invalid operator or value for key: ${key}`);
-  }
-  if (!isValidOperator(operator)) {
-    throw new Error(`Unsupported operator: ${operator}`);
-  }
-
-  const operatorFn = FILTER_OPERATORS[operator];
-  const operatorResult = operatorFn(key);
+  const operatorFn = FILTER_OPERATORS[operator as string]!;
+  const operatorResult = operatorFn(key, operatorValue);
 
   if (!operatorResult.needsValue) {
     return { sql: operatorResult.sql, values: [] };

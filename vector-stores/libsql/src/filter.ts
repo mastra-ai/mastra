@@ -61,6 +61,8 @@ export class LibSQLFilterTranslator extends BaseFilterTranslator {
       } else if (this.isOperator(key)) {
         if (this.isArrayOperator(key) && !Array.isArray(value)) {
           result[key] = [value];
+        } else if (this.isBasicOperator(key) && Array.isArray(value)) {
+          result[key] = JSON.stringify(value);
         } else {
           result[key] = value;
         }

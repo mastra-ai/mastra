@@ -1,7 +1,8 @@
 import { createClient, type Client as TursoClient, type InValue } from '@libsql/client';
-import { MastraVector, type IndexStats, type QueryResult } from '@mastra/core';
+import { Filter, MastraVector, type IndexStats, type QueryResult } from '@mastra/core';
 
-import { buildFilterQuery, Filter } from './sql-builder';
+import { LibSQLFilterTranslator } from './filter';
+import { buildFilterQuery } from './sql-builder';
 
 export class LibSQLVector extends MastraVector {
   private turso: TursoClient;
@@ -38,7 +39,9 @@ export class LibSQLVector extends MastraVector {
     try {
       const vectorStr = `[${queryVector.join(',')}]`;
 
-      const { sql: filterQuery, values: filterValues } = buildFilterQuery(filter);
+      const libsqlFilter = new LibSQLFilterTranslator();
+      const translatedFilter = libsqlFilter.translate(filter ?? {});
+      const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter);
       filterValues.push(minScore);
 
       const query = `
