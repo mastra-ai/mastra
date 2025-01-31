@@ -8,7 +8,7 @@ import { dane } from '../agents/index.js';
 export const messageWorkflow = new Workflow({
   name: 'entry',
   triggerSchema: z.object({
-    resourceid: z.string(),
+    resourceId: z.string(),
     threadId: z.string(),
   }),
 });
@@ -37,7 +37,7 @@ const messageOutputStep = new Step({
   execute: async ({ context, mastra }) => {
     // WISH THIS WAS TYPED
     const threadId = context?.machineContext?.triggerData?.threadId;
-    const resourceid = context?.machineContext?.triggerData?.resourceid;
+    const resourceId = context?.machineContext?.triggerData?.resourceId;
 
     const messageInputStatus = context?.machineContext?.stepResults?.['message-input']?.status;
 
@@ -49,18 +49,19 @@ const messageOutputStep = new Step({
     const message = context?.machineContext?.stepResults?.['message-input']?.payload?.message;
 
     try {
-      let messages = await mastra?.memory?.getContextWindow({
-        threadId,
-        format: 'core_message',
-      });
-
-      if (!messages || messages.length === 0) {
-        messages = [];
-      }
+      // TODO: why was this unused?
+      // let messages = await mastra?.memory?.getContextWindow({
+      //   threadId,
+      //   format: 'core_message',
+      // });
+      //
+      // if (!messages || messages.length === 0) {
+      //   messages = [];
+      // }
 
       const res = await mastra?.agents?.['dane']?.stream(message, {
         maxSteps: 5,
-        resourceid,
+        resourceId,
         threadId,
         context: [],
       });
@@ -88,7 +89,7 @@ const messageOutputStep = new Step({
     const res = await dane.generate(message, {
       maxSteps: 5,
       threadId,
-      resourceid,
+      resourceId,
     });
 
     console.log(chalk.green(res?.text));
