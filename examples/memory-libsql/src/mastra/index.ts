@@ -12,11 +12,13 @@ if (!connectionString) {
 }
 
 const memory = new Memory({
-  storage: new PostgresStore({
-    connectionString,
+  storage: new MastraStorageLibSql({
+    config: {
+      url: 'file:example.db',
+    },
   }),
   threads: {
-    injectRecentMessages: 10,
+    injectRecentMessages: 1,
   },
 });
 
