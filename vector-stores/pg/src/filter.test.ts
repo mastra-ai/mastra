@@ -167,16 +167,6 @@ describe('PGFilterTranslator', () => {
         field: { $regex: '(?imsx)pattern' },
       });
     });
-  });
-
-  describe('edge cases', () => {
-    it('throws on $options without $regex', () => {
-      expect(() =>
-        translator.translate({
-          field: { $options: 'i' },
-        }),
-      ).toThrow();
-    });
 
     it('handles nested regex patterns', () => {
       expect(
@@ -221,7 +211,16 @@ describe('PGFilterTranslator', () => {
         'level1.level2.level3': { $regex: '(?i)pattern' },
       });
     });
+    it('throws on $options without $regex', () => {
+      expect(() =>
+        translator.translate({
+          field: { $options: 'i' },
+        }),
+      ).toThrow();
+    });
+  });
 
+  describe('edge cases', () => {
     it('handles null values', () => {
       expect(
         translator.translate({
@@ -404,23 +403,43 @@ describe('PGFilterTranslator', () => {
   describe('validate operators', () => {
     it('ensure all operator filters are supported', () => {
       const supportedFilters = [
+        // Basic comparison operators
         { field: { $eq: 'value' } },
         { field: { $ne: 'value' } },
         { field: { $gt: 'value' } },
         { field: { $gte: 'value' } },
         { field: { $lt: 'value' } },
         { field: { $lte: 'value' } },
+
+        // Array operators
         { field: { $in: ['value'] } },
         { field: { $nin: ['value'] } },
-        { field: { $regex: 'value' } },
-        { field: { $exists: true } },
-        { field: { $nor: [{ $eq: 'value' }] } },
-        { field: { $not: [{ $eq: 'value' }] } },
-        { field: { $or: [{ $eq: 'value' }] } },
-        { field: { $all: [{ $eq: 'value' }] } },
+        { field: { $all: ['value'] } },
         { field: { $elemMatch: { $gt: 5 } } },
+
+        // Pattern matching
+        { field: { $regex: 'value' } },
         { field: { $contains: 'value' } },
+
+        // Existence
+        { field: { $exists: true } },
+
+        { $and: [{ field1: 'value1' }, { field2: 'value2' }] },
+        { $or: [{ field1: 'value1' }, { field2: 'value2' }] },
+        { $nor: [{ field1: 'value1' }, { field2: 'value2' }] },
+        // { $not: [{ field1: 'value1' }, { field2: 'value2' }] },
+
+        { $and: { field: 'value' } },
+        { $or: { field: 'value' } },
+        { $nor: { field: 'value' } },
+        // { $not: { field: 'value' } },
+
+        // { $or: [{ $and: { field1: 'value1' } }, { $not: { field2: 'value2' } }] },
+
+        // { field: { $not: { $eq: 'value' } } },
+        // { field: { $not: { $in: ['value1', 'value2'] } } },
       ];
+
       supportedFilters.forEach(filter => {
         expect(() => translator.translate(filter)).not.toThrow();
       });

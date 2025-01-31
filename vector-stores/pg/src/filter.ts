@@ -1,6 +1,18 @@
-import { BaseFilterTranslator, FieldCondition, Filter } from '@mastra/core';
+import { BaseFilterTranslator, FieldCondition, Filter, LogicalOperator } from '@mastra/core';
+
+/**
+ * Translates MongoDB-style filters to PG compatible filters.
+ *
+ * Key differences from MongoDB:
+ *
+ * Logical Operators ($and, $or, $nor):
+ * - Can be used at the top level or nested within fields
+ * - Can take either a single condition or an array of conditions
+ */
 
 export class PGFilterTranslator extends BaseFilterTranslator {
+  protected override supportedLogicalOperators: LogicalOperator[] = ['$and', '$or', '$nor'];
+
   protected isPGOperator(key: string): boolean {
     return key === '$contains';
   }
@@ -57,7 +69,9 @@ export class PGFilterTranslator extends BaseFilterTranslator {
       const newPath = currentPath ? `${currentPath}.${key}` : key;
 
       if (this.isLogicalOperator(key)) {
-        result[key] = this.translateLogicalOperator(value);
+        result[key] = Array.isArray(value)
+          ? value.map((filter: Filter) => this.translateNode(filter))
+          : this.translateNode(value);
       } else if (this.isOperator(key)) {
         if (this.isArrayOperator(key) && !Array.isArray(value)) {
           result[key] = [value];
@@ -78,10 +92,6 @@ export class PGFilterTranslator extends BaseFilterTranslator {
     }
 
     return result;
-  }
-
-  private translateLogicalOperator(value: Filter[]): Filter[] {
-    return value.map(filter => this.translateNode(filter));
   }
 
   private translateRegexPattern(pattern: string, options: string = ''): any {

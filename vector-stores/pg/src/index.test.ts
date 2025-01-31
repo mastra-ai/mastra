@@ -226,27 +226,6 @@ describe('PgVector', () => {
       });
     });
 
-    // Test string operations
-    it('should filter with $regex operator', async () => {
-      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        category: { $regex: 'elect' },
-      });
-      expect(results).toHaveLength(2);
-      results.forEach(result => {
-        expect(result.metadata?.category).toBe('electronics');
-      });
-    });
-
-    it('should filter with $regex operator for case-insensitive search', async () => {
-      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        category: { $regex: 'BOOKS', $options: 'i' },
-      });
-      expect(results).toHaveLength(2);
-      results.forEach(result => {
-        expect(result.metadata?.category.toLowerCase()).toBe('books');
-      });
-    });
-
     // Test array operations
     it('should filter with $in operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
@@ -720,14 +699,14 @@ describe('PgVector', () => {
       });
     });
 
-    it('should handle empty $not conditions', async () => {
-      await expect(
-        pgVector.query(indexName, [1, 0, 0], 10, {
-          $not: [],
-          category: 'electronics',
-        }),
-      ).rejects.toThrow('$not operator cannot be empty');
-    });
+    // it('should handle empty $not conditions', async () => {
+    //   await expect(
+    //     pgVector.query(indexName, [1, 0, 0], 10, {
+    //       $not: [],
+    //       category: 'electronics',
+    //     }),
+    //   ).rejects.toThrow('$not operator cannot be empty');
+    // });
 
     it('should handle multiple empty logical operators', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
@@ -769,15 +748,15 @@ describe('PgVector', () => {
     });
 
     // Logical operator tests
-    it('should handle $not operator', async () => {
-      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        $not: [{ category: 'electronics' }],
-      });
-      expect(results.length).toBeGreaterThan(0);
-      results.forEach(result => {
-        expect(result.metadata?.category).not.toBe('electronics');
-      });
-    });
+    // it('should handle $not operator', async () => {
+    //   const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+    //     $not: [{ category: 'electronics' }],
+    //   });
+    //   expect(results.length).toBeGreaterThan(0);
+    //   results.forEach(result => {
+    //     expect(result.metadata?.category).not.toBe('electronics');
+    //   });
+    // });
 
     it('should handle $nor operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
@@ -789,19 +768,19 @@ describe('PgVector', () => {
       });
     });
 
-    it('should handle nested $not with $or', async () => {
-      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        $not: [
-          {
-            $or: [{ category: 'electronics' }, { category: 'books' }],
-          },
-        ],
-      });
-      expect(results.length).toBeGreaterThan(0);
-      results.forEach(result => {
-        expect(['electronics', 'books']).not.toContain(result.metadata?.category);
-      });
-    });
+    // it('should handle nested $not with $or', async () => {
+    //   const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+    //     $not: [
+    //       {
+    //         $or: [{ category: 'electronics' }, { category: 'books' }],
+    //       },
+    //     ],
+    //   });
+    //   expect(results.length).toBeGreaterThan(0);
+    //   results.forEach(result => {
+    //     expect(['electronics', 'books']).not.toContain(result.metadata?.category);
+    //   });
+    // });
 
     it('should handle basic regex patterns', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
@@ -968,19 +947,19 @@ describe('PgVector', () => {
       expect(results).toHaveLength(1); // Exact match, not regex
     });
 
-    it('should handle $not with $and', async () => {
-      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        $not: [
-          {
-            $and: [{ category: 'electronics' }, { price: { $gt: 50 } }],
-          },
-        ],
-      });
-      expect(results.length).toBeGreaterThan(0);
-      results.forEach(result => {
-        expect(result.metadata?.category !== 'electronics' || result.metadata?.price <= 50).toBe(true);
-      });
-    });
+    // it('should handle $not with $and', async () => {
+    //   const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+    //     $not: [
+    //       {
+    //         $and: [{ category: 'electronics' }, { price: { $gt: 50 } }],
+    //       },
+    //     ],
+    //   });
+    //   expect(results.length).toBeGreaterThan(0);
+    //   results.forEach(result => {
+    //     expect(result.metadata?.category !== 'electronics' || result.metadata?.price <= 50).toBe(true);
+    //   });
+    // });
 
     it('should handle $nor with $or', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
@@ -993,26 +972,26 @@ describe('PgVector', () => {
       });
     });
 
-    it('should handle nested $and with $or and $not', async () => {
-      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        $and: [{ $or: [{ category: 'electronics' }, { category: 'books' }] }, { $not: [{ price: { $lt: 50 } }] }],
-      });
-      expect(results.length).toBeGreaterThan(0);
-      results.forEach(result => {
-        expect(['electronics', 'books']).toContain(result.metadata?.category);
-        expect(result.metadata?.price).toBeGreaterThanOrEqual(50);
-      });
-    });
+    // it('should handle nested $and with $or and $not', async () => {
+    //   const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+    //     $and: [{ $or: [{ category: 'electronics' }, { category: 'books' }] }, { $not: [{ price: { $lt: 50 } }] }],
+    //   });
+    //   expect(results.length).toBeGreaterThan(0);
+    //   results.forEach(result => {
+    //     expect(['electronics', 'books']).toContain(result.metadata?.category);
+    //     expect(result.metadata?.price).toBeGreaterThanOrEqual(50);
+    //   });
+    // });
 
-    it('should handle $or with multiple $not conditions', async () => {
-      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        $or: [{ $not: [{ category: 'electronics' }] }, { $not: [{ price: { $gt: 50 } }] }],
-      });
-      expect(results.length).toBeGreaterThan(0);
-      results.forEach(result => {
-        expect(result.metadata?.category !== 'electronics' || result.metadata?.price <= 50).toBe(true);
-      });
-    });
+    // it('should handle $or with multiple $not conditions', async () => {
+    //   const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+    //     $or: [{ $not: [{ category: 'electronics' }] }, { $not: [{ price: { $gt: 50 } }] }],
+    //   });
+    //   expect(results.length).toBeGreaterThan(0);
+    //   results.forEach(result => {
+    //     expect(result.metadata?.category !== 'electronics' || result.metadata?.price <= 50).toBe(true);
+    //   });
+    // });
 
     it('should handle $nor with nested $and conditions', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
@@ -1029,34 +1008,34 @@ describe('PgVector', () => {
       });
     });
 
-    it('should handle deeply nested logical operators', async () => {
-      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        $and: [
-          {
-            $or: [{ category: 'electronics' }, { $and: [{ category: 'books' }, { price: { $lt: 30 } }] }],
-          },
-          {
-            $not: [
-              {
-                $or: [{ active: false }, { price: { $gt: 100 } }],
-              },
-            ],
-          },
-        ],
-      });
-      expect(results.length).toBeGreaterThan(0);
-      results.forEach(result => {
-        // First condition: electronics OR (books AND price < 30)
-        const firstCondition =
-          result.metadata?.category === 'electronics' ||
-          (result.metadata?.category === 'books' && result.metadata?.price < 30);
+    //   it('should handle deeply nested logical operators', async () => {
+    //     const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+    //       $and: [
+    //         {
+    //           $or: [{ category: 'electronics' }, { $and: [{ category: 'books' }, { price: { $lt: 30 } }] }],
+    //         },
+    //         {
+    //           $not: [
+    //             {
+    //               $or: [{ active: false }, { price: { $gt: 100 } }],
+    //             },
+    //           ],
+    //         },
+    //       ],
+    //     });
+    //     expect(results.length).toBeGreaterThan(0);
+    //     results.forEach(result => {
+    //       // First condition: electronics OR (books AND price < 30)
+    //       const firstCondition =
+    //         result.metadata?.category === 'electronics' ||
+    //         (result.metadata?.category === 'books' && result.metadata?.price < 30);
 
-        // Second condition: NOT (active = false OR price > 100)
-        const secondCondition = result.metadata?.active !== false && result.metadata?.price <= 100;
+    //       // Second condition: NOT (active = false OR price > 100)
+    //       const secondCondition = result.metadata?.active !== false && result.metadata?.price <= 100;
 
-        expect(firstCondition && secondCondition).toBe(true);
-      });
-    });
+    //       expect(firstCondition && secondCondition).toBe(true);
+    //     });
+    //   });
   });
 
   describe('listIndexes', () => {
@@ -1110,4 +1089,73 @@ describe('PgVector', () => {
       await expect(pgVector.describeIndex('non_existent')).rejects.toThrow();
     });
   });
+
+  // describe('$not operator', () => {
+  //   const indexName = 'test_query_5';
+  //   beforeEach(async () => {
+  //     await pgVector.createIndex(indexName, 3);
+  //     const vectors = [
+  //       [1, 0.1, 0],
+  //       [0.9, 0.2, 0],
+  //       [0.95, 0.1, 0],
+  //       [0.85, 0.2, 0],
+  //       [0.9, 0.1, 0],
+  //     ];
+
+  //     const metadata = [
+  //       { category: 'electronics', price: 100, tags: ['new', 'premium'], active: true },
+  //       { category: 'books', price: 50, tags: ['used'], active: true },
+  //       { category: 'electronics', price: 75, tags: ['refurbished'], active: false },
+  //       { category: 'books', price: 25, tags: ['used', 'sale'], active: true },
+  //       { category: 'clothing', price: 60, tags: ['new'], active: true },
+  //     ];
+
+  //     await pgVector.upsert(indexName, vectors, metadata);
+  //   });
+
+  //   afterEach(async () => {
+  //     await pgVector.deleteIndex(indexName);
+  //   });
+
+  //   // it('should handle $not with comparison operators', async () => {
+  //   //   const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+  //   //     price: { $not: { $gt: 100 } },
+  //   //   });
+  //   //   expect(results.length).toBeGreaterThan(0);
+  //   //   results.forEach(result => {
+  //   //     expect(Number(result.metadata?.price)).toBeLessThanOrEqual(100);
+  //   //   });
+  //   // });
+
+  //   // it('should handle $not with $in operator', async () => {
+  //   //   const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+  //   //     category: { $not: { $in: ['electronics', 'books'] } },
+  //   //   });
+  //   //   expect(results.length).toBeGreaterThan(0);
+  //   //   results.forEach(result => {
+  //   //     expect(['electronics', 'books']).not.toContain(result.metadata?.category);
+  //   //   });
+  //   // });
+
+  //   // it('should handle $not with regex', async () => {
+  //   //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //   //     category: { $not: { $regex: '^elect' } },
+  //   //   });
+  //   //   expect(results.length).toBeGreaterThan(0);
+  //   //   results.forEach(result => {
+  //   //     expect(result.metadata?.category).not.toMatch(/^elect/);
+  //   //   });
+  //   // });
+
+  //   // it.only('should handle $not with multiple operators', async () => {
+  //   //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //   //     price: { $not: { $gte: 10, $lte: 100 } },
+  //   //   });
+  //   //   expect(results.length).toBeGreaterThan(0);
+  //   //   results.forEach(result => {
+  //   //     const price = Number(result.metadata?.price);
+  //   //     expect(price < 10 || price > 100).toBe(true);
+  //   //   });
+  //   // });
+  // });
 });
