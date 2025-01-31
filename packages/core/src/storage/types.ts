@@ -1,3 +1,4 @@
+import { MemoryConfig } from '../memory';
 import { WorkflowRunState } from '../workflows';
 
 export interface StorageColumn {
@@ -17,3 +18,17 @@ export interface WorkflowRow {
   created_at: Date;
   updated_at: Date;
 }
+
+export type StorageGetMessagesArg = {
+  threadId: string;
+  selectBy?: {
+    vectorSearchString?: string;
+    last?: number | false;
+    include?: {
+      id: string;
+      withPreviousMessages?: number;
+      withNextMessages?: number;
+    }[];
+  };
+  threadConfig?: MemoryConfig;
+};

@@ -1,4 +1,5 @@
-import { createLogger, Mastra } from "@mastra/core";
+import { createLogger } from "@mastra/core/logger";
+import { Mastra } from "@mastra/core/mastra";
 import { UpstashTransport } from "@mastra/loggers/upstash";
 import { PostgresEngine } from "@mastra/engine";
 import { agentOne } from "./agents";

@@ -10,6 +10,9 @@ import {
 } from 'ai';
 
 import { MastraBase } from '../base';
+import { EmbeddingOptions } from '../embeddings';
+import { MastraStorage, StorageGetMessagesArg } from '../storage';
+import { MastraVector } from '../vector';
 
 export type AiMessageType = AiMessage;
 
@@ -17,7 +20,7 @@ export type AiMessageType = AiMessage;
 export type MessageType = {
   id: string;
   content: UserContent | AssistantContent | ToolContent;
-  role: 'user' | 'assistant' | 'tool';
+  role: 'system' | 'user' | 'assistant' | 'tool';
   createdAt: Date;
   threadId: string;
   toolCallIds?: string[];
@@ -35,19 +38,37 @@ export type StorageThreadType = {
   metadata?: Record<string, unknown>;
 };
 
-export type ThreadType = {
-  id: string;
-  title?: string;
-  resourceid: string;
-  createdAt: Date;
-  updatedAt: Date;
-  metadata?: Record<string, unknown>;
-};
-
 export type MessageResponse<T extends 'raw' | 'core_message'> = {
   raw: MessageType[];
   core_message: CoreMessage[];
 }[T];
+
+export type MemoryConfig = {
+  injectRecentMessages?: number | false;
+  injectVectorHistorySearch?:
+    | boolean
+    | {
+        includeResults: number;
+        includePrevious: number;
+        includeNext: number;
+      };
+  // TODO:
+  // injectWorkingMemory?: boolean;
+};
+
+export type SharedMemoryConfig =
+  | {
+      storage: MastraStorage;
+      threads?: MemoryConfig;
+      vector?: MastraVector;
+      embeddingOptions?: EmbeddingOptions;
+    }
+  | {
+      storage: MastraStorage;
+      threads?: MemoryConfig;
+      vector: MastraVector;
+      embeddingOptions: EmbeddingOptions;
+    };
 
 /**
  * Abstract Memory class that defines the interface for storing and retrieving
@@ -56,22 +77,75 @@ export type MessageResponse<T extends 'raw' | 'core_message'> = {
 export abstract class MastraMemory extends MastraBase {
   MAX_CONTEXT_TOKENS?: number;
 
-  constructor() {
-    super({ component: 'MEMORY', name: 'MastraMemory' });
+  storage: MastraStorage;
+  vector?: MastraVector;
+  embeddingOptions?: EmbeddingOptions;
+
+  protected threadConfig: MemoryConfig = {
+    injectRecentMessages: 40,
+    injectVectorHistorySearch: false, // becomes true by default if a vector store is attached
+    // TODO:
+    // injectWorkingMemory: true
+  };
+
+  constructor(config: { name: string } & SharedMemoryConfig) {
+    super({ component: 'MEMORY', name: config.name });
+    this.storage = config.storage;
+    if (config.vector) {
+      this.vector = config.vector;
+      this.threadConfig.injectVectorHistorySearch = true;
+    }
+    if (`embeddingOptions` in config) {
+      this.embeddingOptions = config.embeddingOptions;
+    }
+    if (config.threads) {
+      this.threadConfig = this.getMergedThreadConfig(config.threads);
+    }
   }
+
+  protected parseEmbeddingOptions() {
+    if (!this.embeddingOptions) {
+      throw new Error(`Cannot use vector features without setting new Memory({ embeddingOptions: { ... } })`);
+    }
+
+    return this.embeddingOptions;
+  }
+
+  protected getMergedThreadConfig(config: MemoryConfig): MemoryConfig {
+    return {
+      ...this.threadConfig,
+      ...config,
+    };
+  }
+
+  abstract rememberMessages({
+    threadId,
+    vectorMessageSearch,
+    config,
+  }: {
+    threadId: string;
+    vectorMessageSearch?: string;
+    config?: MemoryConfig;
+  }): Promise<{
+    messages: CoreMessage[];
+    uiMessages: AiMessageType[];
+  }>;
 
   estimateTokens(text: string): number {
     return Math.ceil(text.split(' ').length * 1.3);
   }
 
-  parseMessages(messages: MessageType[]): MessageType[] {
-    return messages.map(mssg => ({
-      ...mssg,
-      content: typeof mssg.content === 'string' ? JSON.parse((mssg as MessageType).content as string) : mssg.content,
+  protected parseMessages(messages: MessageType[]): CoreMessage[] {
+    return messages.map(msg => ({
+      ...msg,
+      content:
+        typeof msg.content === 'string' && (msg.content.startsWith('[') || msg.content.startsWith('{'))
+          ? JSON.parse((msg as MessageType).content as string)
+          : msg.content,
     }));
   }
 
-  convertToUIMessages(messages: MessageType[]): AiMessageType[] {
+  protected convertToUIMessages(messages: MessageType[]): AiMessageType[] {
     function addToolMessageToChat({
       toolMessage,
       messages,
@@ -142,7 +216,7 @@ export abstract class MastraMemory extends MastraBase {
         }
 
         obj.chatMessages.push({
-          id: message.id,
+          id: (message as MessageType).id,
           role: message.role as AiMessageType['role'],
           content: textContent,
           toolInvocations,
@@ -164,22 +238,29 @@ export abstract class MastraMemory extends MastraBase {
    * @param threadId - The unique identifier of the thread
    * @returns Promise resolving to the thread or null if not found
    */
-  abstract getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null>;
+  abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
-  abstract getThreadsByResourceId({ resourceid }: { resourceid: string }): Promise<ThreadType[]>;
+  abstract getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]>;
+
   /**
    * Saves or updates a thread
    * @param thread - The thread data to save
    * @returns Promise resolving to the saved thread
    */
-  abstract saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType>;
+  abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 
   /**
    * Saves messages to a thread
    * @param messages - Array of messages to save
    * @returns Promise resolving to the saved messages
    */
-  abstract saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]>;
+  abstract saveMessages({
+    messages,
+    memoryConfig,
+  }: {
+    messages: MessageType[];
+    memoryConfig: MemoryConfig | undefined;
+  }): Promise<MessageType[]>;
 
   /**
    * Retrieves all messages for a specific thread
@@ -188,52 +269,8 @@ export abstract class MastraMemory extends MastraBase {
    */
   abstract getMessages({
     threadId,
-  }: {
-    threadId: string;
-  }): Promise<{ messages: MessageType[]; uiMessages: AiMessageType[] }>;
-
-  /**
-   * Retrieves all messages for a specific thread within a context window
-   * @param threadId - The unique identifier of the thread
-   * @param startDate - Optional start date to filter the context window
-   * @param endDate - Optional end date to filter the context window
-   * @returns Promise resolving to an array of messages
-   */
-  abstract getContextWindow<T extends 'raw' | 'core_message'>({
-    threadId,
-    startDate,
-    endDate,
-    format,
-  }: {
-    threadId: string;
-    startDate?: Date;
-    endDate?: Date;
-    format?: T;
-  }): Promise<MessageResponse<T>>;
-
-  /**
-   * Retrieves cached tool result for a specific arg in a thread
-   * @param threadId - The unique identifier of the thread
-   * @param toolArgs - The tool arguments to retrieve the cached result for
-   * @param toolName - The name of the tool that was called
-   * @returns Promise resolving to the cached tool result or null if not found
-   */
-  abstract getToolResult({
-    threadId,
-    toolArgs,
-    toolName,
-  }: {
-    threadId: string;
-    toolArgs: Record<string, unknown>;
-    toolName: string;
-  }): Promise<ToolResultPart['result'] | null>;
-
-  /**
-   * Checks if an un-expired tool call arg exists in a thread
-   * @param hashedArgs - The hashed tool call information (args, threadId, toolName) to check for
-   * @returns Promise resolving to true if the un-expired tool call arg exists, false otherwise
-   */
-  abstract validateToolCallArgs({ hashedArgs }: { hashedArgs: string }): Promise<boolean>;
+    selectBy,
+  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }>;
 
   /**
    * Helper method to create a new thread
@@ -243,19 +280,19 @@ export abstract class MastraMemory extends MastraBase {
    */
   async createThread({
     threadId,
-    resourceid,
+    resourceId,
     title,
     metadata,
   }: {
-    resourceid: string;
+    resourceId: string;
     threadId?: string;
     title?: string;
     metadata?: Record<string, unknown>;
-  }): Promise<ThreadType> {
-    const thread: ThreadType = {
+  }): Promise<StorageThreadType> {
+    const thread: StorageThreadType = {
       id: threadId || this.generateId(),
       title,
-      resourceid,
+      resourceId,
       createdAt: new Date(),
       updatedAt: new Date(),
       metadata,
@@ -283,6 +320,7 @@ export abstract class MastraMemory extends MastraBase {
    */
   async addMessage({
     threadId,
+    config,
     content,
     role,
     type,
@@ -291,6 +329,7 @@ export abstract class MastraMemory extends MastraBase {
     toolCallIds,
   }: {
     threadId: string;
+    config?: MemoryConfig;
     content: UserContent | AssistantContent;
     role: 'user' | 'assistant';
     type: 'text' | 'tool-call' | 'tool-result';
@@ -310,7 +349,7 @@ export abstract class MastraMemory extends MastraBase {
       toolCallIds,
     };
 
-    const savedMessages = await this.saveMessages({ messages: [message] });
+    const savedMessages = await this.saveMessages({ messages: [message], memoryConfig: config });
     return savedMessages[0]!;
   }
 
@@ -318,7 +357,7 @@ export abstract class MastraMemory extends MastraBase {
    * Generates a unique identifier
    * @returns A unique string ID
    */
-  generateId(): string {
+  public generateId(): string {
     return crypto.randomUUID();
   }
 }

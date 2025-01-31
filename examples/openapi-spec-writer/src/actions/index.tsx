@@ -1,6 +1,6 @@
 "use server";
 
-import { BaseLogMessage } from "@mastra/core";
+import { BaseLogMessage } from "@mastra/core/logger";
 import { mastra } from "../mastra";
 
 const makePRToMastraWorkflow = mastra

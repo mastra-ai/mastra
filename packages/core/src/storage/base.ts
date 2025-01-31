@@ -2,7 +2,7 @@ import { MastraBase } from '../base';
 import { MessageType, StorageThreadType } from '../memory';
 import { WorkflowRunState } from '../workflows';
 
-import { StorageColumn } from './types';
+import { StorageColumn, StorageGetMessagesArg } from './types';
 
 export type TABLE_NAMES =
   | typeof MastraStorage.TABLE_WORKFLOW_SNAPSHOT
@@ -50,7 +50,6 @@ export abstract class MastraStorage extends MastraBase {
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 
   async __saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    console.log('Saving thread:', thread);
     await this.init();
     return this.saveThread({ thread });
   }
@@ -78,18 +77,18 @@ export abstract class MastraStorage extends MastraBase {
     return this.updateThread({ id, title, metadata });
   }
 
-  abstract deleteThread({ id }: { id: string }): Promise<void>;
+  abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;
 
-  async __deleteThread({ threadId }: { threadId: string }): Promise<MessageType[]> {
+  async __deleteThread({ threadId }: { threadId: string }): Promise<void> {
     await this.init();
-    return this.getMessages({ threadId });
+    return this.deleteThread({ threadId });
   }
 
-  abstract getMessages({ threadId }: { threadId: string }): Promise<MessageType[]>;
+  abstract getMessages({ threadId, selectBy, threadConfig }: StorageGetMessagesArg): Promise<MessageType[]>;
 
-  async __getMessages({ threadId }: { threadId: string }): Promise<MessageType[]> {
+  async __getMessages({ threadId, selectBy, threadConfig }: StorageGetMessagesArg): Promise<MessageType[]> {
     await this.init();
-    return this.getMessages({ threadId });
+    return this.getMessages({ threadId, selectBy, threadConfig });
   }
 
   abstract saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]>;
@@ -105,7 +104,7 @@ export abstract class MastraStorage extends MastraBase {
     }
 
     await this.createTable({
-      tableName: 'workflow_snapshot',
+      tableName: MastraStorage.TABLE_WORKFLOW_SNAPSHOT,
       schema: {
         workflow_name: {
           type: 'text',
@@ -126,7 +125,7 @@ export abstract class MastraStorage extends MastraBase {
     });
 
     await this.createTable({
-      tableName: 'evals',
+      tableName: MastraStorage.TABLE_EVALS,
       schema: {
         meta: {
           type: 'text',
@@ -147,19 +146,19 @@ export abstract class MastraStorage extends MastraBase {
     });
 
     await this.createTable({
-      tableName: 'threads',
+      tableName: MastraStorage.TABLE_THREADS,
       schema: {
         id: { type: 'text', nullable: false, primaryKey: true },
         resourceId: { type: 'text', nullable: false },
         title: { type: 'text', nullable: false },
-        metadata: { type: 'text', nullable: false },
+        metadata: { type: 'text', nullable: true },
         createdAt: { type: 'timestamp', nullable: false },
         updatedAt: { type: 'timestamp', nullable: false },
       },
     });
 
     await this.createTable({
-      tableName: 'messages',
+      tableName: MastraStorage.TABLE_MESSAGES,
       schema: {
         id: { type: 'text', nullable: false, primaryKey: true },
         thread_id: { type: 'text', nullable: false },

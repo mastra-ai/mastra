@@ -3,7 +3,7 @@ import { createClient, Client } from '@libsql/client';
 import { MessageType, StorageThreadType } from '../memory';
 
 import { MastraStorage, TABLE_NAMES } from './base';
-import { StorageColumn } from './types';
+import { StorageColumn, StorageGetMessagesArg } from './types';
 
 export interface LibSQLConfig {
   url: string;
@@ -76,7 +76,13 @@ export class MastraStorageLibSql extends MastraStorage {
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
       const columns = Object.keys(record);
-      const values = Object.values(record).map(v => (typeof v === 'object' ? JSON.stringify(v) : v));
+      const values = Object.values(record).map(v => {
+        if (typeof v === `undefined`) {
+          // returning an undefined value will cause libsql to throw
+          return null;
+        }
+        return typeof v === 'object' ? JSON.stringify(v) : v;
+      });
       const placeholders = values.map(() => '?').join(', ');
 
       await this.client.execute({
@@ -198,30 +204,109 @@ export class MastraStorageLibSql extends MastraStorage {
     return updatedThread;
   }
 
-  async deleteThread({ id }: { id: string }): Promise<void> {
+  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     await this.client.execute({
       sql: `DELETE FROM ${MastraStorage.TABLE_THREADS} WHERE id = ?`,
-      args: [id],
+      args: [threadId],
     });
     // Messages will be automatically deleted due to CASCADE constraint
   }
 
-  async getMessages({ threadId }: { threadId: string }): Promise<MessageType[]> {
-    const result = await this.client.execute({
-      sql: `SELECT * FROM ${MastraStorage.TABLE_MESSAGES} WHERE thread_id = ? ORDER BY createdAt ASC`,
-      args: [threadId],
-    });
+  private parseRow(row: any): MessageType {
+    console.log(typeof row.createdAt, row.createdAt);
+    return {
+      id: row.id,
+      content:
+        typeof row.content === `string` && (row.content.startsWith('[') || row.content.startsWith('{'))
+          ? JSON.parse(row.content)
+          : row.content,
+      role: row.role,
+      type: row.type,
+      createdAt: new Date(row.createdAt as string),
+      threadId: row.thread_id,
+    } as MessageType;
+  }
 
-    if (!result.rows) {
-      return [] as MessageType[];
+  async getMessages<T extends MessageType[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
+    try {
+      const messages: MessageType[] = [];
+      const limit = selectBy?.last || 100;
+
+      // If we have specific messages to select
+      if (selectBy?.include?.length) {
+        const includeIds = selectBy.include.map(i => i.id);
+        const maxPrev = Math.max(...selectBy.include.map(i => i.withPreviousMessages || 0));
+        const maxNext = Math.max(...selectBy.include.map(i => i.withNextMessages || 0));
+
+        // Get messages around all specified IDs in one query using row numbers
+        const includeResult = await this.client.execute({
+          sql: `
+            WITH numbered_messages AS (
+              SELECT 
+                id,
+                content,
+                role,
+                type,
+                "createdAt",
+                thread_id,
+                ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
+              FROM "${MastraStorage.TABLE_MESSAGES}"
+              WHERE thread_id = ?
+            ),
+            target_positions AS (
+              SELECT row_num as target_pos
+              FROM numbered_messages
+              WHERE id IN (${includeIds.map(() => '?').join(', ')})
+            )
+            SELECT DISTINCT m.*
+            FROM numbered_messages m
+            CROSS JOIN target_positions t
+            WHERE m.row_num BETWEEN (t.target_pos - ?) AND (t.target_pos + ?)
+            ORDER BY m."createdAt" ASC
+          `,
+          args: [threadId, ...includeIds, maxPrev, maxNext],
+        });
+
+        if (includeResult.rows) {
+          messages.push(...includeResult.rows.map((row: any) => this.parseRow(row)));
+        }
+      }
+
+      // Get remaining messages, excluding already fetched IDs
+      const excludeIds = messages.map(m => m.id);
+      const remainingSql = `
+        SELECT 
+          id, 
+          content, 
+          role, 
+          type,
+          "createdAt", 
+          thread_id
+        FROM "${MastraStorage.TABLE_MESSAGES}"
+        WHERE thread_id = ?
+        ${excludeIds.length ? `AND id NOT IN (${excludeIds.map(() => '?').join(', ')})` : ''}
+        ORDER BY "createdAt" DESC
+        LIMIT ?
+      `;
+      const remainingArgs = [threadId, ...(excludeIds.length ? excludeIds : []), limit];
+
+      const remainingResult = await this.client.execute({
+        sql: remainingSql,
+        args: remainingArgs,
+      });
+
+      if (remainingResult.rows) {
+        messages.push(...remainingResult.rows.map((row: any) => this.parseRow(row)));
+      }
+
+      // Sort all messages by creation date
+      messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+      return messages as T;
+    } catch (error) {
+      this.logger.error('Error getting messages:', error as Error);
+      throw error;
     }
-
-    return result.rows.map(({ content }) => {
-      console.log(content);
-      const contentParsed = typeof content === 'string' ? JSON.parse(content) : content;
-      console.log(contentParsed);
-      return contentParsed;
-    }) as MessageType[];
   }
 
   async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
@@ -236,16 +321,17 @@ export class MastraStorageLibSql extends MastraStorage {
       }
 
       for (const message of messages) {
+        const time = message.createdAt || new Date();
         await tx.execute({
           sql: `INSERT INTO ${MastraStorage.TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt) 
                               VALUES (?, ?, ?, ?, ?, ?)`,
           args: [
             message.id,
             threadId,
-            JSON.stringify(message),
+            JSON.stringify(message.content),
             message.role,
             message.type,
-            message.createdAt || new Date().toISOString(),
+            time instanceof Date ? time.toISOString() : time,
           ],
         });
       }

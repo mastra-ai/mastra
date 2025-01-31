@@ -1,6 +1,8 @@
-import { Mastra, createLogger } from "@mastra/core";
+import { Mastra } from "@mastra/core/mastra";
+import { createLogger } from "@mastra/core/logger";
 import { PostgresEngine } from "@mastra/engine";
-import { PgMemory } from "@mastra/memory/postgres";
+import { Memory } from "@mastra/memory";
+import { PostgresStore } from "@mastra/store-pg";
 
 import { travelAgent, travelAnalyzer } from "./agents";
 import { syncCsvDataWorkflow } from "./workflows/attractions";
@@ -11,15 +13,14 @@ const engine = new PostgresEngine({
   url,
 });
 
-// TODO: Change this to match engine PostgresMemory
-const memory = new PgMemory({
-  connectionString: url,
-});
-
 export const mastra = new Mastra({
   workflows: { syncCsvDataWorkflow },
   engine,
-  memory,
+  memory: new Memory({
+    storage: new PostgresStore({
+      connectionString: url,
+    }),
+  }),
   agents: { travelAgent, travelAnalyzer },
   logger: createLogger({
     name: "CONSOLE",

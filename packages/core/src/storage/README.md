@@ -67,7 +67,7 @@ await storage.init();
 ```typescript
 // Create a new thread
 const thread = await storage.createThread({
-  resourceid: 'resource-123',
+  resourceId: 'resource-123',
   title: 'My Thread',
   metadata: { key: 'value' },
 });

@@ -5,193 +5,263 @@ description: Documentation on how agents in Mastra use memory to store conversat
 
 # Agent Memory
 
-Agents in Mastra have a memory that stores conversation history and contextual information. This memory allows agents to maintain state across interactions, enabling more coherent and context-aware responses.
+Agents in Mastra have a sophisticated memory system that stores conversation history and contextual information. This memory system supports both traditional message storage and vector-based semantic search, enabling agents to maintain state across interactions and retrieve relevant historical context.
 
-## Using Agent Memory
+## Memory Configuration
 
-Agent memory in Mastra is configured with two named parameters:
-
-- `threadId` - A unique identifier for the conversation thread.
-- `resourceId` - A unique identifier for the agent's memory context. This is used to group and manage memory for different agents or resources. You can also just set it to `default` for all agents if you don't need to group threads.
-
-You can currently store agent memory in [Postgres](#using-postgres-for-agent-memory) or [UpstashKV](#using-redis-for-agent-memory).
-
-First, create a new conversation thread:
+The Mastra memory system is highly configurable and supports multiple storage backends. Here's a basic configuration example:
 
 ```typescript
-import { randomUUID } from 'crypto';
+import { Memory } from '@mastra/memory';
+import { PostgresStore } from '@mastra/store-pg';
+import { PgVector } from '@mastra/vector-pg';
 
-const thread = await mastra.memory?.createThread({
-  resourceid: "user-1"
-  threadId: randomUUID()
+const memory = new Memory({
+  // Required: Storage backend for messages
+  storage: new PostgresStore({
+    host: 'localhost',
+    port: 5432,
+    user: 'postgres',
+    database: 'postgres',
+    password: 'postgres',
+  }),
+  
+  // Optional: Vector store for semantic search
+  vector: new PgVector(connectionString),
+  
+  // Optional: Thread configuration
+  threads: {
+    // Number of recent messages to include (false to disable)
+    injectRecentMessages: 10,
+    
+    // Vector search configuration
+    injectVectorHistorySearch: {
+      includeResults: 3,  // Number of semantic search results
+      includePrevious: 2, // Messages before each result
+      includeNext: 2,     // Messages after each result
+    },
+  },
+  
+  // Required if using vector search
+  embeddingOptions: {
+    provider: 'OPEN_AI',
+    model: 'text-embedding-ada-002',
+    maxRetries: 3,
+  },
 });
 ```
 
-Now, let's start adding messages to the thread:
+When you initialize a Mastra instance with this memory configuration, all agents will automatically use these memory settings when you call their `stream()` or `generate()` methods. The thread configuration specified in the `threads` object will be applied to all conversations.
+
+You can override these default settings for individual calls by passing a `thread` option:
 
 ```typescript
-const responseOne = await myAgent.generate(
-  "Tell me about the project requirements.",
+// Use default memory settings from Memory configuration
+const response1 = await agent.generate("What were we discussing earlier?", {
+  resourceId: "user_123",
+  threadId: "thread_456"
+});
+
+// Override memory settings for this specific call
+const response2 = await agent.generate("What were we discussing earlier?", {
+  resourceId: "user_123",
+  threadId: "thread_456",
+  thread: {
+    injectRecentMessages: 5,  // Only inject 5 recent messages
+    injectVectorHistorySearch: {
+      includeResults: 2,      // Only get 2 semantic search results
+      includePrevious: 1,     // Include 1 message before each result
+      includeNext: 1,         // Include 1 message after each result
+    }
+  }
+});
+```
+
+The same applies to the `stream()` method:
+
+```typescript
+const stream = await agent.stream("Tell me about our previous conversation", {
+  resourceId: "user_123",
+  threadId: "thread_456",
+  thread: {
+    injectRecentMessages: 20  // Override to get more context
+  }
+});
+```
+
+## Storage Options
+
+Mastra currently supports several storage backends:
+
+### LibSQL Storage
+```typescript
+import { MastraStorageLibSql } from '@mastra/core';
+
+const storage = new MastraStorageLibSql({
+  config: {
+    url: 'file:example.db',
+  },
+});
+```
+
+### PostgreSQL Storage
+```typescript
+import { PostgresStore } from '@mastra/store-pg';
+
+const storage = new PostgresStore({
+  host: 'localhost',
+  port: 5432,
+  user: 'postgres',
+  database: 'postgres',
+  password: 'postgres',
+});
+```
+
+### Upstash KV Storage
+```typescript
+import { UpstashStore } from '@mastra/store-upstash';
+
+const storage = new UpstashStore({
+  url: 'http://localhost:8089',
+  token: 'your_token',
+});
+```
+
+## Vector Search
+
+Mastra supports semantic search through vector embeddings. When configured with a vector store, agents can find relevant historical messages based on semantic similarity. To enable vector search:
+
+1. Configure a vector store (currently supports PostgreSQL):
+```typescript
+import { PgVector } from '@mastra/vector-pg';
+
+const vector = new PgVector(connectionString);
+```
+
+2. Configure embedding options:
+```typescript
+const embeddingOptions = {
+  provider: 'OPEN_AI',
+  model: 'text-embedding-ada-002',
+  maxRetries: 3,
+};
+```
+
+3. Enable vector search in thread configuration:
+```typescript
+const threadConfig = {
+  injectVectorHistorySearch: {
+    includeResults: 3,    // Number of similar messages to find
+    includePrevious: 2,   // Context before each result
+    includeNext: 2,       // Context after each result
+  },
+};
+```
+
+## Using Memory in Agents
+
+Once configured, the memory system is automatically used by agents. Here's how to use it:
+
+```typescript
+// Initialize Mastra with memory
+const mastra = new Mastra({
+  agents: { myAgent },
+  memory,
+});
+
+// Memory is automatically used in agent interactions
+const response = await myAgent.generate(
+  "What were we discussing earlier about performance?",
   {
-    resourceid: "memory_id",
-    threadId: thread.id,
+    resourceId: "user_123",
+    threadId: "thread_456",
   },
 );
+```
 
-const responseTwo = await myAgent.generate("What are the next steps?", {
-  resourceid: "memory_id",
+The memory system will automatically:
+1. Store all messages in the configured storage backend
+2. Create vector embeddings for semantic search (if configured)
+3. Inject relevant historical context into new conversations
+4. Maintain conversation threads and context
+
+## Manually Managing Threads
+
+While threads are automatically managed when using agent methods, you can also manually manage threads using the memory API directly. This is useful for advanced use cases like:
+- Creating threads before starting conversations
+- Managing thread metadata
+- Explicitly saving or retrieving messages
+- Cleaning up old threads
+
+Here's how to manually work with threads:
+
+```typescript
+import { Memory } from '@mastra/memory';
+import { PostgresStore } from '@mastra/store-pg';
+
+// Initialize memory
+const memory = new Memory({
+  storage: new PostgresStore({
+    host: 'localhost',
+    port: 5432,
+    user: 'postgres',
+    database: 'postgres',
+    password: 'postgres',
+  })
+});
+
+// Create a new thread
+const thread = await memory.createThread({
+  resourceId: "user_123",
+  title: "Project Discussion",
+  metadata: {
+    project: "mastra",
+    topic: "architecture"
+  }
+});
+
+// Manually save messages to a thread
+await memory.saveMessages({
+  messages: [{
+    id: "msg_1",
+    threadId: thread.id,
+    role: "user",
+    content: "What's the project status?",
+    createdAt: new Date(),
+    type: "text"
+  }]
+});
+
+// Get messages from a thread with various filters
+const messages = await memory.getMessages({
   threadId: thread.id,
-});
-```
-
-Notice that you don't need to explicitly save the messages to memory, or pass the response from the first call to the second.
-
-Each generate call automatically preserves the conversation context in memory.
-
-### Inserting Messages to Memory
-
-You can also explicitly insert messages to the thread.
-
-```typescript
-await myAgent.saveMemory({
-  threadId: thread.id,
-  resourceid: "memory_id",
-  userMessages: [
-    {
-      role: "user",
-      content: "What are the main performance bottlenecks?",
-    },
-  ],
-});
-```
-
-### Retrieving Messages From Memory
-
-To check the current messages in memory at any point:
-
-```typescript
-const messages = await mastra.memory.getMessages({
-  threadId: thread.id,
-});
-```
-
-Retrieves all messages from the specified thread in chronological order.
-
-### Retrieving Context Window
-
-You can use memory to retrieve messages within a specific time range:
-
-```typescript
-const messages = await mastra.memory.getContextWindow({
-  threadId: thread.id,
-  startDate: new Date("2024-01-01"),
-  endDate: new Date("2024-01-31"),
-  format: "raw",
-});
-```
-
-You can optionally limit the total tokens in the context window by configuring maxTokens in your memory:
-
-```typescript
-const upstashKVMemory = new UpstashKVMemory({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-  maxTokens: 4000, // Limit total tokens in context window
-});
-```
-
-When maxTokens is set, messages are filtered by date range and then processed from newest to oldest until the token limit is reached.
-
-This maintains the context window size while preserving the most recent conversation history.
-
-### Deleting a Thread
-
-To remove a thread and all its associated messages:
-
-```typescript
-await mastra.memory.deleteThread(thread.id);
-```
-
-## Persisting Memory to a Backend
-
-We currently have two drivers for agent memory in Mastra, Postgres and Redis.
-
-### Using Postgres for Agent Memory
-
-First, install the necessary packages:
-
-```bash npm2yarn copy
-npm install @mastra/memory
-```
-
-Then, configure your agent to use PostgreSQL for memory storage:
-
-```typescript
-// src/mastra/index.ts
-import { Mastra } from "@mastra/core";
-import { PgMemory } from "@mastra/memory/postgres";
-
-import { myAgent } from "./agents";
-
-// Create a PgMemory using connectionString
-const pgMemory = new PgMemory({
-  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+  selectBy: {
+    last: 10,                         // Get last 10 messages
+    vectorSearchString: "performance", // Find messages about performance
+  }
 });
 
-export const mastra = new Mastra({
-  memory: pgMemory,
-  agents: { myAgent },
-});
-```
-
-Ensure you have your PostgreSQL connection string set in your environment variables:
-
-```env
-# .env
-POSTGRES_CONNECTION_STRING=postgresql://user:password@localhost:5432/your_database
-```
-
-### Using Redis for Agent Memory
-
-KV Upstash provides a serverless Redis-compatible key-value store that's perfect for agent memory storage. Here's how to set it up:
-
-First, install the necessary package:
-
-```bash
-npm install @mastra/memory
-```
-
-Create an Upstash account and database:
-
-1. Go to https://upstash.com/ and sign up for an account
-2. Create a new database in your preferred region
-3. Copy your REST URL and TOKEN from the database details page
-
-Then, configure your agent to use Upstash KV:
-
-```typescript
-// src/mastra/index.ts
-import { Mastra } from "@mastra/core";
-import { UpstashKVMemory } from "@mastra/memory/kv-upstash";
-
-import { myAgent } from "./agents";
-
-// Create UpstashKVMemory
-const upstashKVMemory = new UpstashKVMemory({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+// Get thread by ID
+const existingThread = await memory.getThreadById({
+  threadId: "thread_123"
 });
 
-export const mastra = new Mastra({
-  memory: upstashKVMemory,
-  agents: { myAgent },
+// Get all threads for a resource
+const threads = await memory.getThreadsByResourceId({
+  resourceId: "user_123"
 });
+
+// Update thread metadata
+await memory.updateThread({
+  id: thread.id,
+  title: "Updated Project Discussion",
+  metadata: {
+    status: "completed"
+  }
+});
+
+// Delete a thread and all its messages
+await memory.deleteThread(thread.id);
 ```
 
-Add your Upstash credentials to your environment variables:
-
-```env
-# .env
-UPSTASH_REDIS_REST_URL=https://your-url.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your_token
-```
+Note that in most cases, you won't need to manage threads manually since the agent's `generate()` and `stream()` methods handle thread management automatically. Manual thread management is primarily useful for advanced use cases or when you need more fine-grained control over the conversation history.

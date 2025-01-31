@@ -1,4 +1,7 @@
 import { MastraBase } from '../base';
+import { embed, embedMany } from '../embeddings';
+import { EmbeddingOptions } from '../embeddings/types';
+import { EmbedManyResult, EmbedResult } from '../llm/types';
 
 export interface QueryResult {
   id: string;
@@ -17,6 +20,26 @@ export abstract class MastraVector extends MastraBase {
   constructor() {
     super({ name: 'MastraVector', component: 'VECTOR' });
   }
+
+  /**
+   * Embeds text using the specified embedding model and options. Always returns embeddings as an array for simplicity
+   */
+  async embed(text: string | string[], options: EmbeddingOptions): Promise<{ embeddings: number[][] }> {
+    if (typeof text === `string`) {
+      const result = await embed(text, options);
+      return {
+        ...result,
+        embeddings: [(result as EmbedResult<string>).embedding],
+      };
+    }
+
+    const result = await embedMany(text, options);
+    return {
+      ...result,
+      embeddings: (result as EmbedManyResult<string>).embeddings,
+    };
+  }
+
   abstract upsert(
     indexName: string,
     vectors: number[][],

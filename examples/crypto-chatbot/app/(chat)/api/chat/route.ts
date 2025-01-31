@@ -51,7 +51,7 @@ export async function POST(request: Request) {
 
   try {
     const streamResult = await cryptoAgent.stream(userMessages, {
-      resourceid: session.user.id,
+      resourceId: session.user.id,
       threadId: id,
       onFinish: () => {
         streamingData.close();
@@ -91,7 +91,7 @@ export async function DELETE(request: Request) {
     });
     const chat = await mastra.memory?.getThreadById({ threadId: id });
 
-    if (chat?.resourceid !== session.user.id) {
+    if (chat?.resourceId !== session.user.id) {
       return new Response('Unauthorized', { status: 401 });
     }
 

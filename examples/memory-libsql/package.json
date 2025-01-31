@@ -1,11 +1,12 @@
 {
-  "name": "memory",
+  "name": "memory-libsql",
   "type": "module",
   "description": "",
   "private": true,
   "main": "index.js",
   "scripts": {
-    "start": "npx bun src/index.ts"
+    "start": "bun run --watch src/index.ts",
+    "chat": "bun run --watch src/chat.ts"
   },
   "keywords": [],
   "author": "",

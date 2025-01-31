@@ -1,9 +1,16 @@
-import { createLogger, Mastra } from '@mastra/core';
-import { PgMemory } from '@mastra/memory/postgres';
+import { Mastra } from '@mastra/core/mastra';
+import { createLogger } from '@mastra/core/logger';
+import { Memory } from '@mastra/memory';
+import { PostgresStore } from '@mastra/store-pg';
 import { createCryptoAgent } from './agents';
 
 const connectionString = process.env.POSTGRES_URL!;
-const pgMemory = new PgMemory({ connectionString });
+
+const memory = new Memory({
+  storage: new PostgresStore({
+    connectionString,
+  }),
+});
 
 export const createMastra = ({
   modelProvider,
@@ -13,7 +20,7 @@ export const createMastra = ({
   modelName: string;
 }) =>
   new Mastra({
-    memory: pgMemory,
+    memory,
     agents: { cryptoAgent: createCryptoAgent(modelProvider, modelName) },
     logger: createLogger({
       name: 'CONSOLE',

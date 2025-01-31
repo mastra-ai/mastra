@@ -1,4 +1,4 @@
-import { Step, Workflow } from "@mastra/core";
+import { Step, Workflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
 import { mastra } from "../index";
@@ -117,7 +117,7 @@ function createArrangementStep({
         const result = await agent.generate(messages, {
           runId,
           threadId: sessionId,
-          resourceid: `travel-workflow-${userId}`,
+          resourceId: `travel-workflow-${userId}`,
           output: z.object({
             ids: z.array(z.string()),
             reasoning: z.string(),
