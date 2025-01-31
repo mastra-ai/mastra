@@ -1,7 +1,7 @@
 import { CoreMessage } from '@mastra/core';
 import { MastraMemory, MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import { StorageGetMessagesArg } from '@mastra/core/storage';
-import { Message as AiMessage, CoreSystemMessage } from 'ai';
+import { Message as AiMessage } from 'ai';
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -110,24 +110,7 @@ export class Memory extends MastraMemory {
     });
 
     this.logger.info(`Remembered message history includes ${messages.messages.length} messages.`);
-    return messages.messages.length > 0
-      ? {
-          messages: [
-            {
-              role: 'system',
-              content:
-                "all messages after this one are messages you've remembered until you see a system message telling you otherwise.",
-            } satisfies CoreSystemMessage,
-            ...messages.messages,
-            {
-              role: 'system',
-              content:
-                "messages prior to this are messages you've remembered. Any messages after this are new. Pay attention to dates as you may remember very old or very recent messages.",
-            } satisfies CoreSystemMessage,
-          ],
-          uiMessages: messages.uiMessages,
-        }
-      : messages;
+    return messages;
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
