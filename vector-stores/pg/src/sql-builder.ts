@@ -1,0 +1,179 @@
+import {
+  Filter,
+  RegexOperator,
+  ArrayOperator,
+  BasicOperator,
+  ElementOperator,
+  LogicalOperator,
+  NumericOperator,
+} from '@mastra/core';
+
+export type OperatorType =
+  | BasicOperator
+  | NumericOperator
+  | ArrayOperator
+  | ElementOperator
+  | LogicalOperator
+  | '$contains'
+  | Exclude<RegexOperator, '$options'>;
+
+type FilterOperator = {
+  sql: string;
+  needsValue: boolean;
+  transformValue?: (value: any) => any;
+};
+
+type OperatorFn = (key: string, paramIndex: number) => FilterOperator;
+
+// Helper functions to create operators
+const createBasicOperator = (symbol: string) => {
+  return (key: string, paramIndex: number) => ({
+    sql: `metadata#>>'{${handleKey(key)}}' ${symbol} $${paramIndex}`,
+    needsValue: true,
+  });
+};
+
+const createNumericOperator = (symbol: string) => {
+  return (key: string, paramIndex: number) => ({
+    sql: `(metadata#>>'{${handleKey(key)}}')::numeric ${symbol} $${paramIndex}`,
+    needsValue: true,
+  });
+};
+
+// Define all filter operators
+export const FILTER_OPERATORS: Record<string, OperatorFn> = {
+  $eq: createBasicOperator('='),
+  $ne: createBasicOperator('!='),
+  $gt: createNumericOperator('>'),
+  $gte: createNumericOperator('>='),
+  $lt: createNumericOperator('<'),
+  $lte: createNumericOperator('<='),
+
+  // Array Operators
+  $in: (key, paramIndex) => ({
+    sql: `metadata#>>'{${handleKey(key)}}' = ANY($${paramIndex}::text[])`,
+    needsValue: true,
+  }),
+  $nin: (key, paramIndex) => ({
+    sql: `metadata#>>'{${handleKey(key)}}' != ALL($${paramIndex}::text[])`,
+    needsValue: true,
+  }),
+  $all: (key, paramIndex) => ({
+    sql: `CASE WHEN array_length($${paramIndex}::text[], 1) IS NULL THEN false 
+          ELSE (metadata#>'{${handleKey(key)}}')::jsonb ?& $${paramIndex}::text[] END`,
+    needsValue: true,
+  }),
+  $elemMatch: (key, paramIndex) => ({
+    sql: `(metadata#>'{${handleKey(key)}}')::jsonb ?| $${paramIndex}::text[]`,
+    needsValue: true,
+  }),
+
+  // Element Operators
+  $exists: key => ({
+    sql: `metadata ? '${key}'`,
+    needsValue: false,
+  }),
+
+  // Logical Operators
+  $and: key => ({ sql: `(${key})`, needsValue: false }),
+  $or: key => ({ sql: `(${key})`, needsValue: false }),
+  $not: key => ({ sql: `NOT (${key})`, needsValue: false }),
+  $nor: key => ({ sql: `NOT (${key})`, needsValue: false }),
+
+  // Regex Operators
+  $regex: (key, paramIndex) => ({
+    sql: `metadata#>>'{${handleKey(key)}}' ~ $${paramIndex}`,
+    needsValue: true,
+  }),
+
+  $contains: (key, paramIndex) => ({
+    sql: `metadata @> $${paramIndex}::jsonb`,
+    needsValue: true,
+    transformValue: value => {
+      const parts = key.split('.');
+      return JSON.stringify(parts.reduceRight((value, key) => ({ [key]: value }), value));
+    },
+  }),
+};
+
+export interface FilterResult {
+  sql: string;
+  values: any[];
+}
+
+export const handleKey = (key: string) => {
+  return key.replace(/\./g, ',');
+};
+
+export function buildFilterQuery(filter: Filter, minScore: number): FilterResult {
+  const values = [minScore];
+
+  function buildCondition(key: string, value: any): string {
+    // Handle logical operators ($and/$or)
+    if (['$and', '$or', '$not', '$nor'].includes(key)) {
+      return handleLogicalOperator(key as '$and' | '$or' | '$not' | '$nor', value);
+    }
+
+    // If condition is not a FilterCondition object, assume it's an equality check
+    if (!value || typeof value !== 'object') {
+      values.push(value);
+      return `metadata#>>'{${handleKey(key)}}' = $${values.length}`;
+    }
+
+    // Handle operator conditions
+    const [[operator, operatorValue] = []] = Object.entries(value);
+    const operatorFn = FILTER_OPERATORS[operator as string]!;
+    const operatorResult = operatorFn(key, values.length + 1);
+    if (operatorResult.needsValue) {
+      const transformedValue = operatorResult.transformValue
+        ? operatorResult.transformValue(operatorValue)
+        : operatorValue;
+      values.push(transformedValue);
+    }
+    return operatorResult.sql;
+  }
+
+  function handleLogicalOperator(key: '$and' | '$or' | '$not' | '$nor', value: Filter[]): string {
+    // Handle empty conditions
+    if (!value || value.length === 0) {
+      switch (key) {
+        case '$and':
+        case '$nor':
+          return 'true'; // Empty $and/$nor match everything
+        case '$or':
+          return 'false'; // Empty $or matches nothing
+        case '$not':
+          throw new Error('$not operator cannot be empty');
+        default:
+          return 'true';
+      }
+    }
+
+    const joinOperator = key === '$or' || key === '$nor' ? 'OR' : 'AND';
+    const conditions = value.map((f: Filter) => {
+      const entries = Object.entries(f);
+      if (entries.length === 0) return '';
+
+      const [firstKey, firstValue] = entries[0] || [];
+      if (['$and', '$or', '$not', '$nor'].includes(firstKey as string)) {
+        return buildCondition(firstKey as string, firstValue);
+      }
+      return entries.map(([k, v]) => buildCondition(k, v)).join(` ${joinOperator} `);
+    });
+
+    const joined = conditions.join(` ${joinOperator} `);
+    const operatorFn = FILTER_OPERATORS[key]!;
+    return operatorFn(joined, 0).sql;
+  }
+
+  if (!filter) {
+    return { sql: '', values };
+  }
+
+  const conditions = Object.entries(filter)
+    .map(([key, value]) => buildCondition(key, value))
+    .filter(Boolean)
+    .join(' AND ');
+
+  return { sql: conditions ? `WHERE ${conditions}` : '', values };
+}
