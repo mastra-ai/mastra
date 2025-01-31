@@ -85,12 +85,13 @@ export class PGFilterTranslator extends BaseFilterTranslator {
   }
 
   private translateRegexPattern(pattern: string, options: string = ''): any {
-    let pgFlags = '';
-    if (options.includes('i')) pgFlags += '(?i)';
-    if (options.includes('m')) pgFlags += '(?m)';
-    if (options.includes('s')) pgFlags += '(?s)';
-    if (options.includes('x')) pgFlags += '(?x)';
+    if (!options) return { $regex: pattern };
 
-    return { $regex: pgFlags + pattern };
+    const flags = options
+      .split('')
+      .filter(f => 'imsux'.includes(f))
+      .join('');
+
+    return { $regex: flags ? `(?${flags})${pattern}` : pattern };
   }
 }

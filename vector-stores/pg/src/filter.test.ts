@@ -164,7 +164,7 @@ describe('PGFilterTranslator', () => {
           field: { $regex: 'pattern', $options: 'imsx' },
         }),
       ).toEqual({
-        field: { $regex: '(?i)(?m)(?s)(?x)pattern' },
+        field: { $regex: '(?imsx)pattern' },
       });
     });
   });
@@ -415,6 +415,7 @@ describe('PGFilterTranslator', () => {
         { field: { $regex: 'value' } },
         { field: { $exists: true } },
         { field: { $nor: [{ $eq: 'value' }] } },
+        { field: { $not: [{ $eq: 'value' }] } },
         { field: { $or: [{ $eq: 'value' }] } },
         { field: { $all: [{ $eq: 'value' }] } },
         { field: { $elemMatch: { $gt: 5 } } },

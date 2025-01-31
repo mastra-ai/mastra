@@ -208,17 +208,17 @@ describe('PgVector', () => {
     });
 
     // Test numeric comparisons
-    it('should filter with gt operator', async () => {
+    it('should filter with $gt operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        price: { gt: 75 },
+        price: { $gt: 75 },
       });
       expect(results).toHaveLength(1);
       expect(results[0]?.metadata?.price).toBe(100);
     });
 
-    it('should filter with lte operator', async () => {
+    it('should filter with $lte operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        price: { lte: 50 },
+        price: { $lte: 50 },
       });
       expect(results).toHaveLength(2);
       results.forEach(result => {
@@ -227,9 +227,9 @@ describe('PgVector', () => {
     });
 
     // Test string operations
-    it('should filter with like operator', async () => {
+    it('should filter with $regex operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        category: { like: 'elect' },
+        category: { $regex: 'elect' },
       });
       expect(results).toHaveLength(2);
       results.forEach(result => {
@@ -237,9 +237,9 @@ describe('PgVector', () => {
       });
     });
 
-    it('should filter with ilike operator for case-insensitive search', async () => {
+    it('should filter with $regex operator for case-insensitive search', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        category: { ilike: 'BOOKS' },
+        category: { $regex: 'BOOKS', $options: 'i' },
       });
       expect(results).toHaveLength(2);
       results.forEach(result => {
@@ -248,9 +248,9 @@ describe('PgVector', () => {
     });
 
     // Test array operations
-    it('should filter with in operator', async () => {
+    it('should filter with $in operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        category: { in: ['electronics', 'clothing'] },
+        category: { $in: ['electronics', 'clothing'] },
       });
       expect(results).toHaveLength(3);
       results.forEach(result => {
@@ -259,9 +259,9 @@ describe('PgVector', () => {
     });
 
     // Test contains operator with different types
-    it('should filter with array contains operator', async () => {
+    it('should filter with array $contains operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        tags: { contains: ['new'] },
+        tags: { $contains: ['new'] },
       });
       expect(results.length).toBeGreaterThan(0);
       results.forEach(result => {
@@ -269,9 +269,9 @@ describe('PgVector', () => {
       });
     });
 
-    it('should filter with containsAny operator', async () => {
+    it('should filter with $elemMatch operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        tags: { containsAny: ['new', 'premium'] },
+        tags: { $elemMatch: ['new', 'premium'] },
       });
       expect(results.length).toBeGreaterThan(0);
       results.forEach(result => {
@@ -279,9 +279,9 @@ describe('PgVector', () => {
       });
     });
 
-    it('should filter with containsAll operator', async () => {
+    it('should filter with $all operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        tags: { containsAll: ['used', 'sale'] },
+        tags: { $all: ['used', 'sale'] },
       });
       expect(results).toHaveLength(1);
       results.forEach(result => {
@@ -290,17 +290,17 @@ describe('PgVector', () => {
       });
     });
 
-    it('should filter with containsAny using single value', async () => {
+    it('should filter with $elemMatch using single value', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        tags: { containsAny: 'sale' },
+        tags: { $elemMatch: 'sale' },
       });
       expect(results).toHaveLength(1);
       expect(results[0]?.metadata?.tags).toContain('sale');
     });
 
-    it('should filter with containsAll using single value', async () => {
+    it('should filter with $all using single value', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        tags: { containsAll: 'new' },
+        tags: { $all: ['new'] },
       });
       expect(results.length).toBeGreaterThan(0);
       results.forEach(result => {
@@ -309,9 +309,9 @@ describe('PgVector', () => {
     });
 
     // Multiple values tests
-    it('should filter with containsAny using multiple values', async () => {
+    it('should filter with $elemMatch using multiple values', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        tags: { containsAny: ['sale', 'new'] },
+        tags: { $elemMatch: ['sale', 'new'] },
       });
       expect(results.length).toBeGreaterThan(0);
       results.forEach(result => {
@@ -319,9 +319,9 @@ describe('PgVector', () => {
       });
     });
 
-    it('should filter with containsAll using multiple values', async () => {
+    it('should filter with $all using multiple values', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        tags: { containsAll: ['used', 'sale'] },
+        tags: { $all: ['used', 'sale'] },
       });
       expect(results).toHaveLength(1);
       results.forEach(result => {
@@ -331,23 +331,23 @@ describe('PgVector', () => {
     });
 
     // Edge cases
-    it('should handle empty array for containsAny', async () => {
+    it('should handle empty array for $elemMatch', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        tags: { containsAny: [] },
+        tags: { $elemMatch: [] },
       });
       expect(results).toHaveLength(0);
     });
 
-    it('should handle empty array for containsAll', async () => {
+    it('should handle empty array for $all', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        tags: { containsAll: [] },
+        tags: { $all: [] },
       });
       expect(results).toHaveLength(0);
     });
 
     it('should handle non-existent field', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        nonexistent: { containsAny: ['value'] },
+        nonexistent: { $elemMatch: ['value'] },
       });
       expect(results).toHaveLength(0);
     });
@@ -357,7 +357,7 @@ describe('PgVector', () => {
       await pgVector.upsert(indexName, [[1, 0.1, 0]], [{ tags: 'not-an-array' }]);
 
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        tags: { containsAny: ['value'] },
+        tags: { $elemMatch: ['value'] },
       });
       expect(results).toHaveLength(0);
     });
@@ -367,7 +367,7 @@ describe('PgVector', () => {
       await pgVector.upsert(indexName, [[1, 0.1, 0]], [{ tags: ['valid', null] }]);
 
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        tags: { containsAny: ['valid'] },
+        tags: { $elemMatch: ['valid'] },
       });
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]?.metadata?.tags).toContain('valid');
@@ -375,14 +375,14 @@ describe('PgVector', () => {
 
     it('should handle non-existent values', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        tags: { containsAny: ['nonexistent'] },
+        tags: { $elemMatch: ['nonexistent'] },
       });
       expect(results).toHaveLength(0);
     });
 
     it('should filter with contains operator for exact field match', async () => {
       const results = await pgVector.query(indexName, [1, 0.1, 0], 10, {
-        category: { contains: 'electronics' },
+        category: { $contains: 'electronics' },
       });
       expect(results.length).toBeGreaterThan(0);
       results.forEach(result => {
@@ -390,7 +390,7 @@ describe('PgVector', () => {
       });
     });
 
-    it('should filter with contains operator for nested objects', async () => {
+    it('should filter with $contains operator for nested objects', async () => {
       // First insert a record with nested object
       await pgVector.upsert(
         indexName,
@@ -404,7 +404,7 @@ describe('PgVector', () => {
       );
 
       const results = await pgVector.query(indexName, [1, 0.1, 0], 10, {
-        details: { contains: { color: 'red' } },
+        details: { $contains: { color: 'red' } },
       });
       expect(results.length).toBeGreaterThan(0);
       results.forEach(result => {
@@ -413,9 +413,9 @@ describe('PgVector', () => {
     });
 
     // Test exists operator
-    it('should filter with exists operator', async () => {
+    it('should filter with $exists operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        active: { exists: null },
+        active: { $exists: null },
       });
       expect(results).toHaveLength(5);
     });
@@ -424,7 +424,7 @@ describe('PgVector', () => {
     it('should handle multiple filter conditions', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
         category: 'electronics',
-        price: { gt: 75 },
+        price: { $gt: 75 },
         active: true,
       });
       expect(results).toHaveLength(1);
@@ -440,7 +440,7 @@ describe('PgVector', () => {
     // Test edge cases
     it('should handle empty result sets with valid filters', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        price: { gt: 1000 },
+        price: { $gt: 1000 },
       });
       expect(results).toHaveLength(0);
     });
@@ -448,9 +448,9 @@ describe('PgVector', () => {
     it('should throw error for invalid operator', async () => {
       await expect(
         pgVector.query(indexName, [1, 0, 0], 10, {
-          price: { invalid: 100 },
+          price: { $invalid: 100 },
         }),
-      ).rejects.toThrow('Unsupported operator: invalid');
+      ).rejects.toThrow('Unsupported operator: $invalid');
     });
 
     // Test score threshold
@@ -487,7 +487,7 @@ describe('PgVector', () => {
 
       const results = await pgVector.query(indexName, [1, 0.1, 0], 10, {
         'nested.keywords': {
-          ilike: 'test',
+          $regex: 'test',
         },
       });
 
@@ -501,12 +501,12 @@ describe('PgVector', () => {
         $and: [
           {
             category: {
-              eq: 'electronics',
+              $eq: 'electronics',
             },
           },
           {
             price: {
-              gt: 75,
+              $gt: 75,
             },
           },
         ],
@@ -523,12 +523,12 @@ describe('PgVector', () => {
         $or: [
           {
             category: {
-              eq: 'electronics',
+              $eq: 'electronics',
             },
           },
           {
             category: {
-              eq: 'books',
+              $eq: 'books',
             },
           },
         ],
@@ -543,7 +543,7 @@ describe('PgVector', () => {
     // Test remaining comparison operators
     it('should filter with lt operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        price: { lt: 60 },
+        price: { $lt: 60 },
       });
       expect(results).toHaveLength(2);
       results.forEach(result => {
@@ -553,7 +553,7 @@ describe('PgVector', () => {
 
     it('should filter with gte operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        price: { gte: 75 },
+        price: { $gte: 75 },
       });
       expect(results).toHaveLength(2);
       results.forEach(result => {
@@ -563,7 +563,7 @@ describe('PgVector', () => {
 
     it('should filter with ne operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        category: { ne: 'electronics' },
+        category: { $ne: 'electronics' },
       });
       expect(results.length).toBeGreaterThan(0);
       results.forEach(result => {
@@ -576,10 +576,10 @@ describe('PgVector', () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
         $or: [
           {
-            $and: [{ category: 'electronics' }, { price: { gt: 90 } }, { active: true }],
+            $and: [{ category: 'electronics' }, { price: { $gt: 90 } }, { active: true }],
           },
           {
-            $and: [{ category: 'books' }, { tags: { exists: 'used' } }, { price: { lt: 30 } }],
+            $and: [{ category: 'books' }, { tags: { $exists: 'used' } }, { price: { $lt: 30 } }],
           },
         ],
       });
@@ -631,9 +631,9 @@ describe('PgVector', () => {
       expect(results.length).toBeGreaterThan(0);
     });
 
-    it('should filter with nin operator', async () => {
+    it('should filter with $nin operator', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        category: { nin: ['electronics', 'books'] },
+        category: { $nin: ['electronics', 'books'] },
       });
       expect(results.length).toBeGreaterThan(0);
       results.forEach(result => {
@@ -646,22 +646,22 @@ describe('PgVector', () => {
       await pgVector.upsert(indexName, [[1, 0.1, 0]], [{ numericString: '123' }]);
 
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
-        numericString: { gt: '100' }, // Compare strings numerically
+        numericString: { $gt: '100' }, // Compare strings numerically
       });
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]?.metadata?.numericString).toBe('123');
     });
 
-    it('should handle empty arrays in in/nin operators', async () => {
+    it('should handle empty arrays in $in/$nin operators', async () => {
       // Should return no results for empty IN
       const resultsIn = await pgVector.query(indexName, [1, 0, 0], 10, {
-        category: { in: [] },
+        category: { $in: [] },
       });
       expect(resultsIn).toHaveLength(0);
 
       // Should return all results for empty NIN
       const resultsNin = await pgVector.query(indexName, [1, 0, 0], 10, {
-        category: { nin: [] },
+        category: { $nin: [] },
       });
       expect(resultsNin.length).toBeGreaterThan(0);
     });
@@ -670,7 +670,7 @@ describe('PgVector', () => {
     it('should handle multiple logical operators at root level', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 10, {
         $and: [{ category: 'electronics' }],
-        $or: [{ price: { lt: 100 } }, { price: { gt: 20 } }],
+        $or: [{ price: { $lt: 100 } }, { price: { $gt: 20 } }],
       });
       expect(results.length).toBeGreaterThan(0);
       results.forEach(result => {
@@ -689,6 +689,235 @@ describe('PgVector', () => {
       results.forEach(result => {
         expect(result.metadata?.category).toBe('electronics');
       });
+    });
+
+    // Regex operator tests
+    it('should handle $regex with case sensitivity', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        category: { $regex: 'ELECTRONICS' },
+      });
+      expect(results).toHaveLength(0); // Case sensitive by default
+    });
+
+    it('should handle $regex with case insensitivity', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        category: { $regex: 'ELECTRONICS', $options: 'i' },
+      });
+      expect(results).toHaveLength(2); // Case insensitive
+    });
+
+    it('should handle $regex with start anchor', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        category: { $regex: '^elect' },
+      });
+      expect(results).toHaveLength(2);
+    });
+
+    it('should handle $regex with end anchor', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        category: { $regex: 'nics$' },
+      });
+      expect(results).toHaveLength(2);
+    });
+
+    // Logical operator tests
+    it('should handle $not operator', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        $not: [{ category: 'electronics' }],
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.category).not.toBe('electronics');
+      });
+    });
+
+    it('should handle $nor operator', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        $nor: [{ category: 'electronics' }, { category: 'books' }],
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(['electronics', 'books']).not.toContain(result.metadata?.category);
+      });
+    });
+
+    it('should handle nested $not with $or', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        $not: [
+          {
+            $or: [{ category: 'electronics' }, { category: 'books' }],
+          },
+        ],
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(['electronics', 'books']).not.toContain(result.metadata?.category);
+      });
+    });
+
+    it('should handle basic regex patterns', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        category: { $regex: 'elect.*' },
+      });
+      expect(results).toHaveLength(2);
+    });
+
+    it('should handle case sensitivity', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        category: { $regex: 'ELECTRONICS' },
+      });
+      expect(results).toHaveLength(0); // Case sensitive by default
+
+      const iResults = await pgVector.query(indexName, [1, 0, 0], 10, {
+        category: { $regex: 'ELECTRONICS', $options: 'i' },
+      });
+      expect(iResults).toHaveLength(2); // Case insensitive
+    });
+
+    it('should handle start/end anchors', async () => {
+      const startResults = await pgVector.query(indexName, [1, 0, 0], 10, {
+        category: { $regex: '^elect' },
+      });
+      expect(startResults).toHaveLength(2);
+
+      const endResults = await pgVector.query(indexName, [1, 0, 0], 10, {
+        category: { $regex: 'nics$' },
+      });
+      expect(endResults).toHaveLength(2);
+    });
+
+    it('should handle multiline flag', async () => {
+      // First insert a record with multiline text
+      await pgVector.upsert(
+        indexName,
+        [[1, 0.1, 0]],
+        [
+          {
+            description: 'First line\nSecond line\nThird line',
+          },
+        ],
+      );
+
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        description: { $regex: '^Second', $options: 'm' },
+      });
+      expect(results).toHaveLength(1);
+    });
+
+    it('should handle multiline regex patterns', async () => {
+      await pgVector.upsert(
+        indexName,
+        [[1, 0.1, 0]],
+        [
+          {
+            description: 'First line\nSecond line\nThird line',
+          },
+        ],
+      );
+
+      // Test without multiline flag
+      const withoutM = await pgVector.query(indexName, [1, 0, 0], 10, {
+        description: { $regex: '^Second' },
+      });
+      expect(withoutM).toHaveLength(0); // Won't match "Second" at start of line
+
+      // Test with multiline flag
+      const withM = await pgVector.query(indexName, [1, 0, 0], 10, {
+        description: { $regex: '^Second', $options: 'm' },
+      });
+      expect(withM).toHaveLength(1); // Will match "Second" at start of any line
+    });
+
+    it('should handle dotall flag', async () => {
+      await pgVector.upsert(
+        indexName,
+        [[1, 0.1, 0]],
+        [
+          {
+            description: 'First\nSecond\nThird',
+          },
+        ],
+      );
+
+      // Test with a more complex pattern that demonstrates s flag behavior
+      const withoutS = await pgVector.query(indexName, [1, 0, 0], 10, {
+        description: { $regex: 'First[^\\n]*Third' },
+      });
+      expect(withoutS).toHaveLength(0); // Won't match across lines without s flag
+
+      const withS = await pgVector.query(indexName, [1, 0, 0], 10, {
+        description: { $regex: 'First.*Third', $options: 's' },
+      });
+      expect(withS).toHaveLength(1); // Matches across lines with s flag
+    });
+
+    it('should handle extended flag', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        category: { $regex: 'elect # start\nronics # end', $options: 'x' },
+      });
+      expect(results).toHaveLength(2); // x flag allows comments and whitespace
+    });
+
+    it('should handle flag combinations', async () => {
+      await pgVector.upsert(
+        indexName,
+        [[1, 0.1, 0]],
+        [
+          {
+            description: 'FIRST line\nSECOND line',
+          },
+        ],
+      );
+
+      // Test case-insensitive and multiline flags together
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        description: {
+          $regex: '^first',
+          $options: 'im', // Case-insensitive and multiline
+        },
+      });
+      expect(results).toHaveLength(1);
+
+      // Test with second line
+      const secondResults = await pgVector.query(indexName, [1, 0, 0], 10, {
+        description: {
+          $regex: '^second',
+          $options: 'im',
+        },
+      });
+      expect(secondResults).toHaveLength(1);
+    });
+
+    // String pattern tests (non-regex direct matches)
+    it('should handle exact string matches', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        category: 'electronics',
+      });
+      expect(results).toHaveLength(2);
+    });
+
+    it('should handle case-sensitive string matches', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        category: 'ELECTRONICS',
+      });
+      expect(results).toHaveLength(0);
+    });
+
+    it('should handle special regex characters as literals', async () => {
+      await pgVector.upsert(
+        indexName,
+        [[1, 0.1, 0]],
+        [
+          {
+            special: 'text.with*special(chars)',
+          },
+        ],
+      );
+
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        special: 'text.with*special(chars)',
+      });
+      expect(results).toHaveLength(1); // Exact match, not regex
     });
   });
 
