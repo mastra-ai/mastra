@@ -1,7 +1,6 @@
 {
   "name": "generate-text-from-image",
   "type": "module",
-  "version": "0.0.1-alpha.23",
   "private": true,
   "scripts": {
     "start": "pnpx tsx index.ts"
