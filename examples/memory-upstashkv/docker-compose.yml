@@ -1,4 +1,5 @@
-version: '3'
+version: '3.8'
+
 services:
   redis:
     image: redis:7-alpine
@@ -13,3 +14,16 @@ services:
       SRH_MODE: env
       SRH_TOKEN: test_token
       SRH_CONNECTION_STRING: "redis://:redis_password@redis:6379"
+  postgres:
+    image: ankane/pgvector:latest
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

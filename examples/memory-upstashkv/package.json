@@ -16,9 +16,11 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@mastra/store-upstash": "workspace:*"
+    "@mastra/store-upstash": "workspace:*",
+    "@mastra/vector-pg": "workspace:*"
   },
   "devDependencies": {
+    "dotenv": "^16.4.7",
     "tsx": "^4.19.2"
   }
 }

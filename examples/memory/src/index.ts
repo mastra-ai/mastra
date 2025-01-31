@@ -49,7 +49,7 @@ async function main() {
     await agent.stream(log('What did we cook before I went to my friends house?'), {
       threadId,
       resourceId,
-      memory: {
+      thread: {
         injectRecentMessages: 3,
       },
     }),

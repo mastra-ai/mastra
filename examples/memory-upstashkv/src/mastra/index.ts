@@ -1,18 +1,24 @@
 import { Mastra } from '@mastra/core';
 import { Memory } from '@mastra/memory';
 import { UpstashStore } from '@mastra/store-upstash';
+import { PgVector } from '@mastra/vector-pg';
 
-import 'dotenv/config';
+import { chefAgent, memoryAgent } from './agents';
 
-import { chefAgent } from './agents';
+const host = `localhost`;
+const port = 5433;
+const user = `postgres`;
+const password = `postgres`;
+const connectionString = `postgresql://${user}:${password}@${host}:${port}`;
 
 const memory = new Memory({
   storage: new UpstashStore({
     url: 'http://localhost:8089',
     token: 'test_token',
   }),
+  vector: new PgVector(connectionString),
   threads: {
-    injectRecentMessages: 10,
+    injectRecentMessages: 1,
     injectVectorHistorySearch: {
       includeResults: 3,
       includePrevious: 2,
@@ -27,6 +33,6 @@ const memory = new Memory({
 });
 
 export const mastra = new Mastra({
-  agents: { chefAgent },
+  agents: { chefAgent, memoryAgent },
   memory,
 });
