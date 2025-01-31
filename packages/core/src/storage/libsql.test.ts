@@ -30,7 +30,7 @@ describe('MastraStorageLibSql', () => {
       type: 'text',
       threadId,
       content: [{ type: 'text', text: 'Hello' }],
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
     }) as any;
 
   beforeAll(async () => {
@@ -109,7 +109,7 @@ describe('MastraStorageLibSql', () => {
       const thread = createSampleThread();
       await storage.saveThread({ thread });
 
-      await storage.deleteThread({ id: thread.id });
+      await storage.deleteThread({ threadId: thread.id });
 
       const retrievedThread = await storage.getThreadById({ threadId: thread.id });
       expect(retrievedThread).toBeNull();
@@ -124,12 +124,12 @@ describe('MastraStorageLibSql', () => {
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
 
       // Save messages
-      const savedMessages = await storage.saveMessages({ messages });
+      const savedMessages = await storage.__saveMessages({ messages });
 
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages
-      const retrievedMessages = await storage.getMessages({ threadId: thread.id });
+      const retrievedMessages = await storage.__getMessages({ threadId: thread.id });
 
       expect(retrievedMessages).toHaveLength(2);
 
