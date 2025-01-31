@@ -1,4 +1,4 @@
-import { MastraTTS } from '@mastra/core';
+import { MastraTTS } from '@mastra/core/tts';
 import Replicate from 'replicate';
 import { PassThrough } from 'stream';
 

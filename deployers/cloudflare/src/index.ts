@@ -1,4 +1,4 @@
-import { MastraDeployer } from '@mastra/core';
+import { MastraDeployer } from '@mastra/core/deployer';
 import { createChildProcessLogger } from '@mastra/deployer';
 import { Cloudflare } from 'cloudflare';
 import { writeFileSync } from 'fs';

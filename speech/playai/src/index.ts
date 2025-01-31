@@ -1,4 +1,4 @@
-import { MastraTTS } from '@mastra/core';
+import { MastraTTS } from '@mastra/core/tts';
 
 interface PlayAIVoice {
   name: string;

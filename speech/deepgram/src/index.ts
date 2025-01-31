@@ -1,5 +1,5 @@
 import { type SpeakSchema, createClient } from '@deepgram/sdk';
-import { MastraTTS } from '@mastra/core';
+import { MastraTTS } from '@mastra/core/tts';
 import { PassThrough } from 'stream';
 
 import { DEEPGRAM_VOICES, type DeepgramVoice, type DeepgramModel } from './voices';

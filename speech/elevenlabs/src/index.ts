@@ -1,4 +1,4 @@
-import { MastraTTS } from '@mastra/core';
+import { MastraTTS } from '@mastra/core/tts';
 import { ElevenLabsClient } from 'elevenlabs';
 
 interface ElevenLabsTTSConfig {

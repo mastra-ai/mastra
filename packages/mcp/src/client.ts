@@ -1,4 +1,5 @@
-import { createTool, jsonSchemaToModel } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
+import { jsonSchemaToModel } from '@mastra/core/utils';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport, type StdioServerParameters } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { type ClientCapabilities, ListResourcesResultSchema } from '@modelcontextprotocol/sdk/types.js';

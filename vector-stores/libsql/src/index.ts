@@ -1,5 +1,5 @@
 import { createClient, type Client as TursoClient, type InValue } from '@libsql/client';
-import { MastraVector, type IndexStats, type QueryResult } from '@mastra/core';
+import { MastraVector, type IndexStats, type QueryResult } from '@mastra/core/vector';
 
 import { FILTER_OPERATORS, isValidOperator } from './filter';
 

@@ -38,7 +38,7 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
       ${addExampleTool ? 'Use the weatherTool to fetch current weather data.' : ''}
 `;
   const content = `
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 ${addExampleTool ? `import { weatherTool } from '../tools';` : ''}
 
 export const weatherAgent = new Agent({
@@ -114,7 +114,7 @@ export const writeIndexFile = async ({
       await fs.writeFile(
         destPath,
         `
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 
 export const mastra = new Mastra()
         `,
@@ -125,8 +125,8 @@ export const mastra = new Mastra()
     await fs.writeFile(
       destPath,
       `
-import { Mastra } from '@mastra/core';
-import { createLogger } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
+import { createLogger } from '@mastra/core/logger';
 ${addWorkflow ? `import { weatherWorkflow } from './workflows';` : ''}
 ${addAgent ? `import { weatherAgent } from './agents';` : ''}
 

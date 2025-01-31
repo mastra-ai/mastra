@@ -1,4 +1,4 @@
-import { MastraVector, QueryResult } from '@mastra/core';
+import { MastraVector, QueryResult } from '@mastra/core/vector';
 import Cloudflare from 'cloudflare';
 
 export class CloudflareVector extends MastraVector {

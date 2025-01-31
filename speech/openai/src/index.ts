@@ -1,4 +1,4 @@
-import { MastraTTS } from '@mastra/core';
+import { MastraTTS } from '@mastra/core/tts';
 import OpenAI from 'openai';
 import { PassThrough } from 'stream';
 
