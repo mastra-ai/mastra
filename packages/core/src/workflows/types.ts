@@ -1,8 +1,15 @@
 import { Query } from 'sift';
 import { z } from 'zod';
 
-import { IAction, IExecutionContext } from '../action';
-import { BaseLogMessage, RegisteredLogger } from '../logger';
+import type { IAction, IExecutionContext, MastraPrimitives } from '../action';
+import type { BaseLogMessage, RegisteredLogger } from '../logger';
+
+export interface WorkflowOptions<TTriggerSchema extends z.ZodType<any> = any> {
+  name: string;
+  triggerSchema?: TTriggerSchema;
+  retryConfig?: RetryConfig;
+  mastra?: MastraPrimitives;
+}
 
 export interface StepExecutionContext<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
