@@ -16,11 +16,15 @@
       "types": "./dist/server/index.d.ts",
       "default": "./dist/server/index.js"
     },
+    "./build": {
+      "types": "./dist/build/index.d.ts",
+      "default": "./dist/build/index.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
     "build": "npm-run-all --serial build:lib build:server types:server",
-    "build:lib": "tsup-node src/index.ts --format esm --clean --dts --treeshake --no-splitting",
+    "build:lib": "tsup-node src/index.ts src/build/index.ts --format esm --clean --dts --treeshake --no-splitting",
     "build:server": "esbuild --platform=node --target=node20 --format=esm --bundle --outdir=dist/server src/server/index.ts",
     "types:server": "tsup src/server/index.ts --no-clean --format esm --dts-only --out-dir=dist/server",
     "dev": "npm-run-all -p dev:lib dev:server dev:types",
@@ -34,19 +38,29 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@babel/core": "^7.26.7",
     "@mastra/core": "workspace:*",
+    "@rollup/plugin-alias": "^5.1.1",
+    "@rollup/plugin-commonjs": "^28.0.2",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "@rollup/plugin-virtual": "^3.0.2",
     "esbuild": "^0.24.2",
     "fs-extra": "^11.2.0",
+    "rollup": "^4.30.1",
+    "rollup-plugin-esbuild": "^6.1.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@hono/node-server": "^1.13.7",
     "@hono/swagger-ui": "^0.5.0",
+    "@types/babel__core": "^7.20.5",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^22.9.0",
     "concurrently": "^9.1.0",
     "hono": "^4.6.17",
     "hono-openapi": "^0.4.3",
+    "rollup-plugin-visualizer": "^5.14.0",
     "superjson": "^2.2.2",
     "tsup": "^8.3.6",
     "type-fest": "^4.30.0",
