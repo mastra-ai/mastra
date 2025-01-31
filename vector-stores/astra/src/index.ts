@@ -1,5 +1,5 @@
 import { DataAPIClient, Db, UUID } from '@datastax/astra-db-ts';
-import { MastraVector, QueryResult, IndexStats } from '@mastra/core';
+import { MastraVector, QueryResult, IndexStats } from '@mastra/core/vector';
 
 // Mastra and Astra DB agree on cosine and euclidean, but Astra DB uses dot_product instead of dotproduct.
 const metricMap = {
