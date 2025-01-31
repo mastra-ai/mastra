@@ -4,7 +4,6 @@
   "description": "",
   "type": "module",
   "main": "dist/index.js",
-  "module": "dist/composio.esm.js",
   "typings": "dist/index.d.ts",
   "files": [
     "dist"
@@ -13,19 +12,15 @@
     ".": {
       "import": {
         "types": "./dist/index.d.ts",
-        "default": "./dist/composio.esm.js"
-      },
-      "require": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
+        "default": "./dist/index.esm.js"
       }
     },
     "./package.json": "./package.json"
   },
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "dts build",
-    "build:dev": "dts watch",
+    "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
+    "build:dev": "tsup src/index.ts --format esm --dts --clean --treeshake --watch",
     "lint": "dts lint",
     "size": "size-limit",
     "start": "dts watch",
@@ -64,6 +59,7 @@
     "size-limit": "^11.1.4",
     "ts-jest": "^29.2.4",
     "tslib": "^2.6.3",
+    "tsup": "^8.0.1",
     "typescript": "^5.7.3"
   },
   "keywords": [],
