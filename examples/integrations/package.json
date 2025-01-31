@@ -20,5 +20,6 @@
     "@mastra/core": "workspace:*",
     "@mastra/firecrawl": "workspace:*",
     "@mastra/composio": "workspace:*"
-  }
+  },
+  "version": "0.0.0"
 }
