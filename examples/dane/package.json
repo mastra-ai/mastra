@@ -33,6 +33,7 @@
     "@mastra/github": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/rag": "workspace:*",
+    "@mastra/store-upstash": "workspace:*",
     "@mastra/stabilityai": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "boxen": "^8.0.1",

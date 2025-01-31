@@ -1,6 +1,6 @@
-import { StorageThreadType, MessageType } from '@mastra/core/memory';
-import { MastraStorage, TABLE_NAMES, StorageColumn, StorageGetMessagesArg } from '@mastra/core/storage';
-import { WorkflowRunState } from '@mastra/core/workflows';
+import { type StorageThreadType, type MessageType } from '@mastra/core/memory';
+import { MastraStorage, type TABLE_NAMES, type StorageColumn, type StorageGetMessagesArg } from '@mastra/core/storage';
+import { type WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
 
 export interface UpstashConfig {

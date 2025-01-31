@@ -1,6 +1,6 @@
-import { Mastra } from '@mastra/core';
-import { MastraStorageLibSql } from '@mastra/core/storage';
-import { UpstashKVMemory } from '@mastra/memory/kv-upstash';
+import { Mastra, MastraStorageLibSql } from '@mastra/core';
+import { Memory } from '@mastra/memory';
+import { UpstashStore } from '@mastra/store-upstash';
 
 import { dane, daneChangeLog, daneCommitMessage, daneIssueLabeler, daneLinkChecker } from './agents/index.js';
 import { daneNewContributor } from './agents/new-contributor.js';
@@ -27,10 +27,13 @@ export const mastra = new Mastra({
       url: 'file:memory:',
     },
   }),
-  memory: new UpstashKVMemory({
-    url: 'http://localhost:8079',
-    token: `example_token`,
-    maxTokens: 39000,
+  memory: new Memory({
+    storage: new UpstashStore({
+      url: 'http://localhost:8079',
+      token: `example_token`,
+      // TODO: do we need to implement this in Memory?
+      // maxTokens: 39000,
+    }),
   }),
   workflows: {
     message: messageWorkflow,
