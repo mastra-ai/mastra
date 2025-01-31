@@ -3,13 +3,17 @@ import { MessageType, StorageThreadType } from '@mastra/core';
 import { StorageColumn } from '@mastra/core';
 import pgPromise from 'pg-promise';
 
-export interface PostgresConfig {
-  host: string;
-  port: number;
-  database: string;
-  user: string;
-  password: string;
-}
+export type PostgresConfig =
+  | {
+      host: string;
+      port: number;
+      database: string;
+      user: string;
+      password: string;
+    }
+  | {
+      connectionString: string;
+    };
 
 export class PostgresStore extends MastraStorage {
   private db: pgPromise.IDatabase<{}>;
@@ -18,13 +22,17 @@ export class PostgresStore extends MastraStorage {
   constructor(config: PostgresConfig) {
     super({ name: 'PostgresStore' });
     this.pgp = pgPromise();
-    this.db = this.pgp({
-      host: config.host,
-      port: config.port,
-      database: config.database,
-      user: config.user,
-      password: config.password,
-    });
+    this.db = this.pgp(
+      `connectionString` in config
+        ? { connectionString: config.connectionString }
+        : {
+            host: config.host,
+            port: config.port,
+            database: config.database,
+            user: config.user,
+            password: config.password,
+          },
+    );
   }
 
   async createTable({
