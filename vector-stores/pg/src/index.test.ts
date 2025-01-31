@@ -690,6 +690,54 @@ describe('PgVector', () => {
         expect(result.metadata?.category).toBe('electronics');
       });
     });
+    it('should handle empty $and conditions', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        $and: [],
+        category: 'electronics',
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.category).toBe('electronics');
+      });
+    });
+
+    it('should handle empty $or conditions', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        $or: [],
+        category: 'electronics',
+      });
+      expect(results).toHaveLength(0);
+    });
+
+    it('should handle empty $nor conditions', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        $nor: [],
+        category: 'electronics',
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.category).toBe('electronics');
+      });
+    });
+
+    it('should handle empty $not conditions', async () => {
+      await expect(
+        pgVector.query(indexName, [1, 0, 0], 10, {
+          $not: [],
+          category: 'electronics',
+        }),
+      ).rejects.toThrow('$not operator cannot be empty');
+    });
+
+    it('should handle multiple empty logical operators', async () => {
+      const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+        $and: [],
+        $or: [],
+        $nor: [],
+        category: 'electronics',
+      });
+      expect(results).toHaveLength(0);
+    });
 
     // Regex operator tests
     it('should handle $regex with case sensitivity', async () => {

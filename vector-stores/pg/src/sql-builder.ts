@@ -136,7 +136,17 @@ export function buildFilterQuery(filter: Filter, minScore: number): FilterResult
   function handleLogicalOperator(key: '$and' | '$or' | '$not' | '$nor', value: Filter[]): string {
     // Handle empty conditions
     if (!value || value.length === 0) {
-      return key === '$and' ? 'true' : 'false';
+      switch (key) {
+        case '$and':
+        case '$nor':
+          return 'true'; // Empty $and/$nor match everything
+        case '$or':
+          return 'false'; // Empty $or matches nothing
+        case '$not':
+          throw new Error('$not operator cannot be empty');
+        default:
+          return 'true';
+      }
     }
 
     const joinOperator = key === '$or' || key === '$nor' ? 'OR' : 'AND';
