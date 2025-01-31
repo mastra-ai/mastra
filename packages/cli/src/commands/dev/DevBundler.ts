@@ -1,11 +1,11 @@
 import { MastraBundler } from '@mastra/core/bundler';
-import { FileService, getBundler, getWatcher } from '@mastra/deployer';
+import { FileService, getWatcher } from '@mastra/deployer';
+import virtual from '@rollup/plugin-virtual';
 import * as fsExtra from 'fs-extra';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { RollupWatcherEvent } from 'rollup';
-import virtual from 'rollup-plugin-virtual';
+import type { RollupWatcherEvent } from 'rollup';
 
 export class DevBundler extends MastraBundler {
   constructor() {
@@ -58,14 +58,20 @@ export class DevBundler extends MastraBundler {
     });
 
     this.logger.info('Starting watcher...');
-    return new Promise(resolve => {
-      function cb(event: RollupWatcherEvent) {
+    return new Promise((resolve, reject) => {
+      const cb = (event: RollupWatcherEvent) => {
         if (event.code === 'BUNDLE_END') {
           this.logger.info('Bundling finished, starting server...');
           watcher.off('event', cb);
           resolve(watcher);
         }
-      }
+
+        if (event.code === 'ERROR') {
+          this.logger.error('Bundling failed, stopping watcher...');
+          watcher.off('event', cb);
+          reject(event);
+        }
+      };
 
       watcher.on('event', cb);
     });
