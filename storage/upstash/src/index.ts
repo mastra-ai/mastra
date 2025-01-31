@@ -1,4 +1,11 @@
-import { MastraStorage, StorageThreadType, MessageType, TABLE_NAMES, StorageColumn } from '@mastra/core';
+import {
+  MastraStorage,
+  StorageThreadType,
+  MessageType,
+  TABLE_NAMES,
+  StorageColumn,
+  WorkflowRunState,
+} from '@mastra/core';
 import { Redis } from '@upstash/redis';
 
 export interface UpstashConfig {
@@ -31,19 +38,6 @@ export class UpstashStore extends MastraStorage {
     if (!date) return undefined;
     const dateObj = this.ensureDate(date);
     return dateObj?.toISOString();
-  }
-
-  async init(): Promise<void> {
-    // Initialize all required tables
-    await Promise.all([
-      this.createTable({ tableName: MastraStorage.TABLE_THREADS, schema: MastraStorage.THREADS_SCHEMA }),
-      this.createTable({ tableName: MastraStorage.TABLE_MESSAGES, schema: MastraStorage.MESSAGES_SCHEMA }),
-      this.createTable({
-        tableName: MastraStorage.TABLE_WORKFLOW_SNAPSHOT,
-        schema: MastraStorage.WORKFLOW_SNAPSHOT_SCHEMA,
-      }),
-      this.createTable({ tableName: MastraStorage.TABLE_EVALS, schema: MastraStorage.EVALS_SCHEMA }),
-    ]);
   }
 
   async createTable({
@@ -163,8 +157,8 @@ export class UpstashStore extends MastraStorage {
     return updatedThread;
   }
 
-  async deleteThread({ id }: { id: string }): Promise<void> {
-    const key = this.getKey(MastraStorage.TABLE_THREADS, { id });
+  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
+    const key = this.getKey(MastraStorage.TABLE_THREADS, { id: threadId });
     await this.redis.del(key);
   }
 
@@ -200,17 +194,20 @@ export class UpstashStore extends MastraStorage {
       }),
     );
 
-    return messages
-      .filter(message => message && message.threadId === threadId)
-      .sort((a, b) => {
-        // First try to sort by _index if available
-        if (a!._index !== undefined && b!._index !== undefined) {
-          return a!._index - b!._index;
-        }
-        // Fall back to createdAt if _index is not available
-        return new Date(a!.createdAt).getTime() - new Date(b!.createdAt).getTime();
-      })
-      .map(({ _index, ...message }) => message as MessageType); // Remove _index before returning
+    return (
+      messages
+        .filter(message => message && message.threadId === threadId)
+        .sort((a, b) => {
+          // First try to sort by _index if available
+          if (a!._index !== undefined && b!._index !== undefined) {
+            return a!._index - b!._index;
+          }
+          // Fall back to createdAt if _index is not available
+          return new Date(a!.createdAt).getTime() - new Date(b!.createdAt).getTime();
+        })
+        // @ts-ignore TODO _index?
+        .map(({ _index, ...message }) => message as MessageType)
+    ); // Remove _index before returning
   }
 
   async persistWorkflowSnapshot(params: {
