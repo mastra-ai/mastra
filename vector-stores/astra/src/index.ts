@@ -1,5 +1,8 @@
 import { DataAPIClient, Db, UUID } from '@datastax/astra-db-ts';
+import { Filter } from '@mastra/core/filter';
 import { MastraVector, QueryResult, IndexStats } from '@mastra/core/vector';
+
+import { AstraFilterTranslator } from './filter';
 
 // Mastra and Astra DB agree on cosine and euclidean, but Astra DB uses dot_product instead of dotproduct.
 const metricMap = {
@@ -92,12 +95,15 @@ export class AstraVector extends MastraVector {
     indexName: string,
     queryVector: number[],
     topK?: number,
-    filter?: Record<string, any>,
+    filter?: Filter,
     includeVector: boolean = false,
   ): Promise<QueryResult[]> {
     const collection = this.#db.collection(indexName);
 
-    const cursor = collection.find(filter ?? {}, {
+    const astraFilter = new AstraFilterTranslator();
+    const translatedFilter = astraFilter.translate(filter ?? {});
+
+    const cursor = collection.find(translatedFilter ?? {}, {
       sort: { $vector: queryVector },
       limit: topK,
       includeSimilarity: true,
