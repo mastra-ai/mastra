@@ -14,7 +14,6 @@ export class LibSQLFilterTranslator extends BaseFilterTranslator {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
-      logical: ['$and', '$or', '$nor'],
       regex: [],
     };
   }

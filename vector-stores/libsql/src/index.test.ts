@@ -677,14 +677,14 @@ describe('LibSQLVector', () => {
       });
     });
 
-    // it('should handle empty $not conditions', async () => {
-    //   await expect(
-    //     libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //       $not: [],
-    //       category: 'electronics',
-    //     }),
-    //   ).rejects.toThrow('$not operator cannot be empty');
-    // });
+    it('should handle empty $not conditions', async () => {
+      await expect(
+        libsqlVector.query(indexName, [1, 0, 0], 10, {
+          $not: {},
+          category: 'electronics',
+        }),
+      ).rejects.toThrow('$not operator cannot be empty');
+    });
 
     it('should handle multiple empty logical operators', async () => {
       const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
@@ -697,15 +697,15 @@ describe('LibSQLVector', () => {
     });
 
     // Logical operator tests
-    // it('should handle $not operator', async () => {
-    //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     $not: [{ category: 'electronics' }],
-    //   });
-    //   expect(results.length).toBeGreaterThan(0);
-    //   results.forEach(result => {
-    //     expect(result.metadata?.category).not.toBe('electronics');
-    //   });
-    // });
+    it('should handle $not operator', async () => {
+      const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        $not: { category: 'electronics' },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.category).not.toBe('electronics');
+      });
+    });
 
     it('should handle $nor operator', async () => {
       const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
@@ -717,153 +717,17 @@ describe('LibSQLVector', () => {
       });
     });
 
-    // it('should handle nested $not with $or', async () => {
-    //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     $not: [
-    //       {
-    //         $or: [{ category: 'electronics' }, { category: 'books' }],
-    //       },
-    //     ],
-    //   });
-    //   expect(results.length).toBeGreaterThan(0);
-    //   results.forEach(result => {
-    //     expect(['electronics', 'books']).not.toContain(result.metadata?.category);
-    //   });
-    // });
-
-    // Regex operator tests
-    // it('should handle basic regex patterns', async () => {
-    //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     category: { $regex: 'elect.*' },
-    //   });
-    //   expect(results).toHaveLength(2);
-    // });
-
-    // it('should handle case sensitivity', async () => {
-    //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     category: { $regex: 'ELECTRONICS' },
-    //   });
-    //   expect(results).toHaveLength(0); // Case sensitive by default
-
-    //   const iResults = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     category: { $regex: 'ELECTRONICS', $options: 'i' },
-    //   });
-    //   expect(iResults).toHaveLength(2); // Case insensitive
-    // });
-
-    // it('should handle start/end anchors', async () => {
-    //   const startResults = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     category: { $regex: '^elect' },
-    //   });
-    //   expect(startResults).toHaveLength(2);
-
-    //   const endResults = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     category: { $regex: 'nics$' },
-    //   });
-    //   expect(endResults).toHaveLength(2);
-    // });
-
-    // it('should handle multiline flag', async () => {
-    //   // First insert a record with multiline text
-    //   await libsqlVector.upsert(
-    //     indexName,
-    //     [[1, 0.1, 0]],
-    //     [
-    //       {
-    //         description: 'First line\nSecond line\nThird line',
-    //       },
-    //     ],
-    //   );
-
-    //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     description: { $regex: '^Second', $options: 'm' },
-    //   });
-    //   expect(results).toHaveLength(1);
-    // });
-
-    // it('should handle multiline regex patterns', async () => {
-    //   await libsqlVector.upsert(
-    //     indexName,
-    //     [[1, 0.1, 0]],
-    //     [
-    //       {
-    //         description: 'First line\nSecond line\nThird line',
-    //       },
-    //     ],
-    //   );
-
-    //   // Test without multiline flag
-    //   const withoutM = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     description: { $regex: '^Second' },
-    //   });
-    //   expect(withoutM).toHaveLength(0); // Won't match "Second" at start of line
-
-    //   // Test with multiline flag
-    //   const withM = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     description: { $regex: '^Second', $options: 'm' },
-    //   });
-    //   expect(withM).toHaveLength(1); // Will match "Second" at start of any line
-    // });
-
-    // it('should handle dotall flag', async () => {
-    //   await libsqlVector.upsert(
-    //     indexName,
-    //     [[1, 0.1, 0]],
-    //     [
-    //       {
-    //         description: 'First\nSecond\nThird',
-    //       },
-    //     ],
-    //   );
-
-    //   // Test with a more complex pattern that demonstrates s flag behavior
-    //   const withoutS = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     description: { $regex: 'First[^\\n]*Third' },
-    //   });
-    //   expect(withoutS).toHaveLength(0); // Won't match across lines without s flag
-
-    //   const withS = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     description: { $regex: 'First.*Third', $options: 's' },
-    //   });
-    //   expect(withS).toHaveLength(1); // Matches across lines with s flag
-    // });
-
-    // it('should handle extended flag', async () => {
-    //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     category: { $regex: 'elect # start\nronics # end', $options: 'x' },
-    //   });
-    //   expect(results).toHaveLength(2); // x flag allows comments and whitespace
-    // });
-
-    // it('should handle flag combinations', async () => {
-    //   await libsqlVector.upsert(
-    //     indexName,
-    //     [[1, 0.1, 0]],
-    //     [
-    //       {
-    //         description: 'FIRST line\nSECOND line',
-    //       },
-    //     ],
-    //   );
-
-    //   // Test case-insensitive and multiline flags together
-    //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     description: {
-    //       $regex: '^first',
-    //       $options: 'im', // Case-insensitive and multiline
-    //     },
-    //   });
-    //   expect(results).toHaveLength(1);
-
-    //   // Test with second line
-    //   const secondResults = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     description: {
-    //       $regex: '^second',
-    //       $options: 'im',
-    //     },
-    //   });
-    //   expect(secondResults).toHaveLength(1);
-    // });
+    it('should handle nested $not with $or', async () => {
+      const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        $not: {
+          $or: [{ category: 'electronics' }, { category: 'books' }],
+        },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(['electronics', 'books']).not.toContain(result.metadata?.category);
+      });
+    });
 
     // String pattern tests
     it('should handle exact string matches', async () => {
@@ -880,36 +744,17 @@ describe('LibSQLVector', () => {
       expect(results).toHaveLength(0);
     });
 
-    it('should handle special regex characters as literals', async () => {
-      await libsqlVector.upsert(
-        indexName,
-        [[1, 0.1, 0]],
-        [
-          {
-            special: 'text.with*special(chars)',
-          },
-        ],
-      );
-
+    it('should handle $not with $and', async () => {
       const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-        special: 'text.with*special(chars)',
+        $not: {
+          $and: [{ category: 'electronics' }, { price: { $gt: 50 } }],
+        },
       });
-      expect(results).toHaveLength(1); // Exact match, not regex
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.category !== 'electronics' || result.metadata?.price <= 50).toBe(true);
+      });
     });
-
-    // it('should handle $not with $and', async () => {
-    //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     $not: [
-    //       {
-    //         $and: [{ category: 'electronics' }, { price: { $gt: 50 } }],
-    //       },
-    //     ],
-    //   });
-    //   expect(results.length).toBeGreaterThan(0);
-    //   results.forEach(result => {
-    //     expect(result.metadata?.category !== 'electronics' || result.metadata?.price <= 50).toBe(true);
-    //   });
-    // });
 
     it('should handle $nor with $or', async () => {
       const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
@@ -922,26 +767,26 @@ describe('LibSQLVector', () => {
       });
     });
 
-    // it('should handle nested $and with $or and $not', async () => {
-    //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     $and: [{ $or: [{ category: 'electronics' }, { category: 'books' }] }, { $not: [{ price: { $lt: 50 } }] }],
-    //   });
-    //   expect(results.length).toBeGreaterThan(0);
-    //   results.forEach(result => {
-    //     expect(['electronics', 'books']).toContain(result.metadata?.category);
-    //     expect(result.metadata?.price).toBeGreaterThanOrEqual(50);
-    //   });
-    // });
+    it('should handle nested $and with $or and $not', async () => {
+      const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        $and: [{ $or: [{ category: 'electronics' }, { category: 'books' }] }, { $not: { price: { $lt: 50 } } }],
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(['electronics', 'books']).toContain(result.metadata?.category);
+        expect(result.metadata?.price).toBeGreaterThanOrEqual(50);
+      });
+    });
 
-    // it('should handle $or with multiple $not conditions', async () => {
-    //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     $or: [{ $not: [{ category: 'electronics' }] }, { $not: [{ price: { $gt: 50 } }] }],
-    //   });
-    //   expect(results.length).toBeGreaterThan(0);
-    //   results.forEach(result => {
-    //     expect(result.metadata?.category !== 'electronics' || result.metadata?.price <= 50).toBe(true);
-    //   });
-    // });
+    it('should handle $or with multiple $not conditions', async () => {
+      const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        $or: [{ $not: { category: 'electronics' } }, { $not: { price: { $gt: 50 } } }],
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.category !== 'electronics' || result.metadata?.price <= 50).toBe(true);
+      });
+    });
 
     it('should handle $nor with nested $and conditions', async () => {
       const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
@@ -958,68 +803,32 @@ describe('LibSQLVector', () => {
       });
     });
 
-    // it('should handle deeply nested logical operators', async () => {
-    //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     $and: [
-    //       {
-    //         $or: [{ category: 'electronics' }, { $and: [{ category: 'books' }, { price: { $lt: 30 } }] }],
-    //       },
-    //       {
-    //         $not: [
-    //           {
-    //             $or: [{ active: false }, { price: { $gt: 100 } }],
-    //           },
-    //         ],
-    //       },
-    //     ],
-    //   });
-    //   expect(results.length).toBeGreaterThan(0);
-    //   results.forEach(result => {
-    //     // First condition: electronics OR (books AND price < 30)
-    //     const firstCondition =
-    //       result.metadata?.category === 'electronics' ||
-    //       (result.metadata?.category === 'books' && result.metadata?.price < 30);
+    it('should handle deeply nested logical operators', async () => {
+      const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+        $and: [
+          {
+            $or: [{ category: 'electronics' }, { $and: [{ category: 'books' }, { price: { $lt: 30 } }] }],
+          },
+          {
+            $not: {
+              $or: [{ active: false }, { price: { $gt: 100 } }],
+            },
+          },
+        ],
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        // First condition: electronics OR (books AND price < 30)
+        const firstCondition =
+          result.metadata?.category === 'electronics' ||
+          (result.metadata?.category === 'books' && result.metadata?.price < 30);
 
-    //     // Second condition: NOT (active = false OR price > 100)
-    //     const secondCondition = result.metadata?.active !== false && result.metadata?.price <= 100;
+        // Second condition: NOT (active = false OR price > 100)
+        const secondCondition = result.metadata?.active !== false && result.metadata?.price <= 100;
 
-    //     expect(firstCondition && secondCondition).toBe(true);
-    //   });
-    // });
-
-    // it('should handle case insensitive flag (i)', async () => {
-    //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     category: { $regex: 'ELECTRONICS', $options: 'i' },
-    //   });
-    //   expect(results.length).toBeGreaterThan(0);
-    // });
-
-    // it('should handle multiline flag (m)', async () => {
-    //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     description: { $regex: '^start', $options: 'm' },
-    //   });
-    //   expect(results.length).toBeGreaterThan(0);
-    // });
-
-    // it('should handle extended flag (x)', async () => {
-    //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     category: {
-    //       $regex: 'elect # match electronics\nronics',
-    //       $options: 'x',
-    //     },
-    //   });
-    //   expect(results.length).toBeGreaterThan(0);
-    // });
-
-    // it('should handle multiple flags', async () => {
-    //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-    //     category: {
-    //       $regex: 'ELECTRONICS\nITEM',
-    //       $options: 'im',
-    //     },
-    //   });
-    //   expect(results.length).toBeGreaterThan(0);
-    // });
+        expect(firstCondition && secondCondition).toBe(true);
+      });
+    });
   });
 
   describe('listIndexes', () => {
@@ -1120,17 +929,6 @@ describe('LibSQLVector', () => {
   //       expect(['electronics', 'books']).not.toContain(result.metadata?.category);
   //     });
   //   });
-
-  //   // it('should handle $not with regex', async () => {
-  //   //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
-  //   //     category: { $not: { $regex: '^elect' } },
-  //   //   });
-  //   //   expect(results.length).toBeGreaterThan(0);
-  //   //   results.forEach(result => {
-  //   //     expect(result.metadata?.category).not.toMatch(/^elect/);
-  //   //   });
-  //   // });
-
   //   // it.only('should handle $not with multiple operators', async () => {
   //   //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
   //   //     price: { $not: { $gte: 10, $lte: 100 } },
@@ -1141,5 +939,184 @@ describe('LibSQLVector', () => {
   //   //     expect(price < 10 || price > 100).toBe(true);
   //   //   });
   //   // });
+  // });
+
+  // describe('regex tests', () => {
+  //   //   // it('should handle $not with regex', async () => {
+  //   //   //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //   //   //     category: { $not: { $regex: '^elect' } },
+  //   //   //   });
+  //   //   //   expect(results.length).toBeGreaterThan(0);
+  //   //   //   results.forEach(result => {
+  //   //   //     expect(result.metadata?.category).not.toMatch(/^elect/);
+  //   //   //   });
+  //   //   // });
+  //   // Regex operator tests
+  //   // it('should handle basic regex patterns', async () => {
+  //   //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //   //     category: { $regex: 'elect.*' },
+  //   //   });
+  //   //   expect(results).toHaveLength(2);
+  //   // });
+  //   // it('should handle case sensitivity', async () => {
+  //   //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //   //     category: { $regex: 'ELECTRONICS' },
+  //   //   });
+  //   //   expect(results).toHaveLength(0); // Case sensitive by default
+  //   //   const iResults = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //   //     category: { $regex: 'ELECTRONICS', $options: 'i' },
+  //   //   });
+  //   //   expect(iResults).toHaveLength(2); // Case insensitive
+  //   // });
+  //   // it('should handle start/end anchors', async () => {
+  //   //   const startResults = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //   //     category: { $regex: '^elect' },
+  //   //   });
+  //   //   expect(startResults).toHaveLength(2);
+  //   //   const endResults = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //   //     category: { $regex: 'nics$' },
+  //   //   });
+  //   //   expect(endResults).toHaveLength(2);
+  //   // });
+  //   // it('should handle multiline flag', async () => {
+  //   //   // First insert a record with multiline text
+  //   //   await libsqlVector.upsert(
+  //   //     indexName,
+  //   //     [[1, 0.1, 0]],
+  //   //     [
+  //   //       {
+  //   //         description: 'First line\nSecond line\nThird line',
+  //   //       },
+  //   //     ],
+  //   //   );
+  //   //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //   //     description: { $regex: '^Second', $options: 'm' },
+  //   //   });
+  //   //   expect(results).toHaveLength(1);
+  //   // });
+  //   // it('should handle multiline regex patterns', async () => {
+  //   //   await libsqlVector.upsert(
+  //   //     indexName,
+  //   //     [[1, 0.1, 0]],
+  //   //     [
+  //   //       {
+  //   //         description: 'First line\nSecond line\nThird line',
+  //   //       },
+  //   //     ],
+  //   //   );
+  //   //   // Test without multiline flag
+  //   //   const withoutM = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //   //     description: { $regex: '^Second' },
+  //   //   });
+  //   //   expect(withoutM).toHaveLength(0); // Won't match "Second" at start of line
+  //   //   // Test with multiline flag
+  //   //   const withM = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //   //     description: { $regex: '^Second', $options: 'm' },
+  //   //   });
+  //   //   expect(withM).toHaveLength(1); // Will match "Second" at start of any line
+  //   // });
+  //   // it('should handle dotall flag', async () => {
+  //   //   await libsqlVector.upsert(
+  //   //     indexName,
+  //   //     [[1, 0.1, 0]],
+  //   //     [
+  //   //       {
+  //   //         description: 'First\nSecond\nThird',
+  //   //       },
+  //   //     ],
+  //   //   );
+  //   //   // Test with a more complex pattern that demonstrates s flag behavior
+  //   //   const withoutS = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //   //     description: { $regex: 'First[^\\n]*Third' },
+  //   //   });
+  //   //   expect(withoutS).toHaveLength(0); // Won't match across lines without s flag
+  //   //   const withS = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //   //     description: { $regex: 'First.*Third', $options: 's' },
+  //   //   });
+  //   //   expect(withS).toHaveLength(1); // Matches across lines with s flag
+  //   // });
+  //   // it('should handle extended flag', async () => {
+  //   //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //   //     category: { $regex: 'elect # start\nronics # end', $options: 'x' },
+  //   //   });
+  //   //   expect(results).toHaveLength(2); // x flag allows comments and whitespace
+  //   // });
+  //   // it('should handle flag combinations', async () => {
+  //   //   await libsqlVector.upsert(
+  //   //     indexName,
+  //   //     [[1, 0.1, 0]],
+  //   //     [
+  //   //       {
+  //   //         description: 'FIRST line\nSECOND line',
+  //   //       },
+  //   //     ],
+  //   //   );
+  //   //   // Test case-insensitive and multiline flags together
+  //   //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //   //     description: {
+  //   //       $regex: '^first',
+  //   //       $options: 'im', // Case-insensitive and multiline
+  //   //     },
+  //   //   });
+  //   //   expect(results).toHaveLength(1);
+  //   //   // Test with second line
+  //   //   const secondResults = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //   //     description: {
+  //   //       $regex: '^second',
+  //   //       $options: 'im',
+  //   //     },
+  //   //   });
+  //   //   expect(secondResults).toHaveLength(1);
+  //   // });
+  // it('should handle case insensitive flag (i)', async () => {
+  //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //     category: { $regex: 'ELECTRONICS', $options: 'i' },
+  //   });
+  //   expect(results.length).toBeGreaterThan(0);
+  // });
+
+  // it('should handle multiline flag (m)', async () => {
+  //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //     description: { $regex: '^start', $options: 'm' },
+  //   });
+  //   expect(results.length).toBeGreaterThan(0);
+  // });
+
+  // it('should handle extended flag (x)', async () => {
+  //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //     category: {
+  //       $regex: 'elect # match electronics\nronics',
+  //       $options: 'x',
+  //     },
+  //   });
+  //   expect(results.length).toBeGreaterThan(0);
+  // });
+
+  // it('should handle multiple flags', async () => {
+  //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //     category: {
+  //       $regex: 'ELECTRONICS\nITEM',
+  //       $options: 'im',
+  //     },
+  //   });
+  //   expect(results.length).toBeGreaterThan(0);
+  // });
+  // it('should handle special regex characters as literals', async () => {
+  //   await libsqlVector.upsert(
+  //     indexName,
+  //     [[1, 0.1, 0]],
+  //     [
+  //       {
+  //         special: 'text.with*special(chars)',
+  //       },
+  //     ],
+  //   );
+
+  //   const results = await libsqlVector.query(indexName, [1, 0, 0], 10, {
+  //     special: 'text.with*special(chars)',
+  //   });
+  //   expect(results).toHaveLength(1); // Exact match, not regex
+  // });
+
   // });
 });

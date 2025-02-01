@@ -131,33 +131,7 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     sql: `(${key})`,
     needsValue: false,
   }),
-  $not: (key: string) => ({
-    sql: `NOT (${key})`,
-    needsValue: true, // We need the nested condition
-    transformValue: (value: any) => {
-      // Get the inner operator and its value
-      const [operator, operatorValue] = Object.entries(value)[0] || [];
-      // Use the existing operator's SQL generation
-      const innerOperator = FILTER_OPERATORS[operator as string]?.(key, operatorValue);
-
-      console.log('innerOperator', innerOperator, operator, operatorValue);
-
-      const transformed = innerOperator?.transformValue ? innerOperator.transformValue(operatorValue) : operatorValue;
-
-      // Handle case where transformValue returns { sql, values }
-      if (transformed && typeof transformed === 'object' && 'sql' in transformed) {
-        return {
-          sql: transformed?.sql ? `NOT (${transformed.sql})` : '',
-          values: transformed.values,
-        };
-      }
-
-      return {
-        sql: innerOperator?.sql ? `NOT (${innerOperator.sql})` : '',
-        values: Array.isArray(transformed) ? transformed : [transformed],
-      };
-    },
-  }),
+  $not: key => ({ sql: `NOT (${key})`, needsValue: false }),
   $nor: (key: string) => ({
     sql: `NOT (${key})`,
     needsValue: false,
@@ -294,7 +268,7 @@ export function buildFilterQuery(filter: Filter): FilterResult {
   const values: InValue[] = [];
   const conditions = Object.entries(filter)
     .map(([key, value]) => {
-      const condition = buildCondition(key, value);
+      const condition = buildCondition(key, value, '');
       values.push(...condition.values);
       return condition.sql;
     })
@@ -306,10 +280,10 @@ export function buildFilterQuery(filter: Filter): FilterResult {
   };
 }
 
-function buildCondition(key: string, value: any): FilterResult {
+function buildCondition(key: string, value: any, parentPath: string): FilterResult {
   // Handle logical operators ($and/$or)
   if (['$and', '$or', '$not', '$nor'].includes(key)) {
-    return handleLogicalOperator(key as '$and' | '$or' | '$not' | '$nor', value);
+    return handleLogicalOperator(key as '$and' | '$or' | '$not' | '$nor', value, parentPath);
   }
 
   // If condition is not a FilterCondition object, assume it's an equality check
@@ -340,7 +314,11 @@ function buildCondition(key: string, value: any): FilterResult {
 //   };
 // }
 
-function handleLogicalOperator(key: '$and' | '$or' | '$not' | '$nor', value: Filter[]): FilterResult {
+function handleLogicalOperator(
+  key: '$and' | '$or' | '$not' | '$nor',
+  value: Filter[] | Filter,
+  parentPath: string,
+): FilterResult {
   if (!value || value.length === 0) {
     switch (key) {
       case '$and':
@@ -355,37 +333,62 @@ function handleLogicalOperator(key: '$and' | '$or' | '$not' | '$nor', value: Fil
     }
   }
 
+  if (key === '$not') {
+    // For top-level $not
+    const entries = Object.entries(value);
+    const conditions = entries.map(([fieldKey, fieldValue]) => buildCondition(fieldKey, fieldValue, key));
+    return {
+      sql: `NOT (${conditions.map(c => c.sql).join(' AND ')})`,
+      values: conditions.flatMap(c => c.values),
+    };
+  }
+
   const values: InValue[] = [];
   const joinOperator = key === '$or' || key === '$nor' ? 'OR' : 'AND';
-  const conditions = value.map((f: Filter) => {
-    const entries = Object.entries(f);
-    if (entries.length === 0) return '';
+  const conditions = Array.isArray(value)
+    ? value.map(f => {
+        const entries = Object.entries(f);
+        return entries.map(([k, v]) => buildCondition(k, v, key));
+      })
+    : [buildCondition(key, value, parentPath)];
 
-    const [firstKey, firstValue] = entries[0] || [];
-    if (['$and', '$or', '$not', '$nor'].includes(firstKey as string)) {
-      const result = buildCondition(firstKey as string, firstValue);
-      values.push(...result.values);
-      return result.sql;
-    }
+  const joined = conditions
+    .flat()
+    .map(c => {
+      values.push(...c.values);
+      return c.sql;
+    })
+    .join(` ${joinOperator} `);
 
-    const subConditions = Object.entries(f).map(([k, v]) => {
-      const result = buildCondition(k, v);
-      values.push(...result.values);
-      return result.sql;
-    });
-
-    return subConditions.join(` ${joinOperator} `);
-  });
-
-  const operatorFn = FILTER_OPERATORS[key as string]!;
   return {
-    sql: operatorFn(conditions.join(` ${joinOperator} `), values).sql,
+    sql: key === '$nor' ? `NOT (${joined})` : `(${joined})`,
     values,
   };
 }
 
 function handleOperator(key: string, value: any): FilterResult {
   const [[operator, operatorValue] = []] = Object.entries(value);
+  if (operator === '$not') {
+    const entries = Object.entries(operatorValue as Record<string, unknown>);
+    const results = entries.map(([nestedOp, nestedValue]) => {
+      if (!nestedOp || !FILTER_OPERATORS[nestedOp as keyof typeof FILTER_OPERATORS]) {
+        throw new Error(`Invalid operator in $not condition: ${nestedOp}`);
+      }
+      const operatorFn = FILTER_OPERATORS[nestedOp]!;
+      const operatorResult = operatorFn(key, nestedValue);
+
+      return {
+        sql: operatorResult.sql,
+        values: operatorResult.needsValue ? (Array.isArray(nestedValue) ? nestedValue : [nestedValue]) : [],
+      };
+    });
+
+    return {
+      sql: `NOT (${results.map(r => r.sql).join(' AND ')})`,
+      values: results.flatMap(r => r.values) as InValue[],
+    };
+  }
+
   const operatorFn = FILTER_OPERATORS[operator as string]!;
   const operatorResult = operatorFn(key, operatorValue);
 
