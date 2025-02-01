@@ -422,7 +422,6 @@ describe('LibSQLFilterTranslator', () => {
 
         { $or: [{ $and: { field1: 'value1' } }, { $not: { field2: 'value2' } }] },
 
-        // $not operator tests (uncommented)
         { field: { $not: { $eq: 'value' } } },
         { field: { $not: { $in: ['value1', 'value2'] } } },
         { field: { $not: { $gt: 100 } } },

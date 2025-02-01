@@ -1,4 +1,4 @@
-import { BaseFilterTranslator, FieldCondition, Filter, QueryOperator } from '@mastra/core/filter';
+import { BaseFilterTranslator, FieldCondition, Filter, OperatorSupport, QueryOperator } from '@mastra/core/filter';
 
 /**
  * Translator for Astra DB filter queries.
@@ -6,11 +6,15 @@ import { BaseFilterTranslator, FieldCondition, Filter, QueryOperator } from '@ma
  * and normalization of values.
  */
 export class AstraFilterTranslator extends BaseFilterTranslator {
-  /**
-   * Translates a MongoDB-style filter to Astra-compatible format.
-   * Since Astra supports MongoDB syntax, this mainly handles validation
-   * and normalization.
-   */
+  protected override getSupportedOperators(): OperatorSupport {
+    return {
+      ...BaseFilterTranslator.DEFAULT_OPERATORS,
+      logical: ['$and', '$or', '$not'],
+      regex: [],
+      custom: ['$size'],
+    };
+  }
+
   translate(filter: Filter): Filter {
     if (this.isEmpty(filter)) return filter;
     this.validateFilter(filter);
@@ -20,7 +24,10 @@ export class AstraFilterTranslator extends BaseFilterTranslator {
 
   private translateNode(node: Filter | FieldCondition): any {
     // Handle primitive values and arrays
-    if (this.isPrimitive(node) || Array.isArray(node) || this.isRegex(node)) {
+    if (this.isRegex(node)) {
+      throw new Error('Regex is not supported in Astra DB');
+    }
+    if (this.isPrimitive(node) || Array.isArray(node)) {
       return node;
     }
 

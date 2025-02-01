@@ -105,13 +105,6 @@ describe('AstraFilterTranslator', () => {
       expect(translator.translate(filter)).toEqual(filter);
     });
 
-    it('handles $nor operator', () => {
-      const filter = {
-        $nor: [{ price: { $lt: 100 } }, { status: 'inactive' }],
-      };
-      expect(translator.translate(filter)).toEqual(filter);
-    });
-
     it('handles empty conditions in logical operators', () => {
       const filter = {
         $and: [],
@@ -126,7 +119,6 @@ describe('AstraFilterTranslator', () => {
         translator.translate({
           $and: [{ field1: { $gt: 10 } }],
           $or: [{ field2: { $lt: 20 } }],
-          $nor: [{ field3: { $in: ['a', 'b'] } }],
           field4: { $not: { $eq: 'value' } },
         }),
       ).not.toThrow();
@@ -137,7 +129,6 @@ describe('AstraFilterTranslator', () => {
         translator.translate({
           $and: [{ field1: 'value1' }, { field2: 'value2' }],
           $or: [{ field3: 'value3' }, { field4: 'value4' }],
-          $nor: [{ field5: 'value5' }, { field6: 'value6' }],
         }),
       ).not.toThrow();
     });
@@ -150,7 +141,7 @@ describe('AstraFilterTranslator', () => {
               $or: [{ field1: 'value1' }, { field2: 'value2' }],
             },
             {
-              $nor: [{ field3: 'value3' }, { field4: 'value4' }],
+              $and: [{ field3: 'value3' }, { field4: 'value4' }],
             },
           ],
         }),
@@ -286,41 +277,6 @@ describe('AstraFilterTranslator', () => {
     });
   });
 
-  // Regex Support
-  describe('regex support', () => {
-    it('passes through regex literals', () => {
-      const filter = { field: /pattern/i };
-      expect(translator.translate(filter)).toEqual(filter);
-    });
-
-    it('passes through regex object form', () => {
-      const filter = { field: { $regex: 'pattern', $options: 'i' } };
-      expect(translator.translate(filter)).toEqual(filter);
-    });
-
-    it('passes through start/end anchors', () => {
-      const filter = {
-        start: { $regex: '^begin' },
-        end: { $regex: 'end$' },
-        exact: { $regex: '^exact$' },
-      };
-      expect(translator.translate(filter)).toEqual(filter);
-    });
-
-    it('passes through regex patterns', () => {
-      const filter = { field: { $regex: 'pat.*ern' } };
-      expect(translator.translate(filter)).toEqual(filter);
-    });
-
-    it('handles case-insensitive regex', () => {
-      const filter = {
-        name: { $regex: 'test', $options: 'i' },
-        description: { $regex: '^hello' },
-      };
-      expect(translator.translate(filter)).toEqual(filter);
-    });
-  });
-
   // Special Cases
   describe('special cases', () => {
     it('handles empty filters', () => {
@@ -345,6 +301,56 @@ describe('AstraFilterTranslator', () => {
           field3: { $not: { $regex: 'pattern' } },
         }),
       ).not.toThrow();
+    });
+  });
+
+  describe('operator validation', () => {
+    it('ensure all operator filters are supported', () => {
+      const supportedFilters = [
+        // Basic comparison operators
+        { field: { $eq: 'value' } },
+        { field: { $ne: 'value' } },
+        { field: { $gt: 'value' } },
+        { field: { $gte: 'value' } },
+        { field: { $lt: 'value' } },
+        { field: { $lte: 'value' } },
+
+        // Array operators
+        { field: { $in: ['value'] } },
+        { field: { $nin: ['value'] } },
+        { field: { $all: ['value'] } },
+        { field: { $elemMatch: { $gt: 5 } } },
+
+        // Existence
+        { field: { $exists: true } },
+
+        { $and: [{ field1: 'value1' }, { field2: 'value2' }] },
+        { $or: [{ field1: 'value1' }, { field2: 'value2' }] },
+
+        { $and: { field: 'value' } },
+        { $or: { field: 'value' } },
+        { $not: { field: 'value' } },
+
+        { $or: [{ $and: { field1: 'value1' } }, { $not: { field2: 'value2' } }] },
+
+        { field: { $not: { $eq: 'value' } } },
+        { field: { $not: { $in: ['value1', 'value2'] } } },
+        { field: { $not: { $gt: 100 } } },
+        { field: { $not: { $lt: 50 } } },
+
+        { field: { $size: 1 } },
+      ];
+
+      supportedFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).not.toThrow();
+      });
+    });
+
+    it('throws on unsupported operators', () => {
+      expect(() => translator.translate({ field: { $regex: 'value' } })).toThrow('Unsupported operator: $regex');
+      const filter = { field: /pattern/i };
+      expect(() => translator.translate(filter)).toThrow('Regex is not supported in Astra DB');
+      expect(() => translator.translate({ $nor: [{ field: 'value' }] })).toThrow('Unsupported operator: $nor');
     });
   });
 });
