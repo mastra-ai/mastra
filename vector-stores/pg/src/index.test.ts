@@ -596,6 +596,17 @@ describe('PgVector', () => {
         });
         expect(results.length).toBe(1);
       });
+
+      it('should handle $not with multiple operators', async () => {
+        const results = await pgVector.query(indexName, [1, 0, 0], 10, {
+          price: { $not: { $gte: 30, $lte: 70 } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          const price = Number(result.metadata?.price);
+          expect(price < 30 || price > 70).toBe(true);
+        });
+      });
     });
 
     // Edge Cases and Special Values
