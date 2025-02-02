@@ -23,9 +23,10 @@ async function waitForCondition(
   return false;
 }
 
-describe.skip('AstraVector Integration Tests', () => {
+describe('AstraVector Integration Tests', () => {
   let astraVector: AstraVector;
   const testIndexName = 'testvectors1733728136118'; // Unique collection name
+  const testIndexName2 = 'testvectors1733728136119'; // Unique collection name
 
   console.log('testIndexName:', testIndexName);
 
@@ -53,11 +54,17 @@ describe.skip('AstraVector Integration Tests', () => {
     } catch (error) {
       console.error('Failed to delete test collection:', error);
     }
+    try {
+      await astraVector.deleteIndex(testIndexName2);
+    } catch (error) {
+      console.error('Failed to delete test collection:', error);
+    }
   });
 
   test('full vector database workflow', async () => {
     // 1. Create a new collection
     await astraVector.createIndex(testIndexName, 4, 'cosine');
+    await astraVector.createIndex(testIndexName2, 4, 'cosine');
 
     // Verify collection was created
     const indexes = await astraVector.listIndexes();
@@ -209,197 +216,615 @@ describe.skip('AstraVector Integration Tests', () => {
     }
   }, 500000);
 
-  // describe('filter', () => {
-  //       it('throws error for invalid operator values', () => {
-  //     const filter = { tags: { $all: 'not-an-array' } };
-  //     expect(() => translator.translate(filter)).toThrow();
-  //   });
+  describe('Filter Validation in Queries', () => {
+    it('rejects invalid operator values', async () => {
+      await expect(
+        astraVector.query(testIndexName2, [1, 0, 0], 10, {
+          tags: { $all: 'not-an-array' },
+        }),
+      ).rejects.toThrow();
+    });
 
-  //   it('validates array operator values', () => {
-  //     expect(() =>
-  //       translator.translate({
-  //         tags: { $in: null },
-  //       }),
-  //     ).toThrow();
+    it('validates array operator values', async () => {
+      await expect(
+        astraVector.query(testIndexName2, [1, 0, 0], 10, {
+          tags: { $in: null },
+        }),
+      ).rejects.toThrow();
 
-  //     expect(() =>
-  //       translator.translate({
-  //         tags: { $all: 'not-an-array' },
-  //       }),
-  //     ).toThrow();
-  //   });
+      await expect(
+        astraVector.query(testIndexName2, [1, 0, 0], 10, {
+          tags: { $all: 'not-an-array' },
+        }),
+      ).rejects.toThrow();
+    });
 
-  //   it('validates numeric values for comparison operators', () => {
-  //     const filter = {
-  //       price: { $gt: 'not-a-number' },
-  //     };
-  //     expect(() => translator.translate(filter)).toThrow();
-  //   });
+    it('validates numeric values for comparison operators', async () => {
+      await expect(
+        astraVector.query(testIndexName2, [1, 0, 0], 10, {
+          price: { $gt: 'not-a-number' },
+        }),
+      ).rejects.toThrow();
+    });
 
-  //   it('validates value types', () => {
-  //     expect(() =>
-  //       translator.translate({
-  //         date: { $gt: 'not-a-date' },
-  //       }),
-  //     ).toThrow();
+    it('validates value types', async () => {
+      await expect(
+        astraVector.query(testIndexName2, [1, 0, 0], 10, {
+          date: { $gt: 'not-a-date' },
+        }),
+      ).rejects.toThrow();
 
-  //     expect(() =>
-  //       translator.translate({
-  //         number: { $lt: 'not-a-number' },
-  //       }),
-  //     ).toThrow();
-  //   });
+      await expect(
+        astraVector.query(testIndexName2, [1, 0, 0], 10, {
+          number: { $lt: 'not-a-number' },
+        }),
+      ).rejects.toThrow();
+    });
 
-  //   // Array Operators
-  //   it('validates array operators', () => {
-  //     const invalidValues = [123, 'string', true, { key: 'value' }, null, undefined];
-  //     for (const op of ['$in', '$nin', '$all']) {
-  //       for (const val of invalidValues) {
-  //         expect(() =>
-  //           translator.translate({
-  //             field: { [op]: val },
-  //           }),
-  //         ).toThrow();
-  //       }
-  //     }
+    it('validates array operators', async () => {
+      const invalidValues = [123, 'string', true, { key: 'value' }, null, undefined];
+      for (const op of ['$in', '$nin', '$all']) {
+        for (const val of invalidValues) {
+          await expect(
+            astraVector.query(testIndexName2, [1, 0, 0], 10, {
+              field: { [op]: val },
+            }),
+          ).rejects.toThrow();
+        }
+      }
 
-  //     // Invalid array elements
-  //     expect(() =>
-  //       translator.translate({
-  //         field: { $in: [undefined, null] },
-  //       }),
-  //     ).toThrow();
-  //   });
+      await expect(
+        astraVector.query(testIndexName2, [1, 0, 0], 10, {
+          field: { $in: [undefined, null] },
+        }),
+      ).rejects.toThrow();
+    });
 
-  //   // Element Operators
-  //   it('validates element operators', () => {
-  //     const invalidValues = [123, 'string', [], {}, null, undefined];
-  //     for (const val of invalidValues) {
-  //       expect(() =>
-  //         translator.translate({
-  //           field: { $exists: val },
-  //         }),
-  //       ).toThrow();
-  //     }
-  //   });
+    it('validates element operators', async () => {
+      const invalidValues = [123, 'string', [], {}, null, undefined];
+      for (const val of invalidValues) {
+        await expect(
+          astraVector.query(testIndexName2, [1, 0, 0], 10, {
+            field: { $exists: val },
+          }),
+        ).rejects.toThrow();
+      }
+    });
 
-  //   // Comparison Operators
-  //   it('validates comparison operators', () => {
-  //     // Basic equality can accept any non-undefined value
-  //     const eqOps = ['$eq', '$ne'];
-  //     for (const op of eqOps) {
-  //       expect(() =>
-  //         translator.translate({
-  //           field: { [op]: undefined },
-  //         }),
-  //       ).toThrow();
-  //     }
+    it('validates comparison operators', async () => {
+      // Basic equality can accept any non-undefined value
+      for (const op of ['$eq', '$ne']) {
+        await expect(
+          astraVector.query(testIndexName2, [1, 0, 0], 10, {
+            field: { [op]: undefined },
+          }),
+        ).rejects.toThrow();
+      }
 
-  //     // Numeric comparisons require numbers or dates
-  //     const numOps = ['$gt', '$gte', '$lt', '$lte'];
-  //     const invalidNumericValues = ['not-a-number', true, [], {}, null, undefined];
-  //     for (const op of numOps) {
-  //       for (const val of invalidNumericValues) {
-  //         expect(() =>
-  //           translator.translate({
-  //             field: { [op]: val },
-  //           }),
-  //         ).toThrow();
-  //       }
-  //     }
-  //   });
-  // });
+      // Numeric comparisons require numbers
+      const numOps = ['$gt', '$gte', '$lt', '$lte'];
+      const invalidNumericValues = ['not-a-number', true, [], {}, null, undefined];
+      for (const op of numOps) {
+        for (const val of invalidNumericValues) {
+          await expect(
+            astraVector.query(testIndexName2, [1, 0, 0], 10, {
+              field: { [op]: val },
+            }),
+          ).rejects.toThrow();
+        }
+      }
+    });
 
-  // // Multiple Invalid Values
-  // it('validates multiple invalid values', () => {
-  //   expect(() =>
-  //     translator.translate({
-  //       field1: { $in: 'not-array' },
-  //       field2: { $exists: 'not-boolean' },
-  //       field3: { $gt: 'not-number' },
-  //       field4: { $regex: {} },
-  //     }),
-  //   ).toThrow();
-  // });
-  //     it('validates regex options', () => {
-  //       expect(() =>
-  //         translator.translate({
-  //           field: {
-  //             $regex: 'pattern',
-  //             $options: 'i',
-  //           },
-  //         }),
-  //       ).not.toThrow();
-  //     });
-  // describe('regex validation', () => {
+    it('validates multiple invalid values', async () => {
+      await expect(
+        astraVector.query(testIndexName2, [1, 0, 0], 10, {
+          field1: { $in: 'not-array' },
+          field2: { $exists: 'not-boolean' },
+          field3: { $gt: 'not-number' },
+        }),
+      ).rejects.toThrow();
+    });
+  });
 
-  // Text Search Operators
-  // it('validates regex operators', () => {
-  //   const invalidValues = [123, true, [], {}, null, undefined];
-  //   for (const val of invalidValues) {
-  //     expect(() =>
-  //       translator.translate({
-  //         field: { $regex: val },
-  //       }),
-  //     ).toThrow();
-  //   }
-  // });
-  // it('not supported regex options', () => {
-  //   expect(() =>
-  //     translator.translate({
-  //       field: {
-  //         $regex: 'pattern',
-  //         $options: 'm', // 'm' is not supported
-  //       },
-  //     }),
-  //   ).toThrow();
-  // });
+  describe('Metadata Filter Tests', () => {
+    // Set up test vectors and metadata
+    beforeAll(async () => {
+      const vectors = [
+        [1, 0, 0, 0], // Electronics
+        [0, 1, 0, 0], // Books
+        [0, 0, 1, 0], // Electronics
+        [0, 0, 0, 1], // Books
+      ];
 
-  // it('invalid regex options type', () => {
-  //   expect(() =>
-  //     translator.translate({
-  //       field: {
-  //         $regex: 'pattern',
-  //         $options: true, // must be string
-  //       },
-  //     }),
-  //   ).toThrow();
-  // });
-  //   it('validates basic regex patterns', () => {
-  //     // Valid cases
-  //     const validCases = [
-  //       { field: { $regex: 'pattern' } },
-  //       { field: { $regex: 'pattern', $options: 'i' } },
-  //       { field: { $regex: /pattern/ } },
-  //       { field: { $regex: new RegExp('pattern') } },
-  //     ];
+      const metadata = [
+        {
+          category: 'electronics',
+          price: 1000,
+          rating: 4.8,
+          tags: ['premium', 'new'],
+          inStock: true,
+          specs: {
+            color: 'black',
+            weight: 2.5,
+          },
+        },
+        {
+          category: 'books',
+          price: 25,
+          rating: 4.2,
+          tags: ['bestseller'],
+          inStock: true,
+          author: {
+            name: 'John Doe',
+            country: 'USA',
+          },
+        },
+        {
+          category: 'electronics',
+          price: 500,
+          rating: 4.5,
+          tags: ['refurbished', 'premium'],
+          inStock: false,
+          specs: {
+            color: 'silver',
+            weight: 1.8,
+          },
+        },
+        {
+          category: 'books',
+          price: 15,
+          rating: 4.9,
+          tags: ['bestseller', 'new'],
+          inStock: true,
+          author: {
+            name: 'Jane Smith',
+            country: 'UK',
+          },
+        },
+      ];
 
-  //     validCases.forEach(filter => {
-  //       expect(() => translator.translate(filter)).not.toThrow();
-  //     });
+      await astraVector.upsert(testIndexName2, vectors, metadata);
+      // Wait for indexing
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    });
 
-  //     // Invalid cases
-  //     const invalidCases = [
-  //       { field: { $regex: 123 } },
-  //       { field: { $regex: true } },
-  //       { field: { $regex: [] } },
-  //       { field: { $regex: {} } },
-  //       { field: { $regex: 'pattern', $options: 'x' } }, // unsupported option
-  //       { field: { $regex: 'pattern', $options: 123 } }, // invalid options type
-  //     ];
+    describe('Basic Comparison Operators', () => {
+      it('filters with $eq operator', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          'metadata.category': { $eq: 'electronics' },
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          expect(result.metadata?.category).toBe('electronics');
+        });
+      });
 
-  //     invalidCases.forEach(filter => {
-  //       expect(() => translator.translate(filter)).toThrow();
-  //     });
-  //   });
+      it('filters with $gt operator', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          'metadata.price': { $gt: 500 },
+        });
+        expect(results.length).toBe(1);
+        results.forEach(result => {
+          expect(Number(result.metadata?.price)).toBeGreaterThan(500);
+        });
+      });
 
-  //   it('handles multiple regex conditions', () => {
-  //     const filter = {
-  //       title: { $regex: 'pattern1', $options: 'i' },
-  //       description: { $regex: 'pattern2' },
-  //       $or: [{ tag: { $regex: 'pattern3', $options: 'i' } }, { category: { $regex: 'pattern4' } }],
-  //     };
-  //     expect(translator.translate(filter)).toEqual(filter);
-  //   });
-  // });
+      it('filters with $gte, $lt, $lte operators', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          'metadata.price': { $gte: 25, $lte: 500 },
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          expect(Number(result.metadata?.price)).toBeLessThanOrEqual(500);
+          expect(Number(result.metadata?.price)).toBeGreaterThanOrEqual(25);
+        });
+      });
+
+      it('filters with $ne operator', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          'metadata.category': { $ne: 'books' },
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          expect(result.metadata?.category).not.toBe('books');
+        });
+      });
+    });
+
+    describe('Array Operators', () => {
+      it('filters with $in operator', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          'metadata.tags': { $in: ['premium'] },
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          expect(result.metadata?.tags).toContain('premium');
+        });
+      });
+
+      it('filters with $nin operator', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          'metadata.tags': { $nin: ['bestseller'] },
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          expect(result.metadata?.tags).not.toContain('bestseller');
+        });
+      });
+
+      it('filters with $all operator', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          'metadata.tags': { $all: ['premium', 'new'] },
+        });
+        expect(results.length).toBe(1);
+        results.forEach(result => {
+          expect(result.metadata?.tags).toContain('premium');
+          expect(result.metadata?.tags).toContain('new');
+        });
+      });
+    });
+
+    describe('Logical Operators', () => {
+      it('filters with $and operator', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          $and: [{ 'metadata.category': 'electronics' }, { 'metadata.price': { $gt: 500 } }],
+        });
+        expect(results.length).toBe(1);
+        expect(results[0]?.metadata?.category).toBe('electronics');
+        expect(Number(results[0]?.metadata?.price)).toBeGreaterThan(500);
+      });
+
+      it('filters with $or operator', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          $or: [{ 'metadata.price': { $gt: 900 } }, { 'metadata.rating': { $gt: 4.8 } }],
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          expect(Number(result.metadata?.price) > 900 || Number(result.metadata?.rating) > 4.8).toBe(true);
+        });
+      });
+
+      it('filters with direct field comparison', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          $not: { 'metadata.category': 'electronics' }, // Simple field equality
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          expect(result.metadata?.category).not.toBe('electronics');
+        });
+      });
+
+      it('filters with $eq operator', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          $not: { 'metadata.category': { $eq: 'electronics' } },
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          expect(result.metadata?.category).not.toBe('electronics');
+        });
+      });
+
+      it('filters with multiple fields', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          $not: {
+            'metadata.category': 'electronics',
+            'metadata.price': 100,
+          },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category === 'electronics' && result.metadata?.price === 100).toBe(false);
+        });
+      });
+
+      it('uses $not within $or', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          $or: [{ $not: { 'metadata.category': 'electronics' } }, { 'metadata.price': { $gt: 100 } }],
+        });
+        expect(results.length).toBeGreaterThan(0);
+      });
+
+      // Test $not with $exists
+      it('filters with $exists', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          $not: { 'metadata.optional_field': { $exists: true } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+      });
+
+      it('filters with nested logical operators', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          $and: [
+            { 'metadata.category': 'electronics' },
+            {
+              $or: [{ 'metadata.price': { $gt: 900 } }, { 'metadata.tags': { $all: ['refurbished'] } }],
+            },
+          ],
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          expect(result.metadata?.category).toBe('electronics');
+          expect(Number(result.metadata?.price) > 900 || result.metadata?.tags?.includes('refurbished')).toBe(true);
+        });
+      });
+    });
+
+    describe('Nested Field Queries', () => {
+      it('filters on nested object fields', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          'metadata.specs.color': 'black',
+        });
+        expect(results.length).toBe(1);
+        expect(results[0]?.metadata?.specs?.color).toBe('black');
+      });
+
+      it('combines nested field queries with logical operators', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          $or: [{ 'metadata.specs.weight': { $lt: 2.0 } }, { 'metadata.author.country': 'UK' }],
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          expect(result.metadata?.specs?.weight < 2.0 || result.metadata?.author?.country === 'UK').toBe(true);
+        });
+      });
+    });
+
+    describe('Complex Filter Combinations', () => {
+      it('combines multiple operators and conditions', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          $and: [
+            { 'metadata.price': { $gt: 20 } },
+            { 'metadata.inStock': true },
+            {
+              $or: [{ 'metadata.tags': { $in: ['premium'] } }, { 'metadata.rating': { $gt: 4.5 } }],
+            },
+          ],
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(Number(result.metadata?.price)).toBeGreaterThan(20);
+          expect(result.metadata?.inStock).toBe(true);
+          expect(result.metadata?.tags?.includes('premium') || Number(result.metadata?.rating) > 4.5).toBe(true);
+        });
+      });
+
+      it('handles complex nested conditions', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          $or: [
+            {
+              $and: [
+                { 'metadata.category': 'electronics' },
+                { 'metadata.specs.weight': { $lt: 2.0 } },
+                { 'metadata.tags': { $in: ['premium'] } },
+              ],
+            },
+            {
+              $and: [
+                { 'metadata.category': 'books' },
+                { 'metadata.price': { $lt: 20 } },
+                { 'metadata.author.country': 'UK' },
+              ],
+            },
+          ],
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          if (result.metadata?.category === 'electronics') {
+            expect(result.metadata?.specs?.weight).toBeLessThan(2.0);
+            expect(result.metadata?.tags).toContain('premium');
+          } else {
+            expect(Number(result.metadata?.price)).toBeLessThan(20);
+            expect(result.metadata?.author?.country).toBe('UK');
+          }
+        });
+      });
+    });
+
+    describe('Field Existence and Null Checks', () => {
+      beforeAll(async () => {
+        // Add some vectors with special metadata cases
+        const vectors = [
+          [0.5, 0.5, 0.5, 0.5],
+          [0.3, 0.3, 0.3, 0.3],
+        ];
+
+        const metadata = [
+          {
+            category: 'special',
+            optionalField: null,
+            emptyArray: [],
+            nested: {
+              existingField: 'value',
+              nullField: null,
+            },
+          },
+          {
+            category: 'special',
+            // optionalField intentionally missing
+            emptyArray: ['single'],
+            nested: {
+              // existingField intentionally missing
+              otherField: 'value',
+            },
+          },
+        ];
+
+        await astraVector.upsert(testIndexName2, vectors, metadata);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      });
+
+      it('filters based on field existence', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          'metadata.optionalField': { $exists: true },
+        });
+        expect(results.length).toBe(1);
+        expect('optionalField' in results[0]!.metadata!).toBe(true);
+      });
+
+      it('filters for null values', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          'metadata.nested.nullField': null,
+        });
+        expect(results.length).toBe(1);
+        expect(results[0]!.metadata!.nested.nullField).toBeNull();
+      });
+
+      it('combines existence checks with other operators', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          $and: [{ 'metadata.category': 'special' }, { 'metadata.optionalField': { $exists: false } }],
+        });
+        expect(results.length).toBe(1);
+        expect(results[0]!.metadata!.category).toBe('special');
+        expect('optionalField' in results[0]!.metadata!).toBe(false);
+      });
+
+      it('handles empty array edge cases', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          'metadata.emptyArray': { $size: 0 },
+        });
+        expect(results.length).toBe(1);
+        expect(results[0]!.metadata!.emptyArray).toHaveLength(0);
+      });
+    });
+
+    describe('Date and Numeric Edge Cases', () => {
+      beforeAll(async () => {
+        const vectors = [
+          [0.1, 0.1, 0.1, 0.1],
+          [0.2, 0.2, 0.2, 0.2],
+        ];
+
+        const metadata = [
+          {
+            numericFields: {
+              zero: 0,
+              negativeZero: -0,
+              infinity: Infinity,
+              negativeInfinity: -Infinity,
+              decimal: 0.1,
+              negativeDecimal: -0.1,
+            },
+            dateFields: {
+              current: new Date().toISOString(),
+              epoch: new Date(0).toISOString(),
+              future: new Date('2100-01-01').toISOString(),
+            },
+          },
+          {
+            numericFields: {
+              maxInt: Number.MAX_SAFE_INTEGER,
+              minInt: Number.MIN_SAFE_INTEGER,
+              maxFloat: Number.MAX_VALUE,
+              minFloat: Number.MIN_VALUE,
+            },
+            dateFields: {
+              past: new Date('1900-01-01').toISOString(),
+              current: new Date().toISOString(),
+            },
+          },
+        ];
+
+        await astraVector.upsert(testIndexName2, vectors, metadata);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      });
+
+      it('handles special numeric values', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          $or: [{ 'metadata.numericFields.zero': 0 }, { 'metadata.numericFields.negativeZero': 0 }],
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          const value = result.metadata?.numericFields?.zero ?? result.metadata?.numericFields?.negativeZero;
+          expect(value).toBe(0);
+        });
+      });
+
+      it('compares dates correctly', async () => {
+        const now = new Date().toISOString();
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          $and: [
+            { 'metadata.dateFields.current': { $lte: now } },
+            { 'metadata.dateFields.current': { $gt: new Date(0).toISOString() } },
+          ],
+        });
+        expect(results.length).toBeGreaterThan(0);
+      });
+
+      it('handles extreme numeric values', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          $or: [
+            { 'metadata.numericFields.maxInt': { $gte: Number.MAX_SAFE_INTEGER } },
+            { 'metadata.numericFields.minInt': { $lte: Number.MIN_SAFE_INTEGER } },
+          ],
+        });
+        expect(results.length).toBe(1);
+      });
+    });
+
+    describe('Advanced Array Operations', () => {
+      beforeAll(async () => {
+        const vectors = [
+          [0.7, 0.7, 0.7, 0.7],
+          [0.8, 0.8, 0.8, 0.8],
+          [0.9, 0.9, 0.9, 0.9],
+        ];
+
+        const metadata = [
+          {
+            arrays: {
+              empty: [],
+              single: ['one'],
+              multiple: ['one', 'two', 'three'],
+              nested: [['inner']],
+            },
+          },
+          {
+            arrays: {
+              empty: [],
+              single: ['two'],
+              multiple: ['two', 'three'],
+              nested: [['inner'], ['outer']],
+            },
+          },
+          {
+            arrays: {
+              single: ['three'],
+              multiple: ['three', 'four', 'five'],
+              nested: [],
+            },
+          },
+        ];
+
+        await astraVector.upsert(testIndexName2, vectors, metadata);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      });
+
+      it('handles $in with empty array input', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          'metadata.arrays.single': { $in: [] },
+        });
+        expect(results.length).toBe(0);
+      });
+
+      it('combines $size with $exists for array fields', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          $and: [{ 'metadata.arrays.empty': { $exists: true } }, { 'metadata.arrays.empty': { $size: 0 } }],
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          expect(result.metadata?.arrays?.empty).toBeDefined();
+          expect(result.metadata?.arrays?.empty).toHaveLength(0);
+        });
+      });
+
+      it('filters arrays by exact size matching', async () => {
+        const results = await astraVector.query(testIndexName2, [1, 0, 0, 0], 10, {
+          $and: [{ 'metadata.arrays.multiple': { $size: 3 } }, { 'metadata.arrays.multiple': { $in: ['two'] } }],
+        });
+        expect(results.length).toBe(1);
+        expect(results[0]?.metadata?.arrays?.multiple).toContain('two');
+        expect(results[0]?.metadata?.arrays?.multiple).toHaveLength(3);
+      });
+    });
+  });
 });
