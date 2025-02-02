@@ -1,5 +1,16 @@
 # @mastra/github
 
+## 1.0.3-alpha.67
+
+### Patch Changes
+
+- b8f3be0: New bundling for integrations
+- Updated dependencies [30322ce]
+- Updated dependencies [78eec7c]
+- Updated dependencies [9625602]
+- Updated dependencies [8769a62]
+  - @mastra/core@0.2.0-alpha.83
+
 ## 1.0.3-alpha.66
 
 ### Patch Changes

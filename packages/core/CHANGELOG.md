@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 0.2.0-alpha.83
+
+### Minor Changes
+
+- 30322ce: Added new Memory API for managed agent memory via MastraStorage and MastraVector classes
+- 8769a62: Split core into seperate entry fils
+
+### Patch Changes
+
+- 78eec7c: Started implementation on Unified Filter API for several vector stores.
+- 9625602: Use mastra core splitted bundles in other packages
+
 ## 0.1.27-alpha.82
 
 ### Patch Changes
