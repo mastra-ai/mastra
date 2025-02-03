@@ -2492,6 +2492,9 @@ importers:
       '@rollup/plugin-virtual':
         specifier: ^3.0.2
         version: 3.0.2(rollup@4.32.1)
+      builtins:
+        specifier: ^5.1.0
+        version: 5.1.0
       esbuild:
         specifier: ^0.24.2
         version: 0.24.2
