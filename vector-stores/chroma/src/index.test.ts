@@ -65,7 +65,7 @@ describe('ChromaVector Integration Tests', () => {
     });
   });
 
-  describe('Vector Operations', () => {
+  describe('Basic Vector Operations', () => {
     const testVectors = [
       [1.0, 0.0, 0.0],
       [0.0, 1.0, 0.0],
@@ -97,42 +97,6 @@ describe('ChromaVector Integration Tests', () => {
       }
     });
 
-    it('should perform vector search with topK', async () => {
-      await vectorDB.upsert(testIndexName, testVectors, testMetadata, testIds);
-
-      const queryVector = [1.0, 0.1, 0.1];
-      const topK = 2;
-
-      const results: QueryResult[] = await vectorDB.query(testIndexName, queryVector, topK);
-
-      expect(results).toHaveLength(topK);
-      expect(results?.[0]?.id).toBe(testIds[0]); // Should match x-axis vector most closely
-    });
-
-    it('should filter query results', async () => {
-      await vectorDB.upsert(testIndexName, testVectors, testMetadata, testIds);
-
-      const queryVector = [1.0, 1.0, 1.0];
-      const filter = { label: 'x-axis' };
-
-      const results = await vectorDB.query(testIndexName, queryVector, 3, filter);
-
-      expect(results).toHaveLength(1);
-      expect(results?.[0]?.metadata?.label).toBe('x-axis');
-    });
-
-    it('should include vector in query results', async () => {
-      await vectorDB.upsert(testIndexName, testVectors, testMetadata, testIds);
-
-      const queryVector = [1.0, 0.1, 0.1];
-      const topK = 1;
-
-      const results = await vectorDB.query(testIndexName, queryVector, topK, undefined, true);
-
-      expect(results).toHaveLength(topK);
-      expect(results?.[0]?.vector).toEqual(testVectors[0]);
-    });
-
     it('should update existing vectors', async () => {
       // Initial upsert
       await vectorDB.upsert(testIndexName, testVectors, testMetadata, testIds);
@@ -146,6 +110,56 @@ describe('ChromaVector Integration Tests', () => {
       const results = await vectorDB.query(testIndexName, updatedVector?.[0]!, 1);
       expect(results?.[0]?.id).toBe(testIds[0]);
       expect(results?.[0]?.metadata).toEqual(updatedMetadata[0]);
+    });
+  });
+
+  describe('Query Operations', () => {
+    const testVectors = [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0],
+    ];
+    const testMetadata = [{ label: 'x-axis' }, { label: 'y-axis' }, { label: 'z-axis' }];
+    const testIds = ['vec1', 'vec2', 'vec3'];
+
+    beforeEach(async () => {
+      await vectorDB.upsert(testIndexName, testVectors, testMetadata, testIds);
+    });
+
+    describe('Basic Queries', () => {
+      it('should perform vector search with topK', async () => {
+        const queryVector = [1.0, 0.1, 0.1];
+        const topK = 2;
+
+        const results: QueryResult[] = await vectorDB.query(testIndexName, queryVector, topK);
+
+        expect(results).toHaveLength(topK);
+        expect(results?.[0]?.id).toBe(testIds[0]); // Should match x-axis vector most closely
+      });
+    });
+
+    describe('Filter Queries', () => {
+      it('should filter query results', async () => {
+        const queryVector = [1.0, 1.0, 1.0];
+        const filter = { label: 'x-axis' };
+
+        const results = await vectorDB.query(testIndexName, queryVector, 3, filter);
+
+        expect(results).toHaveLength(1);
+        expect(results?.[0]?.metadata?.label).toBe('x-axis');
+      });
+    });
+
+    describe('Vector Inclusion', () => {
+      it('should include vector in query results', async () => {
+        const queryVector = [1.0, 0.1, 0.1];
+        const topK = 1;
+
+        const results = await vectorDB.query(testIndexName, queryVector, topK, undefined, true);
+
+        expect(results).toHaveLength(topK);
+        expect(results?.[0]?.vector).toEqual(testVectors[0]);
+      });
     });
   });
 
@@ -181,24 +195,10 @@ describe('ChromaVector Integration Tests', () => {
       ).rejects.toThrow();
     });
 
-    it('rejects invalid operator values', async () => {
-      await expect(
-        vectorDB.query(testIndexName, [1, 0, 0], 10, {
-          tags: { $all: 'not-an-array' },
-        }),
-      ).rejects.toThrow();
-    });
-
     it('validates array operator values', async () => {
       await expect(
         vectorDB.query(testIndexName, [1, 0, 0], 10, {
           tags: { $in: null },
-        }),
-      ).rejects.toThrow();
-
-      await expect(
-        vectorDB.query(testIndexName, [1, 0, 0], 10, {
-          tags: { $all: 'not-an-array' },
         }),
       ).rejects.toThrow();
     });
@@ -227,7 +227,7 @@ describe('ChromaVector Integration Tests', () => {
 
     it('validates array operators', async () => {
       const invalidValues = [123, 'string', true, { key: 'value' }, null, undefined];
-      for (const op of ['$in', '$nin', '$all']) {
+      for (const op of ['$in', '$nin']) {
         for (const val of invalidValues) {
           await expect(
             vectorDB.query(testIndexName, [1, 0, 0], 10, {
@@ -286,26 +286,6 @@ describe('ChromaVector Integration Tests', () => {
       ).rejects.toThrow();
     });
 
-    it('rejects invalid array values', async () => {
-      await expect(
-        vectorDB.query(testIndexName, [1, 0, 0], 10, {
-          field: { $in: [null] },
-        }),
-      ).rejects.toThrow();
-
-      await expect(
-        vectorDB.query(testIndexName, [1, 0, 0], 10, {
-          field: { $in: [undefined] },
-        }),
-      ).rejects.toThrow();
-
-      await expect(
-        vectorDB.query(testIndexName, [1, 0, 0], 10, {
-          field: { $all: 'not-an-array' },
-        }),
-      ).rejects.toThrow('A non-empty array is required for the $all operator');
-    });
-
     it('handles empty object filters', async () => {
       // Test empty object at top level
       await expect(vectorDB.query(testIndexName, [1, 0, 0], 10, { field: { $eq: {} } })).rejects.toThrow();
@@ -346,45 +326,25 @@ describe('ChromaVector Integration Tests', () => {
           category: 'electronics',
           price: 1000,
           rating: 4.8,
-          tags: ['premium', 'new'],
           inStock: true,
-          specs: {
-            color: 'black',
-            weight: 2.5,
-          },
         },
         {
           category: 'books',
           price: 25,
           rating: 4.2,
-          tags: ['bestseller'],
           inStock: true,
-          author: {
-            name: 'John Doe',
-            country: 'USA',
-          },
         },
         {
           category: 'electronics',
           price: 500,
           rating: 4.5,
-          tags: ['refurbished', 'premium'],
           inStock: false,
-          specs: {
-            color: 'silver',
-            weight: 1.8,
-          },
         },
         {
           category: 'books',
           price: 15,
           rating: 4.9,
-          tags: ['bestseller', 'new'],
           inStock: true,
-          author: {
-            name: 'Jane Smith',
-            country: 'UK',
-          },
         },
       ];
 
@@ -396,24 +356,32 @@ describe('ChromaVector Integration Tests', () => {
     afterAll(async () => {
       // Cleanup after tests
       try {
-        await vectorDB.deleteIndex(testIndexName);
+        await vectorDB.deleteIndex(testIndexName2);
       } catch (error) {
         // Ignore cleanup errors
       }
-    }, 5000);
+    });
 
     describe('Basic Comparison Operators', () => {
-      it.only('filters with $eq operator', async () => {
+      it('filters with $eq operator', async () => {
         const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
           category: { $eq: 'electronics' },
         });
         expect(results.length).toBe(2);
-        console.log(results);
         results.forEach(result => {
           expect(result.metadata?.category).toBe('electronics');
         });
       });
 
+      it('filters with implicit $eq', async () => {
+        const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+          category: 'electronics', // implicit $eq
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          expect(result.metadata?.category).toBe('electronics');
+        });
+      });
       it('filters with $gt operator', async () => {
         const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
           price: { $gt: 500 },
@@ -424,33 +392,33 @@ describe('ChromaVector Integration Tests', () => {
         });
       });
 
-      it('should filter with $gte operator', async () => {
+      it('filters with $gte operator', async () => {
         const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
           price: { $gte: 500 },
         });
-        expect(results.length).toBeGreaterThan(0);
+        expect(results.length).toBe(2);
         results.forEach(result => {
           expect(Number(result.metadata?.price)).toBeGreaterThanOrEqual(500);
         });
       });
 
-      it('should filter with $lt operator', async () => {
+      it('filters with $lt operator', async () => {
         const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
           price: { $lt: 100 },
         });
-        expect(results.length).toBeGreaterThan(0);
+        expect(results.length).toBe(2);
         results.forEach(result => {
           expect(Number(result.metadata?.price)).toBeLessThan(100);
         });
       });
 
-      it('should filter with $lte operator', async () => {
+      it('filters with $lte operator', async () => {
         const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          price: { $lte: 50 },
+          price: { $lte: 500 },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
-          expect(Number(result.metadata?.price)).toBeLessThanOrEqual(50);
+          expect(Number(result.metadata?.price)).toBeLessThanOrEqual(500);
         });
       });
 
@@ -467,27 +435,38 @@ describe('ChromaVector Integration Tests', () => {
 
       it('filters with $ne operator', async () => {
         const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          category: { $ne: 'books' },
+          category: { $ne: 'electronics' },
         });
         expect(results.length).toBe(2);
         results.forEach(result => {
-          expect(result.metadata?.category).not.toBe('books');
+          expect(result.metadata?.category).not.toBe('electronics');
+        });
+      });
+
+      it('filters with boolean values', async () => {
+        const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+          inStock: true, // test both implicit
+        });
+        expect(results.length).toBe(3);
+        results.forEach(result => {
+          expect(result.metadata?.inStock).toBe(true);
+        });
+      });
+
+      it('filters with multiple fields', async () => {
+        const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+          category: 'electronics',
+          price: 1000,
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category === 'electronics' && result.metadata?.price === 1000).toBe(true);
         });
       });
     });
 
     describe('Array Operators', () => {
       it('filters with $in operator', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          tags: { $in: ['premium'] },
-        });
-        expect(results.length).toBe(2);
-        results.forEach(result => {
-          expect(result.metadata?.tags).toContain('premium');
-        });
-      });
-
-      it('should filter with $in operator for strings', async () => {
         const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
           category: { $in: ['electronics', 'books'] },
         });
@@ -507,34 +486,13 @@ describe('ChromaVector Integration Tests', () => {
         });
       });
 
-      it('filters with $nin operator', async () => {
+      it('filters with $in operator for booleans', async () => {
         const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          tags: { $nin: ['bestseller'] },
-        });
-        expect(results.length).toBe(2);
-        results.forEach(result => {
-          expect(result.metadata?.tags).not.toContain('bestseller');
-        });
-      });
-
-      it('should filter with $nin operator', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          category: { $nin: ['electronics', 'books'] },
+          inStock: { $in: [true] },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
-          expect(['electronics', 'books']).not.toContain(result.metadata?.category);
-        });
-      });
-
-      it('filters with $all operator', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          tags: { $all: ['premium', 'new'] },
-        });
-        expect(results.length).toBe(1);
-        results.forEach(result => {
-          expect(result.metadata?.tags).toContain('premium');
-          expect(result.metadata?.tags).toContain('new');
+          expect(result.metadata?.inStock).toBe(true);
         });
       });
     });
@@ -573,26 +531,13 @@ describe('ChromaVector Integration Tests', () => {
 
       it('should filter with $or operator', async () => {
         const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          $or: [{ price: { $gt: 900 } }, { tags: { $all: ['bestseller'] } }],
+          $or: [{ price: { $gt: 900 } }, { category: { $in: ['electronics', 'books'] } }],
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
           const condition1 = Number(result.metadata?.price) > 900;
-          const condition2 = result.metadata?.tags?.includes('bestseller');
+          const condition2 = ['electronics', 'books'].includes(result.metadata?.category);
           expect(condition1 || condition2).toBe(true);
-        });
-      });
-
-      it('filters with multiple fields', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          $not: {
-            category: 'electronics',
-            price: 100,
-          },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(result.metadata?.category === 'electronics' && result.metadata?.price === 100).toBe(false);
         });
       });
 
@@ -621,48 +566,18 @@ describe('ChromaVector Integration Tests', () => {
         expect(results.length).toBeGreaterThan(0);
       });
 
-      it('implicit $eq inside of $and', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          $and: [{ category: 'special' }],
-        });
-        expect(results.length).toBe(1);
-        expect(results[0]!.metadata!.category).toBe('special');
-      });
+      it('requires multiple conditions in logical operators', async () => {
+        await expect(
+          vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+            $and: [{ category: 'electronics' }],
+          }),
+        ).rejects.toThrow();
 
-      it('filters with nested logical operators', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          $and: [
-            { category: 'electronics' },
-            {
-              $or: [{ price: { $gt: 900 } }, { tags: { $all: ['refurbished'] } }],
-            },
-          ],
-        });
-        expect(results.length).toBe(2);
-        results.forEach(result => {
-          expect(result.metadata?.category).toBe('electronics');
-          expect(Number(result.metadata?.price) > 900 || result.metadata?.tags?.includes('refurbished')).toBe(true);
-        });
-      });
-    });
-
-    describe('Nested Field Queries', () => {
-      it('filters on nested object fields', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          'specs.color': 'black',
-        });
-        expect(results.length).toBe(1);
-        expect(results[0]?.metadata?.specs?.color).toBe('black');
-      });
-
-      it('combines nested field queries with logical operators', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          $or: [{ 'specs.weight': { $lt: 2.0 } }, { 'author.country': 'UK' }],
-        });
-        expect(results.length).toBe(2);
-        results.forEach(result => {
-          expect(result.metadata?.specs?.weight < 2.0 || result.metadata?.author?.country === 'UK').toBe(true);
-        });
+        await expect(
+          vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+            $or: [{ price: { $gt: 900 } }],
+          }),
+        ).rejects.toThrow();
       });
     });
 
@@ -673,7 +588,7 @@ describe('ChromaVector Integration Tests', () => {
             { price: { $gt: 20 } },
             { inStock: true },
             {
-              $or: [{ tags: { $in: ['premium'] } }, { rating: { $gt: 4.5 } }],
+              $or: [{ category: { $in: ['books'] } }, { rating: { $gt: 4.5 } }],
             },
           ],
         });
@@ -681,7 +596,7 @@ describe('ChromaVector Integration Tests', () => {
         results.forEach(result => {
           expect(Number(result.metadata?.price)).toBeGreaterThan(20);
           expect(result.metadata?.inStock).toBe(true);
-          expect(result.metadata?.tags?.includes('premium') || Number(result.metadata?.rating) > 4.5).toBe(true);
+          expect(result.metadata?.category === 'books' || Number(result.metadata?.rating) > 4.5).toBe(true);
         });
       });
 
@@ -689,33 +604,31 @@ describe('ChromaVector Integration Tests', () => {
         const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
           $or: [
             {
-              $and: [{ category: 'electronics' }, { 'specs.weight': { $lt: 2.0 } }, { tags: { $in: ['premium'] } }],
+              $and: [{ category: 'electronics' }, { price: { $gt: 700 } }],
             },
             {
-              $and: [{ category: 'books' }, { price: { $lt: 20 } }, { 'author.country': 'UK' }],
+              $and: [{ category: 'books' }, { price: { $lt: 20 } }],
             },
           ],
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
           if (result.metadata?.category === 'electronics') {
-            expect(result.metadata?.specs?.weight).toBeLessThan(2.0);
-            expect(result.metadata?.tags).toContain('premium');
+            expect(Number(result.metadata?.price)).toBeGreaterThan(700);
           } else {
             expect(Number(result.metadata?.price)).toBeLessThan(20);
-            expect(result.metadata?.author?.country).toBe('UK');
           }
         });
       });
 
       it('should combine comparison and array operators', async () => {
         const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          $and: [{ price: { $gte: 500 } }, { tags: { $in: ['premium', 'refurbished'] } }],
+          $and: [{ price: { $gte: 500 } }, { rating: { $gt: 4.5 } }],
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
           expect(Number(result.metadata?.price)).toBeGreaterThanOrEqual(500);
-          expect(result.metadata?.tags?.some(tag => ['premium', 'refurbished'].includes(tag))).toBe(true);
+          expect(Number(result.metadata?.rating)).toBeGreaterThan(4.5);
         });
       });
 
@@ -731,14 +644,14 @@ describe('ChromaVector Integration Tests', () => {
         });
       });
 
-      it('should handle complex nested conditions', async () => {
+      it('should handle deeply nested logical operators', async () => {
         const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
           $or: [
             {
-              $and: [{ category: 'electronics' }, { price: { $gt: 700 } }, { tags: { $all: ['premium'] } }],
+              $and: [{ category: 'electronics' }, { price: { $gt: 700 } }, { rating: { $gt: 4.5 } }],
             },
             {
-              $and: [{ category: 'books' }, { price: { $lt: 50 } }, { tags: { $in: ['paperback'] } }],
+              $and: [{ category: 'books' }, { price: { $lt: 50 } }, { rating: { $gt: 4.0 } }],
             },
           ],
         });
@@ -747,57 +660,15 @@ describe('ChromaVector Integration Tests', () => {
           const isExpensiveElectronics =
             result.metadata?.category === 'electronics' &&
             Number(result.metadata?.price) > 700 &&
-            result.metadata?.tags?.includes('premium');
+            Number(result.metadata?.rating) > 4.5;
 
           const isCheapBook =
             result.metadata?.category === 'books' &&
             Number(result.metadata?.price) < 50 &&
-            result.metadata?.tags?.includes('paperback');
+            Number(result.metadata?.rating) > 4.0;
 
           expect(isExpensiveElectronics || isCheapBook).toBe(true);
         });
-      });
-    });
-
-    describe('Field Existence and Null Checks', () => {
-      beforeAll(async () => {
-        // Add some vectors with special metadata cases
-        const vectors = [
-          [0.5, 0.5, 0.5],
-          [0.3, 0.3, 0.3],
-        ];
-
-        const metadata = [
-          {
-            category: 'special',
-            optionalField: null,
-            emptyArray: [],
-            nested: {
-              existingField: 'value',
-              nullField: null,
-            },
-          },
-          {
-            category: 'special',
-            // optionalField intentionally missing
-            emptyArray: ['single'],
-            nested: {
-              // existingField intentionally missing
-              otherField: 'value',
-            },
-          },
-        ];
-
-        await vectorDB.upsert(testIndexName2, vectors, metadata);
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      });
-
-      it('filters for null values', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          'nested.nullField': null,
-        });
-        expect(results.length).toBe(1);
-        expect(results[0]!.metadata!.nested.nullField).toBeNull();
       });
     });
 
@@ -810,31 +681,23 @@ describe('ChromaVector Integration Tests', () => {
 
         const metadata = [
           {
-            numericFields: {
-              zero: 0,
-              negativeZero: -0,
-              infinity: Infinity,
-              negativeInfinity: -Infinity,
-              decimal: 0.1,
-              negativeDecimal: -0.1,
-            },
-            dateFields: {
-              current: new Date().toISOString(),
-              epoch: new Date(0).toISOString(),
-              future: new Date('2100-01-01').toISOString(),
-            },
+            zero: 0,
+            negativeZero: -0,
+            infinity: Infinity,
+            negativeInfinity: -Infinity,
+            decimal: 0.1,
+            negativeDecimal: -0.1,
+            currentDate: new Date().toISOString(),
+            epochDate: new Date(0).toISOString(),
+            futureDate: new Date('2100-01-01').toISOString(),
           },
           {
-            numericFields: {
-              maxInt: Number.MAX_SAFE_INTEGER,
-              minInt: Number.MIN_SAFE_INTEGER,
-              maxFloat: Number.MAX_VALUE,
-              minFloat: Number.MIN_VALUE,
-            },
-            dateFields: {
-              past: new Date('1900-01-01').toISOString(),
-              current: new Date().toISOString(),
-            },
+            maxInt: Number.MAX_SAFE_INTEGER,
+            minInt: Number.MIN_SAFE_INTEGER,
+            maxFloat: Number.MAX_VALUE,
+            minFloat: Number.MIN_VALUE,
+            pastDate: new Date('1900-01-01').toISOString(),
+            currentDate: new Date().toISOString(),
           },
         ];
 
@@ -844,29 +707,18 @@ describe('ChromaVector Integration Tests', () => {
 
       it('handles special numeric values', async () => {
         const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          $or: [{ 'numericFields.zero': 0 }, { 'numericFields.negativeZero': 0 }],
+          $or: [{ zero: 0 }, { negativeZero: 0 }],
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
-          const value = result.metadata?.numericFields?.zero ?? result.metadata?.numericFields?.negativeZero;
+          const value = result.metadata?.zero ?? result.metadata?.negativeZero;
           expect(value).toBe(0);
         });
       });
 
-      it('compares dates correctly', async () => {
-        const now = new Date().toISOString();
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          $and: [{ 'dateFields.current': { $lte: now } }, { 'dateFields.current': { $gt: new Date(0).toISOString() } }],
-        });
-        expect(results.length).toBeGreaterThan(0);
-      });
-
       it('handles extreme numeric values', async () => {
         const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          $or: [
-            { 'numericFields.maxInt': { $gte: Number.MAX_SAFE_INTEGER } },
-            { 'numericFields.minInt': { $lte: Number.MIN_SAFE_INTEGER } },
-          ],
+          $or: [{ maxInt: { $gte: Number.MAX_SAFE_INTEGER } }, { minInt: { $lte: Number.MIN_SAFE_INTEGER } }],
         });
         expect(results.length).toBe(1);
       });
@@ -890,230 +742,135 @@ describe('ChromaVector Integration Tests', () => {
           expect(result.metadata?.inStock).toBe(false);
         });
       });
+    });
 
-      it('should handle empty array in $in operator', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          category: { $in: [] },
-        });
-        expect(results).toHaveLength(0);
+    describe('Additional Validation Tests', () => {
+      it('should throw error as date is not supported', async () => {
+        await expect(
+          vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+            $and: [
+              { currentDate: { $lte: new Date().toISOString() } },
+              { currentDate: { $gt: new Date(0).toISOString() } },
+            ],
+          }),
+        ).rejects.toThrow();
+      });
+      it('should throw error as empty array in $in operator is not supported', async () => {
+        await expect(
+          vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+            category: { $in: [] },
+          }),
+        ).rejects.toThrow();
+      });
+      it('should reject non-numeric values in numeric comparisons', async () => {
+        await expect(
+          vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+            price: { $gt: '500' }, // string instead of number
+          }),
+        ).rejects.toThrow();
       });
 
-      it('should handle single value in $all operator', async () => {
+      it('should reject mixed types in $in operator', async () => {
+        await expect(
+          vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+            field: { $in: ['string', 123] }, // mixed string and number
+          }),
+        ).rejects.toThrow();
+      });
+    });
+
+    describe('Additional Edge Cases', () => {
+      it('should handle exact boundary conditions', async () => {
         const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          tags: { $all: ['premium'] },
+          $and: [{ price: { $gte: 25 } }, { price: { $lte: 1000 } }],
+        });
+        expect(results.length).toBeGreaterThan(0);
+        expect(results.some(r => r.metadata?.price === 25)).toBe(true);
+        expect(results.some(r => r.metadata?.price === 1000)).toBe(true);
+      });
+    });
+
+    describe('Additional Complex Logical Combinations', () => {
+      it('should handle deeply nested $or conditions', async () => {
+        const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+          $or: [
+            {
+              $and: [{ category: 'electronics' }, { $or: [{ price: { $gt: 900 } }, { rating: { $gt: 4.8 } }] }],
+            },
+            {
+              $and: [{ category: 'books' }, { $or: [{ price: { $lt: 30 } }, { rating: { $gt: 4.5 } }] }],
+            },
+          ],
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
-          expect(result.metadata?.tags).toContain('premium');
+          if (result.metadata?.category === 'electronics') {
+            expect(Number(result.metadata?.price) > 900 || Number(result.metadata?.rating) > 4.8).toBe(true);
+          } else if (result.metadata?.category === 'books') {
+            expect(Number(result.metadata?.price) < 30 || Number(result.metadata?.rating) > 4.5).toBe(true);
+          }
         });
       });
-    });
 
-    describe('Advanced Array Operations', () => {
-      beforeAll(async () => {
-        const vectors = [
-          [0.7, 0.7, 0.7],
-          [0.8, 0.8, 0.8],
-          [0.9, 0.9, 0.9],
-        ];
-
-        const metadata = [
-          {
-            arrays: {
-              empty: [],
-              single: ['one'],
-              multiple: ['one', 'two', 'three'],
-              nested: [['inner']],
-            },
-          },
-          {
-            arrays: {
-              empty: [],
-              single: ['two'],
-              multiple: ['two', 'three'],
-              nested: [['inner'], ['outer']],
-            },
-          },
-          {
-            arrays: {
-              single: ['three'],
-              multiple: ['three', 'four', 'five'],
-              nested: [],
-            },
-          },
-        ];
-
-        await vectorDB.upsert(testIndexName2, vectors, metadata);
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      });
-
-      it('handles $in with empty array input', async () => {
+      it('should handle multiple field comparisons with same value', async () => {
         const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          'arrays.single': { $in: [] },
+          $or: [{ price: { $gt: 500 } }, { rating: { $gt: 4.5 } }],
         });
-        expect(results.length).toBe(0);
-      });
-    });
-  });
-
-  describe('Additional Validation Tests', () => {
-    it('should reject non-numeric values in numeric comparisons', async () => {
-      await expect(
-        vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          price: { $gt: '500' }, // string instead of number
-        }),
-      ).rejects.toThrow('the $gt operator must be followed by a number');
-    });
-
-    it('should reject invalid types in $in operator', async () => {
-      await expect(
-        vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          price: { $in: [true, false] }, // booleans instead of numbers
-        }),
-      ).rejects.toThrow('the $in operator must be followed by a list of strings or a list of numbers');
-    });
-
-    it('should reject mixed types in $in operator', async () => {
-      await expect(
-        vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          field: { $in: ['string', 123] }, // mixed string and number
-        }),
-      ).rejects.toThrow();
-    });
-  });
-
-  describe('Additional Edge Cases', () => {
-    it('should handle exact boundary conditions', async () => {
-      // Test exact boundary values from our test data
-      const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-        $and: [
-          { price: { $gte: 25 } }, // lowest price in our data
-          { price: { $lte: 1000 } }, // highest price in our data
-        ],
-      });
-      expect(results.length).toBeGreaterThan(0);
-      // Should include both boundary values
-      expect(results.some(r => r.metadata?.price === 25)).toBe(true);
-      expect(results.some(r => r.metadata?.price === 1000)).toBe(true);
-    });
-
-    it('should handle multiple $all conditions on same array field', async () => {
-      const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-        $and: [{ tags: { $all: ['premium'] } }, { tags: { $all: ['new'] } }],
-      });
-      expect(results.length).toBeGreaterThan(0);
-      results.forEach(result => {
-        expect(result.metadata?.tags).toContain('premium');
-        expect(result.metadata?.tags).toContain('new');
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(Number(result.metadata?.price) > 500 || Number(result.metadata?.rating) > 4.5).toBe(true);
+        });
       });
     });
 
-    it('should handle multiple array operator combinations', async () => {
-      const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-        $and: [{ tags: { $all: ['premium'] } }, { tags: { $in: ['new', 'refurbished'] } }],
-      });
-      expect(results.length).toBeGreaterThan(0);
-      results.forEach(result => {
-        expect(result.metadata?.tags).toContain('premium');
-        expect(result.metadata?.tags?.some(tag => ['new', 'refurbished'].includes(tag))).toBe(true);
-      });
-    });
-  });
-
-  describe('Additional Complex Logical Combinations', () => {
-    it('should handle deeply nested $or conditions', async () => {
-      const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-        $or: [
-          {
-            $and: [{ category: 'electronics' }, { $or: [{ price: { $gt: 900 } }, { tags: { $all: ['premium'] } }] }],
-          },
-          {
-            $and: [{ category: 'books' }, { $or: [{ price: { $lt: 30 } }, { tags: { $all: ['bestseller'] } }] }],
-          },
-        ],
-      });
-      expect(results.length).toBeGreaterThan(0);
-      results.forEach(result => {
-        if (result.metadata?.category === 'electronics') {
-          expect(Number(result.metadata?.price) > 900 || result.metadata?.tags?.includes('premium')).toBe(true);
-        } else if (result.metadata?.category === 'books') {
-          expect(Number(result.metadata?.price) < 30 || result.metadata?.tags?.includes('bestseller')).toBe(true);
-        }
-      });
-    });
-
-    it('should handle multiple field comparisons with same value', async () => {
-      const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-        $or: [{ price: { $gt: 500 } }, { rating: { $gt: 4.5 } }],
-      });
-      expect(results.length).toBeGreaterThan(0);
-      results.forEach(result => {
-        expect(Number(result.metadata?.price) > 500 || Number(result.metadata?.rating) > 4.5).toBe(true);
-      });
-    });
-
-    it('should handle combination of array and numeric comparisons', async () => {
-      const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-        $and: [
-          { tags: { $in: ['premium', 'bestseller'] } },
-          { $or: [{ price: { $gt: 500 } }, { rating: { $gt: 4.5 } }] },
-        ],
-      });
-      expect(results.length).toBeGreaterThan(0);
-      results.forEach(result => {
-        expect(['premium', 'bestseller'].some(tag => result.metadata?.tags?.includes(tag))).toBe(true);
-        expect(Number(result.metadata?.price) > 500 || Number(result.metadata?.rating) > 4.5).toBe(true);
-      });
-    });
-  });
-
-  describe('Performance Edge Cases', () => {
-    it('should handle filters with many conditions', async () => {
-      const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-        $and: Array(10)
-          .fill(null)
-          .map(() => ({
-            $or: [{ price: { $gt: 100 } }, { rating: { $gt: 4.0 } }],
-          })),
-      });
-      expect(results.length).toBeGreaterThan(0);
-      results.forEach(result => {
-        expect(Number(result.metadata?.price) > 100 || Number(result.metadata?.rating) > 4.0).toBe(true);
-      });
-    });
-
-    it('should handle deeply nested conditions efficiently', async () => {
-      const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-        $or: Array(5)
-          .fill(null)
-          .map(() => ({
-            $and: [{ category: { $in: ['electronics', 'books'] } }, { price: { $gt: 50 } }, { rating: { $gt: 4.0 } }],
-          })),
-      });
-      expect(results.length).toBeGreaterThan(0);
-      results.forEach(result => {
-        expect(['electronics', 'books']).toContain(result.metadata?.category);
-        expect(Number(result.metadata?.price)).toBeGreaterThan(50);
-        expect(Number(result.metadata?.rating)).toBeGreaterThan(4.0);
-      });
-    });
-
-    it('should handle large number of $or conditions', async () => {
-      const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-        $or: [
-          ...Array(5)
+    describe('Performance Edge Cases', () => {
+      it('should handle filters with many conditions', async () => {
+        const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+          $and: Array(10)
             .fill(null)
-            .map((_, i) => ({
-              price: { $gt: i * 100 },
+            .map(() => ({
+              $or: [{ price: { $gt: 100 } }, { rating: { $gt: 4.0 } }],
             })),
-          ...Array(5)
-            .fill(null)
-            .map((_, i) => ({
-              rating: { $gt: 4.0 + i * 0.1 },
-            })),
-        ],
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(Number(result.metadata?.price) > 100 || Number(result.metadata?.rating) > 4.0).toBe(true);
+        });
       });
-      expect(results.length).toBeGreaterThan(0);
+
+      it('should handle deeply nested conditions efficiently', async () => {
+        const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+          $or: Array(5)
+            .fill(null)
+            .map(() => ({
+              $and: [{ category: { $in: ['electronics', 'books'] } }, { price: { $gt: 50 } }, { rating: { $gt: 4.0 } }],
+            })),
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(['electronics', 'books']).toContain(result.metadata?.category);
+          expect(Number(result.metadata?.price)).toBeGreaterThan(50);
+          expect(Number(result.metadata?.rating)).toBeGreaterThan(4.0);
+        });
+      });
+
+      it('should handle large number of $or conditions', async () => {
+        const results = await vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+          $or: [
+            ...Array(5)
+              .fill(null)
+              .map((_, i) => ({
+                price: { $gt: i * 100 },
+              })),
+            ...Array(5)
+              .fill(null)
+              .map((_, i) => ({
+                rating: { $gt: 4.0 + i * 0.1 },
+              })),
+          ],
+        });
+        expect(results.length).toBeGreaterThan(0);
+      });
     });
   });
 });

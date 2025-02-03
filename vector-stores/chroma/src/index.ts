@@ -113,9 +113,6 @@ export class ChromaVector extends MastraVector {
 
     const translatedFilter = this.transformFilter(filter);
 
-    console.log('translatedFilter', translatedFilter);
-    console.log('filter', filter);
-
     const results = await collection.query({
       queryEmbeddings: [queryVector],
       nResults: topK,

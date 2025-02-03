@@ -10,7 +10,7 @@ export class ChromaFilterTranslator extends BaseFilterTranslator {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
       logical: ['$and', '$or'],
-      array: ['$in', '$all', '$nin'],
+      array: ['$in', '$nin'],
       element: [],
       regex: [],
       custom: [],
@@ -29,7 +29,7 @@ export class ChromaFilterTranslator extends BaseFilterTranslator {
     if (this.isRegex(node)) {
       throw new Error('Regex is not supported in Chroma');
     }
-    if (this.isPrimitive(node)) return { $eq: this.normalizeComparisonValue(node) };
+    if (this.isPrimitive(node)) return this.normalizeComparisonValue(node);
     if (Array.isArray(node)) return { $in: this.normalizeArrayValues(node) };
 
     const entries = Object.entries(node as Record<string, any>);
@@ -37,7 +37,7 @@ export class ChromaFilterTranslator extends BaseFilterTranslator {
     // Handle single operator case
     if (entries.length === 1 && firstEntry && this.isOperator(firstEntry[0])) {
       const [operator, value] = firstEntry;
-      const translated = this.translateOperator(operator, value, currentPath);
+      const translated = this.translateOperator(operator, value);
       return this.isLogicalOperator(operator) ? { [operator]: translated } : translated;
     }
 
@@ -49,19 +49,11 @@ export class ChromaFilterTranslator extends BaseFilterTranslator {
       const newPath = currentPath ? `${currentPath}.${key}` : key;
 
       if (this.isOperator(key)) {
-        result[key] = this.translateOperator(key, value, currentPath);
+        result[key] = this.translateOperator(key, value);
         continue;
       }
 
       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-        // Handle nested $all
-        if (Object.keys(value).length === 1 && '$all' in value) {
-          const translated = this.translateNode(value, key);
-          if (translated.$and) {
-            return translated;
-          }
-        }
-
         // Check for multiple operators on same field
         const valueEntries = Object.entries(value);
         if (valueEntries.every(([op]) => this.isOperator(op)) && valueEntries.length > 1) {
@@ -110,16 +102,7 @@ export class ChromaFilterTranslator extends BaseFilterTranslator {
     return result;
   }
 
-  private translateOperator(operator: QueryOperator, value: any, currentPath: string = ''): any {
-    // Handle $all specially
-    if (operator === '$all') {
-      if (!Array.isArray(value) || value.length === 0) {
-        throw new Error('A non-empty array is required for the $all operator');
-      }
-
-      return this.simulateAllOperator(currentPath, value);
-    }
-
+  private translateOperator(operator: QueryOperator, value: any): any {
     // Handle logical operators
     if (this.isLogicalOperator(operator)) {
       return Array.isArray(value) ? value.map(item => this.translateNode(item)) : this.translateNode(value);

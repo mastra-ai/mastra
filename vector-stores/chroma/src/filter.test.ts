@@ -61,13 +61,6 @@ describe('ChromaFilterTranslator', () => {
       expect(translator.translate(filter)).toEqual({ tags: { $in: ['tag1', 'tag2'] } });
     });
 
-    it('simulates $all using $and + $in', () => {
-      const filter = { tags: { $all: ['tag1', 'tag2'] } };
-      expect(translator.translate(filter)).toEqual({
-        $and: [{ tags: { $in: ['tag1'] } }, { tags: { $in: ['tag2'] } }],
-      });
-    });
-
     it('handles empty array values', () => {
       // $in with empty array is valid in Pinecone
       expect(translator.translate({ tags: { $in: [] } })).toEqual({ tags: { $in: [] } });
@@ -98,25 +91,6 @@ describe('ChromaFilterTranslator', () => {
         const date = new Date('2024-01-01');
         expect(translator.translate({ field: { $in: [date.toISOString()] } })).toEqual({
           field: { $in: [date.toISOString()] },
-        });
-      });
-    });
-
-    describe('$all operator handling', () => {
-      it('handles $all operator simulation', () => {
-        // Single value - converts to $in
-        expect(translator.translate({ field: { $all: ['value'] } })).toEqual({ $and: [{ field: { $in: ['value'] } }] });
-
-        // Multiple values
-        expect(translator.translate({ field: { $all: ['value1', 'value2'] } })).toEqual({
-          $and: [{ field: { $in: ['value1'] } }, { field: { $in: ['value2'] } }],
-        });
-
-        // With dates
-        const date1 = new Date('2024-01-01');
-        const date2 = new Date('2024-01-02');
-        expect(translator.translate({ field: { $all: [date1, date2] } })).toEqual({
-          $and: [{ field: { $in: [date1.toISOString()] } }, { field: { $in: [date2.toISOString()] } }],
         });
       });
     });
@@ -155,7 +129,7 @@ describe('ChromaFilterTranslator', () => {
     it('handles nested arrays in logical operators', () => {
       expect(
         translator.translate({
-          $and: [{ field1: { $in: ['a', 'b'] } }, { field2: { $all: ['c', 'd'] } }],
+          $and: [{ field1: { $in: ['a', 'b'] } }, { field2: { $in: ['c', 'd'] } }],
         }),
       ).toEqual({
         $and: [
@@ -393,7 +367,6 @@ describe('ChromaFilterTranslator', () => {
         { field: { $in: ['value'] } },
         { $and: [{ field: { $eq: 'value' } }] },
         { $or: [{ field: { $eq: 'value' } }] },
-        { field: { $all: [{ $eq: 'value' }] } },
       ];
       supportedFilters.forEach(filter => {
         expect(() => translator.translate(filter)).not.toThrow();
@@ -409,24 +382,12 @@ describe('ChromaFilterTranslator', () => {
         { field: { $nor: [{ $eq: 'value' }] } },
         { field: { $not: [{ $eq: 'value' }] } },
         { field: { $regex: 'pattern', $options: 'i' } },
+        { field: { $all: [{ $eq: 'value' }] } },
       ];
 
       unsupportedFilters.forEach(filter => {
         expect(() => translator.translate(filter)).toThrow(/Unsupported operator/);
       });
-    });
-
-    it('throws error for empty $all array', () => {
-      expect(() =>
-        translator.translate({
-          categories: { $all: [] },
-        }),
-      ).toThrow();
-    });
-
-    it('throws error for invalid operator values', () => {
-      const filter = { tags: { $all: 'not-an-array' } };
-      expect(() => translator.translate(filter)).toThrow();
     });
   });
 });
