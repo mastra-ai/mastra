@@ -1,5 +1,8 @@
+import { Filter } from '@mastra/core/filter';
 import { MastraVector, QueryResult, IndexStats } from '@mastra/core/vector';
 import { Pinecone } from '@pinecone-database/pinecone';
+
+import { PineconeFilterTranslator } from './filter';
 
 export class PineconeVector extends MastraVector {
   private client: Pinecone;
@@ -76,15 +79,18 @@ export class PineconeVector extends MastraVector {
     indexName: string,
     queryVector: number[],
     topK: number = 10,
-    filter?: Record<string, any>,
+    filter?: Filter,
     includeVector: boolean = false,
   ): Promise<QueryResult[]> {
     const index = this.client.Index(indexName);
 
+    const pineconeFilter = new PineconeFilterTranslator();
+    const translatedFilter = pineconeFilter.translate(filter);
+
     const results = await index.query({
       vector: queryVector,
       topK,
-      filter,
+      filter: translatedFilter,
       includeMetadata: true,
       includeValues: includeVector,
     });

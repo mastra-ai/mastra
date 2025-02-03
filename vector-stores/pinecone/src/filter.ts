@@ -5,16 +5,16 @@ export class PineconeFilterTranslator extends BaseFilterTranslator {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
       logical: ['$and', '$or'],
-      array: ['$in', '$all'],
+      array: ['$in', '$all', '$nin'],
       element: [],
       regex: [],
       custom: [],
     };
   }
 
-  translate(filter: Filter): Filter {
+  translate(filter?: Filter): Filter | undefined {
     if (this.isEmpty(filter)) return filter;
-    this.validateFilter(filter);
+    this.validateFilter(filter as Filter);
     return this.translateNode(filter);
   }
 
@@ -105,7 +105,7 @@ export class PineconeFilterTranslator extends BaseFilterTranslator {
     // Handle $all specially
     if (operator === '$all') {
       if (!Array.isArray(value) || value.length === 0) {
-        throw new Error('Empty $all array is not supported');
+        throw new Error('A non-empty array is required for the $all operator');
       }
 
       return this.simulateAllOperator(currentPath, value);
