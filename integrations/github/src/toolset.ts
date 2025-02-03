@@ -1,4 +1,5 @@
-import { OpenAPIToolset, ToolAction } from '@mastra/core/tools';
+import { OpenAPIToolset } from '@mastra/core/integration';
+import { ToolAction } from '@mastra/core/tools';
 
 // @ts-ignore
 // import GithubLogo from './assets/github.png';
