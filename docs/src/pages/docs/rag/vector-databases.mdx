@@ -15,126 +15,126 @@ After generating embeddings, you need to store them in a database that supports 
 
 Best for teams already using PostgreSQL who want to minimize infrastructure complexity:
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare']} defaultIndex="1">
+<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare']}>
   <Tabs.Tab>
-  ``` ts showLineNumbers copy
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { PgVector } from '@mastra/vector-pg';
 
-    import { PgVector } from '@mastra/vector-pg';
+  const store = new PgVector(process.env.POSTGRES_CONNECTION_STRING)
+  await store.createIndex("my-collection", 1536);
+  await store.upsert(
+    "my-collection",
+    embeddings,
+    chunks.map(chunk => ({ text: chunk.text }))
+)
 
-    const store = new PgVector(process.env.POSTGRES_CONNECTION_STRING)
-    await store.createIndex("my-collection", 1536);
-    await store.upsert(
-      "my-collection",
-      embeddings,
-      chunks.map(chunk => ({ text: chunk.text }))
-    )
-    ```
+````
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```ts filename="vector-store.ts" showLineNumbers copy
-    import { PineconeVector } from '@mastra/vector-pinecone'
-    
-    const store = new PineconeVector(process.env.PINECONE_API_KEY)
-    await store.createIndex("my-collection", 1536);
-    await store.upsert(
-      "my-collection",
-      embeddings,
-      chunks.map(chunk => ({ text: chunk.text }))
-    )
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```ts filename="vector-store.ts" showLineNumbers copy
-    import { QdrantVector } from '@mastra/vector-qdrant'
-    
-    const store = new QdrantVector({
-      url: process.env.QDRANT_URL,
-      apiKey: process.env.QDRANT_API_KEY
-    })
-    await store.createIndex("my-collection", 1536);
-    await store.upsert(
-      "my-collection",
-      embeddings,
-      chunks.map(chunk => ({ text: chunk.text }))
-    )
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```ts filename="vector-store.ts" showLineNumbers copy
-    import { ChromaVector } from '@mastra/vector-chroma'
-    
-    const store = new ChromaVector()
-    await store.createIndex("my-collection", 1536);
-    await store.upsert(
-      "my-collection",
-      embeddings,
-      chunks.map(chunk => ({ text: chunk.text }))
-    )
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```ts filename="vector-store.ts" showLineNumbers copy
-    import { AstraVector } from '@mastra/vector-astra'
-    
-    const store = new AstraVector({
-      token: process.env.ASTRA_DB_TOKEN,
-      endpoint: process.env.ASTRA_DB_ENDPOINT,
-      keyspace: process.env.ASTRA_DB_KEYSPACE
-    })
-    await store.createIndex("my-collection", 1536);
-    await store.upsert(
-      "my-collection",
-      embeddings,
-      chunks.map(chunk => ({ text: chunk.text }))
-    )
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```ts filename="vector-store.ts" showLineNumbers copy
-    import { LibSQLVector } from '@mastra/vector-libsql'
-    
-    const store = new LibSQLVector(process.env.DATabs.TabASE_URL)
-    await store.createIndex("my-collection", 1536);
-    await store.upsert(
-      "my-collection",
-      embeddings,
-      chunks.map(chunk => ({ text: chunk.text }))
-    )
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```ts filename="vector-store.ts" showLineNumbers copy
-    import { UpstashVector } from '@mastra/vector-upstash'
-    
-    const store = new UpstashVector({
-      url: process.env.UPSTASH_URL,
-      token: process.env.UPSTASH_TOKEN
-    })
-    await store.createIndex("my-collection", 1536);
-    await store.upsert(
-      "my-collection",
-      embeddings,
-      chunks.map(chunk => ({ text: chunk.text }))
-    )
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```ts filename="vector-store.ts" showLineNumbers copy
-    import { CloudflareVector } from '@mastra/vector-vectorize'
-    
-    const store = new CloudflareVector({
-      accountId: process.env.CF_ACCOUNT_ID,
-      apiToken: process.env.CF_API_TOKEN
-    })
-    await store.createIndex("my-collection", 1536);
-    await store.upsert(
-      "my-collection",
-      embeddings,
-      chunks.map(chunk => ({ text: chunk.text }))
-    )
-    ```
-  </Tabs.Tab>
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { PineconeVector } from '@mastra/vector-pinecone'
+
+  const store = new PineconeVector(process.env.PINECONE_API_KEY)
+  await store.createIndex("my-collection", 1536);
+  await store.upsert(
+    "my-collection",
+    embeddings,
+    chunks.map(chunk => ({ text: chunk.text }))
+  )
+  ```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { QdrantVector } from '@mastra/vector-qdrant'
+
+  const store = new QdrantVector({
+    url: process.env.QDRANT_URL,
+    apiKey: process.env.QDRANT_API_KEY
+  })
+  await store.createIndex("my-collection", 1536);
+  await store.upsert(
+    "my-collection",
+    embeddings,
+    chunks.map(chunk => ({ text: chunk.text }))
+  )
+  ```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { ChromaVector } from '@mastra/vector-chroma'
+
+  const store = new ChromaVector()
+  await store.createIndex("my-collection", 1536);
+  await store.upsert(
+    "my-collection",
+    embeddings,
+    chunks.map(chunk => ({ text: chunk.text }))
+  )
+  ```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { AstraVector } from '@mastra/vector-astra'
+
+  const store = new AstraVector({
+    token: process.env.ASTRA_DB_TOKEN,
+    endpoint: process.env.ASTRA_DB_ENDPOINT,
+    keyspace: process.env.ASTRA_DB_KEYSPACE
+  })
+  await store.createIndex("my-collection", 1536);
+  await store.upsert(
+    "my-collection",
+    embeddings,
+    chunks.map(chunk => ({ text: chunk.text }))
+  )
+  ```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { LibSQLVector } from '@mastra/vector-libsql'
+
+  const store = new LibSQLVector(process.env.DATABASE_URL)
+  await store.createIndex("my-collection", 1536);
+  await store.upsert(
+    "my-collection",
+    embeddings,
+    chunks.map(chunk => ({ text: chunk.text }))
+  )
+  ```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { UpstashVector } from '@mastra/vector-upstash'
+
+  const store = new UpstashVector({
+    url: process.env.UPSTASH_URL,
+    token: process.env.UPSTASH_TOKEN
+  })
+  await store.createIndex("my-collection", 1536);
+  await store.upsert(
+    "my-collection",
+    embeddings,
+    chunks.map(chunk => ({ text: chunk.text }))
+  )
+  ```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { CloudflareVector } from '@mastra/vector-vectorize'
+
+  const store = new CloudflareVector({
+    accountId: process.env.CF_ACCOUNT_ID,
+    apiToken: process.env.CF_API_TOKEN
+  })
+  await store.createIndex("my-collection", 1536);
+  await store.upsert(
+    "my-collection",
+    embeddings,
+    chunks.map(chunk => ({ text: chunk.text }))
+  )
+  ```
+</Tabs.Tab>
 </Tabs>
 
 ## Using Vector Storage
@@ -147,11 +147,11 @@ await store.createIndex('my-collection', 1536);
 
 // 2. Store embeddings with metadata
 await store.upsert(
-  'my-collection',
-  embeddings,
-  chunks.map(chunk => ({ text: chunk.text })),
+'my-collection',
+embeddings,
+chunks.map(chunk => ({ text: chunk.text })),
 );
-```
+````
 
 ## Adding Metadata
 
