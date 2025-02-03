@@ -29,16 +29,17 @@ const memory = new Memory({
   // Optional: Vector store for semantic search
   vector: new PgVector(connectionString),
   
-  // Optional: Thread configuration
-  threads: {
+  // Optional: Memory configuration options
+  options: {
     // Number of recent messages to include (false to disable)
-    injectRecentMessages: 10,
-    
-    // Vector search configuration
-    injectVectorHistorySearch: {
-      includeResults: 3,  // Number of semantic search results
-      includePrevious: 2, // Messages before each result
-      includeNext: 2,     // Messages after each result
+    recentMessages: 10,
+    // Configure vector-based semantic search
+    historySearch: {
+      topK: 3,         // Number of semantic search results
+      messageRange: {   // Messages before and after each result
+        before: 2,
+        after: 2
+      }
     },
   },
   
@@ -51,9 +52,9 @@ const memory = new Memory({
 });
 ```
 
-When you initialize a Mastra instance with this memory configuration, all agents will automatically use these memory settings when you call their `stream()` or `generate()` methods. The thread configuration specified in the `threads` object will be applied to all conversations.
+When you initialize a Mastra instance with this memory configuration, all agents will automatically use these memory settings when you call their `stream()` or `generate()` methods. The memory configuration options specified in the `options` object will be applied to all conversations.
 
-You can override these default settings for individual calls by passing a `thread` option:
+You can override these default settings for individual calls by passing an `options` parameter:
 
 ```typescript
 // Use default memory settings from Memory configuration
@@ -66,13 +67,15 @@ const response1 = await agent.generate("What were we discussing earlier?", {
 const response2 = await agent.generate("What were we discussing earlier?", {
   resourceId: "user_123",
   threadId: "thread_456",
-  thread: {
-    injectRecentMessages: 5,  // Only inject 5 recent messages
-    injectVectorHistorySearch: {
-      includeResults: 2,      // Only get 2 semantic search results
-      includePrevious: 1,     // Include 1 message before each result
-      includeNext: 1,         // Include 1 message after each result
-    }
+  memoryOptions: {
+    recentMessages: 5,  // Only inject 5 recent messages
+    historySearch: {
+      topK: 2,         // Only get 2 semantic search results
+      messageRange: {   // Context around each result
+        before: 1,
+        after: 1
+      }
+    },
   }
 });
 ```
@@ -83,8 +86,8 @@ The same applies to the `stream()` method:
 const stream = await agent.stream("Tell me about our previous conversation", {
   resourceId: "user_123",
   threadId: "thread_456",
-  thread: {
-    injectRecentMessages: 20  // Override to get more context
+  memoryOptions: {
+    recentMessages: 20  // Override to get more context
   }
 });
 ```
@@ -147,13 +150,15 @@ const embeddingOptions = {
 };
 ```
 
-3. Enable vector search in thread configuration:
+3. Enable vector search in memory configuration options:
 ```typescript
-const threadConfig = {
-  injectVectorHistorySearch: {
-    includeResults: 3,    // Number of similar messages to find
-    includePrevious: 2,   // Context before each result
-    includeNext: 2,       // Context after each result
+const optionsConfig = {
+  historySearch: {
+    topK: 3,           // Number of similar messages to find
+    messageRange: {     // Context around each result
+      before: 2,       // Context before each result
+      after: 2         // Context after each result
+    }
   },
 };
 ```
@@ -265,3 +270,13 @@ await memory.deleteThread(thread.id);
 ```
 
 Note that in most cases, you won't need to manage threads manually since the agent's `generate()` and `stream()` methods handle thread management automatically. Manual thread management is primarily useful for advanced use cases or when you need more fine-grained control over the conversation history.
+
+```typescript
+// Use memoryOptions to get more context for this specific request
+await agent.generate("What did we discuss earlier?", {
+  resourceId: "user_123",
+  threadId: "thread_456",
+  memoryOptions: {
+    recentMessages: 20  // Override to get more context
+  }
+});

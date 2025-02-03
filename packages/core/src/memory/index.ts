@@ -44,13 +44,12 @@ export type MessageResponse<T extends 'raw' | 'core_message'> = {
 }[T];
 
 export type MemoryConfig = {
-  injectRecentMessages?: number | false;
-  injectVectorHistorySearch?:
+  recentMessages?: number | false;
+  historySearch?:
     | boolean
     | {
-        includeResults: number;
-        includePrevious: number;
-        includeNext: number;
+        topK: number;
+        messageRange: number | { before: number; after: number };
       };
   // TODO:
   // injectWorkingMemory?: boolean;
@@ -59,13 +58,13 @@ export type MemoryConfig = {
 export type SharedMemoryConfig =
   | {
       storage: MastraStorage;
-      threads?: MemoryConfig;
+      options?: MemoryConfig;
       vector?: MastraVector;
       embeddingOptions?: EmbeddingOptions;
     }
   | {
       storage: MastraStorage;
-      threads?: MemoryConfig;
+      options?: MemoryConfig;
       vector: MastraVector;
       embeddingOptions: EmbeddingOptions;
     };
@@ -82,8 +81,8 @@ export abstract class MastraMemory extends MastraBase {
   embeddingOptions?: EmbeddingOptions;
 
   protected threadConfig: MemoryConfig = {
-    injectRecentMessages: 40,
-    injectVectorHistorySearch: false, // becomes true by default if a vector store is attached
+    recentMessages: 40,
+    historySearch: false, // becomes true by default if a vector store is attached
     // TODO:
     // injectWorkingMemory: true
   };
@@ -93,13 +92,13 @@ export abstract class MastraMemory extends MastraBase {
     this.storage = config.storage;
     if (config.vector) {
       this.vector = config.vector;
-      this.threadConfig.injectVectorHistorySearch = true;
+      this.threadConfig.historySearch = true;
     }
     if (`embeddingOptions` in config) {
       this.embeddingOptions = config.embeddingOptions;
     }
-    if (config.threads) {
-      this.threadConfig = this.getMergedThreadConfig(config.threads);
+    if (config.options) {
+      this.threadConfig = this.getMergedThreadConfig(config.options);
     }
   }
 

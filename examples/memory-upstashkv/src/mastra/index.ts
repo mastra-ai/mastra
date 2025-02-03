@@ -11,12 +11,11 @@ const memory = new Memory({
     token: 'test_token',
   }),
   vector: new PgVector(`postgresql://postgres:postgres@localhost:5433`),
-  threads: {
-    injectRecentMessages: 1,
-    injectVectorHistorySearch: {
-      includeResults: 3,
-      includePrevious: 2,
-      includeNext: 2,
+  options: {
+    recentMessages: 1,
+    historySearch: {
+      topK: 3,
+      messageRange: { before: 2, after: 2 },
     },
   },
   embeddingOptions: {

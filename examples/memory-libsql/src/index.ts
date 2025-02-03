@@ -50,7 +50,7 @@ async function main() {
       threadId,
       resourceId,
       thread: {
-        injectRecentMessages: 3,
+        recentMessages: 3,
       },
     }),
   );
