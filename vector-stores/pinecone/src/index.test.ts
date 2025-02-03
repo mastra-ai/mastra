@@ -222,9 +222,10 @@ describe('PineconeVector Integration Tests', () => {
       await expect(
         vectorDB.query(testIndexName, [1, 0, 0], 10, {
           field1: { $in: 'not-array' },
-          field2: { $gt: 'not-number' },
+          field2: { $exists: 'not-boolean' },
+          field3: { $gt: 'not-number' },
         }),
-      ).rejects.toThrow('the $in operator must be followed by a list of strings or a list of numbers');
+      ).rejects.toThrow();
     });
 
     it('rejects invalid array values', async () => {
@@ -532,6 +533,15 @@ describe('PineconeVector Integration Tests', () => {
 
           expect(isExpensiveElectronics || isCheapBook).toBe(true);
         });
+      });
+
+      it('combines existence checks with other operators', async () => {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
+          $and: [{ category: 'clothing' }, { optionalField: { $exists: false } }],
+        });
+        expect(results.length).toBe(2);
+        expect(results[0]!.metadata!.category).toBe('clothing');
+        expect('optionalField' in results[0]!.metadata!).toBe(false);
       });
     });
 

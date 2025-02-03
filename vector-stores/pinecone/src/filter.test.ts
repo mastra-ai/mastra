@@ -49,6 +49,11 @@ describe('PineconeFilterTranslator', () => {
       const filter = { timestamp: { $gt: date } };
       expect(translator.translate(filter)).toEqual({ timestamp: { $gt: date.toISOString() } });
     });
+
+    it('handles $exists operator', () => {
+      const filter = { field: { $exists: true } };
+      expect(translator.translate(filter)).toEqual({ field: { $exists: true } });
+    });
   });
 
   // Array Operations
@@ -395,6 +400,7 @@ describe('PineconeFilterTranslator', () => {
         { $and: [{ field: { $eq: 'value' } }] },
         { $or: [{ field: { $eq: 'value' } }] },
         { field: { $all: [{ $eq: 'value' }] } },
+        { field: { $exists: true } },
       ];
       supportedFilters.forEach(filter => {
         expect(() => translator.translate(filter)).not.toThrow();
@@ -405,7 +411,6 @@ describe('PineconeFilterTranslator', () => {
       const unsupportedFilters = [
         { field: { $regex: 'pattern' } },
         { field: { $contains: 'value' } },
-        { field: { $exists: true } },
         { field: { $elemMatch: { $gt: 5 } } },
         { field: { $nor: [{ $eq: 'value' }] } },
         { field: { $not: [{ $eq: 'value' }] } },

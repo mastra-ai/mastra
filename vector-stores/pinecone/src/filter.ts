@@ -6,7 +6,7 @@ export class PineconeFilterTranslator extends BaseFilterTranslator {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
       logical: ['$and', '$or'],
       array: ['$in', '$all', '$nin'],
-      element: [],
+      element: ['$exists'],
       regex: [],
       custom: [],
     };
