@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 import { DocsThemeConfig, useConfig } from "nextra-theme-docs";
+
 import { useRouter } from "next/router";
 
 import { PropertiesTable } from "./src/components/properties-table";
@@ -130,6 +131,9 @@ const docs: DocsThemeConfig = {
   toc: {
     title: "On This Page",
     component: TableOfContents,
+  },
+  footer: {
+    component: null,
   },
 };
 
