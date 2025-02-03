@@ -1,7 +1,9 @@
 ---
-title: "Storing Embeddings in A Vector Database | Mastra Docs"
+title: 'Storing Embeddings in A Vector Database | Mastra Docs'
 description: Guide on vector storage options in Mastra, including embedded and dedicated vector databases for similarity search.
 ---
+
+import { Tabs } from 'nextra/components';
 
 ## Storing Embeddings in A Vector Database
 
@@ -9,16 +11,16 @@ After generating embeddings, you need to store them in a database that supports 
 
 ## Supported databases
 
-### PostgreSQL with PgVector 
+### PostgreSQL with PgVector
 
-Best for teams already using PostgreSQL who want to minimize infrastructure complexity: 
+Best for teams already using PostgreSQL who want to minimize infrastructure complexity:
 
-<Tabs>
-  <Tab>
+<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare']} defaultIndex="1">
+  <Tabs.Tab>
   ``` ts showLineNumbers copy
 
-  import { PgVector } from '@mastra/vector-pg';
-    
+    import { PgVector } from '@mastra/vector-pg';
+
     const store = new PgVector(process.env.POSTGRES_CONNECTION_STRING)
     await store.createIndex("my-collection", 1536);
     await store.upsert(
@@ -27,8 +29,9 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
       chunks.map(chunk => ({ text: chunk.text }))
     )
     ```
-  </Tab>
-  <Tab>
+
+  </Tabs.Tab>
+  <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
     import { PineconeVector } from '@mastra/vector-pinecone'
     
@@ -40,8 +43,8 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
       chunks.map(chunk => ({ text: chunk.text }))
     )
     ```
-  </Tab>
-  <Tab>
+  </Tabs.Tab>
+  <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
     import { QdrantVector } from '@mastra/vector-qdrant'
     
@@ -56,8 +59,8 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
       chunks.map(chunk => ({ text: chunk.text }))
     )
     ```
-  </Tab>
-  <Tab>
+  </Tabs.Tab>
+  <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
     import { ChromaVector } from '@mastra/vector-chroma'
     
@@ -69,8 +72,8 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
       chunks.map(chunk => ({ text: chunk.text }))
     )
     ```
-  </Tab>
-  <Tab>
+  </Tabs.Tab>
+  <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
     import { AstraVector } from '@mastra/vector-astra'
     
@@ -86,12 +89,12 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
       chunks.map(chunk => ({ text: chunk.text }))
     )
     ```
-  </Tab>
-  <Tab>
+  </Tabs.Tab>
+  <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
     import { LibSQLVector } from '@mastra/vector-libsql'
     
-    const store = new LibSQLVector(process.env.DATABASE_URL)
+    const store = new LibSQLVector(process.env.DATabs.TabASE_URL)
     await store.createIndex("my-collection", 1536);
     await store.upsert(
       "my-collection",
@@ -99,8 +102,8 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
       chunks.map(chunk => ({ text: chunk.text }))
     )
     ```
-  </Tab>
-  <Tab>
+  </Tabs.Tab>
+  <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
     import { UpstashVector } from '@mastra/vector-upstash'
     
@@ -115,8 +118,8 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
       chunks.map(chunk => ({ text: chunk.text }))
     )
     ```
-  </Tab>
-  <Tab>
+  </Tabs.Tab>
+  <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
     import { CloudflareVector } from '@mastra/vector-vectorize'
     
@@ -131,7 +134,7 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
       chunks.map(chunk => ({ text: chunk.text }))
     )
     ```
-  </Tab>
+  </Tabs.Tab>
 </Tabs>
 
 ## Using Vector Storage
@@ -140,13 +143,13 @@ Once initialized, all vector stores share the same interface for creating indexe
 
 ```ts filename="store-embeddings.ts" showLineNumbers copy
 // 1. Create an index (dimension = 1536 for text-embedding-3-small)
-await store.createIndex("my-collection", 1536)
+await store.createIndex('my-collection', 1536);
 
 // 2. Store embeddings with metadata
 await store.upsert(
-  "my-collection",
+  'my-collection',
   embeddings,
-  chunks.map(chunk => ({ text: chunk.text }))
+  chunks.map(chunk => ({ text: chunk.text })),
 );
 ```
 
@@ -154,17 +157,17 @@ await store.upsert(
 
 All vector stores support adding metadata to your vectors, which enables filtering during retrieval:
 
-``` ts showLineNumbers copy
+```ts showLineNumbers copy
 // Store embeddings with rich metadata
 await vectorStore.upsert(
-  "embeddings",
+  'embeddings',
   embeddings,
   chunks.map(chunk => ({
     text: chunk.text,
     source: chunk.source,
     category: chunk.category,
-    timestamp: new Date().toISOString()
-  }))
+    timestamp: new Date().toISOString(),
+  })),
 );
 ```
 
@@ -176,6 +179,7 @@ await vectorStore.upsert(
 - Match embedding dimensions to your model (e.g., 1536 for `text-embedding-3-small`)
 
 ## Examples
+
 For complete examples of different vector store implementations, see:
 
 - [Insert Embedding in PgVector](../../examples/rag/insert-embedding-in-pgvector.mdx)
