@@ -19,7 +19,7 @@ export class PineconeFilterTranslator extends BaseFilterTranslator {
   }
 
   private translateNode(node: Filter | FieldCondition, currentPath: string = ''): any {
-    if (this.isPrimitive(node)) return { $eq: this.normalizeComparisonValue(node) };
+    if (this.isPrimitive(node)) return this.normalizeComparisonValue(node);
     if (Array.isArray(node)) return { $in: this.normalizeArrayValues(node) };
 
     const entries = Object.entries(node as Record<string, any>);
@@ -34,7 +34,6 @@ export class PineconeFilterTranslator extends BaseFilterTranslator {
 
     // Process each entry
     const result: Record<string, any> = {};
-    const multiOperatorConditions: any[] = [];
 
     for (const [key, value] of entries) {
       const newPath = currentPath ? `${currentPath}.${key}` : key;
@@ -51,17 +50,6 @@ export class PineconeFilterTranslator extends BaseFilterTranslator {
           if (translated.$and) {
             return translated;
           }
-        }
-
-        // Check for multiple operators on same field
-        const valueEntries = Object.entries(value);
-        if (valueEntries.every(([op]) => this.isOperator(op)) && valueEntries.length > 1) {
-          valueEntries.forEach(([op, opValue]) => {
-            multiOperatorConditions.push({
-              [newPath]: { [op]: this.normalizeComparisonValue(opValue) },
-            });
-          });
-          continue;
         }
 
         // Check if the nested object contains operators
@@ -84,18 +72,6 @@ export class PineconeFilterTranslator extends BaseFilterTranslator {
       } else {
         result[newPath] = this.translateNode(value);
       }
-    }
-
-    // If we have multiple operators, return them combined with $and
-    if (multiOperatorConditions.length > 0) {
-      return { $and: multiOperatorConditions };
-    }
-
-    // Wrap in $and if there are multiple top-level fields
-    if (Object.keys(result).length > 1 && !currentPath) {
-      return {
-        $and: Object.entries(result).map(([key, value]) => ({ [key]: value })),
-      };
     }
 
     return result;
