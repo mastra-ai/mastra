@@ -63,12 +63,14 @@ export class Memory extends MastraMemory {
           ? {
               include: vectorResults.map(r => ({
                 id: r.metadata?.message_id,
-                withNextMessages: typeof vectorConfig.messageRange === 'number'
-                  ? vectorConfig.messageRange
-                  : vectorConfig.messageRange.after,
-                withPreviousMessages: typeof vectorConfig.messageRange === 'number'
-                  ? vectorConfig.messageRange
-                  : vectorConfig.messageRange.before,
+                withNextMessages:
+                  typeof vectorConfig.messageRange === 'number'
+                    ? vectorConfig.messageRange
+                    : vectorConfig.messageRange.after,
+                withPreviousMessages:
+                  typeof vectorConfig.messageRange === 'number'
+                    ? vectorConfig.messageRange
+                    : vectorConfig.messageRange.before,
               })),
             }
           : {}),
@@ -94,7 +96,7 @@ export class Memory extends MastraMemory {
   }) {
     const threadConfig = this.getMergedThreadConfig(config || {});
 
-    if (!threadConfig.recentMessages && !threadConfig.historySearch) {
+    if (!threadConfig.lastMessages && !threadConfig.historySearch) {
       return {
         messages: [],
         uiMessages: [],
@@ -104,9 +106,8 @@ export class Memory extends MastraMemory {
     const messages = await this.getMessages({
       threadId,
       selectBy: {
-        last: threadConfig.recentMessages,
-        vectorSearchString:
-          threadConfig.historySearch && vectorMessageSearch ? vectorMessageSearch : undefined,
+        last: threadConfig.lastMessages,
+        vectorSearchString: threadConfig.historySearch && vectorMessageSearch ? vectorMessageSearch : undefined,
       },
       threadConfig: config,
     });
