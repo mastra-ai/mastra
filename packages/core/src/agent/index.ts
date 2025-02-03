@@ -21,7 +21,7 @@ import { AvailableHooks, executeHook } from '../hooks';
 import { LLM } from '../llm';
 import { GenerateReturn, ModelConfig, StreamReturn } from '../llm/types';
 import { LogLevel, RegisteredLogger } from '../logger';
-import { MemoryConfig, StorageThreadType } from '../memory';
+import { MastraMemory, MemoryConfig, StorageThreadType } from '../memory';
 import { InstrumentClass } from '../telemetry';
 import { CoreTool, ToolAction } from '../tools/types';
 
@@ -40,6 +40,7 @@ export class Agent<
   readonly instructions: string;
   readonly model: ModelConfig;
   #mastra?: MastraPrimitives;
+  #memory?: MastraMemory;
   tools: TTools;
   metrics: TMetrics;
 
@@ -68,6 +69,17 @@ export class Agent<
     if (config.metrics) {
       this.metrics = config.metrics;
     }
+
+    if (config.memory) {
+      this.#memory = config.memory;
+    }
+  }
+
+  public hasOwnMemory(): boolean {
+    return Boolean(this.#memory);
+  }
+  public getMemory(): MastraMemory | undefined {
+    return this.#memory ?? this.#mastra?.memory;
   }
 
   __registerPrimitives(p: MastraPrimitives) {
@@ -154,7 +166,8 @@ export class Agent<
     runId?: string;
   }) {
     const userMessage = this.getMostRecentUserMessage(userMessages);
-    if (this.#mastra?.memory) {
+    const memory = this.getMemory();
+    if (memory) {
       let thread: StorageThreadType | null;
       if (!threadId) {
         this.logger.debug(`No threadId, creating new thread for agent ${this.name}`, {
@@ -162,19 +175,19 @@ export class Agent<
         });
         const title = await this.genTitle(userMessage);
 
-        thread = await this.#mastra.memory.createThread({
+        thread = await memory.createThread({
           threadId,
           resourceId,
           title,
         });
       } else {
-        thread = await this.#mastra.memory.getThreadById({ threadId });
+        thread = await memory.getThreadById({ threadId });
         if (!thread) {
           this.logger.debug(`Thread not found, creating new thread for agent ${this.name}`, {
             runId: runId || this.name,
           });
           const title = await this.genTitle(userMessage);
-          thread = await this.#mastra.memory.createThread({
+          thread = await memory.createThread({
             threadId,
             resourceId,
             title,
@@ -187,7 +200,7 @@ export class Agent<
       if (thread) {
         const messages = newMessages.map(u => {
           return {
-            id: this.#mastra?.memory?.generateId()!,
+            id: this.getMemory()?.generateId()!,
             createdAt: new Date(),
             threadId: thread.id,
             ...u,
@@ -235,9 +248,9 @@ export class Agent<
         }
 
         const memoryMessages =
-          threadId && this.#mastra.memory
+          threadId && memory
             ? (
-                await this.#mastra.memory.rememberMessages({
+                await memory.rememberMessages({
                   threadId,
                   config: memoryConfig,
                   vectorMessageSearch: messages
@@ -253,7 +266,9 @@ export class Agent<
               ).messages
             : [];
 
-        await this.#mastra.memory.saveMessages({ messages, memoryConfig });
+        if (memory) {
+          await memory.saveMessages({ messages, memoryConfig });
+        }
 
         this.log(LogLevel.DEBUG, 'Saved messages to memory', {
           threadId: thread.id,
@@ -293,10 +308,12 @@ export class Agent<
 
         const responseMessagesWithoutIncompleteToolCalls = this.sanitizeResponseMessages(ms);
 
-        if (this.#mastra?.memory) {
+        const memory = this.getMemory();
+
+        if (memory) {
           this.log(LogLevel.DEBUG, 'Saving response to memory', { threadId, runId });
 
-          await this.#mastra.memory.saveMessages({
+          await memory.saveMessages({
             memoryConfig,
             messages: responseMessagesWithoutIncompleteToolCalls.map((message: CoreMessage | CoreAssistantMessage) => {
               const messageId = randomUUID();
@@ -551,7 +568,7 @@ export class Agent<
         let coreMessages = messages;
         let threadIdToUse = threadId;
 
-        if (this.#mastra?.memory && resourceId) {
+        if (this.getMemory() && resourceId) {
           const preExecuteResult = await this.preExecute({
             resourceId,
             runId,
@@ -575,7 +592,7 @@ export class Agent<
 
         if (
           (toolsets && Object.keys(toolsets || {}).length > 0) ||
-          (this.#mastra?.memory && resourceId) ||
+          (this.getMemory() && resourceId) ||
           this.#mastra?.engine
         ) {
           convertedTools = this.convertTools({
@@ -628,7 +645,7 @@ export class Agent<
           result: resToLog,
           threadId,
         });
-        if (this.#mastra?.memory && resourceId) {
+        if (this.getMemory() && resourceId) {
           try {
             this.logger.debug(`Saving assistant message in memory for agent ${this.name}`, {
               runId,
