@@ -146,7 +146,6 @@ export class Mastra<
         });
         this.memory.__setTelemetry(this.telemetry);
       }
-      console.log(`set memory on mastra`);
     }
 
     if (config?.tts) {
@@ -318,7 +317,6 @@ export class Mastra<
     }
 
     if (this.memory) {
-      console.log(`setting memory on logger`);
       this.memory.__setLogger(this.logger);
     }
 
