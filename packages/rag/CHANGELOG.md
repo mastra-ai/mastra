@@ -1,5 +1,16 @@
 # @mastra/rag
 
+## 0.0.2-alpha.74
+
+### Patch Changes
+
+- 9625602: Use mastra core splitted bundles in other packages
+- Updated dependencies [30322ce]
+- Updated dependencies [78eec7c]
+- Updated dependencies [9625602]
+- Updated dependencies [8769a62]
+  - @mastra/core@0.2.0-alpha.83
+
 ## 0.0.2-alpha.73
 
 ### Patch Changes

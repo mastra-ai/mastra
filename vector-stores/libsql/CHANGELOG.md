@@ -1,5 +1,19 @@
 # @mastra/vector-libsql
 
+## 0.0.1-alpha.18
+
+### Patch Changes
+
+- 34048bb: Hook up Astra filter and added tests
+- 78eec7c: Started implementation on Unified Filter API for several vector stores.
+- 72f7fb9: Updated LibSQL filter store to add back in $not
+- 9625602: Use mastra core splitted bundles in other packages
+- Updated dependencies [30322ce]
+- Updated dependencies [78eec7c]
+- Updated dependencies [9625602]
+- Updated dependencies [8769a62]
+  - @mastra/core@0.2.0-alpha.83
+
 ## 0.0.1-alpha.17
 
 ### Patch Changes

@@ -1,5 +1,21 @@
 # @mastra/memory
 
+## 0.1.0-alpha.65
+
+### Minor Changes
+
+- 30322ce: Added new Memory API for managed agent memory via MastraStorage and MastraVector classes
+
+### Patch Changes
+
+- c35aa18: bug: not all models support multiple system messages
+- 9625602: Use mastra core splitted bundles in other packages
+- Updated dependencies [30322ce]
+- Updated dependencies [78eec7c]
+- Updated dependencies [9625602]
+- Updated dependencies [8769a62]
+  - @mastra/core@0.2.0-alpha.83
+
 ## 0.0.2-alpha.64
 
 ### Patch Changes

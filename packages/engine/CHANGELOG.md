@@ -1,5 +1,17 @@
 # @mastra/engine
 
+## 0.0.5-alpha.78
+
+### Patch Changes
+
+- 9625602: Use mastra core splitted bundles in other packages
+- 8769a62: Split core into seperate entry fils
+- Updated dependencies [30322ce]
+- Updated dependencies [78eec7c]
+- Updated dependencies [9625602]
+- Updated dependencies [8769a62]
+  - @mastra/core@0.2.0-alpha.83
+
 ## 0.0.5-alpha.77
 
 ### Patch Changes

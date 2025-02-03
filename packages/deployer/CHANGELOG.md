@@ -1,5 +1,17 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.28
+
+### Patch Changes
+
+- 2ab57d6: Fix: Workflows require a trigger schema otherwise it fails to run in dev
+- 9625602: Use mastra core splitted bundles in other packages
+- Updated dependencies [30322ce]
+- Updated dependencies [78eec7c]
+- Updated dependencies [9625602]
+- Updated dependencies [8769a62]
+  - @mastra/core@0.2.0-alpha.83
+
 ## 0.0.1-alpha.27
 
 ### Patch Changes
