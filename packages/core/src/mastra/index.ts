@@ -178,7 +178,7 @@ export class Mastra<
           telemetry: this.telemetry,
           engine: this.engine,
           storage: this.storage,
-          memory: agent.getMemory(),
+          memory: agent.getMemory() || this.memory,
           agents: agents,
           tts: this.tts,
           vectors: this.vectors,
