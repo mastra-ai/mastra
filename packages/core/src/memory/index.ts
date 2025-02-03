@@ -44,7 +44,7 @@ export type MessageResponse<T extends 'raw' | 'core_message'> = {
 }[T];
 
 export type MemoryConfig = {
-  recentMessages?: number | false;
+  lastMessages?: number | false;
   historySearch?:
     | boolean
     | {
@@ -81,7 +81,7 @@ export abstract class MastraMemory extends MastraBase {
   embeddingOptions?: EmbeddingOptions;
 
   protected threadConfig: MemoryConfig = {
-    recentMessages: 40,
+    lastMessages: 40,
     historySearch: false, // becomes true by default if a vector store is attached
     // TODO:
     // injectWorkingMemory: true

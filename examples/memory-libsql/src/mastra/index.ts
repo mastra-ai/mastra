@@ -17,7 +17,7 @@ const memory = new Memory({
   storage,
   vector,
   options: {
-    recentMessages: 100,
+    lastMessages: 100,
     historySearch: {
       topK: 2,
       messageRange: { before: 2, after: 2 },
