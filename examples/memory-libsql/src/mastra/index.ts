@@ -1,7 +1,7 @@
 import { Mastra } from '@mastra/core';
 import { MastraStorageLibSql } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
-import { PgVector } from '@mastra/vector-pg';
+import { LibSQLVector } from '@mastra/vector-libsql';
 
 import { chefAgent, memoryAgent } from './agents';
 
@@ -11,7 +11,9 @@ const storage = new MastraStorageLibSql({
   },
 });
 
-const vector = new PgVector(`postgresql://postgres:postgres@localhost:5432`);
+const vector = new LibSQLVector({
+  connectionUrl: 'file:example.db',
+});
 
 const memory = new Memory({
   storage,
@@ -25,7 +27,7 @@ const memory = new Memory({
   },
   embeddingOptions: {
     provider: 'OPEN_AI',
-    model: 'text-embedding-ada-002',
+    model: 'text-embedding-3-small',
     maxRetries: 3,
   },
 });

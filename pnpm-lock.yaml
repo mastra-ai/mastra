@@ -1215,9 +1215,9 @@ importers:
       '@mastra/memory':
         specifier: workspace:*
         version: link:../../packages/memory
-      '@mastra/vector-pg':
+      '@mastra/vector-libsql':
         specifier: workspace:*
-        version: link:../../vector-stores/pg
+        version: link:../../vector-stores/libsql
 
   examples/memory-pg:
     dependencies:

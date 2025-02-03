@@ -20,7 +20,7 @@ export const memory = new Memory({
   }),
   vector: new PgVector(connectionString),
   options: {
-    recentMessages: 10,
+    lastMessages: 10,
     historySearch: {
       topK: 3,
       messageRange: { before: 2, after: 2 },
