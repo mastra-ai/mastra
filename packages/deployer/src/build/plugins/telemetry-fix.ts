@@ -44,7 +44,6 @@ export function telemetryFix(): Plugin {
     },
     load(id: string) {
       if (id.startsWith('formdata-node')) {
-        console.log('Skipping formdata-node');
         // Return an empty module
         return 'export default {};';
       }
