@@ -1,9 +1,9 @@
 ---
-title: 'Example: Metadata Filtering | Retrieval | RAG | Mastra Docs'
+title: "Example: Metadata Filtering | Retrieval | RAG | Mastra Docs"
 description: Example of implementing a RAG system in Mastra using metadata filters to search for relevant chunks in the vector store.
 ---
 
-import { GithubLink } from '../../../components/github-link';
+import { GithubLink } from "../../../components/github-link";
 
 # Metadata Filtering
 
@@ -37,9 +37,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
-import { Mastra, Agent } from '@mastra/core';
-import { createVectorQueryTool, embedMany, MDocument } from '@mastra/rag';
-import { PgVector } from '@mastra/vector-pg';
+import { Mastra, Agent } from "@mastra/core";
+import { PgVector } from "@mastra/vector-pg";
+import { createVectorQueryTool, embedMany, MDocument } from "@mastra/rag";
 ```
 
 ## Vector Query Tool Creation
@@ -48,15 +48,15 @@ Using createVectorQueryTool imported from @mastra/rag, you can create a tool tha
 
 ```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'embeddings',
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
   options: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-3-small',
+    provider: "OPEN_AI",
+    model: "text-embedding-3-small",
     maxRetries: 3,
   },
   topK: 3,
-  vectorFilterType: 'pg',
+  vectorFilterType: "pg",
 });
 ```
 
@@ -66,12 +66,12 @@ Set up the Mastra agent that will handle the responses:
 
 ```typescript copy showLineNumbers{16} filename="src/mastra/index.ts"
 export const ragAgent = new Agent({
-  name: 'RAG Agent',
+  name: "RAG Agent",
   instructions:
-    'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
+    "You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.",
   model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o-mini',
+    provider: "OPEN_AI",
+    name: "gpt-4o-mini",
   },
   tools: { vectorQueryTool },
 });
@@ -89,7 +89,7 @@ export const mastra = new Mastra({
   vectors: { pgVector },
 });
 
-const agent = mastra.getAgent('ragAgent');
+const agent = mastra.getAgent("ragAgent");
 ```
 
 ## Document Processing
@@ -97,13 +97,15 @@ const agent = mastra.getAgent('ragAgent');
 Create a document and process it into chunks:
 
 ```typescript copy showLineNumbers{36} filename="src/mastra/index.ts"
-const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`);
+const doc = MDocument.fromText(
+  `The Impact of Climate Change on Global Agriculture...`,
+);
 
 const chunks = await doc.chunk({
-  strategy: 'recursive',
+  strategy: "recursive",
   size: 512,
   overlap: 50,
-  separator: '\n',
+  separator: "\n",
   extract: {
     keywords: true,
   },
@@ -116,24 +118,24 @@ Generate embeddings for the chunks and store them in the vector database:
 
 ```typescript copy showLineNumbers{48} filename="src/mastra/index.ts"
 const { embeddings } = await embedMany(chunks, {
-  provider: 'OPEN_AI',
-  model: 'text-embedding-3-small',
+  provider: "OPEN_AI",
+  model: "text-embedding-3-small",
   maxRetries: 3,
 });
 
-const vectorStore = mastra.getVector('pgVector');
-await vectorStore.createIndex('embeddings', 1536);
+const vectorStore = mastra.getVector("pgVector");
+await vectorStore.createIndex("embeddings", 1536);
 await vectorStore.upsert(
-  'embeddings',
+  "embeddings",
   embeddings,
   chunks?.map((chunk: any) => ({
     text: chunk.text,
     ...chunk.metadata,
     nested: {
       keywords: chunk.metadata.excerptKeywords
-        .replace('KEYWORDS:', '')
-        .split(',')
-        .map(k => k.trim()),
+        .replace("KEYWORDS:", "")
+        .split(",")
+        .map((k) => k.trim()),
       id: index,
     },
   })),
@@ -147,8 +149,10 @@ Function to generate responses based on retrieved context:
 ```typescript copy showLineNumbers{65} filename="src/mastra/index.ts"
 async function generateResponse(query: string, filter: any) {
   const buildFilterString = (f: any): string => {
-    if ('type' in f) {
-      return `type:${f.type} condition with filters: [${f.filters.map(buildFilterString).join(', ')}]`;
+    if ("type" in f) {
+      return `type:${f.type} condition with filters: [${f.filters
+        .map(buildFilterString)
+        .join(", ")}]`;
     }
     return `keyword: ${f.keyword} operator: ${f.operator} value: ${f.value}`;
   };
@@ -182,8 +186,8 @@ async function answerQueries(
     try {
       // Generate and log the response
       const answer = await generateResponse(query, filter);
-      console.log('\nQuery:', query);
-      console.log('Response:', answer);
+      console.log("\nQuery:", query);
+      console.log("Response:", answer);
     } catch (error) {
       console.error(`Error processing query "${query}":`, error);
     }
@@ -192,53 +196,53 @@ async function answerQueries(
 
 const queries = [
   {
-    query: 'What adaptation strategies are mentioned?',
+    query: "What adaptation strategies are mentioned?",
     filter: {
-      keyword: 'nested.keywords',
-      operator: 'ilike',
-      value: 'adaptation',
+      keyword: "nested.keywords",
+      operator: "ilike",
+      value: "adaptation",
     },
   },
   {
-    query: 'Show me recent sections',
+    query: "Show me recent sections",
     filter: {
-      keyword: 'nested.id',
-      operator: 'gt',
-      value: '2',
+      keyword: "nested.id",
+      operator: "gt",
+      value: "2",
     },
   },
   {
-    query: 'Find sections about drought and irrigation',
+    query: "Find sections about drought and irrigation",
     filter: {
-      type: '$and',
+      type: "$and",
       filters: [
         {
-          keyword: 'text',
-          operator: 'ilike',
-          value: 'drought',
+          keyword: "text",
+          operator: "ilike",
+          value: "drought",
         },
         {
-          keyword: 'text',
-          operator: 'ilike',
-          value: 'irrigation',
+          keyword: "text",
+          operator: "ilike",
+          value: "irrigation",
         },
       ],
     },
   },
   {
-    query: 'Find sections about wheat or rice',
+    query: "Find sections about wheat or rice",
     filter: {
-      type: '$or',
+      type: "$or",
       filters: [
         {
-          keyword: 'text',
-          operator: 'ilike',
-          value: 'wheat',
+          keyword: "text",
+          operator: "ilike",
+          value: "wheat",
         },
         {
-          keyword: 'text',
-          operator: 'ilike',
-          value: 'rice',
+          keyword: "text",
+          operator: "ilike",
+          value: "rice",
         },
       ],
     },
@@ -253,4 +257,8 @@ await answerQueries(queries);
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/filter-rag'} />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/filter-rag"
+  }
+/>
