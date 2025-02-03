@@ -1,4 +1,37 @@
 import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { PostgresStore } from '@mastra/store-pg';
+import { PgVector } from '@mastra/vector-pg';
+
+const host = `localhost`;
+const port = 5432;
+const user = `postgres`;
+const database = `postgres`;
+const password = `postgres`;
+const connectionString = `postgresql://${user}:${password}@${host}:${port}`;
+
+export const memory = new Memory({
+  storage: new PostgresStore({
+    host,
+    port,
+    user,
+    database,
+    password,
+  }),
+  vector: new PgVector(connectionString),
+  options: {
+    recentMessages: 10,
+    historySearch: {
+      topK: 3,
+      messageRange: { before: 2, after: 2 },
+    },
+  },
+  embeddingOptions: {
+    provider: 'OPEN_AI',
+    model: 'text-embedding-ada-002',
+    maxRetries: 3,
+  },
+});
 
 export const chefAgent = new Agent({
   name: 'chefAgent',
@@ -9,6 +42,7 @@ export const chefAgent = new Agent({
     name: 'gpt-4o',
     toolChoice: 'auto',
   },
+  memory,
 });
 
 export const memoryAgent = new Agent({
@@ -20,4 +54,5 @@ export const memoryAgent = new Agent({
     name: 'gpt-4o',
     toolChoice: 'auto',
   },
+  memory,
 });
