@@ -62,7 +62,13 @@ type Variables = {
 
 export async function createHonoServer(
   mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; evalStore?: any; apiReqLogs?: boolean } = {},
+  options: {
+    playground?: boolean;
+    swaggerUI?: boolean;
+    evalStore?: any;
+    apiReqLogs?: boolean;
+    fiberplane?: boolean;
+  } = {},
 ) {
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -1037,8 +1043,6 @@ export async function createHonoServer(
     }),
   );
 
-  app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
-
   if (options?.swaggerUI) {
     app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
   }
@@ -1103,12 +1107,29 @@ export async function createHonoServer(
 
 export async function createNodeServer(
   mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; evalStore?: any; apiReqLogs?: boolean } = {},
+  options: {
+    playground?: boolean;
+    swaggerUI?: boolean;
+    evalStore?: any;
+    apiReqLogs?: boolean;
+    fiberplane?: boolean;
+  } = {},
 ) {
   const app = await createHonoServer(mastra, options);
+  let fetch = app.fetch;
+
+  if (options.fiberplane) {
+    try {
+      const { instrument } = await import('@fiberplane/hono-otel');
+      fetch = instrument(app).fetch;
+    } catch (error) {
+      console.warn('Failed to load Fiberplane instrumentation:', error);
+    }
+  }
+
   return serve(
     {
-      fetch: app.fetch,
+      fetch,
       port: Number(process.env.PORT) || 4111,
     },
     () => {

@@ -130,6 +130,8 @@ program
   .option('-e, --env <env>', 'Environment File to use (defaults to .env.development)')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .option('-p, --port <port>', 'Port number for the development server (defaults to 4111)')
+  .option('-f, --fiberplane', 'Enable Fiberplane')
+  .option('-l, --api-req-logs', 'Enable API request logs')
   .action(args => {
     analytics.trackCommand({
       command: 'dev',
@@ -141,6 +143,8 @@ program
       dir: args?.dir,
       toolsDirs: args?.tools,
       root: args?.root,
+      fiberplane: args?.fiberplane,
+      apiReqLogs: args?.apiReqLogs,
     });
   });
 

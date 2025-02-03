@@ -139,9 +139,16 @@ export class Deployer extends MastraBase {
   }
 
   async buildServer(
-    { playground = false, swaggerUI = false }: { playground?: boolean; swaggerUI?: boolean } = {
+    {
+      playground = false,
+      swaggerUI = false,
+      fiberplane = false,
+      apiReqLogs = false,
+    }: { playground?: boolean; swaggerUI?: boolean; fiberplane?: boolean; apiReqLogs?: boolean } = {
       playground: false,
       swaggerUI: false,
+      fiberplane: false,
+      apiReqLogs: false,
     },
   ) {
     upsertMastraDir({ dir: this.projectPath });
@@ -154,7 +161,7 @@ export class Deployer extends MastraBase {
       import { createHonoServer } from './server.mjs';
       import { mastra } from './mastra.mjs';
 
-      export const app = await createHonoServer(mastra, { playground: ${playground}, swaggerUI: ${swaggerUI} });
+      export const app = await createHonoServer(mastra, { playground: ${playground}, swaggerUI: ${swaggerUI}, fiberplane: ${fiberplane}, apiReqLogs: ${apiReqLogs} });
     `,
     );
   }

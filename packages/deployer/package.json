@@ -21,11 +21,11 @@
   "scripts": {
     "build": "npm-run-all --serial build:lib build:server types:server",
     "build:lib": "tsup-node src/index.ts --format esm --clean --dts --treeshake --no-splitting",
-    "build:server": "esbuild --platform=node --target=node20 --format=esm --bundle --outdir=dist/server src/server/index.ts",
+    "build:server": "esbuild --platform=node --target=node20 --format=esm --bundle --outdir=dist/server src/server/index.ts --external:@fiberplane/hono-otel",
     "types:server": "tsup src/server/index.ts --no-clean --format esm --dts-only --out-dir=dist/server",
     "dev": "npm-run-all -p dev:lib dev:server dev:types",
     "dev:lib": "pnpm run build:lib --watch --no-clean",
-    "dev:server": "esbuild --watch --platform=node --target=node20 --format=esm --bundle --outdir=dist/server src/server/index.ts",
+    "dev:server": "esbuild --watch --platform=node --target=node20 --format=esm --bundle --outdir=dist/server src/server/index.ts --external:@fiberplane/hono-otel",
     "dev:types": "pnpm run types:server --watch --no-clean",
     "pull:openapispec": "node src/server/openapi.script.js",
     "test": "vitest run"
@@ -38,6 +38,9 @@
     "esbuild": "^0.24.2",
     "fs-extra": "^11.2.0",
     "zod": "^3.24.1"
+  },
+  "optionalDependencies": {
+    "@fiberplane/hono-otel": "^0.7.0"
   },
   "devDependencies": {
     "@hono/node-server": "^1.13.7",

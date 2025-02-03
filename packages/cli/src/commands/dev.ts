@@ -64,7 +64,14 @@ const bundleTools = async (mastraPath: string, dotMastraPath: string, toolsDirs?
   return MASTRA_TOOLS_PATH;
 };
 
-const startServer = async (dotMastraPath: string, port: number, MASTRA_TOOLS_PATH?: string) => {
+const startServer = async (
+  dotMastraPath: string,
+  port: number,
+  MASTRA_TOOLS_PATH?: string,
+  MASTRA_SERVER_FIBERPLANE?: string,
+  MASTRA_SERVER_SWAGGER_UI?: string,
+  MASTRA_SERVER_API_REQ_LOGS?: string,
+) => {
   try {
     // Restart server
     logger.info('[Mastra Dev] - Starting server...');
@@ -74,6 +81,9 @@ const startServer = async (dotMastraPath: string, port: number, MASTRA_TOOLS_PAT
       env: {
         PORT: port.toString() || '4111',
         MASTRA_TOOLS_PATH,
+        MASTRA_SERVER_FIBERPLANE,
+        MASTRA_SERVER_SWAGGER_UI,
+        MASTRA_SERVER_API_REQ_LOGS,
       },
       stdio: 'inherit',
       reject: false,
@@ -130,6 +140,9 @@ async function rebundleAndRestart(
   port: number,
   envFile: string,
   toolsDirs?: string,
+  MASTRA_SERVER_FIBERPLANE?: string,
+  MASTRA_SERVER_SWAGGER_UI?: string,
+  MASTRA_SERVER_API_REQ_LOGS?: string,
 ) {
   if (isRestarting) {
     return;
@@ -170,7 +183,14 @@ async function rebundleAndRestart(
     /*
       Start server
     */
-    await startServer(dotMastraPath, port, MASTRA_TOOLS_PATH);
+    await startServer(
+      dotMastraPath,
+      port,
+      MASTRA_TOOLS_PATH,
+      MASTRA_SERVER_FIBERPLANE,
+      MASTRA_SERVER_SWAGGER_UI,
+      MASTRA_SERVER_API_REQ_LOGS,
+    );
   } finally {
     isRestarting = false;
   }
@@ -182,15 +202,23 @@ export async function dev({
   dir,
   root,
   toolsDirs,
+  fiberplane,
+  apiReqLogs,
 }: {
   dir?: string;
   root?: string;
   port: number;
   env: Record<string, any>;
   toolsDirs?: string;
+  fiberplane?: boolean;
+  apiReqLogs?: boolean;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = join(rootDir, dir || 'src/mastra');
+
+  const MASTRA_SERVER_FIBERPLANE = fiberplane ? 'true' : 'false';
+  const MASTRA_SERVER_API_REQ_LOGS = apiReqLogs ? 'true' : 'false';
+  const MASTRA_SERVER_SWAGGER_UI = 'true';
 
   const deployer = new Deployer({
     dir: rootDir,
@@ -245,7 +273,14 @@ export async function dev({
 
   writeFileSync(join(dotMastraPath, 'evals.json'), ``);
 
-  await startServer(dotMastraPath, port, MASTRA_TOOLS_PATH);
+  await startServer(
+    dotMastraPath,
+    port,
+    MASTRA_TOOLS_PATH,
+    MASTRA_SERVER_FIBERPLANE,
+    MASTRA_SERVER_SWAGGER_UI,
+    MASTRA_SERVER_API_REQ_LOGS,
+  );
 
   const watcher = watch([mastraDir, ...envPaths], {
     persistent: true,

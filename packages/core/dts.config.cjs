@@ -10,7 +10,7 @@ module.exports = {
   rollup(config, options) {
     config.input.logger = path.resolve(__dirname, 'src/logger/index.ts');
 
-    config.output.entryFileNames = '[name].esm.js'
+    config.output.entryFileNames = '[name].esm.js';
     return config; // always return a config.
   },
 };
