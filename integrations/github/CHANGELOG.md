@@ -1,5 +1,11 @@
 # @mastra/github
 
+## 1.0.3-alpha.68
+
+### Patch Changes
+
+- 03bc87c: Fix github integration
+
 ## 1.0.3-alpha.67
 
 ### Patch Changes

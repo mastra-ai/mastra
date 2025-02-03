@@ -1,5 +1,12 @@
 # @mastra/dane
 
+## 0.0.2-alpha.106
+
+### Patch Changes
+
+- Updated dependencies [03bc87c]
+  - @mastra/github@1.0.3-alpha.68
+
 ## 0.0.2-alpha.105
 
 ### Patch Changes
