@@ -1,5 +1,12 @@
 # openapi-spec-writer
 
+## 0.0.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [03bc87c]
+  - @mastra/github@1.0.3-alpha.68
+
 ## 0.0.1-alpha.0
 
 ### Patch Changes

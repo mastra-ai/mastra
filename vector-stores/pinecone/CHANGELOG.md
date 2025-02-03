@@ -1,5 +1,11 @@
 # @mastra/vector-pinecone
 
+## 0.0.1-alpha.18
+
+### Patch Changes
+
+- cf4c02c: Added testing for Pinecone Unified Filter API
+
 ## 0.0.1-alpha.17
 
 ### Patch Changes

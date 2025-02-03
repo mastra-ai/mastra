@@ -1,5 +1,11 @@
 # @mastra/vector-vectorize
 
+## 0.0.1-alpha.18
+
+### Patch Changes
+
+- bd8b0db: Added Filter Translator to Vectorize
+
 ## 0.0.1-alpha.17
 
 ### Patch Changes
