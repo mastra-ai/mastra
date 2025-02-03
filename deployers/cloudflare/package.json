@@ -27,6 +27,7 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",
+    "@rollup/plugin-virtual": "^3.0.2",
     "cloudflare": "^4.0.0",
     "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",

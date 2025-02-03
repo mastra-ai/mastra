@@ -1,5 +1,6 @@
 import { Deployer } from '@mastra/deployer';
 import { getBundler } from '@mastra/deployer/build';
+import virtual from '@rollup/plugin-virtual';
 import { execa } from 'execa';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
@@ -77,9 +78,7 @@ export class NetlifyDeployer extends Deployer {
 
   async bundle(mastraDir: string, outputDirectory: string): Promise<void> {
     const bundler = await getBundler({
-      input: {
-        api: '#entry',
-      },
+      input: '#entry',
       plugins: [virtual({ '#entry': this.getEntry() })],
     });
 

@@ -1,5 +1,6 @@
-import { MastraDeployer } from '@mastra/core/deployer';
-import { createChildProcessLogger } from '@mastra/deployer';
+import { Deployer, createChildProcessLogger } from '@mastra/deployer';
+import { getBundler } from '@mastra/deployer/build';
+import virtual from '@rollup/plugin-virtual';
 import { Cloudflare } from 'cloudflare';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
@@ -10,10 +11,14 @@ interface CFRoute {
   custom_domain?: boolean;
 }
 
-export class CloudflareDeployer extends MastraDeployer {
+export class CloudflareDeployer extends Deployer {
   private cloudflare: Cloudflare | undefined;
   routes?: CFRoute[] = [];
   workerNamespace?: string;
+  scope: string;
+  env?: Record<string, any>;
+  projectName: string;
+
   constructor({
     scope,
     env,
@@ -27,25 +32,29 @@ export class CloudflareDeployer extends MastraDeployer {
     projectName: string;
     routes?: CFRoute[];
     workerNamespace?: string;
-    auth?: {
+    auth: {
       apiToken: string;
-      apiEmail: string;
+      apiEmail?: string;
     };
   }) {
-    super({ scope, env, projectName });
+    super({ name: 'CLOUDFLARE' });
 
+    this.scope = scope;
+    this.projectName = projectName;
     this.routes = routes;
     this.workerNamespace = workerNamespace;
 
-    if (auth) {
-      this.cloudflare = new Cloudflare(auth);
+    if (env) {
+      this.env = env;
     }
+
+    this.cloudflare = new Cloudflare(auth);
   }
 
-  override writeFiles({ dir }: { dir: string }): void {
-    this.loadEnvVars();
+  async writeFiles(outputDirectory: string): Promise<void> {
+    const env = await this.loadEnvVars();
 
-    this.writeIndex({ dir });
+    const envsAsObject = Object.assign({}, Object.fromEntries(env.entries()), this.env);
 
     const cfWorkerName = this.projectName || 'mastra';
 
@@ -62,48 +71,69 @@ export class CloudflareDeployer extends MastraDeployer {
           enabled: true,
         },
       },
-      vars: this.env,
+      vars: envsAsObject,
     };
 
     if (!this.workerNamespace && this.routes) {
       wranglerConfig.routes = this.routes;
     }
 
-    writeFileSync(join(dir, 'wrangler.json'), JSON.stringify(wranglerConfig));
+    writeFileSync(join(outputDirectory, 'wrangler.json'), JSON.stringify(wranglerConfig));
   }
 
-  override writeIndex({ dir }: { dir: string }): void {
-    writeFileSync(
-      join(dir, './index.mjs'),
-      `
-      export default {
-        fetch: async (request, env, context) => {
-          Object.keys(env).forEach(key => {
-            process.env[key] = env[key]
-          })
-          const { app } = await import('./hono.mjs');
-          return app.fetch(request, env, context);
-        }
-      }
-      `,
-    );
+  private getEntry(): string {
+    return `
+import { mastra } from '#mastra';
+import { createHonoServer } from '#server';
+
+export default {
+  fetch: async (request, env, context) => {
+    Object.keys(env).forEach(key => {
+      process.env[key] = env[key]
+    })
+
+    const { app } = await createHonoServer(mastra)
+    return app.fetch(request, env, context);
+  }
+}
+`;
   }
 
-  override async deploy({ dir, token }: { dir: string; token: string }): Promise<void> {
+  async bundle(mastraDir: string, outputDirectory: string): Promise<void> {
+    const bundler = await getBundler({
+      input: {
+        index: '#entry',
+      },
+      plugins: [virtual({ '#entry': this.getEntry() })],
+    });
+
+    bundler.write({
+      dir: outputDirectory,
+      format: 'es',
+      entryFileNames: '[name].mjs',
+    });
+  }
+
+  async prepare(outputDirectory: string): Promise<void> {
+    await super.prepare(outputDirectory);
+    await this.writeFiles(outputDirectory);
+  }
+
+  async deploy(): Promise<void> {
     const cmd = this.workerNamespace
       ? `npm exec -- wrangler deploy --dispatch-namespace ${this.workerNamespace}`
       : 'npm exec -- wrangler deploy';
 
     const cpLogger = createChildProcessLogger({
       logger: this.logger,
-      root: dir,
+      root: process.cwd(),
     });
 
     await cpLogger({
       cmd,
       args: [],
       env: {
-        CLOUDFLARE_API_TOKEN: token,
+        CLOUDFLARE_API_TOKEN: this.cloudflare!.apiToken!,
         CLOUDFLARE_ACCOUNT_ID: this.scope,
         ...this.env,
         PATH: process.env.PATH!,

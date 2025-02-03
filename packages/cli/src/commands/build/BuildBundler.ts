@@ -44,16 +44,14 @@ export class BuildBundler extends MastraBundler {
 
   async bundle(mastraDir: string, outputDirectory: string): Promise<void> {
     const bundler = await getBundler({
-      input: {
-        index: '#entry',
-      },
+      input: '#entry',
       plugins: [virtual({ '#entry': this.getEntry() })],
     });
 
     bundler.write({
-      dir: outputDirectory,
+      file: `${outputDirectory}/index.mjs`,
       format: 'es',
-      entryFileNames: '[name].mjs',
+      inlineDynamicImports: true,
     });
   }
 
