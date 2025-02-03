@@ -25,7 +25,6 @@ import { getLogsByRunIdHandler, getLogsHandler } from './handlers/logs.js';
 import {
   createThreadHandler,
   deleteThreadHandler,
-  getContextWindowHandler,
   getMemoryStatusHandler,
   getMessagesHandler,
   getThreadByIdHandler,
@@ -34,13 +33,7 @@ import {
   updateThreadHandler,
 } from './handlers/memory.js';
 import { rootHandler } from './handlers/root.js';
-import {
-  executeAgentToolHandler,
-  executeToolHandler,
-  getToolByIdHandler,
-  getToolResultHandler,
-  getToolsHandler,
-} from './handlers/tools.js';
+import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools.js';
 import {
   upsertVectors,
   createIndex,
@@ -366,6 +359,14 @@ export async function createHonoServer(
     describeRoute({
       description: 'Get all threads',
       tags: ['memory'],
+      parameters: [
+        {
+          name: 'resourceid',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
       responses: {
         200: {
           description: 'List of all threads',
@@ -422,39 +423,34 @@ export async function createHonoServer(
     getMessagesHandler,
   );
 
-  app.get(
-    '/api/memory/threads/:threadId/context-window',
-    describeRoute({
-      description: 'Get context window for a thread',
-      tags: ['memory'],
-      parameters: [
-        {
-          name: 'threadId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      responses: {
-        200: {
-          description: 'Context window',
-        },
-      },
-    }),
-    getContextWindowHandler,
-  );
-
   app.post(
     '/api/memory/threads',
     describeRoute({
       description: 'Create a new thread',
       tags: ['memory'],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                metadata: { type: 'object' },
+                resourceid: { type: 'string' },
+                threadId: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
       responses: {
         200: {
           description: 'Created thread',
         },
       },
     }),
+
     createThreadHandler,
   );
 
@@ -547,46 +543,6 @@ export async function createHonoServer(
     saveMessagesHandler,
   );
 
-  app.post(
-    '/api/memory/threads/:threadId/tool-result',
-    describeRoute({
-      description: 'Get tool execution result for a thread',
-      tags: ['memory'],
-      parameters: [
-        {
-          name: 'threadId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                toolId: { type: 'string' },
-                resultId: { type: 'string' },
-              },
-              required: ['toolId', 'resultId'],
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'Tool execution result',
-        },
-        404: {
-          description: 'Result not found',
-        },
-      },
-    }),
-    getToolResultHandler,
-  );
-
   // Workflow routes
   app.get(
     '/api/workflows',
@@ -671,6 +627,14 @@ export async function createHonoServer(
     describeRoute({
       description: 'Get all logs',
       tags: ['logs'],
+      parameters: [
+        {
+          name: 'transportId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
       responses: {
         200: {
           description: 'List of all logs',
@@ -689,6 +653,12 @@ export async function createHonoServer(
         {
           name: 'runId',
           in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'transportId',
+          in: 'query',
           required: true,
           schema: { type: 'string' },
         },
@@ -740,37 +710,6 @@ export async function createHonoServer(
       },
     }),
     getToolByIdHandler,
-  );
-
-  app.get(
-    '/api/tools/:toolId/result/:resultId',
-    describeRoute({
-      description: 'Get tool execution result',
-      tags: ['tools'],
-      parameters: [
-        {
-          name: 'toolId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'resultId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      responses: {
-        200: {
-          description: 'Tool execution result',
-        },
-        404: {
-          description: 'Result not found',
-        },
-      },
-    }),
-    getToolResultHandler,
   );
 
   app.post(

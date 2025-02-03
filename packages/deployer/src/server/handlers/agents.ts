@@ -132,7 +132,7 @@ export async function generateHandler(c: Context) {
   }
 }
 
-export async function streamGenerateHandler(c: Context): Promise<Response> {
+export async function streamGenerateHandler(c: Context): Promise<Response | undefined> {
   try {
     const mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
