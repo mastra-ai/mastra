@@ -200,7 +200,7 @@ export class Agent<
       if (thread) {
         const messages = newMessages.map(u => {
           return {
-            id: this.#mastra?.memory?.generateId()!,
+            id: this.getMemory()?.generateId()!,
             createdAt: new Date(),
             threadId: thread.id,
             ...u,
@@ -592,7 +592,7 @@ export class Agent<
 
         if (
           (toolsets && Object.keys(toolsets || {}).length > 0) ||
-          (this.#mastra?.memory && resourceId) ||
+          (this.getMemory() && resourceId) ||
           this.#mastra?.engine
         ) {
           convertedTools = this.convertTools({
@@ -645,7 +645,7 @@ export class Agent<
           result: resToLog,
           threadId,
         });
-        if (this.#mastra?.memory && resourceId) {
+        if (this.getMemory() && resourceId) {
           try {
             this.logger.debug(`Saving assistant message in memory for agent ${this.name}`, {
               runId,

@@ -146,6 +146,7 @@ export class Mastra<
         });
         this.memory.__setTelemetry(this.telemetry);
       }
+      console.log(`set memory on mastra`);
     }
 
     if (config?.tts) {
@@ -178,7 +179,7 @@ export class Mastra<
           telemetry: this.telemetry,
           engine: this.engine,
           storage: this.storage,
-          memory: agent.getMemory() || this.memory,
+          memory: this.memory,
           agents: agents,
           tts: this.tts,
           vectors: this.vectors,
@@ -302,6 +303,7 @@ export class Mastra<
         const agent = this.agents?.[key];
         if (agent) {
           agent.__setLogger(this.logger);
+
           if (agent.hasOwnMemory()) {
             agent.getMemory()?.__setLogger(this.logger);
           }
@@ -316,6 +318,7 @@ export class Mastra<
     }
 
     if (this.memory) {
+      console.log(`setting memory on logger`);
       this.memory.__setLogger(this.logger);
     }
 
