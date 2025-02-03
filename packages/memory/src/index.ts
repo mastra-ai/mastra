@@ -35,23 +35,21 @@ export class Memory extends MastraMemory {
     const config = this.getMergedThreadConfig(threadConfig || {});
 
     const vectorConfig =
-      typeof config?.injectVectorHistorySearch === `boolean`
+      typeof config?.historySearch === `boolean`
         ? {
-            includeResults: 2,
-            includePrevious: 2,
-            includeNext: 2,
+            topK: 2,
+            messageRange: { before: 2, after: 2 },
           }
         : {
-            includeResults: config?.injectVectorHistorySearch?.includeResults || 2,
-            includePrevious: config?.injectVectorHistorySearch?.includePrevious || 2,
-            includeNext: config?.injectVectorHistorySearch?.includeNext || 2,
+            topK: config?.historySearch?.topK || 2,
+            messageRange: config?.historySearch?.messageRange || { before: 2, after: 2 },
           };
 
     if (selectBy?.vectorSearchString && this.vector) {
       const { embeddings } = await this.vector.embed(selectBy.vectorSearchString, this.parseEmbeddingOptions());
 
       await this.vector.createIndex('memory_messages', 1536);
-      vectorResults = await this.vector.query('memory_messages', embeddings[0]!, vectorConfig.includeResults, {
+      vectorResults = await this.vector.query('memory_messages', embeddings[0]!, vectorConfig.topK, {
         thread_id: threadId,
       });
     }
@@ -65,8 +63,12 @@ export class Memory extends MastraMemory {
           ? {
               include: vectorResults.map(r => ({
                 id: r.metadata?.message_id,
-                withNextMessages: vectorConfig.includeNext,
-                withPreviousMessages: vectorConfig.includePrevious,
+                withNextMessages: typeof vectorConfig.messageRange === 'number'
+                  ? vectorConfig.messageRange
+                  : vectorConfig.messageRange.after,
+                withPreviousMessages: typeof vectorConfig.messageRange === 'number'
+                  ? vectorConfig.messageRange
+                  : vectorConfig.messageRange.before,
               })),
             }
           : {}),
@@ -92,7 +94,7 @@ export class Memory extends MastraMemory {
   }) {
     const threadConfig = this.getMergedThreadConfig(config || {});
 
-    if (!threadConfig.injectRecentMessages && !threadConfig.injectVectorHistorySearch) {
+    if (!threadConfig.recentMessages && !threadConfig.historySearch) {
       return {
         messages: [],
         uiMessages: [],
@@ -102,9 +104,9 @@ export class Memory extends MastraMemory {
     const messages = await this.getMessages({
       threadId,
       selectBy: {
-        last: threadConfig.injectRecentMessages,
+        last: threadConfig.recentMessages,
         vectorSearchString:
-          threadConfig.injectVectorHistorySearch && vectorMessageSearch ? vectorMessageSearch : undefined,
+          threadConfig.historySearch && vectorMessageSearch ? vectorMessageSearch : undefined,
       },
       threadConfig: config,
     });
