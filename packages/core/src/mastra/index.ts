@@ -178,7 +178,7 @@ export class Mastra<
           telemetry: this.telemetry,
           engine: this.engine,
           storage: this.storage,
-          memory: this.memory,
+          memory: agent.getMemory(),
           agents: agents,
           tts: this.tts,
           vectors: this.vectors,
@@ -299,7 +299,13 @@ export class Mastra<
 
     if (this.agents) {
       Object.keys(this.agents).forEach(key => {
-        this.agents?.[key]?.__setLogger(this.logger);
+        const agent = this.agents?.[key];
+        if (agent) {
+          agent.__setLogger(this.logger);
+          if (agent.hasOwnMemory()) {
+            agent.getMemory()?.__setLogger(this.logger);
+          }
+        }
       });
     }
 
