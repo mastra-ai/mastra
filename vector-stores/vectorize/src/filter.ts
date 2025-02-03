@@ -12,9 +12,9 @@ export class VectorizeFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter: Filter): Filter {
+  translate(filter?: Filter): Filter | undefined {
     if (this.isEmpty(filter)) return filter;
-    this.validateFilter(filter);
+    this.validateFilter(filter as Filter);
     return this.translateNode(filter);
   }
 

@@ -1,5 +1,8 @@
+import { Filter } from '@mastra/core/filter';
 import { MastraVector, QueryResult } from '@mastra/core/vector';
 import Cloudflare from 'cloudflare';
+
+import { VectorizeFilterTranslator } from './filter';
 
 export class CloudflareVector extends MastraVector {
   client: Cloudflare;
@@ -40,9 +43,10 @@ export class CloudflareVector extends MastraVector {
     return generatedIds;
   }
 
-  transformFilter(filter?: Record<string, any>) {
-    // Implement if Cloudflare Vectorize supports filtering
-    return filter;
+  transformFilter(filter?: Filter) {
+    const translator = new VectorizeFilterTranslator();
+    const translatedFilter = translator.translate(filter);
+    return translatedFilter;
   }
 
   async createIndex(
@@ -64,16 +68,17 @@ export class CloudflareVector extends MastraVector {
     indexName: string,
     queryVector: number[],
     topK: number = 10,
-    filter?: Record<string, any>,
+    filter?: Filter,
     includeVector: boolean = false,
   ): Promise<QueryResult[]> {
+    const translatedFilter = this.transformFilter(filter);
     const response = await this.client.vectorize.indexes.query(indexName, {
       account_id: this.accountId,
       vector: queryVector,
       returnValues: includeVector,
       returnMetadata: 'all',
       topK,
-      filter,
+      filter: translatedFilter,
     });
 
     return (
@@ -118,5 +123,28 @@ export class CloudflareVector extends MastraVector {
     await this.client.vectorize.indexes.delete(indexName, {
       account_id: this.accountId,
     });
+  }
+
+  async createMetadataIndex(indexName: string, propertyName: string, indexType: 'string' | 'number' | 'boolean') {
+    await this.client.vectorize.indexes.metadataIndex.create(indexName, {
+      account_id: this.accountId,
+      propertyName,
+      indexType,
+    });
+  }
+
+  async deleteMetadataIndex(indexName: string, propertyName: string) {
+    await this.client.vectorize.indexes.metadataIndex.delete(indexName, {
+      account_id: this.accountId,
+      propertyName,
+    });
+  }
+
+  async listMetadataIndexes(indexName: string) {
+    const res = await this.client.vectorize.indexes.metadataIndex.list(indexName, {
+      account_id: this.accountId,
+    });
+
+    return res?.metadataIndexes ?? [];
   }
 }
