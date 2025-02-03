@@ -11,17 +11,16 @@ const storage = new MastraStorageLibSql({
   },
 });
 
-const vector = new PgVector(`postgresql://postgres:postgres@localhost:5433`);
+const vector = new PgVector(`postgresql://postgres:postgres@localhost:5432`);
 
 const memory = new Memory({
   storage,
   vector,
-  threads: {
-    injectRecentMessages: 100,
-    injectVectorHistorySearch: {
-      includeResults: 2,
-      includeNext: 2,
-      includePrevious: 2,
+  options: {
+    recentMessages: 100,
+    historySearch: {
+      topK: 2,
+      messageRange: { before: 2, after: 2 },
     },
   },
   embeddingOptions: {

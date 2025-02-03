@@ -23,12 +23,11 @@ const memory = new Memory({
     password,
   }),
   vector: new PgVector(connectionString),
-  threads: {
-    injectRecentMessages: 10,
-    injectVectorHistorySearch: {
-      includeResults: 3,
-      includePrevious: 2,
-      includeNext: 2,
+  options: {
+    recentMessages: 10,
+    historySearch: {
+      topK: 3,
+      messageRange: { before: 2, after: 2 },
     },
   },
   embeddingOptions: {
