@@ -1,7 +1,7 @@
 {
   "name": "memory",
   "type": "module",
-  "version": "1.0.1-alpha.63",
+  "version": "1.0.1-alpha.64",
   "description": "",
   "private": true,
   "main": "index.js",

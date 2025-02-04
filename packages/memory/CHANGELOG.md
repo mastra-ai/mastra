@@ -1,5 +1,19 @@
 # @mastra/memory
 
+## 0.1.0-alpha.66
+
+### Minor Changes
+
+- cb290ee: Reworked the Memory public API to have more intuitive and simple property names
+
+### Patch Changes
+
+- Updated dependencies [2f17a5f]
+- Updated dependencies [cb290ee]
+- Updated dependencies [b4d7416]
+- Updated dependencies [38b7f66]
+  - @mastra/core@0.2.0-alpha.84
+
 ## 0.1.0-alpha.65
 
 ### Minor Changes
