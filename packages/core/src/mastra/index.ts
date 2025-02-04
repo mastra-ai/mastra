@@ -1,5 +1,3 @@
-import 'dotenv/config';
-
 import { Agent } from '../agent';
 import { MastraDeployer } from '../deployer';
 import { LLM } from '../llm';
@@ -275,14 +273,7 @@ export class Mastra<
 
     if (this.agents) {
       Object.keys(this.agents).forEach(key => {
-        const agent = this.agents?.[key];
-        if (agent) {
-          agent.__setLogger(this.logger);
-
-          if (agent.hasOwnMemory()) {
-            agent.getMemory()?.__setLogger(this.logger);
-          }
-        }
+        this.agents?.[key]?.__setLogger(this.logger);
       });
     }
 

@@ -12,8 +12,6 @@ import { randomUUID } from 'crypto';
 import { JSONSchema7 } from 'json-schema';
 import { z, ZodSchema } from 'zod';
 
-import 'dotenv/config';
-
 import { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 import { Metric } from '../eval';

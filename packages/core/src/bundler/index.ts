@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+import { parse } from 'dotenv';
 
 import { readFile } from 'fs/promises';
 
@@ -14,7 +14,7 @@ export abstract class MastraBundler extends MastraBase {
 
     for (const file of await this.getEnvFiles()) {
       const content = await readFile(file, 'utf-8');
-      const config = dotenv.parse(content);
+      const config = parse(content);
 
       Object.entries(config).forEach(([key, value]) => {
         envVars.set(key, value);
