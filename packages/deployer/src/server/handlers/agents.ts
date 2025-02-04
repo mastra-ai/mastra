@@ -124,7 +124,7 @@ export async function generateHandler(c: Context) {
       throw new HTTPException(400, { message: 'Messages should be an array' });
     }
 
-    const result = await agent.generate(messages, { threadId, resourceid, output });
+    const result = await agent.generate(messages, { threadId, resourceId: resourceid, output });
 
     return c.json(result);
   } catch (error) {
@@ -150,7 +150,7 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
       throw new HTTPException(400, { message: 'Messages should be an array' });
     }
 
-    const streamResult = await agent.stream(messages, { threadId, resourceid, output });
+    const streamResult = await agent.stream(messages, { threadId, resourceId: resourceid, output });
 
     for await (const part of streamResult.fullStream) {
       if (part.type === 'error') {
