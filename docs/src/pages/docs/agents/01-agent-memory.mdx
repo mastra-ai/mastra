@@ -62,11 +62,7 @@ const memory = new Memory({
   options: {
     historySearch: {
       topK: 10, // Include 10 most relevant past messages
-      messageRange: {
-        // Messages before and after each result
-        before: 2,
-        after: 2,
-      },
+      messageRange: 2, // Messages before and after each result
     },
   },
 });
@@ -79,10 +75,7 @@ await agent.stream('What did we decide about the search feature last week?', {
     lastMessages: 10,
     historySearch: {
       topK: 3,
-      messageRange: {
-        before: 2,
-        after: 2,
-      },
+      messageRange: 2,
     },
   },
 });
@@ -153,10 +146,7 @@ const response2 = await agent.generate("What were we discussing earlier?", {
     lastMessages: 5,  // Only inject 5 recent messages
     historySearch: {
       topK: 2,         // Only get 2 semantic search results
-      messageRange: {   // Context around each result
-        before: 1,
-        after: 1
-      }
+      messageRange: 1   // Context around each result
     },
   }
 });
@@ -185,11 +175,7 @@ await agent.stream('Update me on the project status', {
     lastMessages: 50, // Maintain longer conversation history across project discussions
     historySearch: {
       topK: 5, // Find more relevant project details
-      messageRange: {
-        // Context around each result
-        before: 3, // More context before each result
-        after: 3, // More context after each result
-      },
+      messageRange: 3, // Number of messages before and after each result
     },
   },
 });
