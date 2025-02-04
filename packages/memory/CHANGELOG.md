@@ -1,5 +1,13 @@
 # @mastra/memory
 
+## 0.1.0-alpha.67
+
+### Patch Changes
+
+- e9d1b47: Rename Memory options historySearch to semanticRecall, rename embeddingOptions to embedding
+- Updated dependencies [e9d1b47]
+  - @mastra/core@0.2.0-alpha.85
+
 ## 0.1.0-alpha.66
 
 ### Minor Changes

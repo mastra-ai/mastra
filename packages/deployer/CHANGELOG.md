@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.31
+
+### Patch Changes
+
+- c5f2d50: Split deployer package
+- Updated dependencies [e9d1b47]
+  - @mastra/core@0.2.0-alpha.85
+
 ## 0.0.1-alpha.30
 
 ### Patch Changes

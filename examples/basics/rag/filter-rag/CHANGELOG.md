@@ -1,5 +1,12 @@
 # filter-rag
 
+## 0.0.1-alpha.3
+
+### Patch Changes
+
+- @mastra/rag@0.0.2-alpha.77
+- @mastra/vector-pg@0.0.1-alpha.19
+
 ## 0.0.1-alpha.2
 
 ### Patch Changes

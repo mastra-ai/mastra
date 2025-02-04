@@ -1,5 +1,15 @@
 # memory
 
+## 1.0.1-alpha.65
+
+### Patch Changes
+
+- Updated dependencies [e9d1b47]
+  - @mastra/memory@0.1.0-alpha.67
+  - @mastra/core@0.2.0-alpha.85
+  - @mastra/store-pg@0.0.0-alpha.3
+  - @mastra/vector-pg@0.0.1-alpha.19
+
 ## 1.0.1-alpha.64
 
 ### Patch Changes
