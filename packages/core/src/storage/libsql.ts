@@ -213,7 +213,6 @@ export class MastraStorageLibSql extends MastraStorage {
   }
 
   private parseRow(row: any): MessageType {
-    console.log(typeof row.createdAt, row.createdAt);
     return {
       id: row.id,
       content:

@@ -53,7 +53,7 @@ import { embed, EmbeddingOptions } from '@mastra/core';
 
 const embeddings = await embed('text to embed', {
   provider: 'OPEN_AI',
-  model: 'text-embedding-ada-002',
+  model: 'text-embedding-3-small',
 });
 ```
 

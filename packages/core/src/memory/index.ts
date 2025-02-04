@@ -45,7 +45,7 @@ export type MessageResponse<T extends 'raw' | 'core_message'> = {
 
 export type MemoryConfig = {
   lastMessages?: number | false;
-  historySearch?:
+  semanticRecall?:
     | boolean
     | {
         topK: number;
@@ -60,13 +60,13 @@ export type SharedMemoryConfig =
       storage: MastraStorage;
       options?: MemoryConfig;
       vector?: MastraVector;
-      embeddingOptions?: EmbeddingOptions;
+      embedding?: EmbeddingOptions;
     }
   | {
       storage: MastraStorage;
       options?: MemoryConfig;
       vector: MastraVector;
-      embeddingOptions: EmbeddingOptions;
+      embedding: EmbeddingOptions;
     };
 
 /**
@@ -78,11 +78,11 @@ export abstract class MastraMemory extends MastraBase {
 
   storage: MastraStorage;
   vector?: MastraVector;
-  embeddingOptions?: EmbeddingOptions;
+  embedding?: EmbeddingOptions;
 
   protected threadConfig: MemoryConfig = {
     lastMessages: 40,
-    historySearch: false, // becomes true by default if a vector store is attached
+    semanticRecall: false, // becomes true by default if a vector store is attached
     // TODO:
     // injectWorkingMemory: true
   };
@@ -92,10 +92,10 @@ export abstract class MastraMemory extends MastraBase {
     this.storage = config.storage;
     if (config.vector) {
       this.vector = config.vector;
-      this.threadConfig.historySearch = true;
+      this.threadConfig.semanticRecall = true;
     }
-    if (`embeddingOptions` in config) {
-      this.embeddingOptions = config.embeddingOptions;
+    if (`embedding` in config) {
+      this.embedding = config.embedding;
     }
     if (config.options) {
       this.threadConfig = this.getMergedThreadConfig(config.options);
@@ -103,11 +103,11 @@ export abstract class MastraMemory extends MastraBase {
   }
 
   protected parseEmbeddingOptions() {
-    if (!this.embeddingOptions) {
-      throw new Error(`Cannot use vector features without setting new Memory({ embeddingOptions: { ... } })`);
+    if (!this.embedding) {
+      throw new Error(`Cannot use vector features without setting new Memory({ embedding: { ... } })`);
     }
 
-    return this.embeddingOptions;
+    return this.embedding;
   }
 
   protected getMergedThreadConfig(config: MemoryConfig): MemoryConfig {
@@ -266,7 +266,7 @@ export abstract class MastraMemory extends MastraBase {
    * @param threadId - The unique identifier of the thread
    * @returns Promise resolving to array of messages and uiMessages
    */
-  abstract getMessages({
+  abstract query({
     threadId,
     selectBy,
   }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }>;

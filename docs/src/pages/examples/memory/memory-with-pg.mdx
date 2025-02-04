@@ -1,0 +1,105 @@
+# Memory with Postgres
+
+This example demonstrates how to use Mastra's memory system with PostgreSQL as the storage backend.
+
+## Setup
+
+First, set up the memory system with PostgreSQL storage and vector capabilities:
+
+```typescript
+import { Memory } from '@mastra/memory';
+import { PostgresStore } from '@mastra/store-pg';
+import { PgVector } from '@mastra/vector-pg';
+import { Agent } from '@mastra/core/agent';
+
+// PostgreSQL connection details
+const host = 'localhost';
+const port = 5432;
+const user = 'postgres';
+const database = 'postgres';
+const password = 'postgres';
+const connectionString = `postgresql://${user}:${password}@${host}:${port}`;
+
+// Initialize memory with PostgreSQL storage and vector search
+const memory = new Memory({
+  storage: new PostgresStore({
+    host,
+    port,
+    user,
+    database,
+    password,
+  }),
+  vector: new PgVector(connectionString),
+  options: {
+    lastMessages: 10,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+  embedding: {
+    provider: 'OPEN_AI',
+    model: 'text-embedding-3-small',
+    maxRetries: 3,
+  },
+});
+
+// Create an agent with memory capabilities
+const chefAgent = new Agent({
+  name: 'chefAgent',
+  instructions:
+    'You are Michel, a practical and experienced home chef who helps people cook great meals with whatever ingredients they have available.',
+  model: {
+    provider: 'OPEN_AI',
+    name: 'gpt-4',
+    toolChoice: 'auto',
+  },
+  memory,
+});
+```
+
+## Usage Example
+
+```typescript
+import { randomUUID } from 'crypto';
+
+// Start a conversation
+const threadId = randomUUID();
+const resourceId = 'SOME_USER_ID';
+
+// Ask about ingredients
+const response1 = await chefAgent.stream(
+  'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?',
+  {
+    threadId,
+    resourceId,
+  }
+);
+
+// Ask about different ingredients
+const response2 = await chefAgent.stream(
+  "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and curry powder.",
+  {
+    threadId,
+    resourceId,
+  }
+);
+
+// Use memory to recall previous conversation
+const response3 = await chefAgent.stream(
+  'What did we cook before I went to my friends house?',
+  {
+    threadId,
+    resourceId,
+    memoryOptions: {
+      lastMessages: 3, // Get last 3 messages for context
+    }
+  }
+);
+```
+
+The example shows:
+1. Setting up PostgreSQL storage with vector search capabilities
+2. Configuring memory options for message history and semantic search
+3. Creating an agent with memory integration
+4. Using the agent to maintain conversation context across multiple interactions
