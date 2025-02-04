@@ -18,7 +18,6 @@ describe('UpstashFilterTranslator', () => {
     expect(translator.translate({ city: 'Istanbul' })).toBe("city = 'Istanbul'");
     expect(translator.translate({ population: 15460000 })).toBe('population = 15460000');
     expect(translator.translate({ is_capital: false })).toBe('is_capital = 0');
-    expect(translator.translate({ value: null })).toBe('value = NULL');
   });
 
   it('translates nested paths', () => {
@@ -125,7 +124,7 @@ describe('UpstashFilterTranslator', () => {
         translator.translate({
           $nor: [{ type: 'food' }, { price: { $lt: 10 } }],
         }),
-      ).toBe("NOT ((type = 'food' OR price < 10))");
+      ).toBe("(type != 'food' AND price >= 10)");
     });
 
     it('translates $all', () => {
@@ -147,7 +146,7 @@ describe('UpstashFilterTranslator', () => {
         }),
       ).toBe(
         "(name GLOB 'A.*' AND " +
-          "NOT ((type = 'food' OR category = 'toys')) AND " +
+          "(type != 'food' AND category != 'toys') AND " +
           "(tags CONTAINS 'premium' AND tags CONTAINS 'new'))",
       );
     });
@@ -254,7 +253,7 @@ describe('UpstashFilterTranslator', () => {
 
   describe('edge cases', () => {
     it('handles empty arrays', () => {
-      expect(translator.translate({ tags: { $in: [] } })).toBe('tags IN ()');
+      expect(translator.translate({ tags: [] })).toBe('(HAS FIELD empty AND HAS NOT FIELD empty)');
     });
 
     it('handles multiple empty conditions in logical operators', () => {
@@ -262,7 +261,7 @@ describe('UpstashFilterTranslator', () => {
         translator.translate({
           $and: [{ field2: [] }],
         }),
-      ).toBe('field2 IN ()');
+      ).toBe('((HAS FIELD empty AND HAS NOT FIELD empty))');
     });
 
     it('handles special characters in field names', () => {
@@ -292,6 +291,18 @@ describe('UpstashFilterTranslator', () => {
       expect(translator.translate({ field: { $nin: ['a', 'b'] } })).toBe("field NOT IN ('a', 'b')");
     });
 
+    it('translate $not with direct object value', () => {
+      expect(translator.translate({ $not: { field: true } })).toBe('field != 1');
+    });
+
+    it('translates $not with operator', () => {
+      expect(
+        translator.translate({
+          field: { $not: { $eq: 'value' } },
+        }),
+      ).toBe("field != 'value'");
+    });
+
     it('translates not contains', () => {
       expect(
         translator.translate({
@@ -317,7 +328,7 @@ describe('UpstashFilterTranslator', () => {
         translator.translate({
           field: { $not: { $gt: 100 } },
         }),
-      ).toBe('NOT (field > 100)');
+      ).toBe('field <= 100');
     });
 
     it('translates $not operator with multiple conditions', () => {
@@ -327,7 +338,17 @@ describe('UpstashFilterTranslator', () => {
             $and: [{ field: { $in: ['a', 'b'] } }, { field: { $gt: 100 } }],
           },
         }),
-      ).toBe("NOT ((field IN ('a', 'b') AND field > 100))");
+      ).toBe("(field NOT IN ('a', 'b') OR field <= 100)");
+    });
+
+    it('translates $not with $nor', () => {
+      expect(
+        translator.translate({
+          $not: {
+            $nor: [{ field: { $in: ['a', 'b'] } }, { field: { $gt: 100 } }],
+          },
+        }),
+      ).toBe("(field IN ('a', 'b') OR field > 100)");
     });
   });
 
@@ -357,27 +378,23 @@ describe('UpstashFilterTranslator', () => {
 
   describe('null and undefined handling', () => {
     it('handles null in comparisons', () => {
-      expect(
-        translator.translate({
-          field: null,
-        }),
-      ).toBe('field = NULL');
+      expect(() => translator.translate({ value: null })).toThrow();
     });
 
     it('handles null in arrays', () => {
-      expect(
+      expect(() =>
         translator.translate({
           field: { $in: [null, 'value'] },
         }),
-      ).toBe("field IN (NULL, 'value')");
+      ).toThrow();
     });
 
     it('handles undefined values', () => {
-      expect(
+      expect(() =>
         translator.translate({
           field: undefined,
         }),
-      ).toBe('field = NULL'); // Treat undefined like null
+      ).toThrow();
     });
   });
 
@@ -387,7 +404,7 @@ describe('UpstashFilterTranslator', () => {
         translator.translate({
           $and: [],
         }),
-      ).toBe('TRUE'); // Always true for empty AND
+      ).toBe('(HAS FIELD empty OR HAS NOT FIELD empty)');
     });
 
     it('handles empty OR', () => {
@@ -395,7 +412,7 @@ describe('UpstashFilterTranslator', () => {
         translator.translate({
           $or: [],
         }),
-      ).toBe('FALSE'); // Always false for empty OR
+      ).toBe('(HAS FIELD empty AND HAS NOT FIELD empty)');
     });
 
     it('handles empty IN', () => {
@@ -403,7 +420,7 @@ describe('UpstashFilterTranslator', () => {
         translator.translate({
           field: { $in: [] },
         }),
-      ).toBe('field IN ()');
+      ).toBe('(HAS FIELD empty AND HAS NOT FIELD empty)');
     });
   });
 
@@ -429,7 +446,7 @@ describe('UpstashFilterTranslator', () => {
         translator.translate({
           field: 1e-10,
         }),
-      ).toBe('field = 1e-10');
+      ).toBe('field = 0.0000000001');
     });
   });
 
@@ -506,6 +523,10 @@ describe('UpstashFilterTranslator', () => {
       unsupportedFilters.forEach(filter => {
         expect(() => translator.translate(filter)).toThrow(/Unsupported operator/);
       });
+    });
+
+    it('throws error for invalid $not operator', () => {
+      expect(() => translator.translate({ field: { $not: true } })).toThrow();
     });
   });
 });

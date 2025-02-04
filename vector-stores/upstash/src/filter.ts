@@ -19,13 +19,23 @@ export class UpstashFilterTranslator extends BaseFilterTranslator {
   }
 
   private translateNode(node: Filter | FieldCondition, path: string = ''): string {
+    if (node === null || node === undefined) {
+      throw new Error('Filtering for null/undefined values is not supported by Upstash Vector');
+    }
+
     // Handle primitives (direct equality)
     if (this.isPrimitive(node)) {
+      if (node === null || node === undefined) {
+        throw new Error('Filtering for null/undefined values is not supported by Upstash Vector');
+      }
       return this.formatComparison(path, '=', node);
     }
 
     // Handle arrays (IN operator)
     if (Array.isArray(node)) {
+      if (node.length === 0) {
+        return '(HAS FIELD empty AND HAS NOT FIELD empty)';
+      }
       return `${path} IN (${this.formatArray(node)})`;
     }
 
@@ -39,6 +49,8 @@ export class UpstashFilterTranslator extends BaseFilterTranslator {
         conditions.push(this.translateOperator(key, value, path));
       } else if (typeof value === 'object' && value !== null) {
         conditions.push(this.translateNode(value, newPath));
+      } else if (value === null || value === undefined) {
+        throw new Error('Filtering for null/undefined values is not supported by Upstash Vector');
       } else {
         conditions.push(this.formatComparison(newPath, '=', value));
       }
@@ -65,6 +77,9 @@ export class UpstashFilterTranslator extends BaseFilterTranslator {
     // Handle special operators
     switch (operator) {
       case '$in':
+        if (!Array.isArray(value) || value.length === 0) {
+          return '(HAS FIELD empty AND HAS NOT FIELD empty)'; // Always false
+        }
         return `${path} IN (${this.formatArray(value)})`;
       case '$nin':
         return `${path} NOT IN (${this.formatArray(value)})`;
@@ -76,23 +91,22 @@ export class UpstashFilterTranslator extends BaseFilterTranslator {
         return value ? `HAS FIELD ${path}` : `HAS NOT FIELD ${path}`;
 
       case '$and':
-        return Array.isArray(value) && value.length === 0 ? 'TRUE' : this.joinConditions(value, 'AND');
+        if (!Array.isArray(value) || value.length === 0) {
+          return '(HAS FIELD empty OR HAS NOT FIELD empty)';
+        }
+        return this.joinConditions(value, 'AND');
 
       case '$or':
-        return Array.isArray(value) && value.length === 0 ? 'FALSE' : this.joinConditions(value, 'OR');
+        if (!Array.isArray(value) || value.length === 0) {
+          return '(HAS FIELD empty AND HAS NOT FIELD empty)';
+        }
+        return this.joinConditions(value, 'OR');
 
       case '$not':
-        if (typeof value !== 'object') {
-          return `NOT (${this.formatComparison(path, '=', value)})`;
-        }
-        const [op, val] = Object.entries(value)[0] ?? [];
-        if (op === '$contains') return `${path} NOT CONTAINS ${this.formatValue(val)}`;
-        if (op === '$regex') return `${path} NOT GLOB ${this.formatValue(val)}`;
-        return `NOT (${this.translateNode(value, path)})`;
+        return this.formatNot(path, value);
 
       case '$nor':
-        return `NOT (${this.joinConditions(value, 'OR')})`;
-
+        return this.formatNot('', { $or: value });
       case '$all':
         return this.translateOperator(
           '$and',
@@ -105,18 +119,94 @@ export class UpstashFilterTranslator extends BaseFilterTranslator {
     }
   }
 
-  private formatValue(value: any): string {
-    if (value === undefined) return 'NULL';
-    if (typeof value === 'string') {
-      return value.includes("'") ? `"${value}"` : `'${value}'`;
+  private formatNot(path: string, value: any): string {
+    if (typeof value !== 'object') {
+      return `${path} != ${this.formatValue(value)}`;
     }
-    if (typeof value === 'boolean') return value ? '1' : '0';
-    if (value === null) return 'NULL';
+    if (!Object.keys(value).some(k => k.startsWith('$'))) {
+      const [fieldName, fieldValue] = Object.entries(value)[0] ?? [];
+      return `${fieldName} != ${this.formatValue(fieldValue)}`;
+    }
+    const [op, val] = Object.entries(value)[0] ?? [];
+
+    // Handle comparison operators
+    if (op === '$lt') return `${path} >= ${this.formatValue(val)}`;
+    if (op === '$lte') return `${path} > ${this.formatValue(val)}`;
+    if (op === '$gt') return `${path} <= ${this.formatValue(val)}`;
+    if (op === '$gte') return `${path} < ${this.formatValue(val)}`;
+    if (op === '$ne') return `${path} = ${this.formatValue(val)}`;
+    if (op === '$eq') return `${path} != ${this.formatValue(val)}`;
+
+    // Special cases
+    if (op === '$contains') return `${path} NOT CONTAINS ${this.formatValue(val)}`;
+    if (op === '$regex') return `${path} NOT GLOB ${this.formatValue(val)}`;
+    if (op === '$in') return `${path} NOT IN (${this.formatArray(val as any[])})`;
+    if (op === '$exists') return `HAS NOT FIELD ${path}`;
+
+    // Transform NOT(AND) into OR(NOT) and NOT(OR) into AND(NOT)
+    if (op === '$and' || op === '$or') {
+      const newOp = op === '$and' ? '$or' : '$and';
+      const conditions = (val as any[]).map((condition: any) => {
+        const [fieldName, fieldValue] = Object.entries(condition)[0] ?? [];
+        return { [fieldName as string]: { $not: fieldValue } };
+      });
+      return this.translateOperator(newOp, conditions, '');
+    }
+
+    // NOT(NOR) is equivalent to OR
+    if (op === '$nor') {
+      return this.translateOperator('$or', val, '');
+    }
+
+    return `${path} != ${this.formatValue(val)}`;
+  }
+
+  private formatValue(value: any): string {
+    if (value === null || value === undefined) {
+      throw new Error('Filtering for null/undefined values is not supported by Upstash Vector');
+    }
+
+    if (typeof value === 'string') {
+      // Check for quotes in the string content
+      const hasSingleQuote = /'/g.test(value);
+      const hasDoubleQuote = /"/g.test(value);
+
+      // If string has both types of quotes, escape single quotes and use single quotes
+      // If string has single quotes, use double quotes
+      // Otherwise, use single quotes (default)
+      if (hasSingleQuote && hasDoubleQuote) {
+        return `'${value.replace(/'/g, "\\'")}'`;
+      }
+      if (hasSingleQuote) {
+        return `"${value}"`;
+      }
+      return `'${value}'`;
+    }
+    if (typeof value === 'boolean') {
+      return value ? '1' : '0';
+    }
+
+    if (typeof value === 'number') {
+      // Handle scientific notation by converting to decimal
+      if (Math.abs(value) < 1e-6 || Math.abs(value) > 1e6) {
+        return value.toFixed(20).replace(/\.?0+$/, '');
+      }
+      // Regular numbers (including zero and negative)
+      return value.toString();
+    }
+
     return String(value);
   }
 
   private formatArray(values: any[]): string {
-    return values.map(v => this.formatValue(v)).join(', ');
+    return values
+      .map(value => {
+        if (value === null || value === undefined) {
+          throw new Error('Filtering for null/undefined values is not supported by Upstash Vector');
+        }
+        return this.formatValue(value);
+      })
+      .join(', ');
   }
 
   private formatComparison(path: string, op: string, value: any): string {
@@ -129,6 +219,6 @@ export class UpstashFilterTranslator extends BaseFilterTranslator {
       : [this.translateNode(conditions)];
 
     // Don't wrap in parentheses if there's only one condition
-    return translated.length === 1 ? (translated[0] ?? '') : `(${translated.join(` ${operator} `)})`;
+    return `(${translated.join(` ${operator} `)})`;
   }
 }
