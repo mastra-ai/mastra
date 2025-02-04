@@ -20,7 +20,7 @@ const memory = new Memory({
   },
   embeddingOptions: {
     provider: 'OPEN_AI',
-    model: 'text-embedding-ada-002',
+    model: 'text-embedding-3-small',
     maxRetries: 3,
   },
 });
