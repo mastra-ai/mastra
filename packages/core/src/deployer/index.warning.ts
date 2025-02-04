@@ -1,9 +1,9 @@
-import { MastraDeployer as BaseDeployer } from './index';
+import { MastraDeployer as BaseMastraDeployer } from './index';
 
-export class MastraDeployer extends BaseDeployer {
-  constructor(args: { projectName: string; scope: string; env?: Record<string, any> }) {
+export abstract class MastraDeployer extends BaseMastraDeployer {
+  constructor(args: { name: string; mastraDir: string; outputDirectory: string }) {
     super(args);
 
-    this.logger.warn('Please import "MastraDeployer" from "@mastra/core/agent" instead of "@mastra/core"');
+    this.logger.warn('Please import "MastraDeployer" from "@mastra/core/deployer" instead of "@mastra/core"');
   }
 }

@@ -1,59 +1,36 @@
-import * as prompts from '@clack/prompts';
-import { Deployer } from '@mastra/deployer';
+import { getDeployer } from '@mastra/deployer';
 import { join } from 'path';
 
 import { logger } from '../../utils/logger';
 
-export async function deploy({ dir, token }: { dir?: string; token?: string }) {
-  let tokenToUse;
+export async function deploy({ dir }: { dir?: string }) {
+  let mastraDir = dir || join(process.cwd(), 'src/mastra');
+  try {
+    const outputDirectory = join(process.cwd(), '.mastra');
+    const deployer = await getDeployer(mastraDir, outputDirectory);
 
-  if (!token) {
-    const v = await prompts.text({
-      message: 'Provide an access token',
-    });
-
-    if (!v) {
-      logger.debug('No token provided, exiting...');
+    if (!deployer) {
+      logger.warn('No deployer found.');
       return;
     }
-    tokenToUse = v as string;
-  } else {
-    tokenToUse = token;
-  }
 
-  if (!tokenToUse || tokenToUse === 'clack:cancel') {
-    logger.debug('No token provided, exiting...');
-    return;
-  }
-
-  let directoryToDeploy = dir || join(process.cwd(), 'src/mastra');
-
-  const deployer = new Deployer({
-    dir: process.cwd(),
-    type: 'Deploy',
-  });
-
-  await deployer.prepare({
-    dir: directoryToDeploy,
-  });
-
-  const { mastra } = await deployer.getMastra();
-
-  const resDeployer = mastra.getDeployer();
-
-  resDeployer?.__setLogger(logger);
-
-  if (!resDeployer) {
-    // If no deployer, we are deploying to Mastra Cloud
-  } else {
-    resDeployer.writeFiles({ dir: deployer.getMastraPath() });
     try {
-      await resDeployer.deploy({
-        dir: deployer.getMastraPath(),
-        token: tokenToUse,
-      });
-    } catch (error) {
-      console.error('[Mastra Deploy] - Error deploying:', error);
+      await deployer.prepare(outputDirectory);
+      await deployer.bundle(mastraDir, outputDirectory);
+      try {
+        await deployer.deploy(outputDirectory);
+      } catch (error) {
+        console.error('[Mastra Deploy] - Error deploying:', error);
+      }
+    } catch (err) {
+      if (err instanceof Error) {
+        logger.debug(`error: ${err.message}`, { error: err });
+      }
     }
+  } catch (error) {
+    if (error instanceof Error) {
+      logger.debug(`error: ${error.message}`, { error });
+    }
+    logger.warn('No deployer found.');
   }
 }
