@@ -45,7 +45,7 @@ export type MessageResponse<T extends 'raw' | 'core_message'> = {
 
 export type MemoryConfig = {
   lastMessages?: number | false;
-  historySearch?:
+  semanticRecall?:
     | boolean
     | {
         topK: number;
@@ -82,7 +82,7 @@ export abstract class MastraMemory extends MastraBase {
 
   protected threadConfig: MemoryConfig = {
     lastMessages: 40,
-    historySearch: false, // becomes true by default if a vector store is attached
+    semanticRecall: false, // becomes true by default if a vector store is attached
     // TODO:
     // injectWorkingMemory: true
   };
@@ -92,7 +92,7 @@ export abstract class MastraMemory extends MastraBase {
     this.storage = config.storage;
     if (config.vector) {
       this.vector = config.vector;
-      this.threadConfig.historySearch = true;
+      this.threadConfig.semanticRecall = true;
     }
     if (`embeddingOptions` in config) {
       this.embeddingOptions = config.embeddingOptions;

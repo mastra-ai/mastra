@@ -22,7 +22,7 @@ const memory = new Memory({
   }),
   options: {
     lastMessages: 10,
-    historySearch: {
+    semanticRecall: {
       topK: 3,
       messageRange: 2,
     },
@@ -88,7 +88,7 @@ const response3 = await memoryAgent.stream(
     resourceId,
     memoryOptions: {
       lastMessages: false,
-      historySearch: {
+      semanticRecall: {
         topK: 3, // Get top 3 most relevant messages
         messageRange: 2 // Include context around each match
       },

@@ -51,7 +51,7 @@ async function main() {
       resourceId,
       memoryOptions: {
         lastMessages: false,
-        historySearch: {
+        semanticRecall: {
           topK: 3,
           messageRange: 3,
         },

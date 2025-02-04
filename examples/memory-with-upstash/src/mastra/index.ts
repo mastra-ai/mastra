@@ -13,7 +13,7 @@ const memory = new Memory({
   vector: new PgVector(`postgresql://postgres:postgres@localhost:5433`),
   options: {
     lastMessages: 1,
-    historySearch: {
+    semanticRecall: {
       topK: 3,
       messageRange: 2,
     },

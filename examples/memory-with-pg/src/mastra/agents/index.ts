@@ -21,7 +21,7 @@ export const memory = new Memory({
   vector: new PgVector(connectionString),
   options: {
     lastMessages: 10,
-    historySearch: {
+    semanticRecall: {
       topK: 3,
       messageRange: 2,
     },

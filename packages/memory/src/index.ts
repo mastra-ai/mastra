@@ -35,14 +35,14 @@ export class Memory extends MastraMemory {
     const config = this.getMergedThreadConfig(threadConfig || {});
 
     const vectorConfig =
-      typeof config?.historySearch === `boolean`
+      typeof config?.semanticRecall === `boolean`
         ? {
             topK: 2,
             messageRange: { before: 2, after: 2 },
           }
         : {
-            topK: config?.historySearch?.topK || 2,
-            messageRange: config?.historySearch?.messageRange || { before: 2, after: 2 },
+            topK: config?.semanticRecall?.topK || 2,
+            messageRange: config?.semanticRecall?.messageRange || { before: 2, after: 2 },
           };
 
     if (selectBy?.vectorSearchString && this.vector) {
@@ -96,7 +96,7 @@ export class Memory extends MastraMemory {
   }) {
     const threadConfig = this.getMergedThreadConfig(config || {});
 
-    if (!threadConfig.lastMessages && !threadConfig.historySearch) {
+    if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
       return {
         messages: [],
         uiMessages: [],
@@ -107,7 +107,7 @@ export class Memory extends MastraMemory {
       threadId,
       selectBy: {
         last: threadConfig.lastMessages,
-        vectorSearchString: threadConfig.historySearch && vectorMessageSearch ? vectorMessageSearch : undefined,
+        vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
       },
       threadConfig: config,
     });

@@ -60,7 +60,7 @@ When vector search is enabled, Memory can find relevant past messages using sema
 ```tsx
 const memory = new Memory({
   options: {
-    historySearch: {
+    semanticRecall: {
       topK: 10, // Include 10 most relevant past messages
       messageRange: 2, // Messages before and after each result
     },
@@ -73,7 +73,7 @@ await agent.stream('What did we decide about the search feature last week?', {
   resourceId: 'user_123',
   memoryOptions: {
     lastMessages: 10,
-    historySearch: {
+    semanticRecall: {
       topK: 3,
       messageRange: 2,
     },
@@ -112,7 +112,7 @@ const memory = new Memory({
     // Number of recent messages to include (false to disable)
     lastMessages: 10,
     // Configure vector-based semantic search
-    historySearch: {
+    semanticRecall: {
       topK: 3,         // Number of semantic search results
       messageRange: 2  // Messages before and after each result
     },
@@ -144,7 +144,7 @@ const response2 = await agent.generate("What were we discussing earlier?", {
   threadId: "thread_456",
   memoryOptions: {
     lastMessages: 5,  // Only inject 5 recent messages
-    historySearch: {
+    semanticRecall: {
       topK: 2,         // Only get 2 semantic search results
       messageRange: 1   // Context around each result
     },
@@ -173,7 +173,7 @@ await agent.stream('Update me on the project status', {
   resourceId,
   memoryOptions: {
     lastMessages: 50, // Maintain longer conversation history across project discussions
-    historySearch: {
+    semanticRecall: {
       topK: 5, // Find more relevant project details
       messageRange: 3, // Number of messages before and after each result
     },

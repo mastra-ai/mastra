@@ -14,7 +14,7 @@ const memory = new Memory({
   }),
   options: {
     lastMessages: 100,
-    historySearch: {
+    semanticRecall: {
       topK: 2,
       messageRange: 2,
     },
