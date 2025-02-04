@@ -132,7 +132,7 @@ export default {
         external: [/^@opentelemetry\//],
         treeshake: 'smallest',
       },
-      'browser',
+      { platform: 'browser' },
     );
 
     await bundler.write({
