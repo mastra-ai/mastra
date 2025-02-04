@@ -58,7 +58,6 @@ export class UpstashVector extends MastraVector {
     const ns = this.client.namespace(indexName);
 
     const filterString = this.transformFilter(filter);
-    console.log('filterString', filterString);
     const results = await ns.query({
       topK,
       vector: queryVector,

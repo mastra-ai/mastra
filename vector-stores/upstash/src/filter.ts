@@ -119,14 +119,45 @@ export class UpstashFilterTranslator extends BaseFilterTranslator {
     }
   }
 
+  private readonly NEGATED_OPERATORS: Record<string, string> = {
+    $eq: '$ne',
+    $ne: '$eq',
+    $gt: '$lte',
+    $gte: '$lt',
+    $lt: '$gte',
+    $lte: '$gt',
+    $in: '$nin',
+    $nin: '$in',
+    $exists: '$exists', // Special case - we'll flip the value
+  };
+
   private formatNot(path: string, value: any): string {
     if (typeof value !== 'object') {
       return `${path} != ${this.formatValue(value)}`;
     }
+
     if (!Object.keys(value).some(k => k.startsWith('$'))) {
       const [fieldName, fieldValue] = Object.entries(value)[0] ?? [];
+
+      // If it's a nested condition with an operator
+      if (typeof fieldValue === 'object' && fieldValue !== null && Object.keys(fieldValue)[0]?.startsWith('$')) {
+        const [op, val] = Object.entries(fieldValue)[0] ?? [];
+        const negatedOp = this.NEGATED_OPERATORS[op as string];
+        if (!negatedOp) throw new Error(`Unsupported operator in NOT: ${op}`);
+
+        // Special case for $exists - negate the value instead of the operator
+        if (op === '$exists') {
+          return this.translateOperator(op, !val, fieldName ?? '');
+        }
+
+        return this.translateOperator(negatedOp, val, fieldName ?? '');
+      }
+
+      // Otherwise handle as simple field value
       return `${fieldName} != ${this.formatValue(fieldValue)}`;
     }
+
+    // Handle top-level operators
     const [op, val] = Object.entries(value)[0] ?? [];
 
     // Handle comparison operators
@@ -141,7 +172,7 @@ export class UpstashFilterTranslator extends BaseFilterTranslator {
     if (op === '$contains') return `${path} NOT CONTAINS ${this.formatValue(val)}`;
     if (op === '$regex') return `${path} NOT GLOB ${this.formatValue(val)}`;
     if (op === '$in') return `${path} NOT IN (${this.formatArray(val as any[])})`;
-    if (op === '$exists') return `HAS NOT FIELD ${path}`;
+    if (op === '$exists') return val ? `HAS NOT FIELD ${path}` : `HAS FIELD ${path}`;
 
     // Transform NOT(AND) into OR(NOT) and NOT(OR) into AND(NOT)
     if (op === '$and' || op === '$or') {

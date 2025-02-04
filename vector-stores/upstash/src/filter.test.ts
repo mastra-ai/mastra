@@ -323,6 +323,11 @@ describe('UpstashFilterTranslator', () => {
       expect(translator.translate({ field: { $exists: false } })).toBe('HAS NOT FIELD field');
     });
 
+    it('translates $not with $exists', () => {
+      expect(translator.translate({ $not: { field: { $exists: true } } })).toBe('HAS NOT FIELD field');
+      expect(translator.translate({ field: { $not: { $exists: false } } })).toBe('HAS FIELD field');
+    });
+
     it('translates $not operator with comparison', () => {
       expect(
         translator.translate({

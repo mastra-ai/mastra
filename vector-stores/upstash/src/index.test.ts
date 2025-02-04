@@ -503,6 +503,86 @@ describe('UpstashVector', () => {
         expect(result?.tags).not.toContain('tech');
       });
 
+      it('should handle NOR with regex patterns', async () => {
+        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
+          $nor: [{ name: { $regex: '*bul' } }, { name: { $regex: '*lin' } }, { name: { $regex: '*cisco' } }],
+        });
+        expect(results).toHaveLength(1);
+        expect(results[0]?.metadata?.name).toBe("City's Name");
+      });
+
+      it('should handle NOR with mixed operator types', async () => {
+        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
+          $nor: [
+            { population: { $gt: 5000000 } },
+            { tags: { $contains: 'tech' } },
+            { 'location.coordinates.latitude': { $lt: 38 } },
+          ],
+        });
+        expect(results).toHaveLength(1);
+        const result = results[0]?.metadata;
+        expect(result?.population).toBeLessThanOrEqual(5000000);
+        expect(result?.tags).not.toContain('tech');
+        expect(result?.location?.coordinates?.latitude).toBeGreaterThanOrEqual(38);
+      });
+
+      it('should handle NOR with exists operator', async () => {
+        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
+          $nor: [{ lastCensus: { $exists: true } }, { population: { $exists: false } }],
+        });
+        expect(results).toHaveLength(1);
+        const result = results[0]?.metadata;
+        expect(result?.lastCensus).toBeUndefined();
+        expect(result?.population).toBeDefined();
+      });
+
+      it('should handle ALL with mixed value types', async () => {
+        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
+          $and: [{ tags: { $contains: 'coastal' } }, { tags: { $contains: 'metropolitan' } }],
+        });
+        expect(results).toHaveLength(2);
+        results.forEach(result => {
+          const tags = result.metadata?.tags || [];
+          expect(tags).toContain('coastal');
+          expect(tags).toContain('metropolitan');
+        });
+      });
+
+      it('should handle ALL with nested array conditions', async () => {
+        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
+          $and: [{ industries: { $all: ['Tourism', 'Finance'] } }, { tags: { $all: ['metropolitan'] } }],
+        });
+        expect(results).toHaveLength(2);
+        results.forEach(result => {
+          expect(result.metadata?.industries).toContain('Tourism');
+          expect(result.metadata?.industries).toContain('Finance');
+          expect(result.metadata?.tags).toContain('metropolitan');
+        });
+      });
+
+      it('should handle ALL with complex conditions', async () => {
+        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
+          $or: [{ industries: { $all: ['Tourism', 'Finance'] } }, { tags: { $all: ['tech', 'metropolitan'] } }],
+        });
+        expect(results).toHaveLength(2);
+        results.forEach(result => {
+          const hasAllIndustries =
+            result.metadata?.industries?.includes('Tourism') && result.metadata?.industries?.includes('Finance');
+          const hasAllTags = result.metadata?.tags?.includes('tech') && result.metadata?.tags?.includes('metropolitan');
+          expect(hasAllIndustries || hasAllTags).toBe(true);
+        });
+      });
+
+      it('should handle ALL with single item array', async () => {
+        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
+          industries: { $all: ['Technology'] },
+        });
+        expect(results).toHaveLength(3);
+        results.forEach(result => {
+          expect(result.metadata?.industries).toContain('Technology');
+        });
+      });
+
       it('should handle complex nested conditions', async () => {
         const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
           $and: [
