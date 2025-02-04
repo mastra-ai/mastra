@@ -48,7 +48,7 @@ export class BuildBundler extends MastraBundler {
       plugins: [virtual({ '#entry': this.getEntry() })],
     });
 
-    bundler.write({
+    await bundler.write({
       file: `${outputDirectory}/index.mjs`,
       format: 'es',
       inlineDynamicImports: true,

@@ -24,7 +24,7 @@ export const mastra = new Mastra({
   },
   storage: new MastraStorageLibSql({
     config: {
-      url: 'file:memory:',
+      url: ':memory:',
     },
   }),
   memory: new Memory({

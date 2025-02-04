@@ -71,7 +71,7 @@ export class CloudflareDeployer extends Deployer {
           author: 'Mastra',
           license: 'ISC',
           dependencies: {
-            '@mastra/core': 'latest'
+            '@mastra/core': 'latest',
           },
         },
         null,
@@ -135,7 +135,7 @@ export default {
       'browser',
     );
 
-    bundler.write({
+    await bundler.write({
       inlineDynamicImports: true,
       file: join(outputDirectory, 'index.mjs'),
       format: 'es',
