@@ -1,0 +1,108 @@
+# Memory Class Reference
+
+The `Memory` class provides a robust system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval.
+
+## Usage Example
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { PostgresStorage } from "@mastra/storage-pg";
+
+const memory = new Memory({
+  storage: new PostgresStorage({
+    connectionString: process.env.DATABASE_URL,
+  }),
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "storage",
+      type: "MastraStorage",
+      description: "Storage implementation for persisting memory data",
+      isOptional: false,
+    },
+    {
+      name: "vector",
+      type: "MastraVector",
+      description: "Vector store for semantic search capabilities",
+      isOptional: true,
+    },
+    {
+      name: "embeddingOptions",
+      type: "EmbeddingOptions",
+      description: "Configuration for text embeddings",
+      isOptional: true,
+    },
+    {
+      name: "options",
+      type: "MemoryConfig",
+      description: "General memory configuration options",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### options
+
+<PropertiesTable
+  content={[
+    {
+      name: "lastMessages",
+      type: "number | false",
+      description: "Number of most recent messages to retrieve. Set to false to disable.",
+      isOptional: true,
+      defaultValue: "40",
+    },
+    {
+      name: "historySearch",
+      type: "boolean | object",
+      description: "Enable semantic search in message history. Automatically enabled when vector store is provided.",
+      isOptional: true,
+      defaultValue: "false (true if vector store provided)",
+    },
+    {
+      name: "topK",
+      type: "number",
+      description: "Number of similar messages to retrieve when using semantic search",
+      isOptional: true,
+      defaultValue: "2",
+    },
+    {
+      name: "messageRange",
+      type: "number | { before: number; after: number }",
+      description: "Range of messages to include around semantic search results",
+      isOptional: true,
+      defaultValue: "{ before: 2, after: 2 }",
+    },
+  ]}
+/>
+
+## Additional Notes
+
+### Vector Search Configuration
+
+When using vector search capabilities, ensure you configure both the vector store and appropriate search options:
+
+```typescript
+const memory = new Memory({
+  storage: new PostgresStorage({ /* config */ }),
+  vector: new PineconeVector({ /* config */ }),
+  options: {
+    historySearch: {
+      topK: 5,
+      messageRange: { before: 2, after: 2 }
+    }
+  }
+});
+```
+
+### Related
+
+- [createThread](/reference/memory/createThread.mdx)
+- [getMessages](/reference/memory/getMessages.mdx)
+- [addMessage](/reference/memory/addMessage.mdx)
+- [rememberMessages](/reference/memory/rememberMessages.mdx)
