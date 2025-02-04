@@ -1,0 +1,129 @@
+# addMessage
+
+Adds a new message to an existing thread. Supports different message types including text messages and tool-related messages.
+
+## Usage Example
+
+```typescript
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory({ /* config */ });
+
+// Add a simple text message
+await memory.addMessage({
+  threadId: "thread-123",
+  content: "Hello, how can I help you?",
+  role: "assistant",
+  type: "text"
+});
+
+// Add a tool call message
+await memory.addMessage({
+  threadId: "thread-123",
+  content: "Searching for weather data...",
+  role: "assistant",
+  type: "tool-call",
+  toolNames: ["weatherAPI"],
+  toolCallArgs: [{ location: "San Francisco" }],
+  toolCallIds: ["call-123"]
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "threadId",
+      type: "string",
+      description: "The ID of the thread to add the message to",
+      isOptional: false,
+    },
+    {
+      name: "content",
+      type: "UserContent | AssistantContent",
+      description: "The content of the message",
+      isOptional: false,
+    },
+    {
+      name: "role",
+      type: "'user' | 'assistant'",
+      description: "The role of the message sender",
+      isOptional: false,
+    },
+    {
+      name: "type",
+      type: "'text' | 'tool-call' | 'tool-result'",
+      description: "The type of message being added",
+      isOptional: false,
+    },
+    {
+      name: "toolNames",
+      type: "string[]",
+      description: "Names of tools being called (for tool-call type)",
+      isOptional: true,
+    },
+    {
+      name: "toolCallArgs",
+      type: "Record<string, unknown>[]",
+      description: "Arguments for tool calls",
+      isOptional: true,
+    },
+    {
+      name: "toolCallIds",
+      type: "string[]",
+      description: "IDs of tool calls",
+      isOptional: true,
+    },
+    {
+      name: "config",
+      type: "MemoryConfig",
+      description: "Additional configuration for message handling",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "The ID of the created message",
+    },
+    {
+      name: "threadId",
+      type: "string",
+      description: "The ID of the thread the message was added to",
+    },
+    {
+      name: "content",
+      type: "UserContent | AssistantContent | ToolContent",
+      description: "The content of the message",
+    },
+    {
+      name: "role",
+      type: "'user' | 'assistant' | 'tool'",
+      description: "The role of the message sender",
+    },
+    {
+      name: "createdAt",
+      type: "Date",
+      description: "Timestamp when the message was created",
+    },
+  ]}
+/>
+
+## Additional Notes
+
+When adding tool-related messages, make sure to:
+1. Set appropriate `type` ('tool-call' or 'tool-result')
+2. Include relevant tool metadata (names, args, IDs)
+3. Maintain consistency between tool calls and their results
+
+### Related
+
+- [Memory](/reference/memory/Memory.mdx)
+- [getMessages](/reference/memory/getMessages.mdx)

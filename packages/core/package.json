@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.2.0-alpha.83",
+  "version": "0.2.0-alpha.84",
   "license": "MIT",
   "type": "module",
   "main": "dist/core.esm.js",
@@ -38,6 +38,7 @@
     "./run": null,
     "./package.json": "./package.json"
   },
+  "sideEffects": false,
   "scripts": {
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
@@ -46,7 +47,6 @@
     "size": "size-limit",
     "test": "vitest run"
   },
-  "sideEffects": false,
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^1.0.8",
     "@ai-sdk/anthropic": "^1.0.8",
@@ -75,7 +75,6 @@
     "anthropic-vertex-ai": "^1.0.2",
     "cohere-ai": "^7.15.2",
     "date-fns": "^3.0.5",
-    "dotenv": "^16.4.7",
     "express": "^4.21.1",
     "json-schema": "^0.4.0",
     "pino": "^9.6.0",

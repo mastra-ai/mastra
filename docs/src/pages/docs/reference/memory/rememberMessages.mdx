@@ -1,0 +1,120 @@
+# rememberMessages
+
+Retrieves messages from a thread with optional semantic search capabilities. This function is particularly useful when you need to find relevant historical messages based on semantic similarity.
+
+## Usage Example
+
+```typescript
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory({
+  storage: storageInstance,
+  vector: vectorStoreInstance
+});
+
+// Get messages with semantic search
+const { messages, uiMessages } = await memory.rememberMessages({
+  threadId: "thread-123",
+  vectorMessageSearch: "What was said about deployment options?",
+  config: {
+    historySearch: {
+      topK: 5,
+      messageRange: { before: 2, after: 2 }
+    }
+  }
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "threadId",
+      type: "string",
+      description: "The ID of the thread to search messages in",
+      isOptional: false,
+    },
+    {
+      name: "vectorMessageSearch",
+      type: "string",
+      description: "Query text to find semantically similar messages",
+      isOptional: true,
+    },
+    {
+      name: "config",
+      type: "MemoryConfig",
+      description: "Configuration for message retrieval and search",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### config
+
+<PropertiesTable
+  content={[
+    {
+      name: "historySearch",
+      type: "boolean | { topK: number; messageRange: number | { before: number; after: number } }",
+      description: "Configuration for semantic search behavior",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "lastMessages",
+      type: "number | false",
+      description: "Number of recent messages to include",
+      isOptional: true,
+      defaultValue: "40",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "CoreMessage[]",
+      description: "Array of retrieved messages in their core format",
+    },
+    {
+      name: "uiMessages",
+      type: "AiMessageType[]",
+      description: "Array of messages formatted for UI display",
+    },
+  ]}
+/>
+
+## Additional Notes
+
+For semantic search to work:
+1. A vector store must be configured
+2. The `historySearch` option must be enabled
+3. A `vectorMessageSearch` query must be provided
+
+Example with full configuration:
+
+```typescript
+const result = await memory.rememberMessages({
+  threadId: "thread-123",
+  vectorMessageSearch: "deployment options",
+  config: {
+    historySearch: {
+      topK: 5, // Number of similar messages to retrieve
+      messageRange: {
+        before: 2, // Include 2 messages before each match
+        after: 2   // Include 2 messages after each match
+      }
+    },
+    lastMessages: 10 // Also include the 10 most recent messages
+  }
+});
+```
+
+### Related
+
+- [Memory](/reference/memory/Memory.mdx)
+- [getMessages](/reference/memory/getMessages.mdx)
