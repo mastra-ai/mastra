@@ -19,14 +19,14 @@ interface VercelError {
 }
 
 export class VercelDeployer extends Deployer {
-  private scope: string;
+  private teamId: string;
   private projectName: string;
   private token: string;
 
-  constructor({ scope, projectName, token }: { scope: string; projectName: string; token: string }) {
+  constructor({ teamId, projectName, token }: { teamId: string; projectName: string; token: string }) {
     super({ name: 'VERCEL' });
 
-    this.scope = scope;
+    this.teamId = teamId;
     this.projectName = projectName;
     this.token = token;
   }
@@ -88,14 +88,17 @@ export class VercelDeployer extends Deployer {
     try {
       const projectId = this.getProjectId({ dir: process.cwd() });
 
-      const response = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env?teamId=${scope}&upsert=true`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
+      const response = await fetch(
+        `https://api.vercel.com/v10/projects/${projectId}/env?teamId=${this.teamId}&upsert=true`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(vercelEnvVars),
         },
-        body: JSON.stringify(vercelEnvVars),
-      });
+      );
 
       if (!response.ok) {
         const error = (await response.json()) as VercelError;
@@ -124,7 +127,7 @@ import { handle } from 'hono/vercel'
 import { mastra } from '#mastra';
 import { createHonoServer } from '#server';
 
-const app = createHonoServer(mastra);
+const app = await createHonoServer(mastra);
 
 export const GET = handle(app);
 export const POST = handle(app);
@@ -133,16 +136,14 @@ export const POST = handle(app);
 
   async bundle(mastraDir: string, outputDirectory: string): Promise<void> {
     const bundler = await getBundler({
-      input: {
-        index: '#entry',
-      },
+      input: '#entry',
       plugins: [virtual({ '#entry': this.getEntry() })],
     });
 
-    bundler.write({
-      dir: outputDirectory,
+    await bundler.write({
+      inlineDynamicImports: true,
+      file: `${outputDirectory}/index.mjs`,
       format: 'es',
-      entryFileNames: '[name].mjs',
     });
   }
 
@@ -152,7 +153,7 @@ export const POST = handle(app);
     // Create the command array with base arguments
     const commandArgs = [
       '--scope',
-      this.scope as string,
+      this.teamId as string,
       '--cwd',
       outputDirectory,
       '--token',
@@ -172,13 +173,13 @@ export const POST = handle(app);
       stdio: 'inherit',
     });
 
-    console.log('Deployment started on Vercel. You can wait for it to finish or exit this command.');
+    this.logger.info('Deployment started on Vercel. You can wait for it to finish or exit this command.');
 
     if (envVars.size > 0) {
       // Sync environment variables for future deployments
       await this.syncEnv(envVars);
     } else {
-      console.log('\nAdd your ENV vars to .env or your vercel dashboard.\n');
+      this.logger.info('\nAdd your ENV vars to .env or your vercel dashboard.\n');
     }
   }
 }

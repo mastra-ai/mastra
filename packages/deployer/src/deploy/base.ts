@@ -32,6 +32,7 @@ export abstract class Deployer extends MastraDeployer {
           main: 'index.mjs',
           scripts: {
             start: 'node ./index.mjs',
+            build: 'echo "Already built"',
           },
           author: 'Mastra',
           license: 'ISC',

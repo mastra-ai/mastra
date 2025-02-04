@@ -17,19 +17,19 @@ export class CloudflareDeployer extends Deployer {
   workerNamespace?: string;
   scope: string;
   env?: Record<string, any>;
-  projectName: string;
+  projectName?: string;
 
   constructor({
     scope,
     env,
-    projectName,
+    projectName = 'mastra',
     routes,
     workerNamespace,
     auth,
   }: {
     env?: Record<string, any>;
     scope: string;
-    projectName: string;
+    projectName?: string;
     routes?: CFRoute[];
     workerNamespace?: string;
     auth: {
@@ -51,21 +51,47 @@ export class CloudflareDeployer extends Deployer {
     this.cloudflare = new Cloudflare(auth);
   }
 
+  async writePackageJson(outputDirectory: string) {
+    this.logger.debug(`Writing package.json`);
+    const pkgPath = join(outputDirectory, 'package.json');
+
+    writeFileSync(
+      pkgPath,
+      JSON.stringify(
+        {
+          name: 'server',
+          version: '1.0.0',
+          description: '',
+          type: 'module',
+          main: 'index.mjs',
+          scripts: {
+            start: 'node ./index.mjs',
+            build: 'echo "Already built"',
+          },
+          author: 'Mastra',
+          license: 'ISC',
+          dependencies: {
+            '@mastra/core': 'latest'
+          },
+        },
+        null,
+        2,
+      ),
+    );
+  }
+
   async writeFiles(outputDirectory: string): Promise<void> {
     const env = await this.loadEnvVars();
 
     const envsAsObject = Object.assign({}, Object.fromEntries(env.entries()), this.env);
 
-    const cfWorkerName = this.projectName || 'mastra';
+    const cfWorkerName = this.projectName;
 
     const wranglerConfig: Record<string, any> = {
       name: cfWorkerName,
       main: 'index.mjs',
       compatibility_date: '2024-12-02',
       compatibility_flags: ['nodejs_compat'],
-      build: {
-        command: 'npm install',
-      },
       observability: {
         logs: {
           enabled: true,
@@ -83,16 +109,15 @@ export class CloudflareDeployer extends Deployer {
 
   private getEntry(): string {
     return `
-import { mastra } from '#mastra';
-import { createHonoServer } from '#server';
-
 export default {
   fetch: async (request, env, context) => {
     Object.keys(env).forEach(key => {
       process.env[key] = env[key]
     })
 
-    const { app } = await createHonoServer(mastra)
+    const { mastra } = await import('#mastra')
+    const { createHonoServer } = await import('#server')
+    const app = await createHonoServer(mastra)
     return app.fetch(request, env, context);
   }
 }
@@ -100,17 +125,20 @@ export default {
   }
 
   async bundle(mastraDir: string, outputDirectory: string): Promise<void> {
-    const bundler = await getBundler({
-      input: {
-        index: '#entry',
+    const bundler = await getBundler(
+      {
+        input: '#entry',
+        plugins: [virtual({ '#entry': this.getEntry() })],
+        external: [/^@opentelemetry\//],
+        treeshake: 'smallest',
       },
-      plugins: [virtual({ '#entry': this.getEntry() })],
-    });
+      'browser',
+    );
 
     bundler.write({
-      dir: outputDirectory,
+      inlineDynamicImports: true,
+      file: join(outputDirectory, 'index.mjs'),
       format: 'es',
-      entryFileNames: '[name].mjs',
     });
   }
 
@@ -119,14 +147,14 @@ export default {
     await this.writeFiles(outputDirectory);
   }
 
-  async deploy(): Promise<void> {
+  async deploy(outputDirectory: string): Promise<void> {
     const cmd = this.workerNamespace
       ? `npm exec -- wrangler deploy --dispatch-namespace ${this.workerNamespace}`
       : 'npm exec -- wrangler deploy';
 
     const cpLogger = createChildProcessLogger({
       logger: this.logger,
-      root: process.cwd(),
+      root: outputDirectory,
     });
 
     await cpLogger({

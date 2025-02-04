@@ -10,28 +10,48 @@ import { fileURLToPath } from 'url';
 
 import { FileService } from './fs';
 import { libSqlFix } from './plugins/fix-libsql';
+import { removeDeployer } from './plugins/remove-deployer';
 import { telemetryFix } from './plugins/telemetry-fix';
 
-type NormalizedInputOptions = Omit<Partial<InputOptions>, 'plugins' | 'input'> & {
+type NormalizedInputOptions = Omit<Partial<InputOptions>, 'plugins' | 'input' | 'external'> & {
   plugins?: Plugin[];
   input: InputOption;
+  external?: (string | RegExp)[];
 };
 
-function getOptions(inputOptions: NormalizedInputOptions): InputOptions {
+function getOptions(inputOptions: NormalizedInputOptions, platform: 'node' | 'browser'): InputOptions {
   const fileService = new FileService();
   const entry = fileService.getFirstExistingFile([
     join(process.cwd(), 'src/mastra/index.ts'),
     join(process.cwd(), 'src/mastra/index.js'),
   ]);
 
-  const nodeBuiltins = builtins({ version: '20.0.0' });
+  const nodeBuiltins = platform === 'node' ? builtins({ version: '20.0.0' }) : [];
+
+  let nodeResolvePlugin =
+    platform === 'node'
+      ? nodeResolve({
+          preferBuiltins: true,
+          exportConditions: ['node', 'import', 'require'],
+          mainFields: ['module', 'main'],
+        })
+      : nodeResolve({
+          preferBuiltins: false,
+          exportConditions: ['browser', 'import', 'require'],
+          mainFields: ['module', 'main'],
+          browser: true,
+        });
 
   return {
     logLevel: 'silent',
     ...inputOptions,
     treeshake: false,
     preserveSymlinks: true,
-    external: [...nodeBuiltins, ...nodeBuiltins.map((builtin: string) => 'node:' + builtin)],
+    external: [
+      ...nodeBuiltins,
+      ...nodeBuiltins.map((builtin: string) => 'node:' + builtin),
+      ...(inputOptions.external ?? []),
+    ],
     plugins: [
       ...(inputOptions.plugins ?? []),
       telemetryFix(),
@@ -42,6 +62,18 @@ function getOptions(inputOptions: NormalizedInputOptions): InputOptions {
             replacement: fileURLToPath(import.meta.resolve('@mastra/deployer/server')).replaceAll('\\', '/'),
           },
           { find: /^\#mastra$/, replacement: entry.replaceAll('\\', '/') },
+          {
+            find: /^hono\//,
+            replacement: 'hono/',
+            customResolver: (id: string, importer: string | undefined) => {
+              if (!importer?.startsWith('\x00virtual')) {
+                return null;
+              }
+
+              const path = import.meta.resolve(id);
+              return fileURLToPath(path);
+            },
+          },
         ],
       }),
       commonjs({
@@ -53,39 +85,40 @@ function getOptions(inputOptions: NormalizedInputOptions): InputOptions {
       // {
       //   name: 'logger',
       //   // @ts-ignore
-      //   resolveId(id) {
-      //     console.log({ id });
+      //   resolveId(id, ...args) {
+      //     console.log({ id, args });
       //   },
       // },
-      nodeResolve({
-        preferBuiltins: true,
-        exportConditions: ['node', 'import', 'require'],
-        mainFields: ['module', 'main'],
-        // dedupe: ['zod'],
-      }),
+      nodeResolvePlugin,
       json(),
       esbuild({
-        include: /\.tsx?$/, // default, inferred from `loaders` option
-        exclude: /node_modules/, // default
+        include: /\.tsx?$/,
         target: 'node20',
-        platform: 'node',
+        platform,
         minify: false,
         define: {
           'process.env.NODE_ENV': JSON.stringify('production'),
         },
       }),
+      removeDeployer(entry),
+      esbuild({
+        include: entry,
+        target: 'node20',
+        platform,
+        minify: false,
+      }),
     ].filter(Boolean),
   };
 }
 
-export async function getBundler(inputOptions: NormalizedInputOptions) {
-  const bundle = await rollup(getOptions(inputOptions));
+export async function getBundler(inputOptions: NormalizedInputOptions, platform: 'node' | 'browser' = 'node') {
+  const bundle = await rollup(getOptions(inputOptions, platform));
 
   return bundle;
 }
 
-export async function getWatcher(inputOptions: NormalizedInputOptions) {
-  const watcher = watch(getOptions(inputOptions));
+export async function getWatcher(inputOptions: NormalizedInputOptions, platform: 'node' | 'browser' = 'node') {
+  const watcher = watch(getOptions(inputOptions, platform));
 
   return watcher;
 }

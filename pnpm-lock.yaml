@@ -71,6 +71,12 @@ importers:
       execa:
         specifier: ^9.3.1
         version: 9.5.2
+      rollup-plugin-polyfill-node:
+        specifier: ^0.13.0
+        version: 0.13.0(rollup@4.32.1)
+      rollup-plugin-shim:
+        specifier: ^1.0.0
+        version: 1.0.0
       wrangler:
         specifier: ^3.103.2
         version: 3.106.0(@cloudflare/workers-types@4.20250124.3)(bufferutil@4.0.9)(utf-8-validate@6.0.5)
@@ -151,6 +157,9 @@ importers:
       '@mastra/deployer':
         specifier: workspace:*
         version: link:../../packages/deployer
+      '@rollup/plugin-alias':
+        specifier: ^5.1.1
+        version: 5.1.1(rollup@4.32.1)
       '@rollup/plugin-virtual':
         specifier: ^3.0.2
         version: 3.0.2(rollup@4.32.1)
@@ -1949,7 +1958,7 @@ importers:
         version: link:../../packages/core
       axios:
         specifier: ^1.7.9
-        version: 1.7.9(debug@4.4.0)
+        version: 1.7.9
       zod:
         specifier: ^3.24.0
         version: 3.24.1
@@ -2516,6 +2525,9 @@ importers:
       fs-extra:
         specifier: ^11.2.0
         version: 11.3.0
+      hono:
+        specifier: ^4.6.17
+        version: 4.6.19
       rollup:
         specifier: ^4.30.1
         version: 4.32.1
@@ -2550,9 +2562,6 @@ importers:
       concurrently:
         specifier: ^9.1.0
         version: 9.1.2
-      hono:
-        specifier: ^4.6.17
-        version: 4.6.19
       hono-openapi:
         specifier: ^0.4.3
         version: 0.4.3(hono@4.6.19)(openapi-types@12.1.3)(zod@3.24.1)
@@ -8560,6 +8569,15 @@ packages:
 
   '@rollup/plugin-image@3.0.3':
     resolution: {integrity: sha512-qXWQwsXpvD4trSb8PeFPFajp8JLpRtqqOeNYRUKnEQNHm7e5UP7fuSRcbjQAJ7wDZBbnJvSdY5ujNBQd9B1iFg==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      rollup: ^1.20.0||^2.0.0||^3.0.0||^4.0.0
+    peerDependenciesMeta:
+      rollup:
+        optional: true
+
+  '@rollup/plugin-inject@5.0.5':
+    resolution: {integrity: sha512-2+DEJbNBoPROPkgTDNe8/1YXWcqxbN5DTjASVIOx8HS+pITXushyNiBV56RB08zuptzz8gT3YfkqriTBVycepg==}
     engines: {node: '>=14.0.0'}
     peerDependencies:
       rollup: ^1.20.0||^2.0.0||^3.0.0||^4.0.0
@@ -17976,6 +17994,14 @@ packages:
   rollup-plugin-node-polyfills@0.2.1:
     resolution: {integrity: sha512-4kCrKPTJ6sK4/gLL/U5QzVT8cxJcofO0OU74tnB19F40cmuAKSzH5/siithxlofFEjwvw1YAhPmbvGNA6jEroA==}
 
+  rollup-plugin-polyfill-node@0.13.0:
+    resolution: {integrity: sha512-FYEvpCaD5jGtyBuBFcQImEGmTxDTPbiHjJdrYIp+mFIwgXiXabxvKUK7ZT9P31ozu2Tqm9llYQMRWsfvTMTAOw==}
+    peerDependencies:
+      rollup: ^1.20.0 || ^2.0.0 || ^3.0.0 || ^4.0.0
+
+  rollup-plugin-shim@1.0.0:
+    resolution: {integrity: sha512-rZqFD43y4U9nSqVq3iyWBiDwmBQJY8Txi04yI9jTKD3xcl7CbFjh1qRpQshUB3sONLubDzm7vJiwB+1MEGv67w==}
+
   rollup-plugin-typescript2@0.36.0:
     resolution: {integrity: sha512-NB2CSQDxSe9+Oe2ahZbf+B4bh7pHwjV5L+RSYpCu7Q5ROuN94F9b6ioWwKfz3ueL3KTtmX4o2MUH2cgHDIEUsw==}
     peerDependencies:
@@ -23216,7 +23242,7 @@ snapshots:
 
   '@hey-api/client-axios@0.2.12(axios@1.7.9)':
     dependencies:
-      axios: 1.7.9(debug@4.4.0)
+      axios: 1.7.9
 
   '@hey-api/client-fetch@0.3.4': {}
 
@@ -27458,6 +27484,14 @@ snapshots:
     optionalDependencies:
       rollup: 4.32.1
 
+  '@rollup/plugin-inject@5.0.5(rollup@4.32.1)':
+    dependencies:
+      '@rollup/pluginutils': 5.1.4(rollup@4.32.1)
+      estree-walker: 2.0.2
+      magic-string: 0.30.17
+    optionalDependencies:
+      rollup: 4.32.1
+
   '@rollup/plugin-json@6.1.0(rollup@3.29.5)':
     dependencies:
       '@rollup/pluginutils': 5.1.4(rollup@3.29.5)
@@ -29865,6 +29899,14 @@ snapshots:
 
   axe-core@4.10.2: {}
 
+  axios@1.7.9:
+    dependencies:
+      follow-redirects: 1.15.9(debug@4.3.7)
+      form-data: 4.0.1
+      proxy-from-env: 1.1.0
+    transitivePeerDependencies:
+      - debug
+
   axios@1.7.9(debug@4.4.0):
     dependencies:
       follow-redirects: 1.15.9(debug@4.4.0)
@@ -30709,7 +30751,7 @@ snapshots:
       '@langchain/core': 0.2.36(openai@4.80.1(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.1))
       '@langchain/openai': 0.2.11(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))
       ai: 3.4.33(openai@4.80.1(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.1))(react@19.0.0)(sswr@2.1.0(svelte@5.19.4))(svelte@5.19.4)(zod@3.24.1)
-      axios: 1.7.9(debug@4.4.0)
+      axios: 1.7.9
       chalk: 4.1.2
       cli-progress: 3.12.0
       colors: 1.4.0
@@ -35696,7 +35738,7 @@ snapshots:
       '@notionhq/client': 2.2.15(encoding@0.1.13)
       '@pinecone-database/pinecone': 4.1.0
       assemblyai: 4.8.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
-      axios: 1.7.9(debug@4.4.0)
+      axios: 1.7.9
       chromadb: 1.10.4(cohere-ai@7.15.4(encoding@0.1.13))(encoding@0.1.13)(openai@4.80.1(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.1))
       d3-dsv: 3.0.1
       fast-xml-parser: 4.4.1
@@ -37515,7 +37557,7 @@ snapshots:
 
   node-ical@0.20.1:
     dependencies:
-      axios: 1.7.9(debug@4.4.0)
+      axios: 1.7.9
       moment-timezone: 0.5.47
       rrule: 2.8.1
       uuid: 10.0.0
@@ -38470,7 +38512,7 @@ snapshots:
 
   posthog-node@4.4.1:
     dependencies:
-      axios: 1.7.9(debug@4.4.0)
+      axios: 1.7.9
     transitivePeerDependencies:
       - debug
 
@@ -39668,6 +39710,13 @@ snapshots:
   rollup-plugin-node-polyfills@0.2.1:
     dependencies:
       rollup-plugin-inject: 3.0.2
+
+  rollup-plugin-polyfill-node@0.13.0(rollup@4.32.1):
+    dependencies:
+      '@rollup/plugin-inject': 5.0.5(rollup@4.32.1)
+      rollup: 4.32.1
+
+  rollup-plugin-shim@1.0.0: {}
 
   rollup-plugin-typescript2@0.36.0(rollup@3.29.5)(typescript@5.7.3):
     dependencies:
@@ -42142,7 +42191,7 @@ snapshots:
 
   wikipedia@2.1.2:
     dependencies:
-      axios: 1.7.9(debug@4.4.0)
+      axios: 1.7.9
       infobox-parser: 3.6.4
     transitivePeerDependencies:
       - debug

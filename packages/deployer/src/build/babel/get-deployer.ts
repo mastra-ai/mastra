@@ -15,7 +15,10 @@ export function removeAllExceptDeployer() {
         },
       },
       ImportDeclaration(path) {
-        if (path.node.source.value === '@mastra/core' && path.node.specifiers) {
+        if (
+          (path.node.source.value === '@mastra/core' || path.node.source.value === '@mastra/core/mastra') &&
+          path.node.specifiers
+        ) {
           mastraClass =
             path.node.specifiers.find(
               // @ts-ignore - no need to type

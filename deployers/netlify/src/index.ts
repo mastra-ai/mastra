@@ -28,17 +28,16 @@ export class NetlifyDeployer extends Deployer {
     // TODO ENV KEYS
     writeFileSync(
       join(dir, 'netlify.toml'),
-      `
-              [functions]
-              node_bundler = "esbuild"            
-              directory = "/netlify/functions"
+      `[functions]
+node_bundler = "esbuild"            
+directory = "netlify/functions"
 
-              [[redirects]]
-              force = true
-              from = "/*"
-              status = 200
-              to = "/.netlify/functions/api/:splat"
-              `,
+[[redirects]]
+force = true
+from = "/*"
+status = 200
+to = "/.netlify/functions/api/:splat"
+`,
     );
   }
 
@@ -48,7 +47,7 @@ export class NetlifyDeployer extends Deployer {
     const p2 = execa(
       'npx',
       [
-        'netlify',
+        'netlify-cli',
         'deploy',
         '--site',
         site.id,
@@ -69,6 +68,8 @@ export class NetlifyDeployer extends Deployer {
   }
 
   async prepare(outputDirectory: string): Promise<void> {
+    await super.prepare(outputDirectory);
+
     // Prepare the deployment directory
     if (!existsSync(join(outputDirectory, 'netlify/functions/api'))) {
       mkdirSync(join(outputDirectory, 'netlify/functions/api'), { recursive: true });
@@ -79,13 +80,14 @@ export class NetlifyDeployer extends Deployer {
   async bundle(mastraDir: string, outputDirectory: string): Promise<void> {
     const bundler = await getBundler({
       input: '#entry',
+      external: [/^@opentelemetry\//],
       plugins: [virtual({ '#entry': this.getEntry() })],
     });
 
     bundler.write({
-      dir: outputDirectory,
+      inlineDynamicImports: true,
+      file: join(outputDirectory, 'netlify', 'functions', 'api', 'index.mjs'),
       format: 'es',
-      entryFileNames: '[name].mjs',
     });
   }
 
@@ -95,7 +97,7 @@ import { handle } from 'hono/netlify'
 import { mastra } from '#mastra';
 import { createHonoServer } from '#server';
 
-const app = createHonoServer(mastra);
+const app = await createHonoServer(mastra);
 
 export default handle(app)
 `;

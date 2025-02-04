@@ -1,7 +1,7 @@
 import * as babel from '@babel/core';
 import { currentTarget } from '@neon-rs/load';
 import { familySync, GLIBC } from 'detect-libc';
-import path, { dirname, join } from 'path';
+import { dirname, join } from 'path';
 import type { Plugin } from 'rollup';
 
 import fsExtra from 'fs-extra/esm';

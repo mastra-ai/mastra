@@ -38,6 +38,7 @@
     "./run": null,
     "./package.json": "./package.json"
   },
+  "sideEffects": false,
   "scripts": {
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
