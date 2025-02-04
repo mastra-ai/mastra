@@ -22,7 +22,7 @@ import {
   StreamReturn,
 } from '../types';
 
-export class MastraLLM extends MastraBase {
+export class MastraLLMBase extends MastraBase {
   // @ts-ignore
   #mastra?: MastraPrimitives;
 
