@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import { randomUUID } from 'node:crypto';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 
-dotenv.config({ path: '.env.test' }); 
+dotenv.config({ path: '.env.test' });
 
 // Ensure environment variables are set
 if (!process.env.DB_URL) {
@@ -108,17 +108,19 @@ describe('Memory with PostgresStore Integration', () => {
         const messages = Array.from({ length: 15 }, (_, i) => createTestMessage(thread.id, `Message ${i + 1}`));
         await memory.saveMessages({ messages });
 
-        const result = await memory.query({
+        const result = await memory.rememberMessages({
           threadId: thread.id,
-          selectBy: { last: 10 },
+          config: { lastMessages: 10 },
         });
         expect(result.messages).toHaveLength(10); // lastMessages is set to 10
         expect(result.messages[0].content).toBe('Message 6'); // First message
         expect(result.messages[9].content).toBe('Message 15'); // Last message
 
-        const result2 = await memory.query({
+        const result2 = await memory.rememberMessages({
           threadId: thread.id,
-          selectBy: { last: 15 },
+          config: {
+            lastMessages: 15,
+          },
         });
         expect(result2.messages).toHaveLength(15); // lastMessages is set to 10
         expect(result2.messages[0].content).toBe('Message 1'); // First message
@@ -134,9 +136,9 @@ describe('Memory with PostgresStore Integration', () => {
         ];
 
         await memory.saveMessages({ messages: conversation });
-        const result = await memory.query({
+        const result = await memory.rememberMessages({
           threadId: thread.id,
-          selectBy: { last: 10 },
+          config: { lastMessages: 10 },
         });
 
         // Verify conversation flow is maintained
@@ -157,30 +159,36 @@ describe('Memory with PostgresStore Integration', () => {
         await memory.saveMessages({ messages });
 
         // Search for weather-related messages
-        const weatherQuery = await memory.query({
+        const weatherQuery = await memory.rememberMessages({
           threadId: thread.id,
-          selectBy: {
-            vectorSearchString: "How's the temperature outside?",
-          },
+          config: { lastMessages: 0, semanticRecall: { messageRange: 1, topK: 1 } },
+          vectorMessageSearch: "How's the temperature outside?",
         });
 
         // Should find the weather-related messages due to semantic similarity
-        expect(weatherQuery.messages?.some(m => m.content.includes('weather') || m.content.includes('sunny'))).toBe(
-          true,
-        );
+        expect(weatherQuery.messages).toEqual([
+          expect.objectContaining({ content: 'The weather is nice today' }),
+          expect.objectContaining({ content: "Yes, it's sunny and warm" }),
+        ]);
 
         // Search for location-related messages
-        const locationQuery = await memory.query({
+        const locationQuery = await memory.rememberMessages({
           threadId: thread.id,
-          selectBy: {
-            vectorSearchString: 'Tell me about cities in France',
+          vectorMessageSearch: 'Tell me about cities in France',
+          config: {
+            semanticRecall: {
+              topK: 1,
+              messageRange: { after: 1, before: 0 },
+            },
+            lastMessages: 0,
           },
         });
 
         // Should find the Paris-related messages
-        expect(locationQuery.messages?.some(m => m.content.includes('Paris') || m.content.includes('France'))).toBe(
-          true,
-        );
+        expect(locationQuery.messages).toEqual([
+          expect.objectContaining({ content: "What's the capital of France?" }),
+          expect.objectContaining({ content: 'The capital of France is Paris' }),
+        ]);
       });
 
       it('should respect semantic search configuration', async () => {
@@ -196,16 +204,17 @@ describe('Memory with PostgresStore Integration', () => {
         ];
         await memory.saveMessages({ messages });
 
-        const result = await memory.query({
+        const result = await memory.rememberMessages({
           threadId: thread.id,
-          selectBy: {
-            vectorSearchString: 'topic X',
-            last: 0,
-          },
-          threadConfig: {
+          vectorMessageSearch: 'topic X',
+          config: {
+            lastMessages: 0,
             semanticRecall: {
-              topK: 1, // Only find 1 most similar message
-              messageRange: { before: 1, after: 1 }, // Include 1 message before and after
+              topK: 1,
+              messageRange: {
+                before: 1,
+                after: 1,
+              },
             },
           },
         });
@@ -236,13 +245,19 @@ describe('Memory with PostgresStore Integration', () => {
         ];
 
         await memory.saveMessages({ messages });
-        const result = await memory.query({
+        const result = await memory.rememberMessages({
           threadId: thread.id,
-          selectBy: { last: 10 },
+          config: {
+            lastMessages: 10,
+          },
         });
 
         expect(result.messages).toHaveLength(3);
-        expect(result.messages.map(m => m.type)).toEqual(['text', 'tool-call', 'tool-result']);
+        expect(result.messages).toEqual([
+          expect.objectContaining({ type: 'text' }),
+          expect.objectContaining({ type: 'tool-call' }),
+          expect.objectContaining({ type: 'tool-result' }),
+        ]);
       });
 
       it('should handle complex message content', async () => {
@@ -255,9 +270,11 @@ describe('Memory with PostgresStore Integration', () => {
           messages: [createTestMessage(thread.id, complexMessage, 'assistant')],
         });
 
-        const result = await memory.query({
+        const result = await memory.rememberMessages({
           threadId: thread.id,
-          selectBy: { last: 10 },
+          config: {
+            lastMessages: 10,
+          },
         });
         expect(result.messages[0].content).toEqual(complexMessage);
       });
