@@ -18,7 +18,7 @@ The `lastMessages` setting maintains a sliding window of the most recent message
 ```tsx
 const memory = new Memory({
   options: {
-    lastMessages: 10, // Keep 10 most recent messages
+    lastMessages: 1, // Keep 1 most recent messages
   },
 });
 
@@ -27,23 +27,16 @@ const memory = new Memory({
 await agent.stream('When will the project be completed?', {
   threadId: 'project_123',
   resourceId: 'user_123',
-  memoryOptions: {
-    lastMessages: 10,
-  },
 });
 
 // 2. User asks about specific feature
 await agent.stream('How will the new search feature work?', {
   threadId: 'project_123',
   resourceId: 'user_123',
-  memoryOptions: {
-    lastMessages: 10,
-  },
 });
 
-// 3. When user asks this question, the agent will see:
-//    - The last 10 messages from the conversation
-//    - Any relevant messages about search features from earlier
+// 3. When user asks this question, the agent will see the last 10 messages,
+// allowing them to remember the conversation further back than the default we set above (lastMessages: 1)
 await agent.stream('Can you summarize the search feature requirements?', {
   threadId: 'project_123',
   resourceId: 'user_123',
