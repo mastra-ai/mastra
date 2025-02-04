@@ -12,7 +12,7 @@ export class Memory extends MastraMemory {
     super({ name: 'Memory', ...config });
   }
 
-  async getMessages({
+  async query({
     threadId,
     selectBy,
     threadConfig,
@@ -26,7 +26,7 @@ export class Memory extends MastraMemory {
           vector?: number[];
         }[] = null;
 
-    this.logger.info(`Memory getMessages() with:`, {
+    this.logger.info(`Memory query() with:`, {
       threadId,
       selectBy,
       threadConfig,
@@ -100,10 +100,10 @@ export class Memory extends MastraMemory {
       return {
         messages: [],
         uiMessages: [],
-      } satisfies Awaited<ReturnType<typeof this.getMessages>>;
+      } satisfies Awaited<ReturnType<typeof this.query>>;
     }
 
-    const messages = await this.getMessages({
+    const messages = await this.query({
       threadId,
       selectBy: {
         last: threadConfig.lastMessages,

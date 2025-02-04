@@ -317,7 +317,7 @@ await memory.saveMessages({
 });
 
 // Get messages from a thread with various filters
-const messages = await memory.getMessages({
+const messages = await memory.query({
   threadId: thread.id,
   selectBy: {
     last: 10,                         // Get last 10 messages
