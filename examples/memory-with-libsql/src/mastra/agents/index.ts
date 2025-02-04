@@ -16,7 +16,7 @@ const memory = new Memory({
     lastMessages: 100,
     historySearch: {
       topK: 2,
-      messageRange: { before: 2, after: 2 },
+      messageRange: 2,
     },
   },
   embeddingOptions: {

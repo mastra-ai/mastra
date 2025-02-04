@@ -243,11 +243,8 @@ const embeddingOptions = {
 ```typescript
 const optionsConfig = {
   historySearch: {
-    topK: 3,           // Number of similar messages to find
-    messageRange: {     // Context around each result
-      before: 2,       // Context before each result
-      after: 2         // Context after each result
-    }
+    topK: 3,         // Number of similar messages to find
+    messageRange: 2, // Context around each result
   },
 };
 ```

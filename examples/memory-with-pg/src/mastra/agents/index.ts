@@ -23,7 +23,7 @@ export const memory = new Memory({
     lastMessages: 10,
     historySearch: {
       topK: 3,
-      messageRange: { before: 2, after: 2 },
+      messageRange: 2,
     },
   },
   embeddingOptions: {

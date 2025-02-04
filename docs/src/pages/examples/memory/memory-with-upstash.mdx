@@ -26,7 +26,7 @@ const memory = new Memory({
     lastMessages: 10,
     historySearch: {
       topK: 3,
-      messageRange: { before: 2, after: 2 },
+      messageRange: 2,
     },
   },
   embeddingOptions: {
@@ -95,7 +95,7 @@ const response3 = await chefAgent.stream(
       lastMessages: 3, // Get last 3 messages for context
       historySearch: {
         topK: 2, // Also get 2 most relevant messages
-        messageRange: { before: 1, after: 1 }, // Include context around matches
+        messageRange: 2 // Include context around matches
       },
     }
   }
