@@ -112,7 +112,7 @@ const memory = new Memory({
   },
   
   // Required if using vector search
-  embeddingOptions: {
+  embedding: {
     provider: 'OPEN_AI',
     model: 'text-embedding-3-small',
     maxRetries: 3,
@@ -225,7 +225,7 @@ const vector = new PgVector(connectionString);
 
 2. Configure embedding options:
 ```typescript
-const embeddingOptions = {
+const embedding = {
   provider: 'OPEN_AI',
   model: 'text-embedding-3-small',
   maxRetries: 3,

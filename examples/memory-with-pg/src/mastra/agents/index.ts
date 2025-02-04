@@ -26,7 +26,7 @@ export const memory = new Memory({
       messageRange: 2,
     },
   },
-  embeddingOptions: {
+  embedding: {
     provider: 'OPEN_AI',
     model: 'text-embedding-3-small',
     maxRetries: 3,

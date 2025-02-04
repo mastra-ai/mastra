@@ -60,13 +60,13 @@ export type SharedMemoryConfig =
       storage: MastraStorage;
       options?: MemoryConfig;
       vector?: MastraVector;
-      embeddingOptions?: EmbeddingOptions;
+      embedding?: EmbeddingOptions;
     }
   | {
       storage: MastraStorage;
       options?: MemoryConfig;
       vector: MastraVector;
-      embeddingOptions: EmbeddingOptions;
+      embedding: EmbeddingOptions;
     };
 
 /**
@@ -78,7 +78,7 @@ export abstract class MastraMemory extends MastraBase {
 
   storage: MastraStorage;
   vector?: MastraVector;
-  embeddingOptions?: EmbeddingOptions;
+  embedding?: EmbeddingOptions;
 
   protected threadConfig: MemoryConfig = {
     lastMessages: 40,
@@ -94,8 +94,8 @@ export abstract class MastraMemory extends MastraBase {
       this.vector = config.vector;
       this.threadConfig.semanticRecall = true;
     }
-    if (`embeddingOptions` in config) {
-      this.embeddingOptions = config.embeddingOptions;
+    if (`embedding` in config) {
+      this.embedding = config.embedding;
     }
     if (config.options) {
       this.threadConfig = this.getMergedThreadConfig(config.options);
@@ -103,11 +103,11 @@ export abstract class MastraMemory extends MastraBase {
   }
 
   protected parseEmbeddingOptions() {
-    if (!this.embeddingOptions) {
-      throw new Error(`Cannot use vector features without setting new Memory({ embeddingOptions: { ... } })`);
+    if (!this.embedding) {
+      throw new Error(`Cannot use vector features without setting new Memory({ embedding: { ... } })`);
     }
 
-    return this.embeddingOptions;
+    return this.embedding;
   }
 
   protected getMergedThreadConfig(config: MemoryConfig): MemoryConfig {

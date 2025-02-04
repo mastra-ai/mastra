@@ -12,9 +12,9 @@ import { EmbeddingOptions } from './types';
 
 export * from './types';
 
-function getEmbeddingModel(embeddingOptions: EmbeddingOptions) {
+function getEmbeddingModel(embedding: EmbeddingOptions) {
   let embeddingModel: EmbeddingModel<string>;
-  const { provider, model, apiKey } = embeddingOptions;
+  const { provider, model, apiKey } = embedding;
 
   if (provider === 'OPEN_AI') {
     const openai = createOpenAI({
@@ -59,9 +59,9 @@ function getEmbeddingModel(embeddingOptions: EmbeddingOptions) {
   return embeddingModel;
 }
 
-export async function embed(value: string, embeddingOptions: EmbeddingOptions) {
-  const embeddingModel = await getEmbeddingModel(embeddingOptions);
-  const { maxRetries } = embeddingOptions;
+export async function embed(value: string, embedding: EmbeddingOptions) {
+  const embeddingModel = await getEmbeddingModel(embedding);
+  const { maxRetries } = embedding;
 
   return await embedAi({
     model: embeddingModel,
@@ -70,9 +70,9 @@ export async function embed(value: string, embeddingOptions: EmbeddingOptions) {
   });
 }
 
-export async function embedMany(value: string[], embeddingOptions: EmbeddingOptions) {
-  const embeddingModel = await getEmbeddingModel(embeddingOptions);
-  const { maxRetries } = embeddingOptions;
+export async function embedMany(value: string[], embedding: EmbeddingOptions) {
+  const embeddingModel = await getEmbeddingModel(embedding);
+  const { maxRetries } = embedding;
 
   return await embedManyAi({
     model: embeddingModel,
