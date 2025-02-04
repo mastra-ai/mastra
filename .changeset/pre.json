@@ -108,7 +108,10 @@
     "workflow-with-separate-steps": "0.0.0",
     "yc-directory": "1.0.0",
     "@mastra/store-pg": "0.0.0-alpha.0",
-    "@mastra/store-upstash": "0.0.0-alpha.0"
+    "@mastra/store-upstash": "0.0.0-alpha.0",
+    "memory-with-libsql": "0.0.1-alpha.1",
+    "memory-with-pg": "1.0.1-alpha.64",
+    "memory-with-upstash": "1.0.1-alpha.46"
   },
   "changesets": [
     "afraid-papayas-shake",
@@ -156,6 +159,7 @@
     "curvy-mirrors-march",
     "curvy-pans-greet",
     "cyan-beans-fix",
+    "cyan-garlics-double",
     "dirty-paws-deny",
     "dry-bottles-develop",
     "dry-crews-complain",
@@ -286,6 +290,7 @@
     "pretty-doors-sort",
     "pretty-pugs-look",
     "proud-planets-march",
+    "purple-readers-burn",
     "quiet-eels-report",
     "rare-cooks-reply",
     "rare-cougars-remain",

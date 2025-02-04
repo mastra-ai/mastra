@@ -1,5 +1,11 @@
 # chunk-markdown
 
+## 0.0.1-alpha.3
+
+### Patch Changes
+
+- @mastra/rag@0.0.2-alpha.77
+
 ## 0.0.1-alpha.2
 
 ### Patch Changes
