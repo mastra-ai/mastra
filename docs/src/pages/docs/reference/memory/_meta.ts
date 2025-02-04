@@ -1,7 +1,9 @@
-export default {
+const meta = {
   Memory: "Memory Class",
-  createThread: "createThread",
-  getMessages: "getMessages",
-  addMessage: "addMessage",
-  rememberMessages: "rememberMessages"
+  createThread: ".createThread()",
+  getMessages: ".getMessages()",
+  addMessage: ".addMessage()",
+  rememberMessages: ".rememberMessages()"
 };
+
+export default meta;
