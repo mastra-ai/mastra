@@ -1,5 +1,5 @@
 {
-  "name": "memory-libsql",
+  "name": "memory-with-libsql",
   "type": "module",
   "description": "",
   "private": true,
