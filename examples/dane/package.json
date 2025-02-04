@@ -24,18 +24,20 @@
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/pdf-parse": "^1.1.4",
+    "mastra": "workspace:*",
     "tsx": "^4.19.2"
   },
   "dependencies": {
     "@inquirer/prompts": "^7.2.1",
+    "@libsql/client": "^0.14.0",
     "@mastra/core": "workspace:*",
     "@mastra/firecrawl": "workspace:*",
     "@mastra/github": "workspace:*",
+    "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/rag": "workspace:*",
-    "@mastra/store-upstash": "workspace:*",
     "@mastra/stabilityai": "workspace:*",
-    "@mastra/mcp": "workspace:*",
+    "@mastra/store-upstash": "workspace:*",
     "boxen": "^8.0.1",
     "chalk": "^5.3.0",
     "cli-table3": "^0.6.5",
