@@ -43,7 +43,7 @@ export class DevBundler extends MastraBundler {
     });
   }
 
-  async watch(outputDirectory: string) {
+  async watch(outputDirectory: string): ReturnType<typeof getWatcher> {
     const watcher = await getWatcher({
       ...this.getInputOptions(),
       // @ts-ignore

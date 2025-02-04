@@ -106,10 +106,6 @@ export async function dev({ port, dir, root }: { dir?: string; root?: string; po
 
   await startServer(dotMastraPath, port);
 
-  watcher.on('change', async () => {
-    logger.info('[Mastra Dev] - Changes detected, rebundling');
-    await rebundleAndRestart(dotMastraPath, port);
-  });
   watcher.on('event', event => {
     if (event.code === 'BUNDLE_END') {
       logger.info('[Mastra Dev] - Bundling finished, restarting server...');
