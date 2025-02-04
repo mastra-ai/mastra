@@ -19,11 +19,11 @@ type NormalizedInputOptions = Omit<Partial<InputOptions>, 'plugins' | 'input' | 
   external?: (string | RegExp)[];
 };
 
-function getOptions(inputOptions: NormalizedInputOptions, platform: 'node' | 'browser'): InputOptions {
+function getOptions(inputOptions: NormalizedInputOptions, platform: 'node' | 'browser', root: string): InputOptions {
   const fileService = new FileService();
   const entry = fileService.getFirstExistingFile([
-    join(process.cwd(), 'src/mastra/index.ts'),
-    join(process.cwd(), 'src/mastra/index.js'),
+    join(root, 'src/mastra/index.ts'),
+    join(root, 'src/mastra/index.js'),
   ]);
 
   const nodeBuiltins = platform === 'node' ? builtins({ version: '20.0.0' }) : [];
@@ -111,14 +111,30 @@ function getOptions(inputOptions: NormalizedInputOptions, platform: 'node' | 'br
   };
 }
 
-export async function getBundler(inputOptions: NormalizedInputOptions, platform: 'node' | 'browser' = 'node') {
-  const bundle = await rollup(getOptions(inputOptions, platform));
+export async function getBundler(
+  inputOptions: NormalizedInputOptions,
+  args: {
+    platform?: 'node' | 'browser';
+    dir?: string;
+  } = {},
+) {
+  const { platform = 'node', dir = process.cwd() } = args;
+  const bundle = await rollup(getOptions(inputOptions, platform, dir));
 
   return bundle;
 }
 
-export async function getWatcher(inputOptions: NormalizedInputOptions, platform: 'node' | 'browser' = 'node') {
-  const watcher = watch(getOptions(inputOptions, platform));
+export async function getWatcher(
+  inputOptions: NormalizedInputOptions,
+  {
+    platform = 'node',
+    dir = process.cwd(),
+  }: {
+    platform?: 'node' | 'browser';
+    dir?: string;
+  },
+) {
+  const watcher = watch(getOptions(inputOptions, platform, dir));
 
   return watcher;
 }
