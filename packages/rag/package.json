@@ -29,6 +29,7 @@
     "js-tiktoken": "^1.0.15",
     "jsdom": "^25.0.1",
     "llamaindex": "^0.8.15",
+    "pathe": "^2.0.2",
     "zod": "^3.24.1"
   },
   "devDependencies": {
