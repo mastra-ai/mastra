@@ -1,5 +1,11 @@
 # @mastra/deployer-cloudflare
 
+## 0.0.1-alpha.34
+
+### Patch Changes
+
+- 32d15ec: Fix cloudflareDeployer build
+
 ## 0.0.1-alpha.33
 
 ### Patch Changes
