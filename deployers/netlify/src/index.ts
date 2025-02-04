@@ -84,7 +84,7 @@ to = "/.netlify/functions/api/:splat"
       plugins: [virtual({ '#entry': this.getEntry() })],
     });
 
-    bundler.write({
+    await bundler.write({
       inlineDynamicImports: true,
       file: join(outputDirectory, 'netlify', 'functions', 'api', 'index.mjs'),
       format: 'es',

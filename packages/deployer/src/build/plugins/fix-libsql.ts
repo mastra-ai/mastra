@@ -62,7 +62,7 @@ export function libSqlFix(): Plugin {
       if (fileToCopy) {
         await fsExtra.copy(fileToCopy.id, join(outputDirectory, 'libsql.node'));
       } else {
-        throw new Error(`libsql binding not found for @libsql/${target}/index.node`);
+        // throw new Error(`libsql binding not found for @libsql/${target}/index.node`);
       }
     },
   } satisfies Plugin;
