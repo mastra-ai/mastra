@@ -11,6 +11,7 @@ export const RegisteredLogger = {
   LLM: 'LLM',
   TTS: 'TTS',
   VECTOR: 'VECTOR',
+  BUNDLER: 'BUNDLER',
   DEPLOYER: 'DEPLOYER',
   ENGINE: 'ENGINE',
   MEMORY: 'MEMORY',

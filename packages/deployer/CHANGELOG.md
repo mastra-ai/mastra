@@ -1,5 +1,23 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.30
+
+### Patch Changes
+
+- e27fe69: Add dir to deployer
+
+## 0.0.1-alpha.29
+
+### Patch Changes
+
+- 0696eeb: Cleanup Mastra server
+- 38b7f66: Update deployer logic
+- Updated dependencies [2f17a5f]
+- Updated dependencies [cb290ee]
+- Updated dependencies [b4d7416]
+- Updated dependencies [38b7f66]
+  - @mastra/core@0.2.0-alpha.84
+
 ## 0.0.1-alpha.28
 
 ### Patch Changes

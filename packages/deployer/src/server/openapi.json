@@ -141,13 +141,30 @@
         "responses": { "200": { "description": "List of all threads" } },
         "operationId": "getApiMemoryThreads",
         "description": "Get all threads",
-        "tags": ["memory"]
+        "tags": ["memory"],
+        "parameters": [{ "name": "resourceid", "in": "query", "required": true, "schema": { "type": "string" } }]
       },
       "post": {
         "responses": { "200": { "description": "Created thread" } },
         "operationId": "postApiMemoryThreads",
         "description": "Create a new thread",
-        "tags": ["memory"]
+        "tags": ["memory"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string" },
+                  "metadata": { "type": "object" },
+                  "resourceid": { "type": "string" },
+                  "threadId": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/memory/threads/{threadId}": {
@@ -183,15 +200,6 @@
         "parameters": [{ "name": "threadId", "in": "path", "required": true, "schema": { "type": "string" } }]
       }
     },
-    "/api/memory/threads/{threadId}/context-window": {
-      "get": {
-        "responses": { "200": { "description": "Context window" } },
-        "operationId": "getApiMemoryThreadsByThreadIdContext-window",
-        "description": "Get context window for a thread",
-        "tags": ["memory"],
-        "parameters": [{ "name": "threadId", "in": "path", "required": true, "schema": { "type": "string" } }]
-      }
-    },
     "/api/memory/save-messages": {
       "post": {
         "responses": { "200": { "description": "Messages saved" } },
@@ -206,30 +214,6 @@
                 "type": "object",
                 "properties": { "messages": { "type": "array", "items": { "type": "object" } } },
                 "required": ["messages"]
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/memory/threads/{threadId}/tool-result": {
-      "post": {
-        "responses": {
-          "200": { "description": "Tool execution result" },
-          "404": { "description": "Result not found" }
-        },
-        "operationId": "postApiMemoryThreadsByThreadIdTool-result",
-        "description": "Get tool execution result for a thread",
-        "tags": ["memory"],
-        "parameters": [{ "name": "threadId", "in": "path", "required": true, "schema": { "type": "string" } }],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": { "toolId": { "type": "string" }, "resultId": { "type": "string" } },
-                "required": ["toolId", "resultId"]
               }
             }
           }
@@ -276,7 +260,8 @@
         "responses": { "200": { "description": "List of all logs" } },
         "operationId": "getApiLogs",
         "description": "Get all logs",
-        "tags": ["logs"]
+        "tags": ["logs"],
+        "parameters": [{ "name": "transportId", "in": "query", "required": true, "schema": { "type": "string" } }]
       }
     },
     "/api/logs/{runId}": {
@@ -285,7 +270,10 @@
         "operationId": "getApiLogsByRunId",
         "description": "Get logs by run ID",
         "tags": ["logs"],
-        "parameters": [{ "name": "runId", "in": "path", "required": true, "schema": { "type": "string" } }]
+        "parameters": [
+          { "name": "runId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "transportId", "in": "query", "required": true, "schema": { "type": "string" } }
+        ]
       }
     },
     "/api/tools": {
@@ -303,21 +291,6 @@
         "description": "Get tool by ID",
         "tags": ["tools"],
         "parameters": [{ "name": "toolId", "in": "path", "required": true, "schema": { "type": "string" } }]
-      }
-    },
-    "/api/tools/{toolId}/result/{resultId}": {
-      "get": {
-        "responses": {
-          "200": { "description": "Tool execution result" },
-          "404": { "description": "Result not found" }
-        },
-        "operationId": "getApiToolsByToolIdResultByResultId",
-        "description": "Get tool execution result",
-        "tags": ["tools"],
-        "parameters": [
-          { "name": "toolId", "in": "path", "required": true, "schema": { "type": "string" } },
-          { "name": "resultId", "in": "path", "required": true, "schema": { "type": "string" } }
-        ]
       }
     },
     "/api/tools/{toolId}/execute": {

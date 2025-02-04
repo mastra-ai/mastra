@@ -1,5 +1,26 @@
 # @mastra/deployer-netlify
 
+## 0.0.1-alpha.32
+
+### Patch Changes
+
+- e27fe69: Add dir to deployer
+- Updated dependencies [e27fe69]
+  - @mastra/deployer@0.0.1-alpha.30
+
+## 0.0.1-alpha.31
+
+### Patch Changes
+
+- 38b7f66: Update deployer logic
+- Updated dependencies [2f17a5f]
+- Updated dependencies [0696eeb]
+- Updated dependencies [cb290ee]
+- Updated dependencies [b4d7416]
+- Updated dependencies [38b7f66]
+  - @mastra/core@0.2.0-alpha.84
+  - @mastra/deployer@0.0.1-alpha.29
+
 ## 0.0.1-alpha.30
 
 ### Patch Changes

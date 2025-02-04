@@ -1,5 +1,23 @@
 # examples-agent
 
+## 0.0.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [e27fe69]
+  - @mastra/deployer-cloudflare@0.0.1-alpha.33
+
+## 0.0.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [2f17a5f]
+- Updated dependencies [cb290ee]
+- Updated dependencies [b4d7416]
+- Updated dependencies [38b7f66]
+  - @mastra/core@0.2.0-alpha.84
+  - @mastra/deployer-cloudflare@0.0.1-alpha.32
+
 ## 0.0.1-alpha.0
 
 ### Patch Changes

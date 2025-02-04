@@ -1,2 +1,3 @@
-export * from './deploy/index.js';
-export * from './build/index.js';
+export * from './deploy';
+export * from './build';
+export { getDeployer } from './build/deployer';

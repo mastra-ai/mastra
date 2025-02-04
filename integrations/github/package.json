@@ -1,6 +1,6 @@
 {
   "name": "@mastra/github",
-  "version": "1.0.3-alpha.68",
+  "version": "1.0.3-alpha.69",
   "description": "",
   "main": "dist/index.js",
   "type": "module",
@@ -19,7 +19,7 @@
   },
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
+    "build": "cross-env NODE_OPTIONS='--max-old-space-size=8192' tsup src/index.ts --format esm --dts --clean --treeshake",
     "build:dev": "tsup src/index.ts --format esm --dts --clean --treeshake --watch",
     "lint": "dts lint",
     "size": "size-limit",

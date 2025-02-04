@@ -3,7 +3,7 @@ import { Telemetry } from './telemetry';
 
 export class MastraBase {
   component: RegisteredLogger = RegisteredLogger.LLM;
-  logger: Logger;
+  protected logger: Logger;
   name?: string;
   telemetry?: Telemetry;
 

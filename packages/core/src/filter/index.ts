@@ -111,6 +111,11 @@ abstract class BaseFilterTranslator {
     return this.isOperator(key) && !this.isLogicalOperator(key);
   }
 
+  protected isCustomOperator(key: string): boolean {
+    const support = this.getSupportedOperators();
+    return support.custom?.includes(key) ?? false;
+  }
+
   protected getSupportedOperators(): OperatorSupport {
     return BaseFilterTranslator.DEFAULT_OPERATORS;
   }
@@ -127,6 +132,11 @@ abstract class BaseFilterTranslator {
   protected normalizeComparisonValue(value: any): any {
     if (value instanceof Date) {
       return value.toISOString();
+    }
+
+    // Handle -0 case
+    if (typeof value === 'number' && Object.is(value, -0)) {
+      return 0;
     }
     return value;
   }

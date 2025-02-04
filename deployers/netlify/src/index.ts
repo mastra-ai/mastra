@@ -1,13 +1,23 @@
-import { MastraDeployer } from '@mastra/core/deployer';
+import { Deployer } from '@mastra/deployer';
+import { getBundler } from '@mastra/deployer/build';
+import virtual from '@rollup/plugin-virtual';
 import { execa } from 'execa';
-import { existsSync, mkdirSync, renameSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 import { getOrCreateSite } from './helpers.js';
 
-export class NetlifyDeployer extends MastraDeployer {
-  constructor({ scope, env, projectName }: { projectName: string; env?: Record<string, any>; scope: string }) {
-    super({ scope, env, projectName });
+export class NetlifyDeployer extends Deployer {
+  protected scope: string;
+  protected projectName: string;
+  protected token: string;
+
+  constructor({ scope, projectName, token }: { scope: string; projectName: string; token: string }) {
+    super({ name: 'NETLIFY' });
+
+    this.scope = scope;
+    this.projectName = projectName;
+    this.token = token;
   }
 
   writeFiles({ dir }: { dir: string }): void {
@@ -18,30 +28,38 @@ export class NetlifyDeployer extends MastraDeployer {
     // TODO ENV KEYS
     writeFileSync(
       join(dir, 'netlify.toml'),
-      `
-              [functions]
-              node_bundler = "esbuild"            
-              directory = "/netlify/functions"
+      `[functions]
+node_bundler = "esbuild"            
+directory = "netlify/functions"
 
-              [[redirects]]
-              force = true
-              from = "/*"
-              status = 200
-              to = "/.netlify/functions/api/:splat"
-              `,
+[[redirects]]
+force = true
+from = "/*"
+status = 200
+to = "/.netlify/functions/api/:splat"
+`,
     );
-
-    this.writeIndex({ dir });
   }
 
-  async deploy({ dir, token }: { dir: string; token: string }): Promise<void> {
-    const site = await getOrCreateSite({ token, name: this.projectName || `mastra`, scope: this.scope });
+  async deploy(outputDirectory: string): Promise<void> {
+    const site = await getOrCreateSite({ token: this.token, name: this.projectName || `mastra`, scope: this.scope });
 
     const p2 = execa(
-      'netlify',
-      ['deploy', '--site', site.id, '--auth', token, '--dir', '.', '--functions', './netlify/functions'],
+      'npx',
+      [
+        'netlify-cli',
+        'deploy',
+        '--site',
+        site.id,
+        '--auth',
+        this.token,
+        '--dir',
+        '.',
+        '--functions',
+        './netlify/functions',
+      ],
       {
-        cwd: dir,
+        cwd: outputDirectory,
       },
     );
 
@@ -49,23 +67,39 @@ export class NetlifyDeployer extends MastraDeployer {
     await p2;
   }
 
-  writeIndex({ dir }: { dir: string }): void {
-    ['mastra.mjs', 'hono.mjs', 'server.mjs'].forEach(file => {
-      renameSync(join(dir, file), join(dir, `netlify/functions/api/${file}`));
+  async prepare(outputDirectory: string): Promise<void> {
+    await super.prepare(outputDirectory);
+
+    // Prepare the deployment directory
+    if (!existsSync(join(outputDirectory, 'netlify/functions/api'))) {
+      mkdirSync(join(outputDirectory, 'netlify/functions/api'), { recursive: true });
+    }
+    this.writeFiles({ dir: outputDirectory });
+  }
+
+  async bundle(mastraDir: string, outputDirectory: string): Promise<void> {
+    const bundler = await getBundler({
+      input: '#entry',
+      external: [/^@opentelemetry\//],
+      plugins: [virtual({ '#entry': this.getEntry() })],
     });
 
-    writeFileSync(
-      join(dir, 'netlify/functions/api/api.mts'),
-      `                
-             export default async (req, context) => {
-                const { app } = await import('./hono.mjs');
-                    // Pass the request directly to Hono
-                    return app.fetch(req, {
-                        // Optional context passing if needed
-                        env: { context }
-                    })
-                }
-            `,
-    );
+    await bundler.write({
+      inlineDynamicImports: true,
+      file: join(outputDirectory, 'netlify', 'functions', 'api', 'index.mjs'),
+      format: 'es',
+    });
+  }
+
+  private getEntry(): string {
+    return `
+import { handle } from 'hono/netlify'
+import { mastra } from '#mastra';
+import { createHonoServer } from '#server';
+
+const app = await createHonoServer(mastra);
+
+export default handle(app)
+`;
   }
 }

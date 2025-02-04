@@ -1,7 +1,10 @@
-import { MastraDeployer } from '@mastra/core/deployer';
+import { Deployer } from '@mastra/deployer';
+import { getBundler } from '@mastra/deployer/build';
+import virtual from '@rollup/plugin-virtual';
 import * as child_process from 'child_process';
 import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import process from 'process';
 
 interface EnvVar {
   key: string;
@@ -15,16 +18,22 @@ interface VercelError {
   code: string;
 }
 
-export class VercelDeployer extends MastraDeployer {
-  constructor({ scope, env, projectName }: { env?: Record<string, any>; scope: string; projectName: string }) {
-    super({ scope, env, projectName });
+export class VercelDeployer extends Deployer {
+  private teamId: string;
+  private projectName: string;
+  private token: string;
+
+  constructor({ teamId, projectName, token }: { teamId: string; projectName: string; token: string }) {
+    super({ name: 'VERCEL' });
+
+    this.teamId = teamId;
+    this.projectName = projectName;
+    this.token = token;
   }
 
-  writeFiles({ dir }: { dir: string }): void {
-    this.writeIndex({ dir });
-
+  writeFiles(outputDirectory: string): void {
     writeFileSync(
-      join(dir, 'vercel.json'),
+      join(outputDirectory, 'vercel.json'),
       JSON.stringify(
         {
           version: 2,
@@ -59,23 +68,15 @@ export class VercelDeployer extends MastraDeployer {
     }
   }
 
-  async syncEnv({ scope, dir, token }: { token: string; dir: string; scope: string }) {
-    const envFiles = this.getEnvFiles();
-    const envVars: string[] = [];
-
-    for (const file of envFiles) {
-      const vars = this.parseEnvFile(file);
-      envVars.push(...vars);
-    }
-
+  private async syncEnv(envVars: Map<string, string>) {
     console.log('Syncing environment variables...');
 
     // Transform env vars into the format expected by Vercel API
-    const vercelEnvVars: EnvVar[] = envVars.map(envVar => {
-      const [key, value] = envVar.split('=');
+    const vercelEnvVars: EnvVar[] = Array.from(envVars.entries()).map(([key, value]) => {
       if (!key || !value) {
-        throw new Error(`Invalid environment variable format: ${envVar}`);
+        throw new Error(`Invalid environment variable format: ${key || value}`);
       }
+
       return {
         key,
         value,
@@ -85,16 +86,19 @@ export class VercelDeployer extends MastraDeployer {
     });
 
     try {
-      const projectId = this.getProjectId({ dir });
+      const projectId = this.getProjectId({ dir: process.cwd() });
 
-      const response = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env?teamId=${scope}&upsert=true`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
+      const response = await fetch(
+        `https://api.vercel.com/v10/projects/${projectId}/env?teamId=${this.teamId}&upsert=true`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(vercelEnvVars),
         },
-        body: JSON.stringify(vercelEnvVars),
-      });
+      );
 
       if (!response.ok) {
         const error = (await response.json()) as VercelError;
@@ -112,63 +116,70 @@ export class VercelDeployer extends MastraDeployer {
     }
   }
 
-  async deploy({ dir, token }: { dir: string; token: string }): Promise<void> {
-    // Get env vars for initial deployment
-    const envFiles = this.getEnvFiles();
-    const envVars: string[] = [];
+  async prepare(outputDirectory: string): Promise<void> {
+    await super.prepare(outputDirectory);
+    await this.writeFiles(outputDirectory);
+  }
 
-    for (const file of envFiles) {
-      const vars = this.parseEnvFile(file);
-      envVars.push(...vars);
-    }
+  private getEntry(): string {
+    return `
+import { handle } from 'hono/vercel'
+import { mastra } from '#mastra';
+import { createHonoServer } from '#server';
+
+const app = await createHonoServer(mastra);
+
+export const GET = handle(app);
+export const POST = handle(app);
+`;
+  }
+
+  async bundle(mastraDir: string, outputDirectory: string): Promise<void> {
+    const bundler = await getBundler({
+      input: '#entry',
+      plugins: [virtual({ '#entry': this.getEntry() })],
+    });
+
+    await bundler.write({
+      inlineDynamicImports: true,
+      file: `${outputDirectory}/index.mjs`,
+      format: 'es',
+    });
+  }
+
+  async deploy(outputDirectory: string): Promise<void> {
+    const envVars = await this.loadEnvVars();
 
     // Create the command array with base arguments
     const commandArgs = [
       '--scope',
-      this.scope as string,
+      this.teamId as string,
       '--cwd',
-      dir,
-      'deploy',
+      outputDirectory,
       '--token',
-      token,
+      this.token,
+      'deploy',
       '--yes',
       ...(this.projectName ? ['--name', this.projectName] : []),
     ];
 
-    // Add env vars to initial deployment
-    for (const envVar of envVars) {
-      commandArgs.push('--env', envVar);
-    }
-
     // Run the Vercel deploy command
-    child_process.execSync(`vercel ${commandArgs.join(' ')}`, {
-      cwd: dir,
+    child_process.execSync(`npx vercel ${commandArgs.join(' ')}`, {
+      cwd: outputDirectory,
       env: {
-        ...this.env,
+        // ...this.env,
         PATH: process.env.PATH,
       },
       stdio: 'inherit',
     });
 
-    console.log('Deployment started on Vercel. You can wait for it to finish or exit this command.');
+    this.logger.info('Deployment started on Vercel. You can wait for it to finish or exit this command.');
 
-    if (envVars.length > 0) {
+    if (envVars.size > 0) {
       // Sync environment variables for future deployments
-      await this.syncEnv({ scope: this.scope, dir, token });
+      await this.syncEnv(envVars);
     } else {
-      console.log('\nAdd your ENV vars to .env or your vercel dashboard.\n');
+      this.logger.info('\nAdd your ENV vars to .env or your vercel dashboard.\n');
     }
-  }
-
-  writeIndex({ dir }: { dir: string }): void {
-    writeFileSync(
-      join(dir, 'index.mjs'),
-      `
-                import { handle } from 'hono/vercel'
-                import { app } from './hono.mjs';
-                export const GET = handle(app);
-                export const POST = handle(app);
-            `,
-    );
   }
 }

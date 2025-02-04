@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-vercel",
-  "version": "0.0.1-alpha.33",
+  "version": "0.0.1-alpha.35",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -22,7 +22,9 @@
   "license": "ISC",
   "dependencies": {
     "@mastra/core": "workspace:*",
-    "@mastra/deployer": "workspace:*"
+    "@mastra/deployer": "workspace:*",
+    "@rollup/plugin-virtual": "^3.0.2",
+    "fs-extra": "^11.2.0"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.26.0",

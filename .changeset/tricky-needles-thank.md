@@ -1,0 +1,5 @@
+---
+'mastra': patch
+---
+
+Bump version

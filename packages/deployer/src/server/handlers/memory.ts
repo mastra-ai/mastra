@@ -1,3 +1,4 @@
+import type { MastraMemory } from '@mastra/core/memory';
 import type { Context } from 'hono';
 
 import { HTTPException } from 'hono/http-exception';
@@ -24,14 +25,18 @@ export async function getMemoryStatusHandler(c: Context) {
 export async function getThreadsHandler(c: Context) {
   try {
     const mastra = c.get('mastra');
-    const memory = mastra.memory;
+    const memory: MastraMemory = mastra.memory;
     const { resourceid } = c.req.query();
 
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }
 
-    const threads = await memory.getThreadsByResourceId({ resourceid });
+    if (!resourceid) {
+      throw new HTTPException(400, { message: 'Resource ID is required' });
+    }
+
+    const threads = await memory.getThreadsByResourceId({ resourceId: resourceid });
     return c.json(threads);
   } catch (error) {
     return handleError(error, 'Error getting threads');
@@ -41,7 +46,7 @@ export async function getThreadsHandler(c: Context) {
 export async function getThreadByIdHandler(c: Context) {
   try {
     const mastra = c.get('mastra');
-    const memory = mastra.memory;
+    const memory: MastraMemory = mastra.memory;
     const threadId = c.req.param('threadId');
 
     if (!memory) {
@@ -62,7 +67,7 @@ export async function getThreadByIdHandler(c: Context) {
 export async function saveMessagesHandler(c: Context) {
   try {
     const mastra = c.get('mastra');
-    const memory = mastra.memory;
+    const memory: MastraMemory = mastra.memory;
     const { messages } = await c.req.json();
 
     if (!memory) {
@@ -81,40 +86,17 @@ export async function saveMessagesHandler(c: Context) {
       createdAt: message.createdAt ? new Date(message.createdAt) : new Date(),
     }));
 
-    const result = await memory.saveMessages({ messages: processedMessages });
+    const result = await memory.saveMessages({ messages: processedMessages, memoryConfig: {} });
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error saving messages');
   }
 }
 
-export async function getContextWindowHandler(c: Context) {
-  try {
-    const mastra = c.get('mastra');
-    const memory = mastra.memory;
-    const threadId = c.req.param('threadId');
-    const { startDate, endDate, format } = c.req.query();
-
-    if (!memory) {
-      throw new HTTPException(400, { message: 'Memory is not initialized' });
-    }
-
-    const thread = await memory.getThreadById({ threadId });
-    if (!thread) {
-      throw new HTTPException(404, { message: 'Thread not found' });
-    }
-
-    const result = await memory.getContextWindow({ threadId, startDate, endDate, format });
-    return c.json(result);
-  } catch (error) {
-    return handleError(error, 'Error getting context window from memory');
-  }
-}
-
 export async function createThreadHandler(c: Context) {
   try {
     const mastra = c.get('mastra');
-    const memory = mastra.memory;
+    const memory: MastraMemory = mastra.memory;
     const { title, metadata, resourceid, threadId } = await c.req.json();
 
     if (!memory) {
@@ -123,7 +105,7 @@ export async function createThreadHandler(c: Context) {
 
     validateBody({ resourceid });
 
-    const result = await memory.createThread({ resourceid, title, metadata, threadId });
+    const result = await memory.createThread({ resourceId: resourceid, title, metadata, threadId });
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error saving thread to memory');
@@ -133,7 +115,7 @@ export async function createThreadHandler(c: Context) {
 export async function updateThreadHandler(c: Context) {
   try {
     const mastra = c.get('mastra');
-    const memory = mastra.memory;
+    const memory: MastraMemory = mastra.memory;
     const threadId = c.req.param('threadId');
     const { title, metadata, resourceid } = await c.req.json();
     const updatedAt = new Date();
@@ -151,8 +133,8 @@ export async function updateThreadHandler(c: Context) {
       ...thread,
       title: title || thread.title,
       metadata: metadata || thread.metadata,
-      resourceid: resourceid || thread.resourceid,
-      createdAt: thread.createdat,
+      resourceId: resourceid || thread.resourceId,
+      createdAt: thread.createdAt,
       updatedAt,
     };
 
@@ -166,7 +148,7 @@ export async function updateThreadHandler(c: Context) {
 export async function deleteThreadHandler(c: Context) {
   try {
     const mastra = c.get('mastra');
-    const memory = mastra.memory;
+    const memory: MastraMemory = mastra.memory;
     const threadId = c.req.param('threadId');
 
     if (!memory) {
@@ -188,7 +170,7 @@ export async function deleteThreadHandler(c: Context) {
 export async function getMessagesHandler(c: Context) {
   try {
     const mastra = c.get('mastra');
-    const memory = mastra.memory;
+    const memory: MastraMemory = mastra.memory;
     const threadId = c.req.param('threadId');
 
     if (!memory) {

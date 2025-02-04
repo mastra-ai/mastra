@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import type { Mastra } from '@mastra/core';
 import type { Context } from 'hono';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';

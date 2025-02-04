@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-netlify",
-  "version": "0.0.1-alpha.30",
+  "version": "0.0.1-alpha.32",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -23,6 +23,7 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",
+    "@rollup/plugin-virtual": "^3.0.2",
     "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",
     "execa": "^9.3.1",
