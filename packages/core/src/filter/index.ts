@@ -47,12 +47,12 @@ type Filter = {
 };
 
 type OperatorSupport = {
-  logical?: QueryOperator[];
-  array?: QueryOperator[];
-  basic?: QueryOperator[];
-  numeric?: QueryOperator[];
-  element?: QueryOperator[];
-  regex?: QueryOperator[];
+  logical?: LogicalOperator[];
+  array?: ArrayOperator[];
+  basic?: BasicOperator[];
+  numeric?: NumericOperator[];
+  element?: ElementOperator[];
+  regex?: RegexOperator[];
   custom?: string[];
 };
 

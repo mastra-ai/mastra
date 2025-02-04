@@ -81,6 +81,12 @@ export class AstraVector extends MastraVector {
     return result.insertedIds.map(id => (id || '').toString());
   }
 
+  transformFilter(filter?: Filter) {
+    const astraFilter = new AstraFilterTranslator();
+    const translatedFilter = astraFilter.translate(filter ?? {});
+    return translatedFilter;
+  }
+
   /**
    * Queries the specified collection using a vector and optional filter.
    *
@@ -100,8 +106,7 @@ export class AstraVector extends MastraVector {
   ): Promise<QueryResult[]> {
     const collection = this.#db.collection(indexName);
 
-    const astraFilter = new AstraFilterTranslator();
-    const translatedFilter = astraFilter.translate(filter ?? {});
+    const translatedFilter = this.transformFilter(filter);
 
     const cursor = collection.find(translatedFilter ?? {}, {
       sort: { $vector: queryVector },

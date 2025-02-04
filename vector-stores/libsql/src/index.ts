@@ -29,6 +29,12 @@ export class LibSQLVector extends MastraVector {
     });
   }
 
+  transformFilter(filter?: Filter) {
+    const libsqlFilter = new LibSQLFilterTranslator();
+    const translatedFilter = libsqlFilter.translate(filter ?? {});
+    return translatedFilter;
+  }
+
   async query(
     indexName: string,
     queryVector: number[],
@@ -40,8 +46,7 @@ export class LibSQLVector extends MastraVector {
     try {
       const vectorStr = `[${queryVector.join(',')}]`;
 
-      const libsqlFilter = new LibSQLFilterTranslator();
-      const translatedFilter = libsqlFilter.translate(filter ?? {});
+      const translatedFilter = this.transformFilter(filter);
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter);
       filterValues.push(minScore);
 

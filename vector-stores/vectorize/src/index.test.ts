@@ -66,7 +66,7 @@ function waitForMetadataIndexes(vector: CloudflareVector, indexName: string, exp
 }
 
 describe('CloudflareVector', () => {
-  let vectorStore: CloudflareVector;
+  let vectorDB: CloudflareVector;
   const VECTOR_DIMENSION = 1536;
   const testIndexName = `default-${randomUUID()}`;
   const testIndexName2 = `default-${randomUUID()}`;
@@ -91,12 +91,12 @@ describe('CloudflareVector', () => {
       );
     }
 
-    vectorStore = new CloudflareVector({ accountId, apiToken });
+    vectorDB = new CloudflareVector({ accountId, apiToken });
   });
 
   afterAll(async () => {
     try {
-      await vectorStore.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex(testIndexName);
     } catch (error) {
       console.warn('Failed to delete test index:', error);
     }
@@ -106,14 +106,14 @@ describe('CloudflareVector', () => {
     const tempIndexName = 'test_temp_index';
 
     it('should create and list indexes', async () => {
-      await vectorStore.createIndex(tempIndexName, VECTOR_DIMENSION, 'cosine');
-      await waitUntilReady(vectorStore, tempIndexName);
-      const indexes = await vectorStore.listIndexes();
+      await vectorDB.createIndex(tempIndexName, VECTOR_DIMENSION, 'cosine');
+      await waitUntilReady(vectorDB, tempIndexName);
+      const indexes = await vectorDB.listIndexes();
       expect(indexes).toContain(tempIndexName);
     });
 
     it('should describe an index correctly', async () => {
-      const stats = await vectorStore.describeIndex(tempIndexName);
+      const stats = await vectorDB.describeIndex(tempIndexName);
       expect(stats).toEqual({
         dimension: VECTOR_DIMENSION,
         metric: 'cosine',
@@ -122,8 +122,8 @@ describe('CloudflareVector', () => {
     });
 
     it('should delete an index', async () => {
-      await vectorStore.deleteIndex(tempIndexName);
-      const indexes = await vectorStore.listIndexes();
+      await vectorDB.deleteIndex(tempIndexName);
+      const indexes = await vectorDB.listIndexes();
       expect(indexes).not.toContain(tempIndexName);
     });
   }, 30000);
@@ -131,9 +131,9 @@ describe('CloudflareVector', () => {
   describe('Vector Operations', () => {
     let vectorIds: string[];
     it('should create index before operations', async () => {
-      await vectorStore.createIndex(testIndexName, VECTOR_DIMENSION, 'cosine');
-      await waitUntilReady(vectorStore, testIndexName);
-      const indexes = await vectorStore.listIndexes();
+      await vectorDB.createIndex(testIndexName, VECTOR_DIMENSION, 'cosine');
+      await waitUntilReady(vectorDB, testIndexName);
+      const indexes = await vectorDB.listIndexes();
       expect(indexes).toContain(testIndexName);
     });
 
@@ -142,14 +142,14 @@ describe('CloudflareVector', () => {
 
       const testMetadata = [{ label: 'first-dimension' }, { label: 'second-dimension' }, { label: 'third-dimension' }];
 
-      vectorIds = await vectorStore.upsert(testIndexName, testVectors, testMetadata);
+      vectorIds = await vectorDB.upsert(testIndexName, testVectors, testMetadata);
       expect(vectorIds).toHaveLength(3);
 
-      await waitUntilVectorsIndexed(vectorStore, testIndexName, 3);
-      const stats = await vectorStore.describeIndex(testIndexName);
+      await waitUntilVectorsIndexed(vectorDB, testIndexName, 3);
+      const stats = await vectorDB.describeIndex(testIndexName);
       expect(stats.count).toBeGreaterThan(0);
 
-      const results = await vectorStore.query(testIndexName, createVector(0, 0.9), 3);
+      const results = await vectorDB.query(testIndexName, createVector(0, 0.9), 3);
       expect(results).toHaveLength(3);
 
       if (results.length > 0) {
@@ -158,7 +158,7 @@ describe('CloudflareVector', () => {
     }, 30000);
 
     it('should query vectors and return vector in results', async () => {
-      const results = await vectorStore.query(testIndexName, createVector(0, 0.9), 3, undefined, true);
+      const results = await vectorDB.query(testIndexName, createVector(0, 0.9), 3, undefined, true);
 
       expect(results).toHaveLength(3);
 
@@ -171,23 +171,23 @@ describe('CloudflareVector', () => {
 
   describe('Error Handling', () => {
     it('should handle invalid dimension vectors', async () => {
-      await expect(vectorStore.upsert(testIndexName, [[1.0, 0.0]])).rejects.toThrow();
+      await expect(vectorDB.upsert(testIndexName, [[1.0, 0.0]])).rejects.toThrow();
     });
 
     it('should handle querying with wrong dimensions', async () => {
-      await expect(vectorStore.query(testIndexName, [1.0, 0.0])).rejects.toThrow();
+      await expect(vectorDB.query(testIndexName, [1.0, 0.0])).rejects.toThrow();
     });
 
     it('should handle non-existent index operations', async () => {
       const nonExistentIndex = 'non_existent_index';
-      await expect(vectorStore.query(nonExistentIndex, createVector(0, 1.0))).rejects.toThrow();
+      await expect(vectorDB.query(nonExistentIndex, createVector(0, 1.0))).rejects.toThrow();
     });
 
     it('rejects queries with filter keys longer than 512 characters', async () => {
       const longKey = 'a'.repeat(513);
       const filter = { [longKey]: 'value' };
 
-      await expect(vectorStore.query(testIndexName, createVector(0, 0.9), 10, filter)).rejects.toThrow();
+      await expect(vectorDB.query(testIndexName, createVector(0, 0.9), 10, filter)).rejects.toThrow();
     });
 
     it('rejects queries with filter keys containing invalid characters', async () => {
@@ -198,7 +198,7 @@ describe('CloudflareVector', () => {
       ];
 
       for (const filter of invalidFilters) {
-        await expect(vectorStore.query(testIndexName, createVector(0, 0.9), 10, filter)).rejects.toThrow();
+        await expect(vectorDB.query(testIndexName, createVector(0, 0.9), 10, filter)).rejects.toThrow();
       }
     });
 
@@ -210,13 +210,13 @@ describe('CloudflareVector', () => {
       ];
 
       for (const filter of validFilters) {
-        await expect(vectorStore.query(testIndexName, createVector(0, 0.9), 10, filter)).resolves.not.toThrow();
+        await expect(vectorDB.query(testIndexName, createVector(0, 0.9), 10, filter)).resolves.not.toThrow();
       }
     });
 
     it('rejects queries with empty object field values', async () => {
       const emptyFilters = { field: {} };
-      await expect(vectorStore.query(testIndexName, createVector(0, 0.9), 10, emptyFilters)).rejects.toThrow();
+      await expect(vectorDB.query(testIndexName, createVector(0, 0.9), 10, emptyFilters)).rejects.toThrow();
     });
 
     it('rejects oversized filter queries', async () => {
@@ -225,18 +225,18 @@ describe('CloudflareVector', () => {
         field2: { $in: Array(1000).fill(123) },
       };
 
-      await expect(vectorStore.query(testIndexName, createVector(0, 0.9), 10, largeFilter)).rejects.toThrow();
+      await expect(vectorDB.query(testIndexName, createVector(0, 0.9), 10, largeFilter)).rejects.toThrow();
     });
 
     it('rejects queries with array values in comparison operators', async () => {
       await expect(
-        vectorStore.query(testIndexName, createVector(0, 0.9), 10, {
+        vectorDB.query(testIndexName, createVector(0, 0.9), 10, {
           field: { $gt: [] },
         }),
       ).rejects.toThrow();
 
       await expect(
-        vectorStore.query(testIndexName, createVector(0, 0.9), 10, {
+        vectorDB.query(testIndexName, createVector(0, 0.9), 10, {
           field: { $lt: [1, 2, 3] },
         }),
       ).rejects.toThrow();
@@ -245,21 +245,21 @@ describe('CloudflareVector', () => {
 
   describe('Metadata Filter Tests', () => {
     beforeAll(async () => {
-      await vectorStore.createIndex(testIndexName2, VECTOR_DIMENSION, 'cosine');
-      await waitUntilReady(vectorStore, testIndexName2);
+      await vectorDB.createIndex(testIndexName2, VECTOR_DIMENSION, 'cosine');
+      await waitUntilReady(vectorDB, testIndexName2);
 
-      await vectorStore.createMetadataIndex(testIndexName2, 'price', 'number');
-      await vectorStore.createMetadataIndex(testIndexName2, 'category', 'string');
-      await vectorStore.createMetadataIndex(testIndexName2, 'rating', 'number');
-      await vectorStore.createMetadataIndex(testIndexName2, 'nested.number', 'number');
-      await vectorStore.createMetadataIndex(testIndexName2, 'nested.string', 'string');
-      await vectorStore.createMetadataIndex(testIndexName2, 'nested.boolean', 'boolean');
-      await vectorStore.createMetadataIndex(testIndexName2, 'isActive', 'boolean');
-      await vectorStore.createMetadataIndex(testIndexName2, 'code', 'string');
-      await vectorStore.createMetadataIndex(testIndexName2, 'optionalField', 'string');
-      await vectorStore.createMetadataIndex(testIndexName2, 'mixedField', 'string');
+      await vectorDB.createMetadataIndex(testIndexName2, 'price', 'number');
+      await vectorDB.createMetadataIndex(testIndexName2, 'category', 'string');
+      await vectorDB.createMetadataIndex(testIndexName2, 'rating', 'number');
+      await vectorDB.createMetadataIndex(testIndexName2, 'nested.number', 'number');
+      await vectorDB.createMetadataIndex(testIndexName2, 'nested.string', 'string');
+      await vectorDB.createMetadataIndex(testIndexName2, 'nested.boolean', 'boolean');
+      await vectorDB.createMetadataIndex(testIndexName2, 'isActive', 'boolean');
+      await vectorDB.createMetadataIndex(testIndexName2, 'code', 'string');
+      await vectorDB.createMetadataIndex(testIndexName2, 'optionalField', 'string');
+      await vectorDB.createMetadataIndex(testIndexName2, 'mixedField', 'string');
 
-      await waitForMetadataIndexes(vectorStore, testIndexName2, 10);
+      await waitForMetadataIndexes(vectorDB, testIndexName2, 10);
 
       // Create all test vectors and metadata at once
       const vectors = [
@@ -327,24 +327,24 @@ describe('CloudflareVector', () => {
         },
       ];
 
-      await vectorStore.upsert(testIndexName2, vectors, metadata);
-      await waitUntilVectorsIndexed(vectorStore, testIndexName2, vectors.length);
+      await vectorDB.upsert(testIndexName2, vectors, metadata);
+      await waitUntilVectorsIndexed(vectorDB, testIndexName2, vectors.length);
 
-      const stats = await vectorStore.describeIndex(testIndexName2);
+      const stats = await vectorDB.describeIndex(testIndexName2);
       expect(stats.count).toBe(vectors.length);
     }, 300000);
 
     afterAll(async () => {
-      const currentMetadata = await vectorStore.listMetadataIndexes(testIndexName2);
+      const currentMetadata = await vectorDB.listMetadataIndexes(testIndexName2);
       for (const { propertyName } of currentMetadata) {
-        await vectorStore.deleteMetadataIndex(testIndexName2, propertyName as string);
+        await vectorDB.deleteMetadataIndex(testIndexName2, propertyName as string);
       }
-      await vectorStore.deleteIndex(testIndexName2);
+      await vectorDB.deleteIndex(testIndexName2);
     }, 300000);
 
     describe('Basic Equality Operators', () => {
       it('filters with $eq operator', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           category: 'electronics',
         });
         expect(results.length).toBe(2);
@@ -354,7 +354,7 @@ describe('CloudflareVector', () => {
       });
 
       it('filters with $ne operator', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           category: { $ne: 'electronics' },
         });
         expect(results.length).toBe(2);
@@ -366,7 +366,7 @@ describe('CloudflareVector', () => {
 
     describe('Numeric Comparison Operators', () => {
       it('filters with $gt operator', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           price: { $gt: 150 },
         });
         expect(results.length).toBe(1);
@@ -376,7 +376,7 @@ describe('CloudflareVector', () => {
       });
 
       it('filters with $gte operator', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           price: { $gte: 100 },
         });
         expect(results.length).toBe(3);
@@ -387,7 +387,7 @@ describe('CloudflareVector', () => {
       });
 
       it('filters with $lt operator', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           price: { $lt: 150 },
         });
         expect(results.length).toBe(2);
@@ -398,7 +398,7 @@ describe('CloudflareVector', () => {
       });
 
       it('filters with $lte operator', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           price: { $lte: 150 },
         });
         expect(results.length).toBe(3);
@@ -411,7 +411,7 @@ describe('CloudflareVector', () => {
 
     describe('Array Operators', () => {
       it('filters with $in operator for exact matches', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           category: { $in: ['electronics'] },
         });
         expect(results.length).toBe(2);
@@ -421,7 +421,7 @@ describe('CloudflareVector', () => {
       });
 
       it('filters with $nin operator', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           category: { $nin: ['electronics'] },
         });
         expect(results.length).toBe(2);
@@ -433,7 +433,7 @@ describe('CloudflareVector', () => {
 
     describe('Boolean Operations', () => {
       it('filters with boolean values', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           isActive: true,
         });
         expect(results.length).toBe(1);
@@ -441,7 +441,7 @@ describe('CloudflareVector', () => {
       }, 5000);
 
       it('filters with $ne on boolean values', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           isActive: { $ne: true },
         });
         expect(results.length).toBe(3);
@@ -453,7 +453,7 @@ describe('CloudflareVector', () => {
 
     describe('Nested Field Operations', () => {
       it('filters on nested fields with comparison operators', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           'nested.number': { $gt: 100 },
         });
         expect(results.length).toBe(2);
@@ -463,7 +463,7 @@ describe('CloudflareVector', () => {
       });
 
       it('combines nested field filters with top-level filters', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           'nested.number': { $lt: 200 },
           category: 'electronics',
         });
@@ -473,7 +473,7 @@ describe('CloudflareVector', () => {
       });
 
       it('handles nested string equality', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           'nested.string': 'premium',
         });
         expect(results.length).toBe(3);
@@ -483,7 +483,7 @@ describe('CloudflareVector', () => {
       }, 5000);
 
       it('combines nested numeric and boolean conditions', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           'nested.number': { $gt: 100 },
           'nested.boolean': true,
         });
@@ -493,7 +493,7 @@ describe('CloudflareVector', () => {
       }, 5000);
 
       it('handles multiple nested field comparisons', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           'nested.string': 'premium',
           'nested.number': { $lt: 200 },
           'nested.boolean': true,
@@ -506,7 +506,7 @@ describe('CloudflareVector', () => {
       }, 5000);
 
       it('handles $in with nested string values', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           'nested.string': { $in: ['premium', 'basic'] },
         });
         expect(results.length).toBe(4);
@@ -518,7 +518,7 @@ describe('CloudflareVector', () => {
 
     describe('String Operations', () => {
       it('handles string numbers in numeric comparisons', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           price: { $gt: '150' }, // String number
         });
         expect(results.length).toBe(1);
@@ -526,7 +526,7 @@ describe('CloudflareVector', () => {
       });
 
       it('handles mixed numeric and string comparisons', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           price: { $gt: 100 },
           category: { $in: ['electronics'] },
         });
@@ -538,7 +538,7 @@ describe('CloudflareVector', () => {
 
     describe('Filter Validation and Edge Cases', () => {
       it('handles numeric zero values correctly', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           rating: { $eq: 0 },
         });
         expect(results.length).toBe(1);
@@ -546,7 +546,7 @@ describe('CloudflareVector', () => {
       });
 
       it('handles multiple conditions on same field', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           price: { $gt: 75, $lt: 200 },
         });
         expect(results.length).toBe(2);
@@ -558,7 +558,7 @@ describe('CloudflareVector', () => {
       });
 
       it('handles exact numeric equality', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           price: { $eq: 100 },
         });
         expect(results.length).toBe(1);
@@ -566,7 +566,7 @@ describe('CloudflareVector', () => {
       });
 
       it('handles boundary conditions in ranges', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           price: { $gte: 75, $lte: 75 },
         });
         expect(results.length).toBe(1);
@@ -576,7 +576,7 @@ describe('CloudflareVector', () => {
 
     describe('String Range Queries', () => {
       it('handles lexicographical ordering in string range queries', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           code: { $gt: 'A123', $lt: 'C789' },
         });
         expect(results.length).toBe(1);
@@ -584,7 +584,7 @@ describe('CloudflareVector', () => {
       }, 5000);
 
       it('handles string range queries with special characters', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           code: { $gte: 'A', $lt: 'C' },
         });
         expect(results.length).toBe(2);
@@ -596,14 +596,14 @@ describe('CloudflareVector', () => {
 
     describe('Null and Special Values', () => {
       it('handles $in with null values', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           optionalField: { $in: [null, 'exists'] },
         });
         expect(results.length).toBe(1);
       }, 5000);
 
       it('handles $ne with null values', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           optionalField: { $ne: null },
         });
         expect(results.length).toBe(4);
@@ -613,14 +613,14 @@ describe('CloudflareVector', () => {
 
     describe('Mixed Type Arrays and Values', () => {
       it('handles $in with mixed type arrays', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           mixedField: { $in: ['string value', 10, null] },
         });
         expect(results.length).toBe(2);
       }, 5000);
 
       it('combines different types of filters', async () => {
-        const results = await vectorStore.query(testIndexName2, createVector(0, 1.0), 10, {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
           mixedField: { $in: ['string value', true] },
           price: { $eq: 100 },
         });
@@ -638,7 +638,7 @@ describe('CloudflareVector', () => {
           'nested.string': longString.slice(0, 200),
         };
 
-        await expect(vectorStore.query(testIndexName2, createVector(0, 1.0), 10, filter)).resolves.toBeDefined();
+        await expect(vectorDB.query(testIndexName2, createVector(0, 1.0), 10, filter)).resolves.toBeDefined();
       }, 5000);
 
       it('handles valid range query combinations', async () => {
@@ -650,7 +650,7 @@ describe('CloudflareVector', () => {
         ];
 
         for (const filter of validRangeCombinations) {
-          await expect(vectorStore.query(testIndexName2, createVector(0, 1.0), 10, filter)).resolves.toBeDefined();
+          await expect(vectorDB.query(testIndexName2, createVector(0, 1.0), 10, filter)).resolves.toBeDefined();
         }
       }, 5000);
     });

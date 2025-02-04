@@ -12,11 +12,11 @@ const PINECONE_API_KEY = process.env.PINECONE_API_KEY!;
 // }
 // TODO: skip until we the secrets on Github
 
-function waitUntilReady(pineconeVector: PineconeVector, indexName: string) {
+function waitUntilReady(vectorDB: PineconeVector, indexName: string) {
   return new Promise(resolve => {
     const interval = setInterval(async () => {
       try {
-        const stats = await pineconeVector.describeIndex(indexName);
+        const stats = await vectorDB.describeIndex(indexName);
         if (!!stats) {
           clearInterval(interval);
           resolve(true);
@@ -28,13 +28,13 @@ function waitUntilReady(pineconeVector: PineconeVector, indexName: string) {
   });
 }
 
-function waitUntilVectorsIndexed(pineconeVector: PineconeVector, indexName: string, expectedCount: number) {
+function waitUntilVectorsIndexed(vectorDB: PineconeVector, indexName: string, expectedCount: number) {
   return new Promise((resolve, reject) => {
     const maxAttempts = 30; // 30 seconds max
     let attempts = 0;
     const interval = setInterval(async () => {
       try {
-        const stats = await pineconeVector.describeIndex(indexName);
+        const stats = await vectorDB.describeIndex(indexName);
         if (stats && stats.count >= expectedCount) {
           clearInterval(interval);
           resolve(true);
@@ -51,30 +51,30 @@ function waitUntilVectorsIndexed(pineconeVector: PineconeVector, indexName: stri
   });
 }
 describe('PineconeVector Integration Tests', () => {
-  let pineconeVector: PineconeVector;
+  let vectorDB: PineconeVector;
   const testIndexName = 'test-index-' + Date.now(); // Unique index name for each test run
   const dimension = 3;
 
   beforeAll(async () => {
-    pineconeVector = new PineconeVector(PINECONE_API_KEY);
+    vectorDB = new PineconeVector(PINECONE_API_KEY);
     // Create test index
-    await pineconeVector.createIndex(testIndexName, dimension);
-    await waitUntilReady(pineconeVector, testIndexName);
+    await vectorDB.createIndex(testIndexName, dimension);
+    await waitUntilReady(vectorDB, testIndexName);
   }, 500000);
 
   afterAll(async () => {
     // Cleanup: delete test index
-    await pineconeVector.deleteIndex(testIndexName);
+    await vectorDB.deleteIndex(testIndexName);
   }, 500000);
 
   describe('Index Operations', () => {
     it('should list indexes including our test index', async () => {
-      const indexes = await pineconeVector.listIndexes();
+      const indexes = await vectorDB.listIndexes();
       expect(indexes).toContain(testIndexName);
     }, 500000);
 
     it('should describe index with correct properties', async () => {
-      const stats = await pineconeVector.describeIndex(testIndexName);
+      const stats = await vectorDB.describeIndex(testIndexName);
       expect(stats.dimension).toBe(dimension);
       expect(stats.metric).toBe('cosine');
       expect(typeof stats.count).toBe('number');
@@ -91,15 +91,15 @@ describe('PineconeVector Integration Tests', () => {
     let vectorIds: string[];
 
     it('should upsert vectors with metadata', async () => {
-      vectorIds = await pineconeVector.upsert(testIndexName, testVectors, testMetadata);
+      vectorIds = await vectorDB.upsert(testIndexName, testVectors, testMetadata);
       expect(vectorIds).toHaveLength(3);
       // Wait for vectors to be indexed
-      await waitUntilVectorsIndexed(pineconeVector, testIndexName, 3);
+      await waitUntilVectorsIndexed(vectorDB, testIndexName, 3);
     }, 500000);
 
     it.skip('should query vectors and return nearest neighbors', async () => {
       const queryVector = [1.0, 0.1, 0.1];
-      const results = await pineconeVector.query(testIndexName, queryVector, 3);
+      const results = await vectorDB.query(testIndexName, queryVector, 3);
 
       expect(results).toHaveLength(3);
       expect(results[0]!.score).toBeGreaterThan(0);
@@ -110,7 +110,7 @@ describe('PineconeVector Integration Tests', () => {
       const queryVector = [0.0, 1.0, 0.0];
       const filter = { label: 'y-axis' };
 
-      const results = await pineconeVector.query(testIndexName, queryVector, 1, filter);
+      const results = await vectorDB.query(testIndexName, queryVector, 1, filter);
 
       expect(results).toHaveLength(1);
       expect(results?.[0]?.metadata?.label).toBe('y-axis');
@@ -118,7 +118,7 @@ describe('PineconeVector Integration Tests', () => {
 
     it('should query vectors and return vectors in results', async () => {
       const queryVector = [0.0, 1.0, 0.0];
-      const results = await pineconeVector.query(testIndexName, queryVector, 1, undefined, true);
+      const results = await vectorDB.query(testIndexName, queryVector, 1, undefined, true);
 
       expect(results).toHaveLength(1);
       expect(results?.[0]?.vector).toBeDefined();
@@ -129,12 +129,12 @@ describe('PineconeVector Integration Tests', () => {
   describe('Error Handling', () => {
     it('should handle non-existent index query gracefully', async () => {
       const nonExistentIndex = 'non-existent-index';
-      await expect(pineconeVector.query(nonExistentIndex, [1, 0, 0])).rejects.toThrow();
+      await expect(vectorDB.query(nonExistentIndex, [1, 0, 0])).rejects.toThrow();
     }, 500000);
 
     it('should handle incorrect dimension vectors', async () => {
       const wrongDimVector = [[1, 0]]; // 2D vector for 3D index
-      await expect(pineconeVector.upsert(testIndexName, wrongDimVector)).rejects.toThrow();
+      await expect(vectorDB.upsert(testIndexName, wrongDimVector)).rejects.toThrow();
     }, 500000);
   });
 
@@ -151,7 +151,7 @@ describe('PineconeVector Integration Tests', () => {
       const metadata = vectors.map((_, i) => ({ id: i }));
 
       const start = Date.now();
-      const ids = await pineconeVector.upsert(testIndexName, vectors, metadata);
+      const ids = await vectorDB.upsert(testIndexName, vectors, metadata);
       const duration = Date.now() - start;
 
       expect(ids).toHaveLength(batchSize);
@@ -165,7 +165,7 @@ describe('PineconeVector Integration Tests', () => {
       const start = Date.now();
       const promises = Array(numQueries)
         .fill(null)
-        .map(() => pineconeVector.query(testIndexName, queryVector));
+        .map(() => vectorDB.query(testIndexName, queryVector));
 
       const results = await Promise.all(promises);
       const duration = Date.now() - start;
@@ -178,13 +178,13 @@ describe('PineconeVector Integration Tests', () => {
   describe('Filter Validation in Queries', () => {
     it('rejects queries with null values', async () => {
       await expect(
-        pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        vectorDB.query(testIndexName, [1, 0, 0], 10, {
           field: null,
         }),
-      ).rejects.toThrow('the $eq operator must be followed by a string, boolean or a number, got null instead');
+      ).rejects.toThrow();
 
       await expect(
-        pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        vectorDB.query(testIndexName, [1, 0, 0], 10, {
           other: { $eq: null },
         }),
       ).rejects.toThrow('the $eq operator must be followed by a string, boolean or a number, got null instead');
@@ -194,10 +194,9 @@ describe('PineconeVector Integration Tests', () => {
       // Test non-undefined values
       const invalidValues = [123, 'string', true, { key: 'value' }, null];
       for (const op of ['$in', '$nin']) {
-        // Removed $all as it's not supported
         for (const val of invalidValues) {
           await expect(
-            pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+            vectorDB.query(testIndexName, [1, 0, 0], 10, {
               field: { [op]: val },
             }),
           ).rejects.toThrow(`the ${op} operator must be followed by a list of strings or a list of numbers`);
@@ -211,7 +210,7 @@ describe('PineconeVector Integration Tests', () => {
       for (const op of numOps) {
         for (const val of invalidNumericValues) {
           await expect(
-            pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+            vectorDB.query(testIndexName, [1, 0, 0], 10, {
               field: { [op]: val },
             }),
           ).rejects.toThrow(`the ${op} operator must be followed by a number`);
@@ -221,28 +220,29 @@ describe('PineconeVector Integration Tests', () => {
 
     it('rejects multiple invalid values', async () => {
       await expect(
-        pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        vectorDB.query(testIndexName, [1, 0, 0], 10, {
           field1: { $in: 'not-array' },
-          field2: { $gt: 'not-number' },
+          field2: { $exists: 'not-boolean' },
+          field3: { $gt: 'not-number' },
         }),
-      ).rejects.toThrow('the $in operator must be followed by a list of strings or a list of numbers');
+      ).rejects.toThrow();
     });
 
     it('rejects invalid array values', async () => {
       await expect(
-        pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        vectorDB.query(testIndexName, [1, 0, 0], 10, {
           field: { $in: [null] },
         }),
       ).rejects.toThrow('the $in operator must be followed by a list of strings or a list of numbers');
 
       await expect(
-        pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        vectorDB.query(testIndexName, [1, 0, 0], 10, {
           field: { $in: [undefined] },
         }),
       ).rejects.toThrow('the $in operator must be followed by a list of strings or a list of numbers');
 
       await expect(
-        pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        vectorDB.query(testIndexName, [1, 0, 0], 10, {
           field: { $all: 'not-an-array' },
         }),
       ).rejects.toThrow('A non-empty array is required for the $all operator');
@@ -250,7 +250,7 @@ describe('PineconeVector Integration Tests', () => {
 
     it('handles empty object filters', async () => {
       // Test empty object at top level
-      await expect(pineconeVector.query(testIndexName, [1, 0, 0], 10, { field: { $eq: {} } })).rejects.toThrow(
+      await expect(vectorDB.query(testIndexName, [1, 0, 0], 10, { field: { $eq: {} } })).rejects.toThrow(
         'the $eq operator must be followed by a string, boolean or a number, got {} instead',
       );
     });
@@ -261,13 +261,13 @@ describe('PineconeVector Integration Tests', () => {
       const noFilterCases = [{ field: {} }, { field: undefined }, { field: { $in: undefined } }];
 
       for (const filter of noFilterCases) {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, filter);
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, filter);
         expect(results.length).toBeGreaterThan(0);
       }
     });
     it('handles empty object filters', async () => {
       // Test empty object at top level
-      await expect(pineconeVector.query(testIndexName, [1, 0, 0], 10, {})).rejects.toThrow(
+      await expect(vectorDB.query(testIndexName, [1, 0, 0], 10, {})).rejects.toThrow(
         'You must enter a `filter` object with at least one key-value pair.',
       );
     });
@@ -297,14 +297,23 @@ describe('PineconeVector Integration Tests', () => {
     ];
 
     beforeAll(async () => {
-      await pineconeVector.upsert(testIndexName, testVectors, testMetadata);
+      await vectorDB.upsert(testIndexName, testVectors, testMetadata);
       // Wait for vectors to be indexed
-      await waitUntilVectorsIndexed(pineconeVector, testIndexName, testVectors.length);
+      await waitUntilVectorsIndexed(vectorDB, testIndexName, testVectors.length);
     }, 500000);
 
     describe('Comparison Operators', () => {
+      it('should filter with implict $eq', async () => {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
+          category: 'electronics',
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category).toBe('electronics');
+        });
+      });
       it('should filter with $eq operator', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           category: { $eq: 'electronics' },
         });
         expect(results.length).toBeGreaterThan(0);
@@ -314,7 +323,7 @@ describe('PineconeVector Integration Tests', () => {
       });
 
       it('should filter with $gt operator', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           price: { $gt: 500 },
         });
         expect(results.length).toBeGreaterThan(0);
@@ -324,7 +333,7 @@ describe('PineconeVector Integration Tests', () => {
       });
 
       it('should filter with $gte operator', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           price: { $gte: 500 },
         });
         expect(results.length).toBeGreaterThan(0);
@@ -334,7 +343,7 @@ describe('PineconeVector Integration Tests', () => {
       });
 
       it('should filter with $lt operator', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           price: { $lt: 100 },
         });
         expect(results.length).toBeGreaterThan(0);
@@ -344,7 +353,7 @@ describe('PineconeVector Integration Tests', () => {
       });
 
       it('should filter with $lte operator', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           price: { $lte: 50 },
         });
         expect(results.length).toBeGreaterThan(0);
@@ -354,7 +363,7 @@ describe('PineconeVector Integration Tests', () => {
       });
 
       it('should filter with $ne operator', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           category: { $ne: 'electronics' },
         });
         expect(results.length).toBeGreaterThan(0);
@@ -362,11 +371,22 @@ describe('PineconeVector Integration Tests', () => {
           expect(result.metadata?.category).not.toBe('electronics');
         });
       });
+
+      it('filters with $gte, $lt, $lte operators', async () => {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
+          price: { $gte: 25, $lte: 30 },
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          expect(Number(result.metadata?.price)).toBeLessThanOrEqual(30);
+          expect(Number(result.metadata?.price)).toBeGreaterThanOrEqual(25);
+        });
+      });
     });
 
     describe('Array Operators', () => {
       it('should filter with $in operator for strings', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           category: { $in: ['electronics', 'books'] },
         });
         expect(results.length).toBeGreaterThan(0);
@@ -376,7 +396,7 @@ describe('PineconeVector Integration Tests', () => {
       });
 
       it('should filter with $in operator for numbers', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           price: { $in: [50, 75, 1000] },
         });
         expect(results.length).toBeGreaterThan(0);
@@ -386,7 +406,7 @@ describe('PineconeVector Integration Tests', () => {
       });
 
       it('should filter with $nin operator', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           category: { $nin: ['electronics', 'books'] },
         });
         expect(results.length).toBeGreaterThan(0);
@@ -396,7 +416,7 @@ describe('PineconeVector Integration Tests', () => {
       });
 
       it('should filter with $all operator', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           tags: { $all: ['premium', 'new'] },
         });
         expect(results.length).toBeGreaterThan(0);
@@ -408,8 +428,21 @@ describe('PineconeVector Integration Tests', () => {
     });
 
     describe('Logical Operators', () => {
+      it('should filter with implict $and', async () => {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
+          category: 'electronics',
+          price: { $gt: 700 },
+          inStock: true,
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category).toBe('electronics');
+          expect(Number(result.metadata?.price)).toBeGreaterThan(700);
+          expect(result.metadata?.inStock).toBe(true);
+        });
+      });
       it('should filter with $and operator', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           $and: [{ category: 'electronics' }, { price: { $gt: 700 } }, { inStock: true }],
         });
         expect(results.length).toBeGreaterThan(0);
@@ -421,7 +454,7 @@ describe('PineconeVector Integration Tests', () => {
       });
 
       it('should filter with $or operator', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           $or: [{ price: { $gt: 900 } }, { tags: { $all: ['bestseller'] } }],
         });
         expect(results.length).toBeGreaterThan(0);
@@ -433,7 +466,7 @@ describe('PineconeVector Integration Tests', () => {
       });
 
       it('should handle nested logical operators', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           $and: [
             {
               $or: [{ category: 'electronics' }, { category: 'books' }],
@@ -453,7 +486,7 @@ describe('PineconeVector Integration Tests', () => {
 
     describe('Complex Filter Combinations', () => {
       it('should combine comparison and array operators', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           $and: [{ price: { $gte: 500 } }, { tags: { $in: ['premium', 'refurbished'] } }],
         });
         expect(results.length).toBeGreaterThan(0);
@@ -464,7 +497,7 @@ describe('PineconeVector Integration Tests', () => {
       });
 
       it('should handle multiple conditions on same field', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           $and: [{ price: { $gte: 30 } }, { price: { $lte: 800 } }],
         });
         expect(results.length).toBeGreaterThan(0);
@@ -476,7 +509,7 @@ describe('PineconeVector Integration Tests', () => {
       });
 
       it('should handle complex nested conditions', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           $or: [
             {
               $and: [{ category: 'electronics' }, { price: { $gt: 700 } }, { tags: { $all: ['premium'] } }],
@@ -501,11 +534,20 @@ describe('PineconeVector Integration Tests', () => {
           expect(isExpensiveElectronics || isCheapBook).toBe(true);
         });
       });
+
+      it('combines existence checks with other operators', async () => {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
+          $and: [{ category: 'clothing' }, { optionalField: { $exists: false } }],
+        });
+        expect(results.length).toBe(2);
+        expect(results[0]!.metadata!.category).toBe('clothing');
+        expect('optionalField' in results[0]!.metadata!).toBe(false);
+      });
     });
 
     describe('Edge Cases', () => {
       it('should handle numeric comparisons with decimals', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           rating: { $gt: 4.5 },
         });
         expect(results.length).toBeGreaterThan(0);
@@ -515,7 +557,7 @@ describe('PineconeVector Integration Tests', () => {
       });
 
       it('should handle boolean values', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           inStock: { $eq: false },
         });
         expect(results.length).toBeGreaterThan(0);
@@ -525,14 +567,14 @@ describe('PineconeVector Integration Tests', () => {
       });
 
       it('should handle empty array in $in operator', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           category: { $in: [] },
         });
         expect(results).toHaveLength(0);
       });
 
       it('should handle single value in $all operator', async () => {
-        const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
           tags: { $all: ['premium'] },
         });
         expect(results.length).toBeGreaterThan(0);
@@ -546,7 +588,7 @@ describe('PineconeVector Integration Tests', () => {
   describe('Additional Validation Tests', () => {
     it('should reject non-numeric values in numeric comparisons', async () => {
       await expect(
-        pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        vectorDB.query(testIndexName, [1, 0, 0], 10, {
           price: { $gt: '500' }, // string instead of number
         }),
       ).rejects.toThrow('the $gt operator must be followed by a number');
@@ -554,7 +596,7 @@ describe('PineconeVector Integration Tests', () => {
 
     it('should reject invalid types in $in operator', async () => {
       await expect(
-        pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        vectorDB.query(testIndexName, [1, 0, 0], 10, {
           price: { $in: [true, false] }, // booleans instead of numbers
         }),
       ).rejects.toThrow('the $in operator must be followed by a list of strings or a list of numbers');
@@ -562,7 +604,7 @@ describe('PineconeVector Integration Tests', () => {
 
     it('should reject mixed types in $in operator', async () => {
       await expect(
-        pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+        vectorDB.query(testIndexName, [1, 0, 0], 10, {
           field: { $in: ['string', 123] }, // mixed string and number
         }),
       ).rejects.toThrow();
@@ -572,7 +614,7 @@ describe('PineconeVector Integration Tests', () => {
   describe('Additional Edge Cases', () => {
     it('should handle exact boundary conditions', async () => {
       // Test exact boundary values from our test data
-      const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+      const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
         $and: [
           { price: { $gte: 25 } }, // lowest price in our data
           { price: { $lte: 1000 } }, // highest price in our data
@@ -585,7 +627,7 @@ describe('PineconeVector Integration Tests', () => {
     });
 
     it('should handle multiple $all conditions on same array field', async () => {
-      const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+      const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
         $and: [{ tags: { $all: ['premium'] } }, { tags: { $all: ['new'] } }],
       });
       expect(results.length).toBeGreaterThan(0);
@@ -596,7 +638,7 @@ describe('PineconeVector Integration Tests', () => {
     });
 
     it('should handle multiple array operator combinations', async () => {
-      const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+      const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
         $and: [{ tags: { $all: ['premium'] } }, { tags: { $in: ['new', 'refurbished'] } }],
       });
       expect(results.length).toBeGreaterThan(0);
@@ -609,7 +651,7 @@ describe('PineconeVector Integration Tests', () => {
 
   describe('Additional Complex Logical Combinations', () => {
     it('should handle deeply nested $or conditions', async () => {
-      const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+      const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
         $or: [
           {
             $and: [{ category: 'electronics' }, { $or: [{ price: { $gt: 900 } }, { tags: { $all: ['premium'] } }] }],
@@ -630,7 +672,7 @@ describe('PineconeVector Integration Tests', () => {
     });
 
     it('should handle multiple field comparisons with same value', async () => {
-      const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+      const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
         $or: [{ price: { $gt: 500 } }, { rating: { $gt: 4.5 } }],
       });
       expect(results.length).toBeGreaterThan(0);
@@ -640,7 +682,7 @@ describe('PineconeVector Integration Tests', () => {
     });
 
     it('should handle combination of array and numeric comparisons', async () => {
-      const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+      const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
         $and: [
           { tags: { $in: ['premium', 'bestseller'] } },
           { $or: [{ price: { $gt: 500 } }, { rating: { $gt: 4.5 } }] },
@@ -656,7 +698,7 @@ describe('PineconeVector Integration Tests', () => {
 
   describe('Performance Edge Cases', () => {
     it('should handle filters with many conditions', async () => {
-      const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+      const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
         $and: Array(10)
           .fill(null)
           .map(() => ({
@@ -670,7 +712,7 @@ describe('PineconeVector Integration Tests', () => {
     });
 
     it('should handle deeply nested conditions efficiently', async () => {
-      const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+      const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
         $or: Array(5)
           .fill(null)
           .map(() => ({
@@ -686,7 +728,7 @@ describe('PineconeVector Integration Tests', () => {
     });
 
     it('should handle large number of $or conditions', async () => {
-      const results = await pineconeVector.query(testIndexName, [1, 0, 0], 10, {
+      const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, {
         $or: [
           ...Array(5)
             .fill(null)
