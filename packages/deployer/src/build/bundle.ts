@@ -126,14 +126,12 @@ export async function getBundler(
 
 export async function getWatcher(
   inputOptions: NormalizedInputOptions,
-  {
-    platform = 'node',
-    dir = process.cwd(),
-  }: {
+  args: {
     platform?: 'node' | 'browser';
     dir?: string;
-  },
+  } = {},
 ) {
+  const { platform = 'node', dir = process.cwd() } = args;
   const watcher = watch(getOptions(inputOptions, platform, dir));
 
   return watcher;
