@@ -1,5 +1,18 @@
 # memory
 
+## 1.0.1-alpha.46
+
+### Patch Changes
+
+- Updated dependencies [2f17a5f]
+- Updated dependencies [cb290ee]
+- Updated dependencies [b4d7416]
+- Updated dependencies [38b7f66]
+  - @mastra/core@0.2.0-alpha.84
+  - @mastra/memory@0.1.0-alpha.66
+  - @mastra/store-upstash@0.0.0-alpha.2
+  - @mastra/vector-pg@0.0.1-alpha.18
+
 ## 1.0.1-alpha.45
 
 ### Patch Changes

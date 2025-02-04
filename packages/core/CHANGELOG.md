@@ -1,5 +1,14 @@
 # @mastra/core
 
+## 0.2.0-alpha.84
+
+### Patch Changes
+
+- 2f17a5f: Added filter translator and tests for Qdrant
+- cb290ee: Reworked the Memory public API to have more intuitive and simple property names
+- b4d7416: Added the ability to pass a configured Memory class instance directly to new Agent instances instead of passing memory to Mastra
+- 38b7f66: Update deployer logic
+
 ## 0.2.0-alpha.83
 
 ### Minor Changes
