@@ -42,9 +42,9 @@ describe('PostgresStore', () => {
 
   beforeEach(async () => {
     // Clear tables before each test
-    await store.clearTable({ tableName: 'workflow_snapshot' });
-    await store.clearTable({ tableName: 'messages' });
-    await store.clearTable({ tableName: 'threads' });
+    await store.clearTable({ tableName: 'mastra_workflow_snapshot' });
+    await store.clearTable({ tableName: 'mastra_messages' });
+    await store.clearTable({ tableName: 'mastra_threads' });
   });
 
   describe('Thread Operations', () => {

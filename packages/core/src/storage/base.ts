@@ -11,10 +11,10 @@ export type TABLE_NAMES =
   | typeof MastraStorage.TABLE_THREADS;
 
 export abstract class MastraStorage extends MastraBase {
-  static readonly TABLE_WORKFLOW_SNAPSHOT = 'workflow_snapshot';
-  static readonly TABLE_EVALS = 'evals';
-  static readonly TABLE_MESSAGES = 'messages';
-  static readonly TABLE_THREADS = 'threads';
+  static readonly TABLE_WORKFLOW_SNAPSHOT = 'mastra_workflow_snapshot';
+  static readonly TABLE_EVALS = 'mastra_evals';
+  static readonly TABLE_MESSAGES = 'mastra_messages';
+  static readonly TABLE_THREADS = 'mastra_threads';
 
   hasInit = false;
 
