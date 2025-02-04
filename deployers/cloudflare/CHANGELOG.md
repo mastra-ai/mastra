@@ -1,5 +1,13 @@
 # @mastra/deployer-cloudflare
 
+## 0.0.1-alpha.33
+
+### Patch Changes
+
+- e27fe69: Add dir to deployer
+- Updated dependencies [e27fe69]
+  - @mastra/deployer@0.0.1-alpha.30
+
 ## 0.0.1-alpha.32
 
 ### Patch Changes

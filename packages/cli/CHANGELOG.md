@@ -1,5 +1,13 @@
 # mastra
 
+## 0.1.57-alpha.135
+
+### Patch Changes
+
+- e27fe69: Add dir to deployer
+- Updated dependencies [e27fe69]
+  - @mastra/deployer@0.0.1-alpha.30
+
 ## 0.1.57-alpha.134
 
 ### Patch Changes
