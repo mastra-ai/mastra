@@ -406,7 +406,7 @@ export class PostgresStore extends MastraStorage {
         [workflowName, runId, JSON.stringify(snapshot), new Date(), new Date()],
       );
     } catch (error) {
-      console.error('Error inserting into workflow_snapshot:', error);
+      console.error('Error inserting into mastra_workflow_snapshot:', error);
       throw error;
     }
   }
