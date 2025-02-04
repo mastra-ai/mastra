@@ -1,4 +1,4 @@
-# getMessages
+# query
 
 Retrieves messages from a specific thread, with support for pagination and filtering options.
 
@@ -10,7 +10,7 @@ import { Memory } from "@mastra/memory";
 const memory = new Memory({ /* config */ });
 
 // Get last 50 messages
-const { messages, uiMessages } = await memory.getMessages({
+const { messages, uiMessages } = await memory.query({
   threadId: "thread-123",
   selectBy: {
     last: 50
@@ -18,7 +18,7 @@ const { messages, uiMessages } = await memory.getMessages({
 });
 
 // Get messages with context around specific messages
-const { messages: contextMessages } = await memory.getMessages({
+const { messages: contextMessages } = await memory.query({
   threadId: "thread-123",
   selectBy: {
     include: [
@@ -36,7 +36,7 @@ const { messages: contextMessages } = await memory.getMessages({
 });
 
 // Semantic search in messages
-const { messages: searchResults } = await memory.getMessages({
+const { messages: searchResults } = await memory.query({
   threadId: "thread-123",
   selectBy: {
     vectorSearchString: "What was discussed about deployment?"
@@ -142,7 +142,7 @@ const { messages: searchResults } = await memory.getMessages({
 
 ## Additional Notes
 
-The `getMessages` function returns two different message formats:
+The `query` function returns two different message formats:
 - `messages`: Core message format used internally
 - `uiMessages`: Formatted messages suitable for UI display, including proper threading of tool calls and results
 
@@ -150,4 +150,3 @@ The `getMessages` function returns two different message formats:
 
 - [Memory](/docs/reference/memory/Memory.mdx)
 - [addMessage](/docs/reference/memory/addMessage.mdx)
-- [rememberMessages](/docs/reference/memory/rememberMessages.mdx)
