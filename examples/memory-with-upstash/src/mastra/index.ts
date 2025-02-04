@@ -13,14 +13,14 @@ const memory = new Memory({
   vector: new PgVector(`postgresql://postgres:postgres@localhost:5433`),
   options: {
     lastMessages: 1,
-    historySearch: {
+    semanticRecall: {
       topK: 3,
-      messageRange: { before: 2, after: 2 },
+      messageRange: 2,
     },
   },
-  embeddingOptions: {
+  embedding: {
     provider: 'OPEN_AI',
-    model: 'text-embedding-ada-002',
+    model: 'text-embedding-3-small',
     maxRetries: 3,
   },
 });
