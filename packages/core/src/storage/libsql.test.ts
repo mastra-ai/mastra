@@ -39,18 +39,18 @@ describe('MastraStorageLibSql', () => {
 
   beforeEach(async () => {
     // Clear tables before each test
-    await storage.clearTable({ tableName: 'workflow_snapshot' });
-    await storage.clearTable({ tableName: 'evals' });
-    await storage.clearTable({ tableName: 'messages' });
-    await storage.clearTable({ tableName: 'threads' });
+    await storage.clearTable({ tableName: 'mastra_workflow_snapshot' });
+    await storage.clearTable({ tableName: 'mastra_evals' });
+    await storage.clearTable({ tableName: 'mastra_messages' });
+    await storage.clearTable({ tableName: 'mastra_threads' });
   });
 
   afterAll(async () => {
     // Clear tables after tests
-    await storage.clearTable({ tableName: 'workflow_snapshot' });
-    await storage.clearTable({ tableName: 'evals' });
-    await storage.clearTable({ tableName: 'messages' });
-    await storage.clearTable({ tableName: 'threads' });
+    await storage.clearTable({ tableName: 'mastra_workflow_snapshot' });
+    await storage.clearTable({ tableName: 'mastra_evals' });
+    await storage.clearTable({ tableName: 'mastra_messages' });
+    await storage.clearTable({ tableName: 'mastra_threads' });
   });
 
   describe('Thread Operations', () => {
@@ -236,7 +236,7 @@ describe('MastraStorageLibSql', () => {
     beforeAll(async () => {
       // Create workflow_snapshot table
       await storage.createTable({
-        tableName: 'workflow_snapshot',
+        tableName: 'mastra_workflow_snapshot',
         schema: {
           workflow_name: { type: 'text', nullable: false },
           run_id: { type: 'text', nullable: false },
