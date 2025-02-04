@@ -5,7 +5,6 @@ import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from 'hono/http-exception';
 
 import { handleError } from './error';
-import { validateBody } from './utils';
 
 // Tool handlers
 export async function getToolsHandler(c: Context) {
@@ -54,31 +53,6 @@ export async function getToolByIdHandler(c: Context) {
     return c.json(serializedTool);
   } catch (error) {
     return handleError(error, 'Error getting tool');
-  }
-}
-
-export async function getToolResultHandler(c: Context) {
-  try {
-    const mastra = c.get('mastra');
-    const memory = mastra.memory;
-    const threadId = c.req.param('threadId');
-    const { toolName, toolArgs } = await c.req.json();
-
-    if (!memory) {
-      throw new HTTPException(400, { message: 'Memory is not initialized' });
-    }
-
-    validateBody({ toolName, toolArgs });
-
-    const thread = await memory.getThreadById({ threadId });
-    if (!thread) {
-      throw new HTTPException(404, { message: 'Thread not found' });
-    }
-
-    const result = await memory.getToolResult({ threadId, toolName, toolArgs });
-    return c.json(result);
-  } catch (error) {
-    return handleError(error, 'Error getting tool result');
   }
 }
 

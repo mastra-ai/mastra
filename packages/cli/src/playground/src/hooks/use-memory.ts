@@ -1,4 +1,4 @@
-import { ThreadType, AiMessageType, MessageType } from '@mastra/core/memory';
+import { AiMessageType, MessageType, StorageThreadType as ThreadType } from '@mastra/core/memory';
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 import useSWR, { useSWRConfig } from 'swr';
