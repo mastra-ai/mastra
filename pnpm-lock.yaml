@@ -1207,7 +1207,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
 
-  examples/memory-libsql:
+  examples/memory-with-libsql:
     dependencies:
       '@mastra/core':
         specifier: workspace:*
@@ -1219,7 +1219,7 @@ importers:
         specifier: workspace:*
         version: link:../../vector-stores/libsql
 
-  examples/memory-pg:
+  examples/memory-with-pg:
     dependencies:
       '@mastra/core':
         specifier: workspace:*
@@ -1241,7 +1241,7 @@ importers:
         specifier: ^4.19.2
         version: 4.19.2
 
-  examples/memory-upstashkv:
+  examples/memory-with-upstash:
     dependencies:
       '@mastra/core':
         specifier: workspace:*
