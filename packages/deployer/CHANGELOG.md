@@ -1,5 +1,11 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.30
+
+### Patch Changes
+
+- e27fe69: Add dir to deployer
+
 ## 0.0.1-alpha.29
 
 ### Patch Changes
