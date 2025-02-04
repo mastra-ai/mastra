@@ -1,13 +1,14 @@
 {
-  "name": "memory",
+  "name": "memory-with-upstash",
   "type": "module",
-  "version": "1.0.1-alpha.64",
+  "version": "1.0.1-alpha.46",
   "description": "",
   "private": true,
   "main": "index.js",
   "scripts": {
-    "start": "bun run --watch src/index.ts",
-    "chat": "bun run --watch src/chat.ts"
+    "prestart": "docker compose up -d",
+    "start": "npx bun src/index.ts",
+    "poststart": "docker compose down"
   },
   "keywords": [],
   "author": "",
@@ -15,8 +16,8 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@mastra/vector-pg": "workspace:*",
-    "@mastra/store-pg": "workspace:*"
+    "@mastra/store-upstash": "workspace:*",
+    "@mastra/vector-pg": "workspace:*"
   },
   "devDependencies": {
     "dotenv": "^16.4.7",

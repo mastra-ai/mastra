@@ -1,5 +1,5 @@
 {
-  "name": "memory-libsql",
+  "name": "memory-with-libsql",
   "type": "module",
   "description": "",
   "private": true,
@@ -14,7 +14,7 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@mastra/vector-pg": "workspace:*"
+    "@mastra/vector-libsql": "workspace:*"
   },
   "version": "0.0.1-alpha.1"
 }

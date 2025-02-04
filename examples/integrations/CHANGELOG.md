@@ -1,5 +1,11 @@
 # mastra-examples-integrations
 
+## 0.0.1-alpha.2
+
+### Patch Changes
+
+- @mastra/firecrawl@1.0.4-alpha.78
+
 ## 0.0.1-alpha.1
 
 ### Patch Changes
