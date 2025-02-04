@@ -206,15 +206,12 @@ export class UpstashFilterTranslator extends BaseFilterTranslator {
       // If string has single quotes, use double quotes
       // Otherwise, use single quotes (default)
       if (hasSingleQuote && hasDoubleQuote) {
-        return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+        return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
       }
       if (hasSingleQuote) {
         return `"${value}"`;
       }
       return `'${value}'`;
-    }
-    if (typeof value === 'boolean') {
-      return value ? '1' : '0';
     }
 
     if (typeof value === 'number') {

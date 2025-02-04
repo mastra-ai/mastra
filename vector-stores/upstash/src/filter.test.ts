@@ -17,7 +17,7 @@ describe('UpstashFilterTranslator', () => {
   it('translates primitive equality', () => {
     expect(translator.translate({ city: 'Istanbul' })).toBe("city = 'Istanbul'");
     expect(translator.translate({ population: 15460000 })).toBe('population = 15460000');
-    expect(translator.translate({ is_capital: false })).toBe('is_capital = 0');
+    expect(translator.translate({ is_capital: false })).toBe('is_capital = false');
   });
 
   it('translates nested paths', () => {
@@ -77,7 +77,7 @@ describe('UpstashFilterTranslator', () => {
 
     expect(translator.translate(filter)).toBe(
       "(population >= 1000000 AND geography.continent = 'Asia' AND " +
-        "(economy.major_industries CONTAINS 'Tourism' OR is_capital = 1))",
+        "(economy.major_industries CONTAINS 'Tourism' OR is_capital = true))",
     );
   });
 
@@ -177,7 +177,7 @@ describe('UpstashFilterTranslator', () => {
       expect(translator.translate(filter)).toBe(
         "((population >= 1000000 AND geography.continent = 'Asia' AND " +
           "(economy.industries CONTAINS 'Tech' OR economy.industries CONTAINS 'Finance')) OR " +
-          "(geography.continent = 'Europe' AND is_capital = 1 AND population < 5000000))",
+          "(geography.continent = 'Europe' AND is_capital = true AND population < 5000000))",
       );
     });
 
@@ -209,7 +209,7 @@ describe('UpstashFilterTranslator', () => {
       expect(translator.translate(filter)).toBe(
         "(economy.sectors IN ('Technology', 'Finance', 'Tourism') AND " +
           '(geography.coordinates.latitude >= 35.5 AND geography.coordinates.longitude <= 45) AND ' +
-          '(population >= 1000000 OR (is_capital = 1 AND economy.gdp >= 50000)))',
+          '(population >= 1000000 OR (is_capital = true AND economy.gdp >= 50000)))',
       );
     });
 
@@ -292,7 +292,7 @@ describe('UpstashFilterTranslator', () => {
     });
 
     it('translate $not with direct object value', () => {
-      expect(translator.translate({ $not: { field: true } })).toBe('field != 1');
+      expect(translator.translate({ $not: { field: true } })).toBe('field != true');
     });
 
     it('translates $not with operator', () => {
