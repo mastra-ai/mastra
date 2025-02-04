@@ -75,6 +75,12 @@ export class PineconeVector extends MastraVector {
     return vectorIds;
   }
 
+  transformFilter(filter?: Filter) {
+    const pineconeFilter = new PineconeFilterTranslator();
+    const translatedFilter = pineconeFilter.translate(filter);
+    return translatedFilter;
+  }
+
   async query(
     indexName: string,
     queryVector: number[],
@@ -84,8 +90,7 @@ export class PineconeVector extends MastraVector {
   ): Promise<QueryResult[]> {
     const index = this.client.Index(indexName);
 
-    const pineconeFilter = new PineconeFilterTranslator();
-    const translatedFilter = pineconeFilter.translate(filter);
+    const translatedFilter = this.transformFilter(filter);
 
     const results = await index.query({
       vector: queryVector,

@@ -29,6 +29,12 @@ export class PgVector extends MastraVector {
       }) ?? basePool;
   }
 
+  transformFilter(filter?: Filter) {
+    const pgFilter = new PGFilterTranslator();
+    const translatedFilter = pgFilter.translate(filter ?? {});
+    return translatedFilter;
+  }
+
   async query(
     indexName: string,
     queryVector: number[],
@@ -41,8 +47,7 @@ export class PgVector extends MastraVector {
     try {
       const vectorStr = `[${queryVector.join(',')}]`;
 
-      const pgFilter = new PGFilterTranslator();
-      const translatedFilter = pgFilter.translate(filter ?? {});
+      const translatedFilter = this.transformFilter(filter);
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter, minScore);
 
       const query = `
