@@ -1,9 +1,9 @@
 const meta = {
   Memory: "Memory Class",
   createThread: ".createThread()",
-  getMessages: ".getMessages()",
-  addMessage: ".addMessage()",
-  rememberMessages: ".rememberMessages()"
+  query: ".query()",
+  getThreadById: ".getThreadById()",
+  getThreadsByResourceId: ".getThreadsByResourceId()",
 };
 
 export default meta;
