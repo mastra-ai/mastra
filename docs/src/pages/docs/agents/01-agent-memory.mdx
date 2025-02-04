@@ -7,6 +7,77 @@ description: Documentation on how agents in Mastra use memory to store conversat
 
 Agents in Mastra have a sophisticated memory system that stores conversation history and contextual information. This memory system supports both traditional message storage and vector-based semantic search, enabling agents to maintain state across interactions and retrieve relevant historical context.
 
+## How Memory Works
+
+The Memory API uses two main mechanisms to maintain context in conversations:
+
+### Recent Message History
+
+The `lastMessages` setting maintains a sliding window of the most recent messages. This ensures your agent always has access to the immediate conversation context:
+
+```tsx
+const memory = new Memory({
+  options: {
+    lastMessages: 1, // Keep 1 most recent messages
+  },
+});
+
+// Example conversation flow:
+// 1. User asks about project timeline
+await agent.stream('When will the project be completed?', {
+  threadId: 'project_123',
+  resourceId: 'user_123',
+});
+
+// 2. User asks about specific feature
+await agent.stream('How will the new search feature work?', {
+  threadId: 'project_123',
+  resourceId: 'user_123',
+});
+
+// 3. When user asks this question, the agent will see the last 10 messages,
+// allowing them to remember the conversation further back than the default we set above (lastMessages: 1)
+await agent.stream('Can you summarize the search feature requirements?', {
+  threadId: 'project_123',
+  resourceId: 'user_123',
+  memoryOptions: {
+    lastMessages: 10,
+  },
+});
+```
+
+### Semantic Search
+
+When vector search is enabled, Memory can find relevant past messages using semantic similarity. This allows your agent to recall information from earlier in the conversation:
+
+```tsx
+const memory = new Memory({
+  options: {
+    semanticRecall: {
+      topK: 10, // Include 10 most relevant past messages
+      messageRange: 2, // Messages before and after each result
+    },
+  },
+});
+
+// Example: User asks about a past feature discussion
+await agent.stream('What did we decide about the search feature last week?', {
+  threadId: 'support_123',
+  resourceId: 'user_123',
+  memoryOptions: {
+    lastMessages: 10,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+});
+// The vector search will:
+// 1. Find message_3 as relevant (topK: 10)
+// 2. Include messages [1,2] before and [4,5] after
+// 3. Include all of this context in the agent's response
+```
+
 ## Memory Configuration
 
 The Mastra memory system is highly configurable and supports multiple storage backends. Here's a basic configuration example:
@@ -34,24 +105,24 @@ const memory = new Memory({
     // Number of recent messages to include (false to disable)
     lastMessages: 10,
     // Configure vector-based semantic search
-    historySearch: {
+    semanticRecall: {
       topK: 3,         // Number of semantic search results
       messageRange: 2  // Messages before and after each result
     },
   },
   
   // Required if using vector search
-  embeddingOptions: {
+  embedding: {
     provider: 'OPEN_AI',
-    model: 'text-embedding-ada-002',
+    model: 'text-embedding-3-small',
     maxRetries: 3,
   },
 });
 ```
 
-When you initialize a Mastra instance with this memory configuration, all agents will automatically use these memory settings when you call their `stream()` or `generate()` methods. The memory configuration options specified in the `options` object will be applied to all conversations.
+### Overriding Memory Settings
 
-You can override these default settings for individual calls by passing an `options` parameter:
+When you initialize a Mastra instance with memory configuration, all agents will automatically use these memory settings when you call their `stream()` or `generate()` methods. You can override these default settings for individual calls:
 
 ```typescript
 // Use default memory settings from Memory configuration
@@ -66,26 +137,40 @@ const response2 = await agent.generate("What were we discussing earlier?", {
   threadId: "thread_456",
   memoryOptions: {
     lastMessages: 5,  // Only inject 5 recent messages
-    historySearch: {
+    semanticRecall: {
       topK: 2,         // Only get 2 semantic search results
-      messageRange: {   // Context around each result
-        before: 1,
-        after: 1
-      }
+      messageRange: 1   // Context around each result
     },
   }
 });
 ```
 
-The same applies to the `stream()` method:
+### Configuring Memory for Different Use Cases
 
-```typescript
-const stream = await agent.stream("Tell me about our previous conversation", {
-  resourceId: "user_123",
-  threadId: "thread_456",
+You can adjust memory settings based on your agent's needs:
+
+```tsx
+// Customer support agent with minimal context
+await agent.stream('What are your store hours?', {
+  threadId,
+  resourceId,
   memoryOptions: {
-    lastMessages: 20  // Override to get more context
-  }
+    lastMessages: 5, // Quick responses need minimal conversation history
+    historySearch: false, // no need to search through earlier messages
+  },
+});
+
+// Project management agent with extensive context
+await agent.stream('Update me on the project status', {
+  threadId,
+  resourceId,
+  memoryOptions: {
+    lastMessages: 50, // Maintain longer conversation history across project discussions
+    semanticRecall: {
+      topK: 5, // Find more relevant project details
+      messageRange: 3, // Number of messages before and after each result
+    },
+  },
 });
 ```
 
@@ -140,9 +225,9 @@ const vector = new PgVector(connectionString);
 
 2. Configure embedding options:
 ```typescript
-const embeddingOptions = {
+const embedding = {
   provider: 'OPEN_AI',
-  model: 'text-embedding-ada-002',
+  model: 'text-embedding-3-small',
   maxRetries: 3,
 };
 ```
@@ -151,11 +236,8 @@ const embeddingOptions = {
 ```typescript
 const optionsConfig = {
   historySearch: {
-    topK: 3,           // Number of similar messages to find
-    messageRange: {     // Context around each result
-      before: 2,       // Context before each result
-      after: 2         // Context after each result
-    }
+    topK: 3,         // Number of similar messages to find
+    messageRange: 2, // Context around each result
   },
 };
 ```
@@ -235,7 +317,7 @@ await memory.saveMessages({
 });
 
 // Get messages from a thread with various filters
-const messages = await memory.getMessages({
+const messages = await memory.query({
   threadId: thread.id,
   selectBy: {
     last: 10,                         // Get last 10 messages

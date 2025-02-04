@@ -1,5 +1,11 @@
 # @mastra/rag
 
+## 0.0.2-alpha.76
+
+### Patch Changes
+
+- f646a8b: Update rag deps
+
 ## 0.0.2-alpha.75
 
 ### Patch Changes

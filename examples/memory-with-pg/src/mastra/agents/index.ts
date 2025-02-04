@@ -20,15 +20,15 @@ export const memory = new Memory({
   }),
   vector: new PgVector(connectionString),
   options: {
-    recentMessages: 10,
-    historySearch: {
+    lastMessages: 10,
+    semanticRecall: {
       topK: 3,
-      messageRange: { before: 2, after: 2 },
+      messageRange: 2,
     },
   },
-  embeddingOptions: {
+  embedding: {
     provider: 'OPEN_AI',
-    model: 'text-embedding-ada-002',
+    model: 'text-embedding-3-small',
     maxRetries: 3,
   },
 });

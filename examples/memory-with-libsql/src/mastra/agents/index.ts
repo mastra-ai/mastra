@@ -1,4 +1,30 @@
 import { Agent } from '@mastra/core/agent';
+import { MastraStorageLibSql } from '@mastra/core/storage';
+import { Memory } from '@mastra/memory';
+import { LibSQLVector } from '@mastra/vector-libsql';
+
+const memory = new Memory({
+  storage: new MastraStorageLibSql({
+    config: {
+      url: 'file:example.db',
+    },
+  }),
+  vector: new LibSQLVector({
+    connectionUrl: 'file:example.db',
+  }),
+  options: {
+    lastMessages: 100,
+    semanticRecall: {
+      topK: 2,
+      messageRange: 2,
+    },
+  },
+  embedding: {
+    provider: 'OPEN_AI',
+    model: 'text-embedding-3-small',
+    maxRetries: 3,
+  },
+});
 
 export const chefAgent = new Agent({
   name: 'chefAgent',
@@ -9,6 +35,7 @@ export const chefAgent = new Agent({
     name: 'gpt-4o',
     toolChoice: 'auto',
   },
+  memory,
 });
 
 export const memoryAgent = new Agent({
@@ -20,4 +47,5 @@ export const memoryAgent = new Agent({
     name: 'gpt-4o',
     toolChoice: 'auto',
   },
+  memory,
 });

@@ -1,5 +1,13 @@
 # openapi-spec-writer
 
+## 0.0.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [f646a8b]
+  - @mastra/rag@0.0.2-alpha.76
+  - @mastra/firecrawl@1.0.4-alpha.78
+
 ## 0.0.1-alpha.2
 
 ### Patch Changes

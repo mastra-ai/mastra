@@ -182,7 +182,7 @@ export async function getMessagesHandler(c: Context) {
       return c.json({ error: 'Thread not found' }, 404);
     }
 
-    const result = await memory.getMessages({ threadId });
+    const result = await memory.query({ threadId });
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error getting messages');

@@ -50,7 +50,11 @@ async function main() {
       threadId,
       resourceId,
       memoryOptions: {
-        lastMessages: 3,
+        lastMessages: false,
+        semanticRecall: {
+          topK: 3,
+          messageRange: 3,
+        },
       },
     }),
   );

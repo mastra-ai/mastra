@@ -1,4 +1,4 @@
-# getMessages
+# query
 
 Retrieves messages from a specific thread, with support for pagination and filtering options.
 
@@ -7,43 +7,44 @@ Retrieves messages from a specific thread, with support for pagination and filte
 ```typescript
 import { Memory } from "@mastra/memory";
 
-const memory = new Memory({ /* config */ });
+const memory = new Memory({
+  /* config */
+});
 
 // Get last 50 messages
-const { messages, uiMessages } = await memory.getMessages({
+const { messages, uiMessages } = await memory.query({
   threadId: "thread-123",
   selectBy: {
-    last: 50
-  }
+    last: 50,
+  },
 });
 
 // Get messages with context around specific messages
-const { messages: contextMessages } = await memory.getMessages({
+const { messages: contextMessages } = await memory.query({
   threadId: "thread-123",
   selectBy: {
     include: [
-      { 
-        id: "msg-123"    // Get just this message (no context)
+      {
+        id: "msg-123", // Get just this message (no context)
       },
       {
-        id: "msg-456",    // Get this message with custom context
-        withPreviousMessages: 3,  // 3 messages before
-        withNextMessages: 1   // 1 message after
-      }
+        id: "msg-456", // Get this message with custom context
+        withPreviousMessages: 3, // 3 messages before
+        withNextMessages: 1, // 1 message after
+      },
     ],
-    vectorSearchString: "What did we discuss about architecture?"  // Messages will have default context of 2 before and 2 after
-  }
+  },
 });
 
 // Semantic search in messages
-const { messages: searchResults } = await memory.getMessages({
+const { messages } = await memory.query({
   threadId: "thread-123",
   selectBy: {
-    vectorSearchString: "What was discussed about deployment?"
+    vectorSearchString: "What was discussed about deployment?",
   },
   threadConfig: {
-    historySearch: true
-  }
+    historySearch: true,
+  },
 });
 ```
 
@@ -54,7 +55,8 @@ const { messages: searchResults } = await memory.getMessages({
     {
       name: "threadId",
       type: "string",
-      description: "The unique identifier of the thread to retrieve messages from",
+      description:
+        "The unique identifier of the thread to retrieve messages from",
       isOptional: false,
     },
     {
@@ -85,7 +87,8 @@ const { messages: searchResults } = await memory.getMessages({
     {
       name: "last",
       type: "number | false",
-      description: "Number of most recent messages to retrieve. Set to false to disable limit. Note: threadConfig.lastMessages (default: 40) will override this if smaller.",
+      description:
+        "Number of most recent messages to retrieve. Set to false to disable limit. Note: threadConfig.lastMessages (default: 40) will override this if smaller.",
       isOptional: true,
       defaultValue: "40",
     },
@@ -111,13 +114,15 @@ const { messages: searchResults } = await memory.getMessages({
     {
       name: "withPreviousMessages",
       type: "number",
-      description: "Number of messages to include before this message. Defaults to 2 when using vector search, 0 otherwise.",
+      description:
+        "Number of messages to include before this message. Defaults to 2 when using vector search, 0 otherwise.",
       isOptional: true,
     },
     {
       name: "withNextMessages",
       type: "number",
-      description: "Number of messages to include after this message. Defaults to 2 when using vector search, 0 otherwise.",
+      description:
+        "Number of messages to include after this message. Defaults to 2 when using vector search, 0 otherwise.",
       isOptional: true,
     },
   ]}
@@ -142,12 +147,11 @@ const { messages: searchResults } = await memory.getMessages({
 
 ## Additional Notes
 
-The `getMessages` function returns two different message formats:
+The `query` function returns two different message formats:
+
 - `messages`: Core message format used internally
 - `uiMessages`: Formatted messages suitable for UI display, including proper threading of tool calls and results
 
 ### Related
 
 - [Memory](/docs/reference/memory/Memory.mdx)
-- [addMessage](/docs/reference/memory/addMessage.mdx)
-- [rememberMessages](/docs/reference/memory/rememberMessages.mdx)
