@@ -1,5 +1,8 @@
+import { Filter } from '@mastra/core/filter';
 import { MastraVector, QueryResult, IndexStats } from '@mastra/core/vector';
 import { QdrantClient, Schemas } from '@qdrant/js-client-rest';
+
+import { QdrantFilterTranslator } from './filter';
 
 const BATCH_SIZE = 256;
 const DISTANCE_MAPPING: Record<string, Schemas['Distance']> = {
@@ -74,18 +77,25 @@ export class QdrantVector extends MastraVector {
     });
   }
 
+  transformFilter(filter?: Filter) {
+    const translator = new QdrantFilterTranslator();
+    return translator.translate(filter);
+  }
+
   async query(
     indexName: string,
     queryVector: number[],
     topK: number = 10,
-    filter?: Record<string, any>,
+    filter?: Filter,
     includeVector: boolean = false,
   ): Promise<QueryResult[]> {
+    const translatedFilter = this.transformFilter(filter);
+
     const results = (
       await this.client.query(indexName, {
         query: queryVector,
         limit: topK,
-        filter: filter,
+        filter: translatedFilter,
         with_payload: true,
         with_vector: includeVector,
       })
