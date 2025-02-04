@@ -272,7 +272,7 @@ export class PostgresStore extends MastraStorage {
   async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
     try {
       const messages: any[] = [];
-      const limit = selectBy?.last || 100;
+      const limit = typeof selectBy?.last === `number` ? selectBy.last : 100;
       const include = selectBy?.include || [];
 
       if (include.length) {
@@ -342,6 +342,17 @@ export class PostgresStore extends MastraStorage {
       // Sort all messages by creation date
       messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
+      // Parse message content
+      messages.forEach(message => {
+        if (typeof message.content === 'string') {
+          try {
+            message.content = JSON.parse(message.content);
+          } catch (e) {
+            // If parsing fails, leave as string
+          }
+        }
+      });
+
       return messages as T;
     } catch (error) {
       console.error('Error getting messages:', error);
@@ -358,6 +369,12 @@ export class PostgresStore extends MastraStorage {
         throw new Error('Thread ID is required');
       }
 
+      // Check if thread exists
+      const thread = await this.getThreadById({ threadId });
+      if (!thread) {
+        throw new Error(`Thread ${threadId} not found`);
+      }
+
       await this.db.tx(async t => {
         for (const message of messages) {
           await t.none(
@@ -366,7 +383,7 @@ export class PostgresStore extends MastraStorage {
             [
               message.id,
               threadId,
-              JSON.stringify(message.content),
+              typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
               message.createdAt || new Date().toISOString(),
               message.role,
               message.type,
