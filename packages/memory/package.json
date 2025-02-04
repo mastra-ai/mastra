@@ -29,6 +29,8 @@
   "scripts": {
     "build": "tsup src/index.ts src/postgres/index.ts src/kv/upstash.ts --format esm --dts --clean --treeshake",
     "dev": "tsup src/index.ts src/postgres/index.ts src/kv/upstash.ts --format esm --dts --clean --watch",
+    "test:integration": "cd integration-tests && vitest",
+    "test:all": "vitest && pnpm test:integration",
     "test": "vitest",
     "test:watch": "vitest watch"
   },

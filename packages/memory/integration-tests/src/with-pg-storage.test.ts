@@ -1,0 +1,266 @@
+import { Memory } from '@mastra/memory';
+import { PostgresStore } from '@mastra/store-pg';
+import { PgVector } from '@mastra/vector-pg';
+import { TextPart, ImagePart, FilePart, ToolCallPart } from 'ai';
+import dotenv from 'dotenv';
+import { randomUUID } from 'node:crypto';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+
+dotenv.config({ path: '.env.test' }); 
+
+// Ensure environment variables are set
+if (!process.env.DB_URL) {
+  console.warn('DB_URL not set, using default local PostgreSQL connection');
+}
+
+const connectionString = process.env.DB_URL || 'postgres://postgres:password@localhost:5434/mastra';
+const resourceId = 'resource';
+
+// Test helpers
+const createTestThread = (title: string, metadata = {}) => ({
+  id: randomUUID(),
+  title,
+  resourceId,
+  metadata,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+});
+
+let messageCounter = 0;
+const createTestMessage = (
+  threadId: string,
+  content: string | (TextPart | ImagePart | FilePart)[] | (TextPart | ToolCallPart)[],
+  role: 'user' | 'assistant' = 'user',
+  type: 'text' | 'tool-call' | 'tool-result' = 'text',
+) => {
+  messageCounter++;
+  return {
+    id: randomUUID(),
+    threadId,
+    content,
+    role,
+    type,
+    createdAt: new Date(Date.now() + messageCounter * 1000), // Add 1 second per message to prevent messages having the same timestamp
+  };
+};
+
+const parseConnectionString = (url: string) => {
+  const parsedUrl = new URL(url);
+  return {
+    host: parsedUrl.hostname,
+    port: parseInt(parsedUrl.port),
+    user: parsedUrl.username,
+    password: parsedUrl.password,
+    database: parsedUrl.pathname.slice(1),
+  };
+};
+
+describe('Memory with PostgresStore Integration', () => {
+  let memory: Memory;
+
+  beforeAll(async () => {
+    const config = parseConnectionString(connectionString);
+    memory = new Memory({
+      storage: new PostgresStore(config),
+      vector: new PgVector(connectionString),
+      options: {
+        lastMessages: 10,
+        semanticRecall: {
+          topK: 3,
+          messageRange: 2,
+        },
+      },
+      embedding: {
+        provider: 'OPEN_AI',
+        model: 'text-embedding-ada-002',
+        maxRetries: 3,
+      },
+    });
+  });
+
+  beforeEach(async () => {
+    // Reset message counter
+    messageCounter = 0;
+    // Clean up before each test
+    const threads = await memory.getThreadsByResourceId({ resourceId });
+    await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
+  });
+
+  afterAll(async () => {
+    vi.useRealTimers();
+    // Final cleanup
+    const threads = await memory.getThreadsByResourceId({ resourceId });
+    await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
+  });
+
+  describe('Memory Features', () => {
+    let thread: any;
+
+    beforeEach(async () => {
+      thread = await memory.saveThread({
+        thread: createTestThread('Memory Test Thread'),
+      });
+    });
+
+    describe('Message History', () => {
+      it('should respect lastMessages limit in query', async () => {
+        // Create more messages than the limit
+        const messages = Array.from({ length: 15 }, (_, i) => createTestMessage(thread.id, `Message ${i + 1}`));
+        await memory.saveMessages({ messages });
+
+        const result = await memory.query({
+          threadId: thread.id,
+          selectBy: { last: 10 },
+        });
+        expect(result.messages).toHaveLength(10); // lastMessages is set to 10
+        expect(result.messages[0].content).toBe('Message 6'); // First message
+        expect(result.messages[9].content).toBe('Message 15'); // Last message
+
+        const result2 = await memory.query({
+          threadId: thread.id,
+          selectBy: { last: 15 },
+        });
+        expect(result2.messages).toHaveLength(15); // lastMessages is set to 10
+        expect(result2.messages[0].content).toBe('Message 1'); // First message
+        expect(result2.messages[14].content).toBe('Message 15'); // Last message
+      });
+
+      it('should maintain conversation context', async () => {
+        const conversation = [
+          createTestMessage(thread.id, 'What is your name?', 'user'),
+          createTestMessage(thread.id, 'I am an AI assistant', 'assistant'),
+          createTestMessage(thread.id, 'Can you remember that?', 'user'),
+          createTestMessage(thread.id, 'Yes, I am an AI assistant', 'assistant'),
+        ];
+
+        await memory.saveMessages({ messages: conversation });
+        const result = await memory.query({
+          threadId: thread.id,
+          selectBy: { last: 10 },
+        });
+
+        // Verify conversation flow is maintained
+        expect(result.messages).toHaveLength(4);
+        expect(result.messages.map(m => m.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
+      });
+    });
+
+    describe('Semantic Search', () => {
+      it('should find semantically similar messages', async () => {
+        const messages = [
+          createTestMessage(thread.id, 'The weather is nice today', 'user'),
+          createTestMessage(thread.id, "Yes, it's sunny and warm", 'assistant'),
+          createTestMessage(thread.id, "What's the capital of France?", 'user'),
+          createTestMessage(thread.id, 'The capital of France is Paris', 'assistant'),
+        ];
+
+        await memory.saveMessages({ messages });
+
+        // Search for weather-related messages
+        const weatherQuery = await memory.query({
+          threadId: thread.id,
+          selectBy: {
+            vectorSearchString: "How's the temperature outside?",
+          },
+        });
+
+        // Should find the weather-related messages due to semantic similarity
+        expect(weatherQuery.messages?.some(m => m.content.includes('weather') || m.content.includes('sunny'))).toBe(
+          true,
+        );
+
+        // Search for location-related messages
+        const locationQuery = await memory.query({
+          threadId: thread.id,
+          selectBy: {
+            vectorSearchString: 'Tell me about cities in France',
+          },
+        });
+
+        // Should find the Paris-related messages
+        expect(locationQuery.messages?.some(m => m.content.includes('Paris') || m.content.includes('France'))).toBe(
+          true,
+        );
+      });
+
+      it('should respect semantic search configuration', async () => {
+        // Create messages with a specific pattern so we can verify the exact messages returned
+        const messages = [
+          createTestMessage(thread.id, 'First unrelated message'),
+          createTestMessage(thread.id, 'Another unrelated message'),
+          createTestMessage(thread.id, 'Message about topic X'), // This should be our match
+          createTestMessage(thread.id, 'Yet another message'),
+          createTestMessage(thread.id, 'One more message'),
+          createTestMessage(thread.id, 'Message about topic Y'), // Another potential match, but should not be included since topK=1
+          createTestMessage(thread.id, 'Final message'),
+        ];
+        await memory.saveMessages({ messages });
+
+        const result = await memory.query({
+          threadId: thread.id,
+          selectBy: {
+            vectorSearchString: 'topic X',
+            last: 0,
+          },
+          threadConfig: {
+            semanticRecall: {
+              topK: 1, // Only find 1 most similar message
+              messageRange: { before: 1, after: 1 }, // Include 1 message before and after
+            },
+          },
+        });
+
+        // Should respect semantic search configuration
+        // - topK: 1 (finds 1 most similar message)
+        // - messageRange: { before: 1, after: 1 } (includes 1 message before and after)
+        // Messages are returned in chronological order by createdAt
+        expect(result.messages).toBeDefined();
+        expect(result.messages.length).toBe(3); // Should still only get 3 messages even though there are 7 total
+
+        // Should get exactly these 3 consecutive messages in chronological order
+        expect(result.messages[0].content).toBe('Another unrelated message');
+        expect(result.messages[1].content).toBe('Message about topic X');
+        expect(result.messages[2].content).toBe('Yet another message');
+
+        // Messages should be in the order they were created
+        expect(result.messages.every((m, i) => i === 0 || m.createdAt >= result.messages[i - 1].createdAt)).toBe(true);
+      });
+    });
+
+    describe('Message Types and Roles', () => {
+      it('should handle different message types', async () => {
+        const messages = [
+          createTestMessage(thread.id, 'Regular message', 'user', 'text'),
+          createTestMessage(thread.id, [{ type: 'text', text: 'Tool call' }], 'assistant', 'tool-call'),
+          createTestMessage(thread.id, [{ type: 'text', text: 'Tool result' }], 'assistant', 'tool-result'),
+        ];
+
+        await memory.saveMessages({ messages });
+        const result = await memory.query({
+          threadId: thread.id,
+          selectBy: { last: 10 },
+        });
+
+        expect(result.messages).toHaveLength(3);
+        expect(result.messages.map(m => m.type)).toEqual(['text', 'tool-call', 'tool-result']);
+      });
+
+      it('should handle complex message content', async () => {
+        const complexMessage = [
+          { type: 'text' as const, text: 'Main content' },
+          { type: 'text' as const, text: 'Additional info' },
+        ];
+
+        await memory.saveMessages({
+          messages: [createTestMessage(thread.id, complexMessage, 'assistant')],
+        });
+
+        const result = await memory.query({
+          threadId: thread.id,
+          selectBy: { last: 10 },
+        });
+        expect(result.messages[0].content).toEqual(complexMessage);
+      });
+    });
+  });
+});
