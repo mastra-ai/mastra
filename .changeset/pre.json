@@ -80,7 +80,6 @@
     "metadata-extraction": "0.0.0",
     "rerank-rag": "0.0.0",
     "retrieve-results": "0.0.0",
-    "calling-agent-from-workflow": "0.0.0",
     "calling-llm-from-workflow": "0.0.0",
     "create-workflow": "0.0.0",
     "tool-as-workflow-step": "0.0.0",

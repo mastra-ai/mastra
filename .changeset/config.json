@@ -11,6 +11,7 @@
     "!mastra",
     "!create-mastra",
     "!@mastra/*",
-    "@mastra/playground"
+    "@mastra/playground",
+    "calling-agent-from-workflow"
   ]
 }
