@@ -1,5 +1,11 @@
 # mastra
 
+## 0.2.0-alpha.140
+
+### Patch Changes
+
+- c16b6a1: Fix loading env files in dev
+
 ## 0.2.0-alpha.139
 
 ### Patch Changes
