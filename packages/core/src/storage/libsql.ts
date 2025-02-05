@@ -215,10 +215,7 @@ export class MastraStorageLibSql extends MastraStorage {
   private parseRow(row: any): MessageType {
     return {
       id: row.id,
-      content:
-        typeof row.content === `string` && (row.content.startsWith('[') || row.content.startsWith('{'))
-          ? JSON.parse(row.content)
-          : row.content,
+      content: row.content,
       role: row.role,
       type: row.type,
       createdAt: new Date(row.createdAt as string),
@@ -229,7 +226,7 @@ export class MastraStorageLibSql extends MastraStorage {
   async getMessages<T extends MessageType[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
     try {
       const messages: MessageType[] = [];
-      const limit = selectBy?.last || 100;
+      const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
 
       // If we have specific messages to select
       if (selectBy?.include?.length) {
@@ -327,7 +324,7 @@ export class MastraStorageLibSql extends MastraStorage {
           args: [
             message.id,
             threadId,
-            JSON.stringify(message.content),
+            typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
             message.role,
             message.type,
             time instanceof Date ? time.toISOString() : time,
