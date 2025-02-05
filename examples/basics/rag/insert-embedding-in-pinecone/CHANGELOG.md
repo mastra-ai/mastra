@@ -1,5 +1,12 @@
 # insert-embedding-in-pinecone
 
+## 0.0.1-alpha.4
+
+### Patch Changes
+
+- @mastra/rag@0.0.2-alpha.77
+- @mastra/vector-pinecone@0.0.1-alpha.20
+
 ## 0.0.1-alpha.3
 
 ### Patch Changes

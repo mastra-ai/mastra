@@ -1,5 +1,5 @@
 {
-  "name": "cot-workflow-rag",
+  "name": "examples-cot-workflow-rag",
   "type": "module",
   "scripts": {
     "start": "pnpx tsx index.ts"
@@ -9,5 +9,5 @@
     "@mastra/vector-pg": "workspace:*",
     "zod": "^3.24.1"
   },
-  "version": "0.0.1-alpha.2"
+  "version": "0.0.1-alpha.3"
 }

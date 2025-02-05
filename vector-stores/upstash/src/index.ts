@@ -1,5 +1,8 @@
+import { Filter } from '@mastra/core/filter';
 import { MastraVector, QueryResult } from '@mastra/core/vector';
 import { Index } from '@upstash/vector';
+
+import { UpstashFilterTranslator } from './filter';
 
 export class UpstashVector extends MastraVector {
   private client: Index;
@@ -32,7 +35,10 @@ export class UpstashVector extends MastraVector {
     return generatedIds;
   }
 
-  transformFilter(_filter?: Record<string, any>) {}
+  transformFilter(filter?: Filter) {
+    const translator = new UpstashFilterTranslator();
+    return translator.translate(filter);
+  }
 
   async createIndex(
     _indexName: string,
@@ -46,20 +52,19 @@ export class UpstashVector extends MastraVector {
     indexName: string,
     queryVector: number[],
     topK: number = 10,
-    filter?: Record<string, any>,
+    filter?: Filter,
     includeVector: boolean = false,
   ): Promise<QueryResult[]> {
     const ns = this.client.namespace(indexName);
 
+    const filterString = this.transformFilter(filter);
     const results = await ns.query({
       topK,
       vector: queryVector,
       includeVectors: includeVector,
       includeMetadata: true,
-      // ...(filter ? { filter } : {}),
+      ...(filterString ? { filter: filterString } : {}),
     });
-
-    this.transformFilter(filter);
 
     // Map the results to our expected format
     return (results || []).map(result => ({

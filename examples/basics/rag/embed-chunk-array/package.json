@@ -1,5 +1,5 @@
 {
-  "name": "embed-chunk-array",
+  "name": "examples-embed-chunk-array",
   "type": "module",
   "scripts": {
     "start": "pnpx tsx index.ts"
@@ -7,5 +7,5 @@
   "dependencies": {
     "@mastra/rag": "workspace:*"
   },
-  "version": "0.0.1-alpha.2"
+  "version": "0.0.1-alpha.3"
 }

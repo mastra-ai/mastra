@@ -17,18 +17,19 @@ describe('PineconeFilterTranslator', () => {
       expect(translator.translate(undefined as any)).toEqual(undefined);
     });
 
-    it('converts implicit equality to explicit $eq', () => {
+    it('allows implicit equality', () => {
       const filter = { field: 'value' };
-      expect(translator.translate(filter)).toEqual({ field: { $eq: 'value' } });
+      expect(translator.translate(filter)).toEqual({ field: 'value' });
     });
 
-    it('converts multiple top-level fields to $and', () => {
+    it('allows multiple top-level fields', () => {
       const filter = {
         field1: 'value1',
         field2: 'value2',
       };
       expect(translator.translate(filter)).toEqual({
-        $and: [{ field1: { $eq: 'value1' } }, { field2: { $eq: 'value2' } }],
+        field1: 'value1',
+        field2: 'value2',
       });
     });
 
@@ -38,12 +39,8 @@ describe('PineconeFilterTranslator', () => {
         quantity: { $gte: 10, $lte: 20 },
       };
       expect(translator.translate(filter)).toEqual({
-        $and: [
-          { price: { $gt: 100 } },
-          { price: { $lt: 200 } },
-          { quantity: { $gte: 10 } },
-          { quantity: { $lte: 20 } },
-        ],
+        price: { $gt: 100, $lt: 200 },
+        quantity: { $gte: 10, $lte: 20 },
       });
     });
 
@@ -51,6 +48,11 @@ describe('PineconeFilterTranslator', () => {
       const date = new Date('2024-01-01');
       const filter = { timestamp: { $gt: date } };
       expect(translator.translate(filter)).toEqual({ timestamp: { $gt: date.toISOString() } });
+    });
+
+    it('handles $exists operator', () => {
+      const filter = { field: { $exists: true } };
+      expect(translator.translate(filter)).toEqual({ field: { $exists: true } });
     });
   });
 
@@ -129,7 +131,7 @@ describe('PineconeFilterTranslator', () => {
         $or: [{ status: 'active' }, { age: { $gt: 25 } }],
       };
       expect(translator.translate(filter)).toEqual({
-        $or: [{ status: { $eq: 'active' } }, { age: { $gt: 25 } }],
+        $or: [{ status: 'active' }, { age: { $gt: 25 } }],
       });
     });
 
@@ -144,7 +146,7 @@ describe('PineconeFilterTranslator', () => {
       };
       expect(translator.translate(filter)).toEqual({
         $and: [
-          { status: { $eq: 'active' } },
+          { status: 'active' },
           {
             $or: [{ category: { $in: ['A', 'B'] } }, { $and: [{ price: { $gt: 100 } }, { stock: { $lt: 50 } }] }],
           },
@@ -181,7 +183,8 @@ describe('PineconeFilterTranslator', () => {
         $or: [
           { age: { $gt: 25 } },
           {
-            $and: [{ status: { $eq: 'active' } }, { 'user.preferences.theme': { $eq: 'dark' } }],
+            status: 'active',
+            'user.preferences.theme': 'dark',
           },
         ],
       });
@@ -208,7 +211,8 @@ describe('PineconeFilterTranslator', () => {
       };
 
       expect(translator.translate(filter)).toEqual({
-        $and: [{ metadata: {} }, { 'user.profile': {} }],
+        metadata: {},
+        'user.profile': {},
       });
     });
 
@@ -218,7 +222,7 @@ describe('PineconeFilterTranslator', () => {
       };
 
       expect(translator.translate(filter)).toEqual({
-        $or: [{}, { status: { $eq: 'active' } }],
+        $or: [{}, { status: 'active' }],
       });
     });
 
@@ -264,7 +268,9 @@ describe('PineconeFilterTranslator', () => {
       };
 
       expect(translator.translate(filter)).toEqual({
-        $and: [{ metadata: {} }, { settings: {} }, { 'config.nested': {} }],
+        metadata: {},
+        settings: {},
+        'config.nested': {},
       });
     });
   });
@@ -394,6 +400,7 @@ describe('PineconeFilterTranslator', () => {
         { $and: [{ field: { $eq: 'value' } }] },
         { $or: [{ field: { $eq: 'value' } }] },
         { field: { $all: [{ $eq: 'value' }] } },
+        { field: { $exists: true } },
       ];
       supportedFilters.forEach(filter => {
         expect(() => translator.translate(filter)).not.toThrow();
@@ -404,12 +411,10 @@ describe('PineconeFilterTranslator', () => {
       const unsupportedFilters = [
         { field: { $regex: 'pattern' } },
         { field: { $contains: 'value' } },
-        { field: { $exists: true } },
         { field: { $elemMatch: { $gt: 5 } } },
         { field: { $nor: [{ $eq: 'value' }] } },
         { field: { $not: [{ $eq: 'value' }] } },
         { field: { $regex: 'pattern', $options: 'i' } },
-        { field: { $nin: 'value' } },
       ];
 
       unsupportedFilters.forEach(filter => {

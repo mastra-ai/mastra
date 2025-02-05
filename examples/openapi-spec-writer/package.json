@@ -1,5 +1,5 @@
 {
-  "name": "openapi-spec-writer",
+  "name": "examples-openapi-spec-writer",
   "type": "module",
   "private": true,
   "scripts": {
@@ -56,5 +56,5 @@
     "react": ">= 0.14.0 || 19",
     "react-dom": ">= 0.14.0 || 19"
   },
-  "version": "0.0.1-alpha.3"
+  "version": "0.0.1-alpha.4"
 }

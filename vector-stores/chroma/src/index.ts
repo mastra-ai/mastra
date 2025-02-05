@@ -1,5 +1,8 @@
+import { Filter } from '@mastra/core/filter';
 import { MastraVector, QueryResult, IndexStats } from '@mastra/core/vector';
 import { ChromaClient } from 'chromadb';
+
+import { ChromaFilterTranslator } from './filter';
 
 export class ChromaVector extends MastraVector {
   private client: ChromaClient;
@@ -92,21 +95,28 @@ export class ChromaVector extends MastraVector {
     });
   }
 
+  transformFilter(filter?: Filter) {
+    const chromaFilter = new ChromaFilterTranslator();
+    const translatedFilter = chromaFilter.translate(filter);
+    return translatedFilter;
+  }
   async query(
     indexName: string,
     queryVector: number[],
     topK: number = 10,
-    filter?: Record<string, any>,
+    filter?: Filter,
     includeVector: boolean = false,
   ): Promise<QueryResult[]> {
     const collection = await this.getCollection(indexName, true);
 
     const defaultInclude = ['documents', 'metadatas', 'distances'];
 
+    const translatedFilter = this.transformFilter(filter);
+
     const results = await collection.query({
       queryEmbeddings: [queryVector],
       nResults: topK,
-      where: filter,
+      where: translatedFilter,
       include: includeVector ? [...defaultInclude, 'embeddings'] : defaultInclude,
     });
 

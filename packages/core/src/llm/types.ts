@@ -660,6 +660,7 @@ export type LLMTextOptions = {
   convertedTools?: Record<string, CoreTool>;
   messages: CoreMessage[];
   onStepFinish?: (step: string) => void;
+  toolChoice?: 'auto' | 'required';
   maxSteps?: number;
   temperature?: number;
 } & Run;
