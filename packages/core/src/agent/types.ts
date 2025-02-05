@@ -19,7 +19,7 @@ export interface AgentConfig<
 > {
   name: string;
   instructions: string;
-  model: ModelConfig;
+  model?: ModelConfig;
   llm?: MastraLLMBase;
   tools?: TTools;
   mastra?: MastraPrimitives;

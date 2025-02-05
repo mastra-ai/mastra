@@ -39,7 +39,7 @@ export class Agent<
   public name: string;
   readonly llm: LLM | MastraLLMBase;
   readonly instructions: string;
-  readonly model: ModelConfig;
+  readonly model?: ModelConfig;
   #mastra?: MastraPrimitives;
   #memory?: MastraMemory;
   tools: TTools;
@@ -51,13 +51,16 @@ export class Agent<
     this.name = config.name;
     this.instructions = config.instructions;
 
-    if (config.llm) {
-      this.llm = config.llm;
-    } else {
-      this.llm = new LLM({ model: config.model });
+    if (!config.model && !config.llm) {
+      throw new Error('Either model or llm is required');
     }
 
-    this.model = config.model;
+    if (config.llm) {
+      this.llm = config.llm;
+    } else if (config.model) {
+      this.model = config.model;
+      this.llm = new LLM({ model: config.model });
+    }
 
     this.tools = {} as TTools;
 
