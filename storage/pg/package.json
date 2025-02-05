@@ -17,10 +17,12 @@
   "scripts": {
     "build": "tsup-node src/index.ts --format esm --dts --clean --treeshake",
     "dev": "tsup-node src/index.ts --format esm --dts --clean --treeshake --watch",
-    "test": "npm run db:up && vitest run && npm run db:down",
-    "test:watch": "npm run db:up && vitest watch",
-    "db:up": "docker compose up -d",
-    "db:down": "docker compose down -v"
+    "pretest": "docker compose up -d && (for i in $(seq 1 30); do docker compose exec -T db pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
+    "test": "vitest run",
+    "posttest": "docker compose down -v",
+    "pretest:watch": "docker compose up -d",
+    "test:watch": "vitest watch",
+    "posttest:watch": "docker compose down -v"
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
