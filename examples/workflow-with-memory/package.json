@@ -1,5 +1,5 @@
 {
-  "name": "workflow",
+  "name": "examples-workflow-with-memory",
   "private": true,
   "main": "index.js",
   "scripts": {

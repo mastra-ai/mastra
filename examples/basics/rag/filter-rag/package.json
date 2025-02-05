@@ -1,5 +1,5 @@
 {
-  "name": "filter-rag",
+  "name": "examples-filter-rag",
   "type": "module",
   "scripts": {
     "start": "pnpx tsx index.ts"

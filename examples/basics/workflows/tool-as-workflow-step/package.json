@@ -1,5 +1,5 @@
 {
-  "name": "tool-as-workflow-step",
+  "name": "examples-tool-as-workflow-step",
   "type": "module",
   "scripts": {
     "start": "pnpx tsx index.ts"

@@ -1,5 +1,5 @@
 {
-  "name": "workflow-ai-recruiter",
+  "name": "examples-workflow-ai-recruiter",
   "main": "index.js",
   "private": true,
   "scripts": {
