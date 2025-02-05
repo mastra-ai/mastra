@@ -1,6 +1,6 @@
-# Mastra
+# Mastra <img align="cener" alt="Project Status: Alpha" src="https://img.shields.io/badge/Status-Alpha-red"> <img align="cener" alt="Project Status: Alpha" src="https://img.shields.io/badge/Y%20Combinator-W25-orange?style=flat-square">
 
-<img align="cener" alt="Project Status: Alpha" src="https://img.shields.io/badge/Status-Alpha-red">
+
 
 Mastra is an opinionated Typescript framework that helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations and evals. You can run Mastra on your local machine, or deploy to a serverless cloud.
 
@@ -66,7 +66,7 @@ async function main() {
     name: 'story-writer',
     model: {
       provider: 'OPEN_AI',
-      name: 'gpt-4o',
+      name: 'gpt-4o-mini',
       toolChoice: 'auto',
     },
     instructions: `You are a helpful assistant who writes creative stories.`,
