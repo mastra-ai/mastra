@@ -37,6 +37,7 @@ export class Agent<
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > extends MastraBase {
   public name: string;
+  // @ts-ignore
   readonly llm: LLM | MastraLLMBase;
   readonly instructions: string;
   readonly model?: ModelConfig;
