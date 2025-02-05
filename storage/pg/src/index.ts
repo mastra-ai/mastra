@@ -287,7 +287,7 @@ export class PostgresStore extends MastraStorage {
   async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
     try {
       const messages: any[] = [];
-      const limit = typeof selectBy?.last === `number` ? selectBy.last : 100;
+      const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
       const include = selectBy?.include || [];
 
       if (include.length) {
