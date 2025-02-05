@@ -1,5 +1,13 @@
 # mastra
 
+## 0.2.0-alpha.139
+
+### Patch Changes
+
+- Updated dependencies [7365b6c]
+  - @mastra/core@0.2.0-alpha.87
+  - @mastra/deployer@0.1.0-alpha.33
+
 ## 0.2.0-alpha.138
 
 ### Minor Changes

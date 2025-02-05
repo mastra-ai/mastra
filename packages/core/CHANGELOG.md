@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.2.0-alpha.87
+
+### Patch Changes
+
+- 7365b6c: More models
+
 ## 0.2.0-alpha.86
 
 ### Patch Changes

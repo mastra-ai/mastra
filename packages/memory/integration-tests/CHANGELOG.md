@@ -1,5 +1,17 @@
 # @mastra/memory-integration-tests
 
+## 0.0.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [7365b6c]
+  - @mastra/core@0.2.0-alpha.87
+  - @mastra/memory@0.1.0-alpha.69
+  - @mastra/store-pg@0.0.0-alpha.5
+  - @mastra/store-upstash@0.0.0-alpha.5
+  - @mastra/vector-libsql@0.1.0-alpha.22
+  - @mastra/vector-pg@0.1.0-alpha.21
+
 ## 0.0.1-alpha.0
 
 ### Patch Changes
