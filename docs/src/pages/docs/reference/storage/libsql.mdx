@@ -16,16 +16,16 @@ npm install @mastra/storage-libsql
 ## Usage
 
 ```typescript copy showLineNumbers
-import { LibSQLStorage } from "@mastra/storage-libsql";
+import { MastraStorageLibSql } from "@mastra/core/storage";
 
 // In-memory database (development)
-const storage = new LibSQLStorage({
-  url: "file::memory:?cache=shared"
+const storage = new MastraStorageLibSql({
+  url: ":memory:",
 });
 
 // Persistent database (production)
-const storage = new LibSQLStorage({
-  url: process.env.DATABASE_URL
+const storage = new MastraStorageLibSql({
+  url: process.env.DATABASE_URL,
 });
 ```
 
@@ -36,7 +36,8 @@ const storage = new LibSQLStorage({
     {
       name: "url",
       type: "string",
-      description: "Database URL. Use 'file::memory:?cache=shared' for in-memory database or a LibSQL-compatible connection string for persistent storage.",
+      description:
+        "Database URL. Use ':memory:' for in-memory database or a LibSQL-compatible connection string for persistent storage.",
       isOptional: false,
     },
     {
@@ -44,7 +45,7 @@ const storage = new LibSQLStorage({
       type: "string",
       description: "Authentication token for remote LibSQL databases.",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -52,18 +53,21 @@ const storage = new LibSQLStorage({
 
 ### In-Memory vs Persistent Storage
 
-The in-memory configuration (`file::memory:?cache=shared`) is useful for:
+The in-memory configuration (`:memory:`) is useful for:
+
 - Development and testing
 - Temporary storage that doesn't need to persist
 - Quick prototyping
 
 For production use cases, use a persistent database URL:
+
 - Local file: `file:local.db`
 - Remote LibSQL: `libsql://your-database.turso.io`
 
 ### Schema Management
 
 The storage implementation handles schema creation and updates automatically. It creates the following tables:
+
 - `threads`: Stores conversation threads
 - `messages`: Stores individual messages
 - `metadata`: Stores additional metadata for threads and messages
