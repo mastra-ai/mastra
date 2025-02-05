@@ -10,17 +10,17 @@ The Upstash storage implementation provides a serverless-friendly storage soluti
 ## Installation
 
 ```bash
-npm install @mastra/storage-upstash
+npm install @mastra/store-upstash
 ```
 
 ## Usage
 
 ```typescript copy showLineNumbers
-import { UpstashStorage } from "@mastra/storage-upstash";
+import { UpstashStorage } from "@mastra/store-upstash";
 
 const storage = new UpstashStorage({
   url: process.env.UPSTASH_URL,
-  token: process.env.UPSTASH_TOKEN
+  token: process.env.UPSTASH_TOKEN,
 });
 ```
 
@@ -45,8 +45,8 @@ const storage = new UpstashStorage({
       type: "string",
       description: "Key prefix for all stored items",
       isOptional: true,
-      defaultValue: "mastra:"
-    }
+      defaultValue: "mastra:",
+    },
   ]}
 />
 
@@ -55,6 +55,7 @@ const storage = new UpstashStorage({
 ### Key Structure
 
 The Upstash storage implementation uses a key-value structure:
+
 - Thread keys: `{prefix}thread:{threadId}`
 - Message keys: `{prefix}message:{messageId}`
 - Metadata keys: `{prefix}metadata:{entityId}`
@@ -62,6 +63,7 @@ The Upstash storage implementation uses a key-value structure:
 ### Serverless Benefits
 
 Upstash storage is particularly well-suited for serverless deployments:
+
 - No connection management needed
 - Pay-per-request pricing
 - Global replication options
@@ -70,6 +72,7 @@ Upstash storage is particularly well-suited for serverless deployments:
 ### Data Persistence
 
 Upstash provides:
+
 - Automatic data persistence
 - Point-in-time recovery
 - Cross-region replication options
@@ -77,6 +80,7 @@ Upstash provides:
 ### Performance Considerations
 
 For optimal performance:
+
 - Use appropriate key prefixes to organize data
 - Monitor Redis memory usage
 - Consider data expiration policies if needed
