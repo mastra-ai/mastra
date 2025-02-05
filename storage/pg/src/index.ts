@@ -55,7 +55,18 @@ export class PostgresStore extends MastraStorage {
       const sql = `
         CREATE TABLE IF NOT EXISTS ${tableName} (
           ${columns}
-        )
+        );
+        ${tableName === MastraStorage.TABLE_WORKFLOW_SNAPSHOT ? `
+        DO $$ BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'mastra_workflow_snapshot_workflow_name_run_id_key'
+          ) THEN
+            ALTER TABLE ${tableName}
+            ADD CONSTRAINT mastra_workflow_snapshot_workflow_name_run_id_key
+            UNIQUE (workflow_name, run_id);
+          END IF;
+        END $$;
+        ` : ''}
       `;
 
       await this.db.none(sql);
@@ -409,6 +420,7 @@ export class PostgresStore extends MastraStorage {
     snapshot: WorkflowRunState;
   }): Promise<void> {
     try {
+      const now = new Date().toISOString();
       await this.db.none(
         `INSERT INTO "${MastraStorage.TABLE_WORKFLOW_SNAPSHOT}" (
           workflow_name,
@@ -417,13 +429,40 @@ export class PostgresStore extends MastraStorage {
           "createdAt",
           "updatedAt"
         ) VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (workflow_name, run_id) DO UPDATE SET
-          snapshot = EXCLUDED.snapshot,
-          "updatedAt" = EXCLUDED."updatedAt"`,
-        [workflowName, runId, JSON.stringify(snapshot), new Date(), new Date()],
+        ON CONFLICT (workflow_name, run_id) DO UPDATE
+        SET snapshot = EXCLUDED.snapshot,
+            "updatedAt" = EXCLUDED."updatedAt"`,
+        [workflowName, runId, JSON.stringify(snapshot), now, now]
       );
     } catch (error) {
-      console.error('Error inserting into mastra_workflow_snapshot:', error);
+      console.error('Error persisting workflow snapshot:', error);
+      throw error;
+    }
+  }
+
+  async loadWorkflowSnapshot({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunState | null> {
+    try {
+      const result = await this.load({
+        tableName: MastraStorage.TABLE_WORKFLOW_SNAPSHOT,
+        keys: {
+          workflow_name: workflowName,
+          run_id: runId,
+        },
+      });
+
+      if (!result) {
+        return null;
+      }
+
+      return (result as any).snapshot;
+    } catch (error) {
+      console.error('Error loading workflow snapshot:', error);
       throw error;
     }
   }
