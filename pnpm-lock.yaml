@@ -2313,6 +2313,9 @@ importers:
       '@ai-sdk/perplexity':
         specifier: ^0.0.7
         version: 0.0.7(zod@3.24.1)
+      '@ai-sdk/togetherai':
+        specifier: ^0.1.9
+        version: 0.1.9(zod@3.24.1)
       '@ai-sdk/xai':
         specifier: ^1.0.17
         version: 1.1.6(zod@3.24.1)
@@ -3679,6 +3682,12 @@ packages:
     peerDependenciesMeta:
       svelte:
         optional: true
+
+  '@ai-sdk/togetherai@0.1.9':
+    resolution: {integrity: sha512-JG/UV/cjkrWMcRtqrTsu5v6a7Xi95hKn0K+G3pFrEY4l0RXCwtgC6Nw4lLy6afyI118/YAoHW2wNx9gnxWVPKw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.0.0
 
   '@ai-sdk/ui-utils@0.0.50':
     resolution: {integrity: sha512-Z5QYJVW+5XpSaJ4jYCCAVG7zIAuKOOdikhgpksneNmKvx61ACFaf98pmOd+xnjahl0pIlc/QIe6O4yVaJ1sEaw==}
@@ -20816,6 +20825,13 @@ snapshots:
       svelte: 5.19.4
     transitivePeerDependencies:
       - zod
+
+  '@ai-sdk/togetherai@0.1.9(zod@3.24.1)':
+    dependencies:
+      '@ai-sdk/openai-compatible': 0.1.8(zod@3.24.1)
+      '@ai-sdk/provider': 1.0.7
+      '@ai-sdk/provider-utils': 2.1.6(zod@3.24.1)
+      zod: 3.24.1
 
   '@ai-sdk/ui-utils@0.0.50(zod@3.24.1)':
     dependencies:
