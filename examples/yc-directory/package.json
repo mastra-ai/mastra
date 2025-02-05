@@ -1,5 +1,5 @@
 {
-  "name": "yc-directory",
+  "name": "examples-yc-directory",
   "version": "1.0.1-alpha.2",
   "private": true,
   "main": "index.js",

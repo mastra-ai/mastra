@@ -1,5 +1,5 @@
 {
-  "name": "assistant-ui-starter",
+  "name": "examples-assistant-ui",
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",

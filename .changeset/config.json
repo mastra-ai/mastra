@@ -11,6 +11,9 @@
     "!mastra",
     "!create-mastra",
     "!@mastra/*",
-    "@mastra/playground"
+    "@mastra/playground",
+    "examples-*",
+    "*-with-*",
+    "!@mastra/dane"
   ]
 }

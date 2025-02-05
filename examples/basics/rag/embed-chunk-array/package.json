@@ -1,5 +1,5 @@
 {
-  "name": "embed-chunk-array",
+  "name": "examples-embed-chunk-array",
   "type": "module",
   "scripts": {
     "start": "pnpx tsx index.ts"

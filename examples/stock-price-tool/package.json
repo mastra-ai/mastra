@@ -1,5 +1,5 @@
 {
-  "name": "stock-price-tool",
+  "name": "examples-stock-price-tool",
   "main": "index.js",
   "type": "module",
   "private": true,

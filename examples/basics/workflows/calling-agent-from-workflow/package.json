@@ -1,5 +1,5 @@
 {
-  "name": "calling-agent-from-workflow",
+  "name": "examples-calling-agent-from-workflow",
   "type": "module",
   "scripts": {
     "start": "pnpx tsx index.ts"

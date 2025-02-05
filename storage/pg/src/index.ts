@@ -55,7 +55,22 @@ export class PostgresStore extends MastraStorage {
       const sql = `
         CREATE TABLE IF NOT EXISTS ${tableName} (
           ${columns}
-        )
+        );
+        ${
+          tableName === MastraStorage.TABLE_WORKFLOW_SNAPSHOT
+            ? `
+        DO $$ BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'mastra_workflow_snapshot_workflow_name_run_id_key'
+          ) THEN
+            ALTER TABLE ${tableName}
+            ADD CONSTRAINT mastra_workflow_snapshot_workflow_name_run_id_key
+            UNIQUE (workflow_name, run_id);
+          END IF;
+        END $$;
+        `
+            : ''
+        }
       `;
 
       await this.db.none(sql);
@@ -272,7 +287,7 @@ export class PostgresStore extends MastraStorage {
   async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
     try {
       const messages: any[] = [];
-      const limit = selectBy?.last || 100;
+      const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
       const include = selectBy?.include || [];
 
       if (include.length) {
@@ -342,6 +357,17 @@ export class PostgresStore extends MastraStorage {
       // Sort all messages by creation date
       messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
+      // Parse message content
+      messages.forEach(message => {
+        if (typeof message.content === 'string') {
+          try {
+            message.content = JSON.parse(message.content);
+          } catch (e) {
+            // If parsing fails, leave as string
+          }
+        }
+      });
+
       return messages as T;
     } catch (error) {
       console.error('Error getting messages:', error);
@@ -358,6 +384,12 @@ export class PostgresStore extends MastraStorage {
         throw new Error('Thread ID is required');
       }
 
+      // Check if thread exists
+      const thread = await this.getThreadById({ threadId });
+      if (!thread) {
+        throw new Error(`Thread ${threadId} not found`);
+      }
+
       await this.db.tx(async t => {
         for (const message of messages) {
           await t.none(
@@ -366,7 +398,7 @@ export class PostgresStore extends MastraStorage {
             [
               message.id,
               threadId,
-              JSON.stringify(message.content),
+              typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
               message.createdAt || new Date().toISOString(),
               message.role,
               message.type,
@@ -392,6 +424,7 @@ export class PostgresStore extends MastraStorage {
     snapshot: WorkflowRunState;
   }): Promise<void> {
     try {
+      const now = new Date().toISOString();
       await this.db.none(
         `INSERT INTO "${MastraStorage.TABLE_WORKFLOW_SNAPSHOT}" (
           workflow_name,
@@ -400,13 +433,40 @@ export class PostgresStore extends MastraStorage {
           "createdAt",
           "updatedAt"
         ) VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (workflow_name, run_id) DO UPDATE SET
-          snapshot = EXCLUDED.snapshot,
-          "updatedAt" = EXCLUDED."updatedAt"`,
-        [workflowName, runId, JSON.stringify(snapshot), new Date(), new Date()],
+        ON CONFLICT (workflow_name, run_id) DO UPDATE
+        SET snapshot = EXCLUDED.snapshot,
+            "updatedAt" = EXCLUDED."updatedAt"`,
+        [workflowName, runId, JSON.stringify(snapshot), now, now],
       );
     } catch (error) {
-      console.error('Error inserting into mastra_workflow_snapshot:', error);
+      console.error('Error persisting workflow snapshot:', error);
+      throw error;
+    }
+  }
+
+  async loadWorkflowSnapshot({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunState | null> {
+    try {
+      const result = await this.load({
+        tableName: MastraStorage.TABLE_WORKFLOW_SNAPSHOT,
+        keys: {
+          workflow_name: workflowName,
+          run_id: runId,
+        },
+      });
+
+      if (!result) {
+        return null;
+      }
+
+      return (result as any).snapshot;
+    } catch (error) {
+      console.error('Error loading workflow snapshot:', error);
       throw error;
     }
   }

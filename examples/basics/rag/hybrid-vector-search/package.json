@@ -1,5 +1,5 @@
 {
-  "name": "hybrid-vector-search",
+  "name": "examples-hybrid-vector-search",
   "type": "module",
   "private": true,
   "scripts": {

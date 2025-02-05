@@ -1,6 +1,6 @@
 {
   "name": "@mastra/firecrawl",
-  "version": "1.0.4-alpha.79",
+  "version": "1.1.0-alpha.81",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -67,8 +67,8 @@
   "license": "ISC",
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.3",
-    "@mastra/core": "workspace:*",
-    "@mastra/rag": "workspace:*",
+    "@mastra/core": "workspace:^",
+    "@mastra/rag": "workspace:^",
     "zod": "^3.24.0",
     "ts-to-zod": "^3.13.0"
   }

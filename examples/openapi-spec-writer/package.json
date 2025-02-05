@@ -1,5 +1,5 @@
 {
-  "name": "openapi-spec-writer",
+  "name": "examples-openapi-spec-writer",
   "type": "module",
   "private": true,
   "scripts": {

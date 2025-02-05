@@ -1,5 +1,27 @@
 # @mastra/speech-google
 
+## 0.1.0-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [7365b6c]
+  - @mastra/core@0.2.0-alpha.87
+
+## 0.1.0-alpha.11
+
+### Minor Changes
+
+- 5916f9d: Update deps from fixed to ^
+
+### Patch Changes
+
+- Updated dependencies [6fa4bd2]
+- Updated dependencies [e2e76de]
+- Updated dependencies [7f24c29]
+- Updated dependencies [67637ba]
+- Updated dependencies [04f3171]
+  - @mastra/core@0.2.0-alpha.86
+
 ## 0.0.1-alpha.10
 
 ### Patch Changes

@@ -1,5 +1,5 @@
 {
-  "name": "travel-app",
+  "name": "examples-travel-app",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",

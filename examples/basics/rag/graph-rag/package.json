@@ -1,5 +1,5 @@
 {
-  "name": "graph-rag",
+  "name": "examples-graph-rag",
   "type": "module",
   "private": true,
   "scripts": {

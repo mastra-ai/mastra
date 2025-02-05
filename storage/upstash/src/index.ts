@@ -195,9 +195,13 @@ export class UpstashStore extends MastraStorage {
   }
 
   async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
-    const limit = selectBy?.last || 100;
+    const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
     const messageIds = new Set<string>();
     const threadMessagesKey = this.getThreadMessagesKey(threadId);
+
+    if (limit === 0 && !selectBy?.include) {
+      return [];
+    }
 
     // First, get specifically included messages and their context
     if (selectBy?.include?.length) {
@@ -212,7 +216,7 @@ export class UpstashStore extends MastraStorage {
           // Get previous messages if requested
           if (item.withPreviousMessages) {
             const start = Math.max(0, rank - item.withPreviousMessages);
-            const prevIds = await this.redis.zrange(threadMessagesKey, start, rank - 1);
+            const prevIds = rank === 0 ? [] : await this.redis.zrange(threadMessagesKey, start, rank - 1);
             prevIds.forEach(id => messageIds.add(id as string));
           }
 
@@ -226,7 +230,7 @@ export class UpstashStore extends MastraStorage {
     }
 
     // Then get the most recent messages
-    const latestIds = await this.redis.zrange(threadMessagesKey, -limit, -1);
+    const latestIds = limit === 0 ? [] : await this.redis.zrange(threadMessagesKey, -limit, -1);
     latestIds.forEach(id => messageIds.add(id as string));
 
     // Fetch all needed messages in parallel

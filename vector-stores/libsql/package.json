@@ -1,6 +1,6 @@
 {
   "name": "@mastra/vector-libsql",
-  "version": "0.0.1-alpha.20",
+  "version": "0.1.0-alpha.22",
   "description": "LibSQL vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",
-    "@mastra/core": "workspace:*"
+    "@mastra/core": "workspace:^"
   },
   "devDependencies": {
     "@tsconfig/recommended": "^1.0.7",

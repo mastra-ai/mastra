@@ -1,5 +1,5 @@
 {
-  "name": "generate-text-from-pdf",
+  "name": "examples-generate-text-from-pdf",
   "type": "module",
   "private": true,
   "scripts": {

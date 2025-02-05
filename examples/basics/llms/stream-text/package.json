@@ -1,5 +1,5 @@
 {
-  "name": "stream-text",
+  "name": "examples-stream-text",
   "type": "module",
   "private": true,
   "scripts": {

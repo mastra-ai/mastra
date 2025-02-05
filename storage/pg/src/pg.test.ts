@@ -6,7 +6,7 @@ import { PostgresStore, type PostgresConfig } from './index';
 
 const TEST_CONFIG: PostgresConfig = {
   host: process.env.POSTGRES_HOST || 'localhost',
-  port: Number(process.env.POSTGRES_PORT) || 5432,
+  port: Number(process.env.POSTGRES_PORT) || 5434,
   database: process.env.POSTGRES_DB || 'postgres',
   user: process.env.POSTGRES_USER || 'postgres',
   password: process.env.POSTGRES_PASSWORD || 'postgres',
@@ -29,7 +29,7 @@ const createSampleMessage = (threadId: string) =>
     type: 'text',
     threadId,
     content: [{ type: 'text', text: 'Hello' }],
-    createdAt: new Date().toISOString(),
+    createdAt: new Date(),
   }) as any;
 
 describe('PostgresStore', () => {
@@ -53,16 +53,16 @@ describe('PostgresStore', () => {
       console.log('Saving thread:', thread);
 
       // Save thread
-      const savedThread = await store.saveThread({ thread });
+      const savedThread = await store.__saveThread({ thread });
       expect(savedThread).toEqual(thread);
 
       // Retrieve thread
-      const retrievedThread = await store.getThreadById({ threadId: thread.id });
+      const retrievedThread = await store.__getThreadById({ threadId: thread.id });
       expect(retrievedThread?.title).toEqual(thread.title);
     });
 
     it('should return null for non-existent thread', async () => {
-      const result = await store.getThreadById({ threadId: 'non-existent' });
+      const result = await store.__getThreadById({ threadId: 'non-existent' });
       expect(result).toBeNull();
     });
 
@@ -70,10 +70,10 @@ describe('PostgresStore', () => {
       const thread1 = createSampleThread();
       const thread2 = { ...createSampleThread(), resourceId: thread1.resourceId };
 
-      await store.saveThread({ thread: thread1 });
-      await store.saveThread({ thread: thread2 });
+      await store.__saveThread({ thread: thread1 });
+      await store.__saveThread({ thread: thread2 });
 
-      const threads = await store.getThreadsByResourceId({ resourceId: thread1.resourceId });
+      const threads = await store.__getThreadsByResourceId({ resourceId: thread1.resourceId });
       expect(threads).toHaveLength(2);
       expect(threads.map(t => t.id)).toEqual(expect.arrayContaining([thread1.id, thread2.id]));
     });
@@ -81,10 +81,10 @@ describe('PostgresStore', () => {
     it('should update thread title and metadata', async () => {
       const thread = createSampleThread();
       console.log('Saving thread:', thread);
-      await store.saveThread({ thread });
+      await store.__saveThread({ thread });
 
       const newMetadata = { newKey: 'newValue' };
-      const updatedThread = await store.updateThread({
+      const updatedThread = await store.__updateThread({
         id: thread.id,
         title: 'Updated Title',
         metadata: newMetadata,
@@ -97,25 +97,25 @@ describe('PostgresStore', () => {
       });
 
       // Verify persistence
-      const retrievedThread = await store.getThreadById({ threadId: thread.id });
+      const retrievedThread = await store.__getThreadById({ threadId: thread.id });
       expect(retrievedThread).toEqual(updatedThread);
     });
 
     it('should delete thread and its messages', async () => {
       const thread = createSampleThread();
-      await store.saveThread({ thread });
+      await store.__saveThread({ thread });
 
       // Add some messages
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
-      await store.saveMessages({ messages });
+      await store.__saveMessages({ messages });
 
-      await store.deleteThread({ id: thread.id });
+      await store.__deleteThread({ threadId: thread.id });
 
-      const retrievedThread = await store.getThreadById({ threadId: thread.id });
+      const retrievedThread = await store.__getThreadById({ threadId: thread.id });
       expect(retrievedThread).toBeNull();
 
       // Verify messages were also deleted
-      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.__getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(0);
     });
   });
@@ -123,28 +123,28 @@ describe('PostgresStore', () => {
   describe('Message Operations', () => {
     it('should save and retrieve messages', async () => {
       const thread = createSampleThread();
-      await store.saveThread({ thread });
+      await store.__saveThread({ thread });
 
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
 
       // Save messages
-      const savedMessages = await store.saveMessages({ messages });
+      const savedMessages = await store.__saveMessages({ messages });
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages
-      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.__getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(2);
       expect(retrievedMessages).toEqual(expect.arrayContaining(messages));
     });
 
     it('should handle empty message array', async () => {
-      const result = await store.saveMessages({ messages: [] });
+      const result = await store.__saveMessages({ messages: [] });
       expect(result).toEqual([]);
     });
 
     it('should maintain message order', async () => {
       const thread = createSampleThread();
-      await store.saveThread({ thread });
+      await store.__saveThread({ thread });
 
       const messages = [
         { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'First' }] },
@@ -152,9 +152,9 @@ describe('PostgresStore', () => {
         { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Third' }] },
       ];
 
-      await store.saveMessages({ messages });
+      await store.__saveMessages({ messages });
 
-      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.__getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
@@ -165,17 +165,17 @@ describe('PostgresStore', () => {
 
     it('should rollback on error during message save', async () => {
       const thread = createSampleThread();
-      await store.saveThread({ thread });
+      await store.__saveThread({ thread });
 
       const messages = [
         createSampleMessage(thread.id),
         { ...createSampleMessage(thread.id), id: null }, // This will cause an error
       ];
 
-      await expect(store.saveMessages({ messages })).rejects.toThrow();
+      await expect(store.__saveMessages({ messages })).rejects.toThrow();
 
       // Verify no messages were saved
-      const savedMessages = await store.getMessages({ threadId: thread.id });
+      const savedMessages = await store.__getMessages({ threadId: thread.id });
       expect(savedMessages).toHaveLength(0);
     });
   });
@@ -193,8 +193,8 @@ describe('PostgresStore', () => {
         metadata: largeMetadata,
       };
 
-      await store.saveThread({ thread: threadWithLargeMetadata });
-      const retrieved = await store.getThreadById({ threadId: thread.id });
+      await store.__saveThread({ thread: threadWithLargeMetadata });
+      const retrieved = await store.__getThreadById({ threadId: thread.id });
 
       expect(retrieved?.metadata).toEqual(largeMetadata);
     });
@@ -205,19 +205,19 @@ describe('PostgresStore', () => {
         title: 'Special \'quotes\' and "double quotes" and emoji 🎉',
       };
 
-      await store.saveThread({ thread });
-      const retrieved = await store.getThreadById({ threadId: thread.id });
+      await store.__saveThread({ thread });
+      const retrieved = await store.__getThreadById({ threadId: thread.id });
 
       expect(retrieved?.title).toBe(thread.title);
     });
 
     it('should handle concurrent thread updates', async () => {
       const thread = createSampleThread();
-      await store.saveThread({ thread });
+      await store.__saveThread({ thread });
 
       // Perform multiple updates concurrently
       const updates = Array.from({ length: 5 }, (_, i) =>
-        store.updateThread({
+        store.__updateThread({
           id: thread.id,
           title: `Update ${i}`,
           metadata: { update: i },
@@ -227,7 +227,7 @@ describe('PostgresStore', () => {
       await expect(Promise.all(updates)).resolves.toBeDefined();
 
       // Verify final state
-      const finalThread = await store.getThreadById({ threadId: thread.id });
+      const finalThread = await store.__getThreadById({ threadId: thread.id });
       expect(finalThread).toBeDefined();
     });
   });

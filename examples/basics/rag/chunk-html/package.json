@@ -1,5 +1,5 @@
 {
-  "name": "chunk-html",
+  "name": "examples-chunk-html",
   "type": "module",
   "private": true,
   "scripts": {

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/store-upstash",
-  "version": "0.0.0-alpha.3",
+  "version": "0.0.0-alpha.5",
   "description": "Upstash Redis store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -22,7 +22,7 @@
     "dev": "tsup-node src/index.ts --format esm --dts --clean --treeshake --watch"
   },
   "dependencies": {
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "@upstash/redis": "^1.28.3"
   },
   "devDependencies": {

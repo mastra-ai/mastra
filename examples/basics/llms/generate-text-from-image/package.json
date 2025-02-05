@@ -1,5 +1,5 @@
 {
-  "name": "generate-text-from-image",
+  "name": "examples-generate-text-from-image",
   "type": "module",
   "private": true,
   "scripts": {

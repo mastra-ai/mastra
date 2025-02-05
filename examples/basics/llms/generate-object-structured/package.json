@@ -1,5 +1,5 @@
 {
-  "name": "generate-object-structured",
+  "name": "examples-generate-object-structured",
   "type": "module",
   "private": true,
   "scripts": {

@@ -1,5 +1,5 @@
 {
-  "name": "insert-embedding-in-pinecone",
+  "name": "examples-insert-embedding-in-pinecone",
   "type": "module",
   "scripts": {
     "start": "pnpx tsx index.ts"

@@ -1,5 +1,5 @@
 {
-  "name": "cot-rag",
+  "name": "examples-cot-rag",
   "type": "module",
   "scripts": {
     "start": "pnpx tsx index.ts"

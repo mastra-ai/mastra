@@ -41,7 +41,7 @@
     "test:core": "pnpm --filter ./packages/core test",
     "test:engine": "pnpm --filter ./packages/engine test",
     "test:rag": "pnpm --filter ./packages/rag test",
-    "test:stores": "pnpm --filter ./storage/* test",
+    "test:stores": "pnpm --filter \"@mastra/store-*\" test",
     "test:vector-stores": "pnpm --filter ./vector-stores/* test",
     "test:memory": "pnpm --filter ./packages/memory test",
     "test:evals": "pnpm --filter ./packages/evals test",

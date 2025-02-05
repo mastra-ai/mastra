@@ -1,5 +1,5 @@
 {
-  "name": "stream-object-structured",
+  "name": "examples-stream-object-structured",
   "type": "module",
   "private": true,
   "scripts": {

@@ -1,5 +1,5 @@
 {
-  "name": "mastra-examples-integrations",
+  "name": "examples-integrations",
   "private": true,
   "main": "index.js",
   "scripts": {

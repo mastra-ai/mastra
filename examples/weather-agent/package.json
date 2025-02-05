@@ -1,5 +1,5 @@
 {
-  "name": "weather-agent",
+  "name": "examples-weather-agent",
   "description": "",
   "private": true,
   "type": "module",

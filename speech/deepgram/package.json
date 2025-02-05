@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-deepgram",
-  "version": "0.0.1-alpha.10",
+  "version": "0.1.0-alpha.12",
   "description": "Mastra Deepgram speech integration",
   "type": "module",
   "main": "dist/index.js",
@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@deepgram/sdk": "^3.9.0",
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "zod": "^3.24.1"
   },
   "devDependencies": {

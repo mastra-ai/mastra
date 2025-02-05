@@ -1,5 +1,5 @@
 {
-  "name": "generate-text-with-deepseek",
+  "name": "examples-generate-text-with-deepseek",
   "type": "module",
   "private": true,
   "scripts": {

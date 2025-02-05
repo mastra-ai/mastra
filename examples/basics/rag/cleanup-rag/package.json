@@ -1,5 +1,5 @@
 {
-  "name": "cleanup-rag",
+  "name": "examples-cleanup-rag",
   "type": "module",
   "scripts": {
     "start": "pnpx tsx index.ts"

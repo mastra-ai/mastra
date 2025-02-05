@@ -1,5 +1,5 @@
 {
-  "name": "insert-embedding-in-pgvector",
+  "name": "examples-insert-embedding-in-pgvector",
   "type": "module",
   "scripts": {
     "start": "pnpx tsx index.ts"

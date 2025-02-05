@@ -1,5 +1,5 @@
 {
-  "name": "adjust-chunk-delimiters",
+  "name": "examples-adjust-chunk-delimiters",
   "type": "module",
   "private": true,
   "scripts": {

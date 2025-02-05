@@ -1,5 +1,5 @@
 {
-  "name": "ai-chatbot",
+  "name": "examples-crypto-chatbot",
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
