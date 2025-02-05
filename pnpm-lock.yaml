@@ -2307,6 +2307,9 @@ importers:
       '@ai-sdk/google-vertex':
         specifier: ^2.1.9
         version: 2.1.9(encoding@0.1.13)(zod@3.24.1)
+      '@ai-sdk/groq':
+        specifier: ^1.1.7
+        version: 1.1.7(zod@3.24.1)
       '@ai-sdk/mistral':
         specifier: ^1.1.6
         version: 1.1.6(zod@3.24.1)
@@ -3503,6 +3506,12 @@ packages:
 
   '@ai-sdk/google@1.1.9':
     resolution: {integrity: sha512-Ve3D36pkOZ4vhjimMtou/OG01nMdzglZIBesqE3T20NAl20WbPx3IIK7vGywcD3YgASiWtiHYJnySMJwn2R3mA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.0.0
+
+  '@ai-sdk/groq@1.1.7':
+    resolution: {integrity: sha512-OavkZPF42QcJUltw8N/AXmRJvHBCf+I3Nx0FFywzN8xanEEtHothdMv6qDn0nwta+5itd+DEPI+/tLTIplmsMw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -20641,6 +20650,12 @@ snapshots:
       zod: 3.24.1
 
   '@ai-sdk/google@1.1.9(zod@3.24.1)':
+    dependencies:
+      '@ai-sdk/provider': 1.0.7
+      '@ai-sdk/provider-utils': 2.1.6(zod@3.24.1)
+      zod: 3.24.1
+
+  '@ai-sdk/groq@1.1.7(zod@3.24.1)':
     dependencies:
       '@ai-sdk/provider': 1.0.7
       '@ai-sdk/provider-utils': 2.1.6(zod@3.24.1)

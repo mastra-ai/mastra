@@ -70,6 +70,7 @@
     "@ai-sdk/fireworks": "^0.1.8",
     "@ai-sdk/google": "^1.0.16",
     "@ai-sdk/google-vertex": "^2.1.9",
+    "@ai-sdk/groq": "^1.1.7",
     "@ai-sdk/mistral": "^1.1.6",
     "@ai-sdk/openai": "^1.0.18",
     "@ai-sdk/perplexity": "^0.0.7",
