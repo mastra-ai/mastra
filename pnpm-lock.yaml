@@ -2278,17 +2278,23 @@ importers:
   packages/core:
     dependencies:
       '@ai-sdk/amazon-bedrock':
-        specifier: ^1.0.8
-        version: 1.1.5(zod@3.24.1)
+        specifier: ^1.1.6
+        version: 1.1.6(zod@3.24.1)
       '@ai-sdk/anthropic':
-        specifier: ^1.0.8
-        version: 1.1.5(zod@3.24.1)
+        specifier: ^1.1.6
+        version: 1.1.6(zod@3.24.1)
       '@ai-sdk/azure':
         specifier: ^1.0.20
         version: 1.1.5(zod@3.24.1)
+      '@ai-sdk/cerebras':
+        specifier: ^0.1.8
+        version: 0.1.8(zod@3.24.1)
       '@ai-sdk/cohere':
-        specifier: ^1.0.8
-        version: 1.1.5(zod@3.24.1)
+        specifier: ^1.1.6
+        version: 1.1.6(zod@3.24.1)
+      '@ai-sdk/deepseek':
+        specifier: ^0.1.8
+        version: 0.1.8(zod@3.24.1)
       '@ai-sdk/google':
         specifier: ^1.0.16
         version: 1.1.6(zod@3.24.1)
@@ -2304,12 +2310,6 @@ importers:
       '@ai-sdk/xai':
         specifier: ^1.0.17
         version: 1.1.6(zod@3.24.1)
-      '@badgateway/oauth2-client':
-        specifier: ^2.4.0
-        version: 2.4.2
-      '@date-fns/utc':
-        specifier: ^1.2.0
-        version: 1.2.0
       '@libsql/client':
         specifier: ^0.14.0
         version: 0.14.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
@@ -2346,12 +2346,6 @@ importers:
       '@portkey-ai/vercel-provider':
         specifier: ^1.0.1
         version: 1.0.1(encoding@0.1.13)(zod@3.24.1)
-      '@types/express':
-        specifier: ^5.0.0
-        version: 5.0.0
-      '@upstash/redis':
-        specifier: ^1.34.3
-        version: 1.34.3
       ai:
         specifier: ^4.0.34
         version: 4.1.10(react@19.0.0)(zod@3.24.1)
@@ -2364,9 +2358,6 @@ importers:
       date-fns:
         specifier: ^3.0.5
         version: 3.6.0
-      express:
-        specifier: ^4.21.1
-        version: 4.21.2
       json-schema:
         specifier: ^0.4.0
         version: 0.4.0
@@ -3435,14 +3426,14 @@ importers:
 
 packages:
 
-  '@ai-sdk/amazon-bedrock@1.1.5':
-    resolution: {integrity: sha512-CEHk/EzpfTaVPZtGD5baDescDXNHS9n2XOjkCO3g6MDiPiNDW0Xn4+kko21E6QsdjYQ+bmLVWiWj7ikzc3OD5A==}
+  '@ai-sdk/amazon-bedrock@1.1.6':
+    resolution: {integrity: sha512-h6SJWpku+i8OsSz0A4RT2g2uD+3E0SUgWHsWRIpxmPNgM1DnH6lgSby5sxqAZDY5xJyJtRFW5vB9G3GEBjHy/g==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
 
-  '@ai-sdk/anthropic@1.1.5':
-    resolution: {integrity: sha512-HGs69t2dsHlt+c4nCeUcdx5ojXs25dH8xly88TZZoyjfiCRWjmyjQxiPHZL2ME864a+vEpQSmvn8DgvMFA4p2g==}
+  '@ai-sdk/anthropic@1.1.6':
+    resolution: {integrity: sha512-4TZBg2VoU/F58DmnyfPPGU9wMUTwLP15XyAFSrUqk9sSdjszwcojXw3LE7YbxifZ+RK7wT7lTkuyK1k2UdfFng==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -3453,8 +3444,20 @@ packages:
     peerDependencies:
       zod: ^3.0.0
 
-  '@ai-sdk/cohere@1.1.5':
-    resolution: {integrity: sha512-aKoEqb+HcRoilftIaeDF6BHdYOY1FOaXkUunx/q9933lSJ9IPDcn2H3llSXsa+H+IIzF4u0L2BxSZh678ZrEfQ==}
+  '@ai-sdk/cerebras@0.1.8':
+    resolution: {integrity: sha512-PlGIr4JhLAuefxMv58zjOjvE+zpWddDO+/DiSwpiNKtqYX0616zv8f2xrVl2dKIR3zoB/30AaTW5UEefynSupg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.0.0
+
+  '@ai-sdk/cohere@1.1.6':
+    resolution: {integrity: sha512-RmVtlQCDt6a3jLnlxU/lFixnRaUu1GuF4eoivAnwTtbZ1a1WK6XWQsKtEOHEwMClEyb7szUmpPpnP408/TGSrw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.0.0
+
+  '@ai-sdk/deepseek@0.1.8':
+    resolution: {integrity: sha512-ZnugEqmkscB0an46I0Z6Ppor8YwOC2bIhWXkivkGbVdpQgpx43cPBrD3lyOyNEHIFwHtcrJF13S+4FNPzR0Gng==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -4615,10 +4618,6 @@ packages:
   '@babel/types@7.26.7':
     resolution: {integrity: sha512-t8kDRGrKXyp6+tjUh7hw2RLyclsW4TRoRvRHtSyAX9Bb5ldlFh+90YAYY6awRXrlB4G5G2izNeGySpATlFzmOg==}
     engines: {node: '>=6.9.0'}
-
-  '@badgateway/oauth2-client@2.4.2':
-    resolution: {integrity: sha512-70Fmzlmn8EfCjjssls8N6E94quBUWnLhu4inPZU2pkwpc6ZvbErkLRvtkYl81KFCvVcuVC0X10QPZVNwjXo2KA==}
-    engines: {node: '>= 14'}
 
   '@balena/dockerignore@1.0.2':
     resolution: {integrity: sha512-wMue2Sy4GAVTk6Ic4tJVcnfdau+gx2EnG7S+uAEe+TWJFqE4YoWN4/H8MSLj4eYJKxGg26lZwboEniNiNwZQ6Q==}
@@ -20510,19 +20509,19 @@ packages:
 
 snapshots:
 
-  '@ai-sdk/amazon-bedrock@1.1.5(zod@3.24.1)':
+  '@ai-sdk/amazon-bedrock@1.1.6(zod@3.24.1)':
     dependencies:
-      '@ai-sdk/provider': 1.0.6
-      '@ai-sdk/provider-utils': 2.1.5(zod@3.24.1)
+      '@ai-sdk/provider': 1.0.7
+      '@ai-sdk/provider-utils': 2.1.6(zod@3.24.1)
       '@aws-sdk/client-bedrock-runtime': 3.734.0
       zod: 3.24.1
     transitivePeerDependencies:
       - aws-crt
 
-  '@ai-sdk/anthropic@1.1.5(zod@3.24.1)':
+  '@ai-sdk/anthropic@1.1.6(zod@3.24.1)':
     dependencies:
-      '@ai-sdk/provider': 1.0.6
-      '@ai-sdk/provider-utils': 2.1.5(zod@3.24.1)
+      '@ai-sdk/provider': 1.0.7
+      '@ai-sdk/provider-utils': 2.1.6(zod@3.24.1)
       zod: 3.24.1
 
   '@ai-sdk/azure@1.1.5(zod@3.24.1)':
@@ -20532,10 +20531,24 @@ snapshots:
       '@ai-sdk/provider-utils': 2.1.5(zod@3.24.1)
       zod: 3.24.1
 
-  '@ai-sdk/cohere@1.1.5(zod@3.24.1)':
+  '@ai-sdk/cerebras@0.1.8(zod@3.24.1)':
     dependencies:
-      '@ai-sdk/provider': 1.0.6
-      '@ai-sdk/provider-utils': 2.1.5(zod@3.24.1)
+      '@ai-sdk/openai-compatible': 0.1.8(zod@3.24.1)
+      '@ai-sdk/provider': 1.0.7
+      '@ai-sdk/provider-utils': 2.1.6(zod@3.24.1)
+      zod: 3.24.1
+
+  '@ai-sdk/cohere@1.1.6(zod@3.24.1)':
+    dependencies:
+      '@ai-sdk/provider': 1.0.7
+      '@ai-sdk/provider-utils': 2.1.6(zod@3.24.1)
+      zod: 3.24.1
+
+  '@ai-sdk/deepseek@0.1.8(zod@3.24.1)':
+    dependencies:
+      '@ai-sdk/openai-compatible': 0.1.8(zod@3.24.1)
+      '@ai-sdk/provider': 1.0.7
+      '@ai-sdk/provider-utils': 2.1.6(zod@3.24.1)
       zod: 3.24.1
 
   '@ai-sdk/google@1.1.6(zod@3.24.1)':
@@ -22383,8 +22396,6 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.25.9
       '@babel/helper-validator-identifier': 7.25.9
-
-  '@badgateway/oauth2-client@2.4.2': {}
 
   '@balena/dockerignore@1.0.2': {}
 
