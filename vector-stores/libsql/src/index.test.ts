@@ -222,8 +222,37 @@ describe('LibSQLVector', () => {
         ];
 
         const metadata = [
-          { category: 'electronics', price: 100, tags: ['new', 'premium'], active: true },
-          { category: 'books', price: 50, tags: ['used'], active: true },
+          {
+            category: 'electronics',
+            price: 100,
+            tags: ['new', 'premium'],
+            active: true,
+            ratings: [4.5, 4.8, 4.2], // Array of numbers
+            stock: [
+              { location: 'A', count: 25 },
+              { location: 'B', count: 15 },
+            ], // Array of objects
+            reviews: [
+              { user: 'alice', score: 5, verified: true },
+              { user: 'bob', score: 4, verified: true },
+              { user: 'charlie', score: 3, verified: false },
+            ], // Complex array objects
+          },
+          {
+            category: 'books',
+            price: 50,
+            tags: ['used'],
+            active: true,
+            ratings: [3.8, 4.0, 4.1],
+            stock: [
+              { location: 'A', count: 10 },
+              { location: 'C', count: 30 },
+            ],
+            reviews: [
+              { user: 'dave', score: 4, verified: true },
+              { user: 'eve', score: 5, verified: false },
+            ],
+          },
           { category: 'electronics', price: 75, tags: ['refurbished'], active: false },
           { category: 'books', price: 25, tags: ['used', 'sale'], active: true },
           { category: 'clothing', price: 60, tags: ['new'], active: true },
@@ -285,6 +314,17 @@ describe('LibSQLVector', () => {
         });
       });
 
+      it('should filter with $gt and $lte operator', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          price: { $gt: 70, $lte: 100 },
+        });
+        expect(results).toHaveLength(2);
+        results.forEach(result => {
+          expect(result.metadata?.price).toBeGreaterThan(70);
+          expect(result.metadata?.price).toBeLessThanOrEqual(100);
+        });
+      });
+
       // Array Operation Tests
       it('should filter with $in operator', async () => {
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
@@ -332,7 +372,11 @@ describe('LibSQLVector', () => {
 
       it('should filter with $elemMatch operator', async () => {
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          tags: { $elemMatch: ['new', 'premium'] },
+          tags: {
+            $elemMatch: {
+              $in: ['new', 'premium'],
+            },
+          },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
@@ -340,50 +384,48 @@ describe('LibSQLVector', () => {
         });
       });
 
-      it('should filter with $elemMatch using single value', async () => {
+      it('should filter with $elemMatch using equality', async () => {
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          tags: { $elemMatch: 'sale' },
+          tags: {
+            $elemMatch: {
+              $eq: 'sale',
+            },
+          },
         });
         expect(results).toHaveLength(1);
         expect(results[0]?.metadata?.tags).toContain('sale');
       });
 
-      it('should filter with $elemMatch using multiple values', async () => {
+      it('should filter with $elemMatch using multiple conditions', async () => {
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          tags: { $elemMatch: ['sale', 'new'] },
+          ratings: {
+            $elemMatch: {
+              $gt: 4,
+              $lt: 4.5,
+            },
+          },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
-          expect(result.metadata?.tags.some(tag => ['sale', 'new'].includes(tag))).toBe(true);
+          expect(Array.isArray(result.metadata?.ratings)).toBe(true);
+          expect(result.metadata?.ratings.some(rating => rating > 4 && rating < 4.5)).toBe(true);
         });
       });
 
-      it('should handle empty array for $elemMatch', async () => {
+      it('should handle complex $elemMatch conditions', async () => {
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          tags: { $elemMatch: [] },
-        });
-        expect(results).toHaveLength(0);
-      });
-
-      it('should handle non-array field $elemMatch', async () => {
-        // First insert a record with non-array field
-        await vectorDB.upsert(indexName, [[1, 0.1, 0]], [{ tags: 'not-an-array' }]);
-
-        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          tags: { $elemMatch: ['value'] },
-        });
-        expect(results).toHaveLength(0);
-      });
-
-      it('should handle null values in array', async () => {
-        // First insert a record with null in array
-        await vectorDB.upsert(indexName, [[1, 0.1, 0]], [{ tags: ['valid', null] }]);
-
-        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          tags: { $elemMatch: ['valid'] },
+          stock: {
+            $elemMatch: {
+              location: 'A',
+              count: { $gt: 20 },
+            },
+          },
         });
         expect(results.length).toBeGreaterThan(0);
-        expect(results[0]?.metadata?.tags).toContain('valid');
+        results.forEach(result => {
+          const matchingStock = result.metadata?.stock.find(s => s.location === 'A' && s.count > 20);
+          expect(matchingStock).toBeDefined();
+        });
       });
 
       it('should filter with $all operator', async () => {
@@ -612,18 +654,25 @@ describe('LibSQLVector', () => {
 
       it('should handle non-existent field', async () => {
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          nonexistent: { $elemMatch: ['value'] },
+          nonexistent: {
+            $elemMatch: {
+              $eq: 'value',
+            },
+          },
         });
         expect(results).toHaveLength(0);
       });
 
       it('should handle non-existent values', async () => {
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          tags: { $elemMatch: ['nonexistent'] },
+          tags: {
+            $elemMatch: {
+              $eq: 'nonexistent-tag',
+            },
+          },
         });
         expect(results).toHaveLength(0);
       });
-
       // Empty Conditions Tests
       it('should handle empty conditions in logical operators', async () => {
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
@@ -777,6 +826,20 @@ describe('LibSQLVector', () => {
           expect(result.metadata?.category).toBe('electronics');
           expect(result.metadata?.price < 100 || result.metadata?.price > 20).toBe(true);
         });
+      });
+
+      it('should handle non-array field with $elemMatch', async () => {
+        // First insert a record with non-array field
+        await vectorDB.upsert(indexName, [[1, 0.1, 0]], [{ tags: 'not-an-array' }]);
+
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          tags: {
+            $elemMatch: {
+              $eq: 'value',
+            },
+          },
+        });
+        expect(results).toHaveLength(0); // Should return no results for non-array field
       });
     });
   });

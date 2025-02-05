@@ -50,6 +50,9 @@ export class LibSQLVector extends MastraVector {
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter);
       filterValues.push(minScore);
 
+      console.log('filterQuery', filterQuery);
+      console.log('filterValues', filterValues);
+
       const query = `
         WITH vector_scores AS (
           SELECT

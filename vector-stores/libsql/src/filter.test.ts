@@ -29,6 +29,10 @@ describe('LibSQLFilterTranslator', () => {
       expect(translator.translate(filter)).toEqual(filter);
     });
 
+    it('preserves multiple comparison operators', () => {
+      expect(translator.translate({ field: { $gt: 5, $lt: 10 } })).toEqual({ field: { $gt: 5, $lt: 10 } });
+    });
+
     it('handles nested paths', () => {
       expect(
         translator.translate({
@@ -78,6 +82,43 @@ describe('LibSQLFilterTranslator', () => {
         field: { $in: [] },
       });
     });
+
+    it('validates $elemMatch translation', () => {
+      expect(
+        translator.translate({
+          field: {
+            $elemMatch: {
+              $eq: 'value',
+            },
+          },
+        }),
+      ).toEqual({
+        field: {
+          $elemMatch: {
+            $eq: 'value',
+          },
+        },
+      });
+
+      // Test multiple conditions
+      expect(
+        translator.translate({
+          field: {
+            $elemMatch: {
+              $gt: 5,
+              $lt: 10,
+            },
+          },
+        }),
+      ).toEqual({
+        field: {
+          $elemMatch: {
+            $gt: 5,
+            $lt: 10,
+          },
+        },
+      });
+    });
   });
 
   // Array Operator Normalization
@@ -89,16 +130,6 @@ describe('LibSQLFilterTranslator', () => {
         }),
       ).toEqual({
         field: { $all: ['value'] },
-      });
-    });
-
-    it('normalizes single values for $elemMatch', () => {
-      expect(
-        translator.translate({
-          field: { $elemMatch: 'value' },
-        }),
-      ).toEqual({
-        field: { $elemMatch: ['value'] },
       });
     });
 
@@ -568,6 +599,43 @@ describe('LibSQLFilterTranslator', () => {
     it('validates empty $not conditions', () => {
       expect(() => translator.translate({ field: { $not: {} } })).toThrow();
       expect(() => translator.translate({ $not: {} })).toThrow();
+    });
+
+    it('throws error for non-logical operators at top level', () => {
+      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
+
+      invalidFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
+      });
+    });
+    it('allows logical operators at top level', () => {
+      const validFilters = [{ $and: [{ field: 'value' }] }, { $or: [{ field: 'value' }] }];
+
+      validFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).not.toThrow();
+      });
+    });
+
+    it('should throw error for direct regex patterns', () => {
+      const filter = {
+        field: /pattern/,
+      };
+      expect(() => translator.translate(filter)).toThrow();
+    });
+
+    it('validates $elemMatch requires an object with conditions', () => {
+      // Should throw for non-object values
+      expect(() =>
+        translator.translate({
+          field: { $elemMatch: 'value' },
+        }),
+      ).toThrow('$elemMatch requires an object with conditions');
+
+      expect(() =>
+        translator.translate({
+          field: { $elemMatch: ['value'] },
+        }),
+      ).toThrow('$elemMatch requires an object with conditions');
     });
   });
 
