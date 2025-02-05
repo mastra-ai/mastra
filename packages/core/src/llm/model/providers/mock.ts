@@ -2,7 +2,7 @@ import { simulateReadableStream } from 'ai';
 
 import { MockLanguageModelV1 } from 'ai/test';
 
-import { MastraLLM } from '../llm';
+import { MastraLLM } from '../model';
 
 export class MockProvider extends MastraLLM {
   constructor({

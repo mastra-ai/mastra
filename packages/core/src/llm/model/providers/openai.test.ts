@@ -1,11 +1,10 @@
 import { JSONSchema7 } from 'json-schema';
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 
 // Load environment variables
 import 'dotenv/config';
 
-import { Logger } from '../../../logger';
 import { createTool } from '../../../tools';
 
 import { OpenAI } from './openai';
@@ -23,18 +22,6 @@ const calculatorTool = createTool({
 });
 
 describe('LLM Class Integration Tests', () => {
-  let logger: Logger;
-
-  beforeAll(() => {
-    // Setup real logger
-    logger = {
-      debug: (msg: any) => console.debug(msg),
-      info: (msg: any) => console.info(msg),
-      warn: (msg: any) => console.warn(msg),
-      error: (msg: any) => console.error(msg),
-    } as Logger;
-  });
-
   const llm = new OpenAI({
     name: 'gpt-4o-mini',
   });

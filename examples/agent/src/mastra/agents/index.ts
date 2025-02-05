@@ -1,6 +1,11 @@
 import { Agent } from '@mastra/core/agent';
+import { OpenAI } from '@mastra/core/llm/openai';
 
 import { myTool } from '../tools/index.js';
+
+const openai = new OpenAI({
+  name: 'gpt-4o-mini',
+});
 
 export const chefAgent = new Agent({
   name: 'Chef Agent',
@@ -11,6 +16,7 @@ export const chefAgent = new Agent({
     name: 'gpt-4o',
     toolChoice: 'auto',
   },
+  llm: openai,
   tools: {
     myTool,
   },

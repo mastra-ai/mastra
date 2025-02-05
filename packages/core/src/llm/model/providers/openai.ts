@@ -1,7 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { type OpenAIChatSettings } from '@ai-sdk/openai/internal';
 
-import { MastraLLM } from '../llm';
+import { MastraLLM } from '../model';
 
 export type OpenAIModel =
   | 'gpt-4'
