@@ -72,7 +72,7 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
   }
 };
 
-async function rebundleAndRestart(dotMastraPath: string, port: number, env: Map<string, string>) {
+async function rebundleAndRestart(dotMastraPath: string, port: number, bundler: DevBundler) {
   if (isRestarting) {
     return;
   }
@@ -86,6 +86,7 @@ async function rebundleAndRestart(dotMastraPath: string, port: number, env: Map<
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
+    const env = await bundler.loadEnvVars();
     await startServer(dotMastraPath, port, env);
   } finally {
     isRestarting = false;
@@ -112,7 +113,7 @@ export async function dev({ port, dir, root }: { dir?: string; root?: string; po
   watcher.on('event', event => {
     if (event.code === 'BUNDLE_END') {
       logger.info('[Mastra Dev] - Bundling finished, restarting server...');
-      rebundleAndRestart(dotMastraPath, port, env);
+      rebundleAndRestart(dotMastraPath, port, bundler);
     }
   });
 
