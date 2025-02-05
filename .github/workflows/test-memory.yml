@@ -50,6 +50,9 @@ jobs:
       - name: Build core
         run: pnpm build:core
 
+      - name: Build storage packages
+        run: pnpm --filter "@mastra/store-*" build
+
       - name: Build engine
         run: pnpm build:engine && pnpm copy:drizzle
 
