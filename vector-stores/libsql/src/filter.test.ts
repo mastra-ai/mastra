@@ -623,6 +623,8 @@ describe('LibSQLFilterTranslator', () => {
         { field: { $not: { $in: ['value1', 'value2'] } } },
         { field: { $not: { $gt: 100 } } },
         { field: { $not: { $lt: 50 } } },
+
+        { field: { $size: 1 } },
       ];
 
       supportedFilters.forEach(filter => {

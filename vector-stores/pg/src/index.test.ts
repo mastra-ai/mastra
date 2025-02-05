@@ -590,6 +590,31 @@ describe('PgVector', () => {
         });
         expect(results).toHaveLength(0);
       });
+      it('should filter arrays by size', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          ratings: { $size: 3 },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.ratings).toHaveLength(3);
+        });
+
+        const noResults = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          ratings: { $size: 10 },
+        });
+        expect(noResults).toHaveLength(0);
+      });
+
+      it('should handle $size with nested arrays', async () => {
+        await vectorDB.upsert(indexName, [[1, 0.1, 0]], [{ nested: { array: [1, 2, 3, 4] } }]);
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          'nested.array': { $size: 4 },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.nested.array).toHaveLength(4);
+        });
+      });
     });
 
     // Logical Operator Tests

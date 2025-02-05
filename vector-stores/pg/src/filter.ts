@@ -14,7 +14,7 @@ export class PGFilterTranslator extends BaseFilterTranslator {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
-      custom: ['$contains'],
+      custom: ['$contains', '$size'],
     };
   }
 

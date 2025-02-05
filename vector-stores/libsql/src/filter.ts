@@ -15,7 +15,7 @@ export class LibSQLFilterTranslator extends BaseFilterTranslator {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
       regex: [],
-      custom: ['$contains'],
+      custom: ['$contains', '$size'],
     };
   }
 

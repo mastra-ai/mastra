@@ -171,7 +171,16 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     sql: `NOT (${key})`,
     needsValue: false,
   }),
-
+  $size: (key: string, paramIndex: number) => ({
+    sql: `(
+    CASE
+      WHEN json_type(json_extract(metadata, '$."${handleKey(key)}"')) = 'array' THEN 
+        json_array_length(json_extract(metadata, '$."${handleKey(key)}"')) = $${paramIndex}
+      ELSE FALSE
+    END
+  )`,
+    needsValue: true,
+  }),
   //   /**
   //    * Regex Operators
   //    * Supports case insensitive and multiline

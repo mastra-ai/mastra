@@ -159,6 +159,16 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
       return JSON.stringify(parts.reduceRight((value, key) => ({ [key]: value }), value));
     },
   }),
+  $size: (key: string, paramIndex: number) => ({
+    sql: `(
+      CASE
+        WHEN jsonb_typeof(metadata#>'{${handleKey(key)}}') = 'array' THEN 
+          jsonb_array_length(metadata#>'{${handleKey(key)}}') = $${paramIndex}
+        ELSE FALSE
+      END
+    )`,
+    needsValue: true,
+  }),
 };
 
 export interface FilterResult {
