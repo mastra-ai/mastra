@@ -284,8 +284,7 @@ export class Agent<
           runId,
         });
 
-        // Get working memory if enabled
-        const workingMemory = memory ? await memory.getWorkingMemory() : null;
+        const memorySystemMessage = memory && threadId ? await memory.getSystemMessage({ threadId }) : null;
 
         return {
           threadId: thread.id,
@@ -299,7 +298,7 @@ export class Agent<
              Return dates in ISO format.
              If no specific dates are mentioned but time periods are (like "last week" or "past month"), calculate the appropriate date range.
              For the end date, return the date 1 day after the end of the time period.
-             Today's date is ${new Date().toISOString()} and the time is ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })} ${workingMemory ? `\n\n${workingMemory}` : ''}`,
+             Today's date is ${new Date().toISOString()} and the time is ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })} ${memorySystemMessage ? `\n\n${memorySystemMessage}` : ''}`,
             } as any,
             ...memoryMessages,
             ...newMessages,
