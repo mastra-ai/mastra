@@ -54,41 +54,35 @@ function buildElemMatchConditions(value: any, paramIndex: number): { sql: string
   Object.entries(value).forEach(([field, val]) => {
     const nextParamIndex = paramIndex + values.length;
 
+    let paramOperator;
+    let paramKey;
+    let paramValue;
+
     if (field.startsWith('$')) {
-      // Handle operators like $in, $gt, etc.
-      const operatorFn = FILTER_OPERATORS[field];
-      if (!operatorFn) {
-        throw new Error(`Invalid operator: ${field}`);
-      }
-      const result = operatorFn('', nextParamIndex);
-      const sql = result.sql.replaceAll('metadata#>>', 'elem#>>');
-      conditions.push(sql);
-      if (result.needsValue) {
-        values.push(val);
-      }
+      paramOperator = field;
+      paramKey = '';
+      paramValue = val;
     } else if (typeof val === 'object' && !Array.isArray(val)) {
       const [op, opValue] = Object.entries(val || {})[0] || [];
-      const operatorFn = FILTER_OPERATORS[op as keyof typeof FILTER_OPERATORS];
-      if (!operatorFn) {
-        throw new Error(`Invalid operator: ${op}`);
-      }
-      const result = operatorFn(field, nextParamIndex);
-      const sql = result.sql.replaceAll('metadata#>>', 'elem#>>');
-      conditions.push(sql);
-      if (result.needsValue) {
-        values.push(opValue);
-      }
+      paramOperator = op;
+      paramKey = field;
+      paramValue = opValue;
     } else {
-      const result = FILTER_OPERATORS.$eq?.(field, nextParamIndex);
-      if (!result) {
-        throw new Error(`Invalid operator: $eq`);
-      }
+      paramOperator = '$eq';
+      paramKey = field;
+      paramValue = val;
+    }
 
-      const sql = result.sql.replaceAll('metadata#>>', 'elem#>>');
-      conditions.push(sql);
-      if (result.needsValue) {
-        values.push(val);
-      }
+    const operatorFn = FILTER_OPERATORS[paramOperator as keyof typeof FILTER_OPERATORS];
+    if (!operatorFn) {
+      throw new Error(`Invalid operator: ${paramOperator}`);
+    }
+    const result = operatorFn(paramKey, nextParamIndex, paramValue);
+
+    const sql = result.sql.replaceAll('metadata#>>', 'elem#>>');
+    conditions.push(sql);
+    if (result.needsValue) {
+      values.push(paramValue);
     }
   });
 

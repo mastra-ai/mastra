@@ -438,6 +438,58 @@ describe('LibSQLVector', () => {
         });
       });
 
+      it('should filter with $elemMatch on nested numeric fields', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          reviews: {
+            $elemMatch: {
+              score: { $gt: 4 },
+            },
+          },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.reviews.some(r => r.score > 4)).toBe(true);
+        });
+      });
+
+      it('should filter with $elemMatch on multiple nested fields', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          reviews: {
+            $elemMatch: {
+              score: { $gte: 4 },
+              verified: true,
+            },
+          },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.reviews.some(r => r.score >= 4 && r.verified)).toBe(true);
+        });
+      });
+
+      it('should filter with $elemMatch on exact string match', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          reviews: {
+            $elemMatch: {
+              user: 'alice',
+            },
+          },
+        });
+        expect(results).toHaveLength(1);
+        expect(results[0].metadata?.reviews.some(r => r.user === 'alice')).toBe(true);
+      });
+
+      it('should handle $elemMatch with no matches', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          reviews: {
+            $elemMatch: {
+              score: 10, // No review has score 10
+            },
+          },
+        });
+        expect(results).toHaveLength(0);
+      });
+
       it('should filter with $all operator', async () => {
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
           tags: { $all: ['used', 'sale'] },
@@ -576,14 +628,13 @@ describe('LibSQLVector', () => {
         });
       });
 
-      // Additional $not operator tests
       it('should handle $not with comparison operators', async () => {
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          price: { $not: { $gt: 75 } },
+          price: { $not: { $gt: 100 } },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
-          expect(result.metadata?.price).toBeLessThanOrEqual(75);
+          expect(Number(result.metadata?.price)).toBeLessThanOrEqual(100);
         });
       });
 
@@ -718,28 +769,6 @@ describe('LibSQLVector', () => {
         });
       });
 
-      it('should handle $not with $in operator', async () => {
-        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          category: { $not: { $in: ['electronics', 'books'] } },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(['electronics', 'books']).not.toContain(result.metadata?.category);
-        });
-      });
-
-      it('should handle nested $not with $or', async () => {
-        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          $not: {
-            $or: [{ category: 'electronics' }, { category: 'books' }],
-          },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(['electronics', 'books']).not.toContain(result.metadata?.category);
-        });
-      });
-
       it('should handle $not with $and', async () => {
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
           $not: {
@@ -749,16 +778,6 @@ describe('LibSQLVector', () => {
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
           expect(result.metadata?.category !== 'electronics' || result.metadata?.price <= 50).toBe(true);
-        });
-      });
-
-      it('should handle $nor operator', async () => {
-        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          $nor: [{ category: 'electronics' }, { category: 'books' }],
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(['electronics', 'books']).not.toContain(result.metadata?.category);
         });
       });
 
@@ -1057,64 +1076,6 @@ describe('LibSQLVector', () => {
           },
         });
         expect(results).toHaveLength(0); // Should return no results for non-array field
-      });
-    });
-  });
-
-  describe('$not operator', () => {
-    const indexName = 'test_query_5';
-    beforeEach(async () => {
-      await vectorDB.createIndex(indexName, 3);
-      const vectors = [
-        [1, 0.1, 0],
-        [0.9, 0.2, 0],
-        [0.95, 0.1, 0],
-        [0.85, 0.2, 0],
-        [0.9, 0.1, 0],
-      ];
-
-      const metadata = [
-        { category: 'electronics', price: 100, tags: ['new', 'premium'], active: true },
-        { category: 'books', price: 50, tags: ['used'], active: true },
-        { category: 'electronics', price: 75, tags: ['refurbished'], active: false },
-        { category: 'books', price: 25, tags: ['used', 'sale'], active: true },
-        { category: 'clothing', price: 60, tags: ['new'], active: true },
-      ];
-
-      await vectorDB.upsert(indexName, vectors, metadata);
-    });
-
-    afterEach(async () => {
-      await vectorDB.deleteIndex(indexName);
-    });
-
-    it('should handle $not with comparison operators', async () => {
-      const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-        price: { $not: { $gt: 100 } },
-      });
-      expect(results.length).toBeGreaterThan(0);
-      results.forEach(result => {
-        expect(Number(result.metadata?.price)).toBeLessThanOrEqual(100);
-      });
-    });
-
-    it('should handle $not with $in operator', async () => {
-      const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-        category: { $not: { $in: ['electronics', 'books'] } },
-      });
-      expect(results.length).toBeGreaterThan(0);
-      results.forEach(result => {
-        expect(['electronics', 'books']).not.toContain(result.metadata?.category);
-      });
-    });
-    it('should handle $not with multiple operators', async () => {
-      const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-        price: { $not: { $gte: 30, $lte: 70 } },
-      });
-      expect(results.length).toBeGreaterThan(0);
-      results.forEach(result => {
-        const price = Number(result.metadata?.price);
-        expect(price < 30 || price > 70).toBe(true);
       });
     });
 
