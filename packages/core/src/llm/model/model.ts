@@ -56,14 +56,23 @@ export class MastraLLM extends MastraLLMBase {
             description: tool.description!,
             parameters: tool.inputSchema,
             execute: async (props: any) => {
-              this.logger.debug('Executing tool', {
-                tool: k,
-                props,
-              });
-              return tool.execute({
-                context: props,
-                mastra: this.#mastra,
-              });
+              try {
+                this.logger.debug('Executing tool', {
+                  tool: k,
+                  props,
+                });
+                return tool.execute({
+                  context: props,
+                  mastra: this.#mastra,
+                });
+              } catch (error) {
+                this.logger.error('Error executing tool', {
+                  tool: k,
+                  props,
+                  error,
+                });
+                throw error;
+              }
             },
           };
         }
