@@ -20,7 +20,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "@pinecone-database/pinecone": "^3.0.3"
   },
   "devDependencies": {

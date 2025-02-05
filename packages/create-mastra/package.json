@@ -49,7 +49,7 @@
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^22.1.0",
     "esbuild": "^0.24.2",
-    "mastra": "workspace:*",
+    "mastra": "workspace:^",
     "rollup": "^4.30.1",
     "rollup-plugin-esbuild": "^6.1.1",
     "rollup-plugin-node-externals": "^8.0.0",

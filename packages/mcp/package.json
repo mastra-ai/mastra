@@ -23,7 +23,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",

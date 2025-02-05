@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@datastax/astra-db-ts": "^1.5.0",
-    "@mastra/core": "workspace:*"
+    "@mastra/core": "workspace:^"
   },
   "devDependencies": {
     "@tsconfig/recommended": "^1.0.7",

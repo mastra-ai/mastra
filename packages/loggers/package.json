@@ -35,7 +35,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@mastra/core": "workspace:*"
+    "@mastra/core": "workspace:^"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.26.0",

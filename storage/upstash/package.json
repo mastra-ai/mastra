@@ -22,7 +22,7 @@
     "dev": "tsup-node src/index.ts --format esm --dts --clean --treeshake --watch"
   },
   "dependencies": {
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "@upstash/redis": "^1.28.3"
   },
   "devDependencies": {
