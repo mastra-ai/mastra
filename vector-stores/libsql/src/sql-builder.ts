@@ -29,11 +29,17 @@ type OperatorFn = (key: string, value?: any) => FilterOperator;
 // Helper functions to create operators
 const createBasicOperator = (symbol: string) => {
   return (key: string): FilterOperator => ({
-    sql: `json_extract(metadata, '$."${handleKey(key)}"') ${symbol} ?`,
+    sql: `CASE 
+      WHEN ? IS NULL THEN json_extract(metadata, '$."${handleKey(key)}"') IS ${symbol === '=' ? '' : 'NOT'} NULL
+      ELSE json_extract(metadata, '$."${handleKey(key)}"') ${symbol} ?
+    END`,
     needsValue: true,
+    transformValue: (value: any) => {
+      // Return the values directly, not in an object
+      return [value, value];
+    },
   });
 };
-
 const createNumericOperator = (symbol: string) => {
   return (key: string): FilterOperator => ({
     sql: `CAST(json_extract(metadata, '$."${handleKey(key)}"') AS NUMERIC) ${symbol} ?`,
@@ -310,9 +316,6 @@ export function buildFilterQuery(filter: Filter): FilterResult {
 }
 
 function buildCondition(key: string, value: any, parentPath: string): FilterResult {
-  console.log('key', key);
-  console.log('value', value);
-  console.log('parentPath', parentPath);
   // Handle logical operators ($and/$or)
   if (['$and', '$or', '$not', '$nor'].includes(key)) {
     return handleLogicalOperator(key as '$and' | '$or' | '$not' | '$nor', value, parentPath);
@@ -351,6 +354,7 @@ function handleLogicalOperator(
   value: Filter[] | Filter,
   parentPath: string,
 ): FilterResult {
+  // Handle empty conditions
   if (!value || value.length === 0) {
     switch (key) {
       case '$and':
