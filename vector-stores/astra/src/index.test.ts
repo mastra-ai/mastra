@@ -30,7 +30,7 @@ describe('AstraVector Integration Tests', () => {
 
   console.log('testIndexName:', testIndexName);
 
-  beforeAll(() => {
+  beforeAll(async () => {
     // Ensure required environment variables are set
     const token = process.env.ASTRA_DB_TOKEN;
     const endpoint = process.env.ASTRA_DB_ENDPOINT;
@@ -45,7 +45,16 @@ describe('AstraVector Integration Tests', () => {
       endpoint,
       keyspace,
     });
-  });
+    try {
+      const collections = await vectorDB.listIndexes();
+      await Promise.all(collections.map(c => vectorDB.deleteIndex(c)));
+    } catch (error) {
+      console.error('Failed to delete test collections:', error);
+    }
+
+    await vectorDB.createIndex(testIndexName, 4, 'cosine');
+    await vectorDB.createIndex(testIndexName2, 4, 'cosine');
+  }, 500000);
 
   afterAll(async () => {
     // Cleanup: delete test collection
@@ -62,10 +71,6 @@ describe('AstraVector Integration Tests', () => {
   });
 
   test('full vector database workflow', async () => {
-    // 1. Create a new collection
-    await vectorDB.createIndex(testIndexName, 4, 'cosine');
-    await vectorDB.createIndex(testIndexName2, 4, 'cosine');
-
     // Verify collection was created
     const indexes = await vectorDB.listIndexes();
     expect(indexes).toContain(testIndexName);
