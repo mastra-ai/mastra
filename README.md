@@ -66,7 +66,7 @@ async function main() {
     name: 'story-writer',
     model: {
       provider: 'OPEN_AI',
-      name: 'gpt-4o',
+      name: 'gpt-4o-mini',
       toolChoice: 'auto',
     },
     instructions: `You are a helpful assistant who writes creative stories.`,
