@@ -1,0 +1,86 @@
+---
+title: "PostgreSQL Storage | Storage System | Mastra Core"
+description: Documentation for the PostgreSQL storage implementation in Mastra.
+---
+
+# PostgreSQL Storage
+
+The PostgreSQL storage implementation provides a production-ready storage solution using PostgreSQL databases.
+
+## Installation
+
+```bash
+npm install @mastra/storage-pg
+```
+
+## Usage
+
+```typescript copy showLineNumbers
+import { PostgresStorage } from "@mastra/storage-pg";
+
+const storage = new PostgresStorage({
+  connectionString: process.env.DATABASE_URL,
+  // Optional: Configure connection pool
+  pool: {
+    max: 20,
+    idleTimeoutMillis: 30000
+  }
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "connectionString",
+      type: "string",
+      description: "PostgreSQL connection string (e.g., postgresql://user:pass@host:5432/dbname)",
+      isOptional: false,
+    },
+    {
+      name: "pool",
+      type: "object",
+      description: "Connection pool configuration",
+      isOptional: true,
+    },
+    {
+      name: "pool.max",
+      type: "number",
+      description: "Maximum number of clients in the pool",
+      isOptional: true,
+      defaultValue: "10"
+    },
+    {
+      name: "pool.idleTimeoutMillis",
+      type: "number",
+      description: "Time in milliseconds after which idle clients are closed",
+      isOptional: true,
+      defaultValue: "30000"
+    }
+  ]}
+/>
+
+## Additional Notes
+
+### Connection Pooling
+
+The PostgreSQL storage implementation uses connection pooling to manage database connections efficiently. The pool configuration allows you to:
+- Control the maximum number of concurrent connections
+- Set idle connection timeout
+- Manage connection lifecycle
+
+### Schema Management
+
+The storage implementation handles schema creation and updates automatically. It creates the following tables:
+- `threads`: Stores conversation threads
+- `messages`: Stores individual messages
+- `metadata`: Stores additional metadata for threads and messages
+
+### Production Considerations
+
+For production deployments:
+- Use SSL connections for security
+- Configure appropriate pool sizes based on your workload
+- Monitor connection usage and pool metrics
+- Set up proper database backups and maintenance
