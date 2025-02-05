@@ -6,11 +6,11 @@ The `Memory` class provides a robust system for managing conversation history an
 
 ```typescript copy showLineNumbers
 import { Memory } from "@mastra/memory";
-import { LibSQLStorage } from "@mastra/storage-libsql";
+import { MastraStorageLibSql } from "@mastra/core/storage";
 
 const memory = new Memory({
-  storage: new LibSQLStorage({
-    url: "file::memory:?cache=shared",
+  storage: new MastraStorageLibSql({
+    url: ":memory:",
   }),
 });
 ```
@@ -115,15 +115,15 @@ When using vector search capabilities, ensure you configure both the vector stor
 
 ```typescript copy showLineNumbers
 import { Memory } from "@mastra/memory";
-import { LibSQLStorage } from "@mastra/storage-libsql";
+import { MastraStorageLibSql } from "@mastra/core/storage";
 import { LibSQLVector } from "@mastra/vector-libsql";
 
 const memory = new Memory({
-  storage: new LibSQLStorage({
-    url: "file::memory:?cache=shared",
+  storage: new MastraStorageLibSql({
+    url: ":memory:",
   }),
   vector: new LibSQLVector({
-    url: "file::memory:?cache=shared",
+    url: ":memory:",
   }),
   embedding: {
     provider: "OPEN_AI",
