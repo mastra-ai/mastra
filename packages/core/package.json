@@ -74,6 +74,7 @@
     "@ai-sdk/mistral": "^1.1.6",
     "@ai-sdk/openai": "^1.0.18",
     "@ai-sdk/perplexity": "^0.0.7",
+    "@ai-sdk/provider": "^1.0.7",
     "@ai-sdk/togetherai": "^0.1.9",
     "@ai-sdk/xai": "^1.1.8",
     "@libsql/client": "^0.14.0",
