@@ -1,5 +1,22 @@
 # @mastra/firecrawl
 
+## 1.1.0-alpha.80
+
+### Minor Changes
+
+- 5916f9d: Update deps from fixed to ^
+
+### Patch Changes
+
+- Updated dependencies [6fa4bd2]
+- Updated dependencies [5916f9d]
+- Updated dependencies [e2e76de]
+- Updated dependencies [7f24c29]
+- Updated dependencies [67637ba]
+- Updated dependencies [04f3171]
+  - @mastra/core@0.2.0-alpha.86
+  - @mastra/rag@0.1.0-alpha.78
+
 ## 1.0.4-alpha.79
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.0-alpha.32
+
+### Minor Changes
+
+- 5916f9d: Update deps from fixed to ^
+
 ## 0.1.0-alpha.31
 
 ### Patch Changes

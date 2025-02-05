@@ -1,5 +1,21 @@
 # @mastra/store-pg
 
+## 0.0.0-alpha.4
+
+### Minor Changes
+
+- 5916f9d: Update deps from fixed to ^
+
+### Patch Changes
+
+- 67637ba: Fixed storage bugs related to the new Memory API
+- Updated dependencies [6fa4bd2]
+- Updated dependencies [e2e76de]
+- Updated dependencies [7f24c29]
+- Updated dependencies [67637ba]
+- Updated dependencies [04f3171]
+  - @mastra/core@0.2.0-alpha.86
+
 ## 0.0.0-alpha.3
 
 ### Patch Changes
