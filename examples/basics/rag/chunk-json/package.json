@@ -1,5 +1,5 @@
 {
-  "name": "chunk-json",
+  "name": "examples-chunk-json",
   "type": "module",
   "private": true,
   "scripts": {

@@ -1,5 +1,5 @@
 {
-  "name": "chunk-markdown",
+  "name": "examples-chunk-markdown",
   "type": "module",
   "private": true,
   "scripts": {

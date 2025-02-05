@@ -1,5 +1,5 @@
 {
-  "name": "multi-agent-workflow",
+  "name": "examples-multi-agent-workflow",
   "type": "module",
   "private": true,
   "scripts": {

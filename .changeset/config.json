@@ -12,6 +12,8 @@
     "!create-mastra",
     "!@mastra/*",
     "@mastra/playground",
-    "calling-agent-from-workflow"
+    "examples-*",
+    "*-with-*",
+    "!@mastra/dane"
   ]
 }

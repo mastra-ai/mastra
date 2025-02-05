@@ -1,5 +1,5 @@
 {
-  "name": "adjust-chunk-size",
+  "name": "examples-adjust-chunk-size",
   "type": "module",
   "private": true,
   "scripts": {

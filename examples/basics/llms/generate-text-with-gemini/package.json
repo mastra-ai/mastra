@@ -1,5 +1,5 @@
 {
-  "name": "generate-text-with-gemini",
+  "name": "examples-generate-text-with-gemini",
   "type": "module",
   "private": true,
   "scripts": {

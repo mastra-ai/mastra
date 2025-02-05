@@ -1,5 +1,5 @@
 {
-  "name": "hierarchical-multi-agent",
+  "name": "examples-hierarchical-multi-agent",
   "type": "module",
   "private": true,
   "scripts": {

@@ -1,5 +1,5 @@
 {
-  "name": "generate-text-with-claude",
+  "name": "examples-generate-text-with-claude",
   "type": "module",
   "private": true,
   "scripts": {

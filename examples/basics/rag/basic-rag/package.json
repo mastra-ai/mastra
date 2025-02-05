@@ -1,5 +1,5 @@
 {
-  "name": "basic-rag",
+  "name": "examples-basic-rag",
   "type": "module",
   "private": true,
   "scripts": {

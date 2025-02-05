@@ -1,5 +1,5 @@
 {
-  "name": "generate-text-system-prompt",
+  "name": "examples-generate-text-system-prompt",
   "type": "module",
   "private": true,
   "scripts": {

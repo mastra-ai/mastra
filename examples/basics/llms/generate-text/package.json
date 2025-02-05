@@ -1,5 +1,5 @@
 {
-  "name": "generate-text",
+  "name": "examples-generate-text",
   "type": "module",
   "private": true,
   "scripts": {

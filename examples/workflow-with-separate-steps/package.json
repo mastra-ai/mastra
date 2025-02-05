@@ -1,5 +1,5 @@
 {
-  "name": "workflow-with-separate-steps",
+  "name": "examples-workflow-with-separate-steps",
   "main": "index.js",
   "private": true,
   "scripts": {
