@@ -57,19 +57,6 @@ describe('AstraFilterTranslator', () => {
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
-
-    it('handles elemMatch operator', () => {
-      const filter = {
-        items: {
-          $elemMatch: {
-            qty: { $gt: 20 },
-            price: { $lt: 50 },
-          },
-        },
-      };
-      expect(translator.translate(filter)).toEqual(filter);
-    });
-
     it('handles empty array values', () => {
       const filter = {
         tags: { $in: [] },
@@ -193,7 +180,7 @@ describe('AstraFilterTranslator', () => {
       expect(() =>
         translator.translate({
           field: {
-            $elemMatch: {
+            $gt: {
               $or: [{ subfield: 'value1' }, { subfield: 'value2' }],
             },
           },
@@ -319,7 +306,6 @@ describe('AstraFilterTranslator', () => {
         { field: { $in: ['value'] } },
         { field: { $nin: ['value'] } },
         { field: { $all: ['value'] } },
-        { field: { $elemMatch: { $gt: 5 } } },
 
         // Existence
         { field: { $exists: true } },
@@ -351,6 +337,28 @@ describe('AstraFilterTranslator', () => {
       const filter = { field: /pattern/i };
       expect(() => translator.translate(filter)).toThrow('Regex is not supported in Astra DB');
       expect(() => translator.translate({ $nor: [{ field: 'value' }] })).toThrow('Unsupported operator: $nor');
+      expect(() => translator.translate({ field: { $elemMatch: { $gt: 5 } } })).toThrow(
+        'Unsupported operator: $elemMatch',
+      );
+    });
+    it('throws error for non-logical operators at top level', () => {
+      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $exists: true }];
+
+      invalidFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
+      });
+    });
+
+    it('allows logical operators at top level', () => {
+      const validFilters = [
+        { $and: [{ field: 'value' }] },
+        { $or: [{ field: 'value' }] },
+        { $not: { field: 'value' } },
+      ];
+
+      validFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).not.toThrow();
+      });
     });
   });
 });

@@ -67,7 +67,7 @@ export class ChromaFilterTranslator extends BaseFilterTranslator {
 
         // Check if the nested object contains operators
         if (Object.keys(value).length === 0) {
-          result[newPath] = {};
+          result[newPath] = this.translateNode(value);
         } else {
           const hasOperators = Object.keys(value).some(k => this.isOperator(k));
           if (hasOperators) {
