@@ -388,7 +388,7 @@ export class Agent<
         }
       }
     } catch (err) {
-      this.logger.error('Failed to save assistant response', {
+      this.logger.error(`[Agent:${this.name}] - Failed to save assistant response`, {
         error: err,
         runId: runId,
       });
@@ -470,10 +470,24 @@ export class Agent<
               // this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, {
               //   runId,
               // });
-              return tool.execute({
-                context: args,
-                mastra: this.#mastra,
-              });
+
+              try {
+                this.logger.debug(`[Agent:${this.name}] - Executing tool ${k}`, {
+                  name: k,
+                  description: tool.description,
+                  args,
+                });
+                return tool.execute({
+                  context: args,
+                  mastra: this.#mastra,
+                });
+              } catch (err) {
+                this.logger.error(`[Agent:${this.name}] - Failed execution`, {
+                  error: err,
+                  runId: runId,
+                });
+                throw err;
+              }
             },
           };
         }
@@ -489,7 +503,9 @@ export class Agent<
     const toolsFromToolsets = Object.values(toolsets || {});
 
     if (toolsFromToolsets.length > 0) {
-      this.logger.debug(`Adding tools from toolsets ${Object.keys(toolsets || {}).join(', ')}`, { runId });
+      this.logger.debug(`[Agent:${this.name}] - Adding tools from toolsets ${Object.keys(toolsets || {}).join(', ')}`, {
+        runId,
+      });
       toolsFromToolsets.forEach(toolset => {
         Object.entries(toolset).forEach(([toolName, tool]) => {
           const toolObj = tool;
@@ -515,9 +531,23 @@ export class Agent<
               // this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, {
               //   runId,
               // });
-              return toolObj.execute!({
-                context: args,
-              });
+
+              try {
+                this.logger.debug(`[Agent:${this.name}] - Executing tool ${toolName}`, {
+                  name: toolName,
+                  description: toolObj.description,
+                  args,
+                });
+                return toolObj.execute!({
+                  context: args,
+                });
+              } catch (err) {
+                this.logger.error(`[Agent:${this.name}] - Failed toolset execution`, {
+                  error: err,
+                  runId: runId,
+                });
+                throw err;
+              }
             },
           };
         });
