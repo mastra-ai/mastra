@@ -67,10 +67,12 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     needsValue: true,
   }),
   $elemMatch: (key, paramIndex) => ({
-    sql: `(metadata#>'{${handleKey(key)}}')::jsonb ?| $${paramIndex}::text[]`,
+    sql: `EXISTS (
+      SELECT 1 FROM jsonb_array_elements((metadata#>'{${handleKey(key)}}')::jsonb) elem
+      WHERE elem = $${paramIndex}::text
+    )`,
     needsValue: true,
   }),
-
   // Element Operators
   $exists: key => ({
     sql: `metadata ? '${key}'`,
