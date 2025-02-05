@@ -213,9 +213,15 @@ export class MastraStorageLibSql extends MastraStorage {
   }
 
   private parseRow(row: any): MessageType {
+    let content = row.content;
+    try {
+      content = JSON.parse(row.content);
+    } catch (e) {
+      // use content as is if it's not JSON
+    }
     return {
       id: row.id,
-      content: row.content,
+      content,
       role: row.role,
       type: row.type,
       createdAt: new Date(row.createdAt as string),
