@@ -201,6 +201,7 @@ describe('PgVector', () => {
 
       it('should handle filters correctly', async () => {
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, { type: 'a' });
+
         expect(results).toHaveLength(1);
         results.forEach(result => {
           expect(result?.metadata?.type).toBe('a');
@@ -209,8 +210,8 @@ describe('PgVector', () => {
     });
   });
 
-  // Advanced Query Tests
-  describe('Advanced Query Operations', () => {
+  // Advanced Query and Filter Tests
+  describe('Advanced Query and Filter Operations', () => {
     const indexName = 'test_query_filters';
     beforeAll(async () => {
       try {
@@ -230,13 +231,44 @@ describe('PgVector', () => {
         [0.85, 0.2, 0],
         [0.9, 0.1, 0],
       ];
+
       const metadata = [
-        { category: 'electronics', price: 100, tags: ['new', 'premium'], active: true },
-        { category: 'books', price: 50, tags: ['used'], active: true },
+        {
+          category: 'electronics',
+          price: 100,
+          tags: ['new', 'premium'],
+          active: true,
+          ratings: [4.5, 4.8, 4.2], // Array of numbers
+          stock: [
+            { location: 'A', count: 25 },
+            { location: 'B', count: 15 },
+          ], // Array of objects
+          reviews: [
+            { user: 'alice', score: 5, verified: true },
+            { user: 'bob', score: 4, verified: true },
+            { user: 'charlie', score: 3, verified: false },
+          ], // Complex array objects
+        },
+        {
+          category: 'books',
+          price: 50,
+          tags: ['used'],
+          active: true,
+          ratings: [3.8, 4.0, 4.1],
+          stock: [
+            { location: 'A', count: 10 },
+            { location: 'C', count: 30 },
+          ],
+          reviews: [
+            { user: 'dave', score: 4, verified: true },
+            { user: 'eve', score: 5, verified: false },
+          ],
+        },
         { category: 'electronics', price: 75, tags: ['refurbished'], active: false },
         { category: 'books', price: 25, tags: ['used', 'sale'], active: true },
         { category: 'clothing', price: 60, tags: ['new'], active: true },
       ];
+
       await vectorDB.upsert(indexName, vectors, metadata);
     });
 
@@ -244,8 +276,19 @@ describe('PgVector', () => {
       await vectorDB.deleteIndex(indexName);
     });
 
-    // Comparison Operator Tests
+    // Numeric Comparison Tests
     describe('Comparison Operators', () => {
+      it('should handle numeric string comparisons', async () => {
+        // Insert a record with numeric string
+        await vectorDB.upsert(indexName, [[1, 0.1, 0]], [{ numericString: '123' }]);
+
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          numericString: { $gt: '100' }, // Compare strings numerically
+        });
+        expect(results.length).toBeGreaterThan(0);
+        expect(results[0]?.metadata?.numericString).toBe('123');
+      });
+
       it('should filter with $gt operator', async () => {
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
           price: { $gt: 75 },
@@ -293,6 +336,17 @@ describe('PgVector', () => {
           expect(result.metadata?.category).not.toBe('electronics');
         });
       });
+
+      it('should filter with $gt and $lte operator', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          price: { $gt: 70, $lte: 100 },
+        });
+        expect(results).toHaveLength(2);
+        results.forEach(result => {
+          expect(result.metadata?.price).toBeGreaterThan(70);
+          expect(result.metadata?.price).toBeLessThanOrEqual(100);
+        });
+      });
     });
 
     // Array Operator Tests
@@ -307,8 +361,32 @@ describe('PgVector', () => {
         });
       });
 
-      it('should filter with array $contains operator', async () => {
+      it('should filter with $nin operator', async () => {
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          category: { $nin: ['electronics', 'books'] },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(['electronics', 'books']).not.toContain(result.metadata?.category);
+        });
+      });
+
+      it('should handle empty arrays in in/nin operators', async () => {
+        // Should return no results for empty IN
+        const resultsIn = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          category: { $in: [] },
+        });
+        expect(resultsIn).toHaveLength(0);
+
+        // Should return all results for empty NIN
+        const resultsNin = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          category: { $nin: [] },
+        });
+        expect(resultsNin.length).toBeGreaterThan(0);
+      });
+
+      it('should filter with array $contains operator', async () => {
+        const results = await vectorDB.query(indexName, [1, 0.1, 0], 10, {
           tags: { $contains: ['new'] },
         });
         expect(results.length).toBeGreaterThan(0);
@@ -319,11 +397,59 @@ describe('PgVector', () => {
 
       it('should filter with $elemMatch operator', async () => {
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          tags: { $elemMatch: ['new', 'premium'] },
+          tags: {
+            $elemMatch: {
+              $in: ['new', 'premium'],
+            },
+          },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
           expect(result.metadata?.tags.some(tag => ['new', 'premium'].includes(tag))).toBe(true);
+        });
+      });
+
+      it('should filter with $elemMatch using equality', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          tags: {
+            $elemMatch: {
+              $eq: 'sale',
+            },
+          },
+        });
+        expect(results).toHaveLength(1);
+        expect(results[0]?.metadata?.tags).toContain('sale');
+      });
+
+      it('should filter with $elemMatch using multiple conditions', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          ratings: {
+            $elemMatch: {
+              $gt: 4,
+              $lt: 4.5,
+            },
+          },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(Array.isArray(result.metadata?.ratings)).toBe(true);
+          expect(result.metadata?.ratings.some(rating => rating > 4 && rating < 4.5)).toBe(true);
+        });
+      });
+
+      it('should handle complex $elemMatch conditions', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          stock: {
+            $elemMatch: {
+              location: 'A',
+              count: { $gt: 20 },
+            },
+          },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          const matchingStock = result.metadata?.stock.find(s => s.location === 'A' && s.count > 20);
+          expect(matchingStock).toBeDefined();
         });
       });
 
@@ -338,80 +464,79 @@ describe('PgVector', () => {
         });
       });
 
-      it('should filter with $nin operator', async () => {
+      it('should filter with $all using single value', async () => {
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          category: { $nin: ['electronics', 'books'] },
+          tags: { $all: ['new'] },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
-          expect(['electronics', 'books']).not.toContain(result.metadata?.category);
+          expect(result.metadata?.tags).toContain('new');
         });
       });
 
-      it('should handle empty arrays in $in/$nin operators', async () => {
-        const resultsIn = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          category: { $in: [] },
-        });
-        expect(resultsIn).toHaveLength(0);
-
-        const resultsNin = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          category: { $nin: [] },
-        });
-        expect(resultsNin.length).toBeGreaterThan(0);
-      });
-    });
-
-    // Regex Operator Tests
-    describe('Regex Operators', () => {
-      it('should handle $regex with case sensitivity', async () => {
+      it('should handle empty array for $all', async () => {
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          category: { $regex: 'ELECTRONICS' },
+          tags: { $all: [] },
         });
         expect(results).toHaveLength(0);
       });
 
-      it('should handle $regex with case insensitivity', async () => {
+      it('should handle non-array field $all', async () => {
+        // First insert a record with non-array field
+        await vectorDB.upsert(indexName, [[1, 0.1, 0]], [{ tags: 'not-an-array' }]);
+
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          category: { $regex: 'ELECTRONICS', $options: 'i' },
+          tags: { $all: ['value'] },
+        });
+        expect(results).toHaveLength(0);
+      });
+
+      // Contains Operator Tests
+      it('should filter with contains operator for exact field match', async () => {
+        const results = await vectorDB.query(indexName, [1, 0.1, 0], 10, {
+          category: { $contains: 'electronics' },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category).toBe('electronics');
+        });
+      });
+
+      it('should filter with $contains operator for nested objects', async () => {
+        // First insert a record with nested object
+        await vectorDB.upsert(
+          indexName,
+          [[1, 0.1, 0]],
+          [
+            {
+              details: { color: 'red', size: 'large' },
+              category: 'clothing',
+            },
+          ],
+        );
+
+        const results = await vectorDB.query(indexName, [1, 0.1, 0], 10, {
+          details: { $contains: { color: 'red' } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.details.color).toBe('red');
+        });
+      });
+
+      // String Pattern Tests
+      it('should handle exact string matches', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          category: 'electronics',
         });
         expect(results).toHaveLength(2);
       });
 
-      it('should handle $regex with start anchor', async () => {
+      it('should handle case-sensitive string matches', async () => {
         const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          category: { $regex: '^elect' },
+          category: 'ELECTRONICS',
         });
-        expect(results).toHaveLength(2);
-      });
-
-      it('should handle $regex with end anchor', async () => {
-        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          category: { $regex: 'nics$' },
-        });
-        expect(results).toHaveLength(2);
-      });
-
-      it('should handle multiline flag', async () => {
-        await vectorDB.upsert(indexName, [[1, 0.1, 0]], [{ description: 'First line\nSecond line\nThird line' }]);
-
-        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          description: { $regex: '^Second', $options: 'm' },
-        });
-        expect(results).toHaveLength(1);
-      });
-
-      it('should handle dotall flag', async () => {
-        await vectorDB.upsert(indexName, [[1, 0.1, 0]], [{ description: 'First\nSecond\nThird' }]);
-
-        const withoutS = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          description: { $regex: 'First[^\\n]*Third' },
-        });
-        expect(withoutS).toHaveLength(0);
-
-        const withS = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          description: { $regex: 'First.*Third', $options: 's' },
-        });
-        expect(withS).toHaveLength(1);
+        expect(results).toHaveLength(0);
       });
     });
 
@@ -484,16 +609,6 @@ describe('PgVector', () => {
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
           expect(['electronics', 'books']).not.toContain(result.metadata?.category);
-        });
-      });
-
-      it('should handle $not with $regex operator', async () => {
-        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
-          category: { $not: { $regex: '^elect' } },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(result.metadata?.category).not.toMatch(/^elect/);
         });
       });
 
@@ -607,6 +722,109 @@ describe('PgVector', () => {
           expect(price < 30 || price > 70).toBe(true);
         });
       });
+
+      it('should handle $not with comparison operators', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          price: { $not: { $gt: 100 } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(Number(result.metadata?.price)).toBeLessThanOrEqual(100);
+        });
+      });
+
+      it('should handle $not with $in operator', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          category: { $not: { $in: ['electronics', 'books'] } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(['electronics', 'books']).not.toContain(result.metadata?.category);
+        });
+      });
+
+      it('should handle nested $not with $or', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          $not: {
+            $or: [{ category: 'electronics' }, { category: 'books' }],
+          },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(['electronics', 'books']).not.toContain(result.metadata?.category);
+        });
+      });
+
+      it('should handle $not with $and', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          $not: {
+            $and: [{ category: 'electronics' }, { price: { $gt: 50 } }],
+          },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category !== 'electronics' || result.metadata?.price <= 50).toBe(true);
+        });
+      });
+
+      it('should handle $nor operator', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          $nor: [{ category: 'electronics' }, { category: 'books' }],
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(['electronics', 'books']).not.toContain(result.metadata?.category);
+        });
+      });
+
+      it('should handle $nor with $or', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          $nor: [{ $or: [{ category: 'electronics' }, { category: 'books' }] }, { price: { $gt: 75 } }],
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(['electronics', 'books']).not.toContain(result.metadata?.category);
+          expect(result.metadata?.price).toBeLessThanOrEqual(75);
+        });
+      });
+
+      it('should handle $nor with nested $and conditions', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          $nor: [
+            { $and: [{ category: 'electronics' }, { active: true }] },
+            { $and: [{ category: 'books' }, { price: { $lt: 30 } }] },
+          ],
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          const notElectronicsActive = !(
+            result.metadata?.category === 'electronics' && result.metadata?.active === true
+          );
+          const notBooksLowPrice = !(result.metadata?.category === 'books' && result.metadata?.price < 30);
+          expect(notElectronicsActive && notBooksLowPrice).toBe(true);
+        });
+      });
+
+      it('should handle nested $and with $or and $not', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          $and: [{ $or: [{ category: 'electronics' }, { category: 'books' }] }, { $not: { price: { $lt: 50 } } }],
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(['electronics', 'books']).toContain(result.metadata?.category);
+          expect(result.metadata?.price).toBeGreaterThanOrEqual(50);
+        });
+      });
+
+      it('should handle $or with multiple $not conditions', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          $or: [{ $not: { category: 'electronics' } }, { $not: { price: { $gt: 50 } } }],
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category !== 'electronics' || result.metadata?.price <= 50).toBe(true);
+        });
+      });
     });
 
     // Edge Cases and Special Values
@@ -648,6 +866,332 @@ describe('PgVector', () => {
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
           expect(result.score).toBeGreaterThan(0.9);
+        });
+      });
+    });
+
+    describe('Edge Cases and Special Values', () => {
+      // Additional Edge Cases
+      it('should handle empty result sets with valid filters', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          price: { $gt: 1000 },
+        });
+        expect(results).toHaveLength(0);
+      });
+
+      it('should handle empty filter object', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {});
+        expect(results.length).toBeGreaterThan(0);
+      });
+
+      it('should handle non-existent field', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          nonexistent: {
+            $elemMatch: {
+              $eq: 'value',
+            },
+          },
+        });
+        expect(results).toHaveLength(0);
+      });
+
+      it('should handle non-existent values', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          tags: {
+            $elemMatch: {
+              $eq: 'nonexistent-tag',
+            },
+          },
+        });
+        expect(results).toHaveLength(0);
+      });
+      // Empty Conditions Tests
+      it('should handle empty conditions in logical operators', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          $and: [],
+          category: 'electronics',
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category).toBe('electronics');
+        });
+      });
+
+      it('should handle empty $and conditions', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          $and: [],
+          category: 'electronics',
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category).toBe('electronics');
+        });
+      });
+
+      it('should handle empty $or conditions', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          $or: [],
+          category: 'electronics',
+        });
+        expect(results).toHaveLength(0);
+      });
+
+      it('should handle empty $nor conditions', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          $nor: [],
+          category: 'electronics',
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category).toBe('electronics');
+        });
+      });
+
+      it('should handle empty $not conditions', async () => {
+        await expect(
+          vectorDB.query(indexName, [1, 0, 0], 10, {
+            $not: {},
+            category: 'electronics',
+          }),
+        ).rejects.toThrow('$not operator cannot be empty');
+      });
+
+      it('should handle multiple empty logical operators', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          $and: [],
+          $or: [],
+          $nor: [],
+          category: 'electronics',
+        });
+        expect(results).toHaveLength(0);
+      });
+
+      // Nested Field Tests
+      it('should handle deeply nested metadata paths', async () => {
+        await vectorDB.upsert(
+          indexName,
+          [[1, 0.1, 0]],
+          [
+            {
+              level1: {
+                level2: {
+                  level3: 'deep value',
+                },
+              },
+            },
+          ],
+        );
+
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          'level1.level2.level3': 'deep value',
+        });
+        expect(results).toHaveLength(1);
+        expect(results[0]?.metadata?.level1?.level2?.level3).toBe('deep value');
+      });
+
+      it('should handle non-existent nested paths', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          'nonexistent.path': 'value',
+        });
+        expect(results).toHaveLength(0);
+      });
+
+      // Score Threshold Tests
+      it('should respect minimum score threshold', async () => {
+        const results = await vectorDB.query(
+          indexName,
+          [1, 0, 0],
+          10,
+          { category: 'electronics' },
+          false,
+          0.9, // minScore
+        );
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.score).toBeGreaterThan(0.9);
+        });
+      });
+
+      // Complex Nested Operators Test
+      it('should handle deeply nested logical operators', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          $and: [
+            {
+              $or: [{ category: 'electronics' }, { $and: [{ category: 'books' }, { price: { $lt: 30 } }] }],
+            },
+            {
+              $not: {
+                $or: [{ active: false }, { price: { $gt: 100 } }],
+              },
+            },
+          ],
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          // First condition: electronics OR (books AND price < 30)
+          const firstCondition =
+            result.metadata?.category === 'electronics' ||
+            (result.metadata?.category === 'books' && result.metadata?.price < 30);
+
+          // Second condition: NOT (active = false OR price > 100)
+          const secondCondition = result.metadata?.active !== false && result.metadata?.price <= 100;
+
+          expect(firstCondition && secondCondition).toBe(true);
+        });
+      });
+
+      it('should throw error for invalid operator', async () => {
+        await expect(
+          vectorDB.query(indexName, [1, 0, 0], 10, {
+            price: { $invalid: 100 },
+          }),
+        ).rejects.toThrow('Unsupported operator: $invalid');
+      });
+
+      it('should handle multiple logical operators at root level', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          $and: [{ category: 'electronics' }],
+          $or: [{ price: { $lt: 100 } }, { price: { $gt: 20 } }],
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category).toBe('electronics');
+          expect(result.metadata?.price < 100 || result.metadata?.price > 20).toBe(true);
+        });
+      });
+
+      it('should handle non-array field with $elemMatch', async () => {
+        // First insert a record with non-array field
+        await vectorDB.upsert(indexName, [[1, 0.1, 0]], [{ tags: 'not-an-array' }]);
+
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          tags: {
+            $elemMatch: {
+              $eq: 'value',
+            },
+          },
+        });
+        expect(results).toHaveLength(0); // Should return no results for non-array field
+      });
+    });
+  });
+
+  describe('$not operator', () => {
+    const indexName = 'test_query_5';
+    beforeEach(async () => {
+      await vectorDB.createIndex(indexName, 3);
+      const vectors = [
+        [1, 0.1, 0],
+        [0.9, 0.2, 0],
+        [0.95, 0.1, 0],
+        [0.85, 0.2, 0],
+        [0.9, 0.1, 0],
+      ];
+
+      const metadata = [
+        { category: 'electronics', price: 100, tags: ['new', 'premium'], active: true },
+        { category: 'books', price: 50, tags: ['used'], active: true },
+        { category: 'electronics', price: 75, tags: ['refurbished'], active: false },
+        { category: 'books', price: 25, tags: ['used', 'sale'], active: true },
+        { category: 'clothing', price: 60, tags: ['new'], active: true },
+      ];
+
+      await vectorDB.upsert(indexName, vectors, metadata);
+    });
+
+    afterEach(async () => {
+      await vectorDB.deleteIndex(indexName);
+    });
+
+    it('should handle $not with comparison operators', async () => {
+      const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+        price: { $not: { $gt: 100 } },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(Number(result.metadata?.price)).toBeLessThanOrEqual(100);
+      });
+    });
+
+    it('should handle $not with $in operator', async () => {
+      const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+        category: { $not: { $in: ['electronics', 'books'] } },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(['electronics', 'books']).not.toContain(result.metadata?.category);
+      });
+    });
+    it('should handle $not with multiple operators', async () => {
+      const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+        price: { $not: { $gte: 30, $lte: 70 } },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        const price = Number(result.metadata?.price);
+        expect(price < 30 || price > 70).toBe(true);
+      });
+    });
+
+    // Regex Operator Tests
+    describe('Regex Operators', () => {
+      it('should handle $regex with case sensitivity', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          category: { $regex: 'ELECTRONICS' },
+        });
+        expect(results).toHaveLength(0);
+      });
+
+      it('should handle $regex with case insensitivity', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          category: { $regex: 'ELECTRONICS', $options: 'i' },
+        });
+        expect(results).toHaveLength(2);
+      });
+
+      it('should handle $regex with start anchor', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          category: { $regex: '^elect' },
+        });
+        expect(results).toHaveLength(2);
+      });
+
+      it('should handle $regex with end anchor', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          category: { $regex: 'nics$' },
+        });
+        expect(results).toHaveLength(2);
+      });
+
+      it('should handle multiline flag', async () => {
+        await vectorDB.upsert(indexName, [[1, 0.1, 0]], [{ description: 'First line\nSecond line\nThird line' }]);
+
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          description: { $regex: '^Second', $options: 'm' },
+        });
+        expect(results).toHaveLength(1);
+      });
+
+      it('should handle dotall flag', async () => {
+        await vectorDB.upsert(indexName, [[1, 0.1, 0]], [{ description: 'First\nSecond\nThird' }]);
+
+        const withoutS = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          description: { $regex: 'First[^\\n]*Third' },
+        });
+        expect(withoutS).toHaveLength(0);
+
+        const withS = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          description: { $regex: 'First.*Third', $options: 's' },
+        });
+        expect(withS).toHaveLength(1);
+      });
+      it('should handle $not with $regex operator', async () => {
+        const results = await vectorDB.query(indexName, [1, 0, 0], 10, {
+          category: { $not: { $regex: '^elect' } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category).not.toMatch(/^elect/);
         });
       });
     });
