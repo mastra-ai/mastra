@@ -695,6 +695,26 @@ describe('UpstashVector', () => {
           expect(results).toHaveLength(1);
           expect(results[0]?.metadata?.description).toBe('Contains "quotes"');
         });
+        it('should handle undefined filter', async () => {
+          const results1 = await vectorStore.query(filterIndexName, createVector(0), 10, undefined);
+          const results2 = await vectorStore.query(filterIndexName, createVector(0), 10);
+          expect(results1).toEqual(results2);
+          expect(results1.length).toBeGreaterThan(0);
+        });
+
+        it('should handle empty object filter', async () => {
+          const results = await vectorStore.query(filterIndexName, createVector(0), 10, {});
+          const results2 = await vectorStore.query(filterIndexName, createVector(0), 10);
+          expect(results).toEqual(results2);
+          expect(results.length).toBeGreaterThan(0);
+        });
+
+        it('should handle null filter', async () => {
+          const results = await vectorStore.query(filterIndexName, createVector(0), 10, null as any);
+          const results2 = await vectorStore.query(filterIndexName, createVector(0), 10);
+          expect(results).toEqual(results2);
+          expect(results.length).toBeGreaterThan(0);
+        });
       });
     });
 
