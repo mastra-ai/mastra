@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - "packages/memory/**"
+      - "packages/memory/*/package.json"
+      - "storage/**"
+      - "storage/*/package.json"
       - ".github/workflows/test-memory.yml"
 
 jobs:

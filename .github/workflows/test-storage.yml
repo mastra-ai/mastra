@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "storage/**"
+      - "storage/*/package.json"
       - ".github/workflows/test-storage.yml"
 
 permissions:
