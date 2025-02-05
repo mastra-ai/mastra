@@ -20,7 +20,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "openai": "^4.28.0",
     "zod": "^3.24.1"
   },

@@ -67,8 +67,8 @@
   "license": "ISC",
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.3",
-    "@mastra/core": "workspace:*",
-    "@mastra/rag": "workspace:*",
+    "@mastra/core": "workspace:^",
+    "@mastra/rag": "workspace:^",
     "zod": "^3.24.0",
     "ts-to-zod": "^3.13.0"
   }

@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@deepgram/sdk": "^3.9.0",
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "zod": "^3.24.1"
   },
   "devDependencies": {

@@ -20,7 +20,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "cloudflare": "^4.0.0"
   },
   "devDependencies": {

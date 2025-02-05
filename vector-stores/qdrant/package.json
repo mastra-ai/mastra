@@ -20,7 +20,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "@qdrant/js-client-rest": "^1.12.0"
   },
   "devDependencies": {
