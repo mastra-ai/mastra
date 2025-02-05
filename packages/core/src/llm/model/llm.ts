@@ -25,9 +25,9 @@ import {
   StreamReturn,
 } from '../types';
 
-import { MastraLMBase } from './base';
+import { MastraLLMBase } from './base';
 
-export class MastraLM extends MastraLMBase {
+export class MastraLLM extends MastraLLMBase {
   #model: LanguageModel;
   #mastra?: MastraPrimitives;
 
