@@ -20,7 +20,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "@upstash/vector": "^1.1.7"
   },
   "devDependencies": {

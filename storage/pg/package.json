@@ -25,7 +25,7 @@
     "posttest:watch": "docker compose down -v"
   },
   "dependencies": {
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "pg": "^8.13.1",
     "pg-promise": "^11.5.4"
   },

@@ -50,8 +50,8 @@
   "dependencies": {
     "@clack/prompts": "^0.8.2",
     "@dagrejs/dagre": "^1.1.4",
-    "@mastra/core": "workspace:*",
-    "@mastra/deployer": "workspace:*",
+    "@mastra/core": "workspace:^",
+    "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
     "@swc/core": "^1.9.3",
     "chokidar": "^4.0.3",

@@ -20,7 +20,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "pg": "^8.13.1"
   },
   "devDependencies": {

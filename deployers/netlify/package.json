@@ -21,8 +21,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@mastra/core": "workspace:*",
-    "@mastra/deployer": "workspace:*",
+    "@mastra/core": "workspace:^",
+    "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
     "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",

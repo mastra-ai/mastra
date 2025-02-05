@@ -24,7 +24,7 @@
   "dependencies": {
     "@llamaindex/core": "^0.4.10",
     "@llamaindex/env": "^0.1.20",
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "@paralleldrive/cuid2": "^2.2.2",
     "js-tiktoken": "^1.0.15",
     "jsdom": "^25.0.1",
