@@ -1,6 +1,6 @@
 {
   "name": "@mastra/vector-libsql",
-  "version": "0.1.0-alpha.21",
+  "version": "0.1.0-alpha.22",
   "description": "LibSQL vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
