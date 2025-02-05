@@ -30,7 +30,7 @@
     "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
     "dev": "tsup src/index.ts --format esm --dts --clean --watch",
     "test:integration": "cd integration-tests && pnpm run test",
-    "test:all": "pnpm test:integration"
+    "test": "pnpm test:integration"
   },
   "keywords": [],
   "author": "",
