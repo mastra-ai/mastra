@@ -4,13 +4,13 @@ The `Memory` class provides a robust system for managing conversation history an
 
 ## Usage Example
 
-```typescript
+```typescript copy showLineNumbers
 import { Memory } from "@mastra/memory";
-import { PostgresStorage } from "@mastra/storage-pg";
+import { LibSQLStorage } from "@mastra/storage-libsql";
 
 const memory = new Memory({
-  storage: new PostgresStorage({
-    connectionString: process.env.DATABASE_URL,
+  storage: new LibSQLStorage({
+    url: "file::memory:?cache=shared",
   }),
 });
 ```
@@ -32,8 +32,8 @@ const memory = new Memory({
       isOptional: true,
     },
     {
-      name: "embeddingOptions",
-      type: "EmbeddingOptions",
+      name: "embedding",
+      type: "EmbeddingConfig",
       description: "Configuration for text embeddings",
       isOptional: true,
     },
@@ -58,8 +58,8 @@ const memory = new Memory({
       defaultValue: "40",
     },
     {
-      name: "historySearch",
-      type: "boolean | object",
+      name: "semanticRecall",
+      type: "boolean | SemanticRecallConfig",
       description: "Enable semantic search in message history. Automatically enabled when vector store is provided.",
       isOptional: true,
       defaultValue: "false (true if vector store provided)",
@@ -76,7 +76,33 @@ const memory = new Memory({
       type: "number | { before: number; after: number }",
       description: "Range of messages to include around semantic search results",
       isOptional: true,
-      defaultValue: "{ before: 2, after: 2 }",
+      defaultValue: "2",
+    },
+  ]}
+/>
+
+### embedding
+
+<PropertiesTable
+  content={[
+    {
+      name: "provider",
+      type: "string",
+      description: "The embedding provider to use (e.g., 'OPEN_AI')",
+      isOptional: false,
+    },
+    {
+      name: "model",
+      type: "string",
+      description: "The specific embedding model to use (e.g., 'text-embedding-3-small')",
+      isOptional: false,
+    },
+    {
+      name: "maxRetries",
+      type: "number",
+      description: "Maximum number of retry attempts for embedding generation",
+      isOptional: true,
+      defaultValue: "3",
     },
   ]}
 />
@@ -85,16 +111,29 @@ const memory = new Memory({
 
 ### Vector Search Configuration
 
-When using vector search capabilities, ensure you configure both the vector store and appropriate search options:
+When using vector search capabilities, ensure you configure both the vector store and appropriate search options. Here's an example (just using the in-memory store):
 
-```typescript
+```typescript copy showLineNumbers
+import { Memory } from "@mastra/memory";
+import { LibSQLStorage } from "@mastra/storage-libsql";
+import { LibSQLVector } from "@mastra/vector-libsql";
+
 const memory = new Memory({
-  storage: new PostgresStorage({ /* config */ }),
-  vector: new PineconeVector({ /* config */ }),
+  storage: new LibSQLStorage({
+    url: "file::memory:?cache=shared",
+  }),
+  vector: new LibSQLVector({
+    url: "file::memory:?cache=shared",
+  }),
+  embedding: {
+    provider: "OPEN_AI",
+    model: "text-embedding-3-small",
+    maxRetries: 3,
+  },
   options: {
-    historySearch: {
+    semanticRecall: {
       topK: 5,
-      messageRange: { before: 2, after: 2 }
+      messageRange: 2
     }
   }
 });
