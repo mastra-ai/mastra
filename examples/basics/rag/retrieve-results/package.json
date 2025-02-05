@@ -1,5 +1,5 @@
 {
-  "name": "retrieve-results",
+  "name": "examples-retrieve-results",
   "type": "module",
   "scripts": {
     "start": "pnpx tsx index.ts"

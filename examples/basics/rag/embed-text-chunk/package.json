@@ -1,5 +1,5 @@
 {
-  "name": "embed-text-chunk",
+  "name": "examples-embed-text-chunk",
   "type": "module",
   "scripts": {
     "start": "pnpx tsx index.ts"

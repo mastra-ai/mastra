@@ -1,5 +1,5 @@
 {
-  "name": "metadata-extraction",
+  "name": "examples-metadata-extraction",
   "type": "module",
   "scripts": {
     "start": "pnpx tsx index.ts"

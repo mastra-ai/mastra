@@ -1,5 +1,5 @@
 {
-  "name": "calling-llm-from-workflow",
+  "name": "examples-calling-llm-from-workflow",
   "type": "module",
   "scripts": {
     "start": "pnpx tsx index.ts"
