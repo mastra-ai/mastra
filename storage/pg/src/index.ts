@@ -56,7 +56,9 @@ export class PostgresStore extends MastraStorage {
         CREATE TABLE IF NOT EXISTS ${tableName} (
           ${columns}
         );
-        ${tableName === MastraStorage.TABLE_WORKFLOW_SNAPSHOT ? `
+        ${
+          tableName === MastraStorage.TABLE_WORKFLOW_SNAPSHOT
+            ? `
         DO $$ BEGIN
           IF NOT EXISTS (
             SELECT 1 FROM pg_constraint WHERE conname = 'mastra_workflow_snapshot_workflow_name_run_id_key'
@@ -66,7 +68,9 @@ export class PostgresStore extends MastraStorage {
             UNIQUE (workflow_name, run_id);
           END IF;
         END $$;
-        ` : ''}
+        `
+            : ''
+        }
       `;
 
       await this.db.none(sql);
@@ -432,7 +436,7 @@ export class PostgresStore extends MastraStorage {
         ON CONFLICT (workflow_name, run_id) DO UPDATE
         SET snapshot = EXCLUDED.snapshot,
             "updatedAt" = EXCLUDED."updatedAt"`,
-        [workflowName, runId, JSON.stringify(snapshot), now, now]
+        [workflowName, runId, JSON.stringify(snapshot), now, now],
       );
     } catch (error) {
       console.error('Error persisting workflow snapshot:', error);
