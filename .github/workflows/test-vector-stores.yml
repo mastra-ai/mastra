@@ -7,9 +7,15 @@ on:
       - "vector-stores/**"
       - ".github/workflows/test-vector-stores.yml"
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     services:
       qdrant:
         image: qdrant/qdrant
