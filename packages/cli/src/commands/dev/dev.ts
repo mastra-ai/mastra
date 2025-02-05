@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 let currentServerProcess: ChildProcess | undefined;
 let isRestarting = false;
 
-const startServer = async (dotMastraPath: string, port: number) => {
+const startServer = async (dotMastraPath: string, port: number, env: Map<string, string>) => {
   try {
     // Restart server
     logger.info('[Mastra Dev] - Starting server...');
@@ -22,6 +22,7 @@ const startServer = async (dotMastraPath: string, port: number) => {
       cwd: dotMastraPath,
       env: {
         PORT: port.toString() || '4111',
+        ...Object.fromEntries(env),
       },
       stdio: 'inherit',
       reject: false,
@@ -71,7 +72,7 @@ const startServer = async (dotMastraPath: string, port: number) => {
   }
 };
 
-async function rebundleAndRestart(dotMastraPath: string, port: number) {
+async function rebundleAndRestart(dotMastraPath: string, port: number, bundler: DevBundler) {
   if (isRestarting) {
     return;
   }
@@ -85,7 +86,8 @@ async function rebundleAndRestart(dotMastraPath: string, port: number) {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
-    await startServer(dotMastraPath, port);
+    const env = await bundler.loadEnvVars();
+    await startServer(dotMastraPath, port, env);
   } finally {
     isRestarting = false;
   }
@@ -98,18 +100,20 @@ export async function dev({ port, dir, root }: { dir?: string; root?: string; po
 
   const bundler = new DevBundler();
 
+  const env = await bundler.loadEnvVars();
+
   await bundler.prepare(dotMastraPath);
 
   writeFileSync(join(dotMastraPath, 'evals.json'), ``);
 
   const watcher = await bundler.watch(dotMastraPath);
 
-  await startServer(dotMastraPath, port);
+  await startServer(dotMastraPath, port, env);
 
   watcher.on('event', event => {
     if (event.code === 'BUNDLE_END') {
       logger.info('[Mastra Dev] - Bundling finished, restarting server...');
-      rebundleAndRestart(dotMastraPath, port);
+      rebundleAndRestart(dotMastraPath, port, bundler);
     }
   });
 
