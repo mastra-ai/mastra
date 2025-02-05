@@ -1,4 +1,4 @@
-import { BaseFilterTranslator, FieldCondition, Filter, OperatorSupport } from '@mastra/core/filter';
+import { BaseFilterTranslator, FieldCondition, Filter, LogicalOperator, OperatorSupport } from '@mastra/core/filter';
 
 /**
  * Translates MongoDB-style filters to Qdrant compatible filters.
@@ -20,13 +20,17 @@ import { BaseFilterTranslator, FieldCondition, Filter, OperatorSupport } from '@
  * - $empty -> is_empty check
  */
 export class QdrantFilterTranslator extends BaseFilterTranslator {
+  protected override isLogicalOperator(key: string): key is LogicalOperator {
+    return super.isLogicalOperator(key) || key === '$hasId' || key === '$hasVector';
+  }
+
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
       logical: ['$and', '$or', '$not'],
       array: ['$in', '$nin'],
-      regex: [], // Qdrant uses text match instead
-      custom: ['$count', '$geo', '$hasId', '$nested', '$hasVector', '$datetime', '$null', '$empty'],
+      regex: ['$regex'],
+      custom: ['$count', '$geo', '$nested', '$datetime', '$null', '$empty', '$hasId', '$hasVector'],
     };
   }
 
@@ -51,6 +55,10 @@ export class QdrantFilterTranslator extends BaseFilterTranslator {
         return { is_null: { key: fieldKey } };
       }
       return this.createCondition('match', { value: this.normalizeComparisonValue(node) }, fieldKey);
+    }
+
+    if (this.isRegex(node)) {
+      throw new Error('Direct regex pattern format is not supported in Qdrant');
     }
 
     if (Array.isArray(node)) {
@@ -94,7 +102,7 @@ export class QdrantFilterTranslator extends BaseFilterTranslator {
   private handleLogicalOperators(entries: [string, any][], isNested: boolean): any | null {
     const firstKey = entries[0]?.[0];
 
-    if (firstKey && this.isLogicalOperator(firstKey)) {
+    if (firstKey && this.isLogicalOperator(firstKey) && !this.isCustomOperator(firstKey)) {
       const [key, value] = entries[0]!;
       const qdrantOp = this.getQdrantLogicalOp(key);
       return {
@@ -127,10 +135,8 @@ export class QdrantFilterTranslator extends BaseFilterTranslator {
 
     for (const [key, value] of entries) {
       if (this.isCustomOperator(key)) {
-        const customOp = this.translateCustomOperator(key, value);
-        if (customOp) {
-          conditions.push({ key: fieldKey, ...customOp });
-        }
+        const customOp = this.translateCustomOperator(key, value, fieldKey);
+        conditions.push(customOp);
       } else if (this.isOperator(key)) {
         const opResult = this.translateOperatorValue(key, value);
         if (opResult.range) {
@@ -153,7 +159,7 @@ export class QdrantFilterTranslator extends BaseFilterTranslator {
     return { conditions, range, matchCondition };
   }
 
-  private translateCustomOperator(op: string, value: any): any {
+  private translateCustomOperator(op: string, value: any, fieldKey?: string): any {
     switch (op) {
       case '$count':
         const countConditions = Object.entries(value).reduce(
@@ -163,29 +169,30 @@ export class QdrantFilterTranslator extends BaseFilterTranslator {
           }),
           {},
         );
-        return { values_count: countConditions };
+        return { key: fieldKey, values_count: countConditions };
       case '$geo':
-        return this.translateGeoFilter(value.type, value);
+        const geoOp = this.translateGeoFilter(value.type, value);
+        return { key: fieldKey, ...geoOp };
       case '$hasId':
         return { has_id: Array.isArray(value) ? value : [value] };
       case '$nested':
         return {
           nested: {
-            key: value.key,
-            filter: this.translateNode(value.filter),
+            key: fieldKey,
+            filter: this.translateNode(value),
           },
         };
       case '$hasVector':
         return { has_vector: value };
       case '$datetime':
         return {
-          key: value.key,
+          key: fieldKey,
           range: this.normalizeDatetimeRange(value.range),
         };
       case '$null':
-        return { is_null: { key: value } };
+        return { is_null: { key: fieldKey } };
       case '$empty':
-        return { is_empty: { key: value } };
+        return { is_empty: { key: fieldKey } };
       default:
         throw new Error(`Unsupported custom operator: ${op}`);
     }
@@ -225,7 +232,7 @@ export class QdrantFilterTranslator extends BaseFilterTranslator {
       case '$nin':
         return { except: this.normalizeArrayValues(value) };
       case '$regex':
-        return { text: value.toString() };
+        return { text: value };
       case 'exists':
         return value
           ? {

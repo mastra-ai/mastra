@@ -17,9 +17,9 @@ describe('ChromaFilterTranslator', () => {
       expect(translator.translate(undefined as any)).toEqual(undefined);
     });
 
-    it('converts implicit equality to explicit $eq', () => {
+    it('retains implicit equality', () => {
       const filter = { field: 'value' };
-      expect(translator.translate(filter)).toEqual({ field: { $eq: 'value' } });
+      expect(translator.translate(filter)).toEqual({ field: 'value' });
     });
 
     it('converts multiple top-level fields to $and', () => {
@@ -28,7 +28,7 @@ describe('ChromaFilterTranslator', () => {
         field2: 'value2',
       };
       expect(translator.translate(filter)).toEqual({
-        $and: [{ field1: { $eq: 'value1' } }, { field2: { $eq: 'value2' } }],
+        $and: [{ field1: 'value1' }, { field2: 'value2' }],
       });
     });
 
@@ -100,7 +100,7 @@ describe('ChromaFilterTranslator', () => {
   describe('logical operators', () => {
     it('handles logical operators', () => {
       const filter = {
-        $or: [{ status: 'active' }, { age: { $gt: 25 } }],
+        $or: [{ status: { $eq: 'active' } }, { age: { $gt: 25 } }],
       };
       expect(translator.translate(filter)).toEqual({
         $or: [{ status: { $eq: 'active' } }, { age: { $gt: 25 } }],
@@ -110,7 +110,7 @@ describe('ChromaFilterTranslator', () => {
     it('handles nested logical operators', () => {
       const filter = {
         $and: [
-          { status: 'active' },
+          { status: { $eq: 'active' } },
           {
             $or: [{ category: { $in: ['A', 'B'] } }, { $and: [{ price: { $gt: 100 } }, { stock: { $lt: 50 } }] }],
           },
@@ -135,7 +135,7 @@ describe('ChromaFilterTranslator', () => {
         $and: [
           { field1: { $in: ['a', 'b'] } },
           {
-            $and: [{ field2: { $in: ['c'] } }, { field2: { $in: ['d'] } }],
+            field2: { $in: ['c', 'd'] },
           },
         ],
       });
@@ -146,8 +146,8 @@ describe('ChromaFilterTranslator', () => {
         $or: [
           { age: { $gt: 25 } },
           {
-            status: 'active',
-            'user.preferences.theme': 'dark',
+            status: { $eq: 'active' },
+            theme: 'dark',
           },
         ],
       };
@@ -155,7 +155,7 @@ describe('ChromaFilterTranslator', () => {
         $or: [
           { age: { $gt: 25 } },
           {
-            $and: [{ status: { $eq: 'active' } }, { 'user.preferences.theme': { $eq: 'dark' } }],
+            $and: [{ status: { $eq: 'active' } }, { theme: 'dark' }],
           },
         ],
       });
@@ -192,7 +192,7 @@ describe('ChromaFilterTranslator', () => {
       };
 
       expect(translator.translate(filter)).toEqual({
-        $or: [{}, { status: { $eq: 'active' } }],
+        $or: [{}, { status: 'active' }],
       });
     });
 
@@ -387,6 +387,26 @@ describe('ChromaFilterTranslator', () => {
 
       unsupportedFilters.forEach(filter => {
         expect(() => translator.translate(filter)).toThrow(/Unsupported operator/);
+      });
+    });
+
+    it('throws error for regex operators', () => {
+      const filter = { field: /pattern/i };
+      expect(() => translator.translate(filter)).toThrow('Regex is not supported in Chroma');
+    });
+    it('throws error for non-logical operators at top level', () => {
+      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
+
+      invalidFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
+      });
+    });
+
+    it('allows logical operators at top level', () => {
+      const validFilters = [{ $and: [{ field: 'value' }] }, { $or: [{ field: 'value' }] }];
+
+      validFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).not.toThrow();
       });
     });
   });

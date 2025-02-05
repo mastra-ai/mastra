@@ -1,4 +1,4 @@
-import { BaseFilterTranslator, FieldCondition, Filter, LogicalOperator, OperatorSupport } from '@mastra/core/filter';
+import { BaseFilterTranslator, FieldCondition, Filter, OperatorSupport } from '@mastra/core/filter';
 
 /**
  * Translates MongoDB-style filters to PG compatible filters.
@@ -8,15 +8,16 @@ import { BaseFilterTranslator, FieldCondition, Filter, LogicalOperator, Operator
  * Logical Operators ($and, $or, $nor):
  * - Can be used at the top level or nested within fields
  * - Can take either a single condition or an array of conditions
+ *
  */
-
 export class PGFilterTranslator extends BaseFilterTranslator {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
-      custom: ['$contains'],
+      custom: ['$contains', '$size'],
     };
   }
+
   translate(filter: Filter): Filter {
     if (this.isEmpty(filter)) {
       return filter;
@@ -69,8 +70,10 @@ export class PGFilterTranslator extends BaseFilterTranslator {
           ? value.map((filter: Filter) => this.translateNode(filter))
           : this.translateNode(value);
       } else if (this.isOperator(key)) {
-        if (this.isArrayOperator(key) && !Array.isArray(value)) {
+        if (this.isArrayOperator(key) && !Array.isArray(value) && key !== '$elemMatch') {
           result[key] = [value];
+        } else if (this.isBasicOperator(key) && Array.isArray(value)) {
+          result[key] = JSON.stringify(value);
         } else {
           result[key] = value;
         }

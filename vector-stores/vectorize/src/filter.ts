@@ -19,6 +19,9 @@ export class VectorizeFilterTranslator extends BaseFilterTranslator {
   }
 
   private translateNode(node: Filter | FieldCondition, currentPath: string = ''): any {
+    if (this.isRegex(node)) {
+      throw new Error('Regex is not supported in Vectorize');
+    }
     if (this.isPrimitive(node)) return { $eq: this.normalizeComparisonValue(node) };
     if (Array.isArray(node)) return { $in: this.normalizeArrayValues(node) };
 
@@ -43,7 +46,7 @@ export class VectorizeFilterTranslator extends BaseFilterTranslator {
 
       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
         if (Object.keys(value).length === 0) {
-          result[newPath] = {};
+          result[newPath] = this.translateNode(value);
           continue;
         }
 

@@ -35,6 +35,10 @@ describe('PGFilterTranslator', () => {
       expect(translator.translate(filter)).toEqual(filter);
     });
 
+    it('preserves multiple comparison operators', () => {
+      expect(translator.translate({ field: { $gt: 5, $lt: 10 } })).toEqual({ field: { $gt: 5, $lt: 10 } });
+    });
+
     it('handles nested paths', () => {
       expect(
         translator.translate({
@@ -58,6 +62,114 @@ describe('PGFilterTranslator', () => {
     });
   });
 
+  // Array Operations
+  describe('array operations', () => {
+    it('translates array to $in', () => {
+      expect(translator.translate({ field: ['a', 'b'] })).toEqual({
+        field: { $in: ['a', 'b'] },
+      });
+    });
+
+    it('translates arrays to JSON for basic operators', () => {
+      expect(translator.translate({ field: { $eq: ['a', 'b'] } })).toEqual({
+        field: { $eq: JSON.stringify(['a', 'b']) },
+      });
+      expect(translator.translate({ field: { $ne: ['a', 'b'] } })).toEqual({
+        field: { $ne: JSON.stringify(['a', 'b']) },
+      });
+    });
+
+    it('handles empty arrays', () => {
+      expect(
+        translator.translate({
+          field: [],
+        }),
+      ).toEqual({
+        field: { $in: [] },
+      });
+    });
+
+    it('validates $elemMatch translation', () => {
+      expect(
+        translator.translate({
+          field: {
+            $elemMatch: {
+              $eq: 'value',
+            },
+          },
+        }),
+      ).toEqual({
+        field: {
+          $elemMatch: {
+            $eq: 'value',
+          },
+        },
+      });
+
+      // Test multiple conditions
+      expect(
+        translator.translate({
+          field: {
+            $elemMatch: {
+              $gt: 5,
+              $lt: 10,
+            },
+          },
+        }),
+      ).toEqual({
+        field: {
+          $elemMatch: {
+            $gt: 5,
+            $lt: 10,
+          },
+        },
+      });
+    });
+  });
+
+  // Array Operator Normalization
+  describe('array operator normalization', () => {
+    it('normalizes single values for $all', () => {
+      expect(
+        translator.translate({
+          field: { $all: 'value' },
+        }),
+      ).toEqual({
+        field: { $all: ['value'] },
+      });
+    });
+
+    it('normalizes single values for $in', () => {
+      expect(
+        translator.translate({
+          field: { $in: 'value' },
+        }),
+      ).toEqual({
+        field: { $in: ['value'] },
+      });
+    });
+
+    it('normalizes single values for $nin', () => {
+      expect(
+        translator.translate({
+          field: { $nin: 'value' },
+        }),
+      ).toEqual({
+        field: { $nin: ['value'] },
+      });
+    });
+
+    it('preserves arrays for array operators', () => {
+      expect(
+        translator.translate({
+          field: { $all: ['value1', 'value2'] },
+        }),
+      ).toEqual({
+        field: { $all: ['value1', 'value2'] },
+      });
+    });
+  });
+
   // Logical Operators
   describe('Logical Operators', () => {
     it('handles logical operators', () => {
@@ -77,6 +189,30 @@ describe('PGFilterTranslator', () => {
       ).toEqual({
         $and: [],
         $or: [],
+      });
+    });
+
+    it('handles multiple logical operators at root level', () => {
+      expect(
+        translator.translate({
+          $and: [{ category: 'electronics' }],
+          $or: [{ price: { $lt: 100 } }, { price: { $gt: 20 } }],
+        }),
+      ).toEqual({
+        $and: [{ category: { $eq: 'electronics' } }],
+        $or: [{ price: { $lt: 100 } }, { price: { $gt: 20 } }],
+      });
+    });
+
+    it('handles empty conditions in logical operators', () => {
+      expect(
+        translator.translate({
+          $and: [],
+          category: 'electronics',
+        }),
+      ).toEqual({
+        $and: [],
+        category: { $eq: 'electronics' },
       });
     });
 
@@ -134,6 +270,42 @@ describe('PGFilterTranslator', () => {
       });
     });
 
+    it('handles logical operators with empty arrays and primitives', () => {
+      expect(
+        translator.translate({
+          $and: [],
+          $or: [{ field1: 'value1' }],
+          field2: true,
+          $nor: [],
+        }),
+      ).toEqual({
+        $and: [],
+        $or: [{ field1: { $eq: 'value1' } }],
+        field2: { $eq: true },
+        $nor: [],
+      });
+    });
+
+    it('handles $not operator with comparison', () => {
+      expect(
+        translator.translate({
+          field: { $not: { $eq: 'value' } },
+        }),
+      ).toEqual({
+        field: { $not: { $eq: 'value' } },
+      });
+    });
+
+    it('handles $not operator with array operators', () => {
+      expect(
+        translator.translate({
+          field: { $not: { $in: ['value1', 'value2'] } },
+        }),
+      ).toEqual({
+        field: { $not: { $in: ['value1', 'value2'] } },
+      });
+    });
+
     it('handles multiple $not conditions', () => {
       expect(
         translator.translate({
@@ -173,6 +345,53 @@ describe('PGFilterTranslator', () => {
         ],
       });
     });
+  });
+
+  // Complex Filter Structures
+  describe('complex filter structures', () => {
+    it('handles nested logical operators with mixed conditions', () => {
+      expect(
+        translator.translate({
+          $or: [
+            {
+              $and: [{ category: 'value1' }, { price: { $gt: 90 } }, { active: true }],
+            },
+            {
+              $and: [{ category: 'value2' }, { tags: { $exists: true } }, { price: { $lt: 30 } }],
+            },
+          ],
+        }),
+      ).toEqual({
+        $or: [
+          {
+            $and: [{ category: { $eq: 'value1' } }, { price: { $gt: 90 } }, { active: { $eq: true } }],
+          },
+          {
+            $and: [{ category: { $eq: 'value2' } }, { tags: { $exists: true } }, { price: { $lt: 30 } }],
+          },
+        ],
+      });
+    });
+
+    it('handles deeply nested metadata paths', () => {
+      expect(
+        translator.translate({
+          'level1.level2.level3': 'deep value',
+        }),
+      ).toEqual({
+        'level1.level2.level3': { $eq: 'deep value' },
+      });
+    });
+
+    it('handles non-existent nested paths', () => {
+      expect(
+        translator.translate({
+          'nonexistent.path': 'value',
+        }),
+      ).toEqual({
+        'nonexistent.path': { $eq: 'value' },
+      });
+    });
 
     it('handles logical operators with empty arrays and primitives', () => {
       expect(
@@ -188,151 +407,6 @@ describe('PGFilterTranslator', () => {
         field2: { $eq: true },
         $nor: [],
       });
-    });
-  });
-
-  // Regular Expression Support
-  describe('Regular Expression Support', () => {
-    it('translates string pattern', () => {
-      expect(
-        translator.translate({
-          field: { $regex: 'pattern' },
-        }),
-      ).toEqual({
-        field: { $regex: 'pattern' },
-      });
-    });
-
-    it('translates regex with options', () => {
-      expect(
-        translator.translate({
-          field: { $regex: 'pattern', $options: 'i' },
-        }),
-      ).toEqual({
-        field: { $regex: '(?i)pattern' },
-      });
-    });
-
-    it('translates regex literal', () => {
-      expect(
-        translator.translate({
-          field: /pattern/i,
-        }),
-      ).toEqual({
-        field: { $regex: '(?i)pattern' },
-      });
-    });
-
-    it('translates starts with pattern', () => {
-      expect(
-        translator.translate({
-          field: { $regex: '^start' },
-        }),
-      ).toEqual({
-        field: { $regex: '^start' },
-      });
-    });
-
-    it('translates ends with pattern', () => {
-      expect(
-        translator.translate({
-          field: { $regex: 'end$' },
-        }),
-      ).toEqual({
-        field: { $regex: 'end$' },
-      });
-    });
-
-    it('translates exact match pattern', () => {
-      expect(
-        translator.translate({
-          field: { $regex: '^exact$' },
-        }),
-      ).toEqual({
-        field: { $regex: '^exact$' },
-      });
-    });
-
-    it('translates contains pattern', () => {
-      expect(
-        translator.translate({
-          field: { $regex: 'contains' },
-        }),
-      ).toEqual({
-        field: { $regex: 'contains' },
-      });
-    });
-
-    it('supports complex patterns', () => {
-      expect(
-        translator.translate({
-          field: { $regex: 'pat.*ern' },
-        }),
-      ).toEqual({
-        field: { $regex: 'pat.*ern' },
-      });
-    });
-
-    it('combines multiple regex flags', () => {
-      expect(
-        translator.translate({
-          field: { $regex: 'pattern', $options: 'imsx' },
-        }),
-      ).toEqual({
-        field: { $regex: '(?imsx)pattern' },
-      });
-    });
-
-    it('handles nested regex patterns', () => {
-      expect(
-        translator.translate({
-          nested: {
-            field: { $regex: 'pattern', $options: 'i' },
-          },
-        }),
-      ).toEqual({
-        'nested.field': { $regex: '(?i)pattern' },
-      });
-    });
-
-    it('handles multiple regex patterns', () => {
-      expect(
-        translator.translate({
-          field1: { $regex: 'pattern1' },
-          field2: { $regex: 'pattern2', $options: 'i' },
-        }),
-      ).toEqual({
-        field1: { $regex: 'pattern1' },
-        field2: { $regex: '(?i)pattern2' },
-      });
-    });
-
-    it('handles regex in logical operators', () => {
-      expect(
-        translator.translate({
-          $or: [{ field: { $regex: 'pattern1' } }, { field: { $regex: 'pattern2', $options: 'i' } }],
-        }),
-      ).toEqual({
-        $or: [{ field: { $regex: 'pattern1' } }, { field: { $regex: '(?i)pattern2' } }],
-      });
-    });
-
-    it('handles deeply nested paths with regex', () => {
-      expect(
-        translator.translate({
-          'level1.level2.level3': { $regex: 'pattern', $options: 'i' },
-        }),
-      ).toEqual({
-        'level1.level2.level3': { $regex: '(?i)pattern' },
-      });
-    });
-
-    it('throws on $options without $regex', () => {
-      expect(() =>
-        translator.translate({
-          field: { $options: 'i' },
-        }),
-      ).toThrow();
     });
   });
 
@@ -478,16 +552,6 @@ describe('PGFilterTranslator', () => {
       });
     });
 
-    it('normalizes single values for $elemMatch', () => {
-      expect(
-        translator.translate({
-          field: { $elemMatch: 'value' },
-        }),
-      ).toEqual({
-        field: { $elemMatch: ['value'] },
-      });
-    });
-
     it('normalizes single values for $in', () => {
       expect(
         translator.translate({
@@ -547,6 +611,7 @@ describe('PGFilterTranslator', () => {
         { $and: [{ field1: 'value1' }, { field2: 'value2' }] },
         { $or: [{ field1: 'value1' }, { field2: 'value2' }] },
         { $nor: [{ field1: 'value1' }, { field2: 'value2' }] },
+
         { $and: { field: 'value' } },
         { $or: { field: 'value' } },
         { $nor: { field: 'value' } },
@@ -556,6 +621,10 @@ describe('PGFilterTranslator', () => {
 
         { field: { $not: { $eq: 'value' } } },
         { field: { $not: { $in: ['value1', 'value2'] } } },
+        { field: { $not: { $gt: 100 } } },
+        { field: { $not: { $lt: 50 } } },
+
+        { field: { $size: 1 } },
       ];
 
       supportedFilters.forEach(filter => {
@@ -655,6 +724,242 @@ describe('PGFilterTranslator', () => {
               },
             ],
           },
+        }),
+      ).toThrow();
+    });
+
+    it('validates $not operator structure', () => {
+      // $not must be an object
+      expect(() => translator.translate({ field: { $not: 'value' } })).toThrow();
+      expect(() => translator.translate({ field: { $not: ['value'] } })).toThrow();
+      expect(() => translator.translate({ $not: 'value' })).toThrow();
+      expect(() => translator.translate({ $not: ['value'] })).toThrow();
+    });
+
+    it('validates $not operator nesting', () => {
+      // $not can be nested
+      expect(() =>
+        translator.translate({
+          field: { $not: { $not: { $eq: 'value' } } },
+        }),
+      ).not.toThrow();
+
+      // $not can be deeply nested
+      expect(() =>
+        translator.translate({
+          field: { $not: { $not: { $not: { $eq: 'value' } } } },
+        }),
+      ).not.toThrow();
+
+      // Cannot use $not with logical operators
+      expect(() =>
+        translator.translate({
+          field: { $not: { $and: [{ $eq: 'value1' }, { $eq: 'value2' }] } },
+        }),
+      ).not.toThrow();
+
+      expect(() =>
+        translator.translate({
+          field: { $not: { $or: [{ $eq: 'value1' }, { $eq: 'value2' }] } },
+        }),
+      ).not.toThrow();
+
+      // $not can be used with comparison operators at any nesting level
+      expect(() =>
+        translator.translate({
+          field: { $not: { $not: { $gt: 100 } } },
+          field2: { $not: { $not: { $lt: 50 } } },
+        }),
+      ).not.toThrow();
+    });
+
+    it('allows $not with comparison operators', () => {
+      expect(() =>
+        translator.translate({
+          field: { $not: { $eq: 'value' } },
+          field2: { $not: { $gt: 100 } },
+          field3: { $not: { $lt: 50 } },
+          field4: { $not: { $in: ['value1', 'value2'] } },
+        }),
+      ).not.toThrow();
+    });
+
+    it('validates empty $not conditions', () => {
+      expect(() => translator.translate({ field: { $not: {} } })).toThrow();
+      expect(() => translator.translate({ $not: {} })).toThrow();
+    });
+
+    it('throws error for non-logical operators at top level', () => {
+      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
+
+      invalidFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
+      });
+    });
+    it('allows logical operators at top level', () => {
+      const validFilters = [{ $and: [{ field: 'value' }] }, { $or: [{ field: 'value' }] }];
+
+      validFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).not.toThrow();
+      });
+    });
+
+    it('validates $elemMatch requires an object with conditions', () => {
+      // Should throw for non-object values
+      expect(() =>
+        translator.translate({
+          field: { $elemMatch: 'value' },
+        }),
+      ).toThrow('$elemMatch requires an object with conditions');
+
+      expect(() =>
+        translator.translate({
+          field: { $elemMatch: ['value'] },
+        }),
+      ).toThrow('$elemMatch requires an object with conditions');
+    });
+  });
+
+  // Regular Expression Support
+  describe('Regular Expression Support', () => {
+    it('translates string pattern', () => {
+      expect(
+        translator.translate({
+          field: { $regex: 'pattern' },
+        }),
+      ).toEqual({
+        field: { $regex: 'pattern' },
+      });
+    });
+
+    it('translates regex with options', () => {
+      expect(
+        translator.translate({
+          field: { $regex: 'pattern', $options: 'i' },
+        }),
+      ).toEqual({
+        field: { $regex: '(?i)pattern' },
+      });
+    });
+
+    it('translates regex literal', () => {
+      expect(
+        translator.translate({
+          field: /pattern/i,
+        }),
+      ).toEqual({
+        field: { $regex: '(?i)pattern' },
+      });
+    });
+
+    it('translates starts with pattern', () => {
+      expect(
+        translator.translate({
+          field: { $regex: '^start' },
+        }),
+      ).toEqual({
+        field: { $regex: '^start' },
+      });
+    });
+
+    it('translates ends with pattern', () => {
+      expect(
+        translator.translate({
+          field: { $regex: 'end$' },
+        }),
+      ).toEqual({
+        field: { $regex: 'end$' },
+      });
+    });
+
+    it('translates exact match pattern', () => {
+      expect(
+        translator.translate({
+          field: { $regex: '^exact$' },
+        }),
+      ).toEqual({
+        field: { $regex: '^exact$' },
+      });
+    });
+
+    it('translates contains pattern', () => {
+      expect(
+        translator.translate({
+          field: { $regex: 'contains' },
+        }),
+      ).toEqual({
+        field: { $regex: 'contains' },
+      });
+    });
+
+    it('supports complex patterns', () => {
+      expect(
+        translator.translate({
+          field: { $regex: 'pat.*ern' },
+        }),
+      ).toEqual({
+        field: { $regex: 'pat.*ern' },
+      });
+    });
+
+    it('combines multiple regex flags', () => {
+      expect(
+        translator.translate({
+          field: { $regex: 'pattern', $options: 'imsx' },
+        }),
+      ).toEqual({
+        field: { $regex: '(?imsx)pattern' },
+      });
+    });
+
+    it('handles nested regex patterns', () => {
+      expect(
+        translator.translate({
+          nested: {
+            field: { $regex: 'pattern', $options: 'i' },
+          },
+        }),
+      ).toEqual({
+        'nested.field': { $regex: '(?i)pattern' },
+      });
+    });
+
+    it('handles multiple regex patterns', () => {
+      expect(
+        translator.translate({
+          field1: { $regex: 'pattern1' },
+          field2: { $regex: 'pattern2', $options: 'i' },
+        }),
+      ).toEqual({
+        field1: { $regex: 'pattern1' },
+        field2: { $regex: '(?i)pattern2' },
+      });
+    });
+
+    it('handles regex in logical operators', () => {
+      expect(
+        translator.translate({
+          $or: [{ field: { $regex: 'pattern1' } }, { field: { $regex: 'pattern2', $options: 'i' } }],
+        }),
+      ).toEqual({
+        $or: [{ field: { $regex: 'pattern1' } }, { field: { $regex: '(?i)pattern2' } }],
+      });
+    });
+
+    it('handles deeply nested paths with regex', () => {
+      expect(
+        translator.translate({
+          'level1.level2.level3': { $regex: 'pattern', $options: 'i' },
+        }),
+      ).toEqual({
+        'level1.level2.level3': { $regex: '(?i)pattern' },
+      });
+    });
+
+    it('throws on $options without $regex', () => {
+      expect(() =>
+        translator.translate({
+          field: { $options: 'i' },
         }),
       ).toThrow();
     });

@@ -19,6 +19,9 @@ export class PineconeFilterTranslator extends BaseFilterTranslator {
   }
 
   private translateNode(node: Filter | FieldCondition, currentPath: string = ''): any {
+    if (this.isRegex(node)) {
+      throw new Error('Regex is not supported in Pinecone');
+    }
     if (this.isPrimitive(node)) return this.normalizeComparisonValue(node);
     if (Array.isArray(node)) return { $in: this.normalizeArrayValues(node) };
 
@@ -54,7 +57,7 @@ export class PineconeFilterTranslator extends BaseFilterTranslator {
 
         // Check if the nested object contains operators
         if (Object.keys(value).length === 0) {
-          result[newPath] = {};
+          result[newPath] = this.translateNode(value);
         } else {
           const hasOperators = Object.keys(value).some(k => this.isOperator(k));
           if (hasOperators) {

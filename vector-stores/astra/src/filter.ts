@@ -9,6 +9,7 @@ export class AstraFilterTranslator extends BaseFilterTranslator {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
+      array: ['$all', '$in', '$nin'],
       logical: ['$and', '$or', '$not'],
       regex: [],
       custom: ['$size'],

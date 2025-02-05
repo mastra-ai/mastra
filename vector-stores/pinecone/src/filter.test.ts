@@ -434,5 +434,24 @@ describe('PineconeFilterTranslator', () => {
       const filter = { tags: { $all: 'not-an-array' } };
       expect(() => translator.translate(filter)).toThrow();
     });
+    it('throws error for regex operators', () => {
+      const filter = { field: /pattern/i };
+      expect(() => translator.translate(filter)).toThrow('Regex is not supported in Pinecone');
+    });
+    it('throws error for non-logical operators at top level', () => {
+      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
+
+      invalidFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
+      });
+    });
+
+    it('allows logical operators at top level', () => {
+      const validFilters = [{ $and: [{ field: 'value' }] }, { $or: [{ field: 'value' }] }];
+
+      validFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).not.toThrow();
+      });
+    });
   });
 });

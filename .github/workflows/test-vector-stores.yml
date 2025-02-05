@@ -1,15 +1,43 @@
-name: RAG Tests
+name: Vector Store Tests
 
 on:
   pull_request:
     branches: [main]
     paths:
-      - "packages/rag/**"
-      - ".github/workflows/test-rag.yml"
+      - "vector-stores/**"
+      - ".github/workflows/test-vector-stores.yml"
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      qdrant:
+        image: qdrant/qdrant
+        ports:
+          - 6333:6333
+      chromadb:
+        image: chromadb/chroma
+        ports:
+          - 8000:8000
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: mastra
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5433:5432
     steps:
       - uses: actions/checkout@v4
 
@@ -28,13 +56,13 @@ jobs:
         run: pnpm install
 
       - name: Build core
-        run: pnpm build:core && pnpm build:deployer
+        run: pnpm build:core
 
-      - name: Build rag
-        run: pnpm build:rag
+      - name: Build vector stores
+        run: pnpm build:vector-stores
 
-      - name: Run RAG tests
-        run: pnpm test:rag
+      - name: Run Vector Store tests
+        run: pnpm test:vector-stores
         env:
           NODE_OPTIONS: "--max_old_space_size=8096"
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -46,4 +74,3 @@ jobs:
           UPSTASH_VECTOR_URL: ${{ secrets.UPSTASH_VECTOR_URL }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}
-
