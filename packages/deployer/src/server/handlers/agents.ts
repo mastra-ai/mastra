@@ -156,13 +156,23 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
       if (part.type === 'error') {
         throw new Error(part.error);
       } else {
-        return new Response(streamResult.toDataStream(), {
-          headers: {
-            'Content-Type': 'text/x-unknown',
-            'content-encoding': 'identity',
-            'transfer-encoding': 'chunked',
-          },
-        });
+        if (output) {
+          return new Response(streamResult.toTextStreamResponse(), {
+            headers: {
+              'Content-Type': 'text/event-stream',
+              'content-encoding': 'identity',
+              'transfer-encoding': 'chunked',
+            },
+          });
+        } else {
+          return new Response(streamResult.toDataStream(), {
+            headers: {
+              'Content-Type': 'text/event-stream',
+              'content-encoding': 'identity',
+              'transfer-encoding': 'chunked',
+            },
+          });
+        }
       }
     }
   } catch (error) {
