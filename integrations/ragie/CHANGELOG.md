@@ -1,5 +1,16 @@
 # @mastra/ragie
 
+## 1.0.1-alpha.62
+
+### Patch Changes
+
+- Updated dependencies [6fa4bd2]
+- Updated dependencies [e2e76de]
+- Updated dependencies [7f24c29]
+- Updated dependencies [67637ba]
+- Updated dependencies [04f3171]
+  - @mastra/core@0.2.0-alpha.86
+
 ## 1.0.1-alpha.61
 
 ### Patch Changes

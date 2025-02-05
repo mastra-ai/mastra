@@ -1,5 +1,21 @@
 # @mastra/vector-vectorize
 
+## 0.1.0-alpha.21
+
+### Minor Changes
+
+- 5916f9d: Update deps from fixed to ^
+
+### Patch Changes
+
+- 7f24c29: Add Chroma Filter translator and updated vector store tests
+- Updated dependencies [6fa4bd2]
+- Updated dependencies [e2e76de]
+- Updated dependencies [7f24c29]
+- Updated dependencies [67637ba]
+- Updated dependencies [04f3171]
+  - @mastra/core@0.2.0-alpha.86
+
 ## 0.0.1-alpha.20
 
 ### Patch Changes

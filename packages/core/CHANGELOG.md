@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 0.2.0-alpha.86
+
+### Patch Changes
+
+- 6fa4bd2: New LLM primitive, OpenAI, AmazonBedrock
+- e2e76de: Anthropic model added to new primitive structure
+- 7f24c29: Add Chroma Filter translator and updated vector store tests
+- 67637ba: Fixed storage bugs related to the new Memory API
+- 04f3171: More providers
+
 ## 0.2.0-alpha.85
 
 ### Patch Changes
