@@ -21,16 +21,16 @@
         "default": "./dist/*/index.js"
       }
     },
-    "./llm": {
-      "import": {
-        "types": "./dist/llm/model/index.d.ts",
-        "default": "./dist/llm/model/index.js"
-      }
-    },
     "./llm/*": {
       "import": {
         "types": "./dist/llm/model/providers/*.d.ts",
         "default": "./dist/llm/model/providers/*.js"
+      }
+    },
+    "./llm": {
+      "import": {
+        "types": "./dist/llm/model/index.d.ts",
+        "default": "./dist/llm/model/index.js"
       }
     },
     "./embeddings/*": {
@@ -60,7 +60,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
-    "build": "tsup-node src/index.ts src/base.ts src/utils.ts src/*/index.ts src/llm/model/providers/*.ts --format esm --clean --dts --treeshake",
+    "build": "tsup-node src/index.ts src/base.ts src/utils.ts src/*/index.ts src/llm/model/index.ts src/llm/model/providers/*.ts --format esm --clean --dts --treeshake",
     "build:dev": "pnpm build --watch",
     "size": "size-limit",
     "test": "vitest run"
