@@ -31,8 +31,7 @@ const memory = new Memory({
 
 export const memoryAgent = new Agent({
   name: 'Memory Agent',
-  instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions. You may have conversations that last hours, days, months, or years. If you don't know it already you should ask for the users name and some info about them.",
+  instructions: 'You are a helpful AI agent, looking to assist however you can.',
   model: {
     provider: 'OPEN_AI',
     name: 'gpt-4o',
