@@ -1,6 +1,6 @@
 {
   "name": "@mastra/github",
-  "version": "1.0.3-alpha.74",
+  "version": "1.0.3-alpha.75",
   "description": "",
   "main": "dist/index.js",
   "type": "module",
