@@ -1,4 +1,4 @@
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { type MastraLLMBase } from '@mastra/core/llm';
 
 export abstract class MastraAgentJudge {
