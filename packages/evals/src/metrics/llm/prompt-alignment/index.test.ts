@@ -1,4 +1,4 @@
-import { type ModelConfig } from '@mastra/core';
+import { OpenAI } from '@mastra/core/llm/openai';
 import { describe, it, expect } from 'vitest';
 
 import { TestCaseWithInstructions } from '../utils';
@@ -70,19 +70,17 @@ const testCases: TestCaseWithInstructions[] = [
 
 const SECONDS = 10000;
 
-const modelConfig: ModelConfig = {
-  provider: 'OPEN_AI',
+const llm = new OpenAI({
   name: 'gpt-4o',
-  toolChoice: 'auto',
   apiKey: process.env.OPENAI_API_KEY,
-};
+});
 
 describe(
   'PromptAlignmentMetric',
   () => {
     it('should measure perfect alignment with single instruction', async () => {
       const testCase = testCases[0]!;
-      const metric = new PromptAlignmentMetric(modelConfig, {
+      const metric = new PromptAlignmentMetric(llm, {
         instructions: testCase.instructions,
       });
 
@@ -92,7 +90,7 @@ describe(
 
     it('should measure zero alignment with single instruction', async () => {
       const testCase = testCases[1]!;
-      const metric = new PromptAlignmentMetric(modelConfig, {
+      const metric = new PromptAlignmentMetric(llm, {
         instructions: testCase.instructions,
       });
 
@@ -103,7 +101,7 @@ describe(
 
     it('should measure perfect alignment with multiple instructions', async () => {
       const testCase = testCases[2]!;
-      const metric = new PromptAlignmentMetric(modelConfig, {
+      const metric = new PromptAlignmentMetric(llm, {
         instructions: testCase.instructions,
       });
 
@@ -114,7 +112,7 @@ describe(
 
     it('should measure partial alignment with multiple instructions', async () => {
       const testCase = testCases[3]!;
-      const metric = new PromptAlignmentMetric(modelConfig, {
+      const metric = new PromptAlignmentMetric(llm, {
         instructions: testCase.instructions,
       });
 
@@ -125,7 +123,7 @@ describe(
 
     it('should measure alignment with complex formatting instructions', async () => {
       const testCase = testCases[4]!;
-      const metric = new PromptAlignmentMetric(modelConfig, {
+      const metric = new PromptAlignmentMetric(llm, {
         instructions: testCase.instructions,
       });
 
@@ -136,7 +134,7 @@ describe(
 
     it('should handle empty output', async () => {
       const testCase = testCases[5]!;
-      const metric = new PromptAlignmentMetric(modelConfig, {
+      const metric = new PromptAlignmentMetric(llm, {
         instructions: testCase.instructions,
       });
 
