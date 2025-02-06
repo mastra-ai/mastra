@@ -1,3 +1,4 @@
+import { Agent } from '@mastra/core/agent';
 import { MastraStorageLibSql } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 import { LibSQLVector } from '@mastra/vector-libsql';
@@ -86,6 +87,29 @@ describe('Working Memory Tests', () => {
   afterAll(async () => {
     const threads = await memory.getThreadsByResourceId({ resourceId });
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
+  });
+
+  it('should handle LLM responses with working memory using OpenAI (test that the working memory prompt works)', async () => {
+    const agent = new Agent({
+      name: 'Memory Test Agent',
+      instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
+      model: {
+        provider: 'OPEN_AI',
+        name: 'gpt-4o',
+        toolChoice: 'auto',
+      },
+      memory,
+    });
+
+    await agent.generate('Hi, my name is Tyler and I live in San Francisco', {
+      threadId: thread.id,
+      resourceId,
+    });
+
+    // Get working memory
+    const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+    expect(workingMemory).toContain('<first_name>Tyler</first_name>');
+    expect(workingMemory).toContain('<location>San Francisco</location>');
   });
 
   it('should handle LLM responses with working memory', async () => {
