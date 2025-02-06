@@ -3,7 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import { rerank, RerankConfig } from '../rerank';
-import { vectorQuerySearch } from '../utils';
+import { vectorQuerySearch, defaultVectorQueryDescription } from '../utils';
 
 export const createVectorQueryTool = ({
   vectorStoreName,
@@ -23,25 +23,7 @@ export const createVectorQueryTool = ({
   description?: string;
 }) => {
   const toolId = id || `VectorQuery ${vectorStoreName} ${indexName} Tool`;
-  const toolDescription =
-    description ||
-    `Retrieves relevant information from ${vectorStoreName} using ${indexName} index.
-
-    You MUST generate for each query:
-    1. topK: number of results to return
-        - Broad queries (overviews, lists): 10-15
-        - Specific queries: 3-5
-
-    2. filter: query filter (REQUIRED)
-        - Generate a filter that matches the query's keywords and intent
-        - Use appropriate operators
-        - Must be valid JSON string
-
-    User overrides:
-    - If valid topK/filter provided, use those
-    - If invalid/missing, you must generate appropriate values`;
-
-  console.log('toolId', toolId);
+  const toolDescription = description || defaultVectorQueryDescription(vectorStoreName, indexName);
 
   return createTool({
     id: toolId,
@@ -55,14 +37,7 @@ export const createVectorQueryTool = ({
     }),
     description: toolDescription,
     execute: async ({ context: { queryText, topK, filter }, mastra }) => {
-      console.log('queryText', queryText);
-      console.log('topK', topK);
-      console.log('filter', filter);
-      console.log('mastra', mastra);
       const vectorStore = mastra?.vectors?.[vectorStoreName];
-
-      console.log('vectorStore', vectorStore);
-      console.log('vectorStoreName', vectorStoreName);
 
       // Get relevant chunks from the vector database
       if (vectorStore) {
@@ -77,10 +52,15 @@ export const createVectorQueryTool = ({
                 }
               })()
             : filter;
-          console.log('Generating this filter:', queryFilter);
         }
-
-        console.log('topK', topK);
+        //get fields in mastra instance if they are not defined. i want to see what is defined in the mastra instance
+        const definedFields = Object.entries(mastra)
+          .filter(([, value]) => value !== undefined)
+          .map(([key]) => key);
+        console.log('definedFields', definedFields);
+        if (mastra.logger) {
+          mastra.logger.debug('Using this filter and topK:', { queryFilter, topK });
+        }
 
         const { results } = await vectorQuerySearch({
           indexName,
