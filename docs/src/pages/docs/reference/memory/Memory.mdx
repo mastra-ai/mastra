@@ -78,8 +78,21 @@ const memory = new Memory({
       isOptional: true,
       defaultValue: "2",
     },
+    {
+      name: "workingMemory",
+      type: "{ enabled: boolean; template: string }",
+      description: "Configuration for working memory feature that allows persistent storage of user information across conversations",
+      isOptional: true,
+      defaultValue: "{ enabled: false, template: '<user><first_name></first_name><last_name></last_name>...</user>' }",
+    },
   ]}
 />
+
+### Working Memory
+
+The working memory feature allows agents to maintain persistent information across conversations. When enabled, the Memory class will automatically manage XML-based working memory updates through the conversation stream.
+
+If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information. See the [Agent Memory Guide](/docs/agents/agent-memory#working-memory) for detailed usage examples and best practices.
 
 ### embedding
 
