@@ -206,7 +206,7 @@ export class Memory extends MastraMemory {
   }
 
   protected mutateMessagesToHideWorkingMemory(messages: MessageType[]) {
-    const workingMemoryRegex = /<working_memory>[\s\S]*?<\/working_memory>/g;
+    const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
     for (const message of messages) {
       if (typeof message?.content === `string`) {
         message.content = message.content.replace(workingMemoryRegex, ``).trim();
@@ -223,7 +223,7 @@ export class Memory extends MastraMemory {
   protected parseWorkingMemory(text: string): string | null {
     if (!this.threadConfig.workingMemory?.enabled) return null;
 
-    const workingMemoryRegex = /<working_memory>([\s\S]*?)<\/working_memory>/g;
+    const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
     const matches = text.match(workingMemoryRegex);
     const match = matches?.[0];
 
