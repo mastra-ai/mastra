@@ -41,6 +41,7 @@ export const createMastraProject = async () => {
 
   s.message('Creating project');
   await exec(`npm init -y`);
+  await exec(`npm pkg set type="module"`);
   const depsService = new DepsService();
   await depsService.addScriptsToPackageJson({
     dev: 'mastra dev',
@@ -53,17 +54,24 @@ export const createMastraProject = async () => {
   await exec(`npm i typescript tsx @types/node --save-dev`);
   await exec(`echo '{
   "compilerOptions": {
-    "target": "es2016",
-    "module": "commonjs",
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "skipLibCheck": true,
     "outDir": "dist"
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", ".mastra"]
- }' > tsconfig.json`);
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".mastra"
+  ]
+}' > tsconfig.json`);
   s.stop('NPM dependencies installed');
   s.start('Installing mastra');
   await exec(`npm i -D mastra`);

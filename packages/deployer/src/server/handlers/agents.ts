@@ -152,29 +152,21 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
 
     const streamResult = await agent.stream(messages, { threadId, resourceId: resourceid, output });
 
-    for await (const part of streamResult.fullStream) {
-      if (part.type === 'error') {
-        throw new Error(part.error);
-      } else {
-        if (output) {
-          return new Response(streamResult.toTextStreamResponse(), {
-            headers: {
-              'Content-Type': 'text/event-stream',
-              'content-encoding': 'identity',
-              'transfer-encoding': 'chunked',
-            },
-          });
-        } else {
-          return new Response(streamResult.toDataStream(), {
-            headers: {
-              'Content-Type': 'text/event-stream',
-              'content-encoding': 'identity',
-              'transfer-encoding': 'chunked',
-            },
-          });
-        }
-      }
-    }
+    const streamResponse = output
+      ? streamResult.toTextStreamResponse()
+      : streamResult.toDataStream({
+          getErrorMessage: (error: any) => {
+            return `An error occurred while processing your request. ${error}`;
+          },
+        });
+
+    return new Response(streamResponse, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'content-encoding': 'identity',
+        'transfer-encoding': 'chunked',
+      },
+    });
   } catch (error) {
     return handleError(error, 'Error streaming from agent');
   }
