@@ -1,5 +1,12 @@
 # @mastra/speech-ibm
 
+## 0.1.0-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [ccbc581]
+  - @mastra/core@0.2.0-alpha.88
+
 ## 0.1.0-alpha.12
 
 ### Patch Changes

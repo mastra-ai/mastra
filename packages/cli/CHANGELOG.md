@@ -1,5 +1,15 @@
 # mastra
 
+## 0.2.0-alpha.141
+
+### Patch Changes
+
+- 323e09e: Use 4o-mini in starter example
+- Updated dependencies [ab01c53]
+- Updated dependencies [ccbc581]
+  - @mastra/deployer@0.1.0-alpha.34
+  - @mastra/core@0.2.0-alpha.88
+
 ## 0.2.0-alpha.140
 
 ### Patch Changes

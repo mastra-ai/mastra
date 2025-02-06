@@ -1,5 +1,13 @@
 # @mastra/vector-qdrant
 
+## 0.1.0-alpha.22
+
+### Patch Changes
+
+- ccbc581: Updated operator validation and handling for all vector stores
+- Updated dependencies [ccbc581]
+  - @mastra/core@0.2.0-alpha.88
+
 ## 0.1.0-alpha.21
 
 ### Patch Changes

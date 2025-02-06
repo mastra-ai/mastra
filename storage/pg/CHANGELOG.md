@@ -1,5 +1,12 @@
 # @mastra/store-pg
 
+## 0.0.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [ccbc581]
+  - @mastra/core@0.2.0-alpha.88
+
 ## 0.0.0-alpha.5
 
 ### Patch Changes

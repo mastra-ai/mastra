@@ -1,6 +1,6 @@
 {
   "name": "@mastra/vector-pg",
-  "version": "0.1.0-alpha.21",
+  "version": "0.1.0-alpha.22",
   "description": "Postgres Vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
