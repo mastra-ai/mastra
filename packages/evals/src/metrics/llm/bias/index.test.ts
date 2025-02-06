@@ -1,4 +1,4 @@
-import { type ModelConfig } from '@mastra/core';
+import { OpenAI } from '@mastra/core/llm/openai';
 import { describe, it, expect, vi } from 'vitest';
 
 import { TestCase } from '../utils';
@@ -46,15 +46,13 @@ vi.setConfig({
   testTimeout: 20 * SECONDS,
 });
 
-const modelConfig: ModelConfig = {
-  provider: 'OPEN_AI',
+const llm = new OpenAI({
   name: 'gpt-4o',
-  toolChoice: 'auto',
   apiKey: process.env.OPENAI_API_KEY,
-};
+});
 
 describe('BiasMetric', () => {
-  const metric = new BiasMetric(modelConfig);
+  const metric = new BiasMetric(llm);
 
   it('should be able to measure a prompt that is biased', async () => {
     const result = await metric.measure(testCases[0].input, testCases[0].output);

@@ -1,4 +1,4 @@
-import { type ModelConfig } from '@mastra/core';
+import { OpenAI } from '@mastra/core/llm/openai';
 import { describe, it, expect } from 'vitest';
 
 import { TestCaseWithContext } from '../utils';
@@ -147,19 +147,17 @@ const testCases: TestCaseWithContext[] = [
 
 const SECONDS = 10000;
 
-const modelConfig: ModelConfig = {
-  provider: 'OPEN_AI',
+const llm = new OpenAI({
   name: 'gpt-4o',
-  toolChoice: 'auto',
   apiKey: process.env.OPENAI_API_KEY,
-};
+});
 
 describe(
   'FaithfulnessMetric',
   () => {
     it('should handle perfect faithfulness', async () => {
       const testCase = testCases[0]!;
-      const metric = new FaithfulnessMetric(modelConfig, { context: testCase.context });
+      const metric = new FaithfulnessMetric(llm, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
 
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
@@ -167,7 +165,7 @@ describe(
 
     it('should handle mixed faithfulness with contradictions', async () => {
       const testCase = testCases[1]!;
-      const metric = new FaithfulnessMetric(modelConfig, { context: testCase.context });
+      const metric = new FaithfulnessMetric(llm, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
 
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
@@ -175,7 +173,7 @@ describe(
 
     it('should handle claims with speculative language', async () => {
       const testCase = testCases[2]!;
-      const metric = new FaithfulnessMetric(modelConfig, { context: testCase.context });
+      const metric = new FaithfulnessMetric(llm, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
 
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
@@ -183,7 +181,7 @@ describe(
 
     it('should handle empty output', async () => {
       const testCase = testCases[3]!;
-      const metric = new FaithfulnessMetric(modelConfig, { context: testCase.context });
+      const metric = new FaithfulnessMetric(llm, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
 
       expect(result.score).toBe(testCase.expectedResult.score);
@@ -191,7 +189,7 @@ describe(
 
     it('should handle empty context', async () => {
       const testCase = testCases[4]!;
-      const metric = new FaithfulnessMetric(modelConfig, { context: testCase.context });
+      const metric = new FaithfulnessMetric(llm, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
 
       expect(result.score).toBe(testCase.expectedResult.score);
@@ -199,7 +197,7 @@ describe(
 
     it('should handle subjective claims', async () => {
       const testCase = testCases[5]!;
-      const metric = new FaithfulnessMetric(modelConfig, { context: testCase.context });
+      const metric = new FaithfulnessMetric(llm, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
 
       expect(result.score).toBe(testCase.expectedResult.score);
@@ -207,7 +205,7 @@ describe(
 
     it('should handle claims with speculative language appropriately', async () => {
       const testCase = testCases[6]!;
-      const metric = new FaithfulnessMetric(modelConfig, { context: testCase.context });
+      const metric = new FaithfulnessMetric(llm, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
 
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
@@ -215,7 +213,7 @@ describe(
 
     it('should handle compound statements correctly', async () => {
       const testCase = testCases[7]!;
-      const metric = new FaithfulnessMetric(modelConfig, { context: testCase.context });
+      const metric = new FaithfulnessMetric(llm, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
 
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
@@ -223,7 +221,7 @@ describe(
 
     it('should handle precise numerical claims', async () => {
       const testCase = testCases[8]!;
-      const metric = new FaithfulnessMetric(modelConfig, { context: testCase.context });
+      const metric = new FaithfulnessMetric(llm, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
 
       expect(result.score).toBe(testCase.expectedResult.score);
@@ -231,7 +229,7 @@ describe(
 
     it('should handle partially supported claims', async () => {
       const testCase = testCases[9]!;
-      const metric = new FaithfulnessMetric(modelConfig, { context: testCase.context });
+      const metric = new FaithfulnessMetric(llm, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
 
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
@@ -239,7 +237,7 @@ describe(
 
     it('should handle mixed factual and speculative claims', async () => {
       const testCase = testCases[10]!;
-      const metric = new FaithfulnessMetric(modelConfig, { context: testCase.context });
+      const metric = new FaithfulnessMetric(llm, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
 
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
@@ -247,7 +245,7 @@ describe(
 
     it('should handle implicit information appropriately', async () => {
       const testCase = testCases[11]!;
-      const metric = new FaithfulnessMetric(modelConfig, { context: testCase.context });
+      const metric = new FaithfulnessMetric(llm, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
 
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);

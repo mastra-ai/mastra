@@ -1,4 +1,4 @@
-import { type ModelConfig } from '@mastra/core';
+import { OpenAI } from '@mastra/core/llm/openai';
 import { describe, it, expect } from 'vitest';
 
 import { isCloserTo } from '../utils';
@@ -52,26 +52,24 @@ const testCases: TestCaseWithContext[] = [
 
 const SECONDS = 10000;
 
-const modelConfig: ModelConfig = {
-  provider: 'OPEN_AI',
+const llm = new OpenAI({
   name: 'gpt-4o',
-  toolChoice: 'auto',
   apiKey: process.env.OPENAI_API_KEY,
-};
+});
 
 describe(
   'ContextualRecallMetric',
   () => {
     it('should succeed when context is relevant', async () => {
       const testCase = testCases[0]!;
-      const metric = new ContextualRecallMetric(modelConfig, { context: testCase.context });
+      const metric = new ContextualRecallMetric(llm, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
     });
 
     it('should be mixed', async () => {
       const testCase = testCases[1]!;
-      const metric = new ContextualRecallMetric(modelConfig, { context: testCase.context });
+      const metric = new ContextualRecallMetric(llm, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
 
       expect(isCloserTo(result.score, testCase.expectedResult.score, 1)).toBe(true);
@@ -80,7 +78,7 @@ describe(
 
     it('should be none', async () => {
       const testCase = testCases[2]!;
-      const metric = new ContextualRecallMetric(modelConfig, { context: testCase.context });
+      const metric = new ContextualRecallMetric(llm, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
     });
