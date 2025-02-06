@@ -9,8 +9,9 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.72",
-    "@assistant-ui/react": "^0.7.0",
+    "@assistant-ui/react": "^0.7.68",
     "@assistant-ui/react-markdown": "^0.7.0",
+    "@mastra/client-js": "0.1.0-alpha.7",
     "next": "15.0.3",
     "react": "^18",
     "react-dom": "^18",
