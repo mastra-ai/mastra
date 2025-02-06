@@ -1,4 +1,4 @@
-import { Metric } from '@mastra/core';
+import { Metric } from '@mastra/core/eval';
 import { type MastraLLMBase } from '@mastra/core/llm';
 
 import { type MetricResultWithReason } from '../types';
