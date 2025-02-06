@@ -1,3 +1,4 @@
+import { maskStreamTags } from '@mastra/core/utils';
 import chalk from 'chalk';
 import { randomUUID } from 'crypto';
 import ora from 'ora';
@@ -6,7 +7,6 @@ import Readline from 'readline';
 import 'dotenv/config';
 
 import { mastra } from './mastra/index';
-import { maskStreamTags } from '@mastra/core/utils';
 
 const agent = mastra.getAgent('memoryAgent');
 
@@ -17,15 +17,25 @@ console.log(threadId);
 
 const resourceId = 'SOME_USER_ID';
 
-
-
 async function logRes(res: Awaited<ReturnType<typeof agent.stream>>) {
   console.log(`\n👨‍🍳 Agent:`);
   let message = '';
 
+  const thinkSpinner = ora('thinking');
+
+  const thinkMaskedStream = maskStreamTags(res.textStream, 'think', {
+    onStart: () => thinkSpinner.start(),
+    onEnd: () => {
+      if (thinkSpinner.isSpinning) {
+        thinkSpinner.succeed();
+        process.stdin.resume();
+      }
+    },
+  });
+
   const memorySpinner = ora('saving memory');
 
-  const maskedStream = maskStreamTags(res.textStream, 'working_memory', {
+  const maskedStream = maskStreamTags(thinkMaskedStream, 'working_memory', {
     onStart: () => memorySpinner.start(),
     onEnd: () => {
       if (memorySpinner.isSpinning) {
