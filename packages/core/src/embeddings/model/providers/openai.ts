@@ -1,5 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { embed as embedAi, embedMany as embedManyAi } from 'ai';
+import { embed as embedAi, embedMany as embedManyAi, EmbedResult, EmbedManyResult } from 'ai';
+
+import { MastraEmbedder } from './embedder';
 
 export type OpenAIEmbeddingModelNames =
   | 'text-embedding-3-small'
@@ -55,7 +57,7 @@ export async function embedMany(
   });
 }
 
-export class Embedder {
+export class Embedder extends MastraEmbedder {
   apiKey: string;
   model: OpenAIEmbeddingModelNames;
   baseURL: string | undefined;
@@ -68,12 +70,13 @@ export class Embedder {
     model: OpenAIEmbeddingModelNames;
     baseURL?: string;
   }) {
+    super();
     this.apiKey = apiKey;
     this.model = model;
     this.baseURL = baseURL;
   }
 
-  async embed(value: string, { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }) {
+  async embed(value: string, { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }): Promise<EmbedResult<string>> {
     return embed(value, {
       apiKey: this.apiKey,
       model: this.model,
@@ -82,7 +85,7 @@ export class Embedder {
     });
   }
 
-  async embedMany(values: string[], { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }) {
+  async embedMany(values: string[], { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }): Promise<EmbedManyResult<string>> {
     return embedMany(values, {
       apiKey: this.apiKey,
       model: this.model,

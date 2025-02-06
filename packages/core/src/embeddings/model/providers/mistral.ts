@@ -1,5 +1,7 @@
 import { createMistral } from '@ai-sdk/mistral';
-import { embed as embedAi, embedMany as embedManyAi } from 'ai';
+import { embed as embedAi, embedMany as embedManyAi, EmbedResult, EmbedManyResult } from 'ai';
+
+import { MastraEmbedder } from './embedder';
 
 export type MistralEmbeddingModelNames = 'mistral-embed' | (string & {});
 
@@ -51,7 +53,7 @@ export async function embedMany(
   });
 }
 
-export class Embedder {
+export class Embedder extends MastraEmbedder {
   apiKey: string;
   model: MistralEmbeddingModelNames;
   baseURL: string | undefined;
@@ -64,12 +66,13 @@ export class Embedder {
     model: MistralEmbeddingModelNames;
     baseURL?: string;
   }) {
+    super();
     this.apiKey = apiKey;
     this.model = model;
     this.baseURL = baseURL;
   }
 
-  async embed(value: string, { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }) {
+  async embed(value: string, { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }): Promise<EmbedResult<string>> {
     return embed(value, {
       apiKey: this.apiKey,
       model: this.model,
@@ -78,7 +81,7 @@ export class Embedder {
     });
   }
 
-  async embedMany(values: string[], { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }) {
+  async embedMany(values: string[], { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }): Promise<EmbedManyResult<string>> {
     return embedMany(values, {
       apiKey: this.apiKey,
       model: this.model,

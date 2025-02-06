@@ -1,5 +1,7 @@
 import { createCohere } from '@ai-sdk/cohere';
-import { embed as embedAi, embedMany as embedManyAi } from 'ai';
+import { embed as embedAi, embedMany as embedManyAi, EmbedResult, EmbedManyResult } from 'ai';
+
+import { MastraEmbedder } from './embedder';
 
 export type CohereEmbeddingModelNames =
   | 'embed-english-v3.0'
@@ -56,7 +58,7 @@ export async function embedMany(
   });
 }
 
-export class Embedder {
+export class Embedder extends MastraEmbedder {
   apiKey: string;
   model: CohereEmbeddingModelNames;
   baseURL: string | undefined;
@@ -69,12 +71,13 @@ export class Embedder {
     model: CohereEmbeddingModelNames;
     baseURL?: string;
   }) {
+    super();
     this.apiKey = apiKey;
     this.model = model;
     this.baseURL = baseURL;
   }
 
-  async embed(value: string, { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }) {
+  async embed(value: string, { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }): Promise<EmbedResult<string>> {
     return embed(value, {
       apiKey: this.apiKey,
       model: this.model,
@@ -83,7 +86,7 @@ export class Embedder {
     });
   }
 
-  async embedMany(values: string[], { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }) {
+  async embedMany(values: string[], { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }): Promise<EmbedManyResult<string>> {
     return embedMany(values, {
       apiKey: this.apiKey,
       model: this.model,

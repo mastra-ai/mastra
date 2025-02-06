@@ -1,5 +1,7 @@
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
-import { embed as embedAi, embedMany as embedManyAi } from 'ai';
+import { embed as embedAi, embedMany as embedManyAi, EmbedResult, EmbedManyResult } from 'ai';
+
+import { MastraEmbedder } from './embedder';
 
 export type BedrockEmbeddingModelNames =
   | 'amazon.titan-embed-text-v1'
@@ -68,7 +70,7 @@ export async function embedMany(
   });
 }
 
-export class Embedder {
+export class Embedder extends MastraEmbedder {
   region: string;
   accessKeyId: string;
   secretAccessKey: string;
@@ -88,6 +90,7 @@ export class Embedder {
     sessionToken?: string;
     model?: BedrockEmbeddingModelNames;
   } = {}) {
+    super();
     this.region = region;
     this.accessKeyId = accessKeyId;
     this.secretAccessKey = secretAccessKey;
@@ -95,7 +98,7 @@ export class Embedder {
     this.model = model;
   }
 
-  async embed(value: string, { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }) {
+  async embed(value: string, { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }): Promise<EmbedResult<string>> {
     return embed(value, {
       region: this.region,
       accessKeyId: this.accessKeyId,
@@ -106,7 +109,7 @@ export class Embedder {
     });
   }
 
-  async embedMany(values: string[], { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }) {
+  async embedMany(values: string[], { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }): Promise<EmbedManyResult<string>> {
     return embedMany(values, {
       region: this.region,
       accessKeyId: this.accessKeyId,

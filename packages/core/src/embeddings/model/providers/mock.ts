@@ -1,6 +1,8 @@
-import { embed as embedAi, embedMany as embedManyAi } from 'ai';
+import { embed as embedAi, embedMany as embedManyAi, EmbedResult, EmbedManyResult } from 'ai';
 
 import { MockEmbeddingModelV1 } from 'ai/test';
+
+import { MastraEmbedder } from './embedder';
 
 const model = new MockEmbeddingModelV1({
   doEmbed: () => Promise.resolve({ embeddings: [[1, 0]] }),
@@ -32,16 +34,18 @@ export async function embedMany(
   });
 }
 
-export class Embedder {
-  constructor() {}
+export class Embedder extends MastraEmbedder {
+  constructor() {
+    super();
+  }
 
-  async embed(value: string, { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }) {
+  async embed(value: string, { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }): Promise<EmbedResult<string>> {
     return embed(value, {
       maxRetries,
     });
   }
 
-  async embedMany(values: string[], { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }) {
+  async embedMany(values: string[], { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }): Promise<EmbedManyResult<string>> {
     return embedMany(values, {
       maxRetries,
     });
