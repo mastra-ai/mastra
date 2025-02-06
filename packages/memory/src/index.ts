@@ -189,9 +189,26 @@ export class Memory extends MastraMemory {
       }
     }
 
-    await this.saveWorkingMemory(messages);
+    const workingMemory = await this.saveWorkingMemory(messages);
+
+    if (workingMemory) {
+      this.mutateMessagesToHideWorkingMemory(messages, workingMemory);
+    }
 
     return this.storage.__saveMessages({ messages });
+  }
+
+  protected mutateMessagesToHideWorkingMemory(messages: MessageType[], workingMemory: string) {
+    const latestMessage = messages[messages.length - 1];
+    if (typeof latestMessage?.content === `string`) {
+      latestMessage.content = latestMessage.content.replace(workingMemory, ``);
+    } else if (Array.isArray(latestMessage?.content)) {
+      for (const content of latestMessage.content) {
+        if (content.type === `text`) {
+          content.text = content.text.replace(workingMemory, ``);
+        }
+      }
+    }
   }
 
   protected parseWorkingMemory(text: string): string | null {
@@ -262,6 +279,7 @@ export class Memory extends MastraMemory {
         workingMemory: newMemory,
       },
     });
+    return newMemory;
   }
 
   public async getSystemMessage({ threadId }: { threadId: string }): Promise<string | null> {
