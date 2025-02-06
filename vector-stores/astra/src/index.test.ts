@@ -519,6 +519,14 @@ describe('AstraVector Integration Tests', () => {
         });
       });
 
+      it('filters with multiple conditions on same field using implicit $and', async () => {
+        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
+          'metadata.category': 'electronics',
+          'metadata.price': 1000,
+        });
+        expect(results.length).toBe(1);
+      });
+
       it('filters with multiple fields', async () => {
         const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
           $not: {

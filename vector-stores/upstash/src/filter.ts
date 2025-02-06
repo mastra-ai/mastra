@@ -18,7 +18,7 @@ export class UpstashFilterTranslator extends BaseFilterTranslator {
 
   private translateNode(node: Filter | FieldCondition, path: string = ''): string {
     if (this.isRegex(node)) {
-      throw new Error('Regex is not supported in Upstash');
+      throw new Error('Direct regex pattern format is not supported in Upstash');
     }
     if (node === null || node === undefined) {
       throw new Error('Filtering for null/undefined values is not supported by Upstash Vector');

@@ -29,7 +29,7 @@ export class LibSQLFilterTranslator extends BaseFilterTranslator {
 
   private translateNode(node: Filter | FieldCondition, currentPath: string = ''): any {
     if (this.isRegex(node)) {
-      throw new Error('Direct regex patterns are not supported in LibSQL');
+      throw new Error('Direct regex pattern format is not supported in LibSQL');
     }
     // Helper to wrap result with path if needed
     const withPath = (result: any) => (currentPath ? { [currentPath]: result } : result);
