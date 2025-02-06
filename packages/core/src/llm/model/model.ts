@@ -44,6 +44,18 @@ export class MastraLLM extends MastraLLMBase {
     }
   }
 
+  __registerPrimitives(p: MastraPrimitives) {
+    if (p.telemetry) {
+      this.__setTelemetry(p.telemetry);
+    }
+
+    if (p.logger) {
+      this.__setLogger(p.logger);
+    }
+
+    this.#mastra = p;
+  }
+
   convertTools(tools?: ToolsInput): Record<string, Tool> {
     this.logger.debug('Starting tool conversion for LLM');
     const converted = Object.entries(tools || {}).reduce(
