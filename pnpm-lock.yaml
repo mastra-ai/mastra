@@ -275,7 +275,7 @@ importers:
         version: 0.7.11(@assistant-ui/react@0.7.68(@types/react-dom@18.3.5(@types/react@18.3.18))(@types/react@18.3.18)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(tailwindcss@3.4.17(ts-node@10.9.2(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/node@22.12.0)(typescript@5.7.3)))(use-sync-external-store@1.4.0(react@18.3.1)))(@types/react-dom@18.3.5(@types/react@18.3.18))(@types/react@18.3.18)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(tailwindcss@3.4.17(ts-node@10.9.2(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/node@22.12.0)(typescript@5.7.3)))
       '@mastra/client-js':
         specifier: 0.1.0-alpha.7
-        version: 0.1.0-alpha.7(bufferutil@4.0.9)(encoding@0.1.13)(react@18.3.1)(utf-8-validate@6.0.5)
+        version: 0.1.0-alpha.7(bufferutil@4.0.9)(react@18.3.1)(utf-8-validate@6.0.5)
       next:
         specifier: 15.0.3
         version: 15.0.3(@opentelemetry/api@1.9.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -1233,6 +1233,24 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+
+  examples/memory-todo-agent:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@mastra/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
+      '@mastra/vector-libsql':
+        specifier: workspace:*
+        version: link:../../vector-stores/libsql
+      chalk:
+        specifier: ^5.3.0
+        version: 5.4.1
+      ora:
+        specifier: ^8.2.0
+        version: 8.2.0
 
   examples/memory-with-context:
     dependencies:
@@ -24705,9 +24723,9 @@ snapshots:
       - encoding
       - supports-color
 
-  '@mastra/client-js@0.1.0-alpha.7(bufferutil@4.0.9)(encoding@0.1.13)(react@18.3.1)(utf-8-validate@6.0.5)':
+  '@mastra/client-js@0.1.0-alpha.7(bufferutil@4.0.9)(react@18.3.1)(utf-8-validate@6.0.5)':
     dependencies:
-      '@mastra/core': 0.2.0-alpha.86(bufferutil@4.0.9)(encoding@0.1.13)(react@18.3.1)(utf-8-validate@6.0.5)
+      '@mastra/core': 0.2.0-alpha.86(bufferutil@4.0.9)(react@18.3.1)(utf-8-validate@6.0.5)
       json-schema: 0.4.0
       zod: 3.24.1
       zod-to-json-schema: 3.24.1(zod@3.24.1)
@@ -24719,7 +24737,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@mastra/core@0.2.0-alpha.86(bufferutil@4.0.9)(encoding@0.1.13)(react@18.3.1)(utf-8-validate@6.0.5)':
+  '@mastra/core@0.2.0-alpha.86(bufferutil@4.0.9)(react@18.3.1)(utf-8-validate@6.0.5)':
     dependencies:
       '@ai-sdk/amazon-bedrock': 1.1.6(zod@3.24.1)
       '@ai-sdk/anthropic': 1.1.6(zod@3.24.1)
