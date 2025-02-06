@@ -188,6 +188,7 @@ export class Agent<
           threadId,
           resourceId,
           title,
+          memoryConfig,
         });
       } else {
         thread = await memory.getThreadById({ threadId });
@@ -200,6 +201,7 @@ export class Agent<
             threadId,
             resourceId,
             title,
+            memoryConfig,
           });
         }
       }
@@ -284,7 +286,8 @@ export class Agent<
           runId,
         });
 
-        const memorySystemMessage = memory && threadId ? await memory.getSystemMessage({ threadId }) : null;
+        const memorySystemMessage =
+          memory && threadId ? await memory.getSystemMessage({ threadId, memoryConfig }) : null;
 
         return {
           threadId: thread.id,

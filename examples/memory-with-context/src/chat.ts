@@ -160,6 +160,11 @@ async function main() {
       await agent.stream(answer, {
         threadId,
         resourceId,
+        memoryOptions: {
+          workingMemory: {
+            enabled: false,
+          },
+        },
       }),
     );
   }

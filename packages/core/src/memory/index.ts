@@ -108,7 +108,7 @@ export abstract class MastraMemory extends MastraBase {
    * This will be called before each conversation turn.
    * Implementations can override this to inject custom system messages.
    */
-  public async getSystemMessage(_input: { threadId: string }): Promise<string | null> {
+  public async getSystemMessage(_input: { threadId: string; memoryConfig?: MemoryConfig }): Promise<string | null> {
     return null;
   }
 
@@ -120,8 +120,8 @@ export abstract class MastraMemory extends MastraBase {
     return this.embedding;
   }
 
-  protected getMergedThreadConfig(config: MemoryConfig): MemoryConfig {
-    return deepMerge(this.threadConfig, config);
+  protected getMergedThreadConfig(config?: MemoryConfig): MemoryConfig {
+    return deepMerge(this.threadConfig, config || {});
   }
 
   abstract rememberMessages({
@@ -253,7 +253,13 @@ export abstract class MastraMemory extends MastraBase {
    * @param thread - The thread data to save
    * @returns Promise resolving to the saved thread
    */
-  abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
+  abstract saveThread({
+    thread,
+    memoryConfig,
+  }: {
+    thread: StorageThreadType;
+    memoryConfig?: MemoryConfig;
+  }): Promise<StorageThreadType>;
 
   /**
    * Saves messages to a thread
@@ -289,11 +295,13 @@ export abstract class MastraMemory extends MastraBase {
     resourceId,
     title,
     metadata,
+    memoryConfig,
   }: {
     resourceId: string;
     threadId?: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    memoryConfig?: MemoryConfig;
   }): Promise<StorageThreadType> {
     const thread: StorageThreadType = {
       id: threadId || this.generateId(),
@@ -304,7 +312,7 @@ export abstract class MastraMemory extends MastraBase {
       metadata,
     };
 
-    return this.saveThread({ thread });
+    return this.saveThread({ thread, memoryConfig });
   }
 
   /**

@@ -132,9 +132,14 @@ export class Memory extends MastraMemory {
     return this.storage.__getThreadsByResourceId({ resourceId });
   }
 
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    if (this.threadConfig.workingMemory?.enabled && !thread?.metadata?.workingMemory) {
-    const config = this.getMergedThreadConfig({});
+  async saveThread({
+    thread,
+    memoryConfig,
+  }: {
+    thread: StorageThreadType;
+    memoryConfig?: MemoryConfig;
+  }): Promise<StorageThreadType> {
+    const config = this.getMergedThreadConfig(memoryConfig || {});
 
     if (config.workingMemory?.enabled && !thread?.metadata?.workingMemory) {
       // if working memory is enabled but the thread doesn't have it, we need to set it
@@ -283,8 +288,15 @@ export class Memory extends MastraMemory {
     return newMemory;
   }
 
-  public async getSystemMessage({ threadId }: { threadId: string }): Promise<string | null> {
-    if (!this.threadConfig.workingMemory?.enabled) {
+  public async getSystemMessage({
+    threadId,
+    memoryConfig,
+  }: {
+    threadId: string;
+    memoryConfig?: MemoryConfig;
+  }): Promise<string | null> {
+    const config = this.getMergedThreadConfig(memoryConfig);
+    if (!config.workingMemory?.enabled) {
       return null;
     }
 
