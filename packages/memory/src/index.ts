@@ -181,11 +181,11 @@ export class Memory extends MastraMemory {
   }
 
   async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
-    const workingMemory = await this.saveWorkingMemory(messages);
-
-    if (workingMemory) {
-      this.mutateMessagesToHideWorkingMemory(messages, workingMemory);
-    }
+    // First save working memory from any messages
+    await this.saveWorkingMemory(messages);
+    
+    // Then strip working memory tags from all messages
+    this.mutateMessagesToHideWorkingMemory(messages);
 
     if (this.vector) {
       await this.vector.createIndex('memory_messages', 1536);
@@ -205,14 +205,16 @@ export class Memory extends MastraMemory {
     return this.storage.__saveMessages({ messages });
   }
 
-  protected mutateMessagesToHideWorkingMemory(messages: MessageType[], workingMemory: string) {
-    const latestMessage = messages[messages.length - 1];
-    if (typeof latestMessage?.content === `string`) {
-      latestMessage.content = latestMessage.content.replace(`<working_memory>${workingMemory}</working_memory>`, ``);
-    } else if (Array.isArray(latestMessage?.content)) {
-      for (const content of latestMessage.content) {
-        if (content.type === `text`) {
-          content.text = content.text.replace(workingMemory, ``);
+  protected mutateMessagesToHideWorkingMemory(messages: MessageType[]) {
+    const workingMemoryRegex = /<working_memory>[\s\S]*?<\/working_memory>/g;
+    for (const message of messages) {
+      if (typeof message?.content === `string`) {
+        message.content = message.content.replace(workingMemoryRegex, ``).trim();
+      } else if (Array.isArray(message?.content)) {
+        for (const content of message.content) {
+          if (content.type === `text`) {
+            content.text = content.text.replace(workingMemoryRegex, ``).trim();
+          }
         }
       }
     }
