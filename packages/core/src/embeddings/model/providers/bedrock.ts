@@ -1,34 +1,69 @@
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
+import { embed as embedAi, embedMany as embedManyAi } from 'ai';
 
-import { MastraEmbedding } from '../base';
-
-export type AmazonBedrockEmbeddingModelNames =
+export type BedrockEmbeddingModelNames =
   | 'amazon.titan-embed-text-v1'
-  | 'amazon.titan-embed-text-v2:0'
+  | 'amazon.titan-embed-image-v1'
+  | 'cohere.embed-english-v3'
+  | 'cohere.embed-multilingual-v3'
   | (string & {});
-export class BedrockEmbeddingModel extends MastraEmbedding {
-  constructor({
-    region,
-    accessKeyId,
-    secretAccessKey,
-    sessionToken,
-    model,
+
+export async function embed(
+  value: string,
+  {
+    region = process.env.AWS_REGION || 'us-east-1',
+    accessKeyId = process.env.AWS_ACCESS_KEY_ID || '',
+    secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || '',
+    sessionToken = process.env.AWS_SESSION_TOKEN || '',
+    model = 'amazon.titan-embed-text-v1',
+    maxRetries = 3,
   }: {
+    maxRetries?: number;
     region?: string;
     accessKeyId?: string;
     secretAccessKey?: string;
     sessionToken?: string;
-    model: AmazonBedrockEmbeddingModelNames;
-  }) {
-    const amazon = createAmazonBedrock({
-      region: region || process.env.AWS_REGION || '',
-      accessKeyId: accessKeyId || process.env.AWS_ACCESS_KEY_ID || '',
-      secretAccessKey: secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY || '',
-      sessionToken: sessionToken || process.env.AWS_SESSION_TOKEN || '',
-    });
+    model: BedrockEmbeddingModelNames;
+  },
+) {
+  const bedrock = createAmazonBedrock({
+    region,
+    accessKeyId,
+    secretAccessKey,
+    sessionToken,
+  });
+  const eModel = bedrock.embedding(model);
+  return await embedAi({ model: eModel, value, maxRetries });
+}
 
-    const eModel = amazon.embedding(model);
-
-    super({ model: eModel });
-  }
+export async function embedMany(
+  values: string[],
+  {
+    region = process.env.AWS_REGION || 'us-east-1',
+    accessKeyId = process.env.AWS_ACCESS_KEY_ID || '',
+    secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || '',
+    sessionToken = process.env.AWS_SESSION_TOKEN || '',
+    model = 'amazon.titan-embed-text-v1',
+    maxRetries = 3,
+  }: {
+    maxRetries?: number;
+    region?: string;
+    accessKeyId?: string;
+    secretAccessKey?: string;
+    sessionToken?: string;
+    model: BedrockEmbeddingModelNames;
+  },
+) {
+  const bedrock = createAmazonBedrock({
+    region,
+    accessKeyId,
+    secretAccessKey,
+    sessionToken,
+  });
+  const eModel = bedrock.embedding(model);
+  return await embedManyAi({
+    model: eModel,
+    values,
+    maxRetries,
+  });
 }

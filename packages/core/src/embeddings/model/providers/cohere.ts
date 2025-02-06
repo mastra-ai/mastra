@@ -1,37 +1,57 @@
 import { createCohere } from '@ai-sdk/cohere';
-
-import { MastraEmbedding } from '../base';
+import { embed as embedAi, embedMany as embedManyAi } from 'ai';
 
 export type CohereEmbeddingModelNames =
   | 'embed-english-v3.0'
-  | 'embed-multilingual-v3.0'
   | 'embed-english-light-v3.0'
+  | 'embed-multilingual-v3.0'
   | 'embed-multilingual-light-v3.0'
-  | 'embed-english-v2.0'
-  | 'embed-english-light-v2.0'
-  | 'embed-multilingual-v2.0'
   | (string & {});
 
-export class CohereEmbeddingModel extends MastraEmbedding {
-  constructor({
+export async function embed(
+  value: string,
+  {
     apiKey = process.env.COHERE_API_KEY || '',
-    model,
+    model = 'embed-english-v3.0',
     baseURL,
-    fetch,
-    headers,
+    maxRetries = 3,
   }: {
+    maxRetries?: number;
     apiKey?: string;
     model: CohereEmbeddingModelNames;
     baseURL?: string;
-    fetch?: typeof globalThis.fetch;
-    headers?: Record<string, string>;
-  }) {
-    const cohere = createCohere({
-      apiKey,
-      baseURL,
-      fetch,
-      headers,
-    });
-    super({ model: cohere.embedding(model) });
-  }
+  },
+) {
+  const cohere = createCohere({
+    baseURL,
+    apiKey,
+  });
+  const eModel = cohere.textEmbeddingModel(model);
+  return await embedAi({ model: eModel, value, maxRetries });
+}
+
+export async function embedMany(
+  values: string[],
+  {
+    apiKey = process.env.COHERE_API_KEY || '',
+    model = 'embed-english-v3.0',
+    baseURL,
+    maxRetries = 3,
+  }: {
+    maxRetries?: number;
+    apiKey?: string;
+    model: CohereEmbeddingModelNames;
+    baseURL?: string;
+  },
+) {
+  const cohere = createCohere({
+    baseURL,
+    apiKey,
+  });
+  const eModel = cohere.textEmbeddingModel(model);
+  return await embedManyAi({
+    model: eModel,
+    values,
+    maxRetries,
+  });
 }
