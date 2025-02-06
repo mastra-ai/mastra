@@ -14,12 +14,6 @@ const mastra = new MastraClient({
 });
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
-  if (typeof message.content === 'string') {
-    return {
-      role: message.role,
-      content: [{ type: 'text', text: message.content }],
-    };
-  }
   return message;
 };
 
@@ -53,7 +47,7 @@ export function MastraRuntimeProvider({
         ],
       });
 
-      const reader = (response as any)?.body?.getReader();
+      const reader = response.getReader();
       const decoder = new TextDecoder();
 
       let buffer = '';
@@ -75,7 +69,7 @@ export function MastraRuntimeProvider({
                 role: 'assistant',
                 content: [{ type: 'text', text: 'An error occurred while processing your request.' }],
                 isError: true,
-              } as ThreadMessageLike,
+              },
             ]);
             return;
           }
@@ -85,10 +79,10 @@ export function MastraRuntimeProvider({
             const content = match[1];
             assistantMessage += content;
             setMessages(currentConversation => {
-              const message = {
+              const message: ThreadMessageLike = {
                 role: 'assistant',
                 content: [{ type: 'text', text: assistantMessage }],
-              } as ThreadMessageLike;
+              };
 
               if (!assistantMessageAdded) {
                 assistantMessageAdded = true;
