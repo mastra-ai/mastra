@@ -109,7 +109,8 @@
     "examples-workflow-with-memory": "0.0.1-alpha.2",
     "examples-workflow-with-separate-steps": "0.0.1-alpha.2",
     "examples-yc-directory": "1.0.1-alpha.2",
-    "@mastra/memory-integration-tests": "0.0.0"
+    "@mastra/memory-integration-tests": "0.0.0",
+    "memory-with-context": "0.0.1-alpha.2"
   },
   "changesets": [
     "afraid-papayas-shake",
@@ -198,6 +199,7 @@
     "giant-cups-sin",
     "giant-pants-sit",
     "giant-pears-taste",
+    "giant-worms-cough",
     "gold-deers-peel",
     "good-buttons-care",
     "good-days-explode",
@@ -255,6 +257,7 @@
     "metal-toes-dream",
     "mighty-avocados-cheat",
     "mighty-pets-wave",
+    "modern-comics-grab",
     "moody-ligers-peel",
     "moody-penguins-rest",
     "nasty-kangaroos-hunt",
@@ -322,6 +325,7 @@
     "shaggy-donkeys-happen",
     "shiny-cameras-brake",
     "short-dots-sniff",
+    "silent-dancers-happen",
     "silver-bats-smell",
     "silver-dancers-rush",
     "silver-seahorses-march",
@@ -405,6 +409,7 @@
     "wise-taxis-wink",
     "witty-dolls-repeat",
     "witty-nails-tap",
+    "witty-rivers-camp",
     "yellow-eagles-shout",
     "yellow-mangos-press",
     "yellow-nails-add",

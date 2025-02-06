@@ -1,5 +1,20 @@
 # @mastra/deployer
 
+## 0.1.0-alpha.35
+
+### Patch Changes
+
+- Updated dependencies [27275c9]
+  - @mastra/core@0.2.0-alpha.89
+
+## 0.1.0-alpha.34
+
+### Patch Changes
+
+- ab01c53: Fix mastra server agent streamObject
+- Updated dependencies [ccbc581]
+  - @mastra/core@0.2.0-alpha.88
+
 ## 0.1.0-alpha.33
 
 ### Patch Changes

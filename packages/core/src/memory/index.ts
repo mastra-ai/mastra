@@ -12,6 +12,7 @@ import {
 import { MastraBase } from '../base';
 import { EmbeddingOptions } from '../embeddings';
 import { MastraStorage, StorageGetMessagesArg } from '../storage';
+import { deepMerge } from '../utils';
 import { MastraVector } from '../vector';
 
 export type AiMessageType = AiMessage;
@@ -51,8 +52,10 @@ export type MemoryConfig = {
         topK: number;
         messageRange: number | { before: number; after: number };
       };
-  // TODO:
-  // injectWorkingMemory?: boolean;
+  workingMemory?: {
+    enabled: boolean;
+    template?: string;
+  };
 };
 
 export type SharedMemoryConfig =
@@ -83,8 +86,6 @@ export abstract class MastraMemory extends MastraBase {
   protected threadConfig: MemoryConfig = {
     lastMessages: 40,
     semanticRecall: false, // becomes true by default if a vector store is attached
-    // TODO:
-    // injectWorkingMemory: true
   };
 
   constructor(config: { name: string } & SharedMemoryConfig) {
@@ -102,6 +103,15 @@ export abstract class MastraMemory extends MastraBase {
     }
   }
 
+  /**
+   * Get a system message to inject into the conversation.
+   * This will be called before each conversation turn.
+   * Implementations can override this to inject custom system messages.
+   */
+  public async getSystemMessage(_input: { threadId: string; memoryConfig?: MemoryConfig }): Promise<string | null> {
+    return null;
+  }
+
   protected parseEmbeddingOptions() {
     if (!this.embedding) {
       throw new Error(`Cannot use vector features without setting new Memory({ embedding: { ... } })`);
@@ -110,11 +120,8 @@ export abstract class MastraMemory extends MastraBase {
     return this.embedding;
   }
 
-  protected getMergedThreadConfig(config: MemoryConfig): MemoryConfig {
-    return {
-      ...this.threadConfig,
-      ...config,
-    };
+  protected getMergedThreadConfig(config?: MemoryConfig): MemoryConfig {
+    return deepMerge(this.threadConfig, config || {});
   }
 
   abstract rememberMessages({
@@ -246,7 +253,13 @@ export abstract class MastraMemory extends MastraBase {
    * @param thread - The thread data to save
    * @returns Promise resolving to the saved thread
    */
-  abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
+  abstract saveThread({
+    thread,
+    memoryConfig,
+  }: {
+    thread: StorageThreadType;
+    memoryConfig?: MemoryConfig;
+  }): Promise<StorageThreadType>;
 
   /**
    * Saves messages to a thread
@@ -282,11 +295,13 @@ export abstract class MastraMemory extends MastraBase {
     resourceId,
     title,
     metadata,
+    memoryConfig,
   }: {
     resourceId: string;
     threadId?: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    memoryConfig?: MemoryConfig;
   }): Promise<StorageThreadType> {
     const thread: StorageThreadType = {
       id: threadId || this.generateId(),
@@ -297,7 +312,7 @@ export abstract class MastraMemory extends MastraBase {
       metadata,
     };
 
-    return this.saveThread({ thread });
+    return this.saveThread({ thread, memoryConfig });
   }
 
   /**

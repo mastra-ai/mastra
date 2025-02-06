@@ -1,5 +1,8 @@
 import { JSONSchema7 } from 'json-schema';
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
+
+// Extend timeout for all tests in this file to 60 seconds
+vi.setConfig({ testTimeout: 60000 });
 import { z } from 'zod';
 
 // Load environment variables

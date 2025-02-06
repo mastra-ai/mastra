@@ -348,7 +348,6 @@ export class LLM extends MastraBase {
   }
 
   convertTools(tools?: ToolsInput): Record<string, CoreTool> {
-    this.log(LogLevel.DEBUG, 'Starting tool conversion for LLM');
     const converted = Object.entries(tools || {}).reduce(
       (memo, value) => {
         const k = value[0] as string;
@@ -359,14 +358,23 @@ export class LLM extends MastraBase {
             description: tool.description!,
             parameters: tool.inputSchema,
             execute: async props => {
-              this.log(LogLevel.DEBUG, 'Executing tool', {
-                tool: k,
-                props,
-              });
-              return tool.execute({
-                context: props,
-                mastra: this.#mastra,
-              });
+              try {
+                this.logger.debug(`Executing tool ${k}`, {
+                  tool: k,
+                  props,
+                });
+                return tool.execute({
+                  context: props,
+                  mastra: this.#mastra,
+                });
+              } catch (error) {
+                this.logger.error(`Error executing tool ${k}`, {
+                  tool: k,
+                  props,
+                  error,
+                });
+                throw error;
+              }
             },
           };
         }
@@ -375,7 +383,6 @@ export class LLM extends MastraBase {
       {} as Record<string, CoreTool>,
     );
 
-    this.log(LogLevel.DEBUG, `Converted tools for LLM`);
     return converted;
   }
 
