@@ -10,28 +10,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    services:
-      qdrant:
-        image: qdrant/qdrant
-        ports:
-          - 6333:6333
-      chromadb:
-        image: chromadb/chroma
-        ports:
-          - 8000:8000
-      postgres:
-        image: pgvector/pgvector:pg17
-        env:
-          POSTGRES_DB: mastra
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5433:5432
     steps:
       - uses: actions/checkout@v4
 
@@ -55,9 +33,6 @@ jobs:
       - name: Build rag
         run: pnpm build:rag
 
-      - name: Build vector stores
-        run: pnpm build:vector-stores
-
       - name: Run RAG tests
         run: pnpm test:rag
         env:
@@ -72,16 +47,3 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}
 
-      - name: Run Vector Store tests
-        run: pnpm test:vector-stores
-        env:
-          NODE_OPTIONS: "--max_old_space_size=8096"
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
-          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
-          ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
-          ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
-          UPSTASH_VECTOR_TOKEN: ${{ secrets.UPSTASH_VECTOR_TOKEN }}
-          UPSTASH_VECTOR_URL: ${{ secrets.UPSTASH_VECTOR_URL }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}

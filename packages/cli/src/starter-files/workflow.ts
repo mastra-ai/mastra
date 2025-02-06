@@ -83,7 +83,7 @@ const planActivities = new Step({
 
     const llm = mastra.llm({
       provider: 'OPEN_AI',
-      name: 'gpt-4o',
+      name: 'gpt-4o-mini',
     });
 
     const response = await llm.stream([

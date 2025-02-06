@@ -183,5 +183,16 @@ describe('VectorizeFilterTranslator', () => {
         expect(() => translator.translate(filter)).toThrow(/Unsupported operator/);
       });
     });
+    it('throws error for regex operators', () => {
+      const filter = { field: /pattern/i };
+      expect(() => translator.translate(filter)).toThrow('Regex is not supported in Vectorize');
+    });
+    it('throws error for non-logical operators at top level', () => {
+      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
+
+      invalidFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
+      });
+    });
   });
 });

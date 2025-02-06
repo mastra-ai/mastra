@@ -1,6 +1,6 @@
 import { createTogetherAI } from '@ai-sdk/togetherai';
 
-import { ModelRouter } from '../router';
+import { MastraLLM } from '../model';
 
 export type TogetherAiModel =
   | 'codellama/CodeLlama-34b-Instruct-hf'
@@ -180,7 +180,7 @@ export type TogetherAiModel =
   | 'lmsys/vicuna-7b-v1.5'
   | (string & {});
 
-export class TogetherAI extends ModelRouter {
+export class TogetherAI extends MastraLLM {
   constructor({
     name = 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo',
     apiKey = process.env.TOGETHER_AI_API_KEY || '',

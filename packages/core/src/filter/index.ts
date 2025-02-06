@@ -182,6 +182,8 @@ abstract class BaseFilterTranslator {
     NOT_CANNOT_BE_EMPTY: `$not operator cannot be empty`,
     INVALID_LOGICAL_OPERATOR_CONTENT: (path: string) =>
       `Logical operators must contain field conditions, not direct operators: ${path}`,
+    INVALID_TOP_LEVEL_OPERATOR: (op: string) => `Invalid top-level operator: ${op}`,
+    ELEM_MATCH_REQUIRES_OBJECT: `$elemMatch requires an object with conditions`,
   } as const;
 
   /**
@@ -237,6 +239,20 @@ abstract class BaseFilterTranslator {
         if (!this.isValidOperator(key)) {
           isSupported = false;
           messages.push(BaseFilterTranslator.ErrorMessages.UNSUPPORTED_OPERATOR(key));
+          continue;
+        }
+
+        // Add check for non-logical operators at top level
+        if (!path && !this.isLogicalOperator(key)) {
+          isSupported = false;
+          messages.push(BaseFilterTranslator.ErrorMessages.INVALID_TOP_LEVEL_OPERATOR(key));
+          continue;
+        }
+
+        // In the translate method or wherever operators are handled
+        if (key === '$elemMatch' && (typeof value !== 'object' || Array.isArray(value))) {
+          isSupported = false;
+          messages.push(BaseFilterTranslator.ErrorMessages.ELEM_MATCH_REQUIRES_OBJECT);
           continue;
         }
 

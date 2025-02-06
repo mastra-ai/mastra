@@ -1,12 +1,12 @@
 import {
-  Filter,
-  RegexOperator,
-  ArrayOperator,
   BasicOperator,
+  NumericOperator,
+  ArrayOperator,
   ElementOperator,
   LogicalOperator,
-  NumericOperator,
-} from '@mastra/core';
+  RegexOperator,
+  Filter,
+} from '@mastra/core/filter';
 
 export type OperatorType =
   | BasicOperator
@@ -23,7 +23,7 @@ type FilterOperator = {
   transformValue?: (value: any) => any;
 };
 
-type OperatorFn = (key: string, paramIndex: number) => FilterOperator;
+type OperatorFn = (key: string, paramIndex: number, value?: any) => FilterOperator;
 
 // Helper functions to create operators
 const createBasicOperator = (symbol: string) => {
@@ -42,6 +42,55 @@ const createNumericOperator = (symbol: string) => {
     needsValue: true,
   });
 };
+
+function buildElemMatchConditions(value: any, paramIndex: number): { sql: string; values: any[] } {
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('$elemMatch requires an object with conditions');
+  }
+
+  const conditions: string[] = [];
+  const values: any[] = [];
+
+  Object.entries(value).forEach(([field, val]) => {
+    const nextParamIndex = paramIndex + values.length;
+
+    let paramOperator;
+    let paramKey;
+    let paramValue;
+
+    if (field.startsWith('$')) {
+      paramOperator = field;
+      paramKey = '';
+      paramValue = val;
+    } else if (typeof val === 'object' && !Array.isArray(val)) {
+      const [op, opValue] = Object.entries(val || {})[0] || [];
+      paramOperator = op;
+      paramKey = field;
+      paramValue = opValue;
+    } else {
+      paramOperator = '$eq';
+      paramKey = field;
+      paramValue = val;
+    }
+
+    const operatorFn = FILTER_OPERATORS[paramOperator as keyof typeof FILTER_OPERATORS];
+    if (!operatorFn) {
+      throw new Error(`Invalid operator: ${paramOperator}`);
+    }
+    const result = operatorFn(paramKey, nextParamIndex, paramValue);
+
+    const sql = result.sql.replaceAll('metadata#>>', 'elem#>>');
+    conditions.push(sql);
+    if (result.needsValue) {
+      values.push(paramValue);
+    }
+  });
+
+  return {
+    sql: conditions.join(' AND '),
+    values,
+  };
+}
 
 // Define all filter operators
 export const FILTER_OPERATORS: Record<string, OperatorFn> = {
@@ -66,11 +115,24 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
           ELSE (metadata#>'{${handleKey(key)}}')::jsonb ?& $${paramIndex}::text[] END`,
     needsValue: true,
   }),
-  $elemMatch: (key, paramIndex) => ({
-    sql: `(metadata#>'{${handleKey(key)}}')::jsonb ?| $${paramIndex}::text[]`,
-    needsValue: true,
-  }),
-
+  $elemMatch: (key: string, paramIndex: number, value: any): FilterOperator => {
+    const { sql, values } = buildElemMatchConditions(value, paramIndex);
+    return {
+      sql: `(
+        CASE
+          WHEN jsonb_typeof(metadata->'${handleKey(key)}') = 'array' THEN
+            EXISTS (
+              SELECT 1 
+              FROM jsonb_array_elements(metadata->'${handleKey(key)}') as elem
+              WHERE ${sql}
+            )
+          ELSE FALSE
+        END
+      )`,
+      needsValue: true,
+      transformValue: () => values,
+    };
+  },
   // Element Operators
   $exists: key => ({
     sql: `metadata ? '${key}'`,
@@ -96,6 +158,16 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
       const parts = key.split('.');
       return JSON.stringify(parts.reduceRight((value, key) => ({ [key]: value }), value));
     },
+  }),
+  $size: (key: string, paramIndex: number) => ({
+    sql: `(
+      CASE
+        WHEN jsonb_typeof(metadata#>'{${handleKey(key)}}') = 'array' THEN 
+          jsonb_array_length(metadata#>'{${handleKey(key)}}') = $${paramIndex}
+        ELSE FALSE
+      END
+    )`,
+    needsValue: true,
   }),
 };
 
@@ -146,12 +218,16 @@ export function buildFilterQuery(filter: Filter, minScore: number): FilterResult
       return `NOT (${conditions})`;
     }
     const operatorFn = FILTER_OPERATORS[operator as string]!;
-    const operatorResult = operatorFn(key, values.length + 1);
+    const operatorResult = operatorFn(key, values.length + 1, operatorValue);
     if (operatorResult.needsValue) {
       const transformedValue = operatorResult.transformValue
         ? operatorResult.transformValue(operatorValue)
         : operatorValue;
-      values.push(transformedValue);
+      if (Array.isArray(transformedValue) && operator === '$elemMatch') {
+        values.push(...transformedValue);
+      } else {
+        values.push(transformedValue);
+      }
     }
     return operatorResult.sql;
   }
@@ -193,7 +269,7 @@ export function buildFilterQuery(filter: Filter, minScore: number): FilterResult
 
     const joined = conditions.join(` ${joinOperator} `);
     const operatorFn = FILTER_OPERATORS[key]!;
-    return operatorFn(joined, 0).sql;
+    return operatorFn(joined, 0, value).sql;
   }
 
   if (!filter) {

@@ -1,4 +1,4 @@
-import { BaseFilterTranslator, FieldCondition, Filter, LogicalOperator, OperatorSupport } from '@mastra/core/filter';
+import { BaseFilterTranslator, FieldCondition, Filter, OperatorSupport } from '@mastra/core/filter';
 
 /**
  * Translates MongoDB-style filters to LibSQL compatible filters.
@@ -15,15 +15,8 @@ export class LibSQLFilterTranslator extends BaseFilterTranslator {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
       regex: [],
+      custom: ['$contains', '$size'],
     };
-  }
-
-  protected isLibSQLOperator(key: string): boolean {
-    return key === '$contains';
-  }
-
-  protected override isValidOperator(key: string) {
-    return super.isValidOperator(key) || this.isLibSQLOperator(key);
   }
 
   translate(filter: Filter): Filter {
@@ -35,6 +28,9 @@ export class LibSQLFilterTranslator extends BaseFilterTranslator {
   }
 
   private translateNode(node: Filter | FieldCondition, currentPath: string = ''): any {
+    if (this.isRegex(node)) {
+      throw new Error('Direct regex patterns are not supported in LibSQL');
+    }
     // Helper to wrap result with path if needed
     const withPath = (result: any) => (currentPath ? { [currentPath]: result } : result);
 
@@ -57,9 +53,9 @@ export class LibSQLFilterTranslator extends BaseFilterTranslator {
     const entries = Object.entries(node as Record<string, any>);
     const result: Record<string, any> = {};
 
-    if ('$options' in node && !('$regex' in node)) {
-      throw new Error('$options is not valid without $regex');
-    }
+    // if ('$options' in node && !('$regex' in node)) {
+    //   throw new Error('$options is not valid without $regex');
+    // }
 
     // TODO: Look more into regex support for LibSQL
     // // Handle special regex object format
@@ -80,7 +76,7 @@ export class LibSQLFilterTranslator extends BaseFilterTranslator {
           ? value.map((filter: Filter) => this.translateNode(filter))
           : this.translateNode(value);
       } else if (this.isOperator(key)) {
-        if (this.isArrayOperator(key) && !Array.isArray(value)) {
+        if (this.isArrayOperator(key) && !Array.isArray(value) && key !== '$elemMatch') {
           result[key] = [value];
         } else if (this.isBasicOperator(key) && Array.isArray(value)) {
           result[key] = JSON.stringify(value);

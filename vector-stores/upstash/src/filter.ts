@@ -1,6 +1,4 @@
-import { BaseFilterTranslator, Filter, FieldCondition, OperatorSupport, ArrayOperator } from '@mastra/core/filter';
-
-// type UpstashArrayOperator = '$in' | '$nin' | '$all' | '$contains' | '$regex';
+import { BaseFilterTranslator, Filter, FieldCondition, OperatorSupport } from '@mastra/core/filter';
 
 export class UpstashFilterTranslator extends BaseFilterTranslator {
   protected override getSupportedOperators(): OperatorSupport {
@@ -19,6 +17,9 @@ export class UpstashFilterTranslator extends BaseFilterTranslator {
   }
 
   private translateNode(node: Filter | FieldCondition, path: string = ''): string {
+    if (this.isRegex(node)) {
+      throw new Error('Regex is not supported in Upstash');
+    }
     if (node === null || node === undefined) {
       throw new Error('Filtering for null/undefined values is not supported by Upstash Vector');
     }

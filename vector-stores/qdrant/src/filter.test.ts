@@ -287,20 +287,29 @@ describe('QdrantFilterTranslator', () => {
 
     it('should translate $nested operator', () => {
       const filter = {
-        $nested: {
-          key: 'nested_field',
-          filter: { inner_field: 'value' },
+        diet: {
+          $nested: {
+            food: 'meat',
+            likes: true,
+          },
         },
+        $hasId: '123',
       };
 
       const expected = {
         must: [
           {
             nested: {
-              key: 'nested_field',
-              filter: { must: [{ key: 'inner_field', match: { value: 'value' } }] },
+              key: 'diet',
+              filter: {
+                must: [
+                  { key: 'food', match: { value: 'meat' } },
+                  { key: 'likes', match: { value: true } },
+                ],
+              },
             },
           },
+          { has_id: ['123'] },
         ],
       };
 
@@ -314,11 +323,12 @@ describe('QdrantFilterTranslator', () => {
     it('should translate $datetime operator', () => {
       const now = new Date();
       const filter = {
-        $datetime: {
-          key: 'timestamp',
-          range: {
-            gt: now,
-            lt: new Date(now.getTime() + 86400000),
+        timestamp: {
+          $datetime: {
+            range: {
+              gt: now,
+              lt: new Date(now.getTime() + 86400000),
+            },
           },
         },
       };
@@ -339,11 +349,11 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should translate $null operator', () => {
-      expect(translator.translate({ $null: 'field' })).toEqual({ must: [{ is_null: { key: 'field' } }] });
+      expect(translator.translate({ field: { $null: true } })).toEqual({ must: [{ is_null: { key: 'field' } }] });
     });
 
     it('should translate $empty operator', () => {
-      expect(translator.translate({ $empty: 'field' })).toEqual({ must: [{ is_empty: { key: 'field' } }] });
+      expect(translator.translate({ field: { $empty: true } })).toEqual({ must: [{ is_empty: { key: 'field' } }] });
     });
 
     it('should handle nested $count with multiple conditions', () => {
@@ -361,15 +371,13 @@ describe('QdrantFilterTranslator', () => {
 
     it('should translate $nested operator with complex conditions', () => {
       const filter = {
-        $nested: {
-          key: 'nested_field',
-          filter: {
+        nested_field: {
+          $nested: {
             inner_field: { $gt: 100 },
             'deep.field': { $in: ['value1', 'value2'] },
           },
         },
       };
-
       const expected = {
         must: [
           {
@@ -392,13 +400,14 @@ describe('QdrantFilterTranslator', () => {
     it('should translate $datetime operator with multiple range conditions', () => {
       const now = new Date();
       const filter = {
-        $datetime: {
-          key: 'timestamp',
-          range: {
-            gt: now,
-            lt: new Date(now.getTime() + 86400000),
-            gte: new Date(now.getTime() - 3600000),
-            lte: new Date(now.getTime() + 90000000),
+        timestamp: {
+          $datetime: {
+            range: {
+              gt: now,
+              lt: new Date(now.getTime() + 86400000),
+              gte: new Date(now.getTime() - 3600000),
+              lte: new Date(now.getTime() + 90000000),
+            },
           },
         },
       };
@@ -422,11 +431,13 @@ describe('QdrantFilterTranslator', () => {
 
     it('should translate $datetime operator with string dates', () => {
       const filter = {
-        $datetime: {
-          key: 'timestamp',
-          range: {
-            gt: '2023-01-01T00:00:00Z',
-            lt: '2024-01-01T00:00:00Z',
+        timestamp: {
+          $datetime: {
+            key: 'timestamp',
+            range: {
+              gt: '2023-01-01T00:00:00Z',
+              lt: '2024-01-01T00:00:00Z',
+            },
           },
         },
       };
@@ -438,6 +449,37 @@ describe('QdrantFilterTranslator', () => {
             range: {
               gt: '2023-01-01T00:00:00Z',
               lt: '2024-01-01T00:00:00Z',
+            },
+          },
+        ],
+      };
+
+      expect(translator.translate(filter)).toEqual(expected);
+    });
+
+    it('should translate complex $nested operator', () => {
+      const filter = {
+        diet: {
+          $nested: {
+            food: { $in: ['meat', 'fish'] },
+            likes: true,
+            rating: { $gt: 5 },
+          },
+        },
+      };
+
+      const expected = {
+        must: [
+          {
+            nested: {
+              key: 'diet',
+              filter: {
+                must: [
+                  { key: 'food', match: { any: ['meat', 'fish'] } },
+                  { key: 'likes', match: { value: true } },
+                  { key: 'rating', range: { gt: 5 } },
+                ],
+              },
             },
           },
         ],
@@ -654,6 +696,20 @@ describe('QdrantFilterTranslator', () => {
         expect(() => translator.translate(filter)).toThrow();
       });
     });
+    it('throws error for non-logical operators at top level', () => {
+      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
+
+      invalidFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
+      });
+    });
+    it('allows logical operators at top level', () => {
+      const validFilters = [{ $and: [{ field: 'value' }] }, { $or: [{ field: 'value' }] }];
+
+      validFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).not.toThrow();
+      });
+    });
   });
 
   describe('Must Wrapper Cases', () => {
@@ -749,6 +805,52 @@ describe('QdrantFilterTranslator', () => {
           },
         ],
       };
+      expect(translator.translate(filter)).toEqual(expected);
+    });
+  });
+
+  describe('Regex Patterns', () => {
+    it('should throw error for direct regex patterns', () => {
+      const filter = {
+        field: /pattern/,
+      };
+      expect(() => translator.translate(filter)).toThrow();
+    });
+
+    it('should translate $regex operator', () => {
+      const filters = {
+        field: { $regex: 'pattern' },
+      };
+
+      expect(translator.translate(filters)).toEqual({ must: [{ key: 'field', match: { text: 'pattern' } }] });
+    });
+
+    it('should handle regex in nested conditions', () => {
+      const filter = {
+        diet: {
+          $nested: {
+            food: { $regex: 'meat' },
+            description: { $regex: 'organic' },
+          },
+        },
+      };
+
+      const expected = {
+        must: [
+          {
+            nested: {
+              key: 'diet',
+              filter: {
+                must: [
+                  { key: 'food', match: { text: 'meat' } },
+                  { key: 'description', match: { text: 'organic' } },
+                ],
+              },
+            },
+          },
+        ],
+      };
+
       expect(translator.translate(filter)).toEqual(expected);
     });
   });

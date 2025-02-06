@@ -5,8 +5,8 @@ import { LibSQLFilterTranslator } from './filter';
 describe('LibSQLFilterTranslator', () => {
   const translator = new LibSQLFilterTranslator();
 
-  // Basic Operations
-  describe('basic operations', () => {
+  // Basic Filter Translation
+  describe('Basic Filter Translation', () => {
     it('handles empty filter', () => {
       expect(translator.translate({})).toEqual({});
     });
@@ -14,6 +14,12 @@ describe('LibSQLFilterTranslator', () => {
     it('translates primitive to $eq', () => {
       expect(translator.translate({ field: 'value' })).toEqual({
         field: { $eq: 'value' },
+      });
+    });
+
+    it('translates array to $in', () => {
+      expect(translator.translate({ field: ['a', 'b'] })).toEqual({
+        field: { $in: ['a', 'b'] },
       });
     });
 
@@ -27,6 +33,10 @@ describe('LibSQLFilterTranslator', () => {
         field6: { $lte: 5 },
       };
       expect(translator.translate(filter)).toEqual(filter);
+    });
+
+    it('preserves multiple comparison operators', () => {
+      expect(translator.translate({ field: { $gt: 5, $lt: 10 } })).toEqual({ field: { $gt: 5, $lt: 10 } });
     });
 
     it('handles nested paths', () => {
@@ -78,6 +88,43 @@ describe('LibSQLFilterTranslator', () => {
         field: { $in: [] },
       });
     });
+
+    it('validates $elemMatch translation', () => {
+      expect(
+        translator.translate({
+          field: {
+            $elemMatch: {
+              $eq: 'value',
+            },
+          },
+        }),
+      ).toEqual({
+        field: {
+          $elemMatch: {
+            $eq: 'value',
+          },
+        },
+      });
+
+      // Test multiple conditions
+      expect(
+        translator.translate({
+          field: {
+            $elemMatch: {
+              $gt: 5,
+              $lt: 10,
+            },
+          },
+        }),
+      ).toEqual({
+        field: {
+          $elemMatch: {
+            $gt: 5,
+            $lt: 10,
+          },
+        },
+      });
+    });
   });
 
   // Array Operator Normalization
@@ -89,16 +136,6 @@ describe('LibSQLFilterTranslator', () => {
         }),
       ).toEqual({
         field: { $all: ['value'] },
-      });
-    });
-
-    it('normalizes single values for $elemMatch', () => {
-      expect(
-        translator.translate({
-          field: { $elemMatch: 'value' },
-        }),
-      ).toEqual({
-        field: { $elemMatch: ['value'] },
       });
     });
 
@@ -134,7 +171,7 @@ describe('LibSQLFilterTranslator', () => {
   });
 
   // Logical Operators
-  describe('logical operators', () => {
+  describe('Logical Operators', () => {
     it('handles logical operators', () => {
       const filter = {
         $and: [{ field1: { $eq: 'value1' } }, { field2: { $eq: 'value2' } }],
@@ -186,6 +223,26 @@ describe('LibSQLFilterTranslator', () => {
         }),
       ).toEqual({
         $nor: [{ field1: { $eq: 'value1' } }, { field2: { $gt: 100 } }],
+      });
+    });
+
+    it('handles $not operator with comparison', () => {
+      expect(
+        translator.translate({
+          field: { $not: { $eq: 'value' } },
+        }),
+      ).toEqual({
+        field: { $not: { $eq: 'value' } },
+      });
+    });
+
+    it('handles $not operator with regex', () => {
+      expect(
+        translator.translate({
+          field: { $not: { $regex: 'pattern' } },
+        }),
+      ).toEqual({
+        field: { $not: { $regex: 'pattern' } },
       });
     });
 
@@ -259,7 +316,7 @@ describe('LibSQLFilterTranslator', () => {
       });
     });
 
-    it('handles combination of $not with other logical operators', () => {
+    it('handles combination of all logical operators', () => {
       expect(
         translator.translate({
           $and: [
@@ -335,10 +392,26 @@ describe('LibSQLFilterTranslator', () => {
         'nonexistent.path': { $eq: 'value' },
       });
     });
+
+    it('handles logical operators with empty arrays and primitives', () => {
+      expect(
+        translator.translate({
+          $and: [],
+          $or: [{ field1: 'value1' }],
+          field2: true,
+          $nor: [],
+        }),
+      ).toEqual({
+        $and: [],
+        $or: [{ field1: { $eq: 'value1' } }],
+        field2: { $eq: true },
+        $nor: [],
+      });
+    });
   });
 
-  // Edge Cases
-  describe('edge cases', () => {
+  // Edge Cases and Special Values
+  describe('Edge Cases and Special Values', () => {
     it('handles null values', () => {
       expect(
         translator.translate({
@@ -384,10 +457,134 @@ describe('LibSQLFilterTranslator', () => {
         field: { $eq: '' },
       });
     });
+
+    it('handles empty arrays', () => {
+      expect(
+        translator.translate({
+          field: [],
+        }),
+      ).toEqual({
+        field: { $in: [] },
+      });
+    });
   });
 
-  // Operator Validation
-  describe('operator validation', () => {
+  // Complex Filter Structures
+  describe('Complex Filter Structures', () => {
+    it('handles nested logical operators with mixed conditions', () => {
+      expect(
+        translator.translate({
+          $or: [
+            {
+              $and: [{ category: 'value1' }, { price: { $gt: 90 } }, { active: true }],
+            },
+            {
+              $and: [{ category: 'value2' }, { tags: { $exists: true } }, { price: { $lt: 30 } }],
+            },
+          ],
+        }),
+      ).toEqual({
+        $or: [
+          {
+            $and: [{ category: { $eq: 'value1' } }, { price: { $gt: 90 } }, { active: { $eq: true } }],
+          },
+          {
+            $and: [{ category: { $eq: 'value2' } }, { tags: { $exists: true } }, { price: { $lt: 30 } }],
+          },
+        ],
+      });
+    });
+
+    it('handles multiple logical operators at root level', () => {
+      expect(
+        translator.translate({
+          $and: [{ category: 'electronics' }],
+          $or: [{ price: { $lt: 100 } }, { price: { $gt: 20 } }],
+        }),
+      ).toEqual({
+        $and: [{ category: { $eq: 'electronics' } }],
+        $or: [{ price: { $lt: 100 } }, { price: { $gt: 20 } }],
+      });
+    });
+
+    it('handles empty conditions in logical operators', () => {
+      expect(
+        translator.translate({
+          $and: [],
+          category: 'electronics',
+        }),
+      ).toEqual({
+        $and: [],
+        category: { $eq: 'electronics' },
+      });
+    });
+
+    it('handles deeply nested metadata paths', () => {
+      expect(
+        translator.translate({
+          'level1.level2.level3': 'deep value',
+        }),
+      ).toEqual({
+        'level1.level2.level3': { $eq: 'deep value' },
+      });
+    });
+
+    it('handles non-existent nested paths', () => {
+      expect(
+        translator.translate({
+          'nonexistent.path': 'value',
+        }),
+      ).toEqual({
+        'nonexistent.path': { $eq: 'value' },
+      });
+    });
+  });
+
+  // Array Operator Normalization
+  describe('Array Operator Normalization', () => {
+    it('normalizes single values for $all', () => {
+      expect(
+        translator.translate({
+          field: { $all: 'value' },
+        }),
+      ).toEqual({
+        field: { $all: ['value'] },
+      });
+    });
+
+    it('normalizes single values for $in', () => {
+      expect(
+        translator.translate({
+          field: { $in: 'value' },
+        }),
+      ).toEqual({
+        field: { $in: ['value'] },
+      });
+    });
+
+    it('normalizes single values for $nin', () => {
+      expect(
+        translator.translate({
+          field: { $nin: 'value' },
+        }),
+      ).toEqual({
+        field: { $nin: ['value'] },
+      });
+    });
+
+    it('preserves arrays for array operators', () => {
+      expect(
+        translator.translate({
+          field: { $all: ['value1', 'value2'] },
+        }),
+      ).toEqual({
+        field: { $all: ['value1', 'value2'] },
+      });
+    });
+  });
+
+  // Operator Support Validation
+  describe('Operator Support Validation', () => {
     it('ensure all operator filters are supported', () => {
       const supportedFilters = [
         // Basic comparison operators
@@ -426,6 +623,8 @@ describe('LibSQLFilterTranslator', () => {
         { field: { $not: { $in: ['value1', 'value2'] } } },
         { field: { $not: { $gt: 100 } } },
         { field: { $not: { $lt: 50 } } },
+
+        { field: { $size: 1 } },
       ];
 
       supportedFilters.forEach(filter => {
@@ -433,6 +632,15 @@ describe('LibSQLFilterTranslator', () => {
       });
     });
 
+    it('throws error for $not if not an object', () => {
+      expect(() => translator.translate({ $not: 'value' })).toThrow();
+      expect(() => translator.translate({ $not: [{ field: 'value' }] })).toThrow();
+    });
+    it('throws error for $not if empty', () => {
+      expect(() => translator.translate({ $not: {} })).toThrow();
+    });
+
+    // Add tests for logical operator placement restrictions
     it('throws error when logical operators are used in field-level conditions', () => {
       // $and cannot be used in field conditions
       expect(() =>
@@ -479,6 +687,17 @@ describe('LibSQLFilterTranslator', () => {
               $nor: [{ field3: 'value3' }, { field4: 'value4' }],
             },
           ],
+        }),
+      ).not.toThrow();
+    });
+
+    it('allows $not in field-level conditions', () => {
+      // $not is allowed in field conditions
+      expect(() =>
+        translator.translate({
+          field1: { $not: { $eq: 'value1' } },
+          field2: { $not: { $in: ['value2', 'value3'] } },
+          field3: { $not: { $regex: 'pattern' } },
         }),
       ).not.toThrow();
     });
@@ -568,6 +787,43 @@ describe('LibSQLFilterTranslator', () => {
     it('validates empty $not conditions', () => {
       expect(() => translator.translate({ field: { $not: {} } })).toThrow();
       expect(() => translator.translate({ $not: {} })).toThrow();
+    });
+
+    it('throws error for non-logical operators at top level', () => {
+      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
+
+      invalidFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
+      });
+    });
+    it('allows logical operators at top level', () => {
+      const validFilters = [{ $and: [{ field: 'value' }] }, { $or: [{ field: 'value' }] }];
+
+      validFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).not.toThrow();
+      });
+    });
+
+    it('should throw error for direct regex patterns', () => {
+      const filter = {
+        field: /pattern/,
+      };
+      expect(() => translator.translate(filter)).toThrow();
+    });
+
+    it('validates $elemMatch requires an object with conditions', () => {
+      // Should throw for non-object values
+      expect(() =>
+        translator.translate({
+          field: { $elemMatch: 'value' },
+        }),
+      ).toThrow('$elemMatch requires an object with conditions');
+
+      expect(() =>
+        translator.translate({
+          field: { $elemMatch: ['value'] },
+        }),
+      ).toThrow('$elemMatch requires an object with conditions');
     });
   });
 
