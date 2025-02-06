@@ -25,8 +25,8 @@ Array Operators:
   Example: { "category": { "$in": ["electronics", "books"] } }
 - $nin: Does not match any value in array
   Example: { "category": { "$nin": ["electronics", "books"] } }
-- $all: Matches all values in array
-  Example: { "tags": { "$all": ["premium", "new"] } }
+- $all: Match all values in array
+  Example: { "tags": { "$all": ["premium", "sale"] } }
 
 Logical Operators:
 - $and: Logical AND (can be implicit or explicit)
@@ -37,10 +37,12 @@ Logical Operators:
 - $not: Logical NOT
   Example: { "$not": { "category": "electronics" } }
 
-Special Operators:
+Element Operators:
 - $exists: Check if field exists
-  Example: { "description": { "$exists": true } }
-- $size: Check array length
+  Example: { "rating": { "$exists": true } }
+
+Special Operators:
+- $size: Array length check
   Example: { "tags": { "$size": 2 } }
 
 Restrictions:
@@ -64,6 +66,7 @@ Example Complex Query:
     { "category": { "$in": ["electronics", "computers"] } },
     { "price": { "$gte": 100, "$lte": 1000 } },
     { "tags": { "$all": ["premium"] } },
+    { "rating": { "$exists": true, "$gt": 4 } },
     { "$or": [
       { "stock": { "$gt": 0 } },
       { "preorder": true }
@@ -95,7 +98,7 @@ Array Operators:
   Example: { "category": { "$nin": ["electronics", "books"] } }
 
 Logical Operators:
-- $and: Logical AND (implicit when using multiple conditions)
+- $and: Logical AND
   Example: { "$and": [{ "price": { "$gt": 100 } }, { "category": "electronics" }] }
 - $or: Logical OR
   Example: { "$or": [{ "price": { "$lt": 50 } }, { "category": "books" }] }
@@ -105,7 +108,7 @@ Restrictions:
 - Element operators are not supported
 - Only $and and $or logical operators are supported
 - Nested fields are supported using dot notation
-- Multiple conditions on the same field must use $and
+- Multiple conditions on the same field are supported with both implicit and explicit $and
 - Empty arrays in $in/$nin will return no results
 - If multiple top-level fields exist, they're wrapped in $and
 - Only logical operators ($and, $or) can be used at the top level
@@ -149,6 +152,10 @@ Array Operators:
   Example: { "category": { "$in": ["electronics", "books"] } }
 - $nin: Does not match any value in array
   Example: { "category": { "$nin": ["electronics", "books"] } }
+- $all: Match all values in array
+  Example: { "tags": { "$all": ["premium", "sale"] } }
+- $elemMatch: Match array elements that meet all specified conditions
+  Example: { "items": { "$elemMatch": { "price": { "$gt": 100 } } } }
 - $contains: Check if array contains value
   Example: { "tags": { "$contains": "premium" } }
 
@@ -157,10 +164,16 @@ Logical Operators:
   Example: { "$and": [{ "price": { "$gt": 100 } }, { "category": "electronics" }] }
 - $or: Logical OR
   Example: { "$or": [{ "price": { "$lt": 50 } }, { "category": "books" }] }
+- $not: Logical NOT
+  Example: { "$not": { "category": "electronics" } }
 - $nor: Logical NOR
   Example: { "$nor": [{ "price": { "$lt": 50 } }, { "category": "books" }] }
 
-Other Operators:
+Element Operators:
+- $exists: Check if field exists
+  Example: { "rating": { "$exists": true } }
+
+Special Operators:
 - $size: Array length check
   Example: { "tags": { "$size": 2 } }
 
@@ -168,11 +181,11 @@ Restrictions:
 - Regex patterns are not supported
 - Direct RegExp patterns will throw an error
 - Nested fields are supported using dot notation
-- Multiple conditions on the same field are supported
+- Multiple conditions on the same field are supported with both implicit and explicit $and
 - Array operations work on array fields only
 - Basic operators handle array values as JSON strings
 - Empty arrays in conditions are handled gracefully
-- Only logical operators ($and, $or, $nor) can be used at the top level
+- Only logical operators ($and, $or, $not, $nor) can be used at the top level
 - All other operators must be used within a field condition
   Valid: { "field": { "$gt": 100 } }
   Valid: { "$and": [...] }
@@ -184,9 +197,10 @@ Example Complex Query:
   "$and": [
     { "category": { "$in": ["electronics", "computers"] } },
     { "price": { "$gte": 100, "$lte": 1000 } },
-    { "tags": { "$contains": "premium" } },
+    { "tags": { "$all": ["premium", "sale"] } },
+    { "items": { "$elemMatch": { "price": { "$gt": 50 }, "inStock": true } } },
     { "$or": [
-      { "inStock": true },
+      { "stock": { "$gt": 0 } },
       { "preorder": true }
     ]}
   ]
@@ -214,32 +228,43 @@ Array Operators:
   Example: { "category": { "$in": ["electronics", "books"] } }
 - $nin: Does not match any value in array
   Example: { "category": { "$nin": ["electronics", "books"] } }
+- $all: Match all values in array
+  Example: { "tags": { "$all": ["premium", "sale"] } }
+- $elemMatch: Match array elements that meet all specified conditions
+  Example: { "items": { "$elemMatch": { "price": { "$gt": 100 } } } }
 - $contains: Check if array contains value
   Example: { "tags": { "$contains": "premium" } }
 
 Logical Operators:
-- $and: Logical AND (implicit when using multiple conditions)
+- $and: Logical AND
   Example: { "$and": [{ "price": { "$gt": 100 } }, { "category": "electronics" }] }
 - $or: Logical OR
   Example: { "$or": [{ "price": { "$lt": 50 } }, { "category": "books" }] }
+- $not: Logical NOT
+  Example: { "$not": { "category": "electronics" } }
 - $nor: Logical NOR
   Example: { "$nor": [{ "price": { "$lt": 50 } }, { "category": "books" }] }
 
-Other Operators:
+Element Operators:
+- $exists: Check if field exists
+  Example: { "rating": { "$exists": true } }
+
+Special Operators:
 - $size: Array length check
   Example: { "tags": { "$size": 2 } }
 - $regex: Pattern matching (PostgreSQL regex syntax)
   Example: { "name": { "$regex": "^iphone" } }
+- $options: Regex options (used with $regex)
+  Example: { "name": { "$regex": "iphone", "$options": "i" } }
 
 Restrictions:
 - Direct RegExp patterns are not supported, use $regex operator
 - Nested fields are supported using dot notation
-- Multiple conditions on the same field are supported
+- Multiple conditions on the same field are supported with both implicit and explicit $and
 - Array operations work on array fields only
 - Regex patterns must follow PostgreSQL syntax
-- Basic operators can handle array values as JSON strings
 - Empty arrays in conditions are handled gracefully
-- Only logical operators ($and, $or, $nor) can be used at the top level
+- Only logical operators ($and, $or, $not, $nor) can be used at the top level
 - All other operators must be used within a field condition
   Valid: { "field": { "$gt": 100 } }
   Valid: { "$and": [...] }
@@ -251,9 +276,10 @@ Example Complex Query:
   "$and": [
     { "category": { "$in": ["electronics", "computers"] } },
     { "price": { "$gte": 100, "$lte": 1000 } },
-    { "tags": { "$contains": "premium" } },
+    { "tags": { "$all": ["premium", "sale"] } },
+    { "items": { "$elemMatch": { "price": { "$gt": 50 }, "inStock": true } } },
     { "$or": [
-      { "name": { "$regex": "^iphone" } },
+      { "name": { "$regex": "^iphone", "$options": "i" } },
       { "description": { "$regex": ".*apple.*" } }
     ]}
   ]
@@ -291,22 +317,21 @@ Logical Operators:
 - $or: Logical OR
   Example: { "$or": [{ "price": { "$lt": 50 } }, { "category": "books" }] }
 
-Other Operators:
+Element Operators:
 - $exists: Check if field exists
   Example: { "rating": { "$exists": true } }
 
 Restrictions:
 - Regex patterns are not supported
-- Only $and and $or logical operators are supported
+- Only $and and $or logical operators are supported at the top level
 - Empty arrays in $in/$nin will return no results
 - A non-empty array is required for $all operator
 - Nested fields are supported using dot notation
 - Multiple conditions on the same field are supported with both implicit and explicit $and
 - At least one key-value pair is required in filter object
-- Empty objects and undefined values are treated as no filter (returns all results)
+- Empty objects and undefined values are treated as no filter
 - Invalid types in comparison operators will throw errors
-- Only logical operators ($and, $or) can be used at the top level
-- All other operators must be used within a field condition
+- All non-logical operators must be used within a field condition
   Valid: { "field": { "$gt": 100 } }
   Valid: { "$and": [...] }
   Invalid: { "$gt": 100 }
@@ -315,14 +340,14 @@ Restrictions:
 - $all operator requires non-empty array
 - Filters must have at least one key-value pair
 - Nested fields are supported using dot notation
-- $all operator is simulated using $and
 
 Example Complex Query:
 {
   "$and": [
     { "category": { "$in": ["electronics", "computers"] } },
     { "price": { "$gte": 100, "$lte": 1000 } },
-    { "tags": { "$all": ["premium"] } },
+    { "tags": { "$all": ["premium", "sale"] } },
+    { "rating": { "$exists": true, "$gt": 4 } },
     { "$or": [
       { "stock": { "$gt": 0 } },
       { "preorder": true }
@@ -361,12 +386,16 @@ Logical Operators:
 - $not: Logical NOT
   Example: { "$not": { "category": "electronics" } }
 
+Element Operators:
+- $exists: Check if field exists
+  Example: { "rating": { "$exists": true } }
+
 Special Operators:
-- $regex: Pattern matching (standard regex syntax)
+- $regex: Pattern matching
   Example: { "name": { "$regex": "iphone.*" } }
 - $count: Array length/value count
   Example: { "tags": { "$count": { "$gt": 2 } } }
-- $geo: Geographical filters
+- $geo: Geographical filters (supports radius, box, polygon)
   Example: {
     "location": {
       "$geo": {
@@ -376,10 +405,10 @@ Special Operators:
       }
     }
   }
-- $hasId: Filter by document IDs
+- $hasId: Match specific document IDs
   Example: { "$hasId": ["doc1", "doc2"] }
 - $hasVector: Check vector existence
-  Example: { "$hasVector": true }
+  Example: { "$hasVector": "" }
 - $datetime: RFC 3339 datetime range
   Example: {
     "created_at": {
@@ -397,7 +426,7 @@ Special Operators:
   Example: { "array": { "$empty": true } }
 - $nested: Nested object filters
   Example: {
-    "items": {
+    "items[]": {
       "$nested": {
         "price": { "$gt": 100 },
         "stock": { "$gt": 0 }
@@ -406,20 +435,22 @@ Special Operators:
   }
 
 Restrictions:
-- Direct RegExp patterns are not supported, use $regex operator
-- Nested fields are supported using dot notation
-- Geo filtering requires specific format for radius, box, or polygon
-- Datetime values must be in RFC 3339 format
-- Array operations support nested field queries
-- Empty arrays in conditions are handled gracefully
-- Multiple conditions on same field use implicit AND
-- Only logical operators ($and, $or, $not) and special operators ($hasId, $hasVector) can be used at the top level
+- Only logical operators ($and, $or, $not) and collection operators ($hasId, $hasVector) can be used at the top level
 - All other operators must be used within a field condition
   Valid: { "field": { "$gt": 100 } }
   Valid: { "$and": [...] }
   Valid: { "$hasId": [...] }
   Invalid: { "$gt": 100 }
-  Invalid: { "$regex": "pattern" }
+- Nested fields are supported using dot notation
+- Array fields with nested objects use [] suffix: "items[]"
+- Geo filtering requires specific format for radius, box, or polygon
+- Datetime values must be in RFC 3339 format
+- Empty arrays in conditions are handled as empty values
+- Null values are handled with $null operator
+- Empty values are handled with $empty operator
+- $regex uses standard regex syntax
+- $count can only be used with numeric comparison operators
+- $nested requires an object with conditions
 
 Example Complex Query:
 {
@@ -433,9 +464,22 @@ Example Complex Query:
         "radius": 5000
       }
     }},
+    { "items[]": {
+      "$nested": {
+        "price": { "$gt": 50 },
+        "stock": { "$gt": 0 }
+      }
+    }},
+    { "created_at": {
+      "$datetime": {
+        "range": {
+          "gt": "2024-01-01T00:00:00Z"
+        }
+      }
+    }},
     { "$or": [
-      { "stock": { "$gt": 0 } },
-      { "preorder": true }
+      { "status": { "$ne": "discontinued" } },
+      { "clearance": true }
     ]}
   ]
 }`;
@@ -464,8 +508,6 @@ Array Operators:
   Example: { "category": { "$nin": ["electronics", "books"] } }
 - $all: Matches all values in array
   Example: { "tags": { "$all": ["premium", "new"] } }
-- $contains: Check if array contains value
-  Example: { "tags": { "$contains": "premium" } }
 
 Logical Operators:
 - $and: Logical AND (implicit when using multiple conditions)
@@ -477,26 +519,30 @@ Logical Operators:
 - $nor: Logical NOR
   Example: { "$nor": [{ "price": { "$lt": 50 } }, { "category": "books" }] }
 
-Other Operators:
-- $regex: Pattern matching using glob syntax (only as operator, not direct RegExp)
-  Example: { "name": { "$regex": "iphone*" } }  // Correct
-  Example: { "name": /iphone.*/ }               // Not supported
+Element Operators:
 - $exists: Check if field exists
   Example: { "rating": { "$exists": true } }
 
+Special Operators:
+- $regex: Pattern matching using glob syntax (only as operator, not direct RegExp)
+  Example: { "name": { "$regex": "iphone*" } }
+- $contains: Check if array/string contains value
+  Example: { "tags": { "$contains": "premium" } }
+
 Restrictions:
 - Null/undefined values are not supported in any operator
-- Empty arrays are supported only for $in/$nin operators
-- Multiple conditions on the same field are combined with AND
+- Empty arrays are only supported in $in/$nin operators
+- Direct RegExp patterns are not supported, use $regex with glob syntax
 - Nested fields are supported using dot notation
-- Direct RegExp patterns are not supported, use $regex operator instead
-- String values with quotes will be properly escaped
+- Multiple conditions on same field are combined with AND
+- String values with quotes are automatically escaped
 - Only logical operators ($and, $or, $not, $nor) can be used at the top level
 - All other operators must be used within a field condition
   Valid: { "field": { "$gt": 100 } }
   Valid: { "$and": [...] }
   Invalid: { "$gt": 100 }
-  Invalid: { "$regex": "pattern" }
+- $regex uses glob syntax (*, ?) not standard regex patterns
+- $contains works on both arrays and string fields
 
 Example Complex Query:
 {
@@ -505,6 +551,7 @@ Example Complex Query:
     { "price": { "$gt": 100, "$lt": 1000 } },
     { "tags": { "$all": ["premium", "new"] } },
     { "name": { "$regex": "iphone*" } },
+    { "description": { "$contains": "latest" } },
     { "$or": [
       { "brand": "Apple" },
       { "rating": { "$gte": 4.5 } }
@@ -538,6 +585,7 @@ Array Operators:
 Restrictions:
 - Regex patterns are not supported
 - Logical operators are not supported
+- Element operators are not supported
 - Fields must have a flat structure, as nested fields are not supported
 - Multiple conditions on the same field are supported
 - Empty arrays in $in/$nin will return no results
