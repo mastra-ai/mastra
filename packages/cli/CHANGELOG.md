@@ -1,5 +1,17 @@
 # mastra
 
+## 0.2.0-alpha.143
+
+### Patch Changes
+
+- 82a6d53: better create-mastra tsconfig, better error for mastra server agent stream
+- Updated dependencies [8151f44]
+- Updated dependencies [e897f1c]
+- Updated dependencies [82a6d53]
+- Updated dependencies [3700be1]
+  - @mastra/core@0.2.0-alpha.90
+  - @mastra/deployer@0.1.0-alpha.36
+
 ## 0.2.0-alpha.142
 
 ### Patch Changes

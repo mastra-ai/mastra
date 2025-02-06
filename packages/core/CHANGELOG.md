@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.2.0-alpha.90
+
+### Patch Changes
+
+- 8151f44: Added \_\_registerPrimitives to model.ts
+- e897f1c: Eval change
+- 3700be1: Added helpful error when using vector with Memory class - error now contains embedding option example
+
 ## 0.2.0-alpha.89
 
 ### Patch Changes
