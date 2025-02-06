@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.2.0-alpha.91
+
+### Patch Changes
+
+- 2017553: Added fallback title when calling createThread() with no title - this is needed as storage db schemas mark title as non-null
+
 ## 0.2.0-alpha.90
 
 ### Patch Changes

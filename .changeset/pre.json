@@ -110,7 +110,8 @@
     "examples-workflow-with-separate-steps": "0.0.1-alpha.2",
     "examples-yc-directory": "1.0.1-alpha.2",
     "@mastra/memory-integration-tests": "0.0.0",
-    "memory-with-context": "0.0.1-alpha.2"
+    "memory-with-context": "0.0.1-alpha.2",
+    "memory-todo-agent": "0.0.1-alpha.2"
   },
   "changesets": [
     "afraid-papayas-shake",
@@ -329,6 +330,7 @@
     "shaggy-donkeys-happen",
     "shiny-cameras-brake",
     "short-dots-sniff",
+    "shy-doors-compare",
     "silent-dancers-happen",
     "silver-bats-smell",
     "silver-dancers-rush",
