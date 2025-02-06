@@ -53,11 +53,6 @@ export const createVectorQueryTool = ({
               })()
             : filter;
         }
-        //get fields in mastra instance if they are not defined. i want to see what is defined in the mastra instance
-        const definedFields = Object.entries(mastra)
-          .filter(([, value]) => value !== undefined)
-          .map(([key]) => key);
-        console.log('definedFields', definedFields);
         if (mastra.logger) {
           mastra.logger.debug('Using this filter and topK:', { queryFilter, topK });
         }

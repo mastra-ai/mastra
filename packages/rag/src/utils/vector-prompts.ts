@@ -4,6 +4,7 @@
  */
 
 export const UPSTASH_PROMPT = `When querying Upstash Vector, you can ONLY use the operators listed below. Any other operators will be rejected.
+Important: Don't just explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
 
 Basic Comparison Operators:
 - $eq: Exact match (default when using field: value)
@@ -75,6 +76,7 @@ Example Complex Query:
 }`;
 
 export const PINECONE_PROMPT = `When querying Pinecone, you can ONLY use the operators listed below. Any other operators will be rejected.
+Important: Don't just explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
 
 Basic Comparison Operators:
 - $eq: Exact match (default when using field: value)
@@ -117,6 +119,8 @@ Restrictions:
 - Nested fields are supported using dot notation
 - Multiple conditions on the same field are supported with both implicit and explicit $and
 - At least one key-value pair is required in filter object
+- Empty objects and undefined values are treated as no filter (returns all results)
+- Invalid types in comparison operators will throw errors
 - Only logical operators ($and, $or) can be used at the top level
 - All other operators must be used within a field condition
   Valid: { "field": { "$gt": 100 } }
@@ -138,6 +142,7 @@ Example Complex Query:
 }`;
 
 export const QDRANT_PROMPT = `When querying Qdrant, you can ONLY use the operators listed below. Any other operators will be rejected.
+Important: Don't just explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
 
 Basic Comparison Operators:
 - $eq: Exact match (default when using field: value)
@@ -238,6 +243,7 @@ Example Complex Query:
 }`;
 
 export const CHROMA_PROMPT = `When querying Chroma, you can ONLY use the operators listed below. Any other operators will be rejected.
+Important: Don't just explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
 
 Basic Comparison Operators:
 - $eq: Exact match (default when using field: value)
@@ -293,6 +299,7 @@ Example Complex Query:
 }`;
 
 export const ASTRA_PROMPT = `When querying Astra DB, you can ONLY use the operators listed below. Any other operators will be rejected.
+Important: Don't just explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
 
 Basic Comparison Operators:
 - $eq: Exact match (default when using field: value)
@@ -336,6 +343,8 @@ Restrictions:
 - Multiple conditions on the same field are supported with both implicit and explicit $and
 - Empty arrays in $in/$nin will return no results
 - A non-empty array is required for $all operator
+- Logical operators must contain field conditions
+- $not must be an object and non-empty
 - Only logical operators ($and, $or, $not) can be used at the top level
 - All other operators must be used within a field condition
   Valid: { "field": { "$gt": 100 } }
@@ -357,6 +366,7 @@ Example Complex Query:
 }`;
 
 export const PGVECTOR_PROMPT = `When querying PG Vector, you can ONLY use the operators listed below. Any other operators will be rejected.
+Important: Don't just explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
 
 Basic Comparison Operators:
 - $eq: Exact match (default when using field: value)
@@ -423,6 +433,7 @@ Example Complex Query:
 }`;
 
 export const VECTORIZE_PROMPT = `When querying Vectorize, you can ONLY use the operators listed below. Any other operators will be rejected.
+Important: Don't just explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
 
 Basic Comparison Operators:
 - $eq: Exact match (default when using field: value)
@@ -447,12 +458,18 @@ Array Operators:
 Restrictions:
 - Regex patterns are not supported
 - Logical operators are not supported
-- Nested fields are supported using dot notation
+- Fields must have a flat structure, as nested fields are not supported
 - Multiple conditions on the same field are supported
 - Empty arrays in $in/$nin will return no results
 - Filter keys cannot be longer than 512 characters
 - Filter keys cannot contain invalid characters ($, ", empty)
 - Filter size is limited to prevent oversized queries
+- Invalid types in operators return no results instead of throwing errors
+- Empty objects are accepted in filters
+- Metadata must use flat structure with dot notation (no nested objects)
+- Must explicitly create metadata indexes for filterable fields (limit 10 per index)
+- Can only effectively filter on indexed metadata fields
+- Metadata values can be strings, numbers, booleans, or homogeneous arrays
 - No operators can be used at the top level (no logical operators supported)
 - All operators must be used within a field condition
   Valid: { "field": { "$gt": 100 } }
@@ -467,6 +484,7 @@ Example Complex Query:
 }`;
 
 export const LIBSQL_PROMPT = `When querying LibSQL Vector, you can ONLY use the operators listed below. Any other operators will be rejected.
+Important: Don't just explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
 
 Basic Comparison Operators:
 - $eq: Exact match (default when using field: value)

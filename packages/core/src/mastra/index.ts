@@ -62,6 +62,7 @@ export class Mastra<
         logger = createLogger({ name: 'Mastra', level: levleOnEnv }) as unknown as TLogger;
       }
     }
+    this.logger = logger;
 
     /*
     Telemetry
@@ -213,8 +214,6 @@ export class Mastra<
         this.workflows[key] = workflow;
       });
     }
-
-    this.logger = logger;
     this.setLogger({ logger });
   }
 
