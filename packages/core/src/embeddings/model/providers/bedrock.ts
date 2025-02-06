@@ -67,3 +67,53 @@ export async function embedMany(
     maxRetries,
   });
 }
+
+export class Embedder {
+  region: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  sessionToken: string;
+  model: BedrockEmbeddingModelNames;
+
+  constructor({
+    region = process.env.AWS_REGION || 'us-east-1',
+    accessKeyId = process.env.AWS_ACCESS_KEY_ID || '',
+    secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || '',
+    sessionToken = process.env.AWS_SESSION_TOKEN || '',
+    model = 'amazon.titan-embed-text-v1',
+  }: {
+    region?: string;
+    accessKeyId?: string;
+    secretAccessKey?: string;
+    sessionToken?: string;
+    model?: BedrockEmbeddingModelNames;
+  } = {}) {
+    this.region = region;
+    this.accessKeyId = accessKeyId;
+    this.secretAccessKey = secretAccessKey;
+    this.sessionToken = sessionToken;
+    this.model = model;
+  }
+
+  async embed(value: string, { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }) {
+    return embed(value, {
+      region: this.region,
+      accessKeyId: this.accessKeyId,
+      secretAccessKey: this.secretAccessKey,
+      sessionToken: this.sessionToken,
+      model: this.model,
+      maxRetries,
+    });
+  }
+
+  async embedMany(values: string[], { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }) {
+    return embedMany(values, {
+      region: this.region,
+      accessKeyId: this.accessKeyId,
+      secretAccessKey: this.secretAccessKey,
+      sessionToken: this.sessionToken,
+      model: this.model,
+      maxRetries,
+    });
+  }
+}
