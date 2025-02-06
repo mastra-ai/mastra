@@ -188,6 +188,7 @@ export class Agent<
           threadId,
           resourceId,
           title,
+          memoryConfig,
         });
       } else {
         thread = await memory.getThreadById({ threadId });
@@ -200,6 +201,7 @@ export class Agent<
             threadId,
             resourceId,
             title,
+            memoryConfig,
           });
         }
       }
@@ -284,9 +286,26 @@ export class Agent<
           runId,
         });
 
+        const memorySystemMessage =
+          memory && threadId ? await memory.getSystemMessage({ threadId, memoryConfig }) : null;
+
         return {
           threadId: thread.id,
-          messages: [...memoryMessages, ...newMessages],
+          messages: [
+            {
+              role: 'system',
+              content: `\n
+             Analyze this message to determine if the user is referring to a previous conversation with the LLM.
+             Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation.
+             Extract any date ranges mentioned in the user message that could help identify the previous chat.
+             Return dates in ISO format.
+             If no specific dates are mentioned but time periods are (like "last week" or "past month"), calculate the appropriate date range.
+             For the end date, return the date 1 day after the end of the time period.
+             Today's date is ${new Date().toISOString()} and the time is ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })} ${memorySystemMessage ? `\n\n${memorySystemMessage}` : ''}`,
+            } as any,
+            ...memoryMessages,
+            ...newMessages,
+          ],
         };
       }
 

@@ -1,5 +1,18 @@
 # @mastra/store-pg
 
+## 0.0.0-alpha.8
+
+### Patch Changes
+
+- fb49659: Fixed npm publish script - dist directories were not being published
+
+## 0.0.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [27275c9]
+  - @mastra/core@0.2.0-alpha.89
+
 ## 0.0.0-alpha.6
 
 ### Patch Changes

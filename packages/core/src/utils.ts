@@ -94,3 +94,116 @@ export function jsonSchemaToModel(jsonSchema: Record<string, any>): ZodObject<an
 
   return z.object(zodSchema);
 }
+
+/**
+ * Deep merges two objects, recursively merging nested objects and arrays
+ */
+export function deepMerge<T extends object = object>(target: T, source: Partial<T>): T {
+  const output = { ...target };
+
+  if (!source) return output;
+
+  Object.keys(source).forEach(key => {
+    const targetValue = output[key as keyof T];
+    const sourceValue = source[key as keyof T];
+
+    if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
+      (output as any)[key] = sourceValue;
+    } else if (
+      sourceValue instanceof Object &&
+      targetValue instanceof Object &&
+      !Array.isArray(sourceValue) &&
+      !Array.isArray(targetValue)
+    ) {
+      (output as any)[key] = deepMerge(targetValue, sourceValue as T);
+    } else if (sourceValue !== undefined) {
+      (output as any)[key] = sourceValue;
+    }
+  });
+
+  return output;
+}
+
+export interface TagMaskOptions {
+  /** Called when masking begins */
+  onStart?: () => void;
+  /** Called when masking ends */
+  onEnd?: () => void;
+  /** Called for each chunk that is masked */
+  onMask?: (chunk: string) => void;
+}
+
+/**
+ * Transforms a stream by masking content between XML tags.
+ * @param stream Input stream to transform
+ * @param tag Tag name to mask between (e.g. for <foo>...</foo>, use 'foo')
+ * @param options Optional configuration for masking behavior
+ */
+export async function* maskStreamTags(
+  stream: AsyncIterable<string>,
+  tag: string,
+  options: TagMaskOptions = {},
+): AsyncIterable<string> {
+  const { onStart, onEnd, onMask } = options;
+  const openTag = `<${tag}>`;
+  const closeTag = `</${tag}>`;
+
+  let buffer = '';
+  let fullContent = '';
+  let isMasking = false;
+  let isBuffering = false;
+
+  // Helper to check if text starts with pattern (ignoring whitespace)
+  // When checking partial tags: startsWith(buffer, openTag) checks if buffer could be start of tag
+  // When checking full tags: startsWith(chunk, openTag) checks if chunk starts with full tag
+  const startsWith = (text: string, pattern: string) => text.trim().startsWith(pattern.trim());
+
+  for await (const chunk of stream) {
+    fullContent += chunk;
+
+    if (isBuffering) buffer += chunk;
+
+    const chunkHasTag = startsWith(chunk, openTag);
+    const bufferHasTag = !chunkHasTag && isBuffering && startsWith(openTag, buffer);
+
+    // Check if we should start masking chunks
+    if (!isMasking && (chunkHasTag || bufferHasTag)) {
+      isMasking = true;
+      isBuffering = false;
+      buffer = '';
+      onStart?.();
+    }
+
+    // Check if we should start buffering (looks like part of the opening tag but it's not the full <tag> yet eg <ta - could be <table> but we don't know yet)
+    if (!isMasking && !isBuffering && startsWith(openTag, chunk) && chunk.trim() !== '') {
+      isBuffering = true;
+      buffer += chunk;
+      continue;
+    }
+
+    // We're buffering, need to check again if our buffer has deviated from the opening <tag> eg <tag2>
+    if (isBuffering && buffer && !startsWith(openTag, buffer)) {
+      yield buffer;
+      buffer = '';
+      isBuffering = false;
+      continue;
+    }
+
+    // Check if we should stop masking chunks (since the content includes the closing </tag>)
+    if (isMasking && fullContent.trim().includes(closeTag)) {
+      onMask?.(chunk);
+      onEnd?.();
+      isMasking = false;
+      continue;
+    }
+
+    // We're currently masking chunks inside a <tag>
+    if (isMasking) {
+      onMask?.(chunk);
+      continue;
+    }
+
+    // default yield the chunk
+    yield chunk;
+  }
+}
