@@ -64,7 +64,7 @@ export function Chat({ agentId, initialMessages = [], agentName, threadId, memor
           ...prev.slice(0, -1),
           {
             ...prev[prev.length - 1],
-            content: error.error,
+            content: error.message,
             isError: true,
           },
         ]);
@@ -87,12 +87,14 @@ export function Chat({ agentId, initialMessages = [], agentName, threadId, memor
         const chunk = decoder.decode(value);
         buffer += chunk;
 
-        if (buffer?.toLocaleLowerCase()?.includes('an error occurred')) {
+        const errorMatch = buffer.match(/\d+:"([^"]*Error[^"]*)"/);
+        if (errorMatch) {
+          const errorMessage = errorMatch[1].replace(/^An error occurred while processing your request\.\s*/, '');
           setMessages(prev => [
             ...prev.slice(0, -1),
             {
               ...prev[prev.length - 1],
-              content: 'An error occurred while processing your request.',
+              content: errorMessage,
               isError: true,
             },
           ]);
@@ -107,13 +109,12 @@ export function Chat({ agentId, initialMessages = [], agentName, threadId, memor
         }
         buffer = '';
       }
-    } catch (error) {
-      console.error('Error:', error);
+    } catch (error: any) {
       setMessages(prev => [
         ...prev.slice(0, -1),
         {
           ...prev[prev.length - 1],
-          content: 'An error occurred while processing your request.',
+          content: error?.message || `An error occurred while processing your request.`,
           isError: true,
         },
       ]);
