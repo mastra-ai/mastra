@@ -62,12 +62,14 @@ export function MastraRuntimeProvider({
           const chunk = decoder.decode(value);
           buffer += chunk;
 
-          if (buffer?.toLowerCase()?.includes('an error occurred')) {
+          const errorMatch = buffer.match(/\d+:"([^"]*Error[^"]*)"/);
+          if (errorMatch) {
+            const errorMessage = errorMatch[1].replace(/^An error occurred while processing your request\.\s*/, '');
             setMessages(currentConversation => [
               ...currentConversation,
               {
                 role: 'assistant',
-                content: [{ type: 'text', text: 'An error occurred while processing your request.' }],
+                content: [{ type: 'text', text: errorMessage }],
                 isError: true,
               },
             ]);
