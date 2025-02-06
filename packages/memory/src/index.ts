@@ -245,7 +245,11 @@ export class Memory extends MastraMemory {
       this.threadConfig.workingMemory.template ||
       this.defaultWorkingMemoryTemplate;
 
-    return memory;
+    // compress working memory because LLMs will generate faster without the spaces and line breaks
+    return memory
+      .split(`>\n`)
+      .map(c => c.trim()) // remove extra whitespace
+      .join(`>`); // and linebreaks
   }
 
   private async saveWorkingMemory(messages: MessageType[]) {
@@ -310,31 +314,16 @@ export class Memory extends MastraMemory {
 
   public defaultWorkingMemoryTemplate = `
 <user>
-  <personal>
-    <first_name></first_name>
-    <last_name></last_name>
-    <location></location>
-    <occupation></occupation>
-  </personal>
-
-  <preferences>
-    <interests></interests>
-    <goals></goals>
-    <communication_style></communication_style>
-  </preferences>
-
-  <context>
-    <events></events>
-    <facts></facts>
-    <projects></projects>
-    <lists></lists>
-  </context>
+  <first_name></first_name>
+  <last_name></last_name>
+  <location></location>
+  <occupation></occupation>
+  <interests></interests>
+  <goals></goals>
+  <events></events>
+  <facts></facts>
+  <projects></projects>
 </user>
-
-<assistant_persona>
-  <current_context></current_context>
-  <reminders></reminders>
-</assistant_persona>
 `;
 
   private getWorkingMemoryWithInstruction(workingMemoryBlock: string) {
