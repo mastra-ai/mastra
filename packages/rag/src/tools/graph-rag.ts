@@ -66,6 +66,7 @@ export const createGraphRAGTool = ({
               })()
             : filter;
         }
+        console.log('Using this filter and topK:', { queryFilter, topK });
         if (mastra.logger) {
           mastra.logger.debug('Using this filter and topK:', { queryFilter, topK });
         }
