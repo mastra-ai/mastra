@@ -6,6 +6,7 @@ import Readline from 'readline';
 import 'dotenv/config';
 
 import { mastra } from './mastra/index';
+import { maskStreamTags } from '@mastra/core/utils';
 
 const agent = mastra.getAgent('memoryAgent');
 
@@ -16,97 +17,15 @@ console.log(threadId);
 
 const resourceId = 'SOME_USER_ID';
 
-interface StreamMaskerOptions {
-  /** Whether masking is currently enabled */
-  shouldMask: boolean;
-  /** The XML/HTML-like tag name to mask content between */
-  tagName: string;
-  /** Called when masking begins */
-  onStart?: () => void;
-  /** Called when masking ends */
-  onEnd?: () => void;
-  /** Called for each chunk that is masked, with the masked content */
-  onMask?: (chunk: string) => void;
-}
 
-/**
- * Creates a transform function that masks content between XML/HTML-like tags in a stream.
- * @param options Configuration options for the stream masker
- * @returns An async function that transforms an AsyncIterable stream
- */
-function makeStreamMasker(options: StreamMaskerOptions) {
-  const { shouldMask, tagName, onStart, onEnd, onMask } = options;
-  const openTag = `<${tagName}>`;
-  const closeTag = `</${tagName}>`;
-
-  return async function* transform(stream: AsyncIterable<string>): AsyncIterable<string> {
-    let buffer = '';
-    let fullContent = '';
-    let isMasking = false;
-    let isBuffering = false;
-
-    for await (const chunk of stream) {
-      fullContent += chunk;
-
-      if (!shouldMask) {
-        yield chunk;
-        continue;
-      }
-
-      // Check if we should start masking
-      if (isBuffering && buffer.trim().includes(openTag)) {
-        isMasking = true;
-        isBuffering = false;
-        buffer = '';
-        onStart?.();
-        continue;
-      }
-
-      // Check if buffered content isn't actually a tag
-      if (isBuffering && buffer && !openTag.startsWith(buffer.trim())) {
-        isBuffering = false;
-        isMasking = false;
-        const content = buffer;
-        buffer = '';
-        yield content;
-        continue;
-      }
-
-      // Start buffering if we see the start of an open tag
-      if (!isMasking && !isBuffering && openTag.startsWith(chunk)) {
-        isBuffering = true;
-      }
-
-      // Add to buffer if we're buffering
-      if (isBuffering) {
-        buffer += chunk;
-        continue;
-      }
-
-      // Handle the chunk based on masking state
-      if (isMasking) {
-        onMask?.(chunk);
-      } else {
-        yield chunk;
-      }
-
-      // Check if we should stop masking after processing this chunk
-      if (isMasking && fullContent.trim().endsWith(closeTag)) {
-        onEnd?.();
-        isMasking = false;
-      }
-    }
-  };
-}
 
 async function logRes(res: Awaited<ReturnType<typeof agent.stream>>) {
   console.log(`\n👨‍🍳 Agent:`);
   let message = '';
 
   const memorySpinner = ora('saving memory');
-  const maskStream = makeStreamMasker({
-    shouldMask: true,
-    tagName: 'working_memory',
+
+  const maskedStream = maskStreamTags(res.textStream, 'working_memory', {
     onStart: () => memorySpinner.start(),
     onEnd: () => {
       if (memorySpinner.isSpinning) {
@@ -116,7 +35,7 @@ async function logRes(res: Awaited<ReturnType<typeof agent.stream>>) {
     },
   });
 
-  for await (const chunk of maskStream(res.textStream)) {
+  for await (const chunk of maskedStream) {
     process.stdout.write(chunk);
   }
 
