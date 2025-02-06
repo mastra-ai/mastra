@@ -181,6 +181,12 @@ export class Memory extends MastraMemory {
   }
 
   async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+    const workingMemory = await this.saveWorkingMemory(messages);
+
+    if (workingMemory) {
+      this.mutateMessagesToHideWorkingMemory(messages, workingMemory);
+    }
+
     if (this.vector) {
       await this.vector.createIndex('memory_messages', 1536);
       for (const message of messages) {
@@ -196,19 +202,13 @@ export class Memory extends MastraMemory {
       }
     }
 
-    const workingMemory = await this.saveWorkingMemory(messages);
-
-    if (workingMemory) {
-      this.mutateMessagesToHideWorkingMemory(messages, workingMemory);
-    }
-
     return this.storage.__saveMessages({ messages });
   }
 
   protected mutateMessagesToHideWorkingMemory(messages: MessageType[], workingMemory: string) {
     const latestMessage = messages[messages.length - 1];
     if (typeof latestMessage?.content === `string`) {
-      latestMessage.content = latestMessage.content.replace(workingMemory, ``);
+      latestMessage.content = latestMessage.content.replace(`<working_memory>${workingMemory}</working_memory>`, ``);
     } else if (Array.isArray(latestMessage?.content)) {
       for (const content of latestMessage.content) {
         if (content.type === `text`) {
