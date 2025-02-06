@@ -88,6 +88,51 @@ describe('Working Memory Tests', () => {
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
   });
 
+  it('should handle LLM responses with working memory', async () => {
+    const messages = [
+      createTestMessage(thread.id, 'Hi, my name is Tyler'),
+      {
+        id: randomUUID(),
+        threadId: thread.id,
+        role: 'assistant',
+        type: 'text',
+        content:
+          "Hello Tyler! I'll remember your name.\n<working_memory><user><first_name>Tyler</first_name></user></working_memory>",
+        createdAt: new Date(),
+      },
+      createTestMessage(thread.id, 'I live in San Francisco'),
+      {
+        id: randomUUID(),
+        threadId: thread.id,
+        role: 'assistant',
+        type: 'text',
+        content:
+          "Great city! I'll update my memory about you.\n<working_memory><user><first_name>Tyler</first_name><location>San Francisco</location></user></working_memory>",
+        createdAt: new Date(),
+      },
+    ];
+
+    await memory.saveMessages({ messages });
+
+    // Get the working memory
+    const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+    expect(workingMemory).toContain('<first_name>Tyler</first_name>');
+    expect(workingMemory).toContain('<location>San Francisco</location>');
+
+    // Verify the messages are saved without working memory tags
+    const remembered = await memory.rememberMessages({
+      threadId: thread.id,
+      config: { lastMessages: 10 },
+    });
+
+    // Check that the working memory was stripped from both assistant responses
+    const assistantMessages = remembered.messages.filter(m => m.role === 'assistant');
+    expect(assistantMessages[0].content).not.toContain('<working_memory>');
+    expect(assistantMessages[0].content).toContain('Hello Tyler!');
+    expect(assistantMessages[1].content).not.toContain('<working_memory>');
+    expect(assistantMessages[1].content).toContain('Great city!');
+  });
+
   it('should initialize with default working memory template', async () => {
     const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toContain('<user>');
