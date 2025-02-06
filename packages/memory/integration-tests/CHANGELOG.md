@@ -1,5 +1,13 @@
 # @mastra/memory-integration-tests
 
+## 0.0.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [fb49659]
+  - @mastra/store-pg@0.0.0-alpha.8
+  - @mastra/store-upstash@0.0.0-alpha.8
+
 ## 0.0.1-alpha.3
 
 ### Patch Changes
