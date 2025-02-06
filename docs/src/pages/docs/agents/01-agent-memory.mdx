@@ -364,6 +364,11 @@ Note that in most cases, you won't need to manage threads manually since the age
 
 Working memory is a powerful feature that allows agents to maintain persistent information across conversations, even with minimal context. This is particularly useful for remembering user preferences, personal details, or any other contextual information that should persist throughout interactions.
 
+Inspired by the working memory concept from the MemGPT whitepaper, our implementation improves upon it in several key ways:
+- No extra roundtrips or tool calls required
+- Full support for streaming messages
+- Seamless integration with the agent's natural response flow
+
 #### How It Works
 
 Working memory operates through a system of XML tags and automatic updates:
