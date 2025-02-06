@@ -33,7 +33,7 @@ export function MastraRuntimeProvider({
     setIsRunning(true);
 
     try {
-      const agent = mastra.getAgent('weatherAgent');
+      const agent = mastra.getAgent('ycAgent');
       const response = await agent.stream({
         messages: [
           {
