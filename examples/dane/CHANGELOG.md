@@ -1,5 +1,12 @@
 # @mastra/dane
 
+## 0.0.2-alpha.114
+
+### Patch Changes
+
+- Updated dependencies [fb49659]
+  - @mastra/store-upstash@0.0.0-alpha.8
+
 ## 0.0.2-alpha.113
 
 ### Patch Changes
