@@ -16,110 +16,110 @@ console.log(threadId);
 
 const resourceId = 'SOME_USER_ID';
 
-// TODO: refactor and move this into core
-function makeStreamMasker({
-  shouldMask,
-  tagName,
-  onStartMasking,
-  onEndMasking,
-}: {
+interface StreamMaskerOptions {
+  /** Whether masking is currently enabled */
   shouldMask: boolean;
+  /** The XML/HTML-like tag name to mask content between */
   tagName: string;
-  onStartMasking?: () => void;
-  onEndMasking?: () => void;
-}) {
-  const tagToMask = `<${tagName}>`;
-  let bufferedMessage = ``;
-  let message = ``;
-  let chunksAreBeingMasked = false;
-  let messageIsBuffering = false;
+  /** Called when masking begins */
+  onStart?: () => void;
+  /** Called when masking ends */
+  onEnd?: () => void;
+  /** Called for each chunk that is masked, with the masked content */
+  onMask?: (chunk: string) => void;
+}
 
-  return {
-    shouldMask: () => shouldMask && (chunksAreBeingMasked || messageIsBuffering),
-    preWriteMessage: (chunk: string) => {
-      message += chunk;
-      let appendMsg = ``;
-      if (!shouldMask) return { appendMsg };
-      if (
-        messageIsBuffering &&
-        // and the buffered message includes the full opening tag
-        bufferedMessage.trim().includes(tagToMask)
-      ) {
-        chunksAreBeingMasked = true;
-        // clear the buffered message
-        bufferedMessage = ``;
-        messageIsBuffering = false;
-        // run on start callback
-        onStartMasking?.();
-        // don't do anything else
-        return {
-          appendMsg: ``,
-        };
-      } else if (
-        // if we're buffering chunks
-        messageIsBuffering &&
-        bufferedMessage.length > 0 &&
-        // and the buffered message diverges from the opening tag
-        // the buffered chunks are for something else, not the text we're masking
-        !tagToMask.startsWith(bufferedMessage.trim())
-      ) {
-        // return the buffered message
-        appendMsg += bufferedMessage;
-        process.stdout.write(bufferedMessage);
-        bufferedMessage = ``;
-        messageIsBuffering = false;
-        chunksAreBeingMasked = false;
-        // don't do anything else
-        return { appendMsg };
-      } else if (!chunksAreBeingMasked && !messageIsBuffering && tagToMask.startsWith(chunk)) {
-        messageIsBuffering = true;
+/**
+ * Creates a transform function that masks content between XML/HTML-like tags in a stream.
+ * @param options Configuration options for the stream masker
+ * @returns An async function that transforms an AsyncIterable stream
+ */
+function makeStreamMasker(options: StreamMaskerOptions) {
+  const { shouldMask, tagName, onStart, onEnd, onMask } = options;
+  const openTag = `<${tagName}>`;
+  const closeTag = `</${tagName}>`;
+
+  return async function* transform(stream: AsyncIterable<string>): AsyncIterable<string> {
+    let buffer = '';
+    let fullContent = '';
+    let isMasking = false;
+    let isBuffering = false;
+
+    for await (const chunk of stream) {
+      fullContent += chunk;
+
+      if (!shouldMask) {
+        yield chunk;
+        continue;
       }
 
-      if (messageIsBuffering) {
-        bufferedMessage += chunk;
+      // Check if we should start masking
+      if (isBuffering && buffer.trim().includes(openTag)) {
+        isMasking = true;
+        isBuffering = false;
+        buffer = '';
+        onStart?.();
+        continue;
       }
 
-      if (chunksAreBeingMasked && message.trim().endsWith(`</${tagName}>`)) {
-        onEndMasking?.();
-        setImmediate(() => {
-          chunksAreBeingMasked = false;
-        });
+      // Check if buffered content isn't actually a tag
+      if (isBuffering && buffer && !openTag.startsWith(buffer.trim())) {
+        isBuffering = false;
+        isMasking = false;
+        const content = buffer;
+        buffer = '';
+        yield content;
+        continue;
       }
 
-      return {
-        appendMsg,
-      };
-    },
+      // Start buffering if we see the start of an open tag
+      if (!isMasking && !isBuffering && openTag.startsWith(chunk)) {
+        isBuffering = true;
+      }
+
+      // Add to buffer if we're buffering
+      if (isBuffering) {
+        buffer += chunk;
+        continue;
+      }
+
+      // Handle the chunk based on masking state
+      if (isMasking) {
+        onMask?.(chunk);
+      } else {
+        yield chunk;
+      }
+
+      // Check if we should stop masking after processing this chunk
+      if (isMasking && fullContent.trim().endsWith(closeTag)) {
+        onEnd?.();
+        isMasking = false;
+      }
+    }
   };
 }
 
 async function logRes(res: Awaited<ReturnType<typeof agent.stream>>) {
   console.log(`\n👨‍🍳 Agent:`);
-  let message = ``;
+  let message = '';
 
   const memorySpinner = ora('saving memory');
-  const workingMemoryMasker = makeStreamMasker({
+  const maskStream = makeStreamMasker({
     shouldMask: true,
-    tagName: `working_memory`,
-    onStartMasking: () => memorySpinner.start(),
-    onEndMasking: () => {
+    tagName: 'working_memory',
+    onStart: () => memorySpinner.start(),
+    onEnd: () => {
       if (memorySpinner.isSpinning) {
         memorySpinner.succeed();
-        setImmediate(() => {
-          process.stdin.resume();
-        });
+        process.stdin.resume();
       }
     },
   });
 
-  for await (const chunk of res.textStream) {
-    const working = workingMemoryMasker.preWriteMessage(chunk);
-    if (working.appendMsg) message += working.appendMsg;
-    if (!workingMemoryMasker.shouldMask()) {
-      process.stdout.write(chunk);
-    }
-    message += chunk;
+  for await (const chunk of maskStream(res.textStream)) {
+    process.stdout.write(chunk);
   }
+
   return message;
 }
 
@@ -160,11 +160,6 @@ async function main() {
       await agent.stream(answer, {
         threadId,
         resourceId,
-        memoryOptions: {
-          workingMemory: {
-            enabled: false,
-          },
-        },
       }),
     );
   }
