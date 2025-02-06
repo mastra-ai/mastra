@@ -1,5 +1,4 @@
 import { type EmbeddingOptions } from '@mastra/core/embeddings';
-// import { FilterSchemaBuilder } from '@mastra/core/filter';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -9,7 +8,6 @@ import { vectorQuerySearch } from '../utils';
 export const createVectorQueryTool = ({
   vectorStoreName,
   indexName,
-  topK = 10,
   options,
   enableFilter = false,
   reranker,
@@ -19,43 +17,77 @@ export const createVectorQueryTool = ({
   vectorStoreName: string;
   indexName: string;
   options: EmbeddingOptions;
-  topK?: number;
   enableFilter?: boolean;
   reranker?: RerankConfig;
   id?: string;
   description?: string;
 }) => {
-  // const FilterCondition = FilterSchemaBuilder.createFilterSchema();
-
   const toolId = id || `VectorQuery ${vectorStoreName} ${indexName} Tool`;
   const toolDescription =
     description ||
-    `Fetches and combines the top ${topK} relevant chunks from the ${vectorStoreName} vector store using the ${indexName} index`;
+    `Retrieves relevant information from ${vectorStoreName} using ${indexName} index.
+
+    You MUST generate for each query:
+    1. topK: number of results to return
+        - Broad queries (overviews, lists): 10-15
+        - Specific queries: 3-5
+
+    2. filter: query filter (REQUIRED)
+        - Generate a filter that matches the query's keywords and intent
+        - Use appropriate operators
+        - Must be valid JSON string
+
+    User overrides:
+    - If valid topK/filter provided, use those
+    - If invalid/missing, you must generate appropriate values`;
+
+  console.log('toolId', toolId);
 
   return createTool({
     id: toolId,
     inputSchema: z.object({
-      queryText: z.string().describe('query text'),
+      queryText: z.string(),
+      topK: z.number(),
       filter: z.string(),
     }),
     outputSchema: z.object({
-      relevantContext: z.array(z.any()).describe('relevant context'),
+      relevantContext: z.any(),
     }),
     description: toolDescription,
-    execute: async ({ context: { queryText, filter }, mastra }) => {
+    execute: async ({ context: { queryText, topK, filter }, mastra }) => {
+      console.log('queryText', queryText);
+      console.log('topK', topK);
       console.log('filter', filter);
+      console.log('mastra', mastra);
       const vectorStore = mastra?.vectors?.[vectorStoreName];
+
+      console.log('vectorStore', vectorStore);
+      console.log('vectorStoreName', vectorStoreName);
 
       // Get relevant chunks from the vector database
       if (vectorStore) {
-        const queryFilter = enableFilter && filter ? filter : {};
-        console.log('queryFilter', queryFilter);
+        let queryFilter = {};
+        if (enableFilter) {
+          queryFilter = filter
+            ? (() => {
+                try {
+                  return JSON.parse(filter);
+                } catch {
+                  return filter;
+                }
+              })()
+            : filter;
+          console.log('Generating this filter:', queryFilter);
+        }
+
+        console.log('topK', topK);
+
         const { results } = await vectorQuerySearch({
           indexName,
           vectorStore,
           queryText,
           options,
-          queryFilter,
+          queryFilter: Object.keys(queryFilter || {}).length > 0 ? queryFilter : undefined,
           topK,
         });
         if (reranker) {

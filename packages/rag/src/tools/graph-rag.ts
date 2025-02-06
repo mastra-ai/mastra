@@ -1,5 +1,4 @@
 import { type EmbeddingOptions } from '@mastra/core/embeddings';
-import { FilterSchemaBuilder } from '@mastra/core/filter';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -35,11 +34,24 @@ export const createGraphRAGTool = ({
   id?: string;
   description?: string;
 }) => {
-  const FilterCondition = FilterSchemaBuilder.createFilterSchema();
   const toolId = id || `GraphRAG ${vectorStoreName} ${indexName} Tool`;
   const toolDescription =
     description ||
-    `Fetches and reranks the top ${topK} relevant chunks using GraphRAG from the ${vectorStoreName} vector store using the ${indexName} index`;
+    `Fetches and reranks the top ${topK} relevant chunks using GraphRAG from the ${vectorStoreName} vector store using the ${indexName} index
+    
+    You MUST generate for each query:
+    1. topK: number of results to return
+       - Broad queries (overviews, lists): 10-15
+       - Specific queries: 3-5
+
+    2. filter: query filter (REQUIRED)
+       - Generate a filter that matches the query's keywords and intent
+       - Use appropriate operators
+       - Must be valid JSON string
+
+    User overrides:
+    - If valid topK/filter provided, use those
+    - If invalid/missing, you must generate appropriate values`;
 
   // Initialize GraphRAG
   const graphRag = new GraphRAG(graphOptions.dimension, graphOptions.threshold);
@@ -49,7 +61,7 @@ export const createGraphRAGTool = ({
     id: toolId,
     inputSchema: z.object({
       queryText: z.string(),
-      filter: FilterCondition,
+      filter: z.string(),
     }),
     outputSchema: z.object({
       relevantContext: z.any(),
