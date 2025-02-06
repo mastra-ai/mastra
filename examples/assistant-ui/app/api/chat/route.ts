@@ -1,6 +1,3 @@
-import { openai } from '@ai-sdk/openai';
-import { getEdgeRuntimeResponse } from '@assistant-ui/react/edge';
-
 export const maxDuration = 30;
 
 export const POST = async (request: Request) => {

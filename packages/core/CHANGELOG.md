@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.2.0-alpha.88
+
+### Patch Changes
+
+- ccbc581: Updated operator validation and handling for all vector stores
+
 ## 0.2.0-alpha.87
 
 ### Patch Changes
