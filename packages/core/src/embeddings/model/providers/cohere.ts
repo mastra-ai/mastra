@@ -55,3 +55,40 @@ export async function embedMany(
     maxRetries,
   });
 }
+
+export class Embedder {
+  apiKey: string;
+  model: CohereEmbeddingModelNames;
+  baseURL: string | undefined;
+  constructor({
+    apiKey = process.env.COHERE_API_KEY || '',
+    model = 'embed-english-v3.0',
+    baseURL,
+  }: {
+    apiKey?: string;
+    model: CohereEmbeddingModelNames;
+    baseURL?: string;
+  }) {
+    this.apiKey = apiKey;
+    this.model = model;
+    this.baseURL = baseURL;
+  }
+
+  async embed(value: string, { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }) {
+    return embed(value, {
+      apiKey: this.apiKey,
+      model: this.model,
+      baseURL: this.baseURL,
+      maxRetries,
+    });
+  }
+
+  async embedMany(values: string[], { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }) {
+    return embedMany(values, {
+      apiKey: this.apiKey,
+      model: this.model,
+      baseURL: this.baseURL,
+      maxRetries,
+    });
+  }
+}

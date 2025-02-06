@@ -50,3 +50,40 @@ export async function embedMany(
     maxRetries,
   });
 }
+
+export class Embedder {
+  apiKey: string;
+  model: GoogleEmbeddingModelNames;
+  baseURL: string | undefined;
+  constructor({
+    apiKey = process.env.GOOGLE_API_KEY || '',
+    model = 'textembedding-gecko',
+    baseURL,
+  }: {
+    apiKey?: string;
+    model: GoogleEmbeddingModelNames;
+    baseURL?: string;
+  }) {
+    this.apiKey = apiKey;
+    this.model = model;
+    this.baseURL = baseURL;
+  }
+
+  async embed(value: string, { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }) {
+    return embed(value, {
+      apiKey: this.apiKey,
+      model: this.model,
+      baseURL: this.baseURL,
+      maxRetries,
+    });
+  }
+
+  async embedMany(values: string[], { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }) {
+    return embedMany(values, {
+      apiKey: this.apiKey,
+      model: this.model,
+      baseURL: this.baseURL,
+      maxRetries,
+    });
+  }
+}

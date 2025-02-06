@@ -31,3 +31,19 @@ export async function embedMany(
     maxRetries,
   });
 }
+
+export class Embedder {
+  constructor() {}
+
+  async embed(value: string, { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }) {
+    return embed(value, {
+      maxRetries,
+    });
+  }
+
+  async embedMany(values: string[], { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }) {
+    return embedMany(values, {
+      maxRetries,
+    });
+  }
+}
