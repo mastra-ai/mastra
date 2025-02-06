@@ -318,7 +318,7 @@ new Memory({
   }): Promise<StorageThreadType> {
     const thread: StorageThreadType = {
       id: threadId || this.generateId(),
-      title,
+      title: title || 'New Thread',
       resourceId,
       createdAt: new Date(),
       updatedAt: new Date(),
