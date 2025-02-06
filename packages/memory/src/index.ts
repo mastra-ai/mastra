@@ -1,4 +1,4 @@
-import { CoreMessage } from '@mastra/core';
+import { CoreMessage, deepMerge } from '@mastra/core';
 import { MastraMemory, MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import { StorageGetMessagesArg } from '@mastra/core/storage';
 import { Message as AiMessage } from 'ai';
@@ -11,14 +11,13 @@ export class Memory extends MastraMemory {
   constructor(config: SharedMemoryConfig) {
     super({ name: 'Memory', ...config });
 
-    if (config.options?.workingMemory) {
-      this.threadConfig.workingMemory = config.options.workingMemory;
-    } else {
-      this.threadConfig.workingMemory = {
+    const mergedConfig = this.getMergedThreadConfig({
+      workingMemory: config.options?.workingMemory || {
         enabled: false,
         template: this.defaultWorkingMemoryTemplate,
-      };
-    }
+      },
+    });
+    this.threadConfig = mergedConfig;
   }
 
   async query({
@@ -135,16 +134,19 @@ export class Memory extends MastraMemory {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     if (this.threadConfig.workingMemory?.enabled && !thread?.metadata?.workingMemory) {
+    const config = this.getMergedThreadConfig({});
+
+    if (config.workingMemory?.enabled && !thread?.metadata?.workingMemory) {
+      // if working memory is enabled but the thread doesn't have it, we need to set it
       return this.storage.__saveThread({
-        thread: {
-          ...thread,
+        thread: deepMerge(thread, {
           metadata: {
-            ...(thread?.metadata || {}),
-            workingMemory: this.threadConfig.workingMemory.template || this.defaultWorkingMemoryTemplate,
+            workingMemory: config.workingMemory.template || this.defaultWorkingMemoryTemplate,
           },
-        },
+        }),
       });
     }
+
     return this.storage.__saveThread({ thread });
   }
 
@@ -274,10 +276,9 @@ export class Memory extends MastraMemory {
     await this.storage.__updateThread({
       id: thread.id,
       title: thread.title || '',
-      metadata: {
-        ...thread.metadata,
+      metadata: deepMerge(thread.metadata || {}, {
         workingMemory: newMemory,
-      },
+      }),
     });
     return newMemory;
   }

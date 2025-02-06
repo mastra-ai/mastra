@@ -12,6 +12,7 @@ import {
 import { MastraBase } from '../base';
 import { EmbeddingOptions } from '../embeddings';
 import { MastraStorage, StorageGetMessagesArg } from '../storage';
+import { deepMerge } from '../utils';
 import { MastraVector } from '../vector';
 
 export type AiMessageType = AiMessage;
@@ -120,24 +121,7 @@ export abstract class MastraMemory extends MastraBase {
   }
 
   protected getMergedThreadConfig(config: MemoryConfig): MemoryConfig {
-    const merged = {
-      ...this.threadConfig,
-      ...config,
-    };
-
-    // TODO: clean this up, it's wrong
-    merged.workingMemory ||= {
-      enabled: false,
-      template: ``,
-    };
-    if (this.threadConfig.workingMemory?.enabled)
-      merged.workingMemory.enabled = this.threadConfig.workingMemory.enabled;
-    if (this.threadConfig.workingMemory?.template)
-      merged.workingMemory.template = this.threadConfig.workingMemory.template;
-    if (config.workingMemory?.enabled) merged.workingMemory.enabled = config.workingMemory.enabled;
-    if (config.workingMemory?.template) merged.workingMemory.template = config.workingMemory.template;
-
-    return merged;
+    return deepMerge(this.threadConfig, config);
   }
 
   abstract rememberMessages({

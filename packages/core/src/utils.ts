@@ -94,3 +94,32 @@ export function jsonSchemaToModel(jsonSchema: Record<string, any>): ZodObject<an
 
   return z.object(zodSchema);
 }
+
+/**
+ * Deep merges two objects, recursively merging nested objects and arrays
+ */
+export function deepMerge<T extends object = object>(target: T, source: Partial<T>): T {
+  const output = { ...target };
+  
+  if (!source) return output;
+
+  Object.keys(source).forEach(key => {
+    const targetValue = output[key as keyof T];
+    const sourceValue = source[key as keyof T];
+
+    if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
+      (output as any)[key] = sourceValue;
+    } else if (
+      sourceValue instanceof Object && 
+      targetValue instanceof Object && 
+      !Array.isArray(sourceValue) && 
+      !Array.isArray(targetValue)
+    ) {
+      (output as any)[key] = deepMerge(targetValue, sourceValue as T);
+    } else if (sourceValue !== undefined) {
+      (output as any)[key] = sourceValue;
+    }
+  });
+
+  return output;
+}
