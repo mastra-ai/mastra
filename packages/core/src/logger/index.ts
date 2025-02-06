@@ -16,6 +16,7 @@ export const RegisteredLogger = {
   ENGINE: 'ENGINE',
   MEMORY: 'MEMORY',
   STORAGE: 'STORAGE',
+  EMBEDDINGS: 'EMBEDDINGS',
 } as const;
 
 export type RegisteredLogger = (typeof RegisteredLogger)[keyof typeof RegisteredLogger];
