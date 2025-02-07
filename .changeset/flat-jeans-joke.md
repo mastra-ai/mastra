@@ -7,7 +7,6 @@
 '@mastra/vector-upstash': minor
 '@mastra/deployer-cloudflare': minor
 '@mastra/vector-chroma': minor
-'@mastra/vector-libsql': minor
 '@mastra/vector-qdrant': minor
 '@mastra/vector-astra': minor
 '@mastra/deployer-netlify': minor
@@ -18,7 +17,6 @@
 '@mastra/speech-replicate': minor
 '@mastra/speech-speechify': minor
 '@mastra/vector-pg': minor
-'@mastra/engine': minor
 '@mastra/memory': minor
 '@mastra/speech-deepgram': minor
 '@mastra/store-upstash': minor

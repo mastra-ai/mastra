@@ -1,5 +1,4 @@
 ---
-'@mastra/engine': patch
 '@mastra/core': patch
 'mastra': patch
 ---

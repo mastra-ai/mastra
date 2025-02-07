@@ -1,6 +1,5 @@
 ---
 '@mastra/core': minor
-'@mastra/engine': patch
 '@mastra/evals': patch
 ---
 

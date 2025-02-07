@@ -1,5 +1,4 @@
 ---
-'@mastra/vector-libsql': patch
 '@mastra/vector-astra': patch
 ---
 

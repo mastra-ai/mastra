@@ -7,11 +7,9 @@
     "mastra": "0.1.57-alpha.13",
     "create-mastra": "0.1.0",
     "@mastra/core": "0.1.27-alpha.20",
-    "@mastra/engine": "0.0.5-alpha.12",
     "@mastra/memory": "0.0.1",
     "@mastra/rag": "0.0.2-alpha.0",
     "@mastra/composio": "0.0.0",
-    "@mastra/dane": "0.0.1",
     "@mastra/stabilityai": "1.0.1-alpha.17",
     "@mastra/mcp": "0.0.0",
     "@mastra/evals": "0.0.0",
@@ -23,7 +21,6 @@
     "@mastra/loggers": "0.0.0",
     "@mastra/vector-astra": "0.0.0",
     "@mastra/vector-chroma": "0.0.0",
-    "@mastra/vector-libsql": "0.0.0",
     "@mastra/vector-pg": "0.0.0",
     "@mastra/vector-pinecone": "0.0.0",
     "@mastra/vector-qdrant": "0.0.0",
@@ -113,7 +110,6 @@
     "memory-with-context": "0.0.1-alpha.2"
   },
   "changesets": [
-    "afraid-papayas-shake",
     "angry-onions-nail",
     "big-dots-flow",
     "big-fireants-wave",

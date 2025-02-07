@@ -1,8 +1,6 @@
 ---
 '@mastra/firecrawl': patch
-'@mastra/engine': patch
 '@mastra/memory': patch
-'@mastra/dane': patch
 '@mastra/core': patch
 'mastra': patch
 ---
