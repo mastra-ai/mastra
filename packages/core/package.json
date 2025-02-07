@@ -39,7 +39,7 @@
         "default": "./dist/embeddings/model/providers/*.js"
       }
     },
-    "./vectors/libsql": {
+    "./vector/libsql": {
       "import": {
         "types": "./dist/vectors/libsql/index.d.ts",
         "default": "./dist/vectors/libsql/index.js"
