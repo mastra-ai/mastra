@@ -1,19 +1,14 @@
 import { openai } from '@ai-sdk/openai';
-import { embedMany } from 'ai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { PgVector } from '@mastra/pg';
 import { MDocument, createGraphRAGTool } from '@mastra/rag';
-
+import { embedMany } from 'ai';
 
 const graphRagTool = createGraphRAGTool({
   vectorStoreName: 'pgVector',
   indexName: 'embeddings',
-  options: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-3-small',
-    maxRetries: 3,
-  },
+  model: openai('gpt-4o-mini'),
   graphOptions: {
     dimension: 1536,
     threshold: 0.7,

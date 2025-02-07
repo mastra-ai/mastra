@@ -86,7 +86,7 @@ const vectorQueryTool = createVectorQueryTool({
   indexName: 'embeddings',
   model: openai.embedding('text-embedding-3-small'),
   reranker: {
-    model: openai.languageModel('gpt-4o-mini'),
+    model: openai('gpt-4o-mini'),
   }
 });
 ```
