@@ -1,3 +1,4 @@
+import { anthropic } from '@ai-sdk/anthropic';
 import { Agent } from '@mastra/core/agent';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
@@ -17,11 +18,7 @@ const everArtClient = new MastraMCPClient({
 const agent = new Agent({
   name: 'everart',
   instructions: 'You are my artist. Include the url in your response.',
-  model: {
-    provider: 'ANTHROPIC',
-    name: 'claude-3-5-sonnet-20241022',
-    toolChoice: 'auto',
-  },
+  model: anthropic('claude-3-5-sonnet-20241022'),
 });
 
 describe.skip('MastraMCPClient', () => {
