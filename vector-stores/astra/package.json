@@ -16,8 +16,7 @@
   },
   "scripts": {
     "build": "tsup-node src/index.ts --format esm --dts --clean --treeshake",
-    "dev": "tsup-node src/index.ts --format esm --dts --clean --treeshake --watch",
-    "test": "vitest run"
+    "test": "echo deprecated"
   },
   "dependencies": {
     "@datastax/astra-db-ts": "^1.5.0",
@@ -26,7 +25,6 @@
   "devDependencies": {
     "@tsconfig/recommended": "^1.0.7",
     "@types/node": "^22.9.0",
-    "tsup": "^8.0.1",
-    "vitest": "^3.0.4"
+    "tsup": "^8.0.1"
   }
 }
