@@ -2,7 +2,7 @@ import { WorkflowRunState } from '@mastra/core/workflows';
 import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 
-import { PostgresStore, type PostgresConfig } from './index';
+import { PostgresStore, type PostgresConfig } from '.';
 
 const TEST_CONFIG: PostgresConfig = {
   host: process.env.POSTGRES_HOST || 'localhost',

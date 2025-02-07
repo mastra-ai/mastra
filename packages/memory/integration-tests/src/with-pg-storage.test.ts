@@ -1,7 +1,6 @@
 import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
 import { Memory } from '@mastra/memory';
-import { PostgresStore } from '@mastra/store-pg';
-import { PgVector } from '@mastra/vector-pg';
+import { PostgresStore, PgVector } from '@mastra/pg';
 import dotenv from 'dotenv';
 import { describe } from 'vitest';
 

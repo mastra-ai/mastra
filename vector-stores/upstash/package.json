@@ -16,8 +16,7 @@
   },
   "scripts": {
     "build": "tsup-node src/index.ts --format esm --dts --clean --treeshake",
-    "dev": "tsup-node src/index.ts --format esm --dts --clean --treeshake --watch",
-    "test": "vitest run"
+    "test": "echo deprecated"
   },
   "dependencies": {
     "@mastra/core": "workspace:^",

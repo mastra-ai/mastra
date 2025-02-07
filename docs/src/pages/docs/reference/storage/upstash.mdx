@@ -10,15 +10,15 @@ The Upstash storage implementation provides a serverless-friendly storage soluti
 ## Installation
 
 ```bash
-npm install @mastra/store-upstash
+npm install @mastra/upstash
 ```
 
 ## Usage
 
 ```typescript copy showLineNumbers
-import { UpstashStorage } from "@mastra/store-upstash";
+import { UpstashStore } from "@mastra/upstash";
 
-const storage = new UpstashStorage({
+const storage = new UpstashStore({
   url: process.env.UPSTASH_URL,
   token: process.env.UPSTASH_TOKEN,
 });

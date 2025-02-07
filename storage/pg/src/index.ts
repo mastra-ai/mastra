@@ -15,6 +15,8 @@ export type PostgresConfig =
       connectionString: string;
     };
 
+
+
 export class PostgresStore extends MastraStorage {
   private db: pgPromise.IDatabase<{}>;
   private pgp: pgPromise.IMain;
@@ -475,3 +477,9 @@ export class PostgresStore extends MastraStorage {
     this.pgp.end();
   }
 }
+
+// Throw deprecation error
+throw new Error(
+  '@mastra/store-pg is deprecated. Please use @mastra/pg instead:\n' +
+  'import { PostgresStore } from \'@mastra/pg\';'
+);

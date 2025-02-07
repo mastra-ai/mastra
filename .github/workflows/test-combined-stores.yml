@@ -1,0 +1,58 @@
+name: Combined store Tests (vector+storage)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "stores/**"
+      - "stores/*/package.json"
+      - ".github/workflows/test-combined-stores.yml"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      qdrant:
+        image: qdrant/qdrant
+        ports:
+          - 6333:6333
+      chromadb:
+        image: chromadb/chroma
+        ports:
+          - 8000:8000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build core
+        run: pnpm build:core
+
+      - name: Build combined storage packages
+        run: pnpm build:combined-stores
+
+      - name: Run combined storage tests
+        run: pnpm test:combined-stores
+        env:
+          NODE_OPTIONS: "--max_old_space_size=8096"
+          ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
+          ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}

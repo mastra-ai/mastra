@@ -15,18 +15,24 @@ const outputSchema = z.object({
   packages: z.array(z.string()),
   integrations: z.array(z.string()),
   deployers: z.array(z.string()),
+  speech: z.array(z.string()),
+  // deprecated
   vector_stores: z.array(z.string()),
   stores: z.array(z.string()),
-  speech: z.array(z.string()),
+  // combined deprecated stores
+  combined_stores: z.array(z.string()),
 });
 
 const defaultSet = {
   packages: [],
   deployers: [],
   integrations: [],
+  speech: [],
+  // deprecated
   vector_stores: [],
   stores: [],
-  speech: [],
+  // combined vector + storage
+  combined_stores: [],
 };
 
 const getPacakgesToPublish = new Step({
@@ -55,7 +61,7 @@ const getPacakgesToPublish = new Step({
          - Group parallel builds by directory type
 
       2. Output Format:
-         - Group into: packages[], integrations[], deployers[], vector_stores[], stores[]
+         - Group into: packages[], integrations[], deployers[], vector_stores[], stores[], combined_stores[]
          - Place create-mastra in packages[] array
          - Maintain correct order within each group
 
@@ -71,6 +77,7 @@ const getPacakgesToPublish = new Step({
           deployers: z.array(z.string()),
           vector_stores: z.array(z.string()),
           stores: z.array(z.string()),
+          combined_stores: z.array(z.string()),
           speech: z.array(z.string()),
         }),
       },
@@ -82,6 +89,7 @@ const getPacakgesToPublish = new Step({
       deployers: resultObj?.object?.deployers!,
       vector_stores: resultObj?.object?.vector_stores!,
       stores: resultObj?.object?.stores!,
+      combined_stores: resultObj?.object?.stores!,
       speech: resultObj?.object?.speech!,
     };
   },
@@ -98,6 +106,7 @@ const assemblePackages = new Step({
         deployers: [],
         vector_stores: [],
         stores: [],
+        combined_stores: [],
         speech: [],
       };
     }
@@ -108,6 +117,7 @@ const assemblePackages = new Step({
     const integrationsToBuild: Set<string> = new Set();
     const vector_storesToBuild: Set<string> = new Set();
     const storesToBuild: Set<string> = new Set();
+    const combined_storesToBuild: Set<string> = new Set();
     const speechToBuild: Set<string> = new Set();
 
     if (payload?.packages) {
@@ -154,6 +164,15 @@ const assemblePackages = new Step({
       });
     }
 
+    if (payload?.combined_stores) {
+      payload.combined_stores.forEach((pkg: string) => {
+        let pkgName = pkg.replace('@mastra/', '');
+
+        const pkgPath = path.join(process.cwd(), 'stores', pkgName);
+        combined_storesToBuild.add(pkgPath);
+      });
+    }
+
     if (payload?.integrations) {
       const integrations = payload.integrations;
       integrations.forEach((integration: string) => {
@@ -178,6 +197,7 @@ const assemblePackages = new Step({
     const integrationSet = Array.from(integrationsToBuild.keys());
     const vectorStoreSet = Array.from(vector_storesToBuild.keys());
     const storeSet = Array.from(storesToBuild.keys());
+    const combinedStoreSet = Array.from(combined_storesToBuild.keys());
     const speechSet = Array.from(speechToBuild.keys());
 
     if (
@@ -185,7 +205,8 @@ const assemblePackages = new Step({
       !deployersToBuild.size &&
       !integrationsToBuild.size &&
       !vector_storesToBuild.size &&
-      !storesToBuild.size
+      !storesToBuild.size &&
+      !combined_storesToBuild.size
     ) {
       console.error(chalk.red('No packages to build.'));
       return defaultSet;
@@ -224,6 +245,13 @@ const assemblePackages = new Step({
       });
     }
 
+    if (combinedStoreSet.length > 0) {
+      console.log(chalk.green(`\nBuilding store packages:\n`));
+      combinedStoreSet.forEach((pkg: string) => {
+        console.log(chalk.green(pkg));
+      });
+    }
+
     if (speechSet.length > 0) {
       console.log(chalk.green(`\nBuilding speech:\n`));
       speechSet.forEach((pkg: string) => {
@@ -237,6 +265,7 @@ const assemblePackages = new Step({
       integrations: integrationSet!,
       vector_stores: vectorStoreSet!,
       stores: storeSet!,
+      combined_stores: combinedStoreSet!,
       speech: speechSet!,
     };
   },
@@ -255,6 +284,7 @@ const buildPackages = new Step({
     const integrationSet = context.machineContext.stepResults.assemblePackages.payload.integrations;
     const vectorStoreSet = context.machineContext.stepResults.assemblePackages.payload.vector_stores;
     const storeSet = context.machineContext.stepResults.assemblePackages.payload.stores;
+    const combinedStoreSet = context.machineContext.stepResults.assemblePackages.payload.combined_stores;
     const speechSet = context.machineContext.stepResults.assemblePackages.payload.speech;
 
     console.log({
@@ -263,6 +293,7 @@ const buildPackages = new Step({
       integrationSet,
       vectorStoreSet,
       storeSet,
+      combinedStoreSet,
       speechSet,
     });
 
@@ -322,6 +353,7 @@ const buildPackages = new Step({
       integrations: integrationSet,
       vector_stores: vectorStoreSet,
       stores: storeSet,
+      combined_stores: combinedStoreSet,
       speech: speechSet,
     };
   },
@@ -344,9 +376,18 @@ const verifyBuild = new Step({
     const integrationSet = context.machineContext.stepResults.buildPackages.payload.integrations;
     const vectorStoreSet = context.machineContext.stepResults.buildPackages.payload.vector_stores;
     const storeSet = context.machineContext.stepResults.buildPackages.payload.stores;
+    const combinedStoreSet = context.machineContext.stepResults.buildPackages.payload.combined_stores;
     const speechSet = context.machineContext.stepResults.buildPackages.payload.speech;
 
-    const allPackages = [...pkgSet, ...deploySet, ...integrationSet, ...vectorStoreSet, ...storeSet, ...speechSet];
+    const allPackages = [
+      ...pkgSet,
+      ...deploySet,
+      ...integrationSet,
+      ...vectorStoreSet,
+      ...storeSet,
+      ...combinedStoreSet,
+      ...speechSet,
+    ];
 
     function checkMissingPackages(pkgSet: string[]) {
       const missingPackages = [];

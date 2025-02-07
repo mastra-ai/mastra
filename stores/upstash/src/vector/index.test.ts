@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, test } from 'vitest';
 
 import { UpstashVector } from './';
 
@@ -25,7 +25,12 @@ function waitUntilVectorsIndexed(vector: UpstashVector, indexName: string, expec
   });
 }
 
-describe('UpstashVector', () => {
+/**
+ * These tests require a real Upstash Vector instance since there is no local Docker alternative.
+ * The tests will be skipped in local development where Upstash credentials are not available.
+ * In CI/CD environments, these tests will run using the provided Upstash Vector credentials.
+ */
+describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_TOKEN)('UpstashVector', () => {
   let vectorStore: UpstashVector;
   const VECTOR_DIMENSION = 1536;
   const testIndexName = 'default';
@@ -37,13 +42,17 @@ describe('UpstashVector', () => {
     const token = process.env.UPSTASH_VECTOR_TOKEN;
 
     if (!url || !token) {
-      throw new Error('Missing required environment variables: UPSTASH_VECTOR_URL, UPSTASH_VECTOR_TOKEN');
+      console.log('Skipping Upstash Vector tests - no credentials available');
+      return;
     }
 
     vectorStore = new UpstashVector({ url, token });
   });
 
+
   afterAll(async () => {
+    if (!vectorStore) return;
+
     // Cleanup: delete test index
     try {
       await vectorStore.deleteIndex(testIndexName);

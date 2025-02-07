@@ -98,3 +98,10 @@ export class UpstashVector extends MastraVector {
     }
   }
 }
+
+throw new Error(
+  '@mastra/vector-upstash is deprecated. Please use @mastra/upstash instead:\n\n' +
+  'npm install @mastra/upstash\n\n' +
+  'Then update your imports:\n' +
+  'import { UpstashVector } from \'@mastra/upstash\''
+);
