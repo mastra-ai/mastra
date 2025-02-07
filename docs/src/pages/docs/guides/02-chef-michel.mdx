@@ -27,6 +27,7 @@ In this guide, we'll walk through creating a "Chef Assistant" agent that helps u
 Create a new file `src/mastra/agents/chefAgent.ts` and define your agent:
 
 ```ts copy filename="src/mastra/agents/chefAgent.ts"
+import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const chefAgent = new Agent({
@@ -34,11 +35,7 @@ export const chefAgent = new Agent({
   instructions:
     "You are Michel, a practical and experienced home chef" +
     "You helps people cook with whatever ingredients they have available.",
-  model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-    toolChoice: "auto",
-  },
+  model: openai("gpt-4o-mini"),
 });
 ```
 

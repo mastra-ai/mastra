@@ -12,6 +12,7 @@ This example demonstrates how to create an agent that maintains a todo list usin
 First, set up the memory system with LibSQL storage and a working memory template for the todo list:
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
 import { Memory } from "@mastra/memory";
 import { MastraStorageLibSql } from "@mastra/core/storage";
 
@@ -40,14 +41,9 @@ const todoAgent = new Agent({
   name: "TODO Agent",
   instructions:
     "You are a helpful todolist AI agent. Help the user manage their todolist. If there is no list yet ask them what to add! If there is a list always print it out when the chat starts. For each item add emojis, dates, titles (with an index number starting at 1), descriptions, and statuses. For each piece of info add an emoji to the left of it. Also support subtask lists with bullet points inside a box. Help the user timebox each task by asking them how long it will take.",
-  model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-    toolChoice: "auto",
-  },
+  model: openai("gpt-4o-mini"),
   memory,
 });
-```
 
 ## Usage Example
 

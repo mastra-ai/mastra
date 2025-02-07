@@ -97,6 +97,7 @@ Returns an object mapping tool names to their corresponding Mastra tool implemen
 ### Using with Mastra Agent
 
 ```typescript
+import { anthropic } from '@ai-sdk/anthropic';
 import { Agent } from '@mastra/core';
 import { MastraMCPClient } from '@mastra/mcp-client';
 
@@ -116,11 +117,7 @@ const everArtClient = new MastraMCPClient({
 const agent = new Agent({
     name: 'everart',
     instructions: 'You are my artist. Include the url in your response.',
-    model: {
-        provider: 'ANTHROPIC',
-        name: 'claude-3-5-sonnet-20241022',
-        toolChoice: 'auto',
-    },
+    model: anthropic('claude-3-5-sonnet-20241022'),
 });
 
 // Example usage in an async function
