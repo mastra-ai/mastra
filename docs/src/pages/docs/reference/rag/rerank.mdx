@@ -56,9 +56,9 @@ const rerankedResults = await rerank(
       isOptional: false,
     },
     {
-      name: "modelConfig",
-      type: "ModelConfig",
-      description: "Rerank model configuration",
+      name: "model",
+      type: "LanguageModelV1",
+      description: "The language model to use for reranking",
       isOptional: false,
     },
     {

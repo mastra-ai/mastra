@@ -84,15 +84,9 @@ Here's how to set up re-ranking:
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',
   indexName: 'embeddings',
-  options: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-3-small'
-  },
+  model: openai.embedding('text-embedding-3-small'),
   reranker: {
-    model: {
-      provider: 'OPEN_AI',
-      name: 'gpt-4o-mini',
-    },
+    model: openai.languageModel('gpt-4o-mini'),
   }
 });
 ```

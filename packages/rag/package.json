@@ -22,10 +22,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@ai-sdk/openai": "^1.0.18",
     "@llamaindex/core": "^0.4.10",
     "@llamaindex/env": "^0.1.20",
     "@mastra/core": "workspace:^",
     "@paralleldrive/cuid2": "^2.2.2",
+    "ai": "^4.0.34",
     "js-tiktoken": "^1.0.15",
     "llamaindex": "^0.8.15",
     "node-html-better-parser": "^1.4.7",

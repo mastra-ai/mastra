@@ -1,5 +1,5 @@
-import { type EmbeddingOptions } from '@mastra/core/embeddings';
-import { createTool } from '@mastra/core/tools';
+import { createTool, Tool } from '@mastra/core/tools';
+import { EmbeddingModel } from 'ai';
 import { z } from 'zod';
 
 import { rerank, RerankConfig } from '../rerank';
@@ -8,7 +8,7 @@ import { vectorQuerySearch, defaultVectorQueryDescription } from '../utils';
 export const createVectorQueryTool = ({
   vectorStoreName,
   indexName,
-  options,
+  model,
   enableFilter = false,
   reranker,
   id,
@@ -16,7 +16,7 @@ export const createVectorQueryTool = ({
 }: {
   vectorStoreName: string;
   indexName: string;
-  options: EmbeddingOptions;
+  model: EmbeddingModel<string>;
   enableFilter?: boolean;
   reranker?: RerankConfig;
   id?: string;
@@ -61,7 +61,7 @@ export const createVectorQueryTool = ({
           indexName,
           vectorStore,
           queryText,
-          options,
+          model,
           queryFilter: Object.keys(queryFilter || {}).length > 0 ? queryFilter : undefined,
           topK,
         });
