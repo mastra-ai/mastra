@@ -1,6 +1,6 @@
 ---
 title: "Reference: Metadata Filters | Metadata Filtering | RAG | Mastra Docs"
-description: Documentation for PGVector's metadata filtering capabilities in Mastra, which allow for precise querying of vector search results.
+description: Documentation for metadata filtering capabilities in Mastra, which allow for precise querying of vector search results across different vector stores.
 ---
 
 # Metadata Filters
@@ -28,48 +28,143 @@ const results = await store.query(
 
 ## Supported Operators
 
-### Basic Comparison
+<OperatorsTable
+  title="Basic Comparison"
+  operators={[
+    {
+      name: "$eq",
+      description: "Matches values equal to specified value",
+      example: "{ age: { $eq: 25 } }",
+      supportedBy: ["All"]
+    },
+    {
+      name: "$ne",
+      description: "Matches values not equal",
+      example: "{ status: { $ne: 'inactive' } }",
+      supportedBy: ["All"]
+    },
+    {
+      name: "$gt",
+      description: "Greater than",
+      example: "{ price: { $gt: 100 } }",
+      supportedBy: ["All"]
+    },
+    {
+      name: "$gte",
+      description: "Greater than or equal",
+      example: "{ rating: { $gte: 4.5 } }",
+      supportedBy: ["All"]
+    },
+    {
+      name: "$lt",
+      description: "Less than",
+      example: "{ stock: { $lt: 20 } }",
+      supportedBy: ["All"]
+    },
+    {
+      name: "$lte",
+      description: "Less than or equal",
+      example: "{ priority: { $lte: 3 } }",
+      supportedBy: ["All"]
+    }
+  ]}
+/>
 
-| Operator | Description | Example | Supported By |
-|----------|-------------|---------|--------------|
-| `$eq` | Matches values equal to specified value | `{ age: { $eq: 25 } }` | All |
-| `$ne` | Matches values not equal | `{ status: { $ne: "inactive" } }` | All |
-| `$gt` | Greater than | `{ price: { $gt: 100 } }` | All |
-| `$gte` | Greater than or equal | `{ rating: { $gte: 4.5 } }` | All |
-| `$lt` | Less than | `{ stock: { $lt: 20 } }` | All |
-| `$lte` | Less than or equal | `{ priority: { $lte: 3 } }` | All |
+<OperatorsTable
+  title="Array Operators"
+  operators={[
+    {
+      name: "$in",
+      description: "Matches any value in array",
+      example: '{ category: { $in: ["A", "B"] } }',
+      supportedBy: ["All"]
+    },
+    {
+      name: "$nin",
+      description: "Matches none of the values",
+      example: '{ status: { $nin: ["deleted", "archived"] } }',
+      supportedBy: ["Qdrant", "Pinecone", "PgVector", "Astra", "Upstash", "Chroma", "Vectorize"]
+    },
+    {
+      name: "$all",
+      description: "Matches arrays containing all elements",
+      example: '{ tags: { $all: ["urgent", "high"] } }',
+      supportedBy: ["Pinecone", "Astra"]
+    }
+  ]}
+/>
 
-### Array Operators
+<OperatorsTable
+  title="Logical Operators"
+  operators={[
+    {
+      name: "$and",
+      description: "Logical AND",
+      example: '{ $and: [{ price: { $gt: 100 } }, { stock: { $gt: 0 } }] }',
+      supportedBy: ["All"]
+    },
+    {
+      name: "$or",
+      description: "Logical OR",
+      example: '{ $or: [{ status: "active" }, { priority: "high" }] }',
+      supportedBy: ["All"]
+    },
+    {
+      name: "$not",
+      description: "Logical NOT",
+      example: '{ price: { $not: { $lt: 100 } } }',
+      supportedBy: ["Qdrant", "Astra"]
+    },
+    {
+      name: "$nor",
+      description: "Logical NOR",
+      example: '{ $nor: [{ status: "deleted" }, { archived: true }] }',
+      supportedBy: ["Qdrant"]
+    }
+  ]}
+/>
 
-| Operator | Description | Example | Supported By |
-|----------|-------------|---------|--------------|
-| `$in` | Matches any value in array | `{ category: { $in: ["A", "B"] } }` | All |
-| `$nin` | Matches none of the values | `{ status: { $nin: ["deleted", "archived"] } }` | All except LibSQL |
-| `$all` | Matches arrays containing all elements | `{ tags: { $all: ["urgent", "high"] } }` | Pinecone, Astra |
+<OperatorsTable
+  title="Element Operators"
+  operators={[
+    {
+      name: "$exists",
+      description: "Matches documents with field",
+      example: '{ rating: { $exists: true } }',
+      supportedBy: ["Pinecone", "Qdrant"]
+    }
+  ]}
+/>
 
-### Logical Operators
-
-| Operator | Description | Example | Supported By |
-|----------|-------------|---------|--------------|
-| `$and` | Logical AND | `{ $and: [{ price: { $gt: 100 } }, { stock: { $gt: 0 } }] }` | All |
-| `$or` | Logical OR | `{ $or: [{ status: "active" }, { priority: "high" }] }` | All |
-| `$not` | Logical NOT | `{ price: { $not: { $lt: 100 } } }` | Qdrant, Astra |
-| `$nor` | Logical NOR | `{ $nor: [{ status: "deleted" }, { archived: true }] }` | Qdrant |
-
-### Element Operators
-
-| Operator | Description | Example | Supported By |
-|----------|-------------|---------|--------------|
-| `$exists` | Matches documents with field | `{ rating: { $exists: true } }` | Pinecone, Qdrant |
-
-### Custom Operators
-
-| Operator | Description | Example | Supported By |
-|----------|-------------|---------|--------------|
-| `$contains` | Text contains substring | `{ description: { $contains: "sale" } }` | Upstash, LibSQL, PG |
-| `$regex` | Regular expression match | `{ name: { $regex: "^test" } }` | Qdrant, PG |
-| `$size` | Array length check | `{ tags: { $size: { $gt: 2 } } }` | Astra, LibSQL |
-| `$geo` | Geospatial query | `{ location: { $geo: { type: "radius", ... } } }` | Qdrant |
+<OperatorsTable
+  title="Custom Operators"
+  operators={[
+    {
+      name: "$contains",
+      description: "Text contains substring",
+      example: '{ description: { $contains: "sale" } }',
+      supportedBy: ["Upstash", "LibSQL", "PgVector"]
+    },
+    {
+      name: "$regex",
+      description: "Regular expression match",
+      example: '{ name: { $regex: "^test" } }',
+      supportedBy: ["Qdrant", "PgVector"]
+    },
+    {
+      name: "$size",
+      description: "Array length check",
+      example: '{ tags: { $size: { $gt: 2 } } }',
+      supportedBy: ["Astra", "LibSQL"]
+    },
+    {
+      name: "$geo",
+      description: "Geospatial query",
+      example: '{ location: { $geo: { type: "radius", ... } } }',
+      supportedBy: ["Qdrant"]
+    }
+  ]}
+/>
 
 ## Common Rules and Restrictions
 
