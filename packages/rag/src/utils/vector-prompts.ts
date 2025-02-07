@@ -4,7 +4,8 @@
  */
 
 export const ASTRA_PROMPT = `When querying Astra, you can ONLY use the operators listed below. Any other operators will be rejected.
-Important: Don't just explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
+Important: Don't explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
+If a user tries to give an explicit operator that is not supported, reject the filter entirely and let them know that the operator is not supported.
 
 Basic Comparison Operators:
 - $eq: Exact match (default when using field: value)
@@ -52,13 +53,29 @@ Restrictions:
 - Multiple conditions on the same field are supported with both implicit and explicit $and
 - Empty arrays in $in/$nin will return no results
 - A non-empty array is required for $all operator
-- Logical operators must contain field conditions
-- $not must be an object and non-empty
 - Only logical operators ($and, $or, $not) can be used at the top level
 - All other operators must be used within a field condition
   Valid: { "field": { "$gt": 100 } }
   Valid: { "$and": [...] }
   Invalid: { "$gt": 100 }
+- Logical operators must contain field conditions, not direct operators
+  Valid: { "$and": [{ "field": { "$gt": 100 } }] }
+  Invalid: { "$and": [{ "$gt": 100 }] }
+- $not operator:
+  - Must be an object
+  - Cannot be empty
+  - Can be used at field level or top level
+  - Valid: { "$not": { "field": "value" } }
+  - Valid: { "field": { "$not": { "$eq": "value" } } }
+- Other logical operators ($and, $or):
+  - Can only be used at top level or nested within other logical operators
+  - Can not be used on a field level, or be nested inside a field
+  - Can not be used inside an operator
+  - Valid: { "$and": [{ "field": { "$gt": 100 } }] }
+  - Valid: { "$or": [{ "$and": [{ "field": { "$gt": 100 } }] }] }
+  - Invalid: { "field": { "$and": [{ "$gt": 100 }] } }
+  - Invalid: { "field": { "$or": [{ "$gt": 100 }] } }
+  - Invalid: { "field": { "$gt": { "$and": [{...}] } } }
 
 Example Complex Query:
 {
@@ -75,7 +92,8 @@ Example Complex Query:
 }`;
 
 export const CHROMA_PROMPT = `When querying Chroma, you can ONLY use the operators listed below. Any other operators will be rejected.
-Important: Don't just explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
+Important: Don't explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
+If a user tries to give an explicit operator that is not supported, reject the filter entirely and let them know that the operator is not supported.
 
 Basic Comparison Operators:
 - $eq: Exact match (default when using field: value)
@@ -117,7 +135,18 @@ Restrictions:
   Valid: { "$and": [...] }
   Invalid: { "$gt": 100 }
   Invalid: { "$in": [...] }
-
+- Logical operators must contain field conditions, not direct operators
+  Valid: { "$and": [{ "field": { "$gt": 100 } }] }
+  Invalid: { "$and": [{ "$gt": 100 }] }
+- Logical operators ($and, $or):
+  - Can only be used at top level or nested within other logical operators
+  - Can not be used on a field level, or be nested inside a field
+  - Can not be used inside an operator
+  - Valid: { "$and": [{ "field": { "$gt": 100 } }] }
+  - Valid: { "$or": [{ "$and": [{ "field": { "$gt": 100 } }] }] }
+  - Invalid: { "field": { "$and": [{ "$gt": 100 }] } }
+  - Invalid: { "field": { "$or": [{ "$gt": 100 }] } }
+  - Invalid: { "field": { "$gt": { "$and": [{...}] } } }
 Example Complex Query:
 {
   "$and": [
@@ -131,7 +160,8 @@ Example Complex Query:
 }`;
 
 export const LIBSQL_PROMPT = `When querying LibSQL Vector, you can ONLY use the operators listed below. Any other operators will be rejected.
-Important: Don't just explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
+Important: Don't explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
+If a user tries to give an explicit operator that is not supported, reject the filter entirely and let them know that the operator is not supported.
 
 Basic Comparison Operators:
 - $eq: Exact match (default when using field: value)
@@ -191,6 +221,27 @@ Restrictions:
   Valid: { "$and": [...] }
   Invalid: { "$gt": 100 }
   Invalid: { "$contains": "value" }
+- Logical operators must contain field conditions, not direct operators
+  Valid: { "$and": [{ "field": { "$gt": 100 } }] }
+  Invalid: { "$and": [{ "$gt": 100 }] }
+- $not operator:
+  - Must be an object
+  - Cannot be empty
+  - Can be used at field level or top level
+  - Valid: { "$not": { "field": "value" } }
+  - Valid: { "field": { "$not": { "$eq": "value" } } }
+- Other logical operators ($and, $or, $nor):
+  - Can only be used at top level or nested within other logical operators
+  - Can not be used on a field level, or be nested inside a field
+  - Can not be used inside an operator
+  - Valid: { "$and": [{ "field": { "$gt": 100 } }] }
+  - Valid: { "$or": [{ "$and": [{ "field": { "$gt": 100 } }] }] }
+  - Invalid: { "field": { "$and": [{ "$gt": 100 }] } }
+  - Invalid: { "field": { "$or": [{ "$gt": 100 }] } }
+  - Invalid: { "field": { "$gt": { "$and": [{...}] } } }
+- $elemMatch requires an object with conditions
+  Valid: { "array": { "$elemMatch": { "field": "value" } } }
+  Invalid: { "array": { "$elemMatch": "value" } }
 
 Example Complex Query:
 {
@@ -207,7 +258,8 @@ Example Complex Query:
 }`;
 
 export const PGVECTOR_PROMPT = `When querying PG Vector, you can ONLY use the operators listed below. Any other operators will be rejected.
-Important: Don't just explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
+Important: Don't explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
+If a user tries to give an explicit operator that is not supported, reject the filter entirely and let them know that the operator is not supported.
 
 Basic Comparison Operators:
 - $eq: Exact match (default when using field: value)
@@ -270,6 +322,27 @@ Restrictions:
   Valid: { "$and": [...] }
   Invalid: { "$gt": 100 }
   Invalid: { "$regex": "pattern" }
+- Logical operators must contain field conditions, not direct operators
+  Valid: { "$and": [{ "field": { "$gt": 100 } }] }
+  Invalid: { "$and": [{ "$gt": 100 }] }
+- $not operator:
+  - Must be an object
+  - Cannot be empty
+  - Can be used at field level or top level
+  - Valid: { "$not": { "field": "value" } }
+  - Valid: { "field": { "$not": { "$eq": "value" } } }
+- Other logical operators ($and, $or, $nor):
+  - Can only be used at top level or nested within other logical operators
+  - Can not be used on a field level, or be nested inside a field
+  - Can not be used inside an operator
+  - Valid: { "$and": [{ "field": { "$gt": 100 } }] }
+  - Valid: { "$or": [{ "$and": [{ "field": { "$gt": 100 } }] }] }
+  - Invalid: { "field": { "$and": [{ "$gt": 100 }] } }
+  - Invalid: { "field": { "$or": [{ "$gt": 100 }] } }
+  - Invalid: { "field": { "$gt": { "$and": [{...}] } } }
+- $elemMatch requires an object with conditions
+  Valid: { "array": { "$elemMatch": { "field": "value" } } }
+  Invalid: { "array": { "$elemMatch": "value" } }
 
 Example Complex Query:
 {
@@ -286,7 +359,8 @@ Example Complex Query:
 }`;
 
 export const PINECONE_PROMPT = `When querying Pinecone, you can ONLY use the operators listed below. Any other operators will be rejected.
-Important: Don't just explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
+Important: Don't explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
+If a user tries to give an explicit operator that is not supported, reject the filter entirely and let them know that the operator is not supported.
 
 Basic Comparison Operators:
 - $eq: Exact match (default when using field: value)
@@ -335,12 +409,18 @@ Restrictions:
   Valid: { "field": { "$gt": 100 } }
   Valid: { "$and": [...] }
   Invalid: { "$gt": 100 }
-- Multiple conditions on same field use implicit AND
-- Empty arrays in conditions are handled gracefully
-- $all operator requires non-empty array
-- Filters must have at least one key-value pair
-- Nested fields are supported using dot notation
-
+- Logical operators must contain field conditions, not direct operators
+  Valid: { "$and": [{ "field": { "$gt": 100 } }] }
+  Invalid: { "$and": [{ "$gt": 100 }] }
+- Logical operators ($and, $or):
+  - Can only be used at top level or nested within other logical operators
+  - Can not be used on a field level, or be nested inside a field
+  - Can not be used inside an operator
+  - Valid: { "$and": [{ "field": { "$gt": 100 } }] }
+  - Valid: { "$or": [{ "$and": [{ "field": { "$gt": 100 } }] }] }
+  - Invalid: { "field": { "$and": [{ "$gt": 100 }] } }
+  - Invalid: { "field": { "$or": [{ "$gt": 100 }] } }
+  - Invalid: { "field": { "$gt": { "$and": [{...}] } } }
 Example Complex Query:
 {
   "$and": [
@@ -356,7 +436,8 @@ Example Complex Query:
 }`;
 
 export const QDRANT_PROMPT = `When querying Qdrant, you can ONLY use the operators listed below. Any other operators will be rejected.
-Important: Don't just explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
+Important: Don't explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
+If a user tries to give an explicit operator that is not supported, reject the filter entirely and let them know that the operator is not supported.
 
 Basic Comparison Operators:
 - $eq: Exact match (default when using field: value)
@@ -451,7 +532,24 @@ Restrictions:
 - $regex uses standard regex syntax
 - $count can only be used with numeric comparison operators
 - $nested requires an object with conditions
-
+- Logical operators must contain field conditions, not direct operators
+  Valid: { "$and": [{ "field": { "$gt": 100 } }] }
+  Invalid: { "$and": [{ "$gt": 100 }] }
+- $not operator:
+  - Must be an object
+  - Cannot be empty
+  - Can be used at field level or top level
+  - Valid: { "$not": { "field": "value" } }
+  - Valid: { "field": { "$not": { "$eq": "value" } } }
+- Other logical operators ($and, $or):
+  - Can only be used at top level or nested within other logical operators
+  - Can not be used on a field level, or be nested inside a field
+  - Can not be used inside an operator
+  - Valid: { "$and": [{ "field": { "$gt": 100 } }] }
+  - Valid: { "$or": [{ "$and": [{ "field": { "$gt": 100 } }] }] }
+  - Invalid: { "field": { "$and": [{ "$gt": 100 }] } }
+  - Invalid: { "field": { "$or": [{ "$gt": 100 }] } }
+  - Invalid: { "field": { "$gt": { "$and": [{...}] } } }
 Example Complex Query:
 {
   "$and": [
@@ -485,7 +583,8 @@ Example Complex Query:
 }`;
 
 export const UPSTASH_PROMPT = `When querying Upstash Vector, you can ONLY use the operators listed below. Any other operators will be rejected.
-Important: Don't just explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
+Important: Don't explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
+If a user tries to give an explicit operator that is not supported, reject the filter entirely and let them know that the operator is not supported.
 
 Basic Comparison Operators:
 - $eq: Exact match (default when using field: value)
@@ -543,7 +642,24 @@ Restrictions:
   Invalid: { "$gt": 100 }
 - $regex uses glob syntax (*, ?) not standard regex patterns
 - $contains works on both arrays and string fields
-
+- Logical operators must contain field conditions, not direct operators
+  Valid: { "$and": [{ "field": { "$gt": 100 } }] }
+  Invalid: { "$and": [{ "$gt": 100 }] }
+- $not operator:
+  - Must be an object
+  - Cannot be empty
+  - Can be used at field level or top level
+  - Valid: { "$not": { "field": "value" } }
+  - Valid: { "field": { "$not": { "$eq": "value" } } }
+- Other logical operators ($and, $or, $nor):
+  - Can only be used at top level or nested within other logical operators
+  - Can not be used on a field level, or be nested inside a field
+  - Can not be used inside an operator
+  - Valid: { "$and": [{ "field": { "$gt": 100 } }] }
+  - Valid: { "$or": [{ "$and": [{ "field": { "$gt": 100 } }] }] }
+  - Invalid: { "field": { "$and": [{ "$gt": 100 }] } }
+  - Invalid: { "field": { "$or": [{ "$gt": 100 }] } }
+  - Invalid: { "field": { "$gt": { "$and": [{...}] } } }
 Example Complex Query:
 {
   "$and": [
@@ -560,7 +676,8 @@ Example Complex Query:
 }`;
 
 export const VECTORIZE_PROMPT = `When querying Vectorize, you can ONLY use the operators listed below. Any other operators will be rejected.
-Important: Don't just explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
+Important: Don't explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
+If a user tries to give an explicit operator that is not supported, reject the filter entirely and let them know that the operator is not supported.
 
 Basic Comparison Operators:
 - $eq: Exact match (default when using field: value)
