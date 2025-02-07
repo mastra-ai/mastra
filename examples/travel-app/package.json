@@ -13,7 +13,6 @@
   "dependencies": {
     "@libsql/client": "^0.14.0",
     "@mastra/core": "workspace:*",
-    "@mastra/engine": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/store-pg": "workspace:*",
     "@radix-ui/react-checkbox": "^1.1.2",
