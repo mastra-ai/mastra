@@ -1,9 +1,14 @@
-import { OpenAI } from '@mastra/core/llm/openai';
+import { createOpenAI } from '@ai-sdk/openai';
 import { describe, it, expect, vi } from 'vitest';
 
 import { TestCase } from '../utils';
 
 import { SummarizationMetric } from './index';
+
+const model = createOpenAI({
+  name: 'gpt-4o',
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 const testCases: TestCase[] = [
   {
@@ -167,17 +172,12 @@ const testCases: TestCase[] = [
 
 const SECONDS = 1000;
 
-const llm = new OpenAI({
-  name: 'gpt-4o',
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 vi.setConfig({
   testTimeout: 20 * SECONDS,
 });
 
 describe('SummarizationMetric', () => {
-  const metric = new SummarizationMetric(llm);
+  const metric = new SummarizationMetric(model);
 
   it('should handle perfect summarization', async () => {
     const testCase = testCases[0]!;
