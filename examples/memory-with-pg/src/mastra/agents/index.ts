@@ -2,7 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { PostgresStore } from '@mastra/store-pg';
 import { PgVector } from '@mastra/vector-pg';
-import { OpenAIEmbedder } from '@mastra/embedder-openai';
+import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
 
 const host = `localhost`;
 const port = 5432;

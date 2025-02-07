@@ -11,7 +11,7 @@ import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/store-libsql';
 import { LibSQLVector } from '@mastra/vector-libsql';
 import { Agent } from '@mastra/core/agent';
-import { OpenAIEmbedder } from '@mastra/embedder-openai';
+import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
 
 // Initialize memory with LibSQL storage and vector search
 const memory = new Memory({
