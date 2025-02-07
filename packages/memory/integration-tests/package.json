@@ -15,7 +15,7 @@
   "dependencies": {
     "@mastra/memory": "workspace:*",
     "@mastra/pg": "workspace:*",
-    "@mastra/store-upstash": "workspace:*",
+    "@mastra/upstash": "workspace:*",
     "@mastra/core": "workspace:*",
     "dotenv": "^16.0.0"
   },

@@ -1,4 +1,4 @@
-# @mastra/vector-upstash
+# @mastra/store-upstash
 
 ⚠️ **DEPRECATED** ⚠️
 
@@ -12,11 +12,10 @@ Then update your imports:
 
 ```typescript
 // Old import
-import { UpstashVector } from '@mastra/vector-upstash';
+import { UpstashStore } from '@mastra/store-upstash';
 
 // New import
-import { UpstashVector } from '@mastra/upstash';
+import { UpstashStore } from '@mastra/upstash';
 ```
 
 The new package combines both vector store and storage functionality in one place. See the documentation at `@mastra/upstash` for more details.
-

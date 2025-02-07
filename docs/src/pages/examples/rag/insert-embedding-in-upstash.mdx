@@ -10,7 +10,7 @@ import { GithubLink } from '../../../components/github-link';
 After generating embeddings, you need to store them in a vector database for similarity search. The `UpstashVector` class provides methods to create collections and insert embeddings into Upstash Vector, a serverless vector database. This example shows how to store embeddings in Upstash for later retrieval.
 
 ```tsx copy
-import { UpstashVector } from '@mastra/vector-upstash';
+import { UpstashVector } from '@mastra/upstash';
 import { MDocument, embed } from '@mastra/rag';
 
 const doc = MDocument.fromText('Your text content...');

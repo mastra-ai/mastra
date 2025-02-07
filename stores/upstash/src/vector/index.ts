@@ -1,5 +1,6 @@
-import { Filter } from '@mastra/core/filter';
-import { MastraVector, QueryResult } from '@mastra/core/vector';
+import type { Filter } from '@mastra/core/filter';
+import { MastraVector } from '@mastra/core/vector';
+import type { QueryResult } from '@mastra/core/vector';
 import { Index } from '@upstash/vector';
 
 import { UpstashFilterTranslator } from './filter';
@@ -98,10 +99,3 @@ export class UpstashVector extends MastraVector {
     }
   }
 }
-
-throw new Error(
-  '@mastra/vector-upstash is deprecated. Please use @mastra/upstash instead:\n\n' +
-  'npm install @mastra/upstash\n\n' +
-  'Then update your imports:\n' +
-  'import { UpstashVector } from \'@mastra/upstash\''
-);
