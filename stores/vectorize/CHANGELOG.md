@@ -1,4 +1,30 @@
-# @mastra/vector-vectorize
+# @mastra/vectorize
+
+## 0.1.0-alpha.28
+
+### Major Changes
+
+- Package renamed from @mastra/vector-vectorize to @mastra/vectorize
+- Moved package from vector-stores directory to stores directory
+- Restructured source files under src/vector/
+
+## Previous Changes (as @mastra/vector-vectorize)
+
+### 0.1.0-alpha.21 - 0.1.0-alpha.27
+
+- Implemented new filtering for vectorQueryTool
+- Updated operator validation and handling
+- Added Filter Translator to Vectorize
+- Started implementation of Unified Filter API
+- Updated dependencies to use ^ version ranges
+- Multiple dependency updates and improvements
+
+### 0.0.1-alpha.1 - 0.0.1-alpha.20
+
+- Initial implementation of vector store modules
+- Added basic filtering capabilities
+- Implemented bundle optimization with tsup
+- Various bug fixes and improvements
 
 ## 0.1.0-alpha.27
 
