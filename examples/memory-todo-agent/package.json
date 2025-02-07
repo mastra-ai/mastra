@@ -11,8 +11,10 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
+    "ai": "latest",
     "chalk": "^5.3.0",
     "ora": "^8.2.0"
   },

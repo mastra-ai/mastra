@@ -13,8 +13,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@ai-sdk/openai": "^1.1.9",
+    "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:*",
+    "ai": "latest",
     "zod": "^3.24.0"
   }
 }
