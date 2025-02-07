@@ -50,6 +50,7 @@
     "ai": "^4.0.0"
   },
   "devDependencies": {
+    "@ai-sdk/openai": "latest",
     "@tsconfig/recommended": "^1.0.7",
     "@types/difflib": "^0.2.7",
     "@types/fs-extra": "^11.0.4",

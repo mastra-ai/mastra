@@ -7,7 +7,7 @@ import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { Mastra } from '../mastra';
 import { createTool } from '../tools';
 
-import { Agent } from '..';
+import { Agent } from './index';
 
 config();
 

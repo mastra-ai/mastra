@@ -36,6 +36,7 @@
     "ai": "^4.0.0"
   },
   "devDependencies": {
+    "@ai-sdk/openai": "latest",
     "@babel/preset-env": "^7.26.0",
     "@babel/preset-typescript": "^7.26.0",
     "@tsconfig/recommended": "^1.0.7",
