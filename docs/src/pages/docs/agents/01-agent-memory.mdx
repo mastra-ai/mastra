@@ -395,7 +395,7 @@ const agent = new Agent({
   name: "Customer Service",
   instructions:
     "You are a helpful customer service agent. Remember customer preferences and past interactions.",
-  model: openai("gpt-4"),
+  model: openai("gpt-4o"),
   memory: new Memory({
     storage: new MastraStorageLibSql({ url: ":memory:" }),
     options: {

@@ -10,6 +10,7 @@ import { GithubLink } from "../../../components/github-link";
 We will get a random image from [Unsplash](https://unsplash.com/) that matches a selected query and uses a [Mastra AI Agent](/docs/agents/00-overview.md) to determine if it is a bird or not.
 
 ```ts showLineNumbers copy
+import { anthropic } from "@ai-sdk/anthropic";
 import { Agent } from "@mastra/core/agent";
 import { z } from "zod";
 
@@ -89,11 +90,7 @@ const instructions = `
 export const birdCheckerAgent = new Agent({
   name: "Bird checker",
   instructions,
-  model: {
-    provider: "ANTHROPIC",
-    name: "claude-3-haiku-20240307",
-    toolChoice: "auto",
-  },
+  model: anthropic("claude-3-haiku-20240307"),
 });
 
 const queries: string[] = ["wildlife", "feathers", "flying", "birds"];

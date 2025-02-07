@@ -83,16 +83,14 @@ In the example above:
 Once you've defined tools that utilize integrations, you can include these tools in your agents.
 
 ```typescript filename="src/mastra/agents/index.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core';
 import { getMainBranchRef } from '../tools';
 
 export const codeReviewAgent = new Agent({
   name: 'Code Review Agent',
   instructions: 'An agent that reviews code repositories and provides feedback.',
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4',
-  },
+  model: openai('gpt-4o-mini'),
   tools: {
     getMainBranchRef,
     // other tools...
