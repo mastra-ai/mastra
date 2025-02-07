@@ -1,5 +1,5 @@
 ---
-'@mastra/vector-vectorize': major
+'@mastra/vector-vectorize': minor
 '@mastra/vectorize': minor
 ---
 
