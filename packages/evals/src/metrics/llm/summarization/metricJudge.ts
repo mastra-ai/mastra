@@ -1,4 +1,4 @@
-import { type ModelConfig } from '@mastra/core';
+import { type MastraLLMBase } from '@mastra/core/llm';
 import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';
@@ -13,8 +13,8 @@ import {
 } from './prompts';
 
 export class SummarizationJudge extends MastraAgentJudge {
-  constructor(model: ModelConfig) {
-    super('Summarization', SUMMARIZATION_AGENT_INSTRUCTIONS, model);
+  constructor(llm: MastraLLMBase) {
+    super('Summarization', SUMMARIZATION_AGENT_INSTRUCTIONS, llm);
   }
 
   async evaluateAlignment(originalText: string, summary: string): Promise<{ verdict: string; reason: string }[]> {

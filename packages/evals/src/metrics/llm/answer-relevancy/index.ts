@@ -1,4 +1,5 @@
-import { Metric, type ModelConfig } from '@mastra/core';
+import { Metric } from '@mastra/core/eval';
+import { type MastraLLMBase } from '@mastra/core/llm';
 
 import { type MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';
@@ -15,11 +16,11 @@ export class AnswerRelevancyMetric extends Metric {
   private uncertaintyWeight: number;
   private scale: number;
 
-  constructor(model: ModelConfig, { uncertaintyWeight = 0.3, scale = 1 }: AnswerRelevancyMetricOptions = {}) {
+  constructor(llm: MastraLLMBase, { uncertaintyWeight = 0.3, scale = 1 }: AnswerRelevancyMetricOptions = {}) {
     super();
 
     this.uncertaintyWeight = uncertaintyWeight;
-    this.judge = new AnswerRelevancyJudge(model);
+    this.judge = new AnswerRelevancyJudge(llm);
     this.scale = scale;
   }
 

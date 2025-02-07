@@ -1,4 +1,4 @@
-import { type ModelConfig } from '@mastra/core';
+import { type MastraLLMBase } from '@mastra/core/llm';
 import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';
@@ -6,8 +6,8 @@ import { MastraAgentJudge } from '../../judge';
 import { generateEvaluatePrompt, getReasonPrompt, TOXICITY_AGENT_INSTRUCTIONS } from './prompts';
 
 export class ToxicityJudge extends MastraAgentJudge {
-  constructor(model: ModelConfig) {
-    super('Toxicity', TOXICITY_AGENT_INSTRUCTIONS, model);
+  constructor(llm: MastraLLMBase) {
+    super('Toxicity', TOXICITY_AGENT_INSTRUCTIONS, llm);
   }
 
   async evaluate(input: string, actualOutput: string): Promise<{ verdict: string; reason: string }[]> {

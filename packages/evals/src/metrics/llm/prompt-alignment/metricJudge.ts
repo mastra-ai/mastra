@@ -1,4 +1,4 @@
-import { type ModelConfig } from '@mastra/core';
+import { type MastraLLMBase } from '@mastra/core/llm';
 import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';
@@ -6,8 +6,8 @@ import { MastraAgentJudge } from '../../judge';
 import { generateEvaluatePrompt, PROMPT_ALIGNMENT_AGENT_INSTRUCTIONS, generateReasonPrompt } from './prompts';
 
 export class PromptAlignmentJudge extends MastraAgentJudge {
-  constructor(model: ModelConfig) {
-    super('Prompt Alignment', PROMPT_ALIGNMENT_AGENT_INSTRUCTIONS, model);
+  constructor(llm: MastraLLMBase) {
+    super('Prompt Alignment', PROMPT_ALIGNMENT_AGENT_INSTRUCTIONS, llm);
   }
 
   async evaluate(

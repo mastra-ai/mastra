@@ -1,4 +1,4 @@
-import { type ModelConfig } from '@mastra/core';
+import { OpenAI } from '@mastra/core/llm/openai';
 import { describe, it, expect } from 'vitest';
 
 import { TestCase } from '../utils';
@@ -92,17 +92,14 @@ const testCases: TestCase[] = [
 
 const SECONDS = 10000;
 
-const modelConfig: ModelConfig = {
-  provider: 'OPEN_AI',
+const llm = new OpenAI({
   name: 'gpt-4o',
-  toolChoice: 'auto',
-  apiKey: process.env.OPENAI_API_KEY,
-};
+});
 
 describe(
   'AnswerRelevancyMetric',
   () => {
-    const metric = new AnswerRelevancyMetric(modelConfig);
+    const metric = new AnswerRelevancyMetric(llm);
 
     it('should be able to measure a prompt with perfect relevancy', async () => {
       const result = await metric.measure(testCases[0].input, testCases[0].output);

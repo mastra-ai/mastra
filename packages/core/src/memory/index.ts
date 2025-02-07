@@ -114,7 +114,20 @@ export abstract class MastraMemory extends MastraBase {
 
   protected parseEmbeddingOptions() {
     if (!this.embedding) {
-      throw new Error(`Cannot use vector features without setting new Memory({ embedding: { ... } })`);
+      throw new Error(`Cannot use vector features without setting new Memory({ embedding: { ... } })
+
+For example:
+
+new Memory({
+  storage,
+  vector,
+  embedding: { // <- this is required
+    provider: "OPEN_AI",
+    model: "text-embedding-3-small",
+    maxRetries: 3,
+  }
+});
+`);
     }
 
     return this.embedding;
@@ -305,7 +318,7 @@ export abstract class MastraMemory extends MastraBase {
   }): Promise<StorageThreadType> {
     const thread: StorageThreadType = {
       id: threadId || this.generateId(),
-      title,
+      title: title || 'New Thread',
       resourceId,
       createdAt: new Date(),
       updatedAt: new Date(),

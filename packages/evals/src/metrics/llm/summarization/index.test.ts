@@ -1,4 +1,4 @@
-import { type ModelConfig } from '@mastra/core';
+import { OpenAI } from '@mastra/core/llm/openai';
 import { describe, it, expect, vi } from 'vitest';
 
 import { TestCase } from '../utils';
@@ -167,19 +167,17 @@ const testCases: TestCase[] = [
 
 const SECONDS = 1000;
 
-const modelConfig: ModelConfig = {
-  provider: 'OPEN_AI',
+const llm = new OpenAI({
   name: 'gpt-4o',
-  toolChoice: 'auto',
   apiKey: process.env.OPENAI_API_KEY,
-};
+});
 
 vi.setConfig({
   testTimeout: 20 * SECONDS,
 });
 
 describe('SummarizationMetric', () => {
-  const metric = new SummarizationMetric(modelConfig);
+  const metric = new SummarizationMetric(llm);
 
   it('should handle perfect summarization', async () => {
     const testCase = testCases[0]!;

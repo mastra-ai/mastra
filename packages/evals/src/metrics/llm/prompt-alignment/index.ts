@@ -1,4 +1,5 @@
-import { Metric, type ModelConfig } from '@mastra/core';
+import { Metric } from '@mastra/core/eval';
+import { type MastraLLMBase } from '@mastra/core/llm';
 
 import { type MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';
@@ -15,11 +16,11 @@ export class PromptAlignmentMetric extends Metric {
   private judge: PromptAlignmentJudge;
   private scale: number;
 
-  constructor(model: ModelConfig, { instructions, scale = 1 }: PromptAlignmentMetricOptions) {
+  constructor(llm: MastraLLMBase, { instructions, scale = 1 }: PromptAlignmentMetricOptions) {
     super();
 
     this.instructions = instructions;
-    this.judge = new PromptAlignmentJudge(model);
+    this.judge = new PromptAlignmentJudge(llm);
     this.scale = scale;
   }
 
