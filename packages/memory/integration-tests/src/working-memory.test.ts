@@ -1,4 +1,5 @@
 import { createOpenAI } from '@ai-sdk/openai';
+import { MessageType } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { MastraStorageLibSql } from '@mastra/core/storage';
 import { LibSQLVector } from '@mastra/core/vector/libsql';
@@ -20,7 +21,7 @@ const createTestThread = (title: string, metadata = {}) => ({
   updatedAt: new Date(),
 });
 
-const createTestMessage = (threadId: string, content: string, role: 'user' | 'assistant' = 'user') => {
+const createTestMessage = (threadId: string, content: string, role: 'user' | 'assistant' = 'user'): MessageType => {
   messageCounter++;
   return {
     id: randomUUID(),
@@ -92,11 +93,7 @@ describe('Working Memory Tests', () => {
     const agent = new Agent({
       name: 'Memory Test Agent',
       instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
-      model: {
-        provider: 'OPEN_AI',
-        name: 'gpt-4o',
-        toolChoice: 'auto',
-      },
+      model: openai('gpt-4o'),
       memory,
     });
 
@@ -106,6 +103,7 @@ describe('Working Memory Tests', () => {
     });
 
     // Get working memory
+    // @ts-expect-error
     const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toContain('<first_name>Tyler</first_name>');
     expect(workingMemory).toContain('<location>San Francisco</location>');
@@ -133,11 +131,12 @@ describe('Working Memory Tests', () => {
           "Great city! I'll update my memory about you.\n<working_memory><user><first_name>Tyler</first_name><location>San Francisco</location></user></working_memory>",
         createdAt: new Date(),
       },
-    ];
+    ] as MessageType[];
 
     await memory.saveMessages({ messages });
 
     // Get the working memory
+    // @ts-expect-error
     const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toContain('<first_name>Tyler</first_name>');
     expect(workingMemory).toContain('<location>San Francisco</location>');
@@ -157,6 +156,7 @@ describe('Working Memory Tests', () => {
   });
 
   it('should initialize with default working memory template', async () => {
+    // @ts-expect-error
     const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toContain('<user>');
     expect(workingMemory).toContain('<first_name>');
@@ -218,6 +218,7 @@ describe('Working Memory Tests', () => {
       ],
     });
 
+    // @ts-expect-error
     const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toContain('<first_name>John</first_name>');
     expect(workingMemory).toContain('<location>New York</location>');
@@ -266,11 +267,7 @@ describe('Working Memory Tests', () => {
           messageRange: 2,
         },
       },
-      embedding: {
-        provider: 'OPEN_AI',
-        model: 'text-embedding-ada-002',
-        maxRetries: 3,
-      },
+      embedder: openai.embedding('text-embedding-3-small'),
     });
 
     const thread = await disabledMemory.saveThread({
@@ -289,6 +286,7 @@ describe('Working Memory Tests', () => {
     await disabledMemory.saveMessages({ messages });
 
     // Working memory should be null when disabled
+    // @ts-expect-error
     const workingMemory = await disabledMemory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toBeNull();
 
