@@ -31,6 +31,7 @@ export default function Page() {
             fileName="src/mastra/agents/index.ts"
             language="typescript"
             code={`import { Agent } from '@mastra/core';
+import { anthropic } from '@ai-sdk/anthropic';
 
 export const travelAgent = new Agent({
   name: 'travelAgent',
@@ -39,11 +40,7 @@ export const travelAgent = new Agent({
     and three attractions for a user. You will be given a set of user
     preferences along with some tools and you will need to find the best
     options for them.',
-  model: {
-    provider: 'ANTHROPIC',
-    name: 'claude-3-5-sonnet-20240620',
-    toolChoice: 'auto',
-  },
+  model: anthropic('claude-3-5-sonnet-20240620'),
   enabledTools: {
     searchFlights: true,
     searchHotels: true,
