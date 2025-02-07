@@ -1,0 +1,101 @@
+---
+title: Streaming Working Memory
+description: Example of using working memory with an agent
+---
+
+# Streaming Working Memory
+
+This example demonstrates how to create an agent that maintains a working memory for relevant conversational details like the users name, location, or preferences.
+
+## Setup
+
+First, set up the memory system with LibSQL storage (or any other [storage provider](/docs/agents/01-agent-memory#storage-options)
+and a working memory template for the todo list:
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { MastraStorageLibSql } from "@mastra/core/storage";
+
+const memory = new Memory({
+  storage: new MastraStorageLibSql({
+    config: {
+      url: "file:example.db",
+    },
+  }),
+  options: {
+    workingMemory: {
+      enabled: true,
+    },
+  },
+});
+```
+
+Add the memory instance to an agent
+
+```typescript
+const todoAgent = new Agent({
+  name: "Memory agent",
+  instructions: "You are a helpful AI assistant.",
+  model: {
+    provider: "OPEN_AI",
+    name: "gpt-4o-mini",
+    toolChoice: "auto",
+  },
+  memory,
+});
+```
+
+## Usage Example
+
+Now that working memory is set up you can interact with the agent and it will remember key details about interactions.
+
+First start a conversation and give the agent relevant information like your name.
+
+```typescript
+import { randomUUID } from "crypto";
+
+const threadId = randomUUID();
+const resourceId = "SOME_USER_ID";
+
+const response = await todoAgent.stream("Hello, my name is Jane", {
+  threadId,
+  resourceId,
+});
+
+// process response stream
+for await (const chunk of response.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### Handling response data
+
+The response stream will contain xml-like `<working_memory>$data</working_memory>` tagged data.
+Mastra picks up these tags and automatically updates working memory with the data returned by the LLM.
+
+To prevent showing this data to users you can import the `maskStreamTags` util and pass the stream response through it.
+
+```typescript
+import { maskStreamTags } from "@mastra/core/utils";
+
+for await (const chunk of maskStreamTags(
+  response.textStream, // pass the text stream
+  "working_memory", // and the name of the working memory tag
+)) {
+  process.stdout.write(chunk);
+}
+```
+
+## Summary
+
+This example demonstrates:
+
+1. Setting up a memory system with working memory enabled
+2. Using `maskStreamTags` to hide memory updates from users
+3. The agent will maintain relevant user info between interactions, even when the original messages containing that info are no longer in context.
+
+## Advanced use cases
+
+For examples on controlling which information is relevant for working memory, or showing loading states while working memory is being saved, see our [advanced working memory example](/examples/memory/streaming-working-memory-advanced).
+
+To learn more about agent memory, including other memory types and storage options, check out the [Memory documentation](/docs/agents/01-agent-memory) page.
