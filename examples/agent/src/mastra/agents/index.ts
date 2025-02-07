@@ -1,11 +1,7 @@
+import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { OpenAI } from '@mastra/core/llm/openai';
 
 import { cookingTool } from '../tools/index.js';
-
-const openai = new OpenAI({
-  name: 'gpt-4o-mini',
-});
 
 export const chefAgent = new Agent({
   name: 'Chef Agent',
@@ -15,7 +11,7 @@ export const chefAgent = new Agent({
     ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes. 
     You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
     `,
-  llm: openai,
+  model: openai('gpt-4o-mini'),
   tools: {
     cookingTool,
   },

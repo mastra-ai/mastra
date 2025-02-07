@@ -20,7 +20,7 @@ import {
   LLMTextObjectOptions,
   LLMTextOptions,
   StreamReturn,
-} from '../types';
+} from '../';
 
 export class MastraLLMBase extends MastraBase {
   // @ts-ignore

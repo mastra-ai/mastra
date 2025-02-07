@@ -1,7 +1,7 @@
 import { CoreMessage, deepMerge } from '@mastra/core';
 import { MastraMemory, MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import { StorageGetMessagesArg } from '@mastra/core/storage';
-import { Message as AiMessage } from 'ai';
+import { embed, Message as AiMessage } from 'ai';
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -40,11 +40,11 @@ export class Memory extends MastraMemory {
     let vectorResults:
       | null
       | {
-          id: string;
-          score: number;
-          metadata?: Record<string, any>;
-          vector?: number[];
-        }[] = null;
+        id: string;
+        score: number;
+        metadata?: Record<string, any>;
+        vector?: number[];
+      }[] = null;
 
     this.logger.info(`Memory query() with:`, {
       threadId,
@@ -57,17 +57,22 @@ export class Memory extends MastraMemory {
     const vectorConfig =
       typeof config?.semanticRecall === `boolean`
         ? {
-            topK: 2,
-            messageRange: { before: 2, after: 2 },
-          }
+          topK: 2,
+          messageRange: { before: 2, after: 2 },
+        }
         : {
-            topK: config?.semanticRecall?.topK || 2,
-            messageRange: config?.semanticRecall?.messageRange || { before: 2, after: 2 },
-          };
+          topK: config?.semanticRecall?.topK || 2,
+          messageRange: config?.semanticRecall?.messageRange || { before: 2, after: 2 },
+        };
 
     if (selectBy?.vectorSearchString && this.vector) {
       const embedder = this.getEmbedder();
-      const { embedding } = await embedder.embed(selectBy.vectorSearchString);
+
+      const { embedding } = await embed({
+        value: selectBy.vectorSearchString,
+        model: embedder,
+        maxRetries: 3,
+      });
 
       await this.vector.createIndex('memory_messages', 1536);
       vectorResults = await this.vector.query('memory_messages', embedding, vectorConfig.topK, {
@@ -82,18 +87,18 @@ export class Memory extends MastraMemory {
         ...selectBy,
         ...(vectorResults?.length
           ? {
-              include: vectorResults.map(r => ({
-                id: r.metadata?.message_id,
-                withNextMessages:
-                  typeof vectorConfig.messageRange === 'number'
-                    ? vectorConfig.messageRange
-                    : vectorConfig.messageRange.after,
-                withPreviousMessages:
-                  typeof vectorConfig.messageRange === 'number'
-                    ? vectorConfig.messageRange
-                    : vectorConfig.messageRange.before,
-              })),
-            }
+            include: vectorResults.map(r => ({
+              id: r.metadata?.message_id,
+              withNextMessages:
+                typeof vectorConfig.messageRange === 'number'
+                  ? vectorConfig.messageRange
+                  : vectorConfig.messageRange.after,
+              withPreviousMessages:
+                typeof vectorConfig.messageRange === 'number'
+                  ? vectorConfig.messageRange
+                  : vectorConfig.messageRange.before,
+            })),
+          }
           : {}),
       },
       threadConfig: config,
@@ -205,7 +210,7 @@ export class Memory extends MastraMemory {
       for (const message of messages) {
         if (typeof message.content !== `string`) continue;
         const embedder = this.getEmbedder();
-        const { embedding } = await embedder.embed(message.content);
+        const { embedding } = await embed({ value: message.content, model: embedder, maxRetries: 3 });
         await this.vector.upsert(
           'memory_messages',
           [embedding],
@@ -284,9 +289,9 @@ export class Memory extends MastraMemory {
       : typeof latestMessage.content === 'string'
         ? latestMessage.content
         : latestMessage.content
-            .filter(c => c.type === 'text')
-            .map(c => c.text)
-            .join('\n');
+          .filter(c => c.type === 'text')
+          .map(c => c.text)
+          .join('\n');
 
     const threadId = latestMessage?.threadId;
     if (!latestContent || !threadId) {

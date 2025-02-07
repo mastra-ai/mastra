@@ -1,18 +1,14 @@
+import { type LanguageModelV1 } from 'ai';
 import { Agent } from '../../agent';
-import { CustomModelConfig, ModelConfig } from '../../llm/types';
 import { RelevanceScoreProvider, createSimilarityPrompt } from '../relevance-score-provider';
 
 // Mastra Agent implementation
 export class MastraAgentRelevanceScorer implements RelevanceScoreProvider {
   private agent: Agent;
 
-  constructor(provider: string, name: string, model?: CustomModelConfig['model']) {
-    const modelConfig = {
-      provider,
-      ...(model ? { model } : { name }),
-    } as ModelConfig;
+  constructor(name: string, model: LanguageModelV1) {
     this.agent = new Agent({
-      name: `Relevance Scorer ${provider} ${name}`,
+      name: `Relevance Scorer ${name}`,
       instructions: `You are a specialized agent for evaluating the relevance of text to queries.
 Your task is to rate how well a text passage answers a given query.
 Output only a number between 0 and 1, where:
@@ -23,7 +19,7 @@ Consider:
 - Completeness of information
 - Quality and specificity
 Always return just the number, no explanation.`,
-      model: modelConfig,
+      model,
     });
   }
 

@@ -7,10 +7,10 @@ import {
   CoreToolMessage,
   ToolInvocation,
   CoreMessage,
+  EmbeddingModel,
 } from 'ai';
 
 import { MastraBase } from '../base';
-import { MastraEmbedder } from '../embeddings/model/providers/embedder';
 import { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { deepMerge } from '../utils';
 import { MastraVector } from '../vector';
@@ -47,11 +47,11 @@ export type MessageResponse<T extends 'raw' | 'core_message'> = {
 export type MemoryConfig = {
   lastMessages?: number | false;
   semanticRecall?:
-    | boolean
-    | {
-        topK: number;
-        messageRange: number | { before: number; after: number };
-      };
+  | boolean
+  | {
+    topK: number;
+    messageRange: number | { before: number; after: number };
+  };
   workingMemory?: {
     enabled: boolean;
     template?: string;
@@ -62,7 +62,7 @@ export type SharedMemoryConfig = {
   storage: MastraStorage;
   options?: MemoryConfig;
   vector?: MastraVector;
-  embedder?: MastraEmbedder;
+  embedder?: EmbeddingModel<string>;
 };
 
 /**
@@ -74,7 +74,7 @@ export abstract class MastraMemory extends MastraBase {
 
   storage: MastraStorage;
   vector?: MastraVector;
-  embedder?: MastraEmbedder;
+  embedder?: EmbeddingModel<string>;
 
   protected threadConfig: MemoryConfig = {
     lastMessages: 40,

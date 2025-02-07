@@ -23,7 +23,7 @@ import {
   LLMStreamOptions,
   LLMTextObjectOptions,
   StreamReturn,
-} from '../types';
+} from '../';
 
 import { MastraLLMBase } from './base';
 

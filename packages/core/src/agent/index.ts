@@ -11,18 +11,19 @@ import {
 import { randomUUID } from 'crypto';
 import { JSONSchema7 } from 'json-schema';
 import { z, ZodSchema } from 'zod';
+import { type LanguageModelV1 } from 'ai';
 
-import { MastraPrimitives } from '../action';
-import { MastraBase } from '../base';
-import { Metric } from '../eval';
-import { AvailableHooks, executeHook } from '../hooks';
-import { LLM } from '../llm';
-import { MastraLLMBase } from '../llm/model';
-import { GenerateReturn, ModelConfig, StreamReturn } from '../llm/types';
+import { MastraLLM, MastraLLMBase } from '../llm/model';
+import { CoreTool, ToolAction } from '../tools/types';
+import type { GenerateReturn, StreamReturn } from '../llm';
 import { LogLevel, RegisteredLogger } from '../logger';
 import { MastraMemory, MemoryConfig, StorageThreadType } from '../memory';
 import { InstrumentClass } from '../telemetry';
-import { CoreTool, ToolAction } from '../tools/types';
+import { AvailableHooks, executeHook } from '../hooks';
+import { MastraPrimitives } from '../action';
+import { MastraBase } from '../base';
+import { Metric } from '../eval';
+
 
 import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
 
@@ -35,10 +36,9 @@ export class Agent<
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > extends MastraBase {
   public name: string;
-  // @ts-ignore
-  readonly llm: LLM | MastraLLMBase;
+  readonly llm: MastraLLMBase;
   readonly instructions: string;
-  readonly model?: ModelConfig;
+  readonly model?: LanguageModelV1;
   #mastra?: MastraPrimitives;
   #memory?: MastraMemory;
   tools: TTools;
@@ -50,16 +50,11 @@ export class Agent<
     this.name = config.name;
     this.instructions = config.instructions;
 
-    if (!config.model && !config.llm) {
-      throw new Error('Either model or llm is required');
+    if (!config.model) {
+      throw new Error(`LanugageModel is required to create an Agent. Please provider the 'model'.`);
     }
 
-    if (config.llm) {
-      this.llm = config.llm;
-    } else if (config.model) {
-      this.model = config.model;
-      this.llm = new LLM({ model: config.model });
-    }
+    this.llm = new MastraLLM({ model: config.model })
 
     this.tools = {} as TTools;
 
@@ -259,20 +254,20 @@ export class Agent<
         const memoryMessages =
           threadId && memory
             ? (
-                await memory.rememberMessages({
-                  threadId,
-                  config: memoryConfig,
-                  vectorMessageSearch: messages
-                    .slice(-1)
-                    .map(m => {
-                      if (typeof m === `string`) {
-                        return m;
-                      }
-                      return m?.content || ``;
-                    })
-                    .join(`\n`),
-                })
-              ).messages
+              await memory.rememberMessages({
+                threadId,
+                config: memoryConfig,
+                vectorMessageSearch: messages
+                  .slice(-1)
+                  .map(m => {
+                    if (typeof m === `string`) {
+                      return m;
+                    }
+                    return m?.content || ``;
+                  })
+                  .join(`\n`),
+              })
+            ).messages
             : [];
 
         if (memory) {
@@ -377,10 +372,10 @@ export class Agent<
                     return undefined;
                   })
                   ?.filter(Boolean) as Array<{
-                  toolCallId: string;
-                  toolArgs: Record<string, unknown>;
-                  toolName: string;
-                }>;
+                    toolCallId: string;
+                    toolArgs: Record<string, unknown>;
+                    toolName: string;
+                  }>;
 
                 toolCallIds = assistantToolCalls?.map(toolCall => toolCall.toolCallId);
 
@@ -902,7 +897,7 @@ export class Agent<
         tools: this.tools,
         convertedTools,
         onStepFinish,
-        onFinish: async result => {
+        onFinish: async (result: string) => {
           try {
             const res = JSON.parse(result) || {};
             const outputText = res.text;
@@ -930,7 +925,7 @@ export class Agent<
       structuredOutput: output,
       convertedTools,
       onStepFinish,
-      onFinish: async result => {
+      onFinish: async (result: string) => {
         try {
           const res = JSON.parse(result) || {};
           const outputText = JSON.stringify(res.object);

@@ -21,24 +21,6 @@
         "default": "./dist/*/index.js"
       }
     },
-    "./llm/*": {
-      "import": {
-        "types": "./dist/llm/model/providers/*.d.ts",
-        "default": "./dist/llm/model/providers/*.js"
-      }
-    },
-    "./llm": {
-      "import": {
-        "types": "./dist/llm/model/index.d.ts",
-        "default": "./dist/llm/model/index.js"
-      }
-    },
-    "./embeddings/*": {
-      "import": {
-        "types": "./dist/embeddings/model/providers/*.d.ts",
-        "default": "./dist/embeddings/model/providers/*.js"
-      }
-    },
     "./vector/libsql": {
       "import": {
         "types": "./dist/vector/libsql/index.d.ts",
@@ -66,7 +48,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
-    "build": "tsup-node src/index.ts src/base.ts src/utils.ts src/*/index.ts src/vector/libsql/index.ts src/llm/model/index.ts src/llm/model/providers/*.ts src/embeddings/model/providers/*.ts --format esm --clean --dts --treeshake",
+    "build": "tsup-node src/index.ts src/base.ts src/utils.ts src/*/index.ts src/vector/libsql/index.ts --format esm --clean --dts --treeshake",
     "build:dev": "pnpm build --watch",
     "size": "size-limit",
     "test": "vitest run"

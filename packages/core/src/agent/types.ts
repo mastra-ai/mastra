@@ -1,13 +1,14 @@
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
+import { LanguageModelV1 } from 'ai';
 
 import type { MastraPrimitives } from '../action';
 import type { Metric } from '../eval';
-import { MastraLLMBase } from '../llm/model';
-import type { CoreMessage, ModelConfig, OutputType } from '../llm/types';
+import type { CoreMessage, OutputType } from '../llm';
 import type { MastraMemory } from '../memory';
 import { MemoryConfig } from '../memory';
 import type { ToolAction } from '../tools';
+
 
 export type ToolsetsInput = Record<string, Record<string, ToolAction<any, any, any, any>>>;
 
@@ -19,8 +20,7 @@ export interface AgentConfig<
 > {
   name: string;
   instructions: string;
-  model?: ModelConfig;
-  llm?: MastraLLMBase;
+  model: LanguageModelV1;
   tools?: TTools;
   mastra?: MastraPrimitives;
   metrics?: TMetrics;

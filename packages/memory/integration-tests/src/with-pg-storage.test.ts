@@ -1,4 +1,4 @@
-import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
+import { createOpenAI } from '@ai-sdk/openai';
 import { Memory } from '@mastra/memory';
 import { PostgresStore } from '@mastra/store-pg';
 import { PgVector } from '@mastra/vector-pg';
@@ -27,6 +27,8 @@ const parseConnectionString = (url: string) => {
   };
 };
 
+const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
 describe('Memory with PostgresStore Integration', () => {
   const config = parseConnectionString(connectionString);
   const memory = new Memory({
@@ -39,9 +41,7 @@ describe('Memory with PostgresStore Integration', () => {
         messageRange: 2,
       },
     },
-    embedder: new OpenAIEmbedder({
-      model: 'text-embedding-3-small',
-    }),
+    embedder: openai.embedding('text-embedding-3-small'),
   });
 
   getResuableTests(memory);
