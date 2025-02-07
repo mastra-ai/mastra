@@ -36,10 +36,12 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
+import { openai } from "@ai-sdk/openai";
+import { embedMany } from "ai";
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
 import { PgVector } from "@mastra/pg";
-import { createVectorQueryTool, embedMany, MDocument } from "@mastra/rag";
+import { createVectorQueryTool, MDocument } from "@mastra/rag";
 ```
 
 ## Vector Query Tool Creation
@@ -63,6 +65,7 @@ const vectorQueryTool = createVectorQueryTool({
 Set up the Mastra agent with chain-of-thought prompting instructions:
 
 ```typescript copy showLineNumbers{15} filename="src/mastra/index.ts"
+
 export const ragAgent = new Agent({
   name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context.
@@ -82,10 +85,7 @@ THOUGHT PROCESS:
 
 FINAL ANSWER:
 [Your concise answer based on the retrieved context]`,
-  model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-  },
+  model: openai("gpt-4o-mini"),
   tools: { contextTool },
 });
 ```
