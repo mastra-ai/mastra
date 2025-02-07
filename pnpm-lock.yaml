@@ -708,12 +708,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@mastra/engine':
-        specifier: workspace:*
-        version: link:../../packages/engine
-      drizzle-kit:
-        specifier: ^0.28.1
-        version: 0.28.1
       zod:
         specifier: ^3.24.0
         version: 3.24.1
@@ -1322,9 +1316,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@mastra/engine':
-        specifier: workspace:*
-        version: link:../../packages/engine
       '@mastra/firecrawl':
         specifier: workspace:*
         version: link:../../integrations/firecrawl
@@ -1484,9 +1475,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@mastra/engine':
-        specifier: workspace:*
-        version: link:../../packages/engine
       '@mastra/memory':
         specifier: workspace:*
         version: link:../../packages/memory
@@ -2634,61 +2622,6 @@ importers:
       zod-to-json-schema:
         specifier: ^3.24.1
         version: 3.24.1(zod@3.24.1)
-
-  packages/engine:
-    dependencies:
-      '@date-fns/utc':
-        specifier: ^1.2.0
-        version: 1.2.0
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../core
-      '@paralleldrive/cuid2':
-        specifier: ^2.2.2
-        version: 2.2.2
-      date-fns:
-        specifier: ^4.1.0
-        version: 4.1.0
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.4.7
-      drizzle-orm:
-        specifier: ^0.38.2
-        version: 0.38.4(@cloudflare/workers-types@4.20250124.3)(@libsql/client@0.14.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(@opentelemetry/api@1.9.0)(@types/pg@8.11.11)(@types/react@19.0.8)(@vercel/postgres@0.10.0(utf-8-validate@6.0.5))(pg@8.13.1)(postgres@3.4.5)(react@19.0.0)(sqlite3@5.1.7)
-      pg:
-        specifier: ^8.13.1
-        version: 8.13.1
-      postgres:
-        specifier: ^3.4.5
-        version: 3.4.5
-    devDependencies:
-      '@rollup/plugin-typescript':
-        specifier: ^12.1.1
-        version: 12.1.2(rollup@4.32.1)(tslib@2.8.1)(typescript@5.7.3)
-      '@tsconfig/recommended':
-        specifier: ^1.0.7
-        version: 1.0.8
-      '@types/node':
-        specifier: ^22.9.0
-        version: 22.12.0
-      '@types/pg':
-        specifier: ^8.11.10
-        version: 8.11.11
-      cpy-cli:
-        specifier: ^5.0.0
-        version: 5.0.0
-      drizzle-kit:
-        specifier: ^0.30.1
-        version: 0.30.3
-      tsup:
-        specifier: ^8.3.6
-        version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
-      typescript:
-        specifier: ^5.7.3
-        version: 5.7.3
-      vitest:
-        specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   packages/evals:
     dependencies:
@@ -4880,9 +4813,6 @@ packages:
 
   '@date-fns/tz@1.2.0':
     resolution: {integrity: sha512-LBrd7MiJZ9McsOgxqWX7AaxrDjcFVjWH/tIKJd7pnR7McaslGYOP1QmmiBXdJH/H/yLCT+rcQ7FaPBUxRGUtrg==}
-
-  '@date-fns/utc@1.2.0':
-    resolution: {integrity: sha512-YLq+crMPJiBmIdkRmv9nZuZy1mVtMlDcUKlg4mvI0UsC/dZeIaGoGB5p/C4FrpeOhZ7zBTK03T58S0DFkRNMnw==}
 
   '@deepgram/captions@1.2.0':
     resolution: {integrity: sha512-8B1C/oTxTxyHlSFubAhNRgCbQ2SQ5wwvtlByn8sDYZvdDtdn/VE2yEPZ4BvUnrKWmsbTQY6/ooLV+9Ka2qmDSQ==}
@@ -8788,19 +8718,6 @@ packages:
       rollup:
         optional: true
 
-  '@rollup/plugin-typescript@12.1.2':
-    resolution: {integrity: sha512-cdtSp154H5sv637uMr1a8OTWB0L1SWDSm1rDGiyfcGcvQ6cuTs4MDk2BVEBGysUWago4OJN4EQZqOTl/QY3Jgg==}
-    engines: {node: '>=14.0.0'}
-    peerDependencies:
-      rollup: ^2.14.0||^3.0.0||^4.0.0
-      tslib: '*'
-      typescript: ^5.7.3
-    peerDependenciesMeta:
-      rollup:
-        optional: true
-      tslib:
-        optional: true
-
   '@rollup/plugin-virtual@3.0.2':
     resolution: {integrity: sha512-10monEYsBp3scM4/ND4LNH5Rxvh3e/cVeL3jWTgZ2SrQ+BmUoQcopVQvnaMcOnykb1VkxUFuDAN+0FnpTFRy2A==}
     engines: {node: '>=14.0.0'}
@@ -12186,10 +12103,6 @@ packages:
     resolution: {integrity: sha512-Rcf0nYCAKizwjWQCY+d3zytyuTbDb81NcaPor+8NebESlUz1+9W3uGl0+r9FhU4Qal5Zv9j/7neXCSCe7DHzjA==}
     hasBin: true
 
-  drizzle-kit@0.28.1:
-    resolution: {integrity: sha512-JimOV+ystXTWMgZkLHYHf2w3oS28hxiH1FR0dkmJLc7GHzdGJoJAQtQS5DRppnabsRZwE2U1F6CuezVBgmsBBQ==}
-    hasBin: true
-
   drizzle-kit@0.29.1:
     resolution: {integrity: sha512-OvHL8RVyYiPR3LLRE3SHdcON8xGXl+qMfR9uTTnFWBPIqVk/3NWYZPb7nfpM1Bhix3H+BsxqPyyagG7YZ+Z63A==}
     hasBin: true
@@ -12200,98 +12113,6 @@ packages:
 
   drizzle-orm@0.37.0:
     resolution: {integrity: sha512-AsCNACQ/T2CyZUkrBRUqFT2ibHJ9ZHz3+lzYJFFn3hnj7ylIeItMz5kacRG89uSE74nXYShqehr6u+6ks4JR1A==}
-    peerDependencies:
-      '@aws-sdk/client-rds-data': '>=3'
-      '@cloudflare/workers-types': '>=4'
-      '@electric-sql/pglite': '>=0.2.0'
-      '@libsql/client': '>=0.10.0'
-      '@libsql/client-wasm': '>=0.10.0'
-      '@neondatabase/serverless': '>=0.10.0'
-      '@op-engineering/op-sqlite': '>=2'
-      '@opentelemetry/api': ^1.4.1
-      '@planetscale/database': '>=1'
-      '@prisma/client': '*'
-      '@tidbcloud/serverless': '*'
-      '@types/better-sqlite3': '*'
-      '@types/pg': '*'
-      '@types/react': '>=18'
-      '@types/sql.js': '*'
-      '@vercel/postgres': '>=0.8.0'
-      '@xata.io/client': '*'
-      better-sqlite3: '>=7'
-      bun-types: '*'
-      expo-sqlite: '>=14.0.0'
-      knex: '*'
-      kysely: '*'
-      mysql2: '>=2'
-      pg: '>=8'
-      postgres: '>=3'
-      prisma: '*'
-      react: '>=18'
-      sql.js: '>=1'
-      sqlite3: '>=5'
-    peerDependenciesMeta:
-      '@aws-sdk/client-rds-data':
-        optional: true
-      '@cloudflare/workers-types':
-        optional: true
-      '@electric-sql/pglite':
-        optional: true
-      '@libsql/client':
-        optional: true
-      '@libsql/client-wasm':
-        optional: true
-      '@neondatabase/serverless':
-        optional: true
-      '@op-engineering/op-sqlite':
-        optional: true
-      '@opentelemetry/api':
-        optional: true
-      '@planetscale/database':
-        optional: true
-      '@prisma/client':
-        optional: true
-      '@tidbcloud/serverless':
-        optional: true
-      '@types/better-sqlite3':
-        optional: true
-      '@types/pg':
-        optional: true
-      '@types/react':
-        optional: true
-      '@types/sql.js':
-        optional: true
-      '@vercel/postgres':
-        optional: true
-      '@xata.io/client':
-        optional: true
-      better-sqlite3:
-        optional: true
-      bun-types:
-        optional: true
-      expo-sqlite:
-        optional: true
-      knex:
-        optional: true
-      kysely:
-        optional: true
-      mysql2:
-        optional: true
-      pg:
-        optional: true
-      postgres:
-        optional: true
-      prisma:
-        optional: true
-      react:
-        optional: true
-      sql.js:
-        optional: true
-      sqlite3:
-        optional: true
-
-  drizzle-orm@0.38.4:
-    resolution: {integrity: sha512-s7/5BpLKO+WJRHspvpqTydxFob8i1vo2rEx4pY6TGY7QSMuUfWUuzaY0DIpXCkgHOo37BaFC+SJQb99dDUXT3Q==}
     peerDependencies:
       '@aws-sdk/client-rds-data': '>=3'
       '@cloudflare/workers-types': '>=4'
@@ -22821,8 +22642,6 @@ snapshots:
 
   '@date-fns/tz@1.2.0': {}
 
-  '@date-fns/utc@1.2.0': {}
-
   '@deepgram/captions@1.2.0':
     dependencies:
       dayjs: 1.11.13
@@ -28063,15 +27882,6 @@ snapshots:
     optionalDependencies:
       rollup: 3.29.5
 
-  '@rollup/plugin-typescript@12.1.2(rollup@4.32.1)(tslib@2.8.1)(typescript@5.7.3)':
-    dependencies:
-      '@rollup/pluginutils': 5.1.4(rollup@4.32.1)
-      resolve: 1.22.10
-      typescript: 5.7.3
-    optionalDependencies:
-      rollup: 4.32.1
-      tslib: 2.8.1
-
   '@rollup/plugin-virtual@3.0.2(rollup@4.32.1)':
     optionalDependencies:
       rollup: 4.32.1
@@ -32304,15 +32114,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-kit@0.28.1:
-    dependencies:
-      '@drizzle-team/brocli': 0.10.2
-      '@esbuild-kit/esm-loader': 2.6.5
-      esbuild: 0.19.12
-      esbuild-register: 3.6.0(esbuild@0.19.12)
-    transitivePeerDependencies:
-      - supports-color
-
   drizzle-kit@0.29.1:
     dependencies:
       '@drizzle-team/brocli': 0.10.2
@@ -32342,19 +32143,6 @@ snapshots:
       pg: 8.13.1
       postgres: 3.4.5
       react: 19.0.0-rc-45804af1-20241021
-      sqlite3: 5.1.7
-
-  drizzle-orm@0.38.4(@cloudflare/workers-types@4.20250124.3)(@libsql/client@0.14.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(@opentelemetry/api@1.9.0)(@types/pg@8.11.11)(@types/react@19.0.8)(@vercel/postgres@0.10.0(utf-8-validate@6.0.5))(pg@8.13.1)(postgres@3.4.5)(react@19.0.0)(sqlite3@5.1.7):
-    optionalDependencies:
-      '@cloudflare/workers-types': 4.20250124.3
-      '@libsql/client': 0.14.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
-      '@opentelemetry/api': 1.9.0
-      '@types/pg': 8.11.11
-      '@types/react': 19.0.8
-      '@vercel/postgres': 0.10.0(utf-8-validate@6.0.5)
-      pg: 8.13.1
-      postgres: 3.4.5
-      react: 19.0.0
       sqlite3: 5.1.7
 
   dts-cli@2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.7))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.7))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.12.0)(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5):
