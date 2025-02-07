@@ -1,0 +1,148 @@
+# Workflows API
+
+The Workflows API provides methods to interact with and execute automated workflows in Mastra.
+
+## Getting All Workflows
+
+Retrieve a list of all available workflows:
+
+```typescript
+const workflows = await client.getWorkflows();
+```
+
+## Working with a Specific Workflow
+
+Get an instance of a specific workflow:
+
+```typescript
+const workflow = client.getWorkflow("workflow-id");
+```
+
+## Workflow Methods
+
+### Get Workflow Details
+
+Retrieve detailed information about a workflow:
+
+```typescript
+const details = await workflow.details();
+```
+
+### Execute Workflow
+
+Execute a workflow with input parameters:
+
+```typescript
+const result = await workflow.execute({
+  input: {
+    param1: "value1",
+    param2: "value2",
+  },
+});
+```
+
+## Types
+
+### Workflow Details Type
+
+```typescript
+interface WorkflowDetails {
+  name: string;
+  triggerSchema: string; // JSON Schema for trigger validation
+  steps: Record<string, any>; // Workflow step definitions
+  stepGraph: Record<string, string[]>; // Step dependencies
+  stepSubscriberGraph: Record<string, string[]>; // Step event subscriptions
+}
+```
+
+### Execute Parameters
+
+```typescript
+interface ExecuteParams {
+  input: Record<string, any>;
+}
+```
+
+### Workflow Response Type
+
+```typescript
+interface WorkflowResponse {
+  result: any;
+  metadata?: {
+    duration: number;
+    stepResults: Record<string, any>;
+  };
+}
+```
+
+## Error Handling
+
+The Workflows API includes built-in error handling for common scenarios:
+
+- `WorkflowNotFoundError`: When the specified workflow doesn't exist
+- `InvalidInputError`: When the provided input doesn't match the trigger schema
+- `ExecutionError`: When the workflow execution fails
+- `StepError`: When a specific step in the workflow fails
+
+Example error handling:
+
+```typescript
+try {
+  const result = await workflow.execute({
+    input: {
+      param1: "value1",
+    },
+  });
+} catch (error) {
+  if (error instanceof InvalidInputError) {
+    console.error("Invalid input provided:", error.message);
+  } else if (error instanceof StepError) {
+    console.error("Workflow step failed:", error.message, error.stepId);
+  } else {
+    console.error("An error occurred:", error);
+  }
+}
+```
+
+## Best Practices
+
+1. **Input Validation**: Always check the workflow's trigger schema before execution:
+
+```typescript
+const details = await workflow.details();
+console.log("Required inputs:", details.triggerSchema);
+```
+
+2. **Error Handling**: Implement proper error handling for different failure scenarios:
+
+```typescript
+try {
+  const result = await workflow.execute({
+    input: {
+      /* ... */
+    },
+  });
+} catch (error) {
+  // Handle different error types appropriately
+  handleWorkflowError(error);
+}
+```
+
+3. **Monitoring Execution**: Check metadata for execution details:
+
+```typescript
+const result = await workflow.execute({
+  input: {
+    /* ... */
+  },
+});
+console.log("Execution time:", result.metadata?.duration);
+console.log("Step results:", result.metadata?.stepResults);
+```
+
+4. **Step Dependencies**: Review the step graph for workflow structure:
+
+```typescript
+const details = await workflow.details();
+console.log("Step dependencies:", details.stepGraph);
+```

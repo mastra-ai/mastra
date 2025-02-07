@@ -3,6 +3,7 @@ const meta = {
   cli: "CLI",
   memory: "Memory",
   rag: "RAG",
+  embedder: "Embedder",
   tools: "Tools",
   tts: "TTS",
   storage: "Storage",
@@ -10,6 +11,7 @@ const meta = {
   workflows: "Workflows",
   observability: "Observability",
   evals: "Evals",
+  "client-js": "Client SDK - JS",
 };
 
 export default meta;

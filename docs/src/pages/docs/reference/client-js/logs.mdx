@@ -1,0 +1,72 @@
+# Logs API
+
+The Logs API provides methods to access and query system logs and debugging information in Mastra.
+
+## Getting Logs
+
+Retrieve system logs with optional filtering:
+
+```typescript
+const logs = await client.getLogs({
+  transportId: "transport-1",
+});
+```
+
+## Getting Logs for a Specific Run
+
+Retrieve logs for a specific execution run:
+
+```typescript
+const runLogs = await client.getLog({
+  runId: "run-1",
+  transportId: "transport-1",
+});
+```
+
+## Log Analysis
+
+The Logs API supports various analysis patterns:
+
+### Filtering by Metadata
+
+```typescript
+const logs = await client.getLogs({
+  transportId: "transport-1",
+});
+
+const filteredLogs = logs.filter(
+  (log) => log.metadata?.category === "performance",
+);
+```
+
+### Aggregating Log Data
+
+```typescript
+const logs = await client.getLogs({
+  transportId: "transport-1",
+});
+
+const errorCounts = logs.reduce((acc, log) => {
+  if (log.level === "error") {
+    acc[log.message] = (acc[log.message] || 0) + 1;
+  }
+  return acc;
+}, {});
+```
+
+### Time-Based Analysis
+
+```typescript
+const logs = await client.getLogs({
+  transportId: "transport-1",
+  startTime: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last week
+});
+
+const dailyErrors = logs.reduce((acc, log) => {
+  const date = new Date(log.timestamp).toDateString();
+  if (log.level === "error") {
+    acc[date] = (acc[date] || 0) + 1;
+  }
+  return acc;
+}, {});
+```

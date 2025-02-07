@@ -5,7 +5,7 @@ description: Documentation for the mastra dev command, which launches a local de
 
 # Inspecting agents and workflows with `mastra Dev`
 
-The `mastra dev` command launches a development server that serves your Mastra application locally. 
+The `mastra dev` command launches a development server that serves your Mastra application locally.
 
 ## REST API Endpoints
 
@@ -19,6 +19,32 @@ The `mastra dev` command launches a development server that serves your Mastra a
 
 By default, the server runs at http://localhost:4111, but you can change the port with the `--port` flag.
 
+## Using the Client SDK
+
+The easiest way to interact with your local Mastra server is through our [TypeScript/JavaScript Client SDK](/docs/reference/client-js). Install it with:
+
+```bash
+npm install @mastra/client-js
+```
+
+Then configure it to point to your local server:
+
+```typescript
+import { MastraClient } from "@mastra/client-js";
+
+const client = new MastraClient({
+  baseUrl: "http://localhost:4111",
+});
+
+// Example: Interact with a local agent
+const agent = client.getAgent("my-agent");
+const response = await agent.generate({
+  messages: [{ role: "user", content: "Hello!" }],
+});
+```
+
+The client SDK provides type-safe wrappers for all API endpoints, making it much easier to develop and test your Mastra applications locally.
+
 ## UI Playground
 
 `mastra dev` creates a UI with an agent chat interface, a workflow visualizer and a tool playground.
@@ -28,6 +54,7 @@ By default, the server runs at http://localhost:4111, but you can change the por
 ## OpenAPI Specification
 
 `mastra dev` provides an OpenAPI spec at:
+
 - `GET /openapi.json`
 
 ## Summary
@@ -35,3 +62,4 @@ By default, the server runs at http://localhost:4111, but you can change the por
 `mastra dev` makes it easy to develop, debug, and iterate on your AI logic in a self-contained environment before deploying to production.
 
 - [Mastra Dev reference](../reference/cli/dev.mdx)
+- [Client SDK documentation](/docs/reference/client-js)
