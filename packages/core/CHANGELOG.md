@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.2.0-alpha.92
+
+### Minor Changes
+
+- 4d4f6b6: Update deployer
+
 ## 0.2.0-alpha.91
 
 ### Minor Changes

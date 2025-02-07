@@ -1,5 +1,17 @@
 # @mastra/deployer-netlify
 
+## 0.1.0-alpha.40
+
+### Minor Changes
+
+- 4d4f6b6: Update deployer
+
+### Patch Changes
+
+- Updated dependencies [4d4f6b6]
+  - @mastra/deployer@0.1.0-alpha.38
+  - @mastra/core@0.2.0-alpha.92
+
 ## 0.1.0-alpha.39
 
 ### Patch Changes
