@@ -11,6 +11,7 @@ import { Memory } from '@mastra/memory';
 import { UpstashStore } from '@mastra/store-upstash';
 import { UpstashVector } from '@mastra/vector-upstash';
 import { Agent } from '@mastra/core/agent';
+import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
 
 // Initialize memory with Upstash storage and vector search
 const memory = new Memory({
@@ -29,11 +30,10 @@ const memory = new Memory({
       messageRange: 2,
     },
   },
-  embedding: {
-    provider: 'OPEN_AI',
+  embedder: new OpenAIEmbedder({
     model: 'text-embedding-3-small',
     maxRetries: 3,
-  },
+  }),
 });
 
 // Create an agent with memory capabilities

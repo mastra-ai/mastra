@@ -1,0 +1,79 @@
+# VoyageEmbedder Reference
+
+The VoyageEmbedder class provides access to Voyage AI's text embedding models, offering high-performance embeddings optimized for enterprise use cases.
+
+## Usage Example
+
+```typescript
+import { VoyageEmbedder } from '@mastra/core/embeddings/voyage';
+
+const embedder = new VoyageEmbedder({
+  model: 'voyage-2',
+  maxRetries: 3,
+  apiKey: process.env.VOYAGE_API_KEY,
+});
+
+// Use with Memory
+const memory = new Memory({
+  storage: new PostgresStore({ /* ... */ }),
+  vector: new PgVector(connectionString),
+  embedder,
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "VoyageEmbeddingModelNames",
+      description: "The Voyage embedding model to use",
+      isOptional: true,
+      defaultValue: "'voyage-01'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Voyage API key. If not provided, will use VOYAGE_API_KEY environment variable",
+      isOptional: true,
+      defaultValue: "process.env.VOYAGE_API_KEY || ''",
+    },
+    {
+      name: "baseURL",
+      type: "string",
+      description: "Custom base URL for Voyage API requests",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Supported Models
+
+The VoyageEmbedder supports the following models:
+
+- `voyage-01` (default) - Voyage AI's text embedding model
+
+## Methods
+
+### embed
+
+Embed a single text string into a vector.
+
+```typescript
+embed(value: string, { maxRetries = 3 }: { maxRetries?: number }): Promise<EmbedResult<string>>
+```
+
+### embedMany
+
+Embed multiple text strings into vectors.
+
+```typescript
+embedMany(values: string[], { maxRetries = 3 }: { maxRetries?: number }): Promise<EmbedManyResult<string>>
+```
+
+## Environment Variables
+
+The VoyageEmbedder will automatically use this environment variable if the API key is not provided:
+
+- `VOYAGE_API_KEY` - Your Voyage API key

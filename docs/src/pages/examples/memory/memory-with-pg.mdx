@@ -11,6 +11,7 @@ import { Memory } from '@mastra/memory';
 import { PostgresStore } from '@mastra/store-pg';
 import { PgVector } from '@mastra/vector-pg';
 import { Agent } from '@mastra/core/agent';
+import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
 
 // PostgreSQL connection details
 const host = 'localhost';
@@ -37,11 +38,10 @@ const memory = new Memory({
       messageRange: 2,
     },
   },
-  embedding: {
-    provider: 'OPEN_AI',
+  embedder: new OpenAIEmbedder({
     model: 'text-embedding-3-small',
     maxRetries: 3,
-  },
+  }),
 });
 
 // Create an agent with memory capabilities

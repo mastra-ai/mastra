@@ -1,4 +1,4 @@
-import { BaseFilterTranslator, FieldCondition, Filter, OperatorSupport } from '@mastra/core/filter';
+import { BaseFilterTranslator, FieldCondition, Filter, OperatorSupport } from '../../filter';
 
 /**
  * Translates MongoDB-style filters to LibSQL compatible filters.

@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
 import { MastraStorageLibSql } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 import { LibSQLVector } from '@mastra/vector-libsql';
@@ -19,11 +20,10 @@ const memory = new Memory({
       messageRange: 2,
     },
   },
-  embedding: {
-    provider: 'OPEN_AI',
+  embedder: new OpenAIEmbedder({
     model: 'text-embedding-3-small',
     maxRetries: 3,
-  },
+  }),
 });
 
 export const chefAgent = new Agent({

@@ -1,7 +1,8 @@
 import { Agent } from '@mastra/core/agent';
+import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
 import { MastraStorageLibSql } from '@mastra/core/storage';
+import { LibSQLVector } from '@mastra/core/vector/libsql';
 import { Memory } from '@mastra/memory';
-import { LibSQLVector } from '@mastra/vector-libsql';
 import dotenv from 'dotenv';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
@@ -68,11 +69,9 @@ describe('Working Memory Tests', () => {
           messageRange: 2,
         },
       },
-      embedding: {
-        provider: 'OPEN_AI',
-        model: 'text-embedding-ada-002',
-        maxRetries: 3,
-      },
+      embedder: new OpenAIEmbedder({
+        model: 'text-embedding-3-small',
+      }),
     });
 
     // Reset message counter

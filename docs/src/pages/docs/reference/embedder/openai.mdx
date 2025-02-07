@@ -1,0 +1,81 @@
+# OpenAIEmbedder Reference
+
+The OpenAIEmbedder class provides access to OpenAI's text embedding models, allowing you to generate high-quality vector embeddings for semantic search and similarity comparisons.
+
+## Usage Example
+
+```typescript
+import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
+
+const embedder = new OpenAIEmbedder({
+  model: 'text-embedding-3-small',
+  maxRetries: 3,
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Use with Memory
+const memory = new Memory({
+  storage: new PostgresStore({ /* ... */ }),
+  vector: new PgVector(connectionString),
+  embedder,
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "OpenAIEmbeddingModelNames",
+      description: "The OpenAI embedding model to use",
+      isOptional: true,
+      defaultValue: "'text-embedding-3-small'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "OpenAI API key. If not provided, will use OPENAI_API_KEY environment variable",
+      isOptional: true,
+      defaultValue: "process.env.OPENAI_API_KEY || ''",
+    },
+    {
+      name: "baseURL",
+      type: "string",
+      description: "Custom base URL for OpenAI API requests",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Supported Models
+
+The OpenAIEmbedder supports the following models:
+
+- `text-embedding-3-small` (default) - Latest model, best balance of performance and cost
+- `text-embedding-3-large` - Latest model, highest performance
+- `text-embedding-ada-002` - Legacy model, maintained for backward compatibility
+
+## Methods
+
+### embed
+
+Embed a single text string into a vector.
+
+```typescript
+embed(value: string, { maxRetries = 3 }: { maxRetries?: number }): Promise<EmbedResult<string>>
+```
+
+### embedMany
+
+Embed multiple text strings into vectors.
+
+```typescript
+embedMany(values: string[], { maxRetries = 3 }: { maxRetries?: number }): Promise<EmbedManyResult<string>>
+```
+
+## Environment Variables
+
+The OpenAIEmbedder will automatically use this environment variable if the API key is not provided:
+
+- `OPENAI_API_KEY` - Your OpenAI API key

@@ -17,7 +17,6 @@
     "@mastra/store-pg": "workspace:*",
     "@mastra/vector-pg": "workspace:*",
     "@mastra/store-upstash": "workspace:*",
-    "@mastra/vector-libsql": "workspace:*",
     "@mastra/core": "workspace:*",
     "dotenv": "^16.0.0"
   },

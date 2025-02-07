@@ -13,7 +13,6 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@mastra/vector-libsql": "workspace:*",
     "chalk": "^5.3.0",
     "ora": "^8.2.0"
   },
