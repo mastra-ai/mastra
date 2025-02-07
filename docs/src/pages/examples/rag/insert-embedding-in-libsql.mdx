@@ -10,7 +10,7 @@ import { GithubLink } from '../../../components/github-link';
 After generating embeddings, you need to store them in a vector database for similarity search. The `LibSQLVector` class provides methods to create collections and insert embeddings into LibSQL, a fork of SQLite with vector extensions. This example shows how to store embeddings in LibSQL for later retrieval.
 
 ```tsx copy
-import { LibSQLVector } from '@mastra/vector-libsql';
+import { LibSQLVector } from '@mastra/core/vector/libsql';
 import { MDocument, embed } from '@mastra/rag';
 
 const doc = MDocument.fromText('Your text content...');
