@@ -1,3 +1,4 @@
+import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
 import { Memory } from '@mastra/memory';
 import { UpstashStore } from '@mastra/store-upstash';
 import { LibSQLVector } from '@mastra/core/vector/libsql';
@@ -31,11 +32,9 @@ describe('Memory with UpstashStore Integration', () => {
         messageRange: 2,
       },
     },
-    embedding: {
-      provider: 'OPEN_AI',
-      model: 'text-embedding-ada-002',
-      maxRetries: 3,
-    },
+    embedder: new OpenAIEmbedder({
+      model: 'text-embedding-3-small',
+    }),
   });
 
   getResuableTests(memory);

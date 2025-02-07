@@ -1,0 +1,34 @@
+# Embedder Reference
+
+The Mastra embedder system provides a unified interface for generating vector embeddings from text using various providers. Each embedder implements the `MastraEmbedder` interface and provides consistent functionality while abstracting away provider-specific details.
+
+## Usage Example
+
+```typescript
+import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
+
+const embedder = new OpenAIEmbedder({
+  model: 'text-embedding-3-small',
+  maxRetries: 3,
+});
+
+// Use with Memory
+const memory = new Memory({
+  storage: new PostgresStore({ /* ... */ }),
+  vector: new PgVector(connectionString),
+  embedder,
+});
+```
+
+## Available Embedders
+
+Mastra provides several embedder implementations for different providers:
+
+- [OpenAIEmbedder](/docs/reference/embedder/openai) - OpenAI's text embedding models
+- [CohereEmbedder](/docs/reference/embedder/cohere) - Cohere's embedding models
+- [GoogleEmbedder](/docs/reference/embedder/google) - Google's text embedding models
+- [BedrockEmbedder](/docs/reference/embedder/bedrock) - AWS Bedrock embedding models
+- [MistralEmbedder](/docs/reference/embedder/mistral) - Mistral AI's embedding models
+- [VoyageEmbedder](/docs/reference/embedder/voyage) - Voyage AI's embedding models
+
+Each embedder has its own configuration options and supported models. Click on an embedder above to view its specific documentation.

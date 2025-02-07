@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { PostgresStore } from '@mastra/store-pg';
 import { PgVector } from '@mastra/vector-pg';
+import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
 
 const host = `localhost`;
 const port = 5432;
@@ -26,11 +27,10 @@ export const memory = new Memory({
       messageRange: 2,
     },
   },
-  embedding: {
-    provider: 'OPEN_AI',
+  embedder: new OpenAIEmbedder({
     model: 'text-embedding-3-small',
     maxRetries: 3,
-  },
+  }),
 });
 
 export const chefAgent = new Agent({

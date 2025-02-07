@@ -11,6 +11,7 @@ import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/store-libsql';
 import { LibSQLVector } from '@mastra/core/vector/libsql';
 import { Agent } from '@mastra/core/agent';
+import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
 
 // Initialize memory with LibSQL storage and vector search
 const memory = new Memory({
@@ -27,11 +28,10 @@ const memory = new Memory({
       messageRange: 2,
     },
   },
-  embedding: {
-    provider: 'OPEN_AI',
+  embedder: new OpenAIEmbedder({
     model: 'text-embedding-3-small',
     maxRetries: 3,
-  },
+  }),
 });
 
 // Create an agent with memory capabilities

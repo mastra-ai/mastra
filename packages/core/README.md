@@ -49,10 +49,9 @@ const agent = new Agent({
 The embeddings module provides a unified interface for converting text into vector representations across multiple AI providers. These vectors are essential for semantic search, similarity comparisons, and other NLP tasks.
 
 ```typescript
-import { embed, EmbeddingOptions } from '@mastra/core';
+import { embed } from '@mastra/core/embeddings/openai';
 
 const embeddings = await embed('text to embed', {
-  provider: 'OPEN_AI',
   model: 'text-embedding-3-small',
 });
 ```

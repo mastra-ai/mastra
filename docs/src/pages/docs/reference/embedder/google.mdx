@@ -1,0 +1,81 @@
+# GoogleEmbedder Reference
+
+The GoogleEmbedder class provides access to Google's text embedding models through their Vertex AI platform, offering high-quality embeddings for various natural language processing tasks.
+
+## Usage Example
+
+```typescript
+import { GoogleEmbedder } from '@mastra/core/embeddings/google';
+
+const embedder = new GoogleEmbedder({
+  model: 'textembedding-gecko',
+  maxRetries: 3,
+  apiKey: process.env.GOOGLE_API_KEY,
+  baseURL: undefined,
+});
+
+// Use with Memory
+const memory = new Memory({
+  storage: new PostgresStore({ /* ... */ }),
+  vector: new PgVector(connectionString),
+  embedder,
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "GoogleEmbeddingModelNames",
+      description: "The Google embedding model to use",
+      isOptional: true,
+      defaultValue: "'textembedding-gecko'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Google API key. If not provided, will use GOOGLE_API_KEY environment variable",
+      isOptional: true,
+      defaultValue: "process.env.GOOGLE_API_KEY || ''",
+    },
+    {
+      name: "baseURL",
+      type: "string",
+      description: "Custom base URL for Google API requests",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Supported Models
+
+The GoogleEmbedder supports the following models:
+
+- `textembedding-gecko` (default) - General purpose text embedding model
+- `textembedding-gecko-multilingual` - Multilingual version of gecko model
+
+## Methods
+
+### embed
+
+Embed a single text string into a vector.
+
+```typescript
+embed(value: string, { maxRetries = 3 }: { maxRetries?: number }): Promise<EmbedResult<string>>
+```
+
+### embedMany
+
+Embed multiple text strings into vectors.
+
+```typescript
+embedMany(values: string[], { maxRetries = 3 }: { maxRetries?: number }): Promise<EmbedManyResult<string>>
+```
+
+## Environment Variables
+
+The GoogleEmbedder will automatically use this environment variable if the API key is not provided:
+
+- `GOOGLE_API_KEY` - Your Google API key

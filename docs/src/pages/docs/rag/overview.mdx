@@ -18,6 +18,7 @@ Mastra's RAG system provides:
 To implement RAG, you process your documents into chunks, create embeddings, store them in a vector database, and then retrieve relevant context at query time.
 
 ```ts showLineNumbers copy
+import { embed } from "@mastra/core/embeddings/openai"
 import { PgVector } from "@mastra/vector-pg";
 import { MDocument, embed } from "@mastra/rag";
 import { z } from "zod";
@@ -34,7 +35,6 @@ const chunks = await doc.chunk({
 
 // 3. Generate embeddings
 const { embeddings } = await embed(chunks, {
-  provider: "OPEN_AI",
   model: "text-embedding-3-small"
 });
 

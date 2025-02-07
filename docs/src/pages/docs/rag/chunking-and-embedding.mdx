@@ -51,7 +51,7 @@ Transform chunks into embeddings using your preferred provider. Mastra supports 
 ### Using OpenAI
 
 ```ts showLineNumbers copy
-import { embedMany } from "@mastra/rag";
+import { embedMany } from "@mastra/core/embeddings/openai";
 
 const { embeddings } = await embedMany(chunks, {
   provider: "OPEN_AI",
@@ -63,6 +63,8 @@ const { embeddings } = await embedMany(chunks, {
 ### Using Cohere
 
 ```ts showLineNumbers copy
+import { embed } from '@mastra/core/embeddings/cohere';
+
 const embeddings = await embed(chunks, {
   provider: "COHERE",
   model: "embed-english-v3.0",
@@ -77,7 +79,10 @@ The embedding functions return vectors, arrays of numbers representing the seman
 Here's an example showing document processing and embedding generation with both providers:
 
 ```ts showLineNumbers copy
-import { MDocument, embedMany } from "@mastra/rag";
+import { embedMany as openAIEmbedMany } from "@mastra/core/embeddings/openai";
+import { embedMany as cohereEmbedMany } from "@mastra/core/embeddings/cohere";
+
+import { MDocument } from "@mastra/rag";
 
 // Initialize document
 const doc = MDocument.fromText(`
@@ -93,14 +98,14 @@ const chunks = await doc.chunk({
 });
 
 // Generate embeddings with OpenAI
-const { embeddings: openAIEmbeddings } = await embedMany(chunks, {
-  provider: "OPEN_AI",
+const { embeddings: openAIEmbeddings } = await openAIEmbedMany(chunks, {
   model: "text-embedding-3-small",
 });
 
+// OR
+
 // Generate embeddings with Cohere
-const { embeddings: cohereEmbeddings } = await embedMany(chunks, {
-  provider: "COHERE",
+const { embeddings: cohereEmbeddings } = await cohereEmbedMany(chunks, {
   model: "embed-english-v3.0",
 });
 

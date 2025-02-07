@@ -1,0 +1,79 @@
+# MistralEmbedder Reference
+
+The MistralEmbedder class provides access to Mistral AI's text embedding models, offering high-quality embeddings optimized for various natural language processing tasks.
+
+## Usage Example
+
+```typescript
+import { MistralEmbedder } from '@mastra/core/embeddings/mistral';
+
+const embedder = new MistralEmbedder({
+  model: 'mistral-embed',
+  maxRetries: 3,
+  apiKey: process.env.MISTRAL_API_KEY,
+});
+
+// Use with Memory
+const memory = new Memory({
+  storage: new PostgresStore({ /* ... */ }),
+  vector: new PgVector(connectionString),
+  embedder,
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MistralEmbeddingModelNames",
+      description: "The Mistral embedding model to use",
+      isOptional: true,
+      defaultValue: "'mistral-embed'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Mistral API key. If not provided, will use MISTRAL_API_KEY environment variable",
+      isOptional: true,
+      defaultValue: "process.env.MISTRAL_API_KEY || ''",
+    },
+    {
+      name: "baseURL",
+      type: "string",
+      description: "Custom base URL for Mistral API requests",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Supported Models
+
+The MistralEmbedder currently supports:
+
+- `mistral-embed` (default) - Mistral's general-purpose embedding model
+
+## Methods
+
+### embed
+
+Embed a single text string into a vector.
+
+```typescript
+embed(value: string, { maxRetries = 3 }: { maxRetries?: number }): Promise<EmbedResult<string>>
+```
+
+### embedMany
+
+Embed multiple text strings into vectors.
+
+```typescript
+embedMany(values: string[], { maxRetries = 3 }: { maxRetries?: number }): Promise<EmbedManyResult<string>>
+```
+
+## Environment Variables
+
+The MistralEmbedder will automatically use this environment variable if the API key is not provided:
+
+- `MISTRAL_API_KEY` - Your Mistral API key
