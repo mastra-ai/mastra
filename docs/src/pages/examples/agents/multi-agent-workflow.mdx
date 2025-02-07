@@ -17,6 +17,8 @@ In this example, we create a sequential workflow that calls two agents in order:
 First, import the required dependencies:
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+import { anthropic } from "@ai-sdk/anthropic";
 import { Agent } from "@mastra/core/agent";
 import { Step, Workflow } from "@mastra/core/workflows";
 import { z } from "zod";
@@ -28,11 +30,7 @@ Create the copywriter agent that will generate the initial blog post:
 const copywriterAgent = new Agent({
   name: "Copywriter",
   instructions: "You are a copywriter agent that writes blog post copy.",
-  model: {
-    provider: "ANTHROPIC",
-    name: "claude-3-5-sonnet-20241022",
-    toolChoice: "required",
-  },
+  model: anthropic("claude-3-5-sonnet-20241022"),
 });
 ```
 
@@ -62,10 +60,7 @@ Set up the editor agent to refine the copywriter's content:
 const editorAgent = new Agent({
   name: "Editor",
   instructions: "You are an editor agent that edits blog post copy.",
-  model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-  },
+  model: openai("gpt-4o-mini"),
 });
 ```
 
