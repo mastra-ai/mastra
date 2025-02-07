@@ -104,7 +104,7 @@ export class Telemetry {
     this.tracer = trace.getTracer(this.name);
   }
 
-  private async shutdown() {
+  public async shutdown() {
     if (this.sdk && Telemetry.isInitialized) {
       try {
         await this.sdk.shutdown();
