@@ -1,5 +1,17 @@
 # @mastra/vector-upstash
 
+## 0.1.0-alpha.27
+
+### Minor Changes
+
+- c87eb4e: Combine Upstash packages into `@mastra/upstash`.
+
+  - Move and combine packages to `stores/upstash`
+  - Reorganize source files into `src/vector` and `src/store`
+  - Add deprecation notices to old packages
+  - Update documentation and examples
+  - No breaking changes in functionality
+
 ## 0.1.0-alpha.26
 
 ### Patch Changes

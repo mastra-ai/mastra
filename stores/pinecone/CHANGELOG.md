@@ -1,5 +1,17 @@
 # @mastra/pinecone
 
+## 0.1.0-alpha.28
+
+### Minor Changes
+
+- c87eb4e: Move Pinecone package from `@mastra/vector-pinecone` to `@mastra/pinecone`.
+
+  - Move package to `stores/pinecone`
+  - Reorganize source files into `src/vector`
+  - Add deprecation notice to old package
+  - Update documentation and examples
+  - No breaking changes in functionality
+
 ## 0.1.0-alpha.1
 
 ### Major Changes
@@ -11,6 +23,7 @@
 ### Migration
 
 To migrate from @mastra/vector-pinecone:
+
 1. Remove @mastra/vector-pinecone from dependencies
 2. Install @mastra/pinecone
 3. Update imports from '@mastra/vector-pinecone' to '@mastra/pinecone'

@@ -1,16 +1,30 @@
 # @mastra/qdrant
 
+## 0.1.0-alpha.27
+
+### Minor Changes
+
+- c87eb4e: Move Qdrant package from `@mastra/vector-qdrant` to `@mastra/qdrant`.
+
+  - Move package to `stores/qdrant`
+  - Reorganize source files into `src/vector`
+  - Add deprecation notice to old package
+  - Update documentation and examples
+  - No breaking changes in functionality
+
 ## Migration Notice
 
 This package is the successor to `@mastra/vector-qdrant`. All functionality has been preserved while improving the package structure.
 
 ### Key Features
+
 - Qdrant vector store implementation
 - Telemetry support via @mastra/core
 - Full filter support with type safety
 - Automatic batching for large upserts
 
 ### Migration from @mastra/vector-qdrant
+
 1. Update your dependencies:
    ```bash
    pnpm remove @mastra/vector-qdrant
