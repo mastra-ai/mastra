@@ -1,8 +1,8 @@
 import { Agent } from '@mastra/core/agent';
+import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
 import { Memory } from '@mastra/memory';
 import { PostgresStore } from '@mastra/store-pg';
 import { PgVector } from '@mastra/vector-pg';
-import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
 
 const host = `localhost`;
 const port = 5432;

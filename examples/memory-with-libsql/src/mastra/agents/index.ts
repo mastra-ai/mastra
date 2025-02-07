@@ -1,9 +1,8 @@
 import { Agent } from '@mastra/core/agent';
+import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
 import { MastraStorageLibSql } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 import { LibSQLVector } from '@mastra/vector-libsql';
-import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
-
 
 const memory = new Memory({
   storage: new MastraStorageLibSql({

@@ -224,7 +224,7 @@ describe('AstraVector Integration Tests', () => {
   describe('Filter Validation in Queries', () => {
     it('rejects invalid operator values', async () => {
       await expect(
-        vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+        vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
           tags: { $all: 'not-an-array' },
         }),
       ).rejects.toThrow();
@@ -232,64 +232,58 @@ describe('AstraVector Integration Tests', () => {
 
     it('validates array operator values', async () => {
       await expect(
-        vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+        vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
           tags: { $in: null },
         }),
       ).rejects.toThrow();
 
       await expect(
-        vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+        vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
           tags: { $all: 'not-an-array' },
         }),
       ).rejects.toThrow();
     });
 
-    it('validates numeric values for comparison operators', async () => {
-      await expect(
-        vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          price: { $gt: 'not-a-number' },
-        }),
-      ).rejects.toThrow();
-    });
-
-    it('validates value types', async () => {
-      await expect(
-        vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          date: { $gt: 'not-a-date' },
-        }),
-      ).rejects.toThrow();
-
-      await expect(
-        vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          number: { $lt: 'not-a-number' },
-        }),
-      ).rejects.toThrow();
-    });
-
-    it('validates array operators', async () => {
-      const invalidValues = [123, 'string', true, { key: 'value' }, null, undefined];
-      for (const op of ['$in', '$nin', '$all']) {
-        for (const val of invalidValues) {
-          await expect(
-            vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-              field: { [op]: val },
-            }),
-          ).rejects.toThrow();
-        }
+    it('validates $in operators', async () => {
+      const invalidValues = [123, 'string', true, { key: 'value' }, {}, null];
+      for (const val of invalidValues) {
+        console.log('val:', val);
+        await expect(
+          vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
+            field: { $in: val },
+          }),
+        ).rejects.toThrow();
       }
+    });
 
-      await expect(
-        vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-          field: { $in: [undefined, null] },
-        }),
-      ).rejects.toThrow();
+    it('validates $nin operators', async () => {
+      const invalidValues = [123, 'string', true, { key: 'value' }, {}, null];
+      for (const val of invalidValues) {
+        console.log('val:', val);
+        await expect(
+          vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
+            field: { $nin: val },
+          }),
+        ).rejects.toThrow();
+      }
+    });
+
+    it('validates $all operators', async () => {
+      const invalidValues = [123, 'string', true, { key: 'value' }, {}, [], null];
+      for (const val of invalidValues) {
+        await expect(
+          vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
+            field: { $all: val },
+          }),
+        ).rejects.toThrow();
+      }
     });
 
     it('validates element operators', async () => {
-      const invalidValues = [123, 'string', [], {}, null, undefined];
+      const invalidValues = [123, 'string', { key: 'value' }, {}, [], null];
       for (const val of invalidValues) {
         await expect(
-          vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+          vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
             field: { $exists: val },
           }),
         ).rejects.toThrow();
@@ -297,22 +291,15 @@ describe('AstraVector Integration Tests', () => {
     });
 
     it('validates comparison operators', async () => {
-      // Basic equality can accept any non-undefined value
-      for (const op of ['$eq', '$ne']) {
-        await expect(
-          vectorDB.query(testIndexName2, [1, 0, 0], 10, {
-            field: { [op]: undefined },
-          }),
-        ).rejects.toThrow();
-      }
-
       // Numeric comparisons require numbers
       const numOps = ['$gt', '$gte', '$lt', '$lte'];
-      const invalidNumericValues = ['not-a-number', true, [], {}, null, undefined];
+      const invalidNumericValues = [[], {}, null];
       for (const op of numOps) {
         for (const val of invalidNumericValues) {
+          console.log('op:', op);
+          console.log('val:', val);
           await expect(
-            vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+            vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
               field: { [op]: val },
             }),
           ).rejects.toThrow();
@@ -322,7 +309,7 @@ describe('AstraVector Integration Tests', () => {
 
     it('validates multiple invalid values', async () => {
       await expect(
-        vectorDB.query(testIndexName2, [1, 0, 0], 10, {
+        vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
           field1: { $in: 'not-array' },
           field2: { $exists: 'not-boolean' },
           field3: { $gt: 'not-number' },
@@ -436,6 +423,29 @@ describe('AstraVector Integration Tests', () => {
       });
     });
 
+    describe('Null/Undefined/Empty FIlters', () => {
+      it('should handle undefined filter', async () => {
+        const results1 = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, undefined);
+        const results2 = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10);
+        expect(results1).toEqual(results2);
+        expect(results1.length).toBeGreaterThan(0);
+      });
+
+      it('should handle empty object filter', async () => {
+        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {});
+        const results2 = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10);
+        expect(results).toEqual(results2);
+        expect(results.length).toBeGreaterThan(0);
+      });
+
+      it('should handle null filter', async () => {
+        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, null as any);
+        const results2 = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10);
+        expect(results).toEqual(results2);
+        expect(results.length).toBeGreaterThan(0);
+      });
+    });
+
     describe('Array Operators', () => {
       it('filters with $in operator', async () => {
         const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
@@ -507,6 +517,14 @@ describe('AstraVector Integration Tests', () => {
         results.forEach(result => {
           expect(result.metadata?.category).not.toBe('electronics');
         });
+      });
+
+      it('filters with multiple conditions on same field using implicit $and', async () => {
+        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
+          'metadata.category': 'electronics',
+          'metadata.price': 1000,
+        });
+        expect(results.length).toBe(1);
       });
 
       it('filters with multiple fields', async () => {

@@ -77,7 +77,10 @@ export class CohereEmbedder extends MastraEmbedder {
     this.baseURL = baseURL;
   }
 
-  async embed(value: string, { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }): Promise<EmbedResult<string>> {
+  async embed(
+    value: string,
+    { maxRetries }: { maxRetries?: number } = { maxRetries: 3 },
+  ): Promise<EmbedResult<string>> {
     return embed(value, {
       apiKey: this.apiKey,
       model: this.model,
@@ -86,7 +89,10 @@ export class CohereEmbedder extends MastraEmbedder {
     });
   }
 
-  async embedMany(values: string[], { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }): Promise<EmbedManyResult<string>> {
+  async embedMany(
+    values: string[],
+    { maxRetries }: { maxRetries?: number } = { maxRetries: 3 },
+  ): Promise<EmbedManyResult<string>> {
     return embedMany(values, {
       apiKey: this.apiKey,
       model: this.model,

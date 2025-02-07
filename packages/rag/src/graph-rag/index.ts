@@ -241,7 +241,17 @@ export class GraphRAG {
   }
 
   // Retrieve relevant nodes using hybrid approach
-  query(query: number[], topK: number = 5, randomWalkSteps: number = 100, restartProb: number = 0.15): RankedNode[] {
+  query({
+    query,
+    topK = 10,
+    randomWalkSteps = 100,
+    restartProb = 0.15,
+  }: {
+    query: number[];
+    topK?: number;
+    randomWalkSteps?: number;
+    restartProb?: number;
+  }): RankedNode[] {
     if (!query || query.length !== this.dimension) {
       throw new Error(`Query embedding must have dimension ${this.dimension}`);
     }

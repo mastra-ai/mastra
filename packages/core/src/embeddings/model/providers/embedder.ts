@@ -12,10 +12,7 @@ export abstract class MastraEmbedder {
    * @param options Options for the embedding process
    * @returns Promise<EmbedResult<string>> The embedding result
    */
-  abstract embed(
-    value: string,
-    options?: { maxRetries?: number },
-  ): Promise<EmbedResult<string>>;
+  abstract embed(value: string, options?: { maxRetries?: number }): Promise<EmbedResult<string>>;
 
   /**
    * Embed multiple text strings into vectors
@@ -23,8 +20,5 @@ export abstract class MastraEmbedder {
    * @param options Options for the embedding process
    * @returns Promise<EmbedManyResult<string>> Array of embedding results
    */
-  abstract embedMany(
-    values: string[],
-    options?: { maxRetries?: number },
-  ): Promise<EmbedManyResult<string>>;
+  abstract embedMany(values: string[], options?: { maxRetries?: number }): Promise<EmbedManyResult<string>>;
 }

@@ -1,7 +1,7 @@
 import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
+import { LibSQLVector } from '@mastra/core/vector/libsql';
 import { Memory } from '@mastra/memory';
 import { UpstashStore } from '@mastra/store-upstash';
-import { LibSQLVector } from '@mastra/core/vector/libsql';
 import dotenv from 'dotenv';
 import { describe } from 'vitest';
 

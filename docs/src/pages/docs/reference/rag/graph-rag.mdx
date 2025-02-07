@@ -23,7 +23,7 @@ graphRag.createGraph(documentChunks, embeddings);
 // Query the graph with embedding
 const results = await graphRag.query({
   query: queryEmbedding,
-  topK: 5,
+  topK: 10,
   randomWalkSteps: 100,
   restartProb: 0.15
 });
@@ -83,7 +83,17 @@ createGraph(chunks: GraphChunk[], embeddings: GraphEmbedding[]): void
 Performs a graph-based search combining vector similarity and graph traversal.
 
 ```typescript
-query(query: number[], topK?: number, randomWalkSteps?: number, restartProb?: number): RankedNode[]
+query({
+  query,
+  topK = 10,
+  randomWalkSteps = 100,
+  restartProb = 0.15
+}: {
+  query: number[];
+  topK?: number;
+  randomWalkSteps?: number;
+  restartProb?: number;
+}): RankedNode[]
 ```
 
 #### Parameters
@@ -100,7 +110,7 @@ query(query: number[], topK?: number, randomWalkSteps?: number, restartProb?: nu
       type: "number",
       description: "Number of results to return",
       isOptional: true,
-      defaultValue: "3",
+      defaultValue: "10",
     },
     {
       name: "randomWalkSteps",

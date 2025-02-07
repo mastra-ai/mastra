@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { MastraStorageLibSql } from '@mastra/core/storage';
-import { Memory } from '@mastra/memory';
 import { LibSQLVector } from '@mastra/core/vector/libsql';
+import { Memory } from '@mastra/memory';
 
 const memory = new Memory({
   storage: new MastraStorageLibSql({

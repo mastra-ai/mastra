@@ -609,6 +609,19 @@ describe('PineconeVector Integration Tests', () => {
         }),
       ).rejects.toThrow();
     });
+    it('should handle undefined filter', async () => {
+      const results1 = await vectorDB.query(testIndexName, [1, 0, 0], 10, undefined);
+      const results2 = await vectorDB.query(testIndexName, [1, 0, 0], 10);
+      expect(results1).toEqual(results2);
+      expect(results1.length).toBeGreaterThan(0);
+    });
+
+    it('should handle null filter', async () => {
+      const results = await vectorDB.query(testIndexName, [1, 0, 0], 10, null as any);
+      const results2 = await vectorDB.query(testIndexName, [1, 0, 0], 10);
+      expect(results).toEqual(results2);
+      expect(results.length).toBeGreaterThan(0);
+    });
   });
 
   describe('Additional Edge Cases', () => {
