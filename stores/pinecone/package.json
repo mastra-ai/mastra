@@ -1,5 +1,5 @@
 {
-  "name": "@mastra/vector-pinecone",
+  "name": "@mastra/pinecone",
   "version": "0.1.0-alpha.27",
   "description": "Pinecone vector store provider for Mastra",
   "type": "module",
