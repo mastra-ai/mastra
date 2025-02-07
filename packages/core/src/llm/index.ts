@@ -1,23 +1,13 @@
-import {
-  CoreAssistantMessage as AiCoreAssistantMessage,
-  CoreMessage as AiCoreMessage,
-  CoreSystemMessage as AiCoreSystemMessage,
-  CoreToolMessage as AiCoreToolMessage,
-  CoreUserMessage as AiCoreUserMessage,
-  EmbedManyResult as AiEmbedManyResult,
-  EmbedResult as AiEmbedResult,
-  GenerateObjectResult,
-  GenerateTextResult,
-  LanguageModelV1,
-  StreamObjectResult,
-  StreamTextResult,
-} from 'ai';
+import { CoreAssistantMessage as AiCoreAssistantMessage, CoreMessage as AiCoreMessage, CoreSystemMessage as AiCoreSystemMessage, CoreToolMessage as AiCoreToolMessage, CoreUserMessage as AiCoreUserMessage, EmbedManyResult as AiEmbedManyResult, EmbedResult as AiEmbedResult, GenerateObjectResult, GenerateTextResult, LanguageModelV1, StreamObjectResult, StreamTextResult } from 'ai';
 import { JSONSchema7 } from 'json-schema';
 import { z, ZodSchema } from 'zod';
+
+
 
 import { ToolsInput } from '../agent/types';
 import { Run } from '../run/types';
 import { CoreTool } from '../tools/types';
+
 
 export type LanguageModel = LanguageModelV1;
 
@@ -106,6 +96,7 @@ export type LLMInnerStreamOptions = {
   onFinish?: (result: string) => Promise<void> | void;
   maxSteps?: number;
   temperature?: number;
+  toolChoice?: 'auto' | 'required';
 } & Run;
 
 export type LLMStreamObjectOptions<T> = LLMInnerStreamOptions & {

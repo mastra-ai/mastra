@@ -8,22 +8,21 @@ import {
   ToolCallPart,
   UserContent,
 } from 'ai';
+import { type LanguageModelV1 } from 'ai';
 import { randomUUID } from 'crypto';
 import { JSONSchema7 } from 'json-schema';
 import { z, ZodSchema } from 'zod';
-import { type LanguageModelV1 } from 'ai';
 
-import { MastraLLM, MastraLLMBase } from '../llm/model';
-import { CoreTool, ToolAction } from '../tools/types';
-import type { GenerateReturn, StreamReturn } from '../llm';
-import { LogLevel, RegisteredLogger } from '../logger';
-import { MastraMemory, MemoryConfig, StorageThreadType } from '../memory';
-import { InstrumentClass } from '../telemetry';
-import { AvailableHooks, executeHook } from '../hooks';
 import { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 import { Metric } from '../eval';
-
+import { AvailableHooks, executeHook } from '../hooks';
+import type { GenerateReturn, StreamReturn } from '../llm';
+import { MastraLLM, MastraLLMBase } from '../llm/model';
+import { LogLevel, RegisteredLogger } from '../logger';
+import { MastraMemory, MemoryConfig, StorageThreadType } from '../memory';
+import { InstrumentClass } from '../telemetry';
+import { CoreTool, ToolAction } from '../tools/types';
 
 import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
 
@@ -54,7 +53,7 @@ export class Agent<
       throw new Error(`LanugageModel is required to create an Agent. Please provider the 'model'.`);
     }
 
-    this.llm = new MastraLLM({ model: config.model })
+    this.llm = new MastraLLM({ model: config.model });
 
     this.tools = {} as TTools;
 
@@ -254,20 +253,20 @@ export class Agent<
         const memoryMessages =
           threadId && memory
             ? (
-              await memory.rememberMessages({
-                threadId,
-                config: memoryConfig,
-                vectorMessageSearch: messages
-                  .slice(-1)
-                  .map(m => {
-                    if (typeof m === `string`) {
-                      return m;
-                    }
-                    return m?.content || ``;
-                  })
-                  .join(`\n`),
-              })
-            ).messages
+                await memory.rememberMessages({
+                  threadId,
+                  config: memoryConfig,
+                  vectorMessageSearch: messages
+                    .slice(-1)
+                    .map(m => {
+                      if (typeof m === `string`) {
+                        return m;
+                      }
+                      return m?.content || ``;
+                    })
+                    .join(`\n`),
+                })
+              ).messages
             : [];
 
         if (memory) {
@@ -372,10 +371,10 @@ export class Agent<
                     return undefined;
                   })
                   ?.filter(Boolean) as Array<{
-                    toolCallId: string;
-                    toolArgs: Record<string, unknown>;
-                    toolName: string;
-                  }>;
+                  toolCallId: string;
+                  toolArgs: Record<string, unknown>;
+                  toolName: string;
+                }>;
 
                 toolCallIds = assistantToolCalls?.map(toolCall => toolCall.toolCallId);
 
@@ -763,6 +762,7 @@ export class Agent<
       toolsets,
       output = 'text',
       temperature,
+      toolChoice = 'auto',
     }: AgentGenerateOptions<Z> = {},
   ): Promise<GenerateReturn<Z>> {
     let messagesToUse: CoreMessage[] = [];
@@ -809,6 +809,7 @@ export class Agent<
         maxSteps,
         runId: runIdToUse,
         temperature,
+        toolChoice,
       });
 
       const outputText = result.text;
@@ -827,6 +828,7 @@ export class Agent<
       maxSteps,
       runId: runIdToUse,
       temperature,
+      toolChoice,
     });
 
     const outputText = JSON.stringify(result.object);
@@ -850,6 +852,7 @@ export class Agent<
       toolsets,
       output = 'text',
       temperature,
+      toolChoice = 'auto',
     }: AgentStreamOptions<Z> = {},
   ): Promise<StreamReturn<Z>> {
     const runIdToUse = runId || randomUUID();
@@ -912,6 +915,7 @@ export class Agent<
         },
         maxSteps,
         runId,
+        toolChoice,
       }) as unknown as StreamReturn<Z>;
     }
 
@@ -940,6 +944,7 @@ export class Agent<
       },
       maxSteps,
       runId,
+      toolChoice,
     }) as unknown as StreamReturn<Z>;
   }
 }
