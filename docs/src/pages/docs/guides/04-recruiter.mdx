@@ -16,6 +16,7 @@ Below is a concise version of the workflow. It starts by importing the necessary
 You need to import Mastra tools and Zod to handle workflow definitions and data validation.
 
 ```typescript filename="src/mastra/index.ts" copy
+
 import { Mastra } from "@mastra/core";
 import { Step, Workflow } from "@mastra/core/workflows";
 import { z } from "zod";
@@ -32,6 +33,14 @@ OPENAI_API_KEY=<your-openai-key>
 You want to extract candidate details from the resume text and classify them as technical or non-technical. This step calls an LLM to parse the resume and return structured JSON, including the name, technical status, specialty, and the original resume text. The code reads resumeText from trigger data, prompts the LLM, and returns organized fields for use in subsequent steps.
 
 ```typescript filename="src/mastra/index.ts" copy
+import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+
+const recruiter = new Agent({
+  instructions: `You are a recruiter.`,
+  model: openai("gpt-4o-mini"),
+})
+
 const gatherCandidateInfo = new Step({
   id: "gatherCandidateInfo",
   inputSchema: z.object({
@@ -43,21 +52,17 @@ const gatherCandidateInfo = new Step({
     specialty: z.string(),
     resumeText: z.string(),
   }),
-  execute: async ({ context, mastra }) => {
-    if (!mastra?.llm) {
-      throw new Error("Mastra instance is required to run this step");
-    }
+  execute: async ({ context }) => {
     const resumeText = context.machineContext?.getStepPayload<{
       resumeText: string;
     }>("trigger")?.resumeText;
 
-    const llm = mastra.llm({ provider: "OPEN_AI", name: "gpt-4o-mini" });
-
     const prompt = `
-          You are given this resume text:
+          Extract details from the resume text:
           "${resumeText}"
         `;
-    const res = await llm.generate(prompt, {
+
+    const res = await recruiter.generate(prompt, {
       output: z.object({
         candidateName: z.string(),
         isTechnical: z.boolean(),
@@ -88,22 +93,18 @@ const askAboutSpecialty = new Step({
   outputSchema: z.object({
     question: z.string(),
   }),
-  execute: async ({ context, mastra }) => {
-    if (!mastra?.llm) {
-      throw new Error("Mastra instance is required to run this step");
-    }
-
+  execute: async ({ context }) => {
     const candidateInfo = context.machineContext?.getStepPayload<CandidateInfo>(
       "gatherCandidateInfo",
     );
 
-    const llm = mastra.llm({ provider: "OPEN_AI", name: "gpt-4o-mini" });
     const prompt = `
           You are a recruiter. Given the resume below, craft a short question
           for ${candidateInfo?.candidateName} about how they got into "${candidateInfo?.specialty}".
           Resume: ${candidateInfo?.resumeText}
         `;
-    const res = await llm.generate(prompt);
+    const res = await recruiter.generate(prompt);
+    
     return { question: res?.text?.trim() || "" };
   },
 });
@@ -119,21 +120,17 @@ const askAboutRole = new Step({
   outputSchema: z.object({
     question: z.string(),
   }),
-  execute: async ({ context, mastra }) => {
-    if (!mastra?.llm) {
-      throw new Error("Mastra instance is required to run this step");
-    }
+  execute: async ({ context }) => {
     const candidateInfo = context.machineContext?.getStepPayload<CandidateInfo>(
       "gatherCandidateInfo",
     );
 
-    const llm = mastra.llm({ provider: "OPEN_AI", name: "gpt-4o-mini" });
     const prompt = `
           You are a recruiter. Given the resume below, craft a short question
           for ${candidateInfo?.candidateName} asking what interests them most about this role.
           Resume: ${candidateInfo?.resumeText}
         `;
-    const res = await llm.generate(prompt);
+    const res = await recruiter.generate(prompt);
     return { question: res?.text?.trim() || "" };
   },
 });

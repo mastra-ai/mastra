@@ -13,7 +13,7 @@ You can use Mastra to build [AI agents](/docs/agents/00-overview.mdx) that have 
 
 The main features include:
 
-* **[Model routing](/docs/llm-models/00-overview.mdx)**: With Mastra, you can use the same syntax to call any LLM provider in Mastra, including OpenAI, Anthropic, and Google Gemini.
+* **[Model routing](https://sdk.vercel.ai/docs/introduction)**: Mastra uses the [Vercel AI SDK](https://sdk.vercel.ai/docs/introduction) for model routing, providing a unified interface to interact with any LLM provider including OpenAI, Anthropic, and Google Gemini.
 * **[Agent memory and tool calling](/docs/agents/01-agent-memory.mdx)**: With Mastra, you can give your agent tools (functions) that it can call. You can persist agent memory and retrieve it based on recency, semantic similarity, or conversation thread.
 * **[Workflow graphs](/docs/workflows/00-overview.mdx)**: When you want to execute LLM calls in a deterministic way, Mastra gives you a graph-based workflow engine. You can define discrete steps, log inputs and outputs at each step of each run, and pipe them into an observability tool. Mastra workflows have a simple syntax for control flow (`step()`, `.then()`, `.after()`) that allows branching and chaining. 
 * **[Agent development environment](/docs/local-dev/mastra-dev.mdx)**: When you're developing an agent locally, you can chat with it and see its state and memory in Mastra's agent development environment.
