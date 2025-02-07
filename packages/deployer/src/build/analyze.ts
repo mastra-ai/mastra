@@ -87,8 +87,6 @@ async function analyze(
     }
   }
 
-  // todo fix, coulds should add it itself but somehow doesnt
-  depsToOptimize.set('@hono/node-server', ['serve']);
   return depsToOptimize;
 }
 

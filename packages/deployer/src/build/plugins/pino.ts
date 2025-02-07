@@ -32,23 +32,25 @@ export function pino() {
         // resolve pino first
         const resolvedPino = await this.resolve(id, importee);
 
-        await Promise.all(
-          workerFiles.map(async file => {
-            const resolvedEntry = await this.resolve(file.id, resolvedPino.id);
+        if (resolvedPino) {
+          await Promise.all(
+            workerFiles.map(async file => {
+              const resolvedEntry = await this.resolve(file.id, resolvedPino.id);
 
-            if (!resolvedEntry) {
-              return null;
-            }
+              if (!resolvedEntry) {
+                return null;
+              }
 
-            const reference = this.emitFile({
-              type: 'chunk',
-              id: resolvedEntry.id,
-              name: `${file.file}`,
-            });
+              const reference = this.emitFile({
+                type: 'chunk',
+                id: resolvedEntry.id,
+                name: `${file.file}`,
+              });
 
-            fileReferences.set(file.id, reference);
-          }),
-        );
+              fileReferences.set(file.id, reference);
+            }),
+          );
+        }
       }
     },
     renderChunk(code, chunk) {
