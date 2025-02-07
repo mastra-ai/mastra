@@ -1,32 +1,38 @@
 ---
-title: "Reference: Qdrant | Vector Databases | RAG | Mastra Docs"
-description: Documentation for integrating Qdrant with Mastra, a vector similarity search engine for managing vectors and payloads.
+title: "Reference: LibSQLStore | Vector Databases | RAG | Mastra Docs"
+description: Documentation for the LibSQLStore class in Mastra, which provides vector search using LibSQL/Turso with vector extensions.
 ---
 
-# Qdrant
+# LibSQL
 
-[Qdrant](https://qdrant.tech/) is a vector similarity search engine. It provides a production-ready service with a convenient API to store, search, and manage vectors with additional payload and extended filtering support.
+The LibSQLStore class provides vector search using LibSQL/Turso with vector extensions, offering a lightweight and efficient vector database solution.
 
 ## Constructor Options
 
 <PropertiesTable
   content={[
     {
-      name: "url",
+      name: "connectionUrl",
       type: "string",
-      description:
-        "REST URL of the Qdrant instance. Eg. https://xyz-example.eu-central.aws.cloud.qdrant.io:6333",
+      description: "LibSQL/Turso database connection URL",
     },
     {
-      name: "apiKey",
+      name: "authToken",
       type: "string",
-      description: "Optional Qdrant API key",
+      isOptional: true,
+      description: "Authentication token for Turso",
     },
     {
-      name: "https",
-      type: "boolean",
-      description:
-        "Whether to use TLS when setting up the connection. Recommended.",
+      name: "syncUrl",
+      type: "string",
+      isOptional: true,
+      description: "URL for database synchronization",
+    },
+    {
+      name: "syncInterval",
+      type: "number",
+      isOptional: true,
+      description: "Interval in milliseconds for database synchronization",
     },
   ]}
 />
@@ -52,7 +58,7 @@ description: Documentation for integrating Qdrant with Mastra, a vector similari
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
       defaultValue: "cosine",
-      description: "Distance metric for similarity search",
+      description: "Distance metric for similarity search (only cosine supported currently)",
     },
   ]}
 />
@@ -61,6 +67,11 @@ description: Documentation for integrating Qdrant with Mastra, a vector similari
 
 <PropertiesTable
   content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to upsert into",
+    },
     {
       name: "vectors",
       type: "number[][]",
@@ -112,8 +123,15 @@ description: Documentation for integrating Qdrant with Mastra, a vector similari
       name: "includeVector",
       type: "boolean",
       isOptional: true,
-      defaultValue: "false", 
+      defaultValue: "false",
       description: "Whether to include vectors in the results",
+    },
+    {
+      name: "minScore",
+      type: "number",
+      isOptional: true,
+      defaultValue: "0",
+      description: "Minimum similarity score threshold",
     },
   ]}
 />
@@ -156,6 +174,18 @@ interface IndexStats {
   ]}
 />
 
+### truncateIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to truncate (remove all vectors while keeping the index)",
+    },
+  ]}
+/>
+
 ## Response Types
 
 Query results are returned in this format:
@@ -182,5 +212,6 @@ try {
   }
 }
 ```
+
 ### Related
-- [Metadata Filters](./metadata-filters)
+- [Metadata Filters](./metadata-filters) 
