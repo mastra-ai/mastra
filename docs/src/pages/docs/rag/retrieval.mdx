@@ -23,18 +23,16 @@ Mastra provides flexible retrieval options with support for semantic search, fil
 The simplest approach is direct semantic search. This method uses vector similarity to find chunks that are semantically similar to the query:
 
 ```ts showLineNumbers copy
-import { embed } from "@mastra/core/embeddings/openai"
+import { openai } from "@ai-sdk/openai";
+import { embed } from "ai";
 import { PgVector } from "@mastra/vector-pg";
-import { embed } from "@mastra/rag";
 
 // Convert query to embedding
-const { embedding } = await embed(
-  "What are the main points in the article?",
-  {
-    model: "text-embedding-3-small",
-    maxRetries: 3,
-  }
-);
+const { embedding } = await embed({
+  value: "What are the main points in the article?",
+  model: openai.embedding('text-embedding-3-small'),
+  maxRetries: 3,
+});
 
 // Query vector store
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING);
