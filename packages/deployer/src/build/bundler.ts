@@ -30,7 +30,7 @@ export async function getInputOptions(
         });
 
   return {
-    logLevel: 'silent',
+    logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     treeshake: true,
     preserveSymlinks: true,
     external: Array.from(analyzedBundleInfo.externalDependencies),

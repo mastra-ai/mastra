@@ -41,7 +41,7 @@ async function analyze(
   }
 
   const optimizerBundler = await rollup({
-    logLevel: 'silent',
+    logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     input: isVirtualFile ? '#entry' : entry,
     treeshake: true,
     preserveSymlinks: true,
@@ -121,7 +121,7 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
   }
 
   const bundler = await rollup({
-    logLevel: 'silent',
+    logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     input: Array.from(virtualDependencies.entries()).reduce(
       (acc, [dep, virtualDep]) => {
         acc[virtualDep.name] = `#virtual-${dep}`;
