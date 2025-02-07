@@ -1,5 +1,11 @@
 # @mastra/deployer
 
+## 0.1.0-alpha.39
+
+### Patch Changes
+
+- 8ea426a: Fix patch
+
 ## 0.1.0-alpha.34
 
 ### Patch Changes
