@@ -43,26 +43,6 @@ project-root/
        └── index.ts
 ```
 
-### Engine
-
-`mastra engine add`
-
-This installs the `@mastra/engine` dependency to your project.
-
-`mastra engine generate`
-
-Generates the Drizzle database client and TypeScript types.
-
-`mastra engine migrate`
-
-This migrates the database forward. You might need to run this after updating mastra.
-
-`mastra engine up`
-
-This is a shortcut that runs the `docker-compose up` command using the `mastra-pg.docker-compose.yaml` file. This will spin up any local docker containers that mastra needs.
-
-It is useful for cases where you don't have a dockerized `postgres` db setup.
-
 ### Dev
 
 `mastra dev`

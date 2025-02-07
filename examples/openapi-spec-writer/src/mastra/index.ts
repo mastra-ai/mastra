@@ -1,7 +1,6 @@
 import { createLogger } from "@mastra/core/logger";
 import { Mastra } from "@mastra/core";
 import { UpstashTransport } from "@mastra/loggers/upstash";
-import { PostgresEngine } from "@mastra/engine";
 import { agentOne } from "./agents";
 import { makePRToMastraWorkflow, openApiSpecGenWorkflow } from "./workflows";
 
@@ -17,9 +16,6 @@ export const mastra = new Mastra({
     },
   }),
   agents: { "openapi-spec-gen-agent": agentOne },
-  engine: new PostgresEngine({
-    url: process.env.DB_URL!,
-  }),
   telemetry: {
     serviceName: "mastra-vnext",
     sampling: {
