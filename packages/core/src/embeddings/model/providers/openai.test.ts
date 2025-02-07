@@ -1,20 +1,24 @@
 import dotenv from 'dotenv';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
-import { embed, embedMany } from './openai';
+import { Embedder } from './openai';
 
 // Load environment variables
 dotenv.config();
 
 describe('OpenAI Embeddings', () => {
+  let embedder: Embedder;
+
+  beforeEach(() => {
+    embedder = new Embedder({
+      model: 'text-embedding-3-small',
+    });
+  });
   it('should create an embedding for a single string value', async () => {
     const value = 'This is a test string';
     const maxRetries = 3;
 
-    const embedding = await embed(value, {
-      model: 'text-embedding-3-small',
-      maxRetries,
-    });
+    const embedding = await embedder.embed(value, { maxRetries });
     console.log(embedding);
 
     expect(embedding).toBeDefined();
@@ -24,10 +28,7 @@ describe('OpenAI Embeddings', () => {
     const values = ['String 1', 'String 2', 'String 3'];
     const maxRetries = 3;
 
-    const embeddings = await embedMany(values, {
-      model: 'text-embedding-3-small',
-      maxRetries,
-    });
+    const embeddings = await embedder.embedMany(values, { maxRetries });
     console.log(embeddings);
 
     expect(embeddings).toBeDefined();

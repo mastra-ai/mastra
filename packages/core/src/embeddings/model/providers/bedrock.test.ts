@@ -1,20 +1,24 @@
 import dotenv from 'dotenv';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
-import { embed, embedMany } from './bedrock';
+import { Embedder } from './bedrock';
 
 // Load environment variables
 dotenv.config();
 
 describe('Bedrock Embeddings', () => {
+  let embedder: Embedder;
+
+  beforeEach(() => {
+    embedder = new Embedder({
+      model: 'amazon.titan-embed-text-v1',
+    });
+  });
   it.skip('should create an embedding for a single string value', async () => {
     const value = 'This is a test string';
     const maxRetries = 3;
 
-    const embedding = await embed(value, {
-      model: 'amazon.titan-embed-text-v1',
-      maxRetries,
-    });
+    const embedding = await embedder.embed(value, { maxRetries });
     console.log(embedding);
 
     expect(embedding).toBeDefined();
@@ -24,10 +28,7 @@ describe('Bedrock Embeddings', () => {
     const values = ['String 1', 'String 2', 'String 3'];
     const maxRetries = 3;
 
-    const embeddings = await embedMany(values, {
-      model: 'amazon.titan-embed-text-v1',
-      maxRetries,
-    });
+    const embeddings = await embedder.embedMany(values, { maxRetries });
     console.log(embeddings);
 
     expect(embeddings).toBeDefined();

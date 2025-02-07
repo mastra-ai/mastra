@@ -1,12 +1,17 @@
-import { describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test } from 'vitest';
 
-import { embed, embedMany } from './providers/mock';
+import { Embedder } from './providers/mock';
 
 describe('MastraEmbedding', () => {
+  let embedder: Embedder;
+
+  beforeEach(() => {
+    embedder = new Embedder();
+  });
   test('should create embedding for single text', async () => {
     const text = 'Hello, world!';
 
-    const { embedding } = await embed(text);
+    const { embedding } = await embedder.embed(text);
 
     expect(embedding).toBeDefined();
     expect(embedding.length).toBeGreaterThan(0);
@@ -16,7 +21,7 @@ describe('MastraEmbedding', () => {
   test('should create embeddings for multiple texts', async () => {
     const texts = ['Hello, world!', 'Another text', 'Third text'];
 
-    const { embeddings } = await embedMany(texts);
+    const { embeddings } = await embedder.embedMany(texts);
 
     expect(embeddings).toBeDefined();
     expect(embeddings.length).toBe(texts.length);
@@ -29,7 +34,7 @@ describe('MastraEmbedding', () => {
   test('should handle empty text for single embedding', async () => {
     const text = '';
 
-    const { embedding } = await embed(text);
+    const { embedding } = await embedder.embed(text);
 
     expect(embedding).toBeDefined();
     expect(embedding.length).toBeGreaterThan(0);
@@ -38,7 +43,7 @@ describe('MastraEmbedding', () => {
   test('should handle empty array for multiple embeddings', async () => {
     const texts: string[] = [];
 
-    const { embeddings } = await embedMany(texts);
+    const { embeddings } = await embedder.embedMany(texts);
 
     expect(embeddings).toBeDefined();
     expect(embeddings).toEqual([]);
@@ -47,7 +52,7 @@ describe('MastraEmbedding', () => {
   test('should handle maxRetries parameter for single embedding', async () => {
     const text = 'Test text';
 
-    const { embedding } = await embed(text, { maxRetries: 5 });
+    const { embedding } = await embedder.embed(text, { maxRetries: 5 });
 
     expect(embedding).toBeDefined();
     expect(embedding.length).toBeGreaterThan(0);
@@ -56,7 +61,7 @@ describe('MastraEmbedding', () => {
   test('should handle maxRetries parameter for multiple embeddings', async () => {
     const texts = ['Text 1', 'Text 2'];
 
-    const { embeddings } = await embedMany(texts, { maxRetries: 5 });
+    const { embeddings } = await embedder.embedMany(texts, { maxRetries: 5 });
 
     expect(embeddings).toBeDefined();
     expect(embeddings.length).toBe(texts.length);

@@ -1,20 +1,24 @@
 import dotenv from 'dotenv';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
-import { embed, embedMany } from './google';
+import { Embedder } from './google';
 
 // Load environment variables
 dotenv.config();
 
 describe('Google Embeddings', () => {
+  let embedder: Embedder;
+
+  beforeEach(() => {
+    embedder = new Embedder({
+      model: 'textembedding-gecko',
+    });
+  });
   it.skip('should create an embedding for a single string value', async () => {
     const value = 'This is a test string';
     const maxRetries = 3;
 
-    const embedding = await embed(value, {
-      model: 'textembedding-gecko',
-      maxRetries,
-    });
+    const embedding = await embedder.embed(value, { maxRetries });
     console.log(embedding);
 
     expect(embedding).toBeDefined();
@@ -24,10 +28,7 @@ describe('Google Embeddings', () => {
     const values = ['String 1', 'String 2', 'String 3'];
     const maxRetries = 3;
 
-    const embeddings = await embedMany(values, {
-      model: 'textembedding-gecko',
-      maxRetries,
-    });
+    const embeddings = await embedder.embedMany(values, { maxRetries });
     console.log(embeddings);
 
     expect(embeddings).toBeDefined();
