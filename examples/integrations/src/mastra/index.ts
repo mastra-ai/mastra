@@ -1,3 +1,4 @@
+import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
 
@@ -5,10 +6,7 @@ import { sample } from './integrations';
 
 const agent = new Agent({
   name: 'Notion agent',
-  model: {
-    name: 'gpt-4o-mini',
-    provider: 'OPEN_AI',
-  },
+  model: openai('gpt-4o-mini'),
   instructions: `
         You are a Notion knowledge base librarian.
         You can search for notion pages with the tool NOTION_SEARCH_NOTION_PAGE. 
@@ -18,5 +16,5 @@ const agent = new Agent({
 
 export const mastra = new Mastra({
   agents: { agent },
-  workflows: { ...sample.getWorkflows() },
+  workflows: { ...sample.getWorkflows({}) },
 });

@@ -70,6 +70,8 @@ const graphRagTool = createGraphRAGTool({
 Set up the Mastra agent that will handle the responses:
 
 ```typescript copy showLineNumbers{19} filename="src/mastra/index.ts"
+import { openai } from "@ai-sdk/openai";
+
 export const ragAgent = new Agent({
   name: "GraphRAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context. Format your answers as follows:
@@ -79,10 +81,7 @@ export const ragAgent = new Agent({
 3. CONCLUSION: One sentence summary that ties everything together
 
 Keep each section brief and focus on the most important points.`,
-  model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-  },
+  model: openai("gpt-4o-mini"),
   tools: {
     graphRagTool,
   },
