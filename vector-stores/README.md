@@ -11,7 +11,7 @@ This directory contains vector store implementations for various databases and s
 | [@mastra/vector-qdrant](./qdrant)       | Qdrant implementation                   | Self-hosted or cloud vector search with rich filtering        | - Advanced filtering<br>- Local or cloud deployment<br>- 256 vectors per batch  |
 | [@mastra/vector-chroma](./chroma)       | ChromaDB implementation                 | Simple, lightweight vector search with collection management  | - Collection-based organization<br>- Dimension validation<br>- Built-in caching |
 | [@mastra/vector-pg](./pg)               | PostgreSQL with pgvector implementation | Production-grade SQL database with vector capabilities        | - Connection pooling<br>- Transaction support<br>- MongoDB-like filtering       |
-| [@mastra/vector-libsql](./libsql)       | libSQL/Turso implementation             | Edge-friendly SQLite-based vector search                      | - Edge deployment<br>- JSON filtering<br>- Sync support                         |
+| @mastra/core/vector/libsql (in @mastra/core)             | libSQL/Turso implementation             | Edge-friendly SQLite-based vector search                      | - Edge deployment<br>- JSON filtering<br>- Sync support                         |
 | [@mastra/vector-upstash](./upstash)     | Upstash Vector implementation           | Serverless Redis-compatible vector search                     | - Pay-per-use<br>- Low latency<br>- Global access                               |
 | [@mastra/vector-vectorize](./vectorize) | Vectorize implementation                | AI-optimized vector operations                                | - Auto optimization<br>- Real-time updates<br>- ML workload focused             |
 

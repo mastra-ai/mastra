@@ -13,8 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "@mastra/core": "workspace:*",
-    "@mastra/memory": "workspace:*",
-    "@mastra/vector-libsql": "workspace:*"
+    "@mastra/memory": "workspace:*"
   },
   "version": "0.0.1-alpha.2"
 }

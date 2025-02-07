@@ -129,7 +129,7 @@ When using vector search capabilities, ensure you configure both the vector stor
 ```typescript copy showLineNumbers
 import { Memory } from "@mastra/memory";
 import { MastraStorageLibSql } from "@mastra/core/storage";
-import { LibSQLVector } from "@mastra/vector-libsql";
+import { LibSQLVector } from "@mastra/core/vector/libsql";
 
 const memory = new Memory({
   storage: new MastraStorageLibSql({

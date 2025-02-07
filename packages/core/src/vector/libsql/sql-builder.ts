@@ -1,4 +1,5 @@
 import { InValue } from '@libsql/client';
+
 import {
   BasicOperator,
   NumericOperator,
@@ -7,7 +8,7 @@ import {
   LogicalOperator,
   RegexOperator,
   Filter,
-} from '@mastra/core/filter';
+} from '../../filter';
 
 export type OperatorType =
   | BasicOperator
