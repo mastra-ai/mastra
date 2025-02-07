@@ -5,7 +5,7 @@ Vector store implementation for Pinecone, using the official @pinecone-database/
 ## Installation
 
 ```bash
-npm install @mastra/pinecone
+pnpm add @mastra/pinecone
 ```
 
 ## Usage
