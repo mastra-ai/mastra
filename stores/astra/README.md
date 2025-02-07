@@ -1,17 +1,17 @@
-# @mastra/vector-astra
+# @mastra/astra
 
 Vector store implementation for DataStax Astra DB, providing vector similarity search capabilities using Cassandra's vector search functionality.
 
 ## Installation
 
 ```bash
-npm install @mastra/vector-astra
+npm install @mastra/astra
 ```
 
 ## Usage
 
 ```typescript
-import { AstraVector } from '@mastra/vector-astra';
+import { AstraVector } from '@mastra/astra';
 
 const vectorStore = new AstraVector({
   token: 'your-astra-token',

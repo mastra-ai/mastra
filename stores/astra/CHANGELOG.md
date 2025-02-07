@@ -1,4 +1,31 @@
-# @mastra/vector-astra
+# @mastra/astra
+
+## 0.1.0-alpha.1
+
+### Major Changes
+
+- Package renamed from @mastra/vector-astra to @mastra/astra
+- Moved package to stores/ directory for better organization
+- All functionality remains the same
+
+### Migration
+
+To migrate from @mastra/vector-astra:
+1. Remove @mastra/vector-astra from dependencies
+2. Install @mastra/astra
+3. Update imports from '@mastra/vector-astra' to '@mastra/astra'
+
+### Previous History
+
+This package was previously published as @mastra/vector-astra. Key changes from that history:
+
+- Implemented unified filter API for vector stores
+- Added support for cosine, euclidean, and dot product metrics
+- Added metadata filtering support
+- Added batch vector operations
+- Improved collection management
+- Updated operator validation and handling
+- Various dependency updates and bug fixes
 
 ## 0.1.0-alpha.26
 
