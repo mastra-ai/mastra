@@ -42,7 +42,6 @@ export abstract class Bundler extends MastraBundler {
       dependenciesObject[key] = value;
     }
 
-    console.log('writePackageJson', dependencies);
     await writeFile(
       pkgPath,
       JSON.stringify(
