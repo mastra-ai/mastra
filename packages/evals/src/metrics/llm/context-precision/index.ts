@@ -1,5 +1,5 @@
 import { Metric } from '@mastra/core/eval';
-import { type MastraLLMBase } from '@mastra/core/llm';
+import { type LanguageModel } from '@mastra/core/llm';
 
 import { type MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';
@@ -16,11 +16,11 @@ export class ContextPrecisionMetric extends Metric {
   private scale: number;
   private context: string[];
 
-  constructor(llm: MastraLLMBase, { scale = 1, context }: ContextPrecisionMetricOptions) {
+  constructor(model: LanguageModel, { scale = 1, context }: ContextPrecisionMetricOptions) {
     super();
 
     this.context = context;
-    this.judge = new ContextPrecisionJudge(llm);
+    this.judge = new ContextPrecisionJudge(model);
     this.scale = scale;
   }
 

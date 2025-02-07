@@ -1,5 +1,5 @@
 import { Metric } from '@mastra/core/eval';
-import { type MastraLLMBase } from '@mastra/core/llm';
+import { type LanguageModel } from '@mastra/core/llm';
 
 import { type MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';
@@ -14,10 +14,10 @@ export class SummarizationMetric extends Metric {
   private judge: SummarizationJudge;
   private scale: number;
 
-  constructor(llm: MastraLLMBase, { scale = 1 }: SummarizationMetricOptions = {}) {
+  constructor(model: LanguageModel, { scale = 1 }: SummarizationMetricOptions = {}) {
     super();
 
-    this.judge = new SummarizationJudge(llm);
+    this.judge = new SummarizationJudge(model);
     this.scale = scale;
   }
 

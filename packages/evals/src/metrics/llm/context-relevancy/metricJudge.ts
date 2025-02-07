@@ -1,4 +1,4 @@
-import { type MastraLLMBase } from '@mastra/core/llm';
+import { type LanguageModel } from '@mastra/core/llm';
 import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';
@@ -6,8 +6,8 @@ import { MastraAgentJudge } from '../../judge';
 import { CONTEXT_RELEVANCY_AGENT_INSTRUCTIONS, generateEvaluatePrompt, generateReasonPrompt } from './prompts';
 
 export class ContextRelevancyJudge extends MastraAgentJudge {
-  constructor(llm: MastraLLMBase) {
-    super('Context Relevancy', CONTEXT_RELEVANCY_AGENT_INSTRUCTIONS, llm);
+  constructor(model: LanguageModel) {
+    super('Context Relevancy', CONTEXT_RELEVANCY_AGENT_INSTRUCTIONS, model);
   }
 
   async evaluate(
