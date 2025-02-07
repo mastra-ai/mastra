@@ -1,4 +1,32 @@
-# @mastra/vector-qdrant
+# @mastra/qdrant
+
+## Migration Notice
+
+This package is the successor to `@mastra/vector-qdrant`. All functionality has been preserved while improving the package structure.
+
+### Key Features
+- Qdrant vector store implementation
+- Telemetry support via @mastra/core
+- Full filter support with type safety
+- Automatic batching for large upserts
+
+### Migration from @mastra/vector-qdrant
+1. Update your dependencies:
+   ```bash
+   pnpm remove @mastra/vector-qdrant
+   pnpm add @mastra/qdrant
+   ```
+2. Update your imports:
+   ```typescript
+   // Old import
+   import { QdrantVector } from '@mastra/vector-qdrant';
+   // New import
+   import { QdrantVector } from '@mastra/qdrant';
+   ```
+
+## Change History
+
+### Previous Changes (from @mastra/vector-qdrant)
 
 ## 0.1.0-alpha.26
 

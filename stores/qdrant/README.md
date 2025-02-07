@@ -1,17 +1,17 @@
-# @mastra/vector-qdrant
+# @mastra/qdrant
 
 Vector store implementation for Qdrant using the official @qdrant/js-client-rest SDK with added telemetry support.
 
 ## Installation
 
 ```bash
-npm install @mastra/vector-qdrant
+pnpm add @mastra/qdrant
 ```
 
 ## Usage
 
 ```typescript
-import { QdrantVector } from '@mastra/vector-qdrant';
+import { QdrantVector } from '@mastra/qdrant';
 
 const vectorStore = new QdrantVector(
   'http://localhost:6333', // url
