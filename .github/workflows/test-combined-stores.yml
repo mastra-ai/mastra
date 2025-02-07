@@ -17,6 +17,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    services:
+      chromadb:
+        image: chromadb/chroma
+        ports:
+          - 8000:8000
 
     steps:
       - uses: actions/checkout@v4
@@ -43,3 +48,7 @@ jobs:
 
       - name: Run combined storage tests
         run: pnpm test:combined-stores
+        env:
+          NODE_OPTIONS: "--max_old_space_size=8096"
+          ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
+          ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
