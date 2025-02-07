@@ -14,15 +14,17 @@ The `query` method returns the most semantically similar chunks to your input em
 This example shows how to retrieve similar chunks from a Pinecone vector database.
 
 ```tsx copy
-import { MDocument, embed, PineconeVector } from "@mastra/rag";
+import { embedMany } from "ai";
+import { openai } from "@ai-sdk/openai";
+import { MDocument, PineconeVector } from "@mastra/rag";
 
 const doc = MDocument.fromText("Your text content...");
 
 const chunks = await doc.chunk();
 
-const { embeddings } = await embed(chunks, {
-  provider: "OPEN_AI",
-  model: "text-embedding-3-small",
+const { embeddings } = await embedMany({
+  value: chunks,
+  model: openai.embedding("text-embedding-3-small"),
   maxRetries: 3,
 });
 
