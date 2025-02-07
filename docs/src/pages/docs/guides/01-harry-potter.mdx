@@ -143,16 +143,13 @@ Finally, we'll demonstrate how to stream the response from the model. Streaming 
 ```ts copy filename="src/index.ts"
 const stream = await llm.stream(messages);
 
-console.log('Streaming response as Draco Malfoy:');
+console.log("Streaming response as Draco Malfoy:");
 
 for await (const chunk of stream.textStream) {
   process.stdout.write(chunk);
 }
 
-console.log('\n');
-}
-
-main();
+console.log("\n");
 ```
 
 Run the script again:

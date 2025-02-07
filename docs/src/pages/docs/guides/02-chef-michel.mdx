@@ -22,7 +22,7 @@ In this guide, we'll walk through creating a "Chef Assistant" agent that helps u
 ## Create the Agent
 
 <Steps>
-### Define the Agent
+## Define the Agent
 
 Create a new file `src/mastra/agents/chefAgent.ts` and define your agent:
 
@@ -42,8 +42,6 @@ export const chefAgent = new Agent({
 });
 ```
 
----
-
 ## Set Up Environment Variables
 
 Create a `.env` file in your project root and add your OpenAI API key:
@@ -51,8 +49,6 @@ Create a `.env` file in your project root and add your OpenAI API key:
 ```bash filename=".env" copy
 OPENAI_API_KEY=your_openai_api_key
 ```
-
----
 
 ## Register the Agent with Mastra
 
@@ -68,14 +64,12 @@ export const mastra = new Mastra({
 });
 ```
 
----
-
-</Steps >
+</Steps>
 
 ## Interacting with the Agent
 
 <Steps>
-### Generating Text Responses
+## Generating Text Responses
 
 ```ts copy filename="src/index.ts"
 async function main() {
@@ -104,9 +98,7 @@ Query: In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some
 👨‍🍳 Chef Michel: You can make a delicious pasta al pomodoro! Here's how...
 ```
 
----
-
-### Streaming Responses
+## Streaming Responses
 
 ```ts copy filename="src/index.ts"
 async function main() {
@@ -139,9 +131,7 @@ Great! You can make a comforting chicken curry...
 ✅ Recipe complete!
 ```
 
----
-
-### Generating a Recipe with Structured Data
+## Generating a Recipe with Structured Data
 
 ```ts copy filename="src/index.ts"
 import { z } from "zod";
@@ -191,15 +181,12 @@ Query: I want to make lasagna, can you generate a lasagna recipe for me?
 }
 ```
 
----
-
-</Steps >
+</Steps>
 
 ## Running the Agent Server
 
 <Steps>
-
-### Using `mastra dev`
+## Using `mastra dev`
 
 You can run your agent as a service using the `mastra dev` command:
 
@@ -209,7 +196,7 @@ mastra dev
 
 This will start a server exposing endpoints to interact with your registered agents.
 
-### Accessing the Chef Assistant API
+## Accessing the Chef Assistant API
 
 By default, `mastra dev` runs on `http://localhost:4111`. Your Chef Assistant agent will be available at:
 
@@ -217,7 +204,7 @@ By default, `mastra dev` runs on `http://localhost:4111`. Your Chef Assistant ag
 POST http://localhost:4111/api/agents/chefAgent/generate
 ```
 
-### Interacting with the Agent via `curl`
+## Interacting with the Agent via `curl`
 
 You can interact with the agent using `curl` from the command line:
 

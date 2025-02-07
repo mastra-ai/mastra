@@ -1,0 +1,226 @@
+---
+title: "RAG with SEC Filings | Mastra LLM Guides"
+description: Guide on building a RAG system using Mastra to analyze Nvidia's 10-K SEC filing, demonstrating document chunking, embedding creation, and semantic search.
+---
+
+import { Steps } from "nextra/components";
+
+# Guide: RAG with SEC Filings
+
+In this guide, we'll build a Retrieval-Augmented Generation (RAG) system using Mastra to analyze Nvidia's 10-K SEC filing. We'll demonstrate how to chunk the document, create embeddings, and perform semantic search to answer specific questions about the company's financial information.
+
+In this guide, we'll walk through:
+- Setting up the project
+- Downloading and preprocessing the SEC filing
+- Chunking the document
+- Creating embeddings
+- Performing semantic search
+- Building a simple Q&A system
+
+## Setup
+
+First, ensure you have Mastra and node-fetch installed:
+
+```bash copy
+npm install @mastra/core node-fetch
+```
+
+You'll need an OpenAI API key for embeddings and completion:
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-openai-api-key>
+```
+
+<Steps>
+
+## Initialize the Project
+
+Create a new TypeScript file for our RAG implementation:
+
+```ts copy filename="src/rag-sec-filings.ts"
+import { Mastra, ChunkConfig, EmbeddingConfig, SearchConfig } from "@mastra/core";
+import fetch from "node-fetch";
+
+// Initialize Mastra
+const mastra = new Mastra();
+
+// URL of Nvidia's 10-K filing
+const NVIDIA_10K_URL = "https://www.sec.gov/ix?doc=/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm";
+
+// Function to fetch and clean the document
+async function fetchDocument(url: string): Promise<string> {
+  const response = await fetch(url);
+  const text = await response.text();
+  // Basic cleaning: remove HTML tags and normalize whitespace
+  return text
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+```
+
+## Chunk the Document
+
+Now let's chunk the document into manageable pieces:
+
+```ts copy filename="src/rag-sec-filings.ts"
+async function chunkDocument(text: string) {
+  const chunkConfig: ChunkConfig = {
+    text,
+    chunkSize: 1000,
+    overlap: 200,
+    // Use sentence boundaries for more natural chunks
+    splitBy: "sentence"
+  };
+
+  const chunks = await mastra.chunk(chunkConfig);
+  return chunks;
+}
+```
+
+## Create Embeddings
+
+Create embeddings for each chunk:
+
+```ts copy filename="src/rag-sec-filings.ts"
+async function createEmbeddings(chunks: string[]) {
+  const embeddingConfig: EmbeddingConfig = {
+    texts: chunks,
+    // Using OpenAI's text-embedding-3-small model
+    model: "text-embedding-3-small"
+  };
+
+  const embeddings = await mastra.embed(embeddingConfig);
+  return embeddings;
+}
+```
+
+## Implement Search
+
+Set up the semantic search functionality:
+
+```ts copy filename="src/rag-sec-filings.ts"
+async function searchDocument(query: string, chunks: string[], embeddings: number[][]) {
+  // Create embedding for the query
+  const queryEmbedding = await mastra.embed({
+    texts: [query],
+    model: "text-embedding-3-small"
+  });
+
+  const searchConfig: SearchConfig = {
+    query: queryEmbedding[0],
+    embeddings,
+    k: 3, // Return top 3 most relevant chunks
+  };
+
+  const results = await mastra.search(searchConfig);
+  return results.map(result => ({
+    chunk: chunks[result.index],
+    score: result.score
+  }));
+}
+```
+
+## Build Q&A System
+
+Create a function to answer questions using the retrieved context:
+
+```ts copy filename="src/rag-sec-filings.ts"
+async function answerQuestion(question: string, context: string) {
+  const llm = mastra.llm({
+    provider: "OPEN_AI",
+    model: "gpt-4-turbo-preview",
+    systemMessage: `You are a helpful assistant analyzing Nvidia's 10-K SEC filing. 
+    Use the provided context to answer questions accurately. 
+    If the answer cannot be found in the context, say so.`
+  });
+
+  const response = await llm.complete({
+    messages: [
+      {
+        role: "user",
+        content: `Context: ${context}\n\nQuestion: ${question}\n\nAnswer:`
+      }
+    ]
+  });
+
+  return response;
+}
+```
+
+## Put It All Together
+
+Here's how to use all the components together:
+
+```ts copy filename="src/rag-sec-filings.ts"
+async function main() {
+  try {
+    // 1. Fetch and preprocess the document
+    console.log("Fetching document...");
+    const document = await fetchDocument(NVIDIA_10K_URL);
+
+    // 2. Chunk the document
+    console.log("Chunking document...");
+    const chunks = await chunkDocument(document);
+
+    // 3. Create embeddings
+    console.log("Creating embeddings...");
+    const embeddings = await createEmbeddings(chunks);
+
+    // 4. Example question
+    const question = "What were Nvidia's total revenues for fiscal year 2024?";
+    console.log(`\nQuestion: ${question}`);
+
+    // 5. Search for relevant chunks
+    const searchResults = await searchDocument(question, chunks, embeddings);
+    const context = searchResults.map(r => r.chunk).join("\n\n");
+
+    // 6. Generate answer
+    const answer = await answerQuestion(question, context);
+    console.log(`\nAnswer: ${answer}`);
+
+  } catch (error) {
+    console.error("Error:", error);
+  }
+}
+
+// Run the example
+main();
+```
+
+## Run the Example
+
+Execute the code:
+
+```bash copy
+npx bun src/rag-sec-filings.ts
+```
+
+</Steps>
+
+## Customization Options
+
+You can customize various aspects of the RAG system:
+
+1. **Chunking Strategy**: Adjust `chunkSize`, `overlap`, and `splitBy` in the `ChunkConfig` to optimize for your use case.
+2. **Embedding Model**: Change the embedding model in `EmbeddingConfig` to use different embedding providers.
+3. **Search Parameters**: Modify the number of results (`k`) or add filters in `SearchConfig`.
+4. **LLM Settings**: Adjust the model, temperature, or system message in the Q&A component.
+
+## Example Questions
+
+Try these example questions:
+
+1. "What are Nvidia's primary revenue sources?"
+2. "What are the main risk factors mentioned in the filing?"
+3. "How much did Nvidia spend on R&D in the last fiscal year?"
+
+## Next Steps
+
+- Experiment with different chunking strategies
+- Add metadata extraction for better context
+- Implement caching for embeddings
+- Add error handling and rate limiting
+- Build a simple web interface
+
+For more advanced RAG features, check out our [RAG examples](/examples/rag/basic-rag) and the [Mastra blog](https://mastra.ai/blog/build-rag-workflow).
