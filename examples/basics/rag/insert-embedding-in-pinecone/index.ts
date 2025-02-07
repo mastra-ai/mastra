@@ -1,5 +1,5 @@
 import { MDocument, embedMany } from '@mastra/rag';
-import { PineconeVector } from '@mastra/vector-pinecone';
+import { PineconeVector } from '@mastra/pinecone';
 
 const doc = MDocument.fromText('Your text content...');
 
