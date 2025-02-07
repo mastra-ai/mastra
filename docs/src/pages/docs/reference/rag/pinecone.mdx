@@ -84,6 +84,11 @@ The PineconeStore class provides an interface to Pinecone's vector database.
 <PropertiesTable
   content={[
     {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to query",
+    },
+    {
       name: "vector",
       type: "number[]",
       description: "Query vector to find similar vectors",
@@ -100,6 +105,13 @@ The PineconeStore class provides an interface to Pinecone's vector database.
       type: "Record<string, any>",
       isOptional: true,
       description: "Metadata filters for the query",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include the vector in the result",
     },
   ]}
 />

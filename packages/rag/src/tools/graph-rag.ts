@@ -66,7 +66,6 @@ export const createGraphRAGTool = ({
               })()
             : filter;
         }
-        console.log('Using this filter and topK:', { queryFilter, topK });
         if (mastra.logger) {
           mastra.logger.debug('Using this filter and topK:', { queryFilter, topK });
         }
@@ -96,12 +95,12 @@ export const createGraphRAGTool = ({
         }
 
         // Get reranked results using GraphRAG
-        const rerankedResults = graphRag.query(
-          queryEmbedding,
+        const rerankedResults = graphRag.query({
+          query: queryEmbedding,
           topK,
-          graphOptions.randomWalkSteps,
-          graphOptions.restartProb,
-        );
+          randomWalkSteps: graphOptions.randomWalkSteps,
+          restartProb: graphOptions.restartProb,
+        });
 
         // Extract and combine relevant chunks
         const relevantChunks = rerankedResults.map(result => result.content);

@@ -88,6 +88,11 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
 <PropertiesTable
   content={[
     {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to query",
+    },
+    {
       name: "vector",
       type: "number[]",
       description: "Query vector",
@@ -104,6 +109,13 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
       type: "Record<string, any>",
       isOptional: true,
       description: "Metadata filters",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include the vector in the result",
     },
     {
       name: "minScore",
