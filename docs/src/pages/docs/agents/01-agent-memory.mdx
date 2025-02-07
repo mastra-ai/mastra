@@ -84,8 +84,7 @@ The Mastra memory system is highly configurable and supports multiple storage ba
 
 ```typescript
 import { Memory } from "@mastra/memory";
-import { PostgresStore } from "@mastra/store-pg";
-import { PgVector } from "@mastra/vector-pg";
+import { PostgresStore, PgVector } from "@mastra/pg";
 
 const memory = new Memory({
   // Required: Storage backend for messages
@@ -193,7 +192,7 @@ const storage = new MastraStorageLibSql({
 ### PostgreSQL Storage
 
 ```typescript
-import { PostgresStore } from "@mastra/store-pg";
+import { PostgresStore } from "@mastra/pg";
 
 const storage = new PostgresStore({
   host: "localhost",
@@ -222,7 +221,7 @@ Mastra supports semantic search through vector embeddings. When configured with 
 1. Configure a vector store (currently supports PostgreSQL):
 
 ```typescript
-import { PgVector } from "@mastra/vector-pg";
+import { PgVector } from "@mastra/pg";
 
 const vector = new PgVector(connectionString);
 ```
@@ -289,7 +288,7 @@ Here's how to manually work with threads:
 
 ```typescript
 import { Memory } from "@mastra/memory";
-import { PostgresStore } from "@mastra/store-pg";
+import { PostgresStore } from "@mastra/pg";
 
 // Initialize memory
 const memory = new Memory({
@@ -365,6 +364,7 @@ Note that in most cases, you won't need to manage threads manually since the age
 Working memory is a powerful feature that allows agents to maintain persistent information across conversations, even with minimal context. This is particularly useful for remembering user preferences, personal details, or any other contextual information that should persist throughout interactions.
 
 Inspired by the working memory concept from the MemGPT whitepaper, our implementation improves upon it in several key ways:
+
 - No extra roundtrips or tool calls required
 - Full support for streaming messages
 - Seamless integration with the agent's natural response flow
