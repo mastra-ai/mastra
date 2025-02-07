@@ -1,5 +1,11 @@
 # @mastra/deployer
 
+## 0.1.0-alpha.41
+
+### Patch Changes
+
+- 0b96376: fix pino of being null
+
 ## 0.1.0-alpha.40
 
 ### Patch Changes
