@@ -18,6 +18,10 @@ jobs:
     permissions:
       contents: read
     services:
+      qdrant:
+        image: qdrant/qdrant
+        ports:
+          - 6333:6333
       chromadb:
         image: chromadb/chroma
         ports:
