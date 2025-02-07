@@ -2,8 +2,8 @@ const meta = {
   "memory-with-pg": "Memory with Postgres",
   "memory-with-libsql": "Memory with LibSQL",
   "memory-with-upstash": "Memory with Upstash",
-  "short-term-working-memory": "Short-term working memory (quickstart)",
-  "short-term-working-memory-advanced": "Short-term working memory (advanced)",
+  "streaming-working-memory": "Streaming Working Memory (quickstart)",
+  "streaming-working-memory-advanced": "Streaming Working Memory (advanced)",
 };
 
 export default meta;
