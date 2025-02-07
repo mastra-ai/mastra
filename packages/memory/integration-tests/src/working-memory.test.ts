@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { MastraStorageLibSql } from '@mastra/core/storage';
+import { LibSQLVector } from '@mastra/core/vector/libsql';
 import { Memory } from '@mastra/memory';
-import { LibSQLVector } from '@mastra/vector-libsql';
 import dotenv from 'dotenv';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
