@@ -1,9 +1,11 @@
-import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
-import { createVectorQueryTool, embedMany, MDocument } from '@mastra/rag';
+import { Agent } from '@mastra/core/agent';
+import { OpenAI } from '@mastra/core/llm/openai';
+import { createVectorQueryTool, embedMany, MDocument, PGVECTOR_PROMPT } from '@mastra/rag';
 import { PgVector } from '@mastra/vector-pg';
 
 const vectorQueryTool = createVectorQueryTool({
+  id: 'vectorQueryTool',
   vectorStoreName: 'pgVector',
   indexName: 'embeddings',
   options: {
@@ -11,28 +13,8 @@ const vectorQueryTool = createVectorQueryTool({
     model: 'text-embedding-3-small',
     maxRetries: 3,
   },
-  topK: 3,
-  vectorFilterType: 'pg',
+  enableFilter: true,
 });
-
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  instructions:
-    'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o-mini',
-  },
-  tools: { vectorQueryTool },
-});
-
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
-
-export const mastra = new Mastra({
-  agents: { ragAgent },
-  vectors: { pgVector },
-});
-const agent = mastra.getAgent('ragAgent');
 
 const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture
 
@@ -64,6 +46,52 @@ const chunks = await doc.chunk({
   },
 });
 
+const chunkMetadata = chunks?.map((chunk: any, index: number) => ({
+  text: chunk.text,
+  ...chunk.metadata,
+  nested: {
+    keywords: chunk.metadata.excerptKeywords
+      .replace('KEYWORDS:', '')
+      .split(',')
+      .map(k => k.trim()),
+    id: index,
+  },
+}));
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  llm: new OpenAI({
+    name: 'gpt-4o-mini',
+  }),
+  instructions: `
+  You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
+
+  Use the vectorQueryTool to filter the context by searching the metadata.
+  
+  The metadata is structured as follows:
+
+  {
+    text: string,
+    excerptKeywords: string,
+    nested: {
+      keywords: string[],
+      id: number,
+    },
+  }
+
+  ${PGVECTOR_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+
+export const mastra = new Mastra({
+  agents: { ragAgent },
+  vectors: { pgVector },
+});
+
+const agent = mastra.getAgent('ragAgent');
 const { embeddings } = await embedMany(chunks, {
   provider: 'OPEN_AI',
   model: 'text-embedding-3-small',
@@ -72,36 +100,14 @@ const { embeddings } = await embedMany(chunks, {
 
 const vectorStore = mastra.getVector('pgVector');
 await vectorStore.createIndex('embeddings', 1536);
-await vectorStore.upsert(
-  'embeddings',
-  embeddings,
-  chunks?.map((chunk: any, index: number) => ({
-    text: chunk.text,
-    ...chunk.metadata,
-    nested: {
-      keywords: chunk.metadata.excerptKeywords
-        .replace('KEYWORDS:', '')
-        .split(',')
-        .map(k => k.trim()),
-      id: index,
-    },
-  })),
-);
+await vectorStore.upsert('embeddings', embeddings, chunkMetadata);
 
-async function generateResponse(query: string, filter: any) {
-  const buildFilterString = (f: any): string => {
-    if ('type' in f) {
-      return `type:${f.type} condition with filters: [${f.filters.map(buildFilterString).join(', ')}]`;
-    }
-    return `keyword: ${f.keyword} operator: ${f.operator} value: ${f.value}`;
-  };
-  const filterDescription = buildFilterString(filter);
+async function generateResponse(query: string) {
   const prompt = `
       Please answer the following question:
       ${query}
 
-    Please base your answer only on the context provided in the tool using this filter:
-    ${filterDescription}
+    Please base your answer only on the context provided in the tool.
     If the context doesn't contain enough information to fully answer the question, please state that explicitly.
       `;
 
@@ -111,16 +117,17 @@ async function generateResponse(query: string, filter: any) {
   return completion.text;
 }
 
-async function answerQueries(
-  queries: {
-    query: string;
-    filter: any;
-  }[],
-) {
-  for (const { query, filter } of queries) {
+const queries = [
+  "What adaptation strategies are mentioned? Use regex to search for the word 'adaptation' in the 'nested.keywords' field.",
+  "Show me recent sections. Check the 'nested.id' field and return values that are greater than 2.",
+  "Search the 'text' field using regex operator to find sections containing 'temperature'.",
+];
+
+async function answerQueries() {
+  for (const query of queries) {
     try {
       // Generate and log the response
-      const answer = await generateResponse(query, filter);
+      const answer = await generateResponse(query);
       console.log('\nQuery:', query);
       console.log('Response:', answer);
     } catch (error) {
@@ -129,59 +136,4 @@ async function answerQueries(
   }
 }
 
-const queries = [
-  {
-    query: 'What adaptation strategies are mentioned?',
-    filter: {
-      keyword: 'excerptKeywords',
-      operator: 'ilike',
-      value: `%adaptation%`,
-    },
-  },
-  {
-    query: 'Show me recent sections',
-    filter: {
-      keyword: 'nested.id',
-      operator: 'gt',
-      value: 2,
-    },
-  },
-  {
-    query: 'Find sections about drought and irrigation',
-    filter: {
-      type: '$and',
-      filters: [
-        {
-          keyword: 'text',
-          operator: 'ilike',
-          value: '%drought%',
-        },
-        {
-          keyword: 'text',
-          operator: 'ilike',
-          value: '%irrigation%',
-        },
-      ],
-    },
-  },
-  {
-    query: 'Find sections about wheat or rice',
-    filter: {
-      type: '$or',
-      filters: [
-        {
-          keyword: 'text',
-          operator: 'ilike',
-          value: '%wheat%',
-        },
-        {
-          keyword: 'text',
-          operator: 'ilike',
-          value: '%rice%',
-        },
-      ],
-    },
-  },
-];
-
-await answerQueries(queries);
+await answerQueries();

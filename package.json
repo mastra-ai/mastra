@@ -30,7 +30,7 @@
     "build:cli": "pnpm --filter ./packages/cli build",
     "build:deployer": "pnpm --filter ./packages/deployer build",
     "build:core": "pnpm --filter ./packages/core build",
-    "build:rag": "pnpm --filter ./packages/cli build",
+    "build:rag": "pnpm --filter ./packages/rag build",
     "build:engine": "pnpm --filter ./packages/engine build",
     "build:memory": "pnpm --filter ./packages/memory build",
     "build:evals": "pnpm --filter ./packages/evals build",

@@ -37,51 +37,108 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
-import { Mastra, Agent } from "@mastra/core";
-import { PgVector } from "@mastra/vector-pg";
-import { createVectorQueryTool, embedMany, MDocument } from "@mastra/rag";
+import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { OpenAI } from '@mastra/core/llm/openai';
+import { createVectorQueryTool, embedMany, MDocument, PGVECTOR_PROMPT } from '@mastra/rag';
+import { PgVector } from '@mastra/vector-pg';
 ```
 
 ## Vector Query Tool Creation
 
-Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
+Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database with filtering capabilities.
 
-```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{7} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
+  id: 'vectorQueryTool',
   vectorStoreName: "pgVector",
   indexName: "embeddings",
   options: {
-    provider: "OPEN_AI",
-    model: "text-embedding-3-small",
+    provider: 'OPEN_AI',
+    model: 'text-embedding-3-small',
     maxRetries: 3,
   },
-  topK: 3,
-  vectorFilterType: "pg",
+  enableFilter: true,
 });
+```
+
+## Document Processing
+
+Create a document and process it into chunks:
+
+```typescript copy showLineNumbers{19} filename="src/mastra/index.ts"
+const doc = MDocument.fromText(
+  `The Impact of Climate Change on Global Agriculture...`
+);
+
+const chunks = await doc.chunk({
+  strategy: 'recursive',
+  size: 512,
+  overlap: 50,
+  separator: '\n',
+  extract: {
+    keywords: true,  // Extracts keywords from each chunk
+  },
+});
+```
+
+### Transform Chunks into Metadata
+
+Transform chunks into metadata that can be filtered:
+
+```typescript copy showLineNumbers{33} filename="src/mastra/index.ts"
+const chunkMetadata = chunks?.map((chunk: any, index: number) => ({
+  text: chunk.text,
+  ...chunk.metadata,
+  nested: {
+    keywords: chunk.metadata.excerptKeywords
+      .replace('KEYWORDS:', '')
+      .split(',')
+      .map(k => k.trim()),
+    id: index,
+  },
+}));
 ```
 
 ## Agent Configuration
 
 Set up the Mastra agent that will handle the responses:
 
-```typescript copy showLineNumbers{16} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{45} filename="src/mastra/index.ts"
 export const ragAgent = new Agent({
-  name: "RAG Agent",
-  instructions:
-    "You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.",
-  model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-  },
+  name: 'RAG Agent',
+  llm: new OpenAI({
+    name: 'gpt-4o-mini',
+  }),
+  instructions: `
+  You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
+
+  Use the vectorQueryTool to filter the context by searching the metadata.
+  
+  The metadata is structured as follows:
+
+  {
+    text: string,
+    excerptKeywords: string,
+    nested: {
+      keywords: string[],
+      id: number,
+    },
+  }
+
+  ${PGVECTOR_PROMPT}
+  `,
   tools: { vectorQueryTool },
 });
 ```
+
+We can provide an example of how the metadata is structured for the agent to use when filtering with the tool.
 
 ## Instantiate PgVector and Mastra
 
 Instantiate PgVector and Mastra with all components:
 
-```typescript copy showLineNumbers{27} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{71} filename="src/mastra/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
@@ -89,80 +146,40 @@ export const mastra = new Mastra({
   vectors: { pgVector },
 });
 
-const agent = mastra.getAgent("ragAgent");
-```
-
-## Document Processing
-
-Create a document and process it into chunks:
-
-```typescript copy showLineNumbers{36} filename="src/mastra/index.ts"
-const doc = MDocument.fromText(
-  `The Impact of Climate Change on Global Agriculture...`,
-);
-
-const chunks = await doc.chunk({
-  strategy: "recursive",
-  size: 512,
-  overlap: 50,
-  separator: "\n",
-  extract: {
-    keywords: true,
-  },
-});
+const agent = mastra.getAgent('ragAgent');
 ```
 
 ## Creating and Storing Embeddings
 
-Generate embeddings for the chunks and store them in the vector database:
+Generate embeddings for the chunks and store them in the vector database along with their metadata:
 
-```typescript copy showLineNumbers{48} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{80} filename="src/mastra/index.ts"
 const { embeddings } = await embedMany(chunks, {
-  provider: "OPEN_AI",
-  model: "text-embedding-3-small",
+  provider: 'OPEN_AI',
+  model: 'text-embedding-3-small',
   maxRetries: 3,
 });
 
-const vectorStore = mastra.getVector("pgVector");
-await vectorStore.createIndex("embeddings", 1536);
-await vectorStore.upsert(
-  "embeddings",
-  embeddings,
-  chunks?.map((chunk: any) => ({
-    text: chunk.text,
-    ...chunk.metadata,
-    nested: {
-      keywords: chunk.metadata.excerptKeywords
-        .replace("KEYWORDS:", "")
-        .split(",")
-        .map((k) => k.trim()),
-      id: index,
-    },
-  })),
-);
+const vectorStore = mastra.getVector('pgVector');
+await vectorStore.createIndex('embeddings', 1536);
+
+// Store both embeddings and metadata together
+await vectorStore.upsert('embeddings', embeddings, chunkMetadata);
 ```
+
+The `upsert` operation stores both the vector embeddings and their associated metadata, enabling combined semantic search and metadata filtering capabilities.
 
 ## Response Generation
 
 Function to generate responses based on retrieved context:
 
-```typescript copy showLineNumbers{65} filename="src/mastra/index.ts"
-async function generateResponse(query: string, filter: any) {
-  const buildFilterString = (f: any): string => {
-    if ("type" in f) {
-      return `type:${f.type} condition with filters: [${f.filters
-        .map(buildFilterString)
-        .join(", ")}]`;
-    }
-    return `keyword: ${f.keyword} operator: ${f.operator} value: ${f.value}`;
-  };
-  const filterDescription = buildFilterString(filter);
+```typescript copy showLineNumbers{92} filename="src/mastra/index.ts"
+async function generateResponse(query: string) {
   const prompt = `
       Please answer the following question:
       ${query}
 
-    Please base your answer only on the context provided in the tool using these filter conditions:
-    ${filterDescription}
+    Please base your answer only on the context provided in the tool.
     If the context doesn't contain enough information to fully answer the question, please state that explicitly.
       `;
 
@@ -175,81 +192,27 @@ async function generateResponse(query: string, filter: any) {
 
 ## Example Usage
 
-```typescript copy showLineNumbers{89} filename="src/mastra/index.ts"
-async function answerQueries(
-  queries: {
-    query: string;
-    filter: any;
-  }[],
-) {
-  for (const { query, filter } of queries) {
+```typescript copy showLineNumbers{107} filename="src/mastra/index.ts"
+const queries = [
+  "What adaptation strategies are mentioned? Use regex to search for the word 'adaptation' in the 'nested.keywords' field.",
+  "Show me recent sections. Check the 'nested.id' field and return values that are greater than 2.",
+  "Search the 'text' field using regex operator to find sections containing 'temperature'.",
+];
+
+async function answerQueries() {
+  for (const query of queries) {
     try {
       // Generate and log the response
-      const answer = await generateResponse(query, filter);
-      console.log("\nQuery:", query);
-      console.log("Response:", answer);
+      const answer = await generateResponse(query);
+      console.log('\nQuery:', query);
+      console.log('Response:', answer);
     } catch (error) {
       console.error(`Error processing query "${query}":`, error);
     }
   }
 }
 
-const queries = [
-  {
-    query: "What adaptation strategies are mentioned?",
-    filter: {
-      keyword: "nested.keywords",
-      operator: "ilike",
-      value: "adaptation",
-    },
-  },
-  {
-    query: "Show me recent sections",
-    filter: {
-      keyword: "nested.id",
-      operator: "gt",
-      value: "2",
-    },
-  },
-  {
-    query: "Find sections about drought and irrigation",
-    filter: {
-      type: "$and",
-      filters: [
-        {
-          keyword: "text",
-          operator: "ilike",
-          value: "drought",
-        },
-        {
-          keyword: "text",
-          operator: "ilike",
-          value: "irrigation",
-        },
-      ],
-    },
-  },
-  {
-    query: "Find sections about wheat or rice",
-    filter: {
-      type: "$or",
-      filters: [
-        {
-          keyword: "text",
-          operator: "ilike",
-          value: "wheat",
-        },
-        {
-          keyword: "text",
-          operator: "ilike",
-          value: "rice",
-        },
-      ],
-    },
-  },
-];
-
-await answerQueries(queries);
+await answerQueries();
 ```
 
 <br />

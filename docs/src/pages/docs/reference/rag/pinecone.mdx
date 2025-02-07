@@ -1,11 +1,12 @@
 ---
-title: "Reference: PineconeStore | Vector DBs | RAG | Mastra Docs"
-description: Documentation for the PineconeStore class in Mastra, which provides an interface to Pinecone's vector database.
+title: "Reference: Pinecone Vector Store | Vector DBs | RAG | Mastra Docs"
+description: Documentation for the PineconeVector class in Mastra, which provides an interface to Pinecone's vector database.
 ---
 
-# Pinecone
+# Pinecone Vector Store
 
-The PineconeStore class provides an interface to Pinecone's vector database.
+The PineconeVector class provides an interface to [Pinecone](https://www.pinecone.io/)'s vector database.
+It provides real-time vector search, with features like hybrid search, metadata filtering, and namespace management.
 
 ## Constructor Options
 
@@ -20,11 +21,6 @@ The PineconeStore class provides an interface to Pinecone's vector database.
       name: "environment",
       type: "string",
       description: 'Pinecone environment (e.g., "us-west1-gcp")',
-    },
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of your Pinecone index",
     },
   ]}
 />
@@ -43,7 +39,7 @@ The PineconeStore class provides an interface to Pinecone's vector database.
     {
       name: "dimension",
       type: "number",
-      description: "Vector dimension size",
+      description: "Vector dimension (must match your embedding model)",
     },
     {
       name: "metric",
@@ -60,6 +56,11 @@ The PineconeStore class provides an interface to Pinecone's vector database.
 <PropertiesTable
   content={[
     {
+      name: "indexName",
+      type: "string",
+      description: "Name of your Pinecone index",
+    },
+    {
       name: "vectors",
       type: "number[][]",
       description: "Array of embedding vectors",
@@ -71,10 +72,10 @@ The PineconeStore class provides an interface to Pinecone's vector database.
       description: "Metadata for each vector",
     },
     {
-      name: "namespace",
-      type: "string",
+      name: "ids",
+      type: "string[]",
       isOptional: true,
-      description: "Optional namespace for organization",
+      description: "Optional vector IDs (auto-generated if not provided)",
     },
   ]}
 />
@@ -83,6 +84,11 @@ The PineconeStore class provides an interface to Pinecone's vector database.
 
 <PropertiesTable
   content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to query",
+    },
     {
       name: "vector",
       type: "number[]",
@@ -100,6 +106,13 @@ The PineconeStore class provides an interface to Pinecone's vector database.
       type: "Record<string, any>",
       isOptional: true,
       description: "Metadata filters for the query",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include the vector in the result",
     },
   ]}
 />

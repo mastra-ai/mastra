@@ -3,6 +3,7 @@ import { DocsThemeConfig, useConfig } from "nextra-theme-docs";
 
 import { useRouter } from "next/router";
 
+import { OperatorsTable } from "./src/components/operators-table";
 import { PropertiesTable } from "./src/components/properties-table";
 import { TableOfContents } from "./src/components/toc";
 
@@ -127,6 +128,7 @@ const docs: DocsThemeConfig = {
   },
   components: {
     PropertiesTable,
+    OperatorsTable,
   },
   toc: {
     title: "On This Page",

@@ -154,14 +154,18 @@ describe('GraphRAG', () => {
     it("query embedding can't be empty", () => {
       const graph = new GraphRAG(3);
       const queryEmbedding: number[] = [];
-      expect(() => graph.query(queryEmbedding, 2, 3, 0.1)).toThrowError(`Query embedding must have dimension ${3}`);
+      expect(() => graph.query({ query: queryEmbedding, topK: 2, randomWalkSteps: 3, restartProb: 0.1 })).toThrowError(
+        `Query embedding must have dimension ${3}`,
+      );
     });
 
     it('topK must be greater than 0', () => {
       const graph = new GraphRAG(3);
       const queryEmbedding = [1, 2, 3];
       const topK = 0;
-      expect(() => graph.query(queryEmbedding, topK, 3, 0.1)).toThrowError('TopK must be greater than 0');
+      expect(() => graph.query({ query: queryEmbedding, topK, randomWalkSteps: 3, restartProb: 0.1 })).toThrowError(
+        'TopK must be greater than 0',
+      );
     });
 
     it('randomWalkSteps must be greater than 0', () => {
@@ -169,7 +173,7 @@ describe('GraphRAG', () => {
       const queryEmbedding = [1, 2, 3];
       const topK = 2;
       const randomWalkSteps = 0;
-      expect(() => graph.query(queryEmbedding, topK, randomWalkSteps, 0.1)).toThrowError(
+      expect(() => graph.query({ query: queryEmbedding, topK, randomWalkSteps, restartProb: 0.1 })).toThrowError(
         'Random walk steps must be greater than 0',
       );
     });
@@ -180,7 +184,7 @@ describe('GraphRAG', () => {
       const topK = 2;
       const randomWalkSteps = 3;
       const restartProb = -0.1;
-      expect(() => graph.query(queryEmbedding, topK, randomWalkSteps, restartProb)).toThrowError(
+      expect(() => graph.query({ query: queryEmbedding, topK, randomWalkSteps, restartProb })).toThrowError(
         'Restart probability must be between 0 and 1',
       );
     });
@@ -222,7 +226,7 @@ describe('GraphRAG', () => {
       const topK = 2;
       const randomWalkSteps = 3;
       const restartProb = 0.1;
-      const rerankedResults = graph.query(queryEmbedding, topK, randomWalkSteps, restartProb);
+      const rerankedResults = graph.query({ query: queryEmbedding, topK, randomWalkSteps, restartProb });
 
       expect(rerankedResults.length).toBe(2);
     });

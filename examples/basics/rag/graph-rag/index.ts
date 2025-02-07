@@ -1,5 +1,5 @@
-import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { embedMany, MDocument, createGraphRAGTool } from '@mastra/rag';
 import { PgVector } from '@mastra/vector-pg';
 
@@ -15,7 +15,6 @@ const graphRagTool = createGraphRAGTool({
     dimension: 1536,
     threshold: 0.7,
   },
-  topK: 5,
 });
 
 export const ragAgent = new Agent({

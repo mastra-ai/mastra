@@ -1,33 +1,44 @@
 ---
-title: "Reference: Qdrant Vector Store | Vector Databases | RAG | Mastra Docs"
-description: Documentation for integrating Qdrant with Mastra, a vector similarity search engine for managing vectors and payloads.
+title: "Reference: Chroma Vector Store | Vector Databases | RAG | Mastra Docs"
+description: Documentation for the ChromaVector class in Mastra, which provides vector search using ChromaDB.
 ---
 
-# Qdrant Vector Store
+# Chroma Vector Store
 
-The QdrantVector class provides vector search using [Qdrant](https://qdrant.tech/), a vector similarity search engine. 
-It provides a production-ready service with a convenient API to store, search, and manage vectors with additional payload and extended filtering support.
+The ChromaVector class provides vector search using [ChromaDB](https://www.trychroma.com/), an open-source embedding database. 
+It offers efficient vector search with metadata filtering and hybrid search capabilities.
 
 ## Constructor Options
 
 <PropertiesTable
   content={[
     {
-      name: "url",
+      name: "path",
       type: "string",
-      description:
-        "REST URL of the Qdrant instance. Eg. https://xyz-example.eu-central.aws.cloud.qdrant.io:6333",
+      description: "URL path to ChromaDB instance",
     },
     {
-      name: "apiKey",
+      name: "auth",
+      type: "object",
+      isOptional: true,
+      description: "Authentication configuration",
+    },
+  ]}
+/>
+
+### auth
+
+<PropertiesTable
+  content={[
+    {
+      name: "provider",
       type: "string",
-      description: "Optional Qdrant API key",
+      description: "Authentication provider",
     },
     {
-      name: "https",
-      type: "boolean",
-      description:
-        "Whether to use TLS when setting up the connection. Recommended.",
+      name: "credentials",
+      type: "string",
+      description: "Authentication credentials",
     },
   ]}
 />
@@ -62,6 +73,11 @@ It provides a production-ready service with a convenient API to store, search, a
 
 <PropertiesTable
   content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to upsert into",
+    },
     {
       name: "vectors",
       type: "number[][]",
@@ -113,7 +129,7 @@ It provides a production-ready service with a convenient API to store, search, a
       name: "includeVector",
       type: "boolean",
       isOptional: true,
-      defaultValue: "false", 
+      defaultValue: "false",
       description: "Whether to include vectors in the results",
     },
   ]}
@@ -183,5 +199,6 @@ try {
   }
 }
 ```
+
 ### Related
-- [Metadata Filters](./metadata-filters)
+- [Metadata Filters](./metadata-filters) 

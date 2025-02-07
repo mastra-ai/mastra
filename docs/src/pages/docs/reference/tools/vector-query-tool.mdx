@@ -46,23 +46,21 @@ const queryTool = createVectorQueryTool({
       isOptional: false,
     },
     {
-      name: "topK",
-      type: "number",
-      description: "Maximum number of results to retrieve",
-      isOptional: true,
-      defaultValue: "10",
-    },
-    {
-      name: "vectorFilterType",
-      type: "'pg' | 'astra' | 'qdrant' | 'upstash' | 'pinecone' | 'chroma' | ''",
-      description: "Type of vector store for filter formatting",
-      isOptional: true,
-      defaultValue: "''",
-    },
-    {
       name: "reranker",
       type: "RerankConfig",
       description: "Options for reranking results",
+      isOptional: true,
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "Custom ID for the tool (defaults to 'VectorQuery {vectorStoreName} {indexName} Tool')",
+      isOptional: true,
+    },
+    {
+      name: "description",
+      type: "string",
+      description: "Custom description for the tool (by default, provides instructions for querying the vector store with examples of filtering and reranking if enabled)",
       isOptional: true,
     }
   ]}
@@ -121,10 +119,15 @@ The tool returns an object with:
   ]}
 />
 
+## Default Tool Description
+
+The default tool description provides:
+- Instructions for querying the specified vector store
+- Examples of filter syntax when filtering is enabled
+
 ## Example with Filters
 
 ```typescript
-// Pinecone/PG/Astra
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
@@ -133,13 +136,16 @@ const queryTool = createVectorQueryTool({
     model: "text-embedding-3-small",
     maxRetries: 3
   },
-  vectorFilterType: "pinecone",
-  topK: 5
+  enableFilters: true,
 });
 ```
 
-Filter Formats:
-- Pinecone/PG/Astra: `{ category: { eq: "technical" } }`
+The tool processes queries with metadata filtering when enabled:
+- Filter conditions are specified in the user's query
+- Number of results can be customized with in the user query (default: 10)
+- Filters are automatically translated for each vector store's requirements
+
+For detailed filter syntax and store-specific capabilities, see the [Metadata Filters](../rag/metadata-filters) documentation.
 
 ## Example with Reranking
 
@@ -152,21 +158,35 @@ const queryTool = createVectorQueryTool({
     model: "text-embedding-3-small",
     maxRetries: 3
   },
-  topK: 5,
   reranker: {
     model: {
       provider: "OPEN_AI",
       name: "gpt-4o-mini",
     },
+    options: {
+      weights: {
+        semantic: 0.5,  // Semantic relevance weight
+        vector: 0.3,    // Vector similarity weight
+        position: 0.2   // Original position weight
+      },
+      topK: 5
+    }
   }
 });
 ```
+
+Reranking improves result quality by combining:
+- Semantic relevance: Using LLM-based scoring of text similarity
+- Vector similarity: Original vector distance scores
+- Position bias: Consideration of original result ordering
+- Query analysis: Adjustments based on query characteristics
+
+The reranker processes the initial vector search results and returns a reordered list optimized for relevance.
 
 ## Tool Details
 
 The tool is created with:
 - **ID**: `VectorQuery {vectorStoreName} {indexName} Tool`
-- **Description**: `Fetches and combines the top {topK} relevant chunks from the {vectorStoreName} vector store using the {indexName} index`
 - **Input Schema**: Requires queryText and filter objects
 - **Output Schema**: Returns relevantContext string
 

@@ -1,150 +1,298 @@
 ---
 title: "Reference: Metadata Filters | Metadata Filtering | RAG | Mastra Docs"
-description: Documentation for PGVector's metadata filtering capabilities in Mastra, which allow for precise querying of vector search results.
+description: Documentation for metadata filtering capabilities in Mastra, which allow for precise querying of vector search results across different vector stores.
 ---
 
-# Metadata Filters Reference (PGVector)
+# Metadata Filters
 
-PGVector filters allow you to narrow down vector search results based on metadata conditions. These filters support nested paths, comparisons, text search, and logical operations.
+Mastra provides a unified metadata filtering syntax across all vector stores, based on MongoDB/Sift query syntax. Each vector store translates these filters into their native format.
 
-## Usage Example
+## Basic Example
 
 ```typescript
 import { PgVector } from '@mastra/vector-pg';
 
-const pgVector = new PgVector(connectionString);
-const results = await pgVector.query(
+const store = new PgVector(connectionString);
+
+const results = await store.query(
   "my_index",
   queryVector,
   10,
   {
-    "metadata.category": {
-      eq: "electronics"
-    }
+    category: "electronics",  // Simple equality
+    price: { $gt: 100 },     // Numeric comparison
+    tags: { $in: ["sale", "new"] }  // Array membership
   }
 );
 ```
 
-## Filter Structure
+## Supported Operators
 
-<PropertiesTable
-  content={[
+<OperatorsTable
+  title="Basic Comparison"
+  operators={[
     {
-      name: "field",
-      type: "object",
-      description: "An object where the key is the metadata field path and the value is the filter condition",
-      isOptional: false,
+      name: "$eq",
+      description: "Matches values equal to specified value",
+      example: "{ age: { $eq: 25 } }",
+      supportedBy: ["All"]
+    },
+    {
+      name: "$ne",
+      description: "Matches values not equal",
+      example: "{ status: { $ne: 'inactive' } }",
+      supportedBy: ["All"]
+    },
+    {
+      name: "$gt",
+      description: "Greater than",
+      example: "{ price: { $gt: 100 } }",
+      supportedBy: ["All"]
+    },
+    {
+      name: "$gte",
+      description: "Greater than or equal",
+      example: "{ rating: { $gte: 4.5 } }",
+      supportedBy: ["All"]
+    },
+    {
+      name: "$lt",
+      description: "Less than",
+      example: "{ stock: { $lt: 20 } }",
+      supportedBy: ["All"]
+    },
+    {
+      name: "$lte",
+      description: "Less than or equal",
+      example: "{ priority: { $lte: 3 } }",
+      supportedBy: ["All"]
     }
   ]}
 />
 
-### Operators
-
-<PropertiesTable
-  content={[
+<OperatorsTable
+  title="Array Operators"
+  operators={[
     {
-      name: "eq",
-      type: "string",
-      description: "Exact match comparison",
+      name: "$in",
+      description: "Matches any value in array",
+      example: '{ category: { $in: ["A", "B"] } }',
+      supportedBy: ["All"]
     },
     {
-      name: "neq",
-      type: "string",
-      description: "Not equal comparison",
+      name: "$nin",
+      description: "Matches none of the values",
+      example: '{ status: { $nin: ["deleted", "archived"] } }',
+      supportedBy: ["All"]
     },
     {
-      name: "gt",
-      type: "string",
-      description: "Greater than comparison",
+      name: "$all",
+      description: "Matches arrays containing all elements",
+      example: '{ tags: { $all: ["urgent", "high"] } }',
+      supportedBy: ["Astra", "Pinecone", "Upstash"]
     },
     {
-      name: "gte",
-      type: "string",
-      description: "Greater than or equal comparison",
-    },
-    {
-      name: "lt",
-      type: "string",
-      description: "Less than comparison",
-    },
-    {
-      name: "lte",
-      type: "string",
-      description: "Less than or equal comparison",
-    },
-    {
-      name: "like",
-      type: "string",
-      description: "Case-sensitive pattern matching",
-    },
-    {
-      name: "ilike",
-      type: "string",
-      description: "Case-insensitive pattern matching",
-    },
-    {
-      name: "in",
-      type: "array",
-      description: "Match any value in array",
-    },
-    {
-      name: "contains",
-      type: "any",
-      description: "JSONB containment check",
-    },
-    {
-      name: "exists",
-      type: "boolean",
-      description: "Check if field exists",
-    },
+      name: "$elemMatch",
+      description: "Matches array elements meeting criteria",
+      example: '{ scores: { $elemMatch: { $gt: 80 } } }',
+      supportedBy: ["LibSQL", "PgVector"]
+    }
   ]}
 />
 
-## Additional Examples
-
-### Basic Comparison
-```typescript
-// Greater than comparison
-{
-  "metadata.price": {
-    gt: "100"
-  }
-}
-```
-
-### Text Search
-```typescript
-// Case-insensitive search
-{
-  "metadata.description": {
-    ilike: "electronics"
-  }
-}
-```
-
-### Logical Operations
-```typescript
-// AND condition
-{
-  "$and": [
+<OperatorsTable
+  title="Logical Operators"
+  operators={[
     {
-      "metadata.category": {
-        eq: "electronics"
-      }
+      name: "$and",
+      description: "Logical AND",
+      example: '{ $and: [{ price: { $gt: 100 } }, { stock: { $gt: 0 } }] }',
+      supportedBy: ["All except Vectorize"]
     },
     {
-      "metadata.price": {
-        lt: "1000"
-      }
+      name: "$or",
+      description: "Logical OR",
+      example: '{ $or: [{ status: "active" }, { priority: "high" }] }',
+      supportedBy: ["All except Vectorize"]
+    },
+    {
+      name: "$not",
+      description: "Logical NOT",
+      example: '{ price: { $not: { $lt: 100 } } }',
+      supportedBy: ["Astra", "Qdrant", "Upstash", "PgVector", "LibSQL"]
+    },
+    {
+      name: "$nor",
+      description: "Logical NOR",
+      example: '{ $nor: [{ status: "deleted" }, { archived: true }] }',
+      supportedBy: ["Qdrant", "Upstash", "PgVector", "LibSQL"]
     }
-  ]
-}
-```
+  ]}
+/>
 
-### Notes
-- Text search operators (`like`, `ilike`) automatically add `%` wildcards
-- All numeric values should be passed as strings
-- Nested fields are accessed using dot notation
+<OperatorsTable
+  title="Element Operators"
+  operators={[
+    {
+      name: "$exists",
+      description: "Matches documents with field",
+      example: '{ rating: { $exists: true } }',
+      supportedBy: ["All except Vectorize, Chroma"]
+    }
+  ]}
+/>
 
-### Related
-- [PgStore](./pgstore)
+<OperatorsTable
+  title="Custom Operators"
+  operators={[
+    {
+      name: "$contains",
+      description: "Text contains substring",
+      example: '{ description: { $contains: "sale" } }',
+      supportedBy: ["Upstash", "LibSQL", "PgVector"]
+    },
+    {
+      name: "$regex",
+      description: "Regular expression match",
+      example: '{ name: { $regex: "^test" } }',
+      supportedBy: ["Qdrant", "PgVector", "Upstash"]
+    },
+    {
+      name: "$size",
+      description: "Array length check",
+      example: '{ tags: { $size: { $gt: 2 } } }',
+      supportedBy: ["Astra", "LibSQL", "PgVector"]
+    },
+    {
+      name: "$geo",
+      description: "Geospatial query",
+      example: '{ location: { $geo: { type: "radius", ... } } }',
+      supportedBy: ["Qdrant"]
+    },
+    {
+      name: "$datetime",
+      description: "Datetime range query",
+      example: '{ created: { $datetime: { range: { gt: "2024-01-01" } } } }',
+      supportedBy: ["Qdrant"]
+    },
+    {
+      name: "$hasId",
+      description: "Vector ID existence check",
+      example: '{ $hasId: ["id1", "id2"] }',
+      supportedBy: ["Qdrant"]
+    },
+    {
+      name: "$hasVector",
+      description: "Vector existence check",
+      example: '{ $hasVector: true }',
+      supportedBy: ["Qdrant"]
+    }
+  ]}
+/>
+
+## Common Rules and Restrictions
+
+1. Field names cannot:
+   - Contain dots (.) unless referring to nested fields
+   - Start with $ or contain null characters
+   - Be empty strings
+
+2. Values must be:
+   - Valid JSON types (string, number, boolean, object, array)
+   - Not undefined
+   - Properly typed for the operator (e.g., numbers for numeric comparisons)
+
+3. Logical operators:
+   - Must contain valid conditions
+   - Cannot be empty
+   - Must be properly nested
+   - Can only be used at top level or nested within other logical operators
+   - Cannot be used at field level or nested inside a field
+   - Cannot be used inside an operator
+   - Valid: `{ "$and": [{ "field": { "$gt": 100 } }] }`
+   - Valid: `{ "$or": [{ "$and": [{ "field": { "$gt": 100 } }] }] }`
+   - Invalid: `{ "field": { "$and": [{ "$gt": 100 }] } }`
+   - Invalid: `{ "field": { "$gt": { "$and": [{...}] } } }`
+
+4. $not operator:
+   - Must be an object
+   - Cannot be empty
+   - Can be used at field level or top level
+   - Valid: `{ "$not": { "field": "value" } }`
+   - Valid: `{ "field": { "$not": { "$eq": "value" } } }`
+
+5. Operator nesting:
+   - Logical operators must contain field conditions, not direct operators
+   - Valid: `{ "$and": [{ "field": { "$gt": 100 } }] }`
+   - Invalid: `{ "$and": [{ "$gt": 100 }] }`
+
+## Store-Specific Notes
+
+### Astra
+- Nested field queries are supported using dot notation
+- Array fields must be explicitly defined as arrays in the metadata
+- Metadata values are case-sensitive
+
+### ChromaDB
+- Where filters only return results where the filtered field exists in metadata
+- Empty metadata fields are not included in filter results
+- Metadata fields must be present for negative matches (e.g., $ne won't match documents missing the field)
+
+### Cloudflare Vectorize
+- Requires explicit metadata indexing before filtering can be used
+- Use `createMetadataIndex()` to index fields you want to filter on
+- Up to 10 metadata indexes per Vectorize index
+- String values are indexed up to first 64 bytes (truncated on UTF-8 boundaries)
+- Number values use float64 precision
+- Filter JSON must be under 2048 bytes
+- Field names cannot contain dots (.) or start with $
+- Field names limited to 512 characters
+- Vectors must be re-upserted after creating new metadata indexes to be included in filtered results
+- Range queries may have reduced accuracy with very large datasets (~10M+ vectors)
+
+### LibSQL
+- Supports nested object queries with dot notation
+- Array fields are validated to ensure they contain valid JSON arrays
+- Numeric comparisons maintain proper type handling
+- Empty arrays in conditions are handled gracefully
+- Metadata is stored in a JSONB column for efficient querying
+
+### PgVector
+- Full support for PostgreSQL's native JSON querying capabilities
+- Efficient handling of array operations using native array functions
+- Proper type handling for numbers, strings, and booleans
+- Nested field queries use PostgreSQL's JSON path syntax internally
+- Metadata is stored in a JSONB column for efficient indexing
+
+### Pinecone
+- Metadata field names are limited to 512 characters
+- Numeric values must be within the range of ±1e38
+- Arrays in metadata are limited to 64KB total size
+- Nested objects are flattened with dot notation
+- Metadata updates replace the entire metadata object
+
+### Qdrant
+- Supports advanced filtering with nested conditions
+- Payload (metadata) fields must be explicitly indexed for filtering
+- Efficient handling of geo-spatial queries
+- Special handling for null and empty values
+- Vector-specific filtering capabilities
+- Datetime values must be in RFC 3339 format
+
+### Upstash
+- 512-character limit for metadata field keys
+- Query size is limited (avoid large IN clauses)
+- No support for null/undefined values in filters
+- Translates to SQL-like syntax internally
+- Case-sensitive string comparisons
+- Metadata updates are atomic
+
+## Related
+- [Astra](./astra)
+- [Chroma](./chroma)
+- [Cloudflare Vectorize](./vectorize)
+- [LibSQL](./libsql)
+- [PgStore](./pg)
+- [Pinecone](./pinecone)
+- [Qdrant](./qdrant)
+- [Upstash](./upstash)

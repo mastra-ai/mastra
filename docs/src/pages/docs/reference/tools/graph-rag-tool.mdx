@@ -20,7 +20,6 @@ const graphTool = createGraphRAGTool({
     model: "text-embedding-3-small",
     maxRetries: 3
   },
-  topK: 5,
   graphOptions: {
     dimension: 1536,
     threshold: 0.7,
@@ -51,13 +50,6 @@ const graphTool = createGraphRAGTool({
       type: "EmbeddingOptions",
       description: "Configuration for embedding generation",
       isOptional: false,
-    },
-    {
-      name: "topK",
-      type: "number",
-      description: "Maximum number of results to retrieve",
-      isOptional: true,
-      defaultValue: "10",
     },
     {
       name: "graphOptions",
@@ -128,7 +120,6 @@ const graphTool = createGraphRAGTool({
     model: "text-embedding-3-small",
     maxRetries: 3
   },
-  topK: 5,
   graphOptions: {
     dimension: 1536,
     threshold: 0.8,        // Higher similarity threshold

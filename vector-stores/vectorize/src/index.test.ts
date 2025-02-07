@@ -653,6 +653,27 @@ describe('CloudflareVector', () => {
           await expect(vectorDB.query(testIndexName2, createVector(0, 1.0), 10, filter)).resolves.toBeDefined();
         }
       }, 5000);
+
+      it('should handle undefined filter', async () => {
+        const results1 = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, undefined);
+        const results2 = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10);
+        expect(results1).toEqual(results2);
+        expect(results1.length).toBeGreaterThan(0);
+      });
+
+      it('should handle empty object filter', async () => {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {});
+        const results2 = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10);
+        expect(results).toEqual(results2);
+        expect(results.length).toBeGreaterThan(0);
+      });
+
+      it('should handle null filter', async () => {
+        const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, null as any);
+        const results2 = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10);
+        expect(results).toEqual(results2);
+        expect(results.length).toBeGreaterThan(0);
+      });
     });
   }, 3000000);
 });

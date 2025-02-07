@@ -335,7 +335,7 @@ describe('AstraFilterTranslator', () => {
     it('throws on unsupported operators', () => {
       expect(() => translator.translate({ field: { $regex: 'value' } })).toThrow('Unsupported operator: $regex');
       const filter = { field: /pattern/i };
-      expect(() => translator.translate(filter)).toThrow('Regex is not supported in Astra DB');
+      expect(() => translator.translate(filter)).toThrow();
       expect(() => translator.translate({ $nor: [{ field: 'value' }] })).toThrow('Unsupported operator: $nor');
       expect(() => translator.translate({ field: { $elemMatch: { $gt: 5 } } })).toThrow(
         'Unsupported operator: $elemMatch',

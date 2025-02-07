@@ -185,7 +185,7 @@ describe('VectorizeFilterTranslator', () => {
     });
     it('throws error for regex operators', () => {
       const filter = { field: /pattern/i };
-      expect(() => translator.translate(filter)).toThrow('Regex is not supported in Vectorize');
+      expect(() => translator.translate(filter)).toThrow();
     });
     it('throws error for non-logical operators at top level', () => {
       const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];

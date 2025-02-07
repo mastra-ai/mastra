@@ -1,33 +1,25 @@
 ---
-title: "Reference: Qdrant Vector Store | Vector Databases | RAG | Mastra Docs"
-description: Documentation for integrating Qdrant with Mastra, a vector similarity search engine for managing vectors and payloads.
+title: "Reference: Cloudflare Vector Store | Vector Databases | RAG | Mastra Docs"
+description: Documentation for the CloudflareVector class in Mastra, which provides vector search using Cloudflare Vectorize.
 ---
 
-# Qdrant Vector Store
+# Cloudflare Vector Store
 
-The QdrantVector class provides vector search using [Qdrant](https://qdrant.tech/), a vector similarity search engine. 
-It provides a production-ready service with a convenient API to store, search, and manage vectors with additional payload and extended filtering support.
+The CloudflareVector class provides vector search using [Cloudflare Vectorize](https://developers.cloudflare.com/vectorize/), a vector database service integrated with Cloudflare's edge network.
 
 ## Constructor Options
 
 <PropertiesTable
   content={[
     {
-      name: "url",
+      name: "accountId",
       type: "string",
-      description:
-        "REST URL of the Qdrant instance. Eg. https://xyz-example.eu-central.aws.cloud.qdrant.io:6333",
+      description: "Cloudflare account ID",
     },
     {
-      name: "apiKey",
+      name: "apiToken",
       type: "string",
-      description: "Optional Qdrant API key",
-    },
-    {
-      name: "https",
-      type: "boolean",
-      description:
-        "Whether to use TLS when setting up the connection. Recommended.",
+      description: "Cloudflare API token with Vectorize permissions",
     },
   ]}
 />
@@ -53,7 +45,7 @@ It provides a production-ready service with a convenient API to store, search, a
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
       defaultValue: "cosine",
-      description: "Distance metric for similarity search",
+      description: "Distance metric for similarity search (dotproduct maps to dot-product)",
     },
   ]}
 />
@@ -62,6 +54,11 @@ It provides a production-ready service with a convenient API to store, search, a
 
 <PropertiesTable
   content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to upsert into",
+    },
     {
       name: "vectors",
       type: "number[][]",
@@ -113,7 +110,7 @@ It provides a production-ready service with a convenient API to store, search, a
       name: "includeVector",
       type: "boolean",
       isOptional: true,
-      defaultValue: "false", 
+      defaultValue: "false",
       description: "Whether to include vectors in the results",
     },
   ]}
@@ -157,6 +154,63 @@ interface IndexStats {
   ]}
 />
 
+### createMetadataIndex()
+
+Creates an index on a metadata field to enable filtering.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string", 
+      description: "Name of the index containing the metadata field",
+    },
+    {
+      name: "propertyName",
+      type: "string",
+      description: "Name of the metadata field to index",
+    },
+    {
+      name: "indexType",
+      type: "'string' | 'number' | 'boolean'",
+      description: "Type of the metadata field",
+    },
+  ]}
+/>
+
+### deleteMetadataIndex()
+
+Removes an index from a metadata field.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the metadata field",
+    },
+    {
+      name: "propertyName",
+      type: "string",
+      description: "Name of the metadata field to remove indexing from",
+    },
+  ]}
+/>
+
+### listMetadataIndexes()
+
+Lists all metadata field indexes for an index.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to list metadata indexes for",
+    },
+  ]}
+/>
+
 ## Response Types
 
 Query results are returned in this format:
@@ -183,5 +237,13 @@ try {
   }
 }
 ```
+
+## Environment Variables
+
+Required environment variables:
+
+- `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare account ID
+- `CLOUDFLARE_API_TOKEN`: Your Cloudflare API token with Vectorize permissions
+
 ### Related
-- [Metadata Filters](./metadata-filters)
+- [Metadata Filters](./metadata-filters) 

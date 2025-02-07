@@ -1,186 +1,190 @@
 Combined MDX Documentation
 =========================
-Total files processed: 172
+Total files processed: 176
 
 Files included:
-- docs/08-running-evals.mdx
-- docs/agents/00-overview.mdx
-- docs/agents/01-agent-memory.mdx
-- docs/agents/02-adding-tools.mdx
-- docs/deployment/deployment.mdx
-- docs/deployment/logging-and-tracing.mdx
-- docs/getting-started/installation.mdx
-- docs/getting-started/project-structure.mdx
-- docs/guides/01-harry-potter.mdx
-- docs/guides/02-chef-michel.mdx
-- docs/guides/03-stock-agent.mdx
-- docs/guides/04-recruiter.mdx
-- docs/index.mdx
-- docs/llm-models/00-overview.mdx
-- docs/local-dev/engine.mdx
-- docs/local-dev/integrations.mdx
-- docs/local-dev/mastra-dev.mdx
-- docs/local-dev/mastra-init.mdx
-- docs/rag/chunking-and-embedding.mdx
-- docs/rag/overview.mdx
-- docs/rag/retrieval.mdx
-- docs/rag/vector-databases.mdx
-- docs/reference/agents/createTool.mdx
-- docs/reference/agents/generate.mdx
-- docs/reference/agents/getAgent.mdx
-- docs/reference/agents/stream.mdx
-- docs/reference/cli/deploy.mdx
-- docs/reference/cli/dev.mdx
-- docs/reference/cli/engine.mdx
-- docs/reference/cli/init.mdx
-- docs/reference/core/mastra-class.mdx
-- docs/reference/embedder/bedrock.mdx
-- docs/reference/embedder/cohere.mdx
-- docs/reference/embedder/google.mdx
-- docs/reference/embedder/index.mdx
-- docs/reference/embedder/mistral.mdx
-- docs/reference/embedder/openai.mdx
-- docs/reference/embedder/voyage.mdx
-- docs/reference/evals/answer-relevancy.mdx
-- docs/reference/evals/bias.mdx
-- docs/reference/evals/completeness.mdx
-- docs/reference/evals/content-similarity.mdx
-- docs/reference/evals/context-position.mdx
-- docs/reference/evals/context-precision.mdx
-- docs/reference/evals/context-relevancy.mdx
-- docs/reference/evals/contextual-recall.mdx
-- docs/reference/evals/faithfulness.mdx
-- docs/reference/evals/hallucination.mdx
-- docs/reference/evals/keyword-coverage.mdx
-- docs/reference/evals/prompt-alignment.mdx
-- docs/reference/evals/summarization.mdx
-- docs/reference/evals/textual-difference.mdx
-- docs/reference/evals/tone-consistency.mdx
-- docs/reference/evals/toxicity.mdx
-- docs/reference/llm/generate.mdx
-- docs/reference/llm/providers-and-models.mdx
-- docs/reference/llm/stream.mdx
-- docs/reference/memory/Memory.mdx
-- docs/reference/memory/createThread.mdx
-- docs/reference/memory/getThreadById.mdx
-- docs/reference/memory/getThreadsByResourceId.mdx
-- docs/reference/memory/query.mdx
-- docs/reference/observability/create-logger.mdx
-- docs/reference/observability/logger.mdx
-- docs/reference/observability/otel-config.mdx
-- docs/reference/observability/providers/braintrust.mdx
-- docs/reference/observability/providers/index.mdx
-- docs/reference/observability/providers/laminar.mdx
-- docs/reference/observability/providers/langfuse.mdx
-- docs/reference/observability/providers/langsmith.mdx
-- docs/reference/observability/providers/langwatch.mdx
-- docs/reference/observability/providers/new-relic.mdx
-- docs/reference/observability/providers/signoz.mdx
-- docs/reference/observability/providers/traceloop.mdx
-- docs/reference/rag/chunk.mdx
-- docs/reference/rag/document.mdx
-- docs/reference/rag/embeddings.mdx
-- docs/reference/rag/extract-params.mdx
-- docs/reference/rag/graph-rag.mdx
-- docs/reference/rag/libsql.mdx
-- docs/reference/rag/metadata-filters.mdx
-- docs/reference/rag/pgstore.mdx
-- docs/reference/rag/pinecone.mdx
-- docs/reference/rag/qdrant.mdx
-- docs/reference/rag/rerank.mdx
-- docs/reference/storage/libsql.mdx
-- docs/reference/storage/postgresql.mdx
-- docs/reference/storage/upstash.mdx
-- docs/reference/tools/client.mdx
-- docs/reference/tools/document-chunker-tool.mdx
-- docs/reference/tools/graph-rag-tool.mdx
-- docs/reference/tools/vector-query-tool.mdx
-- docs/reference/tts/generate.mdx
-- docs/reference/tts/providers-and-models.mdx
-- docs/reference/tts/stream.mdx
-- docs/reference/workflows/after.mdx
-- docs/reference/workflows/commit.mdx
-- docs/reference/workflows/createRun.mdx
-- docs/reference/workflows/execute.mdx
-- docs/reference/workflows/resume.mdx
-- docs/reference/workflows/start.mdx
-- docs/reference/workflows/step-class.mdx
-- docs/reference/workflows/step-condition.mdx
-- docs/reference/workflows/step-function.mdx
-- docs/reference/workflows/step-options.mdx
-- docs/reference/workflows/suspend.mdx
-- docs/reference/workflows/then.mdx
-- docs/reference/workflows/watch.mdx
-- docs/reference/workflows/workflow.mdx
-- docs/workflows/00-overview.mdx
-- docs/workflows/control-flow.mdx
-- docs/workflows/steps.mdx
-- docs/workflows/suspend-and-resume.mdx
-- examples/agents/agentic-workflows.mdx
-- examples/agents/bird-checker.mdx
-- examples/agents/hierarchical-multi-agent.mdx
-- examples/agents/multi-agent-workflow.mdx
-- examples/agents/system-prompt.mdx
-- examples/agents/using-a-tool.mdx
-- examples/index.mdx
-- examples/llms/call-claude.mdx
-- examples/llms/call-google-gemini.mdx
-- examples/llms/describe-an-image.mdx
-- examples/llms/generate-object-with-structured-output.mdx
-- examples/llms/generate-text-from-pdf.mdx
-- examples/llms/generate-text-with-deepseek-reasoner.mdx
-- examples/llms/generate-text.mdx
-- examples/llms/stream-object-with-structured-output.mdx
-- examples/llms/stream-text.mdx
-- examples/llms/use-a-system-prompt.mdx
-- examples/memory/memory-with-libsql.mdx
-- examples/memory/memory-with-pg.mdx
-- examples/memory/memory-with-upstash.mdx
-- examples/memory/short-term-working-memory.mdx
-- examples/rag/adjust-chunk-delimiters.mdx
-- examples/rag/adjust-chunk-size.mdx
-- examples/rag/basic-rag.mdx
-- examples/rag/chunk-html.mdx
-- examples/rag/chunk-json.mdx
-- examples/rag/chunk-markdown.mdx
-- examples/rag/chunk-text.mdx
-- examples/rag/cleanup-rag.mdx
-- examples/rag/cot-rag.mdx
-- examples/rag/cot-workflow-rag.mdx
-- examples/rag/embed-chunk-array.mdx
-- examples/rag/embed-text-chunk.mdx
-- examples/rag/embed-text-with-cohere.mdx
-- examples/rag/filter-rag.mdx
-- examples/rag/graph-rag.mdx
-- examples/rag/hybrid-vector-search.mdx
-- examples/rag/insert-embedding-in-astra.mdx
-- examples/rag/insert-embedding-in-chroma.mdx
-- examples/rag/insert-embedding-in-libsql.mdx
-- examples/rag/insert-embedding-in-pgvector.mdx
-- examples/rag/insert-embedding-in-pinecone.mdx
-- examples/rag/insert-embedding-in-qdrant.mdx
-- examples/rag/insert-embedding-in-upstash.mdx
-- examples/rag/insert-embedding-in-vectorize.mdx
-- examples/rag/metadata-extraction.mdx
-- examples/rag/rerank-rag.mdx
-- examples/rag/reranking-with-cohere.mdx
-- examples/rag/retrieve-results.mdx
-- examples/workflows/branching-paths.mdx
-- examples/workflows/calling-agent.mdx
-- examples/workflows/calling-llm.mdx
-- examples/workflows/creating-a-workflow.mdx
-- examples/workflows/cyclical-dependencies.mdx
-- examples/workflows/parallel-steps.mdx
-- examples/workflows/sequential-steps.mdx
-- examples/workflows/suspend-and-resume.mdx
-- examples/workflows/using-a-tool-as-a-step.mdx
-- showcase/index.mdx
+- src/pages/docs/08-running-evals.mdx
+- src/pages/docs/agents/00-overview.mdx
+- src/pages/docs/agents/01-agent-memory.mdx
+- src/pages/docs/agents/02-adding-tools.mdx
+- src/pages/docs/deployment/deployment.mdx
+- src/pages/docs/deployment/logging-and-tracing.mdx
+- src/pages/docs/getting-started/installation.mdx
+- src/pages/docs/getting-started/project-structure.mdx
+- src/pages/docs/guides/01-harry-potter.mdx
+- src/pages/docs/guides/02-chef-michel.mdx
+- src/pages/docs/guides/03-stock-agent.mdx
+- src/pages/docs/guides/04-recruiter.mdx
+- src/pages/docs/index.mdx
+- src/pages/docs/llm-models/00-overview.mdx
+- src/pages/docs/local-dev/engine.mdx
+- src/pages/docs/local-dev/integrations.mdx
+- src/pages/docs/local-dev/mastra-dev.mdx
+- src/pages/docs/local-dev/mastra-init.mdx
+- src/pages/docs/rag/chunking-and-embedding.mdx
+- src/pages/docs/rag/overview.mdx
+- src/pages/docs/rag/retrieval.mdx
+- src/pages/docs/rag/vector-databases.mdx
+- src/pages/docs/reference/agents/createTool.mdx
+- src/pages/docs/reference/agents/generate.mdx
+- src/pages/docs/reference/agents/getAgent.mdx
+- src/pages/docs/reference/agents/stream.mdx
+- src/pages/docs/reference/cli/deploy.mdx
+- src/pages/docs/reference/cli/dev.mdx
+- src/pages/docs/reference/cli/engine.mdx
+- src/pages/docs/reference/cli/init.mdx
+- src/pages/docs/reference/core/mastra-class.mdx
+- src/pages/docs/reference/embedder/bedrock.mdx
+- src/pages/docs/reference/embedder/cohere.mdx
+- src/pages/docs/reference/embedder/google.mdx
+- src/pages/docs/reference/embedder/index.mdx
+- src/pages/docs/reference/embedder/mistral.mdx
+- src/pages/docs/reference/embedder/openai.mdx
+- src/pages/docs/reference/embedder/voyage.mdx
+- src/pages/docs/reference/evals/answer-relevancy.mdx
+- src/pages/docs/reference/evals/bias.mdx
+- src/pages/docs/reference/evals/completeness.mdx
+- src/pages/docs/reference/evals/content-similarity.mdx
+- src/pages/docs/reference/evals/context-position.mdx
+- src/pages/docs/reference/evals/context-precision.mdx
+- src/pages/docs/reference/evals/context-relevancy.mdx
+- src/pages/docs/reference/evals/contextual-recall.mdx
+- src/pages/docs/reference/evals/faithfulness.mdx
+- src/pages/docs/reference/evals/hallucination.mdx
+- src/pages/docs/reference/evals/keyword-coverage.mdx
+- src/pages/docs/reference/evals/prompt-alignment.mdx
+- src/pages/docs/reference/evals/summarization.mdx
+- src/pages/docs/reference/evals/textual-difference.mdx
+- src/pages/docs/reference/evals/tone-consistency.mdx
+- src/pages/docs/reference/evals/toxicity.mdx
+- src/pages/docs/reference/llm/generate.mdx
+- src/pages/docs/reference/llm/providers-and-models.mdx
+- src/pages/docs/reference/llm/stream.mdx
+- src/pages/docs/reference/memory/Memory.mdx
+- src/pages/docs/reference/memory/createThread.mdx
+- src/pages/docs/reference/memory/getThreadById.mdx
+- src/pages/docs/reference/memory/getThreadsByResourceId.mdx
+- src/pages/docs/reference/memory/query.mdx
+- src/pages/docs/reference/observability/create-logger.mdx
+- src/pages/docs/reference/observability/logger.mdx
+- src/pages/docs/reference/observability/otel-config.mdx
+- src/pages/docs/reference/observability/providers/braintrust.mdx
+- src/pages/docs/reference/observability/providers/index.mdx
+- src/pages/docs/reference/observability/providers/laminar.mdx
+- src/pages/docs/reference/observability/providers/langfuse.mdx
+- src/pages/docs/reference/observability/providers/langsmith.mdx
+- src/pages/docs/reference/observability/providers/langwatch.mdx
+- src/pages/docs/reference/observability/providers/new-relic.mdx
+- src/pages/docs/reference/observability/providers/signoz.mdx
+- src/pages/docs/reference/observability/providers/traceloop.mdx
+- src/pages/docs/reference/rag/astra.mdx
+- src/pages/docs/reference/rag/chroma.mdx
+- src/pages/docs/reference/rag/chunk.mdx
+- src/pages/docs/reference/rag/document.mdx
+- src/pages/docs/reference/rag/embeddings.mdx
+- src/pages/docs/reference/rag/extract-params.mdx
+- src/pages/docs/reference/rag/graph-rag.mdx
+- src/pages/docs/reference/rag/libsql.mdx
+- src/pages/docs/reference/rag/metadata-filters.mdx
+- src/pages/docs/reference/rag/pg.mdx
+- src/pages/docs/reference/rag/pinecone.mdx
+- src/pages/docs/reference/rag/qdrant.mdx
+- src/pages/docs/reference/rag/rerank.mdx
+- src/pages/docs/reference/rag/upstash.mdx
+- src/pages/docs/reference/rag/vectorize.mdx
+- src/pages/docs/reference/storage/libsql.mdx
+- src/pages/docs/reference/storage/postgresql.mdx
+- src/pages/docs/reference/storage/upstash.mdx
+- src/pages/docs/reference/tools/client.mdx
+- src/pages/docs/reference/tools/document-chunker-tool.mdx
+- src/pages/docs/reference/tools/graph-rag-tool.mdx
+- src/pages/docs/reference/tools/vector-query-tool.mdx
+- src/pages/docs/reference/tts/generate.mdx
+- src/pages/docs/reference/tts/providers-and-models.mdx
+- src/pages/docs/reference/tts/stream.mdx
+- src/pages/docs/reference/workflows/after.mdx
+- src/pages/docs/reference/workflows/commit.mdx
+- src/pages/docs/reference/workflows/createRun.mdx
+- src/pages/docs/reference/workflows/execute.mdx
+- src/pages/docs/reference/workflows/resume.mdx
+- src/pages/docs/reference/workflows/start.mdx
+- src/pages/docs/reference/workflows/step-class.mdx
+- src/pages/docs/reference/workflows/step-condition.mdx
+- src/pages/docs/reference/workflows/step-function.mdx
+- src/pages/docs/reference/workflows/step-options.mdx
+- src/pages/docs/reference/workflows/suspend.mdx
+- src/pages/docs/reference/workflows/then.mdx
+- src/pages/docs/reference/workflows/watch.mdx
+- src/pages/docs/reference/workflows/workflow.mdx
+- src/pages/docs/workflows/00-overview.mdx
+- src/pages/docs/workflows/control-flow.mdx
+- src/pages/docs/workflows/steps.mdx
+- src/pages/docs/workflows/suspend-and-resume.mdx
+- src/pages/examples/agents/agentic-workflows.mdx
+- src/pages/examples/agents/bird-checker.mdx
+- src/pages/examples/agents/hierarchical-multi-agent.mdx
+- src/pages/examples/agents/multi-agent-workflow.mdx
+- src/pages/examples/agents/system-prompt.mdx
+- src/pages/examples/agents/using-a-tool.mdx
+- src/pages/examples/index.mdx
+- src/pages/examples/llms/call-claude.mdx
+- src/pages/examples/llms/call-google-gemini.mdx
+- src/pages/examples/llms/describe-an-image.mdx
+- src/pages/examples/llms/generate-object-with-structured-output.mdx
+- src/pages/examples/llms/generate-text-from-pdf.mdx
+- src/pages/examples/llms/generate-text-with-deepseek-reasoner.mdx
+- src/pages/examples/llms/generate-text.mdx
+- src/pages/examples/llms/stream-object-with-structured-output.mdx
+- src/pages/examples/llms/stream-text.mdx
+- src/pages/examples/llms/use-a-system-prompt.mdx
+- src/pages/examples/memory/memory-with-libsql.mdx
+- src/pages/examples/memory/memory-with-pg.mdx
+- src/pages/examples/memory/memory-with-upstash.mdx
+- src/pages/examples/memory/short-term-working-memory.mdx
+- src/pages/examples/rag/adjust-chunk-delimiters.mdx
+- src/pages/examples/rag/adjust-chunk-size.mdx
+- src/pages/examples/rag/basic-rag.mdx
+- src/pages/examples/rag/chunk-html.mdx
+- src/pages/examples/rag/chunk-json.mdx
+- src/pages/examples/rag/chunk-markdown.mdx
+- src/pages/examples/rag/chunk-text.mdx
+- src/pages/examples/rag/cleanup-rag.mdx
+- src/pages/examples/rag/cot-rag.mdx
+- src/pages/examples/rag/cot-workflow-rag.mdx
+- src/pages/examples/rag/embed-chunk-array.mdx
+- src/pages/examples/rag/embed-text-chunk.mdx
+- src/pages/examples/rag/embed-text-with-cohere.mdx
+- src/pages/examples/rag/filter-rag.mdx
+- src/pages/examples/rag/graph-rag.mdx
+- src/pages/examples/rag/hybrid-vector-search.mdx
+- src/pages/examples/rag/insert-embedding-in-astra.mdx
+- src/pages/examples/rag/insert-embedding-in-chroma.mdx
+- src/pages/examples/rag/insert-embedding-in-libsql.mdx
+- src/pages/examples/rag/insert-embedding-in-pgvector.mdx
+- src/pages/examples/rag/insert-embedding-in-pinecone.mdx
+- src/pages/examples/rag/insert-embedding-in-qdrant.mdx
+- src/pages/examples/rag/insert-embedding-in-upstash.mdx
+- src/pages/examples/rag/insert-embedding-in-vectorize.mdx
+- src/pages/examples/rag/metadata-extraction.mdx
+- src/pages/examples/rag/rerank-rag.mdx
+- src/pages/examples/rag/reranking-with-cohere.mdx
+- src/pages/examples/rag/retrieve-results.mdx
+- src/pages/examples/workflows/branching-paths.mdx
+- src/pages/examples/workflows/calling-agent.mdx
+- src/pages/examples/workflows/calling-llm.mdx
+- src/pages/examples/workflows/creating-a-workflow.mdx
+- src/pages/examples/workflows/cyclical-dependencies.mdx
+- src/pages/examples/workflows/parallel-steps.mdx
+- src/pages/examples/workflows/sequential-steps.mdx
+- src/pages/examples/workflows/suspend-and-resume.mdx
+- src/pages/examples/workflows/using-a-tool-as-a-step.mdx
+- src/pages/showcase/index.mdx
 
 ================================================================================
 
 
 ================================================================================
-Source: docs/08-running-evals.mdx
+Source: src/pages/docs/08-running-evals.mdx
 ================================================================================
 
 ---
@@ -220,7 +224,7 @@ Mastra provides several eval metrics for assessing LLM outputs:
 
 
 ================================================================================
-Source: docs/agents/00-overview.mdx
+Source: src/pages/docs/agents/00-overview.mdx
 ================================================================================
 
 ---
@@ -413,7 +417,7 @@ curl -X POST http://localhost:4111/api/agents/myAgent/generate \
 
 
 ================================================================================
-Source: docs/agents/01-agent-memory.mdx
+Source: src/pages/docs/agents/01-agent-memory.mdx
 ================================================================================
 
 ---
@@ -904,7 +908,7 @@ The `maskStreamTags` utility:
 
 
 ================================================================================
-Source: docs/agents/02-adding-tools.mdx
+Source: src/pages/docs/agents/02-adding-tools.mdx
 ================================================================================
 
 ---
@@ -1012,7 +1016,7 @@ The agent will use the `weatherInfo` tool to get the current weather in New York
 
 
 ================================================================================
-Source: docs/deployment/deployment.mdx
+Source: src/pages/docs/deployment/deployment.mdx
 ================================================================================
 
 ---
@@ -1130,7 +1134,7 @@ For platform-specific deployment details or troubleshooting, refer to the respec
 
 
 ================================================================================
-Source: docs/deployment/logging-and-tracing.mdx
+Source: src/pages/docs/deployment/logging-and-tracing.mdx
 ================================================================================
 
 ---
@@ -1303,7 +1307,7 @@ This configuration is only necessary for local development to ensure proper inst
 
 
 ================================================================================
-Source: docs/getting-started/installation.mdx
+Source: src/pages/docs/getting-started/installation.mdx
 ================================================================================
 
 ---
@@ -1673,7 +1677,7 @@ This should output the agent's response to your console.
 
 
 ================================================================================
-Source: docs/getting-started/project-structure.mdx
+Source: src/pages/docs/getting-started/project-structure.mdx
 ================================================================================
 
 ---
@@ -1759,7 +1763,7 @@ root/
 
 
 ================================================================================
-Source: docs/guides/01-harry-potter.mdx
+Source: src/pages/docs/guides/01-harry-potter.mdx
 ================================================================================
 
 ---
@@ -1945,7 +1949,7 @@ Feel free to experiment with different system messages and prompts to explore th
 
 
 ================================================================================
-Source: docs/guides/02-chef-michel.mdx
+Source: src/pages/docs/guides/02-chef-michel.mdx
 ================================================================================
 
 ---
@@ -2196,7 +2200,7 @@ curl -X POST http://localhost:4111/api/agents/chefAgent/generate \
 
 
 ================================================================================
-Source: docs/guides/03-stock-agent.mdx
+Source: src/pages/docs/guides/03-stock-agent.mdx
 ================================================================================
 
 ---
@@ -2386,7 +2390,7 @@ This indicates that your agent successfully processed the request, used the `sto
 
 
 ================================================================================
-Source: docs/guides/04-recruiter.mdx
+Source: src/pages/docs/guides/04-recruiter.mdx
 ================================================================================
 
 ---
@@ -2580,7 +2584,7 @@ You've just built a workflow to parse a resume and decide which question to ask 
 
 
 ================================================================================
-Source: docs/index.mdx
+Source: src/pages/docs/index.mdx
 ================================================================================
 
 ---
@@ -2608,7 +2612,7 @@ The main features include:
 
 
 ================================================================================
-Source: docs/llm-models/00-overview.mdx
+Source: src/pages/docs/llm-models/00-overview.mdx
 ================================================================================
 
 ---
@@ -2791,7 +2795,7 @@ for await (const chunk of stream.textStream) {
 
 
 ================================================================================
-Source: docs/local-dev/engine.mdx
+Source: src/pages/docs/local-dev/engine.mdx
 ================================================================================
 
 ---
@@ -2896,7 +2900,7 @@ The Mastra Engine is a PostgreSQL instance that stores agent memory and vector e
 
 
 ================================================================================
-Source: docs/local-dev/integrations.mdx
+Source: src/pages/docs/local-dev/integrations.mdx
 ================================================================================
 
 ---
@@ -3031,7 +3035,7 @@ Remember to consult the documentation of each integration for specific usage det
 
 
 ================================================================================
-Source: docs/local-dev/mastra-dev.mdx
+Source: src/pages/docs/local-dev/mastra-dev.mdx
 ================================================================================
 
 ---
@@ -3074,7 +3078,7 @@ By default, the server runs at http://localhost:4111, but you can change the por
 
 
 ================================================================================
-Source: docs/local-dev/mastra-init.mdx
+Source: src/pages/docs/local-dev/mastra-init.mdx
 ================================================================================
 
 ---
@@ -3144,7 +3148,7 @@ This allows you to specify your preferences upfront without being prompted.
 
 
 ================================================================================
-Source: docs/rag/chunking-and-embedding.mdx
+Source: src/pages/docs/rag/chunking-and-embedding.mdx
 ================================================================================
 
 ---
@@ -3272,7 +3276,7 @@ For more examples of different chunking strategies and embedding configurations,
 
 
 ================================================================================
-Source: docs/rag/overview.mdx
+Source: src/pages/docs/rag/overview.mdx
 ================================================================================
 
 ---
@@ -3357,7 +3361,7 @@ See the [OTel Configuration](../reference/observability/otel-config.mdx) page fo
 
 
 ================================================================================
-Source: docs/rag/retrieval.mdx
+Source: src/pages/docs/rag/retrieval.mdx
 ================================================================================
 
 ---
@@ -3455,7 +3459,6 @@ const vectorQueryTool = createVectorQueryTool({
     provider: 'OPEN_AI',
     model: 'text-embedding-3-small'
   },
-  topK: 10,
   reranker: {
     model: {
       provider: 'OPEN_AI',
@@ -3496,7 +3499,7 @@ For complete examples of these retrieval methods in action, see:
 - [Graph-based Retrieval](../../examples/rag/graph-rag.mdx)
 
 ================================================================================
-Source: docs/rag/vector-databases.mdx
+Source: src/pages/docs/rag/vector-databases.mdx
 ================================================================================
 
 ---
@@ -3695,7 +3698,7 @@ For complete examples of different vector store implementations, see:
 
 
 ================================================================================
-Source: docs/reference/agents/createTool.mdx
+Source: src/pages/docs/reference/agents/createTool.mdx
 ================================================================================
 
 ---
@@ -3860,7 +3863,7 @@ export const stockPrices = createTool({
 
 
 ================================================================================
-Source: docs/reference/agents/generate.mdx
+Source: src/pages/docs/reference/agents/generate.mdx
 ================================================================================
 
 ---
@@ -4011,7 +4014,7 @@ For real-time streaming responses, see the [`stream()`](./stream.mdx) method doc
 
 
 ================================================================================
-Source: docs/reference/agents/getAgent.mdx
+Source: src/pages/docs/reference/agents/getAgent.mdx
 ================================================================================
 
 ---
@@ -4071,7 +4074,7 @@ async function getAgent({
 
 
 ================================================================================
-Source: docs/reference/agents/stream.mdx
+Source: src/pages/docs/reference/agents/stream.mdx
 ================================================================================
 
 ---
@@ -4235,7 +4238,7 @@ The key difference between Agent's `stream()` and LLM's `stream()` is that Agent
 
 
 ================================================================================
-Source: docs/reference/cli/deploy.mdx
+Source: src/pages/docs/reference/cli/deploy.mdx
 ================================================================================
 
 ---
@@ -4263,7 +4266,7 @@ Deploy your Mastra project to Netlify.
 
 
 ================================================================================
-Source: docs/reference/cli/dev.mdx
+Source: src/pages/docs/reference/cli/dev.mdx
 ================================================================================
 
 ---
@@ -4373,7 +4376,7 @@ curl -X POST http://localhost:4111/api/agents/myAgent/generate \
 
 
 ================================================================================
-Source: docs/reference/cli/engine.mdx
+Source: src/pages/docs/reference/cli/engine.mdx
 ================================================================================
 
 ---
@@ -4426,7 +4429,7 @@ Runs database migrations to keep your schema up to date.
 
 
 ================================================================================
-Source: docs/reference/cli/init.mdx
+Source: src/pages/docs/reference/cli/init.mdx
 ================================================================================
 
 ---
@@ -4475,7 +4478,7 @@ This creates a new Mastra project. You can run it in three different ways:
 
 
 ================================================================================
-Source: docs/reference/core/mastra-class.mdx
+Source: src/pages/docs/reference/core/mastra-class.mdx
 ================================================================================
 
 ---
@@ -4615,7 +4618,7 @@ try {
 
 
 ================================================================================
-Source: docs/reference/embedder/bedrock.mdx
+Source: src/pages/docs/reference/embedder/bedrock.mdx
 ================================================================================
 
 # BedrockEmbedder Reference
@@ -4723,7 +4726,7 @@ The BedrockEmbedder will use these environment variables if the corresponding pa
 
 
 ================================================================================
-Source: docs/reference/embedder/cohere.mdx
+Source: src/pages/docs/reference/embedder/cohere.mdx
 ================================================================================
 
 # CohereEmbedder Reference
@@ -4811,7 +4814,7 @@ The CohereEmbedder will automatically use this environment variable if the API k
 
 
 ================================================================================
-Source: docs/reference/embedder/google.mdx
+Source: src/pages/docs/reference/embedder/google.mdx
 ================================================================================
 
 # GoogleEmbedder Reference
@@ -4898,7 +4901,7 @@ The GoogleEmbedder will automatically use this environment variable if the API k
 
 
 ================================================================================
-Source: docs/reference/embedder/index.mdx
+Source: src/pages/docs/reference/embedder/index.mdx
 ================================================================================
 
 # Embedder Reference
@@ -4938,7 +4941,7 @@ Each embedder has its own configuration options and supported models. Click on a
 
 
 ================================================================================
-Source: docs/reference/embedder/mistral.mdx
+Source: src/pages/docs/reference/embedder/mistral.mdx
 ================================================================================
 
 # MistralEmbedder Reference
@@ -5023,7 +5026,7 @@ The MistralEmbedder will automatically use this environment variable if the API 
 
 
 ================================================================================
-Source: docs/reference/embedder/openai.mdx
+Source: src/pages/docs/reference/embedder/openai.mdx
 ================================================================================
 
 # OpenAIEmbedder Reference
@@ -5110,7 +5113,7 @@ The OpenAIEmbedder will automatically use this environment variable if the API k
 
 
 ================================================================================
-Source: docs/reference/embedder/voyage.mdx
+Source: src/pages/docs/reference/embedder/voyage.mdx
 ================================================================================
 
 # VoyageEmbedder Reference
@@ -5195,7 +5198,7 @@ The VoyageEmbedder will automatically use this environment variable if the API k
 
 
 ================================================================================
-Source: docs/reference/evals/answer-relevancy.mdx
+Source: src/pages/docs/reference/evals/answer-relevancy.mdx
 ================================================================================
 
 ---
@@ -5380,7 +5383,7 @@ const result = await metric.measure(
 
 
 ================================================================================
-Source: docs/reference/evals/bias.mdx
+Source: src/pages/docs/reference/evals/bias.mdx
 ================================================================================
 
 ---
@@ -5549,7 +5552,7 @@ const results = await Promise.all([
 - [Faithfulness Metric](./faithfulness)
 
 ================================================================================
-Source: docs/reference/evals/completeness.mdx
+Source: src/pages/docs/reference/evals/completeness.mdx
 ================================================================================
 
 ---
@@ -5699,7 +5702,7 @@ const result = await metric.measure(
 - [Textual Difference Metric](./textual-difference) 
 
 ================================================================================
-Source: docs/reference/evals/content-similarity.mdx
+Source: src/pages/docs/reference/evals/content-similarity.mdx
 ================================================================================
 
 ---
@@ -5864,7 +5867,7 @@ const result2 = await strictWhitespaceMetric.measure(
 - [Answer Relevancy Metric](./answer-relevancy)
 
 ================================================================================
-Source: docs/reference/evals/context-position.mdx
+Source: src/pages/docs/reference/evals/context-position.mdx
 ================================================================================
 
 ---
@@ -6055,7 +6058,7 @@ const result = await metric.measure(
 
 
 ================================================================================
-Source: docs/reference/evals/context-precision.mdx
+Source: src/pages/docs/reference/evals/context-precision.mdx
 ================================================================================
 
 ---
@@ -6245,7 +6248,7 @@ const result = await metric.measure(
 
 
 ================================================================================
-Source: docs/reference/evals/context-relevancy.mdx
+Source: src/pages/docs/reference/evals/context-relevancy.mdx
 ================================================================================
 
 ---
@@ -6435,7 +6438,7 @@ const result = await metric.measure(
 - [Context Precision Metric](./context-precision)
 
 ================================================================================
-Source: docs/reference/evals/contextual-recall.mdx
+Source: src/pages/docs/reference/evals/contextual-recall.mdx
 ================================================================================
 
 ---
@@ -6621,7 +6624,7 @@ const result = await metric.measure(
 - [Context Precision Metric](./context-precision)
 
 ================================================================================
-Source: docs/reference/evals/faithfulness.mdx
+Source: src/pages/docs/reference/evals/faithfulness.mdx
 ================================================================================
 
 ---
@@ -6811,7 +6814,7 @@ const result = await metric.measure(
 
 
 ================================================================================
-Source: docs/reference/evals/hallucination.mdx
+Source: src/pages/docs/reference/evals/hallucination.mdx
 ================================================================================
 
 ---
@@ -7021,7 +7024,7 @@ const result = await metric.measure({
 
 
 ================================================================================
-Source: docs/reference/evals/keyword-coverage.mdx
+Source: src/pages/docs/reference/evals/keyword-coverage.mdx
 ================================================================================
 
 ---
@@ -7184,7 +7187,7 @@ The metric handles several special cases:
 - [Answer Relevancy Metric](./answer-relevancy) 
 
 ================================================================================
-Source: docs/reference/evals/prompt-alignment.mdx
+Source: src/pages/docs/reference/evals/prompt-alignment.mdx
 ================================================================================
 
 ---
@@ -7396,7 +7399,7 @@ const result2 = await metric.measure(
 
 
 ================================================================================
-Source: docs/reference/evals/summarization.mdx
+Source: src/pages/docs/reference/evals/summarization.mdx
 ================================================================================
 
 ---
@@ -7593,7 +7596,7 @@ const result = await metric.measure(
 
 
 ================================================================================
-Source: docs/reference/evals/textual-difference.mdx
+Source: src/pages/docs/reference/evals/textual-difference.mdx
 ================================================================================
 
 ---
@@ -7741,7 +7744,7 @@ const result = await metric.measure(
 - [Answer Relevancy Metric](./answer-relevancy) 
 
 ================================================================================
-Source: docs/reference/evals/tone-consistency.mdx
+Source: src/pages/docs/reference/evals/tone-consistency.mdx
 ================================================================================
 
 ---
@@ -7907,7 +7910,7 @@ const stabilityResult = await metric.measure(
 - [Completeness Metric](./completeness) 
 
 ================================================================================
-Source: docs/reference/evals/toxicity.mdx
+Source: src/pages/docs/reference/evals/toxicity.mdx
 ================================================================================
 
 ---
@@ -8070,7 +8073,7 @@ const result = await metric.measure(
 
 
 ================================================================================
-Source: docs/reference/llm/generate.mdx
+Source: src/pages/docs/reference/llm/generate.mdx
 ================================================================================
 
 ---
@@ -8218,7 +8221,7 @@ console.log(response.object);
 For real-time streaming responses, see the [`stream()`](./stream.mdx) method documentation.
 
 ================================================================================
-Source: docs/reference/llm/providers-and-models.mdx
+Source: src/pages/docs/reference/llm/providers-and-models.mdx
 ================================================================================
 
 ---
@@ -8325,7 +8328,7 @@ You can refer to the [Portkey documentation](https://docs.portkey.ai/docs/custom
 
 
 ================================================================================
-Source: docs/reference/llm/stream.mdx
+Source: src/pages/docs/reference/llm/stream.mdx
 ================================================================================
 
 ---
@@ -8468,7 +8471,7 @@ console.log("Final structured result:", result);
 ```
 
 ================================================================================
-Source: docs/reference/memory/Memory.mdx
+Source: src/pages/docs/reference/memory/Memory.mdx
 ================================================================================
 
 # Memory Class Reference
@@ -8616,7 +8619,7 @@ const memory = new Memory({
 
 
 ================================================================================
-Source: docs/reference/memory/createThread.mdx
+Source: src/pages/docs/reference/memory/createThread.mdx
 ================================================================================
 
 # createThread
@@ -8715,7 +8718,7 @@ const thread = await memory.createThread({
 
 
 ================================================================================
-Source: docs/reference/memory/getThreadById.mdx
+Source: src/pages/docs/reference/memory/getThreadById.mdx
 ================================================================================
 
 # getThreadById Reference
@@ -8764,7 +8767,7 @@ const thread = await memory.getThreadById({ threadId: "thread-123" });
 
 
 ================================================================================
-Source: docs/reference/memory/getThreadsByResourceId.mdx
+Source: src/pages/docs/reference/memory/getThreadsByResourceId.mdx
 ================================================================================
 
 # getThreadsByResourceId Reference
@@ -8815,7 +8818,7 @@ const threads = await memory.getThreadsByResourceId({
 
 
 ================================================================================
-Source: docs/reference/memory/query.mdx
+Source: src/pages/docs/reference/memory/query.mdx
 ================================================================================
 
 # query
@@ -8978,7 +8981,7 @@ The `query` function returns two different message formats:
 
 
 ================================================================================
-Source: docs/reference/observability/create-logger.mdx
+Source: src/pages/docs/reference/observability/create-logger.mdx
 ================================================================================
 
 ---
@@ -9090,7 +9093,7 @@ logger.info({
 
 
 ================================================================================
-Source: docs/reference/observability/logger.mdx
+Source: src/pages/docs/reference/observability/logger.mdx
 ================================================================================
 
 ---
@@ -9151,7 +9154,7 @@ logger.error('An error occurred'); // Logged as ERROR
 
 
 ================================================================================
-Source: docs/reference/observability/otel-config.mdx
+Source: src/pages/docs/reference/observability/otel-config.mdx
 ================================================================================
 
 ---
@@ -9276,7 +9279,7 @@ const otelConfig: OtelConfig = {
 />
 
 ================================================================================
-Source: docs/reference/observability/providers/braintrust.mdx
+Source: src/pages/docs/reference/observability/providers/braintrust.mdx
 ================================================================================
 
 ---
@@ -9322,7 +9325,7 @@ Access your Braintrust dashboard at [braintrust.dev](https://www.braintrust.dev/
 
 
 ================================================================================
-Source: docs/reference/observability/providers/index.mdx
+Source: src/pages/docs/reference/observability/providers/index.mdx
 ================================================================================
 
 ---
@@ -9342,7 +9345,7 @@ Observability providers include:
 - [Laminar](./providers/laminar.mdx)
 
 ================================================================================
-Source: docs/reference/observability/providers/laminar.mdx
+Source: src/pages/docs/reference/observability/providers/laminar.mdx
 ================================================================================
 
 ---
@@ -9388,7 +9391,7 @@ Access your Laminar dashboard at [https://lmnr.ai/](https://lmnr.ai/)
 
 
 ================================================================================
-Source: docs/reference/observability/providers/langfuse.mdx
+Source: src/pages/docs/reference/observability/providers/langfuse.mdx
 ================================================================================
 
 ---
@@ -9441,7 +9444,7 @@ Once configured, you can view your traces and analytics in the Langfuse dashboar
 
 
 ================================================================================
-Source: docs/reference/observability/providers/langsmith.mdx
+Source: src/pages/docs/reference/observability/providers/langsmith.mdx
 ================================================================================
 
 ---
@@ -9487,7 +9490,7 @@ Access your traces and analytics in the LangSmith dashboard at [smith.langchain.
 
 
 ================================================================================
-Source: docs/reference/observability/providers/langwatch.mdx
+Source: src/pages/docs/reference/observability/providers/langwatch.mdx
 ================================================================================
 
 ---
@@ -9538,7 +9541,7 @@ Access your LangWatch dashboard at [app.langwatch.ai](https://app.langwatch.ai)
 
 
 ================================================================================
-Source: docs/reference/observability/providers/new-relic.mdx
+Source: src/pages/docs/reference/observability/providers/new-relic.mdx
 ================================================================================
 
 ---
@@ -9584,7 +9587,7 @@ View your telemetry data in the New Relic One dashboard at [one.newrelic.com](ht
 
 
 ================================================================================
-Source: docs/reference/observability/providers/signoz.mdx
+Source: src/pages/docs/reference/observability/providers/signoz.mdx
 ================================================================================
 
 ---
@@ -9630,7 +9633,7 @@ Access your SigNoz dashboard at [cloud.signoz.io](https://cloud.signoz.io)
 
 
 ================================================================================
-Source: docs/reference/observability/providers/traceloop.mdx
+Source: src/pages/docs/reference/observability/providers/traceloop.mdx
 ================================================================================
 
 ---
@@ -9676,7 +9679,420 @@ Access your traces and analytics in the Traceloop dashboard at [app.traceloop.co
 
 
 ================================================================================
-Source: docs/reference/rag/chunk.mdx
+Source: src/pages/docs/reference/rag/astra.mdx
+================================================================================
+
+---
+title: "Reference: Astra Vector Store | Vector Databases | RAG | Mastra Docs"
+description: Documentation for the AstraVector class in Mastra, which provides vector search using DataStax Astra DB.
+---
+
+# Astra Vector Store
+
+The AstraVector class provides vector search using [DataStax Astra DB](https://www.datastax.com/products/datastax-astra), a cloud-native, serverless database built on Apache Cassandra.
+It provides vector search capabilities with enterprise-grade scalability and high availability.
+
+## Constructor Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "token",
+      type: "string",
+      description: "Astra DB API token",
+    },
+    {
+      name: "endpoint",
+      type: "string",
+      description: "Astra DB API endpoint",
+    },
+    {
+      name: "keyspace",
+      type: "string",
+      isOptional: true,
+      description: "Optional keyspace name",
+    },
+  ]}
+/>
+
+## Methods
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to create",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "Vector dimension (must match your embedding model)",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "Distance metric for similarity search (maps to dot_product for dotproduct)",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to upsert into",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "Array of embedding vectors",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "Metadata for each vector",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "Optional vector IDs (auto-generated if not provided)",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to query",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "Query vector to find similar vectors",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "Number of results to return",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filters for the query",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include vectors in the results",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+Returns an array of index names as strings.
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to describe",
+    },
+  ]}
+/>
+
+Returns:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to delete",
+    },
+  ]}
+/>
+
+## Response Types
+
+Query results are returned in this format:
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+}
+```
+
+## Error Handling
+
+The store throws typed errors that can be caught:
+
+```typescript copy
+try {
+  await store.query(queryVector);
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
+    console.log(error.details); // Additional error context
+  }
+}
+```
+
+## Environment Variables
+
+Required environment variables:
+
+- `ASTRA_DB_TOKEN`: Your Astra DB API token
+- `ASTRA_DB_ENDPOINT`: Your Astra DB API endpoint
+
+### Related
+- [Metadata Filters](./metadata-filters) 
+
+================================================================================
+Source: src/pages/docs/reference/rag/chroma.mdx
+================================================================================
+
+---
+title: "Reference: Chroma Vector Store | Vector Databases | RAG | Mastra Docs"
+description: Documentation for the ChromaVector class in Mastra, which provides vector search using ChromaDB.
+---
+
+# Chroma Vector Store
+
+The ChromaVector class provides vector search using [ChromaDB](https://www.trychroma.com/), an open-source embedding database. 
+It offers efficient vector search with metadata filtering and hybrid search capabilities.
+
+## Constructor Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "URL path to ChromaDB instance",
+    },
+    {
+      name: "auth",
+      type: "object",
+      isOptional: true,
+      description: "Authentication configuration",
+    },
+  ]}
+/>
+
+### auth
+
+<PropertiesTable
+  content={[
+    {
+      name: "provider",
+      type: "string",
+      description: "Authentication provider",
+    },
+    {
+      name: "credentials",
+      type: "string",
+      description: "Authentication credentials",
+    },
+  ]}
+/>
+
+## Methods
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to create",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "Vector dimension (must match your embedding model)",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "Distance metric for similarity search",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to upsert into",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "Array of embedding vectors",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "Metadata for each vector",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "Optional vector IDs (auto-generated if not provided)",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to query",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "Query vector to find similar vectors",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "Number of results to return",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filters for the query",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include vectors in the results",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+Returns an array of index names as strings.
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to describe",
+    },
+  ]}
+/>
+
+Returns:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to delete",
+    },
+  ]}
+/>
+
+## Response Types
+
+Query results are returned in this format:
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+}
+```
+
+## Error Handling
+
+The store throws typed errors that can be caught:
+
+```typescript copy
+try {
+  await store.query(queryVector);
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
+    console.log(error.details); // Additional error context
+  }
+}
+```
+
+### Related
+- [Metadata Filters](./metadata-filters) 
+
+================================================================================
+Source: src/pages/docs/reference/rag/chunk.mdx
 ================================================================================
 
 ---
@@ -9918,7 +10334,7 @@ interface DocumentNode {
 ```
 
 ================================================================================
-Source: docs/reference/rag/document.mdx
+Source: src/pages/docs/reference/rag/document.mdx
 ================================================================================
 
 ---
@@ -10052,7 +10468,7 @@ const metadata = doc.getMetadata();
 ```
 
 ================================================================================
-Source: docs/reference/rag/embeddings.mdx
+Source: src/pages/docs/reference/rag/embeddings.mdx
 ================================================================================
 
 ---
@@ -10106,7 +10522,7 @@ The `embed` function generates vector embeddings for text inputs, enabling simil
 />
 
 ================================================================================
-Source: docs/reference/rag/extract-params.mdx
+Source: src/pages/docs/reference/rag/extract-params.mdx
 ================================================================================
 
 ---
@@ -10184,7 +10600,7 @@ Example:
 
 
 ================================================================================
-Source: docs/reference/rag/graph-rag.mdx
+Source: src/pages/docs/reference/rag/graph-rag.mdx
 ================================================================================
 
 ---
@@ -10212,7 +10628,7 @@ graphRag.createGraph(documentChunks, embeddings);
 // Query the graph with embedding
 const results = await graphRag.query({
   query: queryEmbedding,
-  topK: 5,
+  topK: 10,
   randomWalkSteps: 100,
   restartProb: 0.15
 });
@@ -10272,7 +10688,17 @@ createGraph(chunks: GraphChunk[], embeddings: GraphEmbedding[]): void
 Performs a graph-based search combining vector similarity and graph traversal.
 
 ```typescript
-query(query: number[], topK?: number, randomWalkSteps?: number, restartProb?: number): RankedNode[]
+query({
+  query,
+  topK = 10,
+  randomWalkSteps = 100,
+  restartProb = 0.15
+}: {
+  query: number[];
+  topK?: number;
+  randomWalkSteps?: number;
+  restartProb?: number;
+}): RankedNode[]
 ```
 
 #### Parameters
@@ -10289,7 +10715,7 @@ query(query: number[], topK?: number, randomWalkSteps?: number, restartProb?: nu
       type: "number",
       description: "Number of results to return",
       isOptional: true,
-      defaultValue: "3",
+      defaultValue: "10",
     },
     {
       name: "randomWalkSteps",
@@ -10362,7 +10788,7 @@ const results = await graphRag.query({
 
 
 ================================================================================
-Source: docs/reference/rag/libsql.mdx
+Source: src/pages/docs/reference/rag/libsql.mdx
 ================================================================================
 
 ---
@@ -10372,7 +10798,8 @@ description: Documentation for the LibSQLVector class in Mastra, which provides 
 
 # LibSQL Vector Store
 
-The LibSQLVector class provides vector search using LibSQL, a fork of SQLite with vector extensions. It's part of the `@mastra/core` package and offers efficient vector similarity search with metadata filtering.
+The LibSQLVector class provides vector search using [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
+It's part of the `@mastra/core` package and offers efficient vector similarity search with metadata filtering.
 
 ## Installation
 
@@ -10652,172 +11079,322 @@ Common error cases include:
 
 
 ================================================================================
-Source: docs/reference/rag/metadata-filters.mdx
+Source: src/pages/docs/reference/rag/metadata-filters.mdx
 ================================================================================
 
 ---
 title: "Reference: Metadata Filters | Metadata Filtering | RAG | Mastra Docs"
-description: Documentation for PGVector's metadata filtering capabilities in Mastra, which allow for precise querying of vector search results.
+description: Documentation for metadata filtering capabilities in Mastra, which allow for precise querying of vector search results across different vector stores.
 ---
 
-# Metadata Filters Reference (PGVector)
+# Metadata Filters
 
-PGVector filters allow you to narrow down vector search results based on metadata conditions. These filters support nested paths, comparisons, text search, and logical operations.
+Mastra provides a unified metadata filtering syntax across all vector stores, based on MongoDB/Sift query syntax. Each vector store translates these filters into their native format.
 
-## Usage Example
+## Basic Example
 
 ```typescript
 import { PgVector } from '@mastra/vector-pg';
 
-const pgVector = new PgVector(connectionString);
-const results = await pgVector.query(
+const store = new PgVector(connectionString);
+
+const results = await store.query(
   "my_index",
   queryVector,
   10,
   {
-    "metadata.category": {
-      eq: "electronics"
-    }
+    category: "electronics",  // Simple equality
+    price: { $gt: 100 },     // Numeric comparison
+    tags: { $in: ["sale", "new"] }  // Array membership
   }
 );
 ```
 
-## Filter Structure
+## Supported Operators
 
-<PropertiesTable
-  content={[
+<OperatorsTable
+  title="Basic Comparison"
+  operators={[
     {
-      name: "field",
-      type: "object",
-      description: "An object where the key is the metadata field path and the value is the filter condition",
-      isOptional: false,
+      name: "$eq",
+      description: "Matches values equal to specified value",
+      example: "{ age: { $eq: 25 } }",
+      supportedBy: ["All"]
+    },
+    {
+      name: "$ne",
+      description: "Matches values not equal",
+      example: "{ status: { $ne: 'inactive' } }",
+      supportedBy: ["All"]
+    },
+    {
+      name: "$gt",
+      description: "Greater than",
+      example: "{ price: { $gt: 100 } }",
+      supportedBy: ["All"]
+    },
+    {
+      name: "$gte",
+      description: "Greater than or equal",
+      example: "{ rating: { $gte: 4.5 } }",
+      supportedBy: ["All"]
+    },
+    {
+      name: "$lt",
+      description: "Less than",
+      example: "{ stock: { $lt: 20 } }",
+      supportedBy: ["All"]
+    },
+    {
+      name: "$lte",
+      description: "Less than or equal",
+      example: "{ priority: { $lte: 3 } }",
+      supportedBy: ["All"]
     }
   ]}
 />
 
-### Operators
-
-<PropertiesTable
-  content={[
+<OperatorsTable
+  title="Array Operators"
+  operators={[
     {
-      name: "eq",
-      type: "string",
-      description: "Exact match comparison",
+      name: "$in",
+      description: "Matches any value in array",
+      example: '{ category: { $in: ["A", "B"] } }',
+      supportedBy: ["All"]
     },
     {
-      name: "neq",
-      type: "string",
-      description: "Not equal comparison",
+      name: "$nin",
+      description: "Matches none of the values",
+      example: '{ status: { $nin: ["deleted", "archived"] } }',
+      supportedBy: ["All"]
     },
     {
-      name: "gt",
-      type: "string",
-      description: "Greater than comparison",
+      name: "$all",
+      description: "Matches arrays containing all elements",
+      example: '{ tags: { $all: ["urgent", "high"] } }',
+      supportedBy: ["Astra", "Pinecone", "Upstash"]
     },
     {
-      name: "gte",
-      type: "string",
-      description: "Greater than or equal comparison",
-    },
-    {
-      name: "lt",
-      type: "string",
-      description: "Less than comparison",
-    },
-    {
-      name: "lte",
-      type: "string",
-      description: "Less than or equal comparison",
-    },
-    {
-      name: "like",
-      type: "string",
-      description: "Case-sensitive pattern matching",
-    },
-    {
-      name: "ilike",
-      type: "string",
-      description: "Case-insensitive pattern matching",
-    },
-    {
-      name: "in",
-      type: "array",
-      description: "Match any value in array",
-    },
-    {
-      name: "contains",
-      type: "any",
-      description: "JSONB containment check",
-    },
-    {
-      name: "exists",
-      type: "boolean",
-      description: "Check if field exists",
-    },
+      name: "$elemMatch",
+      description: "Matches array elements meeting criteria",
+      example: '{ scores: { $elemMatch: { $gt: 80 } } }',
+      supportedBy: ["LibSQL", "PgVector"]
+    }
   ]}
 />
 
-## Additional Examples
-
-### Basic Comparison
-```typescript
-// Greater than comparison
-{
-  "metadata.price": {
-    gt: "100"
-  }
-}
-```
-
-### Text Search
-```typescript
-// Case-insensitive search
-{
-  "metadata.description": {
-    ilike: "electronics"
-  }
-}
-```
-
-### Logical Operations
-```typescript
-// AND condition
-{
-  "$and": [
+<OperatorsTable
+  title="Logical Operators"
+  operators={[
     {
-      "metadata.category": {
-        eq: "electronics"
-      }
+      name: "$and",
+      description: "Logical AND",
+      example: '{ $and: [{ price: { $gt: 100 } }, { stock: { $gt: 0 } }] }',
+      supportedBy: ["All except Vectorize"]
     },
     {
-      "metadata.price": {
-        lt: "1000"
-      }
+      name: "$or",
+      description: "Logical OR",
+      example: '{ $or: [{ status: "active" }, { priority: "high" }] }',
+      supportedBy: ["All except Vectorize"]
+    },
+    {
+      name: "$not",
+      description: "Logical NOT",
+      example: '{ price: { $not: { $lt: 100 } } }',
+      supportedBy: ["Astra", "Qdrant", "Upstash", "PgVector", "LibSQL"]
+    },
+    {
+      name: "$nor",
+      description: "Logical NOR",
+      example: '{ $nor: [{ status: "deleted" }, { archived: true }] }',
+      supportedBy: ["Qdrant", "Upstash", "PgVector", "LibSQL"]
     }
-  ]
-}
-```
+  ]}
+/>
 
-### Notes
-- Text search operators (`like`, `ilike`) automatically add `%` wildcards
-- All numeric values should be passed as strings
-- Nested fields are accessed using dot notation
+<OperatorsTable
+  title="Element Operators"
+  operators={[
+    {
+      name: "$exists",
+      description: "Matches documents with field",
+      example: '{ rating: { $exists: true } }',
+      supportedBy: ["All except Vectorize, Chroma"]
+    }
+  ]}
+/>
 
-### Related
-- [PgStore](./pgstore)
+<OperatorsTable
+  title="Custom Operators"
+  operators={[
+    {
+      name: "$contains",
+      description: "Text contains substring",
+      example: '{ description: { $contains: "sale" } }',
+      supportedBy: ["Upstash", "LibSQL", "PgVector"]
+    },
+    {
+      name: "$regex",
+      description: "Regular expression match",
+      example: '{ name: { $regex: "^test" } }',
+      supportedBy: ["Qdrant", "PgVector", "Upstash"]
+    },
+    {
+      name: "$size",
+      description: "Array length check",
+      example: '{ tags: { $size: { $gt: 2 } } }',
+      supportedBy: ["Astra", "LibSQL", "PgVector"]
+    },
+    {
+      name: "$geo",
+      description: "Geospatial query",
+      example: '{ location: { $geo: { type: "radius", ... } } }',
+      supportedBy: ["Qdrant"]
+    },
+    {
+      name: "$datetime",
+      description: "Datetime range query",
+      example: '{ created: { $datetime: { range: { gt: "2024-01-01" } } } }',
+      supportedBy: ["Qdrant"]
+    },
+    {
+      name: "$hasId",
+      description: "Vector ID existence check",
+      example: '{ $hasId: ["id1", "id2"] }',
+      supportedBy: ["Qdrant"]
+    },
+    {
+      name: "$hasVector",
+      description: "Vector existence check",
+      example: '{ $hasVector: true }',
+      supportedBy: ["Qdrant"]
+    }
+  ]}
+/>
+
+## Common Rules and Restrictions
+
+1. Field names cannot:
+   - Contain dots (.) unless referring to nested fields
+   - Start with $ or contain null characters
+   - Be empty strings
+
+2. Values must be:
+   - Valid JSON types (string, number, boolean, object, array)
+   - Not undefined
+   - Properly typed for the operator (e.g., numbers for numeric comparisons)
+
+3. Logical operators:
+   - Must contain valid conditions
+   - Cannot be empty
+   - Must be properly nested
+   - Can only be used at top level or nested within other logical operators
+   - Cannot be used at field level or nested inside a field
+   - Cannot be used inside an operator
+   - Valid: `{ "$and": [{ "field": { "$gt": 100 } }] }`
+   - Valid: `{ "$or": [{ "$and": [{ "field": { "$gt": 100 } }] }] }`
+   - Invalid: `{ "field": { "$and": [{ "$gt": 100 }] } }`
+   - Invalid: `{ "field": { "$gt": { "$and": [{...}] } } }`
+
+4. $not operator:
+   - Must be an object
+   - Cannot be empty
+   - Can be used at field level or top level
+   - Valid: `{ "$not": { "field": "value" } }`
+   - Valid: `{ "field": { "$not": { "$eq": "value" } } }`
+
+5. Operator nesting:
+   - Logical operators must contain field conditions, not direct operators
+   - Valid: `{ "$and": [{ "field": { "$gt": 100 } }] }`
+   - Invalid: `{ "$and": [{ "$gt": 100 }] }`
+
+## Store-Specific Notes
+
+### Astra
+- Nested field queries are supported using dot notation
+- Array fields must be explicitly defined as arrays in the metadata
+- Metadata values are case-sensitive
+
+### ChromaDB
+- Where filters only return results where the filtered field exists in metadata
+- Empty metadata fields are not included in filter results
+- Metadata fields must be present for negative matches (e.g., $ne won't match documents missing the field)
+
+### Cloudflare Vectorize
+- Requires explicit metadata indexing before filtering can be used
+- Use `createMetadataIndex()` to index fields you want to filter on
+- Up to 10 metadata indexes per Vectorize index
+- String values are indexed up to first 64 bytes (truncated on UTF-8 boundaries)
+- Number values use float64 precision
+- Filter JSON must be under 2048 bytes
+- Field names cannot contain dots (.) or start with $
+- Field names limited to 512 characters
+- Vectors must be re-upserted after creating new metadata indexes to be included in filtered results
+- Range queries may have reduced accuracy with very large datasets (~10M+ vectors)
+
+### LibSQL
+- Supports nested object queries with dot notation
+- Array fields are validated to ensure they contain valid JSON arrays
+- Numeric comparisons maintain proper type handling
+- Empty arrays in conditions are handled gracefully
+- Metadata is stored in a JSONB column for efficient querying
+
+### PgVector
+- Full support for PostgreSQL's native JSON querying capabilities
+- Efficient handling of array operations using native array functions
+- Proper type handling for numbers, strings, and booleans
+- Nested field queries use PostgreSQL's JSON path syntax internally
+- Metadata is stored in a JSONB column for efficient indexing
+
+### Pinecone
+- Metadata field names are limited to 512 characters
+- Numeric values must be within the range of ±1e38
+- Arrays in metadata are limited to 64KB total size
+- Nested objects are flattened with dot notation
+- Metadata updates replace the entire metadata object
+
+### Qdrant
+- Supports advanced filtering with nested conditions
+- Payload (metadata) fields must be explicitly indexed for filtering
+- Efficient handling of geo-spatial queries
+- Special handling for null and empty values
+- Vector-specific filtering capabilities
+- Datetime values must be in RFC 3339 format
+
+### Upstash
+- 512-character limit for metadata field keys
+- Query size is limited (avoid large IN clauses)
+- No support for null/undefined values in filters
+- Translates to SQL-like syntax internally
+- Case-sensitive string comparisons
+- Metadata updates are atomic
+
+## Related
+- [Astra](./astra)
+- [Chroma](./chroma)
+- [Cloudflare Vectorize](./vectorize)
+- [LibSQL](./libsql)
+- [PgStore](./pg)
+- [Pinecone](./pinecone)
+- [Qdrant](./qdrant)
+- [Upstash](./upstash)
+
 
 ================================================================================
-Source: docs/reference/rag/pgstore.mdx
+Source: src/pages/docs/reference/rag/pg.mdx
 ================================================================================
 
 ---
-title: "Reference: PgStore | Vector Databases | RAG | Mastra Docs"
-description: Documentation for the PgStore class in Mastra, which provides vector search using PostgreSQL with pgvector extension.
+title: "Reference: PG Vector Store | Vector Databases | RAG | Mastra Docs"
+description: Documentation for the PgVector class in Mastra, which provides vector search using PostgreSQL with pgvector extension.
 ---
 
-# PgStore
+# PG Vector Store
 
-The PgStore class provides vector search using PostgreSQL with pgvector extension.
+The PgVector class provides vector search using [PostgreSQL](https://www.postgresql.org/) with [pgvector](https://github.com/pgvector/pgvector) extension.
+It provides robust vector similarity search capabilities within your existing PostgreSQL database. 
 
 ## Constructor Options
 
@@ -10827,20 +11404,6 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
       name: "connectionString",
       type: "string",
       description: "PostgreSQL connection URL",
-    },
-    {
-      name: "tableName",
-      type: "string",
-      isOptional: true,
-      defaultValue: "embeddings",
-      description: "Table name for vector storage",
-    },
-    {
-      name: "dimension",
-      type: "number",
-      isOptional: true,
-      defaultValue: "1536",
-      description: "Vector dimension (must match your embedding model)",
     },
   ]}
 />
@@ -10859,7 +11422,7 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
     {
       name: "dimension",
       type: "number",
-      description: "Vector dimension size",
+      description: "Vector dimension (must match your embedding model)",
     },
     {
       name: "metric",
@@ -10875,6 +11438,11 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
 
 <PropertiesTable
   content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to upsert vectors into",
+    },
     {
       name: "vectors",
       type: "number[][]",
@@ -10900,6 +11468,11 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
 <PropertiesTable
   content={[
     {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to query",
+    },
+    {
       name: "vector",
       type: "number[]",
       description: "Query vector",
@@ -10918,6 +11491,13 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
       description: "Metadata filters",
     },
     {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include the vector in the result",
+    },
+    {
       name: "minScore",
       type: "number",
       isOptional: true,
@@ -10926,6 +11506,10 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
     },
   ]}
 />
+
+### listIndexes()
+
+Returns an array of index names as strings.
 
 ### describeIndex()
 
@@ -10996,17 +11580,18 @@ try {
 - [Metadata Filters](./metadata-filters)
 
 ================================================================================
-Source: docs/reference/rag/pinecone.mdx
+Source: src/pages/docs/reference/rag/pinecone.mdx
 ================================================================================
 
 ---
-title: "Reference: PineconeStore | Vector DBs | RAG | Mastra Docs"
-description: Documentation for the PineconeStore class in Mastra, which provides an interface to Pinecone's vector database.
+title: "Reference: Pinecone Vector Store | Vector DBs | RAG | Mastra Docs"
+description: Documentation for the PineconeVector class in Mastra, which provides an interface to Pinecone's vector database.
 ---
 
-# Pinecone
+# Pinecone Vector Store
 
-The PineconeStore class provides an interface to Pinecone's vector database.
+The PineconeVector class provides an interface to [Pinecone](https://www.pinecone.io/)'s vector database.
+It provides real-time vector search, with features like hybrid search, metadata filtering, and namespace management.
 
 ## Constructor Options
 
@@ -11021,11 +11606,6 @@ The PineconeStore class provides an interface to Pinecone's vector database.
       name: "environment",
       type: "string",
       description: 'Pinecone environment (e.g., "us-west1-gcp")',
-    },
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of your Pinecone index",
     },
   ]}
 />
@@ -11044,7 +11624,7 @@ The PineconeStore class provides an interface to Pinecone's vector database.
     {
       name: "dimension",
       type: "number",
-      description: "Vector dimension size",
+      description: "Vector dimension (must match your embedding model)",
     },
     {
       name: "metric",
@@ -11061,6 +11641,11 @@ The PineconeStore class provides an interface to Pinecone's vector database.
 <PropertiesTable
   content={[
     {
+      name: "indexName",
+      type: "string",
+      description: "Name of your Pinecone index",
+    },
+    {
       name: "vectors",
       type: "number[][]",
       description: "Array of embedding vectors",
@@ -11072,10 +11657,10 @@ The PineconeStore class provides an interface to Pinecone's vector database.
       description: "Metadata for each vector",
     },
     {
-      name: "namespace",
-      type: "string",
+      name: "ids",
+      type: "string[]",
       isOptional: true,
-      description: "Optional namespace for organization",
+      description: "Optional vector IDs (auto-generated if not provided)",
     },
   ]}
 />
@@ -11084,6 +11669,11 @@ The PineconeStore class provides an interface to Pinecone's vector database.
 
 <PropertiesTable
   content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to query",
+    },
     {
       name: "vector",
       type: "number[]",
@@ -11101,6 +11691,13 @@ The PineconeStore class provides an interface to Pinecone's vector database.
       type: "Record<string, any>",
       isOptional: true,
       description: "Metadata filters for the query",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include the vector in the result",
     },
   ]}
 />
@@ -11181,17 +11778,18 @@ Required environment variables:
 - [Metadata Filters](./metadata-filters)
 
 ================================================================================
-Source: docs/reference/rag/qdrant.mdx
+Source: src/pages/docs/reference/rag/qdrant.mdx
 ================================================================================
 
 ---
-title: "Reference: Qdrant | Vector Databases | RAG | Mastra Docs"
+title: "Reference: Qdrant Vector Store | Vector Databases | RAG | Mastra Docs"
 description: Documentation for integrating Qdrant with Mastra, a vector similarity search engine for managing vectors and payloads.
 ---
 
-# Qdrant
+# Qdrant Vector Store
 
-[Qdrant](https://qdrant.tech/) is a vector similarity search engine. It provides a production-ready service with a convenient API to store, search, and manage vectors with additional payload and extended filtering support.
+The QdrantVector class provides vector search using [Qdrant](https://qdrant.tech/), a vector similarity search engine. 
+It provides a production-ready service with a convenient API to store, search, and manage vectors with additional payload and extended filtering support.
 
 ## Constructor Options
 
@@ -11231,7 +11829,7 @@ description: Documentation for integrating Qdrant with Mastra, a vector similari
     {
       name: "dimension",
       type: "number",
-      description: "Vector dimension size",
+      description: "Vector dimension (must match your embedding model)",
     },
     {
       name: "metric",
@@ -11259,10 +11857,10 @@ description: Documentation for integrating Qdrant with Mastra, a vector similari
       description: "Metadata for each vector",
     },
     {
-      name: "namespace",
-      type: "string",
+      name: "ids",
+      type: "string[]",
       isOptional: true,
-      description: "Optional namespace for organization",
+      description: "Optional vector IDs (auto-generated if not provided)",
     },
   ]}
 />
@@ -11272,7 +11870,12 @@ description: Documentation for integrating Qdrant with Mastra, a vector similari
 <PropertiesTable
   content={[
     {
-      name: "vector",
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to query",
+    },
+    {
+      name: "queryVector",
       type: "number[]",
       description: "Query vector to find similar vectors",
     },
@@ -11288,6 +11891,13 @@ description: Documentation for integrating Qdrant with Mastra, a vector similari
       type: "Record<string, any>",
       isOptional: true,
       description: "Metadata filters for the query",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false", 
+      description: "Whether to include vectors in the results",
     },
   ]}
 />
@@ -11360,7 +11970,7 @@ try {
 - [Metadata Filters](./metadata-filters)
 
 ================================================================================
-Source: docs/reference/rag/rerank.mdx
+Source: src/pages/docs/reference/rag/rerank.mdx
 ================================================================================
 
 ---
@@ -11607,7 +12217,460 @@ The function returns an array of `RerankResult` objects:
 
 
 ================================================================================
-Source: docs/reference/storage/libsql.mdx
+Source: src/pages/docs/reference/rag/upstash.mdx
+================================================================================
+
+---
+title: "Reference: Upstash Vector Store | Vector Databases | RAG | Mastra Docs"
+description: Documentation for the UpstashVector class in Mastra, which provides vector search using Upstash Vector.
+---
+
+# Upstash Vector Store
+
+The UpstashVector class provides vector search using [Upstash Vector](https://upstash.com/vector), a serverless vector database service that provides vector similarity search with metadata filtering capabilities.
+
+## Constructor Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "string",
+      description: "Upstash Vector database URL",
+    },
+    {
+      name: "token",
+      type: "string",
+      description: "Upstash Vector API token",
+    },
+  ]}
+/>
+
+## Methods
+
+### createIndex()
+
+Note: This method is a no-op for Upstash as indexes are created automatically.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to create",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "Vector dimension (must match your embedding model)",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "Distance metric for similarity search",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to upsert into",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "Array of embedding vectors",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "Metadata for each vector",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "Optional vector IDs (auto-generated if not provided)",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to query",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "Query vector to find similar vectors",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "Number of results to return",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filters for the query",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include vectors in the results",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+Returns an array of index names (namespaces) as strings.
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to describe",
+    },
+  ]}
+/>
+
+Returns:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index (namespace) to delete",
+    },
+  ]}
+/>
+
+## Response Types
+
+Query results are returned in this format:
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+}
+```
+
+## Error Handling
+
+The store throws typed errors that can be caught:
+
+```typescript copy
+try {
+  await store.query(queryVector);
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
+    console.log(error.details); // Additional error context
+  }
+}
+```
+
+## Environment Variables
+
+Required environment variables:
+
+- `UPSTASH_VECTOR_URL`: Your Upstash Vector database URL
+- `UPSTASH_VECTOR_TOKEN`: Your Upstash Vector API token
+
+### Related
+- [Metadata Filters](./metadata-filters) 
+
+================================================================================
+Source: src/pages/docs/reference/rag/vectorize.mdx
+================================================================================
+
+---
+title: "Reference: Cloudflare Vector Store | Vector Databases | RAG | Mastra Docs"
+description: Documentation for the CloudflareVector class in Mastra, which provides vector search using Cloudflare Vectorize.
+---
+
+# Cloudflare Vector Store
+
+The CloudflareVector class provides vector search using [Cloudflare Vectorize](https://developers.cloudflare.com/vectorize/), a vector database service integrated with Cloudflare's edge network.
+
+## Constructor Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "accountId",
+      type: "string",
+      description: "Cloudflare account ID",
+    },
+    {
+      name: "apiToken",
+      type: "string",
+      description: "Cloudflare API token with Vectorize permissions",
+    },
+  ]}
+/>
+
+## Methods
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to create",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "Vector dimension (must match your embedding model)",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "Distance metric for similarity search (dotproduct maps to dot-product)",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to upsert into",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "Array of embedding vectors",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "Metadata for each vector",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "Optional vector IDs (auto-generated if not provided)",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to query",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "Query vector to find similar vectors",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "Number of results to return",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filters for the query",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include vectors in the results",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+Returns an array of index names as strings.
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to describe",
+    },
+  ]}
+/>
+
+Returns:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to delete",
+    },
+  ]}
+/>
+
+### createMetadataIndex()
+
+Creates an index on a metadata field to enable filtering.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string", 
+      description: "Name of the index containing the metadata field",
+    },
+    {
+      name: "propertyName",
+      type: "string",
+      description: "Name of the metadata field to index",
+    },
+    {
+      name: "indexType",
+      type: "'string' | 'number' | 'boolean'",
+      description: "Type of the metadata field",
+    },
+  ]}
+/>
+
+### deleteMetadataIndex()
+
+Removes an index from a metadata field.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the metadata field",
+    },
+    {
+      name: "propertyName",
+      type: "string",
+      description: "Name of the metadata field to remove indexing from",
+    },
+  ]}
+/>
+
+### listMetadataIndexes()
+
+Lists all metadata field indexes for an index.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to list metadata indexes for",
+    },
+  ]}
+/>
+
+## Response Types
+
+Query results are returned in this format:
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+}
+```
+
+## Error Handling
+
+The store throws typed errors that can be caught:
+
+```typescript copy
+try {
+  await store.query(queryVector);
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
+    console.log(error.details); // Additional error context
+  }
+}
+```
+
+## Environment Variables
+
+Required environment variables:
+
+- `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare account ID
+- `CLOUDFLARE_API_TOKEN`: Your Cloudflare API token with Vectorize permissions
+
+### Related
+- [Metadata Filters](./metadata-filters) 
+
+================================================================================
+Source: src/pages/docs/reference/storage/libsql.mdx
 ================================================================================
 
 ---
@@ -11686,7 +12749,7 @@ The storage implementation handles schema creation and updates automatically. It
 
 
 ================================================================================
-Source: docs/reference/storage/postgresql.mdx
+Source: src/pages/docs/reference/storage/postgresql.mdx
 ================================================================================
 
 ---
@@ -11740,7 +12803,7 @@ The storage implementation handles schema creation and updates automatically. It
 
 
 ================================================================================
-Source: docs/reference/storage/upstash.mdx
+Source: src/pages/docs/reference/storage/upstash.mdx
 ================================================================================
 
 ---
@@ -11832,7 +12895,7 @@ For optimal performance:
 
 
 ================================================================================
-Source: docs/reference/tools/client.mdx
+Source: src/pages/docs/reference/tools/client.mdx
 ================================================================================
 
 ---
@@ -11992,7 +13055,7 @@ async function main() {
 - For more details about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/typescript-sdk).
 
 ================================================================================
-Source: docs/reference/tools/document-chunker-tool.mdx
+Source: src/pages/docs/reference/tools/document-chunker-tool.mdx
 ================================================================================
 
 ---
@@ -12139,7 +13202,7 @@ The chunker is created as a Mastra tool with the following properties:
 
 
 ================================================================================
-Source: docs/reference/tools/graph-rag-tool.mdx
+Source: src/pages/docs/reference/tools/graph-rag-tool.mdx
 ================================================================================
 
 ---
@@ -12164,7 +13227,6 @@ const graphTool = createGraphRAGTool({
     model: "text-embedding-3-small",
     maxRetries: 3
   },
-  topK: 5,
   graphOptions: {
     dimension: 1536,
     threshold: 0.7,
@@ -12195,13 +13257,6 @@ const graphTool = createGraphRAGTool({
       type: "EmbeddingOptions",
       description: "Configuration for embedding generation",
       isOptional: false,
-    },
-    {
-      name: "topK",
-      type: "number",
-      description: "Maximum number of results to retrieve",
-      isOptional: true,
-      defaultValue: "10",
     },
     {
       name: "graphOptions",
@@ -12272,7 +13327,6 @@ const graphTool = createGraphRAGTool({
     model: "text-embedding-3-small",
     maxRetries: 3
   },
-  topK: 5,
   graphOptions: {
     dimension: 1536,
     threshold: 0.8,        // Higher similarity threshold
@@ -12288,7 +13342,7 @@ const graphTool = createGraphRAGTool({
 - [GraphRAG](../rag/graph-rag) 
 
 ================================================================================
-Source: docs/reference/tools/vector-query-tool.mdx
+Source: src/pages/docs/reference/tools/vector-query-tool.mdx
 ================================================================================
 
 ---
@@ -12339,23 +13393,21 @@ const queryTool = createVectorQueryTool({
       isOptional: false,
     },
     {
-      name: "topK",
-      type: "number",
-      description: "Maximum number of results to retrieve",
-      isOptional: true,
-      defaultValue: "10",
-    },
-    {
-      name: "vectorFilterType",
-      type: "'pg' | 'astra' | 'qdrant' | 'upstash' | 'pinecone' | 'chroma' | ''",
-      description: "Type of vector store for filter formatting",
-      isOptional: true,
-      defaultValue: "''",
-    },
-    {
       name: "reranker",
       type: "RerankConfig",
       description: "Options for reranking results",
+      isOptional: true,
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "Custom ID for the tool (defaults to 'VectorQuery {vectorStoreName} {indexName} Tool')",
+      isOptional: true,
+    },
+    {
+      name: "description",
+      type: "string",
+      description: "Custom description for the tool (by default, provides instructions for querying the vector store with examples of filtering and reranking if enabled)",
       isOptional: true,
     }
   ]}
@@ -12414,10 +13466,15 @@ The tool returns an object with:
   ]}
 />
 
+## Default Tool Description
+
+The default tool description provides:
+- Instructions for querying the specified vector store
+- Examples of filter syntax when filtering is enabled
+
 ## Example with Filters
 
 ```typescript
-// Pinecone/PG/Astra
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
@@ -12426,13 +13483,16 @@ const queryTool = createVectorQueryTool({
     model: "text-embedding-3-small",
     maxRetries: 3
   },
-  vectorFilterType: "pinecone",
-  topK: 5
+  enableFilters: true,
 });
 ```
 
-Filter Formats:
-- Pinecone/PG/Astra: `{ category: { eq: "technical" } }`
+The tool processes queries with metadata filtering when enabled:
+- Filter conditions are specified in the user's query
+- Number of results can be customized with in the user query (default: 10)
+- Filters are automatically translated for each vector store's requirements
+
+For detailed filter syntax and store-specific capabilities, see the [Metadata Filters](../rag/metadata-filters) documentation.
 
 ## Example with Reranking
 
@@ -12445,21 +13505,35 @@ const queryTool = createVectorQueryTool({
     model: "text-embedding-3-small",
     maxRetries: 3
   },
-  topK: 5,
   reranker: {
     model: {
       provider: "OPEN_AI",
       name: "gpt-4o-mini",
     },
+    options: {
+      weights: {
+        semantic: 0.5,  // Semantic relevance weight
+        vector: 0.3,    // Vector similarity weight
+        position: 0.2   // Original position weight
+      },
+      topK: 5
+    }
   }
 });
 ```
+
+Reranking improves result quality by combining:
+- Semantic relevance: Using LLM-based scoring of text similarity
+- Vector similarity: Original vector distance scores
+- Position bias: Consideration of original result ordering
+- Query analysis: Adjustments based on query characteristics
+
+The reranker processes the initial vector search results and returns a reordered list optimized for relevance.
 
 ## Tool Details
 
 The tool is created with:
 - **ID**: `VectorQuery {vectorStoreName} {indexName} Tool`
-- **Description**: `Fetches and combines the top {topK} relevant chunks from the {vectorStoreName} vector store using the {indexName} index`
 - **Input Schema**: Requires queryText and filter objects
 - **Output Schema**: Returns relevantContext string
 
@@ -12469,7 +13543,7 @@ The tool is created with:
 - [createGraphRAGTool](./graph-rag-tool) 
 
 ================================================================================
-Source: docs/reference/tts/generate.mdx
+Source: src/pages/docs/reference/tts/generate.mdx
 ================================================================================
 
 ---
@@ -12698,7 +13772,7 @@ For streaming audio responses, see the [`stream()`](./stream.mdx) method documen
 
 
 ================================================================================
-Source: docs/reference/tts/providers-and-models.mdx
+Source: src/pages/docs/reference/tts/providers-and-models.mdx
 ================================================================================
 
 ---
@@ -12829,7 +13903,7 @@ const tts = new MurfTTS({
 
 
 ================================================================================
-Source: docs/reference/tts/stream.mdx
+Source: src/pages/docs/reference/tts/stream.mdx
 ================================================================================
 
 ---
@@ -13145,7 +14219,7 @@ audioResult.pipe(writeStream);
 
 
 ================================================================================
-Source: docs/reference/workflows/after.mdx
+Source: src/pages/docs/reference/workflows/after.mdx
 ================================================================================
 
 ---
@@ -13201,7 +14275,7 @@ workflow
 
 
 ================================================================================
-Source: docs/reference/workflows/commit.mdx
+Source: src/pages/docs/reference/workflows/commit.mdx
 ================================================================================
 
 ---
@@ -13294,7 +14368,7 @@ try {
 
 
 ================================================================================
-Source: docs/reference/workflows/createRun.mdx
+Source: src/pages/docs/reference/workflows/createRun.mdx
 ================================================================================
 
 ---
@@ -13396,7 +14470,7 @@ try {
 
 
 ================================================================================
-Source: docs/reference/workflows/execute.mdx
+Source: src/pages/docs/reference/workflows/execute.mdx
 ================================================================================
 
 ---
@@ -13511,7 +14585,7 @@ if (status === "COMPLETED") {
 - [Workflow.start()](./start.mdx)
 
 ================================================================================
-Source: docs/reference/workflows/resume.mdx
+Source: src/pages/docs/reference/workflows/resume.mdx
 ================================================================================
 
 ---
@@ -13616,7 +14690,7 @@ try {
 
 
 ================================================================================
-Source: docs/reference/workflows/start.mdx
+Source: src/pages/docs/reference/workflows/start.mdx
 ================================================================================
 
 ---
@@ -13706,7 +14780,7 @@ try {
 
 
 ================================================================================
-Source: docs/reference/workflows/step-class.mdx
+Source: src/pages/docs/reference/workflows/step-class.mdx
 ================================================================================
 
 ---
@@ -13807,7 +14881,7 @@ const processOrder = new Step({
 
 
 ================================================================================
-Source: docs/reference/workflows/step-condition.mdx
+Source: src/pages/docs/reference/workflows/step-condition.mdx
 ================================================================================
 
 ---
@@ -13947,7 +15021,7 @@ This query syntax allows for readable conditional logic for determining whether 
 
 
 ================================================================================
-Source: docs/reference/workflows/step-function.mdx
+Source: src/pages/docs/reference/workflows/step-function.mdx
 ================================================================================
 
 ---
@@ -14045,7 +15119,7 @@ workflow.step({
 
 
 ================================================================================
-Source: docs/reference/workflows/step-options.mdx
+Source: src/pages/docs/reference/workflows/step-options.mdx
 ================================================================================
 
 ---
@@ -14119,7 +15193,7 @@ workflow.step(processOrder, {
 ```
 
 ================================================================================
-Source: docs/reference/workflows/suspend.mdx
+Source: src/pages/docs/reference/workflows/suspend.mdx
 ================================================================================
 
 ---
@@ -14205,7 +15279,7 @@ workflow.watch((state) => {
 
 
 ================================================================================
-Source: docs/reference/workflows/then.mdx
+Source: src/pages/docs/reference/workflows/then.mdx
 ================================================================================
 
 ---
@@ -14285,7 +15359,7 @@ try {
 
 
 ================================================================================
-Source: docs/reference/workflows/watch.mdx
+Source: src/pages/docs/reference/workflows/watch.mdx
 ================================================================================
 
 ---
@@ -14407,7 +15481,7 @@ workflow.watch((state) => {
 
 
 ================================================================================
-Source: docs/reference/workflows/workflow.mdx
+Source: src/pages/docs/reference/workflows/workflow.mdx
 ================================================================================
 
 ---
@@ -14676,7 +15750,7 @@ try {
 
 
 ================================================================================
-Source: docs/workflows/00-overview.mdx
+Source: src/pages/docs/workflows/00-overview.mdx
 ================================================================================
 
 ---
@@ -14777,7 +15851,7 @@ You can:
 
 
 ================================================================================
-Source: docs/workflows/control-flow.mdx
+Source: src/pages/docs/workflows/control-flow.mdx
 ================================================================================
 
 ---
@@ -14968,7 +16042,7 @@ In all these examples, you pick the specific data you want to pass forward. This
 
 
 ================================================================================
-Source: docs/workflows/steps.mdx
+Source: src/pages/docs/workflows/steps.mdx
 ================================================================================
 
 ---
@@ -15065,7 +16139,7 @@ myWorkflow.commit();
 
 
 ================================================================================
-Source: docs/workflows/suspend-and-resume.mdx
+Source: src/pages/docs/workflows/suspend-and-resume.mdx
 ================================================================================
 
 ---
@@ -15150,7 +16224,7 @@ const result = await start();
 
 
 ================================================================================
-Source: examples/agents/agentic-workflows.mdx
+Source: src/pages/examples/agents/agentic-workflows.mdx
 ================================================================================
 
 ---
@@ -15363,7 +16437,7 @@ main();
 
 
 ================================================================================
-Source: examples/agents/bird-checker.mdx
+Source: src/pages/examples/agents/bird-checker.mdx
 ================================================================================
 
 ---
@@ -15518,7 +16592,7 @@ console.log(response.object);
 
 
 ================================================================================
-Source: examples/agents/hierarchical-multi-agent.mdx
+Source: src/pages/examples/agents/hierarchical-multi-agent.mdx
 ================================================================================
 
 ---
@@ -15646,7 +16720,7 @@ main();
 
 
 ================================================================================
-Source: examples/agents/multi-agent-workflow.mdx
+Source: src/pages/examples/agents/multi-agent-workflow.mdx
 ================================================================================
 
 ---
@@ -15775,7 +16849,7 @@ console.log("Results: ", res.results);
 
 
 ================================================================================
-Source: examples/agents/system-prompt.mdx
+Source: src/pages/examples/agents/system-prompt.mdx
 ================================================================================
 
 ---
@@ -15857,7 +16931,7 @@ console.log(result.text);
 
 
 ================================================================================
-Source: examples/agents/using-a-tool.mdx
+Source: src/pages/examples/agents/using-a-tool.mdx
 ================================================================================
 
 ---
@@ -16010,7 +17084,7 @@ main();
 
 
 ================================================================================
-Source: examples/index.mdx
+Source: src/pages/examples/index.mdx
 ================================================================================
 
 ---
@@ -16194,7 +17268,7 @@ The Examples section is a short list of example projects demonstrating basic AI 
 
 
 ================================================================================
-Source: examples/llms/call-claude.mdx
+Source: src/pages/examples/llms/call-claude.mdx
 ================================================================================
 
 ---
@@ -16236,7 +17310,7 @@ console.log(result.text);
 
 
 ================================================================================
-Source: examples/llms/call-google-gemini.mdx
+Source: src/pages/examples/llms/call-google-gemini.mdx
 ================================================================================
 
 ---
@@ -16275,7 +17349,7 @@ console.log(result.text);
 
 
 ================================================================================
-Source: examples/llms/describe-an-image.mdx
+Source: src/pages/examples/llms/describe-an-image.mdx
 ================================================================================
 
 ---
@@ -16329,7 +17403,7 @@ console.log(response.text);
 
 
 ================================================================================
-Source: examples/llms/generate-object-with-structured-output.mdx
+Source: src/pages/examples/llms/generate-object-with-structured-output.mdx
 ================================================================================
 
 ---
@@ -16387,7 +17461,7 @@ console.log(JSON.stringify(result.object.recipe, null, 2));
 
 
 ================================================================================
-Source: examples/llms/generate-text-from-pdf.mdx
+Source: src/pages/examples/llms/generate-text-from-pdf.mdx
 ================================================================================
 
 ---
@@ -16444,7 +17518,7 @@ console.log(response.text);
 
 
 ================================================================================
-Source: examples/llms/generate-text-with-deepseek-reasoner.mdx
+Source: src/pages/examples/llms/generate-text-with-deepseek-reasoner.mdx
 ================================================================================
 
 ---
@@ -16517,7 +17591,7 @@ You can find the complete example in our GitHub repository under [examples/basic
 
 
 ================================================================================
-Source: examples/llms/generate-text.mdx
+Source: src/pages/examples/llms/generate-text.mdx
 ================================================================================
 
 ---
@@ -16559,7 +17633,7 @@ console.log(response.text);
 
 
 ================================================================================
-Source: examples/llms/stream-object-with-structured-output.mdx
+Source: src/pages/examples/llms/stream-object-with-structured-output.mdx
 ================================================================================
 
 ---
@@ -16619,7 +17693,7 @@ for await (const chunk of result.textStream) {
 
 
 ================================================================================
-Source: examples/llms/stream-text.mdx
+Source: src/pages/examples/llms/stream-text.mdx
 ================================================================================
 
 ---
@@ -16659,7 +17733,7 @@ for await (const chunk of response.textStream) {
 
 
 ================================================================================
-Source: examples/llms/use-a-system-prompt.mdx
+Source: src/pages/examples/llms/use-a-system-prompt.mdx
 ================================================================================
 
 ---
@@ -16702,7 +17776,7 @@ console.log(response.text);
 
 
 ================================================================================
-Source: examples/memory/memory-with-libsql.mdx
+Source: src/pages/examples/memory/memory-with-libsql.mdx
 ================================================================================
 
 # Memory with LibSQL
@@ -16813,7 +17887,7 @@ The example shows:
 
 
 ================================================================================
-Source: examples/memory/memory-with-pg.mdx
+Source: src/pages/examples/memory/memory-with-pg.mdx
 ================================================================================
 
 # Memory with Postgres
@@ -16924,7 +17998,7 @@ The example shows:
 
 
 ================================================================================
-Source: examples/memory/memory-with-upstash.mdx
+Source: src/pages/examples/memory/memory-with-upstash.mdx
 ================================================================================
 
 # Memory with Upstash
@@ -17039,7 +18113,7 @@ The example shows:
 
 
 ================================================================================
-Source: examples/memory/short-term-working-memory.mdx
+Source: src/pages/examples/memory/short-term-working-memory.mdx
 ================================================================================
 
 ---
@@ -17138,7 +18212,7 @@ Even with only one message in context (`lastMessages: 1`), the agent maintains t
 
 
 ================================================================================
-Source: examples/rag/adjust-chunk-delimiters.mdx
+Source: src/pages/examples/rag/adjust-chunk-delimiters.mdx
 ================================================================================
 
 ---
@@ -17175,7 +18249,7 @@ const chunks = await doc.chunk({
 
 
 ================================================================================
-Source: examples/rag/adjust-chunk-size.mdx
+Source: src/pages/examples/rag/adjust-chunk-size.mdx
 ================================================================================
 
 ---
@@ -17212,7 +18286,7 @@ const chunks = await doc.chunk({
 
 
 ================================================================================
-Source: examples/rag/basic-rag.mdx
+Source: src/pages/examples/rag/basic-rag.mdx
 ================================================================================
 
 ---
@@ -17271,7 +18345,6 @@ const vectorQueryTool = createVectorQueryTool({
     model: 'text-embedding-3-small',
     maxRetries: 3,
   },
-  topK: 3,
 });
 ```
 
@@ -17335,7 +18408,7 @@ console.log(completion.text);
 
 
 ================================================================================
-Source: examples/rag/chunk-html.mdx
+Source: src/pages/examples/rag/chunk-html.mdx
 ================================================================================
 
 ---
@@ -17384,7 +18457,7 @@ console.log(chunks);
 
 
 ================================================================================
-Source: examples/rag/chunk-json.mdx
+Source: src/pages/examples/rag/chunk-json.mdx
 ================================================================================
 
 ---
@@ -17429,7 +18502,7 @@ console.log(chunks);
 
 
 ================================================================================
-Source: examples/rag/chunk-markdown.mdx
+Source: src/pages/examples/rag/chunk-markdown.mdx
 ================================================================================
 
 ---
@@ -17464,7 +18537,7 @@ const chunks = await doc.chunk();
 
 
 ================================================================================
-Source: examples/rag/chunk-text.mdx
+Source: src/pages/examples/rag/chunk-text.mdx
 ================================================================================
 
 ---
@@ -17499,7 +18572,7 @@ const chunks = await doc.chunk();
 
 
 ================================================================================
-Source: examples/rag/cleanup-rag.mdx
+Source: src/pages/examples/rag/cleanup-rag.mdx
 ================================================================================
 
 ---
@@ -17779,7 +18852,7 @@ await answerQueries(queries, dataAgentTwo);
 
 
 ================================================================================
-Source: examples/rag/cot-rag.mdx
+Source: src/pages/examples/rag/cot-rag.mdx
 ================================================================================
 
 ---
@@ -17838,7 +18911,6 @@ const vectorQueryTool = createVectorQueryTool({
     model: "text-embedding-3-small",
     maxRetries: 3,
   },
-  topK: 3,
 });
 ```
 
@@ -17986,7 +19058,7 @@ await answerQueries(queries);
 
 
 ================================================================================
-Source: examples/rag/cot-workflow-rag.mdx
+Source: src/pages/examples/rag/cot-workflow-rag.mdx
 ================================================================================
 
 ---
@@ -18058,7 +19130,6 @@ const vectorQueryTool = createVectorQueryTool({
     model: "text-embedding-3-small",
     maxRetries: 3,
   },
-  topK: 3,
 });
 ```
 
@@ -18344,7 +19415,7 @@ console.log(result.results);
 
 
 ================================================================================
-Source: examples/rag/embed-chunk-array.mdx
+Source: src/pages/examples/rag/embed-chunk-array.mdx
 ================================================================================
 
 ---
@@ -18385,7 +19456,7 @@ const { embeddings } = await embed(chunks, {
 
 
 ================================================================================
-Source: examples/rag/embed-text-chunk.mdx
+Source: src/pages/examples/rag/embed-text-chunk.mdx
 ================================================================================
 
 ---
@@ -18426,7 +19497,7 @@ const { embedding } = await embed(chunks[0], {
 
 
 ================================================================================
-Source: examples/rag/embed-text-with-cohere.mdx
+Source: src/pages/examples/rag/embed-text-with-cohere.mdx
 ================================================================================
 
 ---
@@ -18467,7 +19538,7 @@ const { embeddings } = await embed(chunks, {
 
 
 ================================================================================
-Source: examples/rag/filter-rag.mdx
+Source: src/pages/examples/rag/filter-rag.mdx
 ================================================================================
 
 ---
@@ -18509,51 +19580,108 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
-import { Mastra, Agent } from "@mastra/core";
-import { PgVector } from "@mastra/vector-pg";
-import { createVectorQueryTool, embedMany, MDocument } from "@mastra/rag";
+import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { OpenAI } from '@mastra/core/llm/openai';
+import { createVectorQueryTool, embedMany, MDocument, PGVECTOR_PROMPT } from '@mastra/rag';
+import { PgVector } from '@mastra/vector-pg';
 ```
 
 ## Vector Query Tool Creation
 
-Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
+Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database with filtering capabilities.
 
-```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{7} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
+  id: 'vectorQueryTool',
   vectorStoreName: "pgVector",
   indexName: "embeddings",
   options: {
-    provider: "OPEN_AI",
-    model: "text-embedding-3-small",
+    provider: 'OPEN_AI',
+    model: 'text-embedding-3-small',
     maxRetries: 3,
   },
-  topK: 3,
-  vectorFilterType: "pg",
+  enableFilter: true,
 });
+```
+
+## Document Processing
+
+Create a document and process it into chunks:
+
+```typescript copy showLineNumbers{19} filename="src/mastra/index.ts"
+const doc = MDocument.fromText(
+  `The Impact of Climate Change on Global Agriculture...`
+);
+
+const chunks = await doc.chunk({
+  strategy: 'recursive',
+  size: 512,
+  overlap: 50,
+  separator: '\n',
+  extract: {
+    keywords: true,  // Extracts keywords from each chunk
+  },
+});
+```
+
+### Transform Chunks into Metadata
+
+Transform chunks into metadata that can be filtered:
+
+```typescript copy showLineNumbers{33} filename="src/mastra/index.ts"
+const chunkMetadata = chunks?.map((chunk: any, index: number) => ({
+  text: chunk.text,
+  ...chunk.metadata,
+  nested: {
+    keywords: chunk.metadata.excerptKeywords
+      .replace('KEYWORDS:', '')
+      .split(',')
+      .map(k => k.trim()),
+    id: index,
+  },
+}));
 ```
 
 ## Agent Configuration
 
 Set up the Mastra agent that will handle the responses:
 
-```typescript copy showLineNumbers{16} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{45} filename="src/mastra/index.ts"
 export const ragAgent = new Agent({
-  name: "RAG Agent",
-  instructions:
-    "You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.",
-  model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-  },
+  name: 'RAG Agent',
+  llm: new OpenAI({
+    name: 'gpt-4o-mini',
+  }),
+  instructions: `
+  You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
+
+  Use the vectorQueryTool to filter the context by searching the metadata.
+  
+  The metadata is structured as follows:
+
+  {
+    text: string,
+    excerptKeywords: string,
+    nested: {
+      keywords: string[],
+      id: number,
+    },
+  }
+
+  ${PGVECTOR_PROMPT}
+  `,
   tools: { vectorQueryTool },
 });
 ```
+
+We can provide an example of how the metadata is structured for the agent to use when filtering with the tool.
 
 ## Instantiate PgVector and Mastra
 
 Instantiate PgVector and Mastra with all components:
 
-```typescript copy showLineNumbers{27} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{71} filename="src/mastra/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
@@ -18561,80 +19689,40 @@ export const mastra = new Mastra({
   vectors: { pgVector },
 });
 
-const agent = mastra.getAgent("ragAgent");
-```
-
-## Document Processing
-
-Create a document and process it into chunks:
-
-```typescript copy showLineNumbers{36} filename="src/mastra/index.ts"
-const doc = MDocument.fromText(
-  `The Impact of Climate Change on Global Agriculture...`,
-);
-
-const chunks = await doc.chunk({
-  strategy: "recursive",
-  size: 512,
-  overlap: 50,
-  separator: "\n",
-  extract: {
-    keywords: true,
-  },
-});
+const agent = mastra.getAgent('ragAgent');
 ```
 
 ## Creating and Storing Embeddings
 
-Generate embeddings for the chunks and store them in the vector database:
+Generate embeddings for the chunks and store them in the vector database along with their metadata:
 
-```typescript copy showLineNumbers{48} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{80} filename="src/mastra/index.ts"
 const { embeddings } = await embedMany(chunks, {
-  provider: "OPEN_AI",
-  model: "text-embedding-3-small",
+  provider: 'OPEN_AI',
+  model: 'text-embedding-3-small',
   maxRetries: 3,
 });
 
-const vectorStore = mastra.getVector("pgVector");
-await vectorStore.createIndex("embeddings", 1536);
-await vectorStore.upsert(
-  "embeddings",
-  embeddings,
-  chunks?.map((chunk: any) => ({
-    text: chunk.text,
-    ...chunk.metadata,
-    nested: {
-      keywords: chunk.metadata.excerptKeywords
-        .replace("KEYWORDS:", "")
-        .split(",")
-        .map((k) => k.trim()),
-      id: index,
-    },
-  })),
-);
+const vectorStore = mastra.getVector('pgVector');
+await vectorStore.createIndex('embeddings', 1536);
+
+// Store both embeddings and metadata together
+await vectorStore.upsert('embeddings', embeddings, chunkMetadata);
 ```
+
+The `upsert` operation stores both the vector embeddings and their associated metadata, enabling combined semantic search and metadata filtering capabilities.
 
 ## Response Generation
 
 Function to generate responses based on retrieved context:
 
-```typescript copy showLineNumbers{65} filename="src/mastra/index.ts"
-async function generateResponse(query: string, filter: any) {
-  const buildFilterString = (f: any): string => {
-    if ("type" in f) {
-      return `type:${f.type} condition with filters: [${f.filters
-        .map(buildFilterString)
-        .join(", ")}]`;
-    }
-    return `keyword: ${f.keyword} operator: ${f.operator} value: ${f.value}`;
-  };
-  const filterDescription = buildFilterString(filter);
+```typescript copy showLineNumbers{92} filename="src/mastra/index.ts"
+async function generateResponse(query: string) {
   const prompt = `
       Please answer the following question:
       ${query}
 
-    Please base your answer only on the context provided in the tool using these filter conditions:
-    ${filterDescription}
+    Please base your answer only on the context provided in the tool.
     If the context doesn't contain enough information to fully answer the question, please state that explicitly.
       `;
 
@@ -18647,81 +19735,27 @@ async function generateResponse(query: string, filter: any) {
 
 ## Example Usage
 
-```typescript copy showLineNumbers{89} filename="src/mastra/index.ts"
-async function answerQueries(
-  queries: {
-    query: string;
-    filter: any;
-  }[],
-) {
-  for (const { query, filter } of queries) {
+```typescript copy showLineNumbers{107} filename="src/mastra/index.ts"
+const queries = [
+  "What adaptation strategies are mentioned? Use regex to search for the word 'adaptation' in the 'nested.keywords' field.",
+  "Show me recent sections. Check the 'nested.id' field and return values that are greater than 2.",
+  "Search the 'text' field using regex operator to find sections containing 'temperature'.",
+];
+
+async function answerQueries() {
+  for (const query of queries) {
     try {
       // Generate and log the response
-      const answer = await generateResponse(query, filter);
-      console.log("\nQuery:", query);
-      console.log("Response:", answer);
+      const answer = await generateResponse(query);
+      console.log('\nQuery:', query);
+      console.log('Response:', answer);
     } catch (error) {
       console.error(`Error processing query "${query}":`, error);
     }
   }
 }
 
-const queries = [
-  {
-    query: "What adaptation strategies are mentioned?",
-    filter: {
-      keyword: "nested.keywords",
-      operator: "ilike",
-      value: "adaptation",
-    },
-  },
-  {
-    query: "Show me recent sections",
-    filter: {
-      keyword: "nested.id",
-      operator: "gt",
-      value: "2",
-    },
-  },
-  {
-    query: "Find sections about drought and irrigation",
-    filter: {
-      type: "$and",
-      filters: [
-        {
-          keyword: "text",
-          operator: "ilike",
-          value: "drought",
-        },
-        {
-          keyword: "text",
-          operator: "ilike",
-          value: "irrigation",
-        },
-      ],
-    },
-  },
-  {
-    query: "Find sections about wheat or rice",
-    filter: {
-      type: "$or",
-      filters: [
-        {
-          keyword: "text",
-          operator: "ilike",
-          value: "wheat",
-        },
-        {
-          keyword: "text",
-          operator: "ilike",
-          value: "rice",
-        },
-      ],
-    },
-  },
-];
-
-await answerQueries(queries);
+await answerQueries();
 ```
 
 <br />
@@ -18737,7 +19771,7 @@ await answerQueries(queries);
 
 
 ================================================================================
-Source: examples/rag/graph-rag.mdx
+Source: src/pages/examples/rag/graph-rag.mdx
 ================================================================================
 
 ---
@@ -18941,7 +19975,7 @@ await answerQueries(queries);
 
 
 ================================================================================
-Source: examples/rag/hybrid-vector-search.mdx
+Source: src/pages/examples/rag/hybrid-vector-search.mdx
 ================================================================================
 
 ---
@@ -19035,7 +20069,7 @@ console.log('Results:', result);
 
 
 ================================================================================
-Source: examples/rag/insert-embedding-in-astra.mdx
+Source: src/pages/examples/rag/insert-embedding-in-astra.mdx
 ================================================================================
 
 ---
@@ -19087,7 +20121,7 @@ await astra.upsert(
 
 
 ================================================================================
-Source: examples/rag/insert-embedding-in-chroma.mdx
+Source: src/pages/examples/rag/insert-embedding-in-chroma.mdx
 ================================================================================
 
 ---
@@ -19137,7 +20171,7 @@ await chroma.upsert(
 
 
 ================================================================================
-Source: examples/rag/insert-embedding-in-libsql.mdx
+Source: src/pages/examples/rag/insert-embedding-in-libsql.mdx
 ================================================================================
 
 ---
@@ -19185,7 +20219,7 @@ await libsql.upsert(
 
 
 ================================================================================
-Source: examples/rag/insert-embedding-in-pgvector.mdx
+Source: src/pages/examples/rag/insert-embedding-in-pgvector.mdx
 ================================================================================
 
 ---
@@ -19237,7 +20271,7 @@ await pgVector.upsert(
 
 
 ================================================================================
-Source: examples/rag/insert-embedding-in-pinecone.mdx
+Source: src/pages/examples/rag/insert-embedding-in-pinecone.mdx
 ================================================================================
 
 ---
@@ -19285,7 +20319,7 @@ await pinecone.upsert(
 
 
 ================================================================================
-Source: examples/rag/insert-embedding-in-qdrant.mdx
+Source: src/pages/examples/rag/insert-embedding-in-qdrant.mdx
 ================================================================================
 
 ---
@@ -19336,7 +20370,7 @@ await qdrant.upsert(
 
 
 ================================================================================
-Source: examples/rag/insert-embedding-in-upstash.mdx
+Source: src/pages/examples/rag/insert-embedding-in-upstash.mdx
 ================================================================================
 
 ---
@@ -19387,7 +20421,7 @@ await upstash.upsert(
 
 
 ================================================================================
-Source: examples/rag/insert-embedding-in-vectorize.mdx
+Source: src/pages/examples/rag/insert-embedding-in-vectorize.mdx
 ================================================================================
 
 ---
@@ -19438,7 +20472,7 @@ await vectorize.upsert(
 
 
 ================================================================================
-Source: examples/rag/metadata-extraction.mdx
+Source: src/pages/examples/rag/metadata-extraction.mdx
 ================================================================================
 
 ---
@@ -19564,7 +20598,7 @@ console.log('Chunk Metadata:', metaTwo);
 /> 
 
 ================================================================================
-Source: examples/rag/rerank-rag.mdx
+Source: src/pages/examples/rag/rerank-rag.mdx
 ================================================================================
 
 ---
@@ -19623,7 +20657,6 @@ const vectorQueryTool = createVectorQueryTool({
     model: "text-embedding-3-small",
     maxRetries: 3,
   },
-  topK: 5,
   reranker: {
     model: {
       provider: "OPEN_AI",
@@ -19766,7 +20799,7 @@ await answerQueries(queries);
 
 
 ================================================================================
-Source: examples/rag/reranking-with-cohere.mdx
+Source: src/pages/examples/rag/reranking-with-cohere.mdx
 ================================================================================
 
 ---
@@ -19808,7 +20841,7 @@ const results = rerank(
 
 
 ================================================================================
-Source: examples/rag/retrieve-results.mdx
+Source: src/pages/examples/rag/retrieve-results.mdx
 ================================================================================
 
 ---
@@ -19869,7 +20902,7 @@ console.log(results);
 
 
 ================================================================================
-Source: examples/workflows/branching-paths.mdx
+Source: src/pages/examples/workflows/branching-paths.mdx
 ================================================================================
 
 ---
@@ -19972,7 +21005,7 @@ const result = await start({ triggerData: { inputValue: 3 } });
 
 
 ================================================================================
-Source: examples/workflows/calling-agent.mdx
+Source: src/pages/examples/workflows/calling-agent.mdx
 ================================================================================
 
 ---
@@ -20051,7 +21084,7 @@ console.log(runResult.results);
 
 
 ================================================================================
-Source: examples/workflows/calling-llm.mdx
+Source: src/pages/examples/workflows/calling-llm.mdx
 ================================================================================
 
 ---
@@ -20133,7 +21166,7 @@ await start({
 
 
 ================================================================================
-Source: examples/workflows/creating-a-workflow.mdx
+Source: src/pages/examples/workflows/creating-a-workflow.mdx
 ================================================================================
 
 ---
@@ -20194,7 +21227,7 @@ console.log(res.results);
 
 
 ================================================================================
-Source: examples/workflows/cyclical-dependencies.mdx
+Source: src/pages/examples/workflows/cyclical-dependencies.mdx
 ================================================================================
 
 ---
@@ -20299,7 +21332,7 @@ main();
 
 
 ================================================================================
-Source: examples/workflows/parallel-steps.mdx
+Source: src/pages/examples/workflows/parallel-steps.mdx
 ================================================================================
 
 ---
@@ -20400,7 +21433,7 @@ const result = await start({ triggerData: { inputValue: 3 } });
 
 
 ================================================================================
-Source: examples/workflows/sequential-steps.mdx
+Source: src/pages/examples/workflows/sequential-steps.mdx
 ================================================================================
 
 ---
@@ -20494,7 +21527,7 @@ const res = await start({ triggerData: { inputValue: 90 } });
 
 
 ================================================================================
-Source: examples/workflows/suspend-and-resume.mdx
+Source: src/pages/examples/workflows/suspend-and-resume.mdx
 ================================================================================
 
 ---
@@ -20584,7 +21617,7 @@ await myWorkflow.watch(runId, async ({ activePaths }) => {
 
 
 ================================================================================
-Source: examples/workflows/using-a-tool-as-a-step.mdx
+Source: src/pages/examples/workflows/using-a-tool-as-a-step.mdx
 ================================================================================
 
 ---
@@ -20636,7 +21669,7 @@ console.log(res.results);
 
 
 ================================================================================
-Source: showcase/index.mdx
+Source: src/pages/showcase/index.mdx
 ================================================================================
 
 ---
