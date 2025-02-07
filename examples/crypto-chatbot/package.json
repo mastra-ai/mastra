@@ -10,7 +10,7 @@
     "db:migrate": "npx tsx ./db/migrate.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^0.0.60",
+    "@ai-sdk/openai": "latest",
     "@libsql/client": "^0.14.0",
     "@mastra/core": "workspace:^",
     "@mastra/memory": "workspace:^",
