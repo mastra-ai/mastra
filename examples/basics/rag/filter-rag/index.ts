@@ -2,7 +2,7 @@ import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { OpenAI } from '@mastra/core/llm/openai';
 import { createVectorQueryTool, embedMany, MDocument, PGVECTOR_PROMPT } from '@mastra/rag';
-import { PgVector } from '@mastra/vector-pg';
+import { PgVector } from '@mastra/pg';
 
 const vectorQueryTool = createVectorQueryTool({
   id: 'vectorQueryTool',

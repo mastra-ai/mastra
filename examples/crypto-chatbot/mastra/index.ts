@@ -1,7 +1,7 @@
 import { Mastra } from '@mastra/core';
 import { createLogger } from '@mastra/core/logger';
 import { Memory } from '@mastra/memory';
-import { PostgresStore } from '@mastra/store-pg';
+import { PostgresStore } from '@mastra/pg';
 import { createCryptoAgent } from './agents';
 
 const connectionString = process.env.POSTGRES_URL!;

@@ -1,5 +1,5 @@
 import { MDocument, embedMany } from '@mastra/rag';
-import { PgVector } from '@mastra/vector-pg';
+import { PgVector } from '@mastra/pg';
 
 const doc = MDocument.fromText('Your text content...');
 
