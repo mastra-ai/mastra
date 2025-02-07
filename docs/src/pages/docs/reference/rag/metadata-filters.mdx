@@ -83,13 +83,19 @@ const results = await store.query(
       name: "$nin",
       description: "Matches none of the values",
       example: '{ status: { $nin: ["deleted", "archived"] } }',
-      supportedBy: ["Qdrant", "Pinecone", "PgVector", "Astra", "Upstash", "Chroma", "Vectorize"]
+      supportedBy: ["All"]
     },
     {
       name: "$all",
       description: "Matches arrays containing all elements",
       example: '{ tags: { $all: ["urgent", "high"] } }',
-      supportedBy: ["Pinecone", "Astra"]
+      supportedBy: ["Astra", "Pinecone", "Upstash"]
+    },
+    {
+      name: "$elemMatch",
+      description: "Matches array elements meeting criteria",
+      example: '{ scores: { $elemMatch: { $gt: 80 } } }',
+      supportedBy: ["LibSQL", "PgVector"]
     }
   ]}
 />
@@ -101,25 +107,25 @@ const results = await store.query(
       name: "$and",
       description: "Logical AND",
       example: '{ $and: [{ price: { $gt: 100 } }, { stock: { $gt: 0 } }] }',
-      supportedBy: ["All"]
+      supportedBy: ["All except Vectorize"]
     },
     {
       name: "$or",
       description: "Logical OR",
       example: '{ $or: [{ status: "active" }, { priority: "high" }] }',
-      supportedBy: ["All"]
+      supportedBy: ["All except Vectorize"]
     },
     {
       name: "$not",
       description: "Logical NOT",
       example: '{ price: { $not: { $lt: 100 } } }',
-      supportedBy: ["Qdrant", "Astra"]
+      supportedBy: ["Astra", "Qdrant", "Upstash", "PgVector", "LibSQL"]
     },
     {
       name: "$nor",
       description: "Logical NOR",
       example: '{ $nor: [{ status: "deleted" }, { archived: true }] }',
-      supportedBy: ["Qdrant"]
+      supportedBy: ["Qdrant", "Upstash", "PgVector", "LibSQL"]
     }
   ]}
 />
@@ -131,7 +137,7 @@ const results = await store.query(
       name: "$exists",
       description: "Matches documents with field",
       example: '{ rating: { $exists: true } }',
-      supportedBy: ["Pinecone", "Qdrant"]
+      supportedBy: ["All except Vectorize, Chroma"]
     }
   ]}
 />
@@ -149,18 +155,36 @@ const results = await store.query(
       name: "$regex",
       description: "Regular expression match",
       example: '{ name: { $regex: "^test" } }',
-      supportedBy: ["Qdrant", "PgVector"]
+      supportedBy: ["Qdrant", "PgVector", "Upstash"]
     },
     {
       name: "$size",
       description: "Array length check",
       example: '{ tags: { $size: { $gt: 2 } } }',
-      supportedBy: ["Astra", "LibSQL"]
+      supportedBy: ["Astra", "LibSQL", "PgVector"]
     },
     {
       name: "$geo",
       description: "Geospatial query",
       example: '{ location: { $geo: { type: "radius", ... } } }',
+      supportedBy: ["Qdrant"]
+    },
+    {
+      name: "$datetime",
+      description: "Datetime range query",
+      example: '{ created: { $datetime: { range: { gt: "2024-01-01" } } } }',
+      supportedBy: ["Qdrant"]
+    },
+    {
+      name: "$hasId",
+      description: "Vector ID existence check",
+      example: '{ $hasId: ["id1", "id2"] }',
+      supportedBy: ["Qdrant"]
+    },
+    {
+      name: "$hasVector",
+      description: "Vector existence check",
+      example: '{ $hasVector: true }',
       supportedBy: ["Qdrant"]
     }
   ]}
@@ -182,50 +206,93 @@ const results = await store.query(
    - Must contain valid conditions
    - Cannot be empty
    - Must be properly nested
+   - Can only be used at top level or nested within other logical operators
+   - Cannot be used at field level or nested inside a field
+   - Cannot be used inside an operator
+   - Valid: `{ "$and": [{ "field": { "$gt": 100 } }] }`
+   - Valid: `{ "$or": [{ "$and": [{ "field": { "$gt": 100 } }] }] }`
+   - Invalid: `{ "field": { "$and": [{ "$gt": 100 }] } }`
+   - Invalid: `{ "field": { "$gt": { "$and": [{...}] } } }`
+
+4. $not operator:
+   - Must be an object
+   - Cannot be empty
+   - Can be used at field level or top level
+   - Valid: `{ "$not": { "field": "value" } }`
+   - Valid: `{ "field": { "$not": { "$eq": "value" } } }`
+
+5. Operator nesting:
+   - Logical operators must contain field conditions, not direct operators
+   - Valid: `{ "$and": [{ "field": { "$gt": 100 } }] }`
+   - Invalid: `{ "$and": [{ "$gt": 100 }] }`
 
 ## Store-Specific Notes
 
-### Qdrant
-- Supports advanced geospatial queries via `$geo`
-- Has additional vector-specific filters (`$hasId`, `$hasVector`)
-- Supports datetime range queries via `$datetime`
-
-### Upstash
-- Does not support null/undefined values in filters
-- Has a 512-character limit for filter keys
-- Query size is limited (avoid extremely large IN clauses)
-
-### Pinecone
-- Limited to `$and` and `$or` for logical operations
-- No regex support
-- Array operations limited to `$in`, `$all`, `$nin`
-
 ### Astra
-- No regex support
-- Supports array size queries via `$size`
-- Maps `dotproduct` to `dot_product` internally
+- Nested field queries are supported using dot notation
+- Array fields must be explicitly defined as arrays in the metadata
+- Metadata values are case-sensitive
 
 ### ChromaDB
-- Limited to `$and` and `$or` for logical operations
-- No regex or element operator support
-- Basic comparison and array operations only
+- Where filters only return results where the filtered field exists in metadata
+- Empty metadata fields are not included in filter results
+- Metadata fields must be present for negative matches (e.g., $ne won't match documents missing the field)
+
+### Cloudflare Vectorize
+- Requires explicit metadata indexing before filtering can be used
+- Use `createMetadataIndex()` to index fields you want to filter on
+- Up to 10 metadata indexes per Vectorize index
+- String values are indexed up to first 64 bytes (truncated on UTF-8 boundaries)
+- Number values use float64 precision
+- Filter JSON must be under 2048 bytes
+- Field names cannot contain dots (.) or start with $
+- Field names limited to 512 characters
+- Vectors must be re-upserted after creating new metadata indexes to be included in filtered results
+- Range queries may have reduced accuracy with very large datasets (~10M+ vectors)
 
 ### LibSQL
-- No regex support currently
-- Limited array operations
-- Supports text containment via `$contains`
+- Supports nested object queries with dot notation
+- Array fields are validated to ensure they contain valid JSON arrays
+- Numeric comparisons maintain proper type handling
+- Empty arrays in conditions are handled gracefully
+- Metadata is stored in a JSONB column for efficient querying
 
 ### PgVector
-- Full regex support with `$regex` and `$options`
-- Supports text search via `$contains`
-- Handles array operations efficiently
+- Full support for PostgreSQL's native JSON querying capabilities
+- Efficient handling of array operations using native array functions
+- Proper type handling for numbers, strings, and booleans
+- Nested field queries use PostgreSQL's JSON path syntax internally
+- Metadata is stored in a JSONB column for efficient indexing
 
-### Related
-- [PgStore](./pgstore)
-- [Qdrant](./qdrant)
-- [Pinecone](./pinecone)
-- [Chroma](./chroma)
+### Pinecone
+- Metadata field names are limited to 512 characters
+- Numeric values must be within the range of ±1e38
+- Arrays in metadata are limited to 64KB total size
+- Nested objects are flattened with dot notation
+- Metadata updates replace the entire metadata object
+
+### Qdrant
+- Supports advanced filtering with nested conditions
+- Payload (metadata) fields must be explicitly indexed for filtering
+- Efficient handling of geo-spatial queries
+- Special handling for null and empty values
+- Vector-specific filtering capabilities
+- Datetime values must be in RFC 3339 format
+
+### Upstash
+- 512-character limit for metadata field keys
+- Query size is limited (avoid large IN clauses)
+- No support for null/undefined values in filters
+- Translates to SQL-like syntax internally
+- Case-sensitive string comparisons
+- Metadata updates are atomic
+
+## Related
 - [Astra](./astra)
+- [Chroma](./chroma)
+- [Cloudflare Vectorize](./vectorize)
+- [LibSQL](./libsql-store)
+- [PgStore](./pgstore)
+- [Pinecone](./pinecone)
+- [Qdrant](./qdrant)
 - [Upstash](./upstash)
-- [LibSQL](./libsql)
-- [Vectorize](./vectorize)

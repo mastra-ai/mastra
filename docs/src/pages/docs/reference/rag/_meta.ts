@@ -8,12 +8,12 @@ const meta = {
   "graph-rag": "GraphRAG",
   astra: "AstraStore",
   chroma: "ChromaStore",
-  libsql: "LibSQLStore",
+  vectorize: "CloudflareStore",
+  "libsql-store": "LibSQLStore",
   pgstore: "PGStore",
   pinecone: "PineconeStore",
   qdrant: "QdrantStore",
   upstash: "UpstashStore",
-  vectorize: "CloudflareStore",
 };
 
 export default meta;

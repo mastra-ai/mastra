@@ -310,7 +310,7 @@ Special Operators:
   Example: { "name": { "$regex": "iphone", "$options": "i" } }
 
 Restrictions:
-- Direct RegExp patterns are not supported, use $regex operator
+- Direct RegExp patterns are supported
 - Nested fields are supported using dot notation
 - Multiple conditions on the same field are supported with both implicit and explicit $and
 - Array operations work on array fields only
