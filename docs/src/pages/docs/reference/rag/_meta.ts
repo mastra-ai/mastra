@@ -6,14 +6,14 @@ const meta = {
   document: "MDocument",
   "metadata-filters": "Metadata Filters",
   "graph-rag": "GraphRAG",
-  astra: "AstraStore",
-  chroma: "ChromaStore",
-  vectorize: "CloudflareStore",
-  pgstore: "PGStore",
+  astra: "AstraVector",
+  chroma: "ChromaVector",
+  vectorize: "CloudflareVector",
+  pg: "PgVector",
   libsql: "LibSQLVector",
-  pinecone: "PineconeStore",
-  qdrant: "QdrantStore",
-  upstash: "UpstashStore",
+  pinecone: "PineconeVector",
+  qdrant: "QdrantVector",
+  upstash: "UpstashVector",
 };
 
 export default meta;
