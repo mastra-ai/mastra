@@ -1,7 +1,7 @@
 {
   "name": "@mastra/vector-pg",
   "version": "0.1.0-alpha.26",
-  "description": "Postgres Vector store provider for Mastra",
+  "description": "Postgres Vector store provider for Mastra (deprecated use @mastra/pg instead)",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -16,8 +16,7 @@
   },
   "scripts": {
     "build": "tsup-node src/index.ts --format esm --dts --clean --treeshake",
-    "dev": "tsup-node src/index.ts --format esm --dts --clean --treeshake --watch",
-    "test": "vitest run"
+    "test": "echo deprecated"
   },
   "dependencies": {
     "@mastra/core": "workspace:^",

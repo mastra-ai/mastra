@@ -1,7 +1,7 @@
 {
   "name": "@mastra/store-pg",
   "version": "0.0.0-alpha.11",
-  "description": "Postgres store provider for Mastra",
+  "description": "Postgres store provider for Mastra (deprecated - use @mastra/pg instead)",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -16,13 +16,7 @@
   },
   "scripts": {
     "build": "tsup-node src/index.ts --format esm --dts --clean --treeshake",
-    "dev": "tsup-node src/index.ts --format esm --dts --clean --treeshake --watch",
-    "pretest": "docker compose up -d && (for i in $(seq 1 30); do docker compose exec -T db pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
-    "test": "vitest run",
-    "posttest": "docker compose down -v",
-    "pretest:watch": "docker compose up -d",
-    "test:watch": "vitest watch",
-    "posttest:watch": "docker compose down -v"
+    "test": "echo deprecated"
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
