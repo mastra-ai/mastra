@@ -20,7 +20,7 @@ To implement RAG, you process your documents into chunks, create embeddings, sto
 
 ```ts showLineNumbers copy
 import { embedMany } from "ai";
-import { openai } from "ai/openai";
+import { openai } from "@ai-sdk/openai";
 import { PgVector } from "@mastra/pg";
 import { MDocument, embed } from "@mastra/rag";
 import { z } from "zod";
