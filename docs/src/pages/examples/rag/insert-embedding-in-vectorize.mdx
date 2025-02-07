@@ -12,7 +12,7 @@ After generating embeddings, you need to store them in a vector database for sim
 ```tsx copy
 import { embedMany } from 'ai';
 import { openai } from '@ai-sdk/openai';
-import { CloudflareVector } from '@mastra/vector-vectorize';
+import { CloudflareVector } from '@mastra/vectorize';
 import { MDocument } from '@mastra/rag';
 
 const doc = MDocument.fromText('Your text content...');

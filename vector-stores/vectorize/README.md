@@ -1,39 +1,34 @@
-# @mastra/vector-vectorize
+# @mastra/vector-vectorize (DEPRECATED)
 
-Vector store implementation for Vectorize, a managed vector database service optimized for AI applications.
+⚠️ **This package is deprecated** ⚠️
 
-## Installation
+This package has been moved to `@mastra/vectorize`. Please update your dependencies and imports to use the new package:
 
-```bash
-npm install @mastra/vector-vectorize
+```diff
+- import { CloudflareVector } from '@mastra/vector-vectorize';
++ import { CloudflareVector } from '@mastra/vectorize';
 ```
 
-## Usage
+## Migration
 
-```typescript
-import { VectorizeStore } from '@mastra/vector-vectorize';
+1. Update your package.json:
 
-const vectorStore = new VectorizeStore({
-  // configuration options
-});
+```diff
+- "@mastra/vector-vectorize": "^0.1.0"
++ "@mastra/vectorize": "^0.1.0"
 ```
 
-## Configuration
+2. Update your imports:
 
-The Vectorize vector store requires the following configuration:
+```diff
+- import { CloudflareVector } from '@mastra/vector-vectorize';
++ import { CloudflareVector } from '@mastra/vectorize';
+```
 
-- `VECTORIZE_API_KEY`: Your Vectorize API key
-- `VECTORIZE_INDEX_NAME`: Name of the index to use
-- `VECTORIZE_PROJECT_ID`: Your Vectorize project ID
+3. Run `pnpm install` to update your dependencies
 
-## Features
+The API remains the same, so no other changes are needed.
 
-- Purpose-built for AI and ML workloads
-- High-performance vector similarity search
-- Automatic index optimization
-- Scalable architecture
-- Real-time updates and queries
+## Why was this moved?
 
-## Related Links
-
-- [Vectorize Documentation](https://www.vectorize.com/docs)
+This package was moved to simplify our package naming convention and improve discoverability. The new package is functionally identical but lives in a more appropriate location in our monorepo structure.
