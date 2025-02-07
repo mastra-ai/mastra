@@ -73,7 +73,7 @@ for await (const chunk of response.textStream) {
 The response stream will contain xml-like `<working_memory>$data</working_memory>` tagged data.
 Mastra picks up these tags and automatically updates working memory with the data returned by the LLM.
 
-To prevent showing this data to users use the `maskStreamTags` util.
+To prevent showing this data to users you can import the `maskStreamTags` util and pass the stream response through it.
 
 ```typescript
 import { maskStreamTags } from "@mastra/core/utils";
