@@ -1,4 +1,3 @@
-import { FirecrawlIntegration } from "@mastra/firecrawl";
 import { GithubIntegration } from "@mastra/github";
 import { StabilityAiIntegration } from "@mastra/stabilityai";
 import { config } from "../../config/index.js";
@@ -13,12 +12,6 @@ const getApiKey = (configKey: string, envKey: string): string => {
 
     return '';
 };
-
-export const firecrawl = new FirecrawlIntegration({
-    config: {
-        API_KEY: getApiKey('FIRECRAWL_API_KEY', 'FIRECRAWL_API_KEY'),
-    },
-});
 
 export const github = new GithubIntegration({
     config: {

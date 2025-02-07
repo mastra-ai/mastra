@@ -2,7 +2,6 @@ import { Agent } from '@mastra/core/agent';
 
 import { browserTool, googleSearch } from '../tools/browser.js';
 import { listEvents } from '../tools/calendar.js';
-import { crawl } from '../tools/crawl.js';
 import { execaTool } from '../tools/execa.js';
 import { fsTool } from '../tools/fs.js';
 import { imageTool } from '../tools/image.js';
