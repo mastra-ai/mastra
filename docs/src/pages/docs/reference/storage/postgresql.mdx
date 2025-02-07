@@ -10,13 +10,13 @@ The PostgreSQL storage implementation provides a production-ready storage soluti
 ## Installation
 
 ```bash
-npm install @mastra/store-pg
+npm install @mastra/pg
 ```
 
 ## Usage
 
 ```typescript copy showLineNumbers
-import { PostgresStorage } from "@mastra/store-pg";
+import { PostgresStore } from "@mastra/pg";
 
 const storage = new PostgresStorage({
   connectionString: process.env.DATABASE_URL,

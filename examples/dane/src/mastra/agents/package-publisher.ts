@@ -34,11 +34,16 @@ const packages_llm_text = `
   - Format: @mastra/store-{name} -> storage/{name}
   - Example: @mastra/store-pg -> storage/pg
 
-  ## 5. Speech packages - STRICT RULES:
+  ## 5. Store packages (combined vector + storage packages) - STRICT RULES:
+  - ALL store packages must be directly under stores/
+  - Format: @mastra/{name} -> stores/{name}
+  - Example: @mastra/pg -> stores/pg
+
+  ## 6. Speech packages - STRICT RULES:
   - ALL speech packages must be directly under speech/
   - Format: @mastra/speech-{name} -> speech/{name}
 
-  ## 6. Integrations - STRICT RULES:
+  ## 7. Integrations - STRICT RULES:
   - ALL integration packages are under integrations/
   @mastra/composio -> integrations/composio
   @mastra/github -> integrations/github
@@ -108,6 +113,11 @@ export const BUILD_PACKAGES_PROMPT = (packages: string[]) => `
             <parallel_phase name="storage">
               <description>Build storage/ directory packages</description>
               <action>Use pnpmBuild for each @mastra/store-* package</action>
+            </parallel_phase>
+
+            <parallel_phase name="stores">
+              <description>Build stores/ directory packages</description>
+              <action>Use pnpmBuild for each @mastra/* package in stores/</action>
             </parallel_phase>
           </phase>
         </execution_plan>

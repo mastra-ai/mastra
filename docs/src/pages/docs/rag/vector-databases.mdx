@@ -18,7 +18,7 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
 <Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare']}>
   <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
-  import { PgVector } from '@mastra/vector-pg';
+  import { PgVector } from '@mastra/pg';
 
   const store = new PgVector(process.env.POSTGRES_CONNECTION_STRING)
   await store.createIndex("my-collection", 1536);

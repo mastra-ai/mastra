@@ -280,3 +280,9 @@ export class PgVector extends MastraVector {
     await this.pool.end();
   }
 }
+
+// Throw deprecation error
+throw new Error(
+  '@mastra/vector-pg is deprecated. Please use @mastra/pg instead:\n' +
+  'import { PgVector } from \'@mastra/pg\';'
+);

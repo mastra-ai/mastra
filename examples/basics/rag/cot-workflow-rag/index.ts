@@ -2,7 +2,7 @@ import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Step, Workflow } from '@mastra/core/workflows';
 import { createVectorQueryTool, embedMany, MDocument } from '@mastra/rag';
-import { PgVector } from '@mastra/vector-pg';
+import { PgVector } from '@mastra/pg';
 import { z } from 'zod';
 
 export const ragWorkflow = new Workflow({

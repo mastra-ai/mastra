@@ -2,11 +2,11 @@ import { WorkflowRunState } from '@mastra/core/workflows';
 import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 
-import { PostgresStore, type PostgresConfig } from './index';
+import { PostgresStore, type PostgresConfig } from '.';
 
 const TEST_CONFIG: PostgresConfig = {
   host: process.env.POSTGRES_HOST || 'localhost',
-  port: Number(process.env.POSTGRES_PORT) || 5434,
+  port: Number(process.env.POSTGRES_PORT) || 5433,
   database: process.env.POSTGRES_DB || 'postgres',
   user: process.env.POSTGRES_USER || 'postgres',
   password: process.env.POSTGRES_PASSWORD || 'postgres',
