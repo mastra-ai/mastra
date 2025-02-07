@@ -1,7 +1,10 @@
+import { openai } from '@ai-sdk/openai';
+import { embedMany } from 'ai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { embedMany, MDocument, createGraphRAGTool } from '@mastra/rag';
 import { PgVector } from '@mastra/pg';
+import { MDocument, createGraphRAGTool } from '@mastra/rag';
+
 
 const graphRagTool = createGraphRAGTool({
   vectorStoreName: 'pgVector',
@@ -26,10 +29,7 @@ export const ragAgent = new Agent({
 3. CONCLUSION: One sentence summary that ties everything together
 
 Keep each section brief and focus on the most important points.`,
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o-mini',
-  },
+  model: openai('gpt-4o-mini'),
   tools: {
     graphRagTool,
   },
