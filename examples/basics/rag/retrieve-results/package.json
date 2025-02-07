@@ -6,7 +6,7 @@
   },
   "dependencies": {
     "@mastra/rag": "workspace:*",
-    "@mastra/vector-pinecone": "workspace:*"
+    "@mastra/pinecone": "workspace:*"
   },
   "version": "0.0.1-alpha.4"
 }

@@ -1,72 +1,26 @@
-# @mastra/vector-pinecone
+# ⚠️ DEPRECATED - @mastra/vector-pinecone
 
-Vector store implementation for Pinecone, using the official @pinecone-database/pinecone SDK with added telemetry support.
+**This package is deprecated. Please use `@mastra/pinecone` instead.**
 
-## Installation
+## Migration Guide
 
-```bash
-npm install @mastra/vector-pinecone
-```
+1. Remove this package from your dependencies:
+   ```bash
+   pnpm remove @mastra/vector-pinecone
+   ```
 
-## Usage
+2. Install the new package:
+   ```bash
+   pnpm add @mastra/pinecone
+   ```
 
-```typescript
-import { PineconeVector } from '@mastra/vector-pinecone';
+3. Update your imports:
+   ```typescript
+   // Old import
+   import { PineconeVector } from "@mastra/vector-pinecone";
 
-const vectorStore = new PineconeVector(
-  'your-api-key',
-  'optional-environment-url'
-);
+   // New import
+   import { PineconeVector } from "@mastra/pinecone";
+   ```
 
-// Create a new index
-await vectorStore.createIndex('my-index', 1536, 'cosine');
-
-// Add vectors
-const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
-const metadata = [{ text: 'doc1' }, { text: 'doc2' }];
-const ids = await vectorStore.upsert('my-index', vectors, metadata);
-
-// Query vectors
-const results = await vectorStore.query(
-  'my-index',
-  [0.1, 0.2, ...],
-  10, // topK
-  { text: { $eq: 'doc1' } }, // optional filter
-  false // includeValues
-);
-```
-
-## Configuration
-
-Required:
-
-- `apiKey`: Your Pinecone API key
-
-Optional:
-
-- `environment`: Your Pinecone environment URL (controller host URL)
-
-## Features
-
-- Serverless deployment on AWS (us-east-1)
-- Vector similarity search with cosine, euclidean, and dot product metrics
-- Automatic batching for large upserts (100 vectors per request)
-- Built-in telemetry support
-- Metadata filtering
-- Optional vector inclusion in query results
-- Automatic UUID generation for vectors
-- Built on top of @pinecone-database/pinecone SDK
-
-## Methods
-
-- `createIndex(indexName, dimension, metric?)`: Create a new index
-- `upsert(indexName, vectors, metadata?, ids?)`: Add or update vectors
-- `query(indexName, queryVector, topK?, filter?, includeVector?)`: Search for similar vectors
-- `listIndexes()`: List all indexes
-- `describeIndex(indexName)`: Get index statistics
-- `deleteIndex(indexName)`: Delete an index
-
-## Related Links
-
-- [Pinecone Documentation](https://docs.pinecone.io/)
-- [Pinecone Node.js SDK](https://github.com/pinecone-io/pinecone-ts-client)
+The new package provides the same functionality with an improved structure and additional features.

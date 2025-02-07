@@ -50,7 +50,8 @@ function waitUntilVectorsIndexed(vectorDB: PineconeVector, indexName: string, ex
     }, 1000);
   });
 }
-describe('PineconeVector Integration Tests', () => {
+// TODO: our pinecone account is over the limit, tests don't work in CI
+describe.skip('PineconeVector Integration Tests', () => {
   let vectorDB: PineconeVector;
   const testIndexName = 'test-index-' + Date.now(); // Unique index name for each test run
   const dimension = 3;

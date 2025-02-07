@@ -54,6 +54,7 @@ jobs:
         run: pnpm test:combined-stores
         env:
           NODE_OPTIONS: "--max_old_space_size=8096"
+          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
           ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
           ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
