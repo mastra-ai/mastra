@@ -1,5 +1,5 @@
+import { createOpenAI } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
 import { MastraStorageLibSql } from '@mastra/core/storage';
 import { LibSQLVector } from '@mastra/core/vector/libsql';
 import { Memory } from '@mastra/memory';
@@ -33,6 +33,8 @@ const createTestMessage = (threadId: string, content: string, role: 'user' | 'as
 };
 
 dotenv.config({ path: '.env.test' });
+
+const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 describe('Working Memory Tests', () => {
   let memory: Memory;
@@ -69,9 +71,7 @@ describe('Working Memory Tests', () => {
           messageRange: 2,
         },
       },
-      embedder: new OpenAIEmbedder({
-        model: 'text-embedding-3-small',
-      }),
+      embedder: openai.embedding('text-embedding-3-small'),
     });
 
     // Reset message counter
