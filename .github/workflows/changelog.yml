@@ -57,14 +57,6 @@ jobs:
       - name: Build core
         run: pnpm build:core
 
-      - name: Build engine
-        run: pnpm build:engine && pnpm copy:drizzle
-
-      - name: Setup database
-        run: pnpm db:setup
-        env:
-          DB_URL: "postgresql://postgres:postgres@localhost:5433/mastra"
-
       - name: Install dane cli
         run: pnpm install -g @mastra/dane
 
