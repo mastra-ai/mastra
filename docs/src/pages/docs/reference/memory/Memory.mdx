@@ -32,9 +32,10 @@ const memory = new Memory({
       isOptional: true,
     },
     {
-      name: "embedding",
-      type: "EmbeddingConfig",
-      description: "Configuration for text embeddings",
+      name: "embedder",
+      type: "MastraEmbedder",
+      description:
+        "Embedder instance for vector embeddings (e.g., OpenAIEmbedder, CohereEmbedder)",
       isOptional: true,
     },
     {
@@ -53,37 +54,43 @@ const memory = new Memory({
     {
       name: "lastMessages",
       type: "number | false",
-      description: "Number of most recent messages to retrieve. Set to false to disable.",
+      description:
+        "Number of most recent messages to retrieve. Set to false to disable.",
       isOptional: true,
       defaultValue: "40",
     },
     {
       name: "semanticRecall",
       type: "boolean | SemanticRecallConfig",
-      description: "Enable semantic search in message history. Automatically enabled when vector store is provided.",
+      description:
+        "Enable semantic search in message history. Automatically enabled when vector store is provided.",
       isOptional: true,
       defaultValue: "false (true if vector store provided)",
     },
     {
       name: "topK",
       type: "number",
-      description: "Number of similar messages to retrieve when using semantic search",
+      description:
+        "Number of similar messages to retrieve when using semantic search",
       isOptional: true,
       defaultValue: "2",
     },
     {
       name: "messageRange",
       type: "number | { before: number; after: number }",
-      description: "Range of messages to include around semantic search results",
+      description:
+        "Range of messages to include around semantic search results",
       isOptional: true,
       defaultValue: "2",
     },
     {
       name: "workingMemory",
       type: "{ enabled: boolean; template: string }",
-      description: "Configuration for working memory feature that allows persistent storage of user information across conversations",
+      description:
+        "Configuration for working memory feature that allows persistent storage of user information across conversations",
       isOptional: true,
-      defaultValue: "{ enabled: false, template: '<user><first_name></first_name><last_name></last_name>...</user>' }",
+      defaultValue:
+        "{ enabled: false, template: '<user><first_name></first_name><last_name></last_name>...</user>' }",
     },
   ]}
 />
@@ -94,31 +101,9 @@ The working memory feature allows agents to maintain persistent information acro
 
 If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information. See the [Agent Memory Guide](/docs/agents/agent-memory#working-memory) for detailed usage examples and best practices.
 
-### embedding
+### embedder
 
-<PropertiesTable
-  content={[
-    {
-      name: "provider",
-      type: "string",
-      description: "The embedding provider to use (e.g., 'OPEN_AI')",
-      isOptional: false,
-    },
-    {
-      name: "model",
-      type: "string",
-      description: "The specific embedding model to use (e.g., 'text-embedding-3-small')",
-      isOptional: false,
-    },
-    {
-      name: "maxRetries",
-      type: "number",
-      description: "Maximum number of retry attempts for embedding generation",
-      isOptional: true,
-      defaultValue: "3",
-    },
-  ]}
-/>
+The embedder instance to use for generating vector embeddings. This should be an instance of a class that implements the `MastraEmbedder` interface. See the [Embedder Reference](/docs/reference/embedder) for available embedders and their configuration options.
 
 ## Additional Notes
 
@@ -138,17 +123,16 @@ const memory = new Memory({
   vector: new LibSQLVector({
     url: ":memory:",
   }),
-  embedding: {
-    provider: "OPEN_AI",
+  embedder: new OpenAIEmbedder({
     model: "text-embedding-3-small",
     maxRetries: 3,
-  },
+  }),
   options: {
     semanticRecall: {
       topK: 5,
-      messageRange: 2
-    }
-  }
+      messageRange: 2,
+    },
+  },
 });
 ```
 
