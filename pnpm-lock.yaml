@@ -1120,9 +1120,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@mastra/firecrawl':
-        specifier: workspace:*
-        version: link:../../integrations/firecrawl
       '@mastra/github':
         specifier: workspace:*
         version: link:../../integrations/github
