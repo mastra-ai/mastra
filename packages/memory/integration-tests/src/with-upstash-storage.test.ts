@@ -1,7 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { LibSQLVector } from '@mastra/core/vector/libsql';
 import { Memory } from '@mastra/memory';
-import { UpstashStore } from '@mastra/store-upstash';
+import { UpstashStore } from '@mastra/upstash';
 import dotenv from 'dotenv';
 import { describe } from 'vitest';
 

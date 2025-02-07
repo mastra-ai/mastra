@@ -12824,9 +12824,9 @@ npm install @mastra/store-upstash
 ## Usage
 
 ```typescript copy showLineNumbers
-import { UpstashStorage } from "@mastra/store-upstash";
+import { UpstashStore } from "@mastra/store-upstash";
 
-const storage = new UpstashStorage({
+const storage = new UpstashStore({
   url: process.env.UPSTASH_URL,
   token: process.env.UPSTASH_TOKEN,
 });

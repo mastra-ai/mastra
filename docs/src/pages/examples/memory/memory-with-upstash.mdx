@@ -7,11 +7,10 @@ This example demonstrates how to use Mastra's memory system with Upstash as the 
 First, set up the memory system with Upstash storage and vector capabilities:
 
 ```typescript
-import { Memory } from '@mastra/memory';
-import { UpstashStore } from '@mastra/store-upstash';
-import { UpstashVector } from '@mastra/vector-upstash';
-import { Agent } from '@mastra/core/agent';
-import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
+import { Memory } from "@mastra/memory";
+import { UpstashStore, UpstashVector } from "@mastra/upstash";
+import { Agent } from "@mastra/core/agent";
+import { OpenAIEmbedder } from "@mastra/core/embeddings/openai";
 
 // Initialize memory with Upstash storage and vector search
 const memory = new Memory({
@@ -31,20 +30,20 @@ const memory = new Memory({
     },
   },
   embedder: new OpenAIEmbedder({
-    model: 'text-embedding-3-small',
+    model: "text-embedding-3-small",
     maxRetries: 3,
   }),
 });
 
 // Create an agent with memory capabilities
 const chefAgent = new Agent({
-  name: 'chefAgent',
+  name: "chefAgent",
   instructions:
-    'You are Michel, a practical and experienced home chef who helps people cook great meals with whatever ingredients they have available.',
+    "You are Michel, a practical and experienced home chef who helps people cook great meals with whatever ingredients they have available.",
   model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4',
-    toolChoice: 'auto',
+    provider: "OPEN_AI",
+    name: "gpt-4",
+    toolChoice: "auto",
   },
   memory,
 });
@@ -53,6 +52,7 @@ const chefAgent = new Agent({
 ## Environment Setup
 
 Make sure to set up your Upstash credentials in the environment variables:
+
 ```bash
 UPSTASH_REDIS_REST_URL=your-redis-url
 UPSTASH_REDIS_REST_TOKEN=your-redis-token
@@ -61,19 +61,19 @@ UPSTASH_REDIS_REST_TOKEN=your-redis-token
 ## Usage Example
 
 ```typescript
-import { randomUUID } from 'crypto';
+import { randomUUID } from "crypto";
 
 // Start a conversation
 const threadId = randomUUID();
-const resourceId = 'SOME_USER_ID';
+const resourceId = "SOME_USER_ID";
 
 // Ask about ingredients
 const response1 = await chefAgent.stream(
-  'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?',
+  "In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?",
   {
     threadId,
     resourceId,
-  }
+  },
 );
 
 // Ask about different ingredients
@@ -82,12 +82,12 @@ const response2 = await chefAgent.stream(
   {
     threadId,
     resourceId,
-  }
+  },
 );
 
 // Use memory to recall previous conversation
 const response3 = await chefAgent.stream(
-  'What did we cook before I went to my friends house?',
+  "What did we cook before I went to my friends house?",
   {
     threadId,
     resourceId,
@@ -95,14 +95,15 @@ const response3 = await chefAgent.stream(
       lastMessages: 3, // Get last 3 messages for context
       semanticRecall: {
         topK: 2, // Also get 2 most relevant messages
-        messageRange: 2 // Include context around matches
+        messageRange: 2, // Include context around matches
       },
-    }
-  }
+    },
+  },
 );
 ```
 
 The example shows:
+
 1. Setting up Upstash storage with vector search capabilities
 2. Configuring environment variables for Upstash connection
 3. Creating an agent with memory integration

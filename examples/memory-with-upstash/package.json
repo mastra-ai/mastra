@@ -17,7 +17,7 @@
     "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@mastra/store-upstash": "workspace:*",
+    "@mastra/upstash": "workspace:*",
     "@mastra/pg": "workspace:*"
   },
   "devDependencies": {

@@ -284,10 +284,3 @@ export class UpstashStore extends MastraStorage {
     // No explicit cleanup needed for Upstash Redis
   }
 }
-
-throw new Error(
-  '@mastra/store-upstash is deprecated. Please use @mastra/upstash instead:\n\n' +
-    'npm install @mastra/upstash\n\n' +
-    'Then update your imports:\n' +
-    "import { UpstashStore } from '@mastra/upstash'",
-);
