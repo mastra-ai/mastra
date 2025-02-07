@@ -10,7 +10,8 @@ import { GithubLink } from "../../../components/github-link";
 When building AI agents, you often need to give them specific instructions and capabilities to handle specialized tasks effectively. System prompts allow you to define an agent's personality, knowledge domain, and behavioral guidelines. This example shows how to create an AI agent with custom instructions and integrate it with a dedicated tool for retrieving verified information.
 
 ```ts showLineNumbers copy
-import { Agent, createTool } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
 
 import { z } from "zod";
 

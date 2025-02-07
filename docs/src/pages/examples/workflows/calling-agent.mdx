@@ -10,7 +10,9 @@ import { GithubLink } from "../../../components/github-link";
 This example demonstrates how to create a workflow that calls an AI agent to process messages and generate responses, and execute it within a workflow step.
 
 ```ts showLineNumbers copy
-import { Agent, Mastra, Step, Workflow } from "@mastra/core";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { Step, Workflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const penguin = new Agent({

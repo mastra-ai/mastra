@@ -14,7 +14,7 @@ The code below shows how to define these steps inline or separately.
 You can create steps directly within your workflow using `.step()` and `.then()`. This code shows how to define, link, and execute two steps in sequence.
 
 ```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
-import { Step, Workflow } from "@mastra/core";
+import { Step, Workflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
 export const myWorkflow = new Workflow({
@@ -54,7 +54,7 @@ myWorkflow
 If you prefer to manage your step logic in separate entities, you can define steps outside and then add them to your workflow. This code shows how to define steps independently and link them afterward.
 
 ```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
-import { Step, Workflow } from "@mastra/core";
+import { Step, Workflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
 // Define steps separately

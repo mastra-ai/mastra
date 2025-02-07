@@ -10,7 +10,9 @@ import { GithubLink } from "../../../components/github-link";
 When building AI agents, you often need to integrate external data sources or functionality to enhance their capabilities. This example shows how to create an AI agent that uses a dedicated weather tool to provide accurate weather information for specific locations.
 
 ```ts showLineNumbers copy
-import { createTool, Agent, Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 interface WeatherResponse {
