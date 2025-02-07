@@ -1,5 +1,5 @@
-import { JSDOM } from 'jsdom';
 import { Document } from 'llamaindex';
+import { parse } from 'node-html-better-parser';
 
 import { RecursiveCharacterTransformer } from './character';
 
@@ -20,22 +20,37 @@ export class HTMLHeaderTransformer {
   }
 
   splitText({ text }: { text: string }): Document[] {
-    const dom = new JSDOM(text);
-    const { document } = dom.window;
+    const root = parse(text);
 
     const headerFilter = this.headersToSplitOn.map(([header]) => header);
     const headerMapping = Object.fromEntries(this.headersToSplitOn);
 
     const elements: ElementType[] = [];
-    const headers = document.querySelectorAll(headerFilter.join(','));
+    const headers = root.querySelectorAll(headerFilter.join(','));
 
     headers.forEach(header => {
       let content = '';
-      let nextElement = header.nextElementSibling;
+      const parentNode = header.parentNode;
 
-      while (nextElement && !headerFilter.includes(nextElement.tagName.toLowerCase())) {
-        content += nextElement.textContent + ' ';
-        nextElement = nextElement.nextElementSibling;
+      if (parentNode && parentNode.childNodes) {
+        let foundHeader = false;
+        for (const node of parentNode.childNodes) {
+          // Start collecting content after we find our header
+          if (node === header) {
+            foundHeader = true;
+            continue;
+          }
+
+          // If we found our header and hit another header, stop
+          if (foundHeader && node.tagName && headerFilter.includes(node.tagName.toLowerCase())) {
+            break;
+          }
+
+          // Collect content between headers
+          if (foundHeader) {
+            content += this.getTextContent(node) + ' ';
+          }
+        }
       }
 
       elements.push({
@@ -43,7 +58,7 @@ export class HTMLHeaderTransformer {
         xpath: this.getXPath(header),
         content: content.trim(),
         metadata: {
-          [headerMapping?.[header.tagName.toLowerCase()]!]: header.textContent?.trim() || '',
+          [headerMapping?.[header.tagName.toLowerCase()]!]: header.text || '',
         },
       });
     });
@@ -53,28 +68,60 @@ export class HTMLHeaderTransformer {
           el =>
             new Document({
               text: el.content,
-              metadata: el.metadata,
+              metadata: { ...el.metadata, xpath: el.xpath },
             }),
         )
       : this.aggregateElementsToChunks(elements);
   }
 
-  private getXPath(element: Element): string {
-    const parts: string[] = [];
-    let current: Element | null = element;
+  private getXPath(element: any): string {
+    if (!element) return '';
 
-    while (current && current.nodeType === 1) {
+    const parts: string[] = [];
+    let current = element;
+
+    while (current && current.tagName) {
       let index = 1;
-      for (let sibling = current.previousElementSibling; sibling; sibling = sibling.previousElementSibling) {
-        if (sibling.nodeName === current.nodeName) {
-          index++;
+      const parent = current.parentNode;
+
+      if (parent && parent.childNodes) {
+        // Count preceding siblings with same tag
+        for (const sibling of parent.childNodes) {
+          if (sibling === current) break;
+          if (sibling.tagName === current.tagName) {
+            index++;
+          }
         }
       }
+
       parts.unshift(`${current.tagName.toLowerCase()}[${index}]`);
-      current = current.parentElement;
+      current = current.parentNode;
     }
 
     return '/' + parts.join('/');
+  }
+
+  private getTextContent(element: any): string {
+    if (!element) return '';
+
+    // For text nodes, return their content
+    if (!element.tagName) {
+      return element.text || '';
+    }
+
+    // For element nodes, combine their text with children's text
+    let content = element.text || '';
+
+    if (element.childNodes) {
+      for (const child of element.childNodes) {
+        const childText = this.getTextContent(child);
+        if (childText) {
+          content += ' ' + childText;
+        }
+      }
+    }
+
+    return content.trim();
   }
 
   private aggregateElementsToChunks(elements: ElementType[]): Document[] {
@@ -97,7 +144,7 @@ export class HTMLHeaderTransformer {
       chunk =>
         new Document({
           text: chunk.content,
-          metadata: chunk.metadata,
+          metadata: { ...chunk.metadata, xpath: chunk.xpath },
         }),
     );
   }
@@ -110,7 +157,6 @@ export class HTMLHeaderTransformer {
       const chunks = this.splitText({ text: texts[i]! });
       for (const chunk of chunks) {
         const metadata = { ...(_metadatas[i] || {}) };
-
         const chunkMetadata = chunk.metadata;
 
         if (chunkMetadata) {
@@ -151,7 +197,7 @@ export class HTMLSectionTransformer {
   private options: Record<string, any>;
 
   constructor(headersToSplitOn: [string, string][], options: Record<string, any> = {}) {
-    this.headersToSplitOn = Object.fromEntries(headersToSplitOn);
+    this.headersToSplitOn = Object.fromEntries(headersToSplitOn.map(([tag, name]) => [tag.toLowerCase(), name]));
     this.options = options;
   }
 
@@ -163,10 +209,80 @@ export class HTMLSectionTransformer {
         new Document({
           text: section.content,
           metadata: {
-            [this.headersToSplitOn[section.tagName]!]: section.header,
+            [this.headersToSplitOn[section.tagName.toLowerCase()]!]: section.header,
+            xpath: section.xpath,
           },
         }),
     );
+  }
+
+  private getXPath(element: any): string {
+    const parts: string[] = [];
+    let current = element;
+
+    while (current && current.nodeType === 1) {
+      let index = 1;
+      let sibling = current.previousSibling;
+
+      while (sibling) {
+        if (sibling.nodeType === 1 && sibling.tagName === current.tagName) {
+          index++;
+        }
+        sibling = sibling.previousSibling;
+      }
+
+      if (current.tagName) {
+        parts.unshift(`${current.tagName.toLowerCase()}[${index}]`);
+      }
+      current = current.parentNode;
+    }
+
+    return '/' + parts.join('/');
+  }
+
+  private splitHtmlByHeaders(htmlDoc: string): Array<{
+    header: string;
+    content: string;
+    tagName: string;
+    xpath: string;
+  }> {
+    const sections: Array<{
+      header: string;
+      content: string;
+      tagName: string;
+      xpath: string;
+    }> = [];
+
+    const root = parse(htmlDoc);
+    const headers = Object.keys(this.headersToSplitOn);
+    const headerElements = root.querySelectorAll(headers.join(','));
+
+    headerElements.forEach((headerElement, index) => {
+      const header = headerElement.text?.trim() || '';
+      const tagName = headerElement.tagName;
+      const xpath = this.getXPath(headerElement);
+      let content = '';
+
+      let currentElement = headerElement.nextElementSibling;
+      const nextHeader = headerElements[index + 1];
+
+      while (currentElement && (!nextHeader || currentElement !== nextHeader)) {
+        if (currentElement.text) {
+          content += currentElement.text.trim() + ' ';
+        }
+        currentElement = currentElement.nextElementSibling;
+      }
+
+      content = content.trim();
+      sections.push({
+        header,
+        content,
+        tagName,
+        xpath,
+      });
+    });
+
+    return sections;
   }
 
   async splitDocuments(documents: Document[]): Promise<Document[]> {
@@ -212,61 +328,6 @@ export class HTMLSectionTransformer {
     }
 
     return documents;
-  }
-
-  private splitHtmlByHeaders(htmlDoc: string): Array<{
-    header: string;
-    content: string;
-    tagName: string;
-  }> {
-    const sections: Array<{
-      header: string;
-      content: string;
-      tagName: string;
-    }> = [];
-
-    const dom = new JSDOM(htmlDoc);
-    const { document } = dom.window;
-    const headers = ['body', ...Object.keys(this.headersToSplitOn)];
-
-    const headerElements = Array.from(document.querySelectorAll(headers.join(',')));
-
-    for (let i = 0; i < headerElements.length; i++) {
-      const headerElement = headerElements[i]!;
-      let currentHeader: string;
-      let currentHeaderTag: string;
-      let sectionContent: string[] = [];
-
-      if (i === 0) {
-        currentHeader = '#TITLE#';
-        currentHeaderTag = 'h1';
-      } else {
-        currentHeader = headerElement.textContent?.trim() || '';
-        currentHeaderTag = headerElement.tagName.toLowerCase();
-      }
-
-      // Get content until next header
-      let currentNode = headerElement.nextSibling;
-      const nextHeader = headerElements[i + 1];
-
-      while (currentNode && currentNode !== nextHeader) {
-        if (currentNode.textContent) {
-          sectionContent.push(currentNode.textContent);
-        }
-        currentNode = currentNode.nextSibling;
-      }
-
-      const content = sectionContent.join(' ').trim();
-      if (content) {
-        sections.push({
-          header: currentHeader,
-          content,
-          tagName: currentHeaderTag,
-        });
-      }
-    }
-
-    return sections;
   }
 
   transformDocuments(documents: Document[]): Document[] {

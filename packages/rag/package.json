@@ -27,8 +27,8 @@
     "@mastra/core": "workspace:^",
     "@paralleldrive/cuid2": "^2.2.2",
     "js-tiktoken": "^1.0.15",
-    "jsdom": "^25.0.1",
     "llamaindex": "^0.8.15",
+    "node-html-better-parser": "^1.4.7",
     "pathe": "^2.0.2",
     "zod": "^3.24.1"
   },
@@ -36,7 +36,6 @@
     "@babel/preset-env": "^7.26.0",
     "@babel/preset-typescript": "^7.26.0",
     "@tsconfig/recommended": "^1.0.7",
-    "@types/jsdom": "^21.1.7",
     "@types/node": "^22.9.0",
     "tsup": "^8.0.1",
     "vitest": "^3.0.4"
