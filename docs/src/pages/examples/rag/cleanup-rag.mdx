@@ -46,11 +46,11 @@ import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
 import { PgVector } from "@mastra/pg";
 import {
-  embedMany,
   MDocument,
   createVectorQueryTool,
   createDocumentChunkerTool,
 } from "@mastra/rag";
+import { embedMany } from "ai";
 ```
 
 ## Tool Creation
@@ -171,15 +171,15 @@ const updatedChunks = await updatedDoc.chunk({
 Generate and store both raw and cleaned embeddings:
 
 ```typescript copy showLineNumbers{101} filename="src/mastra/index.ts"
-const { embeddings } = await embedMany(chunks, {
-  provider: "OPEN_AI",
-  model: "text-embedding-3-small",
+const { embeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
   maxRetries: 3,
 });
 
-const { embeddings: cleanedEmbeddings } = await embedMany(updatedChunks, {
-  provider: "OPEN_AI",
-  model: "text-embedding-3-small",
+const { embeddings: cleanedEmbeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: updatedChunks.map(chunk => chunk.text),
   maxRetries: 3,
 });
 

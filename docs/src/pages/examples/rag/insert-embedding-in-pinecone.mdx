@@ -10,17 +10,17 @@ import { GithubLink } from '../../../components/github-link';
 After generating embeddings, you need to store them in a vector database for similarity search. The `PineconeVector` class provides methods to create indexes and insert embeddings into Pinecone, a managed vector database service. This example shows how to store embeddings in Pinecone for later retrieval.
 
 ```tsx copy
-import { embedMany } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { PineconeVector } from '@mastra/vector-pinecone';
 import { MDocument } from '@mastra/rag';
+import { embedMany } from 'ai';
 
 const doc = MDocument.fromText('Your text content...');
 
 const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
-  values: chunks,
+  values: chunks.map(chunk => chunk.text),
   model: openai.embedding('text-embedding-3-small'),
   maxRetries: 3,
 });

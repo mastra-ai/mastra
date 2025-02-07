@@ -36,12 +36,12 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
-import { embedMany } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
 import { PgVector } from "@mastra/pg";
 import { MDocument, createVectorQueryTool } from "@mastra/rag";
+import { embedMany } from "ai";
 ```
 
 ## Vector Query Tool Creation with Re-ranking
@@ -52,16 +52,9 @@ Using createVectorQueryTool imported from @mastra/rag, you can create a tool tha
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  options: {
-    provider: "OPEN_AI",
-    model: "text-embedding-3-small",
-    maxRetries: 3,
-  },
+  model: openai.embedding("text-embedding-3-small"),
   reranker: {
-    model: {
-      provider: "OPEN_AI",
-      name: "gpt-4o-mini",
-    },
+    model: openai("gpt-4o-mini"),
   },
 });
 ```
@@ -139,7 +132,7 @@ Generate embeddings for the chunks and store them in the vector database:
 
 ```typescript copy showLineNumbers{72} filename="src/mastra/index.ts"
 const { embeddings } = await embedMany({
-  values: chunks,
+  values: chunks.map(chunk => chunk.text),
   model: openai.embedding("text-embedding-3-small"),
   maxRetries: 3,
 });

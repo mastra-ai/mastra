@@ -37,12 +37,12 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
+import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { OpenAI } from '@mastra/core/llm/openai';
 import { createVectorQueryTool, MDocument, PGVECTOR_PROMPT } from '@mastra/rag';
 import { PgVector } from '@mastra/pg';
-import { openai } from '@ai-sdk/openai';
 import { embedMany } from 'ai';
 ```
 
@@ -155,6 +155,7 @@ Generate embeddings for the chunks and store them in the vector database along w
 const { embeddings } = await embedMany({
   model: openai.embedding('text-embedding-3-small'),
   values: chunks.map(chunk => chunk.text),
+  maxRetries: 3,
 });
 
 const vectorStore = mastra.getVector('pgVector');

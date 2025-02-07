@@ -11,16 +11,16 @@ After generating embeddings, you need to store them in a vector database for sim
 
 ```tsx copy
 import { openai } from '@ai-sdk/openai';
-import { embedMany } from 'ai';
 import { LibSQLVector } from '@mastra/core/vector/libsql';
-import { MDocument, embedMany } from '@mastra/rag';
+import { MDocument } from '@mastra/rag';
+import { embedMany } from 'ai';
 
 const doc = MDocument.fromText('Your text content...');
 
 const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
-  values: chunks,
+  values: chunks.map(chunk => chunk.text),
   model: openai.embedding('text-embedding-3-small'),
   maxRetries: 3,
 });
