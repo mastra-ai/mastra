@@ -31,7 +31,7 @@ export const createGraphRAGTool = ({
   };
   id?: string;
   description?: string;
-}) => {
+}): ReturnType<typeof createTool> => {
   const toolId = id || `GraphRAG ${vectorStoreName} ${indexName} Tool`;
   const toolDescription = description || defaultGraphRagDescription(vectorStoreName, indexName);
 
