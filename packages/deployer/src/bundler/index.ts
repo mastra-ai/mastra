@@ -80,7 +80,12 @@ export abstract class Bundler extends MastraBundler {
     await deps.install({ dir: join(outputDirectory, this.outputDir) });
   }
 
-  protected async _bundle(serverFile: string, mastraEntryFile: string, outputDirectory: string): Promise<void> {
+  protected async _bundle(
+    serverFile: string,
+    mastraEntryFile: string,
+    outputDirectory: string,
+    bundleLocation: string = join(outputDirectory, this.outputDir),
+  ): Promise<void> {
     this.logger.info('Start bundling Mastra');
     const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
 
@@ -115,7 +120,7 @@ export abstract class Bundler extends MastraBundler {
       inputOptions.input = { index: serverFile };
     }
 
-    const bundler = await this.createBundler(inputOptions, { dir: join(outputDirectory, this.outputDir) });
+    const bundler = await this.createBundler(inputOptions, { dir: bundleLocation });
 
     await bundler.write();
     this.logger.info('Bundling Mastra done');

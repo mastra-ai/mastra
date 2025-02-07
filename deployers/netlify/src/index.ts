@@ -72,7 +72,12 @@ to = "/.netlify/functions/api/:splat"
   }
 
   async bundle(entryFile: string, outputDirectory: string): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, outputDirectory);
+    return this._bundle(
+      this.getEntry(),
+      entryFile,
+      outputDirectory,
+      join(outputDirectory, this.outputDir, 'netlify', 'functions', 'api'),
+    );
   }
 
   private getEntry(): string {
