@@ -62,7 +62,7 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
 </Tabs.Tab>
 <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
-  import { ChromaVector } from '@mastra/vector-chroma'
+  import { ChromaVector } from '@mastra/chroma'
 
   const store = new ChromaVector()
   await store.createIndex("my-collection", 1536);
