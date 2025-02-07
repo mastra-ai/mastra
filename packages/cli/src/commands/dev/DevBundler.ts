@@ -1,18 +1,20 @@
 import { MastraBundler } from '@mastra/core/bundler';
 import { FileService, getWatcher } from '@mastra/deployer';
-import virtual from '@rollup/plugin-virtual';
+import { createWatcher, getWatcherInputOptions } from '@mastra/deployer/build';
 import * as fsExtra from 'fs-extra';
-import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { RollupWatcherEvent } from 'rollup';
 
 export class DevBundler extends MastraBundler {
-  constructor() {
+  private mastraDir: string;
+  constructor(mastraDir: string) {
     super({
       name: 'Dev',
       component: 'BUNDLER',
     });
+
+    this.mastraDir = mastraDir;
   }
 
   getEnvFiles(): Promise<string[]> {
@@ -27,6 +29,8 @@ export class DevBundler extends MastraBundler {
 
     return Promise.resolve([]);
   }
+
+  async writePackageJson() {}
 
   async prepare(outputDirectory: string): Promise<void> {
     await fsExtra.ensureDir(outputDirectory);
@@ -44,18 +48,31 @@ export class DevBundler extends MastraBundler {
   }
 
   async watch(outputDirectory: string): ReturnType<typeof getWatcher> {
-    const watcher = await getWatcher({
-      ...this.getInputOptions(),
-      // @ts-ignore
-      output: {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+
+    const fileService = new FileService();
+    const entryFile = fileService.getFirstExistingFile([
+      join(this.mastraDir, 'index.ts'),
+      join(this.mastraDir, 'index.js'),
+    ]);
+
+    const inputOptions = await getWatcherInputOptions(entryFile, 'node');
+
+    const watcher = await createWatcher(
+      {
+        ...inputOptions,
+        input: {
+          index: join(__dirname, 'templates', 'dev.entry.js'),
+        },
+        watch: {
+          include: await this.getEnvFiles(),
+        },
+      },
+      {
         dir: outputDirectory,
-        format: 'es',
-        entryFileNames: '[name].mjs',
       },
-      watch: {
-        include: await this.getEnvFiles(),
-      },
-    });
+    );
 
     this.logger.info('Starting watcher...');
     return new Promise((resolve, reject) => {
@@ -67,6 +84,7 @@ export class DevBundler extends MastraBundler {
         }
 
         if (event.code === 'ERROR') {
+          console.log(event);
           this.logger.error('Bundling failed, stopping watcher...');
           watcher.off('event', cb);
           reject(event);
@@ -79,20 +97,5 @@ export class DevBundler extends MastraBundler {
 
   async bundle(): Promise<void> {
     // Do nothing
-  }
-
-  private getEntry(): string {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
-    return readFileSync(join(__dirname, 'templates', 'dev.entry.js'), 'utf8');
-  }
-
-  private getInputOptions() {
-    return {
-      input: {
-        index: '#entry',
-      },
-      plugins: [virtual({ '#entry': this.getEntry() })],
-    };
   }
 }

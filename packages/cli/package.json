@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.2.0-alpha.144",
+  "version": "0.2.0-alpha.145",
   "license": "MIT",
   "description": "cli for mastra",
   "type": "module",
@@ -52,7 +52,6 @@
     "@dagrejs/dagre": "^1.1.4",
     "@mastra/core": "workspace:^",
     "@mastra/deployer": "workspace:^",
-    "@rollup/plugin-virtual": "^3.0.2",
     "@swc/core": "^1.9.3",
     "chokidar": "^4.0.3",
     "commander": "^12.1.0",

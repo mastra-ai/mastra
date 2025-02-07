@@ -2041,9 +2041,6 @@ importers:
       '@mastra/deployer':
         specifier: workspace:^
         version: link:../deployer
-      '@rollup/plugin-virtual':
-        specifier: ^3.0.2
-        version: 3.0.2(rollup@4.32.1)
       '@swc/core':
         specifier: ^1.9.3
         version: 1.10.11(@swc/helpers@0.5.15)

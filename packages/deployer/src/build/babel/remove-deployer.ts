@@ -3,7 +3,6 @@ import babel from '@babel/core';
 export function removeDeployer() {
   const t = babel.types;
   let mastraClass: string | null = null;
-  let hasReplaced = false;
 
   return {
     name: 'remove-deployer',
@@ -22,9 +21,14 @@ export function removeDeployer() {
           }
         }
       },
-      NewExpression(path) {
-        if (mastraClass && t.isIdentifier(path.node.callee) && path.node.callee.name === mastraClass && !hasReplaced) {
-          hasReplaced = true;
+      NewExpression(path, state) {
+        if (
+          mastraClass &&
+          t.isIdentifier(path.node.callee) &&
+          path.node.callee.name === mastraClass &&
+          !state.hasReplaced
+        ) {
+          state.hasReplaced = true;
           const newMastraObj = t.cloneNode(path.node);
           if (t.isObjectExpression(newMastraObj.arguments[0]) && newMastraObj.arguments[0].properties?.[0]) {
             newMastraObj.arguments[0].properties = newMastraObj.arguments[0].properties.filter(

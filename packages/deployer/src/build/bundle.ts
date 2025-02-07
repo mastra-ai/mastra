@@ -2,7 +2,7 @@ import alias from '@rollup/plugin-alias';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import { nodeResolve } from '@rollup/plugin-node-resolve';
-import builtins from 'builtins';
+import { builtinModules } from 'node:module';
 import { join } from 'path';
 import { rollup, watch, type InputOptions, type Plugin, type InputOption } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
@@ -26,7 +26,7 @@ function getOptions(inputOptions: NormalizedInputOptions, platform: 'node' | 'br
     join(root, 'src/mastra/index.js'),
   ]);
 
-  const nodeBuiltins = platform === 'node' ? builtins({ version: '20.0.0' }) : [];
+  const nodeBuiltins = platform === 'node' ? builtinModules : [];
 
   let nodeResolvePlugin =
     platform === 'node'
@@ -77,7 +77,8 @@ function getOptions(inputOptions: NormalizedInputOptions, platform: 'node' | 'br
         ],
       }),
       commonjs({
-        strictRequires: 'debug',
+        strictRequires: 'strict',
+        transformMixedEsModules: true,
         // dynamicRequireTargets: ['node_modules/**/@libsql+win32-*/*'],
       }),
       libSqlFix(),

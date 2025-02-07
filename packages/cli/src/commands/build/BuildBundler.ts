@@ -1,17 +1,13 @@
-import { MastraBundler } from '@mastra/core/bundler';
-import { FileService, getBundler } from '@mastra/deployer';
-import virtual from '@rollup/plugin-virtual';
+import { FileService } from '@mastra/deployer/build';
+import { Bundler } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export class BuildBundler extends MastraBundler {
+export class BuildBundler extends Bundler {
   constructor() {
-    super({
-      name: 'Build',
-      component: 'BUNDLER',
-    });
+    super('Build');
   }
 
   getEnvFiles(): Promise<string[]> {
@@ -22,40 +18,29 @@ export class BuildBundler extends MastraBundler {
       const envFile = fileService.getFirstExistingFile(possibleFiles);
 
       return Promise.resolve([envFile]);
-    } catch (err) {}
+    } catch (err) {
+      // ignore
+    }
 
     return Promise.resolve([]);
   }
 
   async prepare(outputDirectory: string): Promise<void> {
-    await fsExtra.ensureDir(outputDirectory);
-
-    // Clean up the output directory first
-    await fsExtra.emptyDir(outputDirectory);
+    await super.prepare(outputDirectory);
 
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
 
-    const playgroundServePath = join(outputDirectory, 'playground');
+    const playgroundServePath = join(outputDirectory, '.build', 'playground');
     await fsExtra.copy(join(dirname(__dirname), 'src/playground/dist'), playgroundServePath, {
       overwrite: true,
     });
   }
-
-  async bundle(mastraDir: string, outputDirectory: string): Promise<void> {
-    const bundler = await getBundler({
-      input: '#entry',
-      plugins: [virtual({ '#entry': this.getEntry() })],
-    });
-
-    await bundler.write({
-      file: `${outputDirectory}/index.mjs`,
-      format: 'es',
-      inlineDynamicImports: true,
-    });
+  bundle(entryFile: string, outputDirectory: string): Promise<void> {
+    return this._bundle(this.getEntry(), entryFile, outputDirectory);
   }
 
-  private getEntry(): string {
+  protected getEntry(): string {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
     return readFileSync(join(__dirname, 'templates', 'dev.entry.js'), 'utf8');

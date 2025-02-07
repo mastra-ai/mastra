@@ -1,6 +1,4 @@
 import { Deployer } from '@mastra/deployer';
-import { getBundler } from '@mastra/deployer/build';
-import virtual from '@rollup/plugin-virtual';
 import { execa } from 'execa';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
@@ -59,7 +57,7 @@ to = "/.netlify/functions/api/:splat"
         './netlify/functions',
       ],
       {
-        cwd: outputDirectory,
+        cwd: join(outputDirectory, this.outputDir),
       },
     );
 
@@ -70,25 +68,16 @@ to = "/.netlify/functions/api/:splat"
   async prepare(outputDirectory: string): Promise<void> {
     await super.prepare(outputDirectory);
 
-    // Prepare the deployment directory
-    if (!existsSync(join(outputDirectory, 'netlify/functions/api'))) {
-      mkdirSync(join(outputDirectory, 'netlify/functions/api'), { recursive: true });
-    }
-    this.writeFiles({ dir: outputDirectory });
+    this.writeFiles({ dir: join(outputDirectory, this.outputDir) });
   }
 
-  async bundle(mastraDir: string, outputDirectory: string): Promise<void> {
-    const bundler = await getBundler({
-      input: '#entry',
-      external: [/^@opentelemetry\//],
-      plugins: [virtual({ '#entry': this.getEntry() })],
-    });
-
-    await bundler.write({
-      inlineDynamicImports: true,
-      file: join(outputDirectory, 'netlify', 'functions', 'api', 'index.mjs'),
-      format: 'es',
-    });
+  async bundle(entryFile: string, outputDirectory: string): Promise<void> {
+    return this._bundle(
+      this.getEntry(),
+      entryFile,
+      outputDirectory,
+      join(outputDirectory, this.outputDir, 'netlify', 'functions', 'api'),
+    );
   }
 
   private getEntry(): string {
