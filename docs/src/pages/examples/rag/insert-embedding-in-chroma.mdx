@@ -10,18 +10,21 @@ import { GithubLink } from '../../../components/github-link';
 After generating embeddings, you need to store them in a vector database for similarity search. The `ChromaVector` class provides methods to create collections and insert embeddings into Chroma, an open-source embedding database. This example shows how to store embeddings in Chroma for later retrieval.
 
 ```tsx copy
+import { embedMany } from 'ai';
+import { openai } from '@ai-sdk/openai';
 import { ChromaVector } from '@mastra/vector-chroma';
-import { MDocument, embed } from '@mastra/rag';
+import { MDocument } from '@mastra/rag';
 
 const doc = MDocument.fromText('Your text content...');
 
 const chunks = await doc.chunk();
 
-const { embeddings } = await embed(chunks, {
-  provider: 'OPEN_AI',
-  model: 'text-embedding-3-small',
+const { embeddings } = await embedMany({
+  values: chunks,
+  model: openai.embedding('text-embedding-3-small'),
   maxRetries: 3,
 });
+
 
 const chroma = new ChromaVector({
   path: "path/to/chroma/db",
