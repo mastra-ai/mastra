@@ -1242,9 +1242,6 @@ importers:
       '@mastra/memory':
         specifier: workspace:*
         version: link:../../packages/memory
-      '@mastra/vector-libsql':
-        specifier: workspace:*
-        version: link:../../vector-stores/libsql
       chalk:
         specifier: ^5.3.0
         version: 5.4.1
@@ -1260,9 +1257,6 @@ importers:
       '@mastra/memory':
         specifier: workspace:*
         version: link:../../packages/memory
-      '@mastra/vector-libsql':
-        specifier: workspace:*
-        version: link:../../vector-stores/libsql
       chalk:
         specifier: ^5.3.0
         version: 5.4.1
@@ -1278,9 +1272,6 @@ importers:
       '@mastra/memory':
         specifier: workspace:*
         version: link:../../packages/memory
-      '@mastra/vector-libsql':
-        specifier: workspace:*
-        version: link:../../vector-stores/libsql
 
   examples/memory-with-pg:
     dependencies:
@@ -2873,9 +2864,6 @@ importers:
       '@mastra/store-upstash':
         specifier: workspace:*
         version: link:../../../storage/upstash
-      '@mastra/vector-libsql':
-        specifier: workspace:*
-        version: link:../../../vector-stores/libsql
       '@mastra/vector-pg':
         specifier: workspace:*
         version: link:../../../vector-stores/pg
@@ -3335,28 +3323,6 @@ importers:
       chromadb:
         specifier: ^1.9.4
         version: 1.10.4(cohere-ai@7.15.4(encoding@0.1.13))(encoding@0.1.13)(openai@4.80.1(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.1))
-    devDependencies:
-      '@tsconfig/recommended':
-        specifier: ^1.0.7
-        version: 1.0.8
-      '@types/node':
-        specifier: ^22.9.0
-        version: 22.12.0
-      tsup:
-        specifier: ^8.0.1
-        version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
-      vitest:
-        specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
-
-  vector-stores/libsql:
-    dependencies:
-      '@libsql/client':
-        specifier: ^0.14.0
-        version: 0.14.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
     devDependencies:
       '@tsconfig/recommended':
         specifier: ^1.0.7

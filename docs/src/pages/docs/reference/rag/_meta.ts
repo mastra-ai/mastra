@@ -9,6 +9,7 @@ const meta = {
   pgstore: "PGStore",
   pinecone: "PineconeStore",
   qdrant: "QdrantStore",
+  libsql: "LibSQLVector",
 };
 
 export default meta;

@@ -4,6 +4,7 @@ import { Memory } from '@mastra/memory';
 import { LibSQLVector } from '@mastra/vector-libsql';
 import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
 
+
 const memory = new Memory({
   storage: new MastraStorageLibSql({
     config: {
