@@ -1,3 +1,3 @@
 export * from './deploy';
-export * from './build';
+export { getBundler, getWatcher, Deps, FileService } from './build';
 export { getDeployer } from './build/deployer';

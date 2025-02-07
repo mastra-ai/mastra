@@ -25,6 +25,7 @@ export abstract class MastraBundler extends MastraBase {
   }
 
   abstract prepare(outputDirectory: string): Promise<void>;
+  abstract writePackageJson(outputDirectory: string, dependencies: Map<string, string>): Promise<void>;
   abstract getEnvFiles(): Promise<string[]>;
-  abstract bundle(mastraDir: string, outputDirectory: string): Promise<void>;
+  abstract bundle(entryFile: string, outputDirectory: string): Promise<void>;
 }

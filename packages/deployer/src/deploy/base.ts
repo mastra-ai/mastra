@@ -17,33 +17,6 @@ export abstract class Deployer extends MastraDeployer {
     this.deps.__setLogger(this.logger);
   }
 
-  async writePackageJson(outputDirectory: string) {
-    this.logger.debug(`Writing package.json`);
-    const pkgPath = join(outputDirectory, 'package.json');
-
-    await writeFile(
-      pkgPath,
-      JSON.stringify(
-        {
-          name: 'server',
-          version: '1.0.0',
-          description: '',
-          type: 'module',
-          main: 'index.mjs',
-          scripts: {
-            start: 'node ./index.mjs',
-            build: 'echo "Already built"',
-          },
-          author: 'Mastra',
-          license: 'ISC',
-          dependencies: {},
-        },
-        null,
-        2,
-      ),
-    );
-  }
-
   getEnvFiles(): Promise<string[]> {
     const possibleFiles = ['.env.production', '.env'];
 
@@ -63,7 +36,33 @@ export abstract class Deployer extends MastraDeployer {
 
     // Clean up the output directory first
     await emptyDir(outputDirectory);
+  }
 
-    await this.writePackageJson(outputDirectory);
+  async writePackageJson(outputDirectory: string, dependencies: Map<string, string>) {
+    this.logger.debug(`Writing package.json`);
+    const pkgPath = join(outputDirectory, 'package.json');
+
+    await writeFile(
+      pkgPath,
+      JSON.stringify(
+        {
+          name: 'server',
+          version: '1.0.0',
+          description: '',
+          type: 'module',
+          main: 'index.mjs',
+          scripts: {
+            start: 'node ./index.mjs',
+          },
+          author: 'Mastra',
+          license: 'ISC',
+          dependencies: Object.fromEntries(dependencies),
+        },
+        null,
+        2,
+      ),
+    );
+
+    await writeFile(pkgPath, JSON.stringify(dependencies, null, 2));
   }
 }

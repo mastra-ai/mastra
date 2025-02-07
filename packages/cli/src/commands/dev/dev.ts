@@ -98,7 +98,7 @@ export async function dev({ port, dir, root }: { dir?: string; root?: string; po
   const mastraDir = join(rootDir, dir || 'src/mastra');
   const dotMastraPath = join(rootDir, '.mastra');
 
-  const bundler = new DevBundler();
+  const bundler = new DevBundler(mastraDir);
 
   const env = await bundler.loadEnvVars();
 
