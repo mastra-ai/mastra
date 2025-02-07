@@ -1,5 +1,17 @@
 # @mastra/vector-qdrant
 
+## 0.1.0-alpha.27
+
+### Minor Changes
+
+- c87eb4e: Move Qdrant package from `@mastra/vector-qdrant` to `@mastra/qdrant`.
+
+  - Move package to `stores/qdrant`
+  - Reorganize source files into `src/vector`
+  - Add deprecation notice to old package
+  - Update documentation and examples
+  - No breaking changes in functionality
+
 ## 0.1.0-alpha.26
 
 ### Patch Changes

@@ -1,5 +1,17 @@
 # @mastra/astra
 
+## 0.1.0-alpha.27
+
+### Minor Changes
+
+- c87eb4e: Move Astra package from `@mastra/vector-astra` to `@mastra/astra`.
+
+  - Move package to `stores/astra`
+  - Reorganize source files into `src/vector`
+  - Add deprecation notice to old package
+  - Update documentation and examples
+  - No breaking changes in functionality
+
 ## 0.1.0-alpha.1
 
 ### Major Changes
@@ -11,6 +23,7 @@
 ### Migration
 
 To migrate from @mastra/vector-astra:
+
 1. Remove @mastra/vector-astra from dependencies
 2. Install @mastra/astra
 3. Update imports from '@mastra/vector-astra' to '@mastra/astra'
