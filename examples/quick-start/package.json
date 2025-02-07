@@ -16,6 +16,8 @@
     "zod": "^3.24.0"
   },
   "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@ai-sdk/groq": "latest",
     "@mastra/core": "workspace:*"
   },
   "version": "0.0.1-alpha.2"
