@@ -13,7 +13,7 @@ This directory contains vector store implementations for various databases and s
 | [@mastra/vector-pg](./pg)                    | PostgreSQL with pgvector implementation | Production-grade SQL database with vector capabilities        | - Connection pooling<br>- Transaction support<br>- MongoDB-like filtering       |
 | @mastra/core/vector/libsql (in @mastra/core) | libSQL/Turso implementation             | Edge-friendly SQLite-based vector search                      | - Edge deployment<br>- JSON filtering<br>- Sync support                         |
 | [@mastra/vector-upstash](./upstash)          | Upstash Vector implementation           | Serverless Redis-compatible vector search                     | - Pay-per-use<br>- Low latency<br>- Global access                               |
-| [@mastra/vector-vectorize](./vectorize)      | Vectorize implementation                | AI-optimized vector operations                                | - Auto optimization<br>- Real-time updates<br>- ML workload focused             |
+| [@mastra/vectorize](../stores/vectorize)      | Vectorize implementation                | AI-optimized vector operations                                | - Auto optimization<br>- Real-time updates<br>- ML workload focused             |
 
 ## Common Features
 

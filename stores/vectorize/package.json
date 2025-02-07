@@ -1,7 +1,7 @@
 {
-  "name": "@mastra/vector-vectorize",
+  "name": "@mastra/vectorize",
   "version": "0.1.0-alpha.27",
-  "description": "Cloudflare Vectorize store provider for Mastra (deprecated please use @mastra/vectorize instead)",
+  "description": "Cloudflare Vectorize store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -16,7 +16,8 @@
   },
   "scripts": {
     "build": "tsup-node src/index.ts --format esm --dts --clean --treeshake",
-    "test": "echo \"deprecated\""
+    "dev": "tsup-node src/index.ts --format esm --dts --clean --treeshake --watch",
+    "test": "vitest run"
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
@@ -25,6 +26,7 @@
   "devDependencies": {
     "@tsconfig/recommended": "^1.0.7",
     "@types/node": "^22.9.0",
-    "tsup": "^8.0.1"
+    "tsup": "^8.0.1",
+    "vitest": "^3.0.5"
   }
 }

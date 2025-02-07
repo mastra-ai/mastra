@@ -10,7 +10,7 @@ import { GithubLink } from '../../../components/github-link';
 After generating embeddings, you need to store them in a vector database for similarity search. The `CloudflareVector` class provides methods to create collections and insert embeddings into Cloudflare Vectorize, a serverless vector database service. This example shows how to store embeddings in Vectorize for later retrieval.
 
 ```tsx copy
-import { CloudflareVector } from '@mastra/vector-vectorize';
+import { CloudflareVector } from '@mastra/vectorize';
 import { MDocument, embed } from '@mastra/rag';
 
 const doc = MDocument.fromText('Your text content...');
