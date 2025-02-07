@@ -41,8 +41,8 @@
     },
     "./vector/libsql": {
       "import": {
-        "types": "./dist/vectors/libsql/index.d.ts",
-        "default": "./dist/vectors/libsql/index.js"
+        "types": "./dist/vector/libsql/index.d.ts",
+        "default": "./dist/vector/libsql/index.js"
       }
     },
     "./utils": {
