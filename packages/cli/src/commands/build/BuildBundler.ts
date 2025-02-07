@@ -31,7 +31,7 @@ export class BuildBundler extends Bundler {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
 
-    const playgroundServePath = join(outputDirectory, '.build', 'playground');
+    const playgroundServePath = join(outputDirectory, this.outputDir, 'playground');
     await fsExtra.copy(join(dirname(__dirname), 'src/playground/dist'), playgroundServePath, {
       overwrite: true,
     });

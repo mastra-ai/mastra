@@ -1,5 +1,20 @@
 # mastra
 
+## 0.2.0-alpha.147
+
+### Patch Changes
+
+- Updated dependencies [8ea426a]
+  - @mastra/deployer@0.1.0-alpha.39
+
+## 0.2.0-alpha.146
+
+### Patch Changes
+
+- b80ea8d: Fix bundling of server
+- Updated dependencies [b80ea8d]
+  - @mastra/deployer@0.1.0-alpha.34
+
 ## 0.2.0-alpha.145
 
 ### Minor Changes
