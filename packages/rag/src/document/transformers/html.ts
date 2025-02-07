@@ -52,7 +52,7 @@ export class HTMLHeaderTransformer {
           el =>
             new Document({
               text: el.content,
-              metadata: el.metadata,
+              metadata: { ...el.metadata, xpath: el.xpath },
             }),
         )
       : this.aggregateElementsToChunks(elements);
@@ -102,7 +102,7 @@ export class HTMLHeaderTransformer {
       chunk =>
         new Document({
           text: chunk.content,
-          metadata: chunk.metadata,
+          metadata: { ...chunk.metadata, xpath: chunk.xpath },
         }),
     );
   }
@@ -169,20 +169,47 @@ export class HTMLSectionTransformer {
           text: section.content,
           metadata: {
             [this.headersToSplitOn[section.tagName]!]: section.header,
+            xpath: section.xpath,
           },
         }),
     );
+  }
+
+  private getXPath(element: any): string {
+    const parts: string[] = [];
+    let current = element;
+
+    while (current && current.nodeType === 1) {
+      let index = 1;
+      let sibling = current.previousElementSibling;
+
+      while (sibling) {
+        if (sibling.rawTagName === current.rawTagName) {
+          index++;
+        }
+        sibling = sibling.previousElementSibling;
+      }
+
+      if (current.rawTagName) {
+        parts.unshift(`${current.rawTagName.toLowerCase()}[${index}]`);
+      }
+      current = current.parentNode;
+    }
+
+    return '/' + parts.join('/');
   }
 
   private splitHtmlByHeaders(htmlDoc: string): Array<{
     header: string;
     content: string;
     tagName: string;
+    xpath: string;
   }> {
     const sections: Array<{
       header: string;
       content: string;
       tagName: string;
+      xpath: string;
     }> = [];
 
     const root = parse(htmlDoc);
@@ -192,6 +219,7 @@ export class HTMLSectionTransformer {
     headerElements.forEach((headerElement, index) => {
       const header = headerElement.textContent?.trim() || '';
       const tagName = headerElement.rawTagName.toLowerCase();
+      const xpath = this.getXPath(headerElement);
       let content = '';
 
       let currentElement = headerElement.nextElementSibling;
@@ -209,6 +237,7 @@ export class HTMLSectionTransformer {
         header,
         content,
         tagName,
+        xpath,
       });
     });
 

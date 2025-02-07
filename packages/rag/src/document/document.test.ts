@@ -461,6 +461,177 @@ describe('MDocument', () => {
         expect(doc?.metadata).toHaveProperty('Header 1');
       });
     });
+
+    it('should handle empty or invalid HTML', async () => {
+      const emptyHtml = '';
+      const invalidHtml = '<unclosed>test';
+      const noHeadersHtml = '<div>test</div>';
+
+      const doc1 = MDocument.fromHTML(emptyHtml, { meta: 'data' });
+      const doc2 = MDocument.fromHTML(invalidHtml, { meta: 'data' });
+      const doc3 = MDocument.fromHTML(noHeadersHtml, { meta: 'data' });
+
+      await doc1.chunk({
+        strategy: 'html',
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+        ],
+      });
+
+      await doc2.chunk({
+        strategy: 'html',
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+        ],
+      });
+
+      await doc3.chunk({
+        strategy: 'html',
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+        ],
+      });
+
+      expect(doc1.getDocs()).toHaveLength(0);
+      expect(doc2.getDocs()).toHaveLength(0);
+      expect(doc3.getDocs()).toHaveLength(0);
+    });
+
+    it('should handle complex nested header hierarchies', async () => {
+      const html = `
+        <html>
+          <body>
+            <h1>Main Title</h1>
+            <p>Main content</p>
+            <h2>Section 1</h2>
+            <p>Section 1 content</p>
+            <h3>Subsection 1.1</h3>
+            <p>Subsection 1.1 content</p>
+            <h2>Section 2</h2>
+            <h3>Subsection 2.1</h3>
+            <p>Subsection 2.1 content</p>
+          </body>
+        </html>
+      `;
+
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
+      await doc.chunk({
+        strategy: 'html',
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+          ['h3', 'Header 3'],
+        ],
+      });
+
+      const docs = doc.getDocs();
+      expect(docs.length).toBeGreaterThan(3);
+      expect(docs.some(d => d.metadata?.['Header 1'] === 'Main Title')).toBe(true);
+      expect(docs.some(d => d.metadata?.['Header 2'] === 'Section 1')).toBe(true);
+      expect(docs.some(d => d.metadata?.['Header 3'] === 'Subsection 1.1')).toBe(true);
+    });
+
+    it('should handle headers with mixed content and special characters', async () => {
+      const html = `
+        <html>
+          <body>
+            <h1>Title with <strong>bold</strong> &amp; <em>emphasis</em></h1>
+            <p>Content 1</p>
+            <h2>Section with &lt;tags&gt; &amp; symbols</h2>
+            <p>Content 2</p>
+          </body>
+        </html>
+      `;
+
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
+      await doc.chunk({
+        strategy: 'html',
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+        ],
+      });
+
+      const docs = doc.getDocs();
+      expect(docs.length).toBeGreaterThan(1);
+      expect(docs[0]?.metadata?.['Header 1']).toContain('bold');
+      expect(docs[0]?.metadata?.['Header 1']).toContain('&');
+      expect(docs[0]?.metadata?.['Header 1']).toContain('emphasis');
+      expect(docs[1]?.metadata?.['Header 2']).toContain('<tags>');
+    });
+
+    it('should handle headers with no content or whitespace content', async () => {
+      const html = `
+        <html>
+          <body>
+            <h1>Empty Section</h1>
+            <h2>Whitespace Section</h2>
+            
+            <h2>Valid Section</h2>
+            <p>Content</p>
+          </body>
+        </html>
+      `;
+
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
+      await doc.chunk({
+        strategy: 'html',
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+        ],
+      });
+
+      const docs = doc.getDocs();
+      expect(docs.some(d => d.metadata?.['Header 1'] === 'Empty Section')).toBe(true);
+      expect(docs.some(d => d.metadata?.['Header 2'] === 'Valid Section')).toBe(true);
+      expect(docs.find(d => d.metadata?.['Header 2'] === 'Valid Section')?.text).toContain('Content');
+    });
+
+    it('should generate correct XPaths for deeply nested elements', async () => {
+      const html = `
+        <html>
+          <body>
+            <div class="container">
+              <section id="main">
+                <div>
+                  <h1>Deeply Nested Title</h1>
+                  <p>Content</p>
+                </div>
+                <div>
+                  <h1>Second Title</h1>
+                  <p>More Content</p>
+                </div>
+              </section>
+            </div>
+          </body>
+        </html>
+      `;
+
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
+      await doc.chunk({
+        strategy: 'html',
+        headers: [['h1', 'Header 1']],
+      });
+
+      const docs = doc.getDocs();
+      expect(docs).toHaveLength(2);
+
+      // First h1
+      expect(docs[0]?.metadata?.['Header 1']).toBe('Deeply Nested Title');
+      const xpath1 = docs[0]?.metadata?.xpath as string;
+      expect(xpath1).toBeDefined();
+      expect(xpath1).toMatch(/^\/html\[1\]\/body\[1\]\/div\[1\]\/section\[1\]\/div\[1\]\/h1\[1\]$/);
+
+      // Second h1
+      expect(docs[1]?.metadata?.['Header 1']).toBe('Second Title');
+      const xpath2 = docs[1]?.metadata?.xpath as string;
+      expect(xpath2).toBeDefined();
+      expect(xpath2).toMatch(/^\/html\[1\]\/body\[1\]\/div\[1\]\/section\[1\]\/div\[2\]\/h1\[1\]$/);
+    });
   });
 
   describe('chunkJson', () => {
