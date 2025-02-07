@@ -27,6 +27,6 @@
     "@tsconfig/recommended": "^1.0.7",
     "@types/node": "^22.9.0",
     "tsup": "^8.0.1",
-    "vitest": "^3.0.4"
+    "vitest": "^3.0.5"
   }
 }
