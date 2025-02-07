@@ -46,20 +46,6 @@ const queryTool = createVectorQueryTool({
       isOptional: false,
     },
     {
-      name: "topK",
-      type: "number",
-      description: "Maximum number of results to retrieve",
-      isOptional: true,
-      defaultValue: "10",
-    },
-    {
-      name: "vectorFilterType",
-      type: "'pg' | 'astra' | 'qdrant' | 'upstash' | 'pinecone' | 'chroma' | ''",
-      description: "Type of vector store for filter formatting",
-      isOptional: true,
-      defaultValue: "''",
-    },
-    {
       name: "reranker",
       type: "RerankConfig",
       description: "Options for reranking results",
@@ -133,8 +119,6 @@ const queryTool = createVectorQueryTool({
     model: "text-embedding-3-small",
     maxRetries: 3
   },
-  vectorFilterType: "pinecone",
-  topK: 5
 });
 ```
 
@@ -152,7 +136,6 @@ const queryTool = createVectorQueryTool({
     model: "text-embedding-3-small",
     maxRetries: 3
   },
-  topK: 5,
   reranker: {
     model: {
       provider: "OPEN_AI",
@@ -166,7 +149,6 @@ const queryTool = createVectorQueryTool({
 
 The tool is created with:
 - **ID**: `VectorQuery {vectorStoreName} {indexName} Tool`
-- **Description**: `Fetches and combines the top {topK} relevant chunks from the {vectorStoreName} vector store using the {indexName} index`
 - **Input Schema**: Requires queryText and filter objects
 - **Output Schema**: Returns relevantContext string
 

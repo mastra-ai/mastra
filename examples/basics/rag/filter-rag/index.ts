@@ -1,5 +1,5 @@
-import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { createVectorQueryTool, embedMany, MDocument } from '@mastra/rag';
 import { PgVector } from '@mastra/vector-pg';
 
@@ -11,8 +11,6 @@ const vectorQueryTool = createVectorQueryTool({
     model: 'text-embedding-3-small',
     maxRetries: 3,
   },
-  topK: 3,
-  vectorFilterType: 'pg',
 });
 
 export const ragAgent = new Agent({
