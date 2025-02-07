@@ -3,7 +3,6 @@
 '@mastra/vector-pinecone': patch
 '@mastra/vector-upstash': patch
 '@mastra/vector-chroma': patch
-'@mastra/vector-libsql': patch
 '@mastra/vector-qdrant': patch
 '@mastra/vector-astra': patch
 '@mastra/vector-pg': patch

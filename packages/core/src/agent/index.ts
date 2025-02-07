@@ -660,11 +660,7 @@ export class Agent<
 
         let convertedTools: Record<string, CoreTool> | undefined;
 
-        if (
-          (toolsets && Object.keys(toolsets || {}).length > 0) ||
-          (this.getMemory() && resourceId) ||
-          this.#mastra?.engine
-        ) {
+        if ((toolsets && Object.keys(toolsets || {}).length > 0) || (this.getMemory() && resourceId)) {
           const reasons = [];
           if (toolsets && Object.keys(toolsets || {}).length > 0) {
             reasons.push(`toolsets present (${Object.keys(toolsets || {}).length} tools)`);
@@ -672,15 +668,12 @@ export class Agent<
           if (this.getMemory() && resourceId) {
             reasons.push('memory and resourceId available');
           }
-          if (this.#mastra?.engine) {
-            reasons.push('mastra engine enabled');
-          }
+
           this.logger.debug(`[Agent:${this.name}] - Enhancing tools: ${reasons.join(', ')}`, {
             runId,
             toolsets: toolsets ? Object.keys(toolsets) : undefined,
             hasMemory: !!this.getMemory(),
             hasResourceId: !!resourceId,
-            hasEngine: !!this.#mastra?.engine,
           });
           convertedTools = this.convertTools({
             toolsets,

@@ -4,8 +4,6 @@
 '@mastra/composio': patch
 '@mastra/github': patch
 '@mastra/deployer-vercel': patch
-'@mastra/engine': patch
-'@mastra/dane': patch
 '@mastra/core': patch
 'mastra': patch
 '@mastra/rag': patch

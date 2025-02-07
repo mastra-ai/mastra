@@ -1,5 +1,18 @@
 # @mastra/core
 
+## 0.2.0-alpha.91
+
+### Minor Changes
+
+- d7d465a: Breaking change for Memory: embeddings: {} has been replaced with embedder: new OpenAIEmbedder() (or whichever embedder you want - check the docs)
+- 16e5b04: Moved @mastra/vector-libsql into @mastra/core/vector/libsql
+
+### Patch Changes
+
+- d7d465a: Embedding api
+- 2017553: Added fallback title when calling createThread() with no title - this is needed as storage db schemas mark title as non-null
+- a10b7a3: Implemented new filtering for vectorQueryTool and updated docs
+
 ## 0.2.0-alpha.90
 
 ### Patch Changes

@@ -3,7 +3,6 @@
 '@mastra/deployer-netlify': patch
 '@mastra/deployer-vercel': patch
 '@mastra/deployer': patch
-'@mastra/engine': patch
 '@mastra/evals': patch
 '@mastra/loggers': patch
 '@mastra/mcp': patch
@@ -11,7 +10,6 @@
 '@mastra/rag': patch
 '@mastra/vector-astra': patch
 '@mastra/vector-chroma': patch
-'@mastra/vector-libsql': patch
 '@mastra/vector-pg': patch
 '@mastra/vector-pinecone': patch
 '@mastra/vector-qdrant': patch

@@ -4,7 +4,6 @@
 '@mastra/vector-upstash': patch
 '@mastra/deployer-cloudflare': patch
 '@mastra/vector-chroma': patch
-'@mastra/vector-libsql': patch
 '@mastra/vector-qdrant': patch
 '@mastra/vector-astra': patch
 '@mastra/deployer-netlify': patch
@@ -15,7 +14,6 @@
 '@mastra/speech-replicate': patch
 '@mastra/speech-speechify': patch
 '@mastra/vector-pg': patch
-'@mastra/engine': patch
 '@mastra/memory': patch
 '@mastra/speech-deepgram': patch
 '@mastra/evals': patch

@@ -1,6 +1,5 @@
 ---
 '@mastra/deployer': patch
-'@mastra/dane': patch
 '@mastra/speech-azure': patch
 '@mastra/speech-deepgram': patch
 '@mastra/speech-elevenlabs': patch

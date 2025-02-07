@@ -59,17 +59,8 @@ jobs:
       - name: Build vector packages
         run: pnpm --filter "@mastra/vector-*" build
 
-
-      - name: Build engine
-        run: pnpm build:engine && pnpm copy:drizzle
-
       - name: Build memory
         run: pnpm build:memory
-
-      - name: Setup database
-        run: pnpm db:setup
-        env:
-          DB_URL: "postgresql://postgres:postgres@localhost:5432/mastra"
 
       - name: Run Memory tests
         run: pnpm test:memory

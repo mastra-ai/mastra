@@ -2,7 +2,6 @@ export * from './agent/index.warning';
 export * from './base.warning';
 export * from './deployer/index.warning';
 export * from './embeddings/index.warning';
-export * from './engine';
 export * from './storage/index.warning';
 export * from './eval';
 export * from './integration/index.warning';

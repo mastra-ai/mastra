@@ -23,7 +23,7 @@ export const syncCsvDataWorkflow = new Workflow({
 const syncCsvDataStep = new Step({
   id: "sync-csv-data-step",
   description: "Sync data from City CSV",
-  execute: async ({ mastra }) => {
+  execute: async () => {
     const csvFilePath =
       process.env.CSV_FILE_PATH ||
       path.join(process.cwd(), "src/data/city-data.csv");
@@ -43,15 +43,9 @@ const syncCsvDataStep = new Step({
         .on("error", reject);
     });
 
-    if (!mastra?.engine) throw new Error("Mastra is not defined");
-
-    await mastra.engine.syncRecords({
-      connectionId: `SYSTEM`,
-      name: "City",
+    return {
       records,
-    });
-
-    return {};
+    };
   },
 });
 
