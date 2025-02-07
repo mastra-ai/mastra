@@ -1,5 +1,11 @@
 # docs
 
+## 0.0.1-alpha.1
+
+### Patch Changes
+
+- ab04ad9: Update imports in docs
+
 ## 0.0.1-alpha.0
 
 ### Patch Changes
