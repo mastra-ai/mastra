@@ -10,9 +10,10 @@ import { GithubLink } from "../../../components/github-link";
 After generating embeddings, you need to store them in a database that supports vector similarity search. The `PgVector` class provides methods to create indexes and insert embeddings into PostgreSQL with the pgvector extension. This example shows how to store embeddings in a PostgreSQL database for later retrieval.
 
 ```tsx copy
-import { openai, embedMany } from '@ai-sdk/openai';
-import { PgVector } from '@mastra/pg';
-import { MDocument } from '@mastra/rag';
+import { embedMany } from "ai";
+import { openai } from "@ai-sdk/openai";
+import { PgVector } from "@mastra/pg";
+import { MDocument } from "@mastra/rag";
 
 const doc = MDocument.fromText("Your text content...");
 
@@ -20,7 +21,7 @@ const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
   values: chunks,
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
   maxRetries: 3,
 });
 
