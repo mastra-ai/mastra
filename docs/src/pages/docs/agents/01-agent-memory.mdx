@@ -83,6 +83,7 @@ await agent.stream("What did we decide about the search feature last week?", {
 The Mastra memory system is highly configurable and supports multiple storage backends. Here's a basic configuration example:
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
 import { Memory } from "@mastra/memory";
 import { PostgresStore } from "@mastra/store-pg";
 import { PgVector } from "@mastra/vector-pg";
@@ -112,11 +113,7 @@ const memory = new Memory({
   },
 
   // Required if using vector search
-  embedding: {
-    provider: "OPEN_AI",
-    model: "text-embedding-3-small",
-    maxRetries: 3,
-  },
+  embedder: openai.embedding("text-embedding-3-small"),
 });
 ```
 
@@ -392,11 +389,13 @@ The agent is instructed to be proactive about storing information - if there's a
 #### Basic Usage
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+
 const agent = new Agent({
   name: "Customer Service",
   instructions:
     "You are a helpful customer service agent. Remember customer preferences and past interactions.",
-  model: { provider: "OPEN_AI", name: "gpt-4" },
+  model: openai("gpt-4"),
   memory: new Memory({
     storage: new MastraStorageLibSql({ url: ":memory:" }),
     options: {
@@ -424,7 +423,7 @@ const todoAgent = new Agent({
   name: "TODO Manager",
   instructions:
     "You are a TODO list manager. Update the todo list in working memory whenever tasks are added, completed, or modified.",
-  model: { provider: "OPEN_AI", name: "gpt-4o-mini" },
+  model: openai("gpt-4o-mini"),
   memory: new Memory({
     storage: new MastraStorageLibSql({ url: ":memory:" }),
     options: {

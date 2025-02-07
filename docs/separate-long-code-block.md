@@ -19,14 +19,13 @@ Example format:
 For example, this long code block:
 
 ```typescript
+import { anthropic } from "@ai-sdk/anthropic";
+import { openai } from "@ai-sdk/openai";
+
 const copywriterAgent = new Agent({
   name: "Copywriter",
   instructions: "You are a copywriter agent that writes blog post copy.",
-  model: {
-    provider: "ANTHROPIC",
-    name: "claude-3-5-sonnet-20241022",
-    toolChoice: "required",
-  },
+  model: anthropic("claude-3-5-sonnet-20241022"),
 });
 
 const copywriterStep = new Step({
@@ -48,10 +47,7 @@ const copywriterStep = new Step({
 const editorAgent = new Agent({
   name: "Editor",
   instructions: "You are an editor agent that edits blog post copy.",
-  model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-  },
+  model: openai("gpt-4o-mini"),
 });
 
 const editorStep = new Step({
@@ -97,11 +93,7 @@ First, set up the copywriter agent:
 const copywriterAgent = new Agent({
   name: "Copywriter",
   instructions: "You are a copywriter agent that writes blog post copy.",
-  model: {
-    provider: "ANTHROPIC",
-    name: "claude-3-5-sonnet-20241022",
-    toolChoice: "required",
-  },
+  model: anthropic("claude-3-5-sonnet-20241022"),
 });
 ```
 
@@ -118,6 +110,37 @@ const copywriterStep = new Step({
       `Create a blog post about ${machineContext.triggerData.topic}`,
     );
     console.log("copywriter result", result.text);
+    return {
+      copy: result.text,
+    };
+  },
+});
+```
+
+Set up the editor agent:
+
+```typescript
+const editorAgent = new Agent({
+  name: "Editor",
+  instructions: "You are an editor agent that edits blog post copy.",
+  model: openai("gpt-4o-mini"),
+});
+```
+
+Create a step to execute the editor's task:
+
+```typescript
+const editorStep = new Step({
+  id: "editorStep",
+  execute: async ({ context }) => {
+    const copy = context?.machineContext?.getStepPayload<{ copy: number }>(
+      "copywriterStep",
+    )?.copy;
+
+    const result = await editorAgent.generate(
+      `Edit the following blog post only returning the edited copy: ${copy}`,
+    );
+    console.log("editor result", result.text);
     return {
       copy: result.text,
     };

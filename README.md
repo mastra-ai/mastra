@@ -1,7 +1,5 @@
 # Mastra <img align="cener" alt="Project Status: Alpha" src="https://img.shields.io/badge/Status-Alpha-red"> <img align="cener" alt="Project Status: Alpha" src="https://img.shields.io/badge/Y%20Combinator-W25-orange?style=flat-square">
 
-
-
 Mastra is an opinionated Typescript framework that helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations and evals. You can run Mastra on your local machine, or deploy to a serverless cloud.
 
 The main Mastra features are:
@@ -59,16 +57,13 @@ touch src/index.ts
 Then, add this code to `src/index.ts`:
 
 ```typescript
+import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 
 async function main() {
   const agent = new Agent({
     name: 'story-writer',
-    model: {
-      provider: 'OPEN_AI',
-      name: 'gpt-4o-mini',
-      toolChoice: 'auto',
-    },
+    model: openai('gpt-4o-mini'),
     instructions: `You are a helpful assistant who writes creative stories.`,
     tools: {},
   });

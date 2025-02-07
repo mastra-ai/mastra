@@ -237,6 +237,7 @@ mkdir -p src/mastra/agents && touch src/mastra/agents/weather.ts
 Then, add the following code to `src/mastra/agents/weather.ts`:
 
 ```ts filename="src/mastra/agents/weather.ts" showLineNumbers
+import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
 
@@ -250,10 +251,7 @@ Your primary function is to help users get weather details for specific location
 - Keep responses concise but informative
 
 Use the weatherTool to fetch current weather data.`,
-  model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-  },
+  model: openai("gpt-4o-mini"),
   tools: { weatherTool },
 });
 ```
