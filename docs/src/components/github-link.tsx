@@ -10,12 +10,12 @@ export const GithubLink = ({ link }: { link: string }) => {
         <div className="border border-transparent rounded-full mt-[2px]">
           <svg
             height="16"
-            stroke-linejoin="round"
+            strokeLinejoin="round"
             viewBox="0 0 16 16"
             width="16"
             className="w-[18px] h-[18px] text-inherit"
           >
-            <g clip-path="url(#clip0_872_3147)">
+            <g clipPath="url(#clip0_872_3147)">
               <path
                 fill-rule="evenodd"
                 clip-rule="evenodd"
@@ -38,7 +38,7 @@ export const GithubLink = ({ link }: { link: string }) => {
         <svg
           data-testid="geist-icon"
           height="16"
-          stroke-linejoin="round"
+          strokeLinejoin="round"
           viewBox="0 0 16 16"
           width="16"
           style={{
