@@ -1,6 +1,5 @@
 import { Integration } from '@mastra/core/integration';
 import { Step, Workflow } from '@mastra/core/workflows';
-import { MDocument } from '@mastra/rag';
 import { z } from 'zod';
 
 import * as integrationClient from './client/sdk.gen';
@@ -39,7 +38,7 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
       id: 'FIRECRAWL:CRAWL_AND_SYNC',
       name: 'Crawl and Sync',
       description: 'Crawl and Sync',
-      execute: async ({ context, mastra }) => {
+      execute: async ({ context }) => {
         const triggerData = context.machineContext?.triggerData;
         console.log('Starting crawl', triggerData?.url);
 
@@ -100,26 +99,6 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
               entityType: '',
             };
           }
-
-          const recordsToPersist = await Promise.all(
-            crawlData?.flatMap(async ({ markdown, metadata }) => {
-              const doc = MDocument.fromMarkdown(markdown, metadata);
-
-              await doc.chunk({
-                strategy: 'markdown',
-                maxSize: 8190,
-              });
-
-              const chunks = doc.getDocs();
-
-              return chunks.map((c, i) => {
-                return {
-                  externalId: `${c.metadata?.sourceURL}_chunk_${i}`,
-                  data: { markdown: c.text },
-                };
-              });
-            }),
-          );
 
           return {
             success: true,
