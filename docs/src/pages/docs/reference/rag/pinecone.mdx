@@ -21,11 +21,6 @@ The PineconeStore class provides an interface to Pinecone's vector database.
       type: "string",
       description: 'Pinecone environment (e.g., "us-west1-gcp")',
     },
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of your Pinecone index",
-    },
   ]}
 />
 
@@ -60,6 +55,11 @@ The PineconeStore class provides an interface to Pinecone's vector database.
 <PropertiesTable
   content={[
     {
+      name: "indexName",
+      type: "string",
+      description: "Name of your Pinecone index",
+    },
+    {
       name: "vectors",
       type: "number[][]",
       description: "Array of embedding vectors",
@@ -71,10 +71,10 @@ The PineconeStore class provides an interface to Pinecone's vector database.
       description: "Metadata for each vector",
     },
     {
-      name: "namespace",
-      type: "string",
+      name: "ids",
+      type: "string[]",
       isOptional: true,
-      description: "Optional namespace for organization",
+      description: "Optional vector IDs (auto-generated if not provided)",
     },
   ]}
 />

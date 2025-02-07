@@ -16,20 +16,6 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
       type: "string",
       description: "PostgreSQL connection URL",
     },
-    {
-      name: "tableName",
-      type: "string",
-      isOptional: true,
-      defaultValue: "embeddings",
-      description: "Table name for vector storage",
-    },
-    {
-      name: "dimension",
-      type: "number",
-      isOptional: true,
-      defaultValue: "1536",
-      description: "Vector dimension (must match your embedding model)",
-    },
   ]}
 />
 
@@ -47,7 +33,7 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
     {
       name: "dimension",
       type: "number",
-      description: "Vector dimension size",
+      description: "Vector dimension (must match your embedding model)",
     },
     {
       name: "metric",
@@ -63,6 +49,11 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
 
 <PropertiesTable
   content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to upsert vectors into",
+    },
     {
       name: "vectors",
       type: "number[][]",
@@ -126,6 +117,10 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
     },
   ]}
 />
+
+### listIndexes()
+
+Returns an array of index names as strings.
 
 ### describeIndex()
 

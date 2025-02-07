@@ -73,10 +73,10 @@ description: Documentation for integrating Qdrant with Mastra, a vector similari
       description: "Metadata for each vector",
     },
     {
-      name: "namespace",
-      type: "string",
+      name: "ids",
+      type: "string[]",
       isOptional: true,
-      description: "Optional namespace for organization",
+      description: "Optional vector IDs (auto-generated if not provided)",
     },
   ]}
 />
@@ -86,7 +86,12 @@ description: Documentation for integrating Qdrant with Mastra, a vector similari
 <PropertiesTable
   content={[
     {
-      name: "vector",
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to query",
+    },
+    {
+      name: "queryVector",
       type: "number[]",
       description: "Query vector to find similar vectors",
     },
@@ -102,6 +107,13 @@ description: Documentation for integrating Qdrant with Mastra, a vector similari
       type: "Record<string, any>",
       isOptional: true,
       description: "Metadata filters for the query",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false", 
+      description: "Whether to include vectors in the results",
     },
   ]}
 />
