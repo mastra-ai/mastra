@@ -7,11 +7,6 @@ import { build } from './commands/build/build';
 import { create } from './commands/create/create';
 import { deploy } from './commands/deploy/index';
 import { dev } from './commands/dev/dev';
-import { add } from './commands/engine/add';
-import { down } from './commands/engine/down';
-import { generate } from './commands/engine/generate';
-import { migrate } from './commands/engine/migrate';
-import { up } from './commands/engine/up';
 import { init } from './commands/init/init';
 import { checkAndInstallCoreDeps, checkPkgJson, interactivePrompt } from './commands/init/utils';
 import { DepsService } from './services/service.deps';
@@ -137,83 +132,6 @@ program
       port: args?.port ? parseInt(args.port) : 4111,
       dir: args?.dir,
       root: args?.root,
-    });
-  });
-
-const engine = program.command('engine').description('Manage the mastra engine');
-
-engine
-  .command('add')
-  .description('Add the mastra engine to your application')
-  .action(async () => {
-    await analytics.trackCommandExecution({
-      command: 'engine add',
-      args: {},
-      execution: async () => {
-        await add();
-      },
-    });
-  });
-
-engine
-  .command('generate')
-  .description('Generate types and drizzle client')
-  .action(async () => {
-    await analytics.trackCommandExecution({
-      command: 'engine generate',
-      args: {},
-      execution: async () => {
-        await generate(process.env.DB_URL!);
-      },
-    });
-  });
-
-engine
-  .command('up')
-  .description('Runs docker-compose up to start docker containers')
-  .option('-f, --file <path>', 'Path to docker-compose file')
-  .action(async args => {
-    await analytics.trackCommandExecution({
-      command: 'engine up',
-      args,
-      execution: async () => {
-        await up(args.file);
-      },
-    });
-  });
-
-engine
-  .command('down')
-  .description('Runs docker-compose down to shut down docker containers')
-  .option('-f, --file <path>', 'Path to docker-compose file')
-  .action(async args => {
-    await analytics.trackCommandExecution({
-      command: 'engine down',
-      args: {},
-      execution: async () => {
-        await down(args.file);
-      },
-    });
-  });
-
-engine
-  .command('migrate')
-  .description('Migrate the Mastra database forward')
-  .action(async () => {
-    await analytics.trackCommandExecution({
-      command: 'engine migrate',
-      args: {},
-      execution: async () => {
-        const dbUrl = getEnv();
-        if (dbUrl) {
-          await migrate(dbUrl);
-        } else {
-          logger.debug('Please add DB_URL to your .env.development file');
-          logger.debug(
-            `Run ${color.blueBright('mastra engine add')} to get started with a Postgres DB in a docker container`,
-          );
-        }
-      },
     });
   });
 

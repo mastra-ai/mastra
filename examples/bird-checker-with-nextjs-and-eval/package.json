@@ -8,7 +8,6 @@
     "lint": "next lint",
     "mastra:init": "pnpm dlx mastra init",
     "mastra:dev": "pnpm dlx mastra dev",
-    "mastra:migrate": "pnpm dlx mastra engine migrate",
     "braintrust:eval": "npx braintrust eval src/lib/evals"
   },
   "dependencies": {
