@@ -2,8 +2,6 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { embedMany } from 'ai';
 import { describe, it, expect } from 'vitest';
 
-import { getChunkText } from '../utils';
-
 import { MDocument } from './document';
 import { Language } from './types';
 
@@ -57,7 +55,7 @@ describe('MDocument', () => {
 
     it('embed - create embedding from chunk', async () => {
       const embeddings = await embedMany({
-        values: chunks.map(getChunkText),
+        values: chunks.map(chunk => chunk.text),
         model: openai.embedding('text-embedding-3-small'),
       });
 

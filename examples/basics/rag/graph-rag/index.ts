@@ -8,7 +8,7 @@ import { embedMany } from 'ai';
 const graphRagTool = createGraphRAGTool({
   vectorStoreName: 'pgVector',
   indexName: 'embeddings',
-  model: openai('gpt-4o-mini'),
+  model: openai.embedding('text-embedding-3-small'),
   graphOptions: {
     dimension: 1536,
     threshold: 0.7,
@@ -78,10 +78,9 @@ const chunks = await doc.chunk({
   separator: '\n',
 });
 
-const { embeddings } = await embedMany(chunks, {
-  provider: 'OPEN_AI',
-  model: 'text-embedding-3-small',
-  maxRetries: 3,
+const { embeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
 });
 
 const vectorStore = mastra.getVector('pgVector');

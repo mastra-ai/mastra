@@ -1,26 +1,20 @@
-import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
-import { embedMany, MDocument, createVectorQueryTool, createDocumentChunkerTool } from '@mastra/rag';
+import { Agent } from '@mastra/core/agent';
 import { PgVector } from '@mastra/pg';
+import { MDocument, createVectorQueryTool, createDocumentChunkerTool } from '@mastra/rag';
+import { embedMany } from 'ai';
 
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',
   indexName: 'embeddings',
-  options: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-3-small',
-    maxRetries: 3,
-  },
+  model: openai.embedding('text-embedding-3-small'),
 });
 
 const cleanedVectorQueryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',
   indexName: 'cleanedEmbeddings',
-  options: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-3-small',
-    maxRetries: 3,
-  },
+  model: openai.embedding('text-embedding-3-small'),
 });
 
 const doc =
@@ -152,16 +146,14 @@ const updatedChunks = await updatedDoc.chunk({
   separator: '\n',
 });
 
-const { embeddings } = await embedMany(chunks, {
-  provider: 'OPEN_AI',
-  model: 'text-embedding-3-small',
-  maxRetries: 3,
+const { embeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
 });
 
-const { embeddings: cleanedEmbeddings } = await embedMany(updatedChunks, {
-  provider: 'OPEN_AI',
-  model: 'text-embedding-3-small',
-  maxRetries: 3,
+const { embeddings: cleanedEmbeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: updatedChunks.map(chunk => chunk.text),
 });
 
 const vectorStore = mastra.getVector('pgVector');

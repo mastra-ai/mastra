@@ -1,7 +1,9 @@
+import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { PgVector } from '@mastra/pg';
-import { embedMany, MDocument, createVectorQueryTool } from '@mastra/rag';
+import { MDocument, createVectorQueryTool } from '@mastra/rag';
+import { embedMany } from 'ai';
 
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',
@@ -16,10 +18,7 @@ export const ragAgent = new Agent({
   name: 'RAG Agent',
   instructions:
     'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o-mini',
-  },
+  model: openai('gpt-4o-mini'),
   tools: {
     vectorQueryTool,
   },
@@ -61,9 +60,9 @@ const chunks = await doc1.chunk({
   separator: '\n',
 });
 
-const { embeddings } = await embedMany(chunks, {
-  provider: 'OPEN_AI',
-  model: 'text-embedding-3-small',
+const { embeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
   maxRetries: 3,
 });
 

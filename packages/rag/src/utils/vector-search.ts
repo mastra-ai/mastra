@@ -1,8 +1,6 @@
 import { type MastraVector, type QueryResult } from '@mastra/core/vector';
 import { embed, EmbeddingModel } from 'ai';
 
-import { getChunkText } from './get-chunk-text';
-
 interface VectorQuerySearchParams {
   indexName: string;
   vectorStore: MastraVector;
@@ -30,9 +28,8 @@ export const vectorQuerySearch = async ({
   includeVectors = false,
   maxRetries = 3,
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
-  const chunkText = getChunkText(queryText);
   const { embedding } = await embed({
-    value: chunkText,
+    value: queryText,
     model,
     maxRetries,
   });

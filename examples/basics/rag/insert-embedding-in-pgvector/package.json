@@ -5,8 +5,10 @@
     "start": "pnpx tsx index.ts"
   },
   "dependencies": {
+    "@ai-sdk/openai": "latest",
     "@mastra/rag": "workspace:*",
-    "@mastra/pg": "workspace:*"
+    "@mastra/pg": "workspace:*",
+    "ai": "latest"
   },
   "version": "0.0.1-alpha.3"
 }

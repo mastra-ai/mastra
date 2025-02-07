@@ -5,7 +5,9 @@
     "start": "pnpx tsx index.ts"
   },
   "dependencies": {
-    "@mastra/rag": "workspace:*"
+    "@ai-sdk/openai": "latest",
+    "@mastra/rag": "workspace:*",
+    "ai": "latest"
   },
   "version": "0.0.1-alpha.3"
 }
