@@ -1,5 +1,5 @@
 import { embed } from '@mastra/rag';
-import { PgVector } from '@mastra/vector-pg';
+import { PgVector } from '@mastra/pg';
 
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 

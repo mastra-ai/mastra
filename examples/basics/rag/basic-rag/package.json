@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "@mastra/rag": "workspace:*",
-    "@mastra/vector-pg": "workspace:*"
+    "@mastra/pg": "workspace:*"
   },
   "devDependencies": {
     "dotenv": "^16.4.7"

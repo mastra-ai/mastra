@@ -3,6 +3,7 @@ packages:
   - "deployers/*"
   - "storage/*"
   - "vector-stores/*"
+  - "stores/*"
   - "speech/*"
   - "!packages/cli/admin"
   - "integration-generator/*"

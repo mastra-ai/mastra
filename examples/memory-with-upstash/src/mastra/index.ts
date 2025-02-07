@@ -2,7 +2,7 @@ import { Mastra } from '@mastra/core';
 import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
 import { Memory } from '@mastra/memory';
 import { UpstashStore } from '@mastra/store-upstash';
-import { PgVector } from '@mastra/vector-pg';
+import { PgVector } from '@mastra/pg';
 
 import { chefAgent, memoryAgent } from './agents';
 
