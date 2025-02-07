@@ -66,12 +66,9 @@ Results include both the text content and a similarity score:
 Filter results based on metadata fields to narrow down the search space. This is useful when you have documents from different sources or time periods:
 
 ```ts showLineNumbers copy
-const results = await pgVector.query("embeddings", embedding, {
-  topK: 10,
-  filter: {
-    source: "article1.txt",
-    date: { $gt: "2023-01-01" }
-  }
+const results = await pgVector.query("embeddings", embedding, 10, {
+  source: "article1.txt",
+  date: { $gt: "2023-01-01" }
 });
 ``` 
 
