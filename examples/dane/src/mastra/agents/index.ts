@@ -92,12 +92,6 @@ export const dane = new Agent({
     Makes you a powerful agent capable of listing events on a calendar. When using this tool ONLY RETURN RELEVANT EVENTS.
     DO NOT ATTEMPT TO DO ANYTHING MORE.
 
-    ## crawl
-    Use this when the user asks you to crawl. CRAWL is the signal to use this tool.
-    Makes you a powerful agent capable of crawling a site and extracting markdown metadata.
-    The data will be stored in a database if it is not already there. Confirm that it is sucessful.
-    The crawled data will be returned in the response on the 'crawlData' field.
-
     ## imageTool
     Makes you a powerful agent capable of generating images and saving them to disk. Pass the directory and an image prompt.
 
@@ -114,7 +108,6 @@ export const dane = new Agent({
     googleSearch,
     readPDF,
     listEvents,
-    crawl,
     imageTool,
   },
 });

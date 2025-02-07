@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 import { Agent } from '../agent';
-import { MastraEngine } from '../engine';
 import { LLM } from '../llm';
 import { ModelConfig } from '../llm/types';
 import { Logger } from '../logger';
@@ -15,7 +14,6 @@ import { WorkflowContext } from '../workflows';
 export type MastraPrimitives = {
   logger?: Logger;
   telemetry?: Telemetry;
-  engine?: MastraEngine;
   storage?: MastraStorage;
   agents?: Record<string, Agent>;
   tts?: Record<string, MastraTTS>;

@@ -101,10 +101,11 @@ export const generateSpecTool = createTool({
   }),
   description: "Generate a spec from a website",
   execute: async ({ context, runId, mastra }) => {
-    const crawledData = await mastra?.engine?.getRecordsByEntityName({
-      name: context.mastra_entity_type,
-      connectionId: "SYSTEM",
-    });
+    const crawledData =
+      context.machineContext?.stepResults?.["site-crawl"]?.status === "success"
+        ? context.machineContext?.stepResults?.["site-crawl"]?.payload
+            ?.crawlData
+        : [];
 
     if (!crawledData) {
       throw new Error("No crawled data found");

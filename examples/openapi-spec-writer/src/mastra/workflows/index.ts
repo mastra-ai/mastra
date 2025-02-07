@@ -56,12 +56,6 @@ const syncStep = new Step({
       })
     );
 
-    await mastra?.engine?.syncRecords({
-      connectionId: "SYSTEM",
-      records: recordsToPersist.flatMap((r) => r),
-      name: entityType,
-    });
-
     return {
       success: true,
       crawlData,
