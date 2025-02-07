@@ -8,7 +8,19 @@ import { Message as AiMessage } from 'ai';
  * and message injection.
  */
 export class Memory extends MastraMemory {
-  constructor(config: SharedMemoryConfig) {
+  constructor(
+    config: SharedMemoryConfig & {
+      /* @deprecated use embedder instead */
+      embeddings?: any;
+    },
+  ) {
+    // Check for deprecated embeddings object
+    if (config.embeddings) {
+      throw new Error(
+        'The `embeddings` option is deprecated. Please use `embedder` instead. Example: new Memory({ embedder: new OpenAIEmbedder({ model: "text-embedding-3-small" }) })',
+      );
+    }
+
     super({ name: 'Memory', ...config });
 
     const mergedConfig = this.getMergedThreadConfig({
@@ -184,7 +196,7 @@ export class Memory extends MastraMemory {
   async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
     // First save working memory from any messages
     await this.saveWorkingMemory(messages);
-    
+
     // Then strip working memory tags from all messages
     this.mutateMessagesToHideWorkingMemory(messages);
 
@@ -194,13 +206,17 @@ export class Memory extends MastraMemory {
         if (typeof message.content !== `string`) continue;
         const embedder = this.getEmbedder();
         const { embedding } = await embedder.embed(message.content);
-        await this.vector.upsert('memory_messages', [embedding], [
-          {
-            text: message.content,
-            message_id: message.id,
-            thread_id: message.threadId,
-          },
-        ]);
+        await this.vector.upsert(
+          'memory_messages',
+          [embedding],
+          [
+            {
+              text: message.content,
+              message_id: message.id,
+              thread_id: message.threadId,
+            },
+          ],
+        );
       }
     }
 
