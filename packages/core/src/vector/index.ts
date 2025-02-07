@@ -1,7 +1,7 @@
 import { MastraBase } from '../base';
 import { embed, embedMany } from '../embeddings';
-import { EmbeddingOptions } from '../embeddings/types';
-import { EmbedManyResult, EmbedResult } from '../llm/types';
+import type { EmbeddingOptions } from '../embeddings/types';
+import type { EmbedManyResult, EmbedResult } from '../llm/types';
 
 export interface QueryResult {
   id: string;

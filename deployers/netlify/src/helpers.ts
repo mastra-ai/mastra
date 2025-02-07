@@ -1,5 +1,4 @@
 async function createNetlifySite({ token, name, scope }: { token: string; name: string; scope?: string }) {
-  console.log(token, name, scope);
   const response = await fetch('https://api.netlify.com/api/v1/sites', {
     method: 'POST',
     headers: {

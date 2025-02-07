@@ -1,47 +1,16 @@
-import { MastraDeployer } from '@mastra/core/deployer';
-import { emptyDir, ensureDir } from 'fs-extra';
-import { join } from 'path';
-
-import { writeFile } from 'fs/promises';
+import { type IDeployer } from '@mastra/core/deployer';
 
 import { Deps } from '../build/deps.js';
 import { FileService } from '../build/fs';
+import { Bundler } from '../bundler';
 
-export abstract class Deployer extends MastraDeployer {
+export abstract class Deployer extends Bundler implements IDeployer {
   deps: Deps = new Deps();
-  override name: string = '';
 
   constructor(args: { name: string }) {
-    super(args);
+    super(args.name, 'DEPLOYER');
 
     this.deps.__setLogger(this.logger);
-  }
-
-  async writePackageJson(outputDirectory: string) {
-    this.logger.debug(`Writing package.json`);
-    const pkgPath = join(outputDirectory, 'package.json');
-
-    await writeFile(
-      pkgPath,
-      JSON.stringify(
-        {
-          name: 'server',
-          version: '1.0.0',
-          description: '',
-          type: 'module',
-          main: 'index.mjs',
-          scripts: {
-            start: 'node ./index.mjs',
-            build: 'echo "Already built"',
-          },
-          author: 'Mastra',
-          license: 'ISC',
-          dependencies: {},
-        },
-        null,
-        2,
-      ),
-    );
   }
 
   getEnvFiles(): Promise<string[]> {
@@ -57,13 +26,5 @@ export abstract class Deployer extends MastraDeployer {
     return Promise.resolve([]);
   }
 
-  async prepare(outputDirectory: string) {
-    this.logger.info(`Preparing ${outputDirectory}...`);
-    await ensureDir(outputDirectory);
-
-    // Clean up the output directory first
-    await emptyDir(outputDirectory);
-
-    await this.writePackageJson(outputDirectory);
-  }
+  abstract deploy(outputDirectory: string): Promise<void>;
 }

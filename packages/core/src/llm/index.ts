@@ -22,8 +22,6 @@ import { createAnthropicVertex } from 'anthropic-vertex-ai';
 import { JSONSchema7 } from 'json-schema';
 import { z, ZodSchema } from 'zod';
 
-import 'dotenv/config';
-
 import { MastraPrimitives } from '../action';
 import { ToolsInput } from '../agent/types';
 import { MastraBase } from '../base';

@@ -11,9 +11,12 @@ import { createChildProcessLogger } from '../deploy/log.js';
 
 export class Deps extends MastraBase {
   private packageManager: string;
+  private rootDir: string;
 
-  constructor() {
+  constructor(rootDir = process.cwd()) {
     super({ component: 'DEPLOYER', name: 'DEPS' });
+
+    this.rootDir = rootDir;
     this.packageManager = this.getPackageManager();
   }
 
@@ -32,7 +35,7 @@ export class Deps extends MastraBase {
   }
 
   private getPackageManager(): string {
-    const lockFile = this.findLockFile(process.cwd());
+    const lockFile = this.findLockFile(this.rootDir);
     switch (lockFile) {
       case 'pnpm-lock.yaml':
         return 'pnpm';
@@ -47,7 +50,7 @@ export class Deps extends MastraBase {
     }
   }
 
-  public async install({ dir = process.cwd(), packages = [] }: { dir?: string; packages?: string[] }) {
+  public async install({ dir = this.rootDir, packages = [] }: { dir?: string; packages?: string[] }) {
     let runCommand = this.packageManager;
     if (this.packageManager === 'npm') {
       runCommand = `${this.packageManager} i`;
@@ -93,7 +96,7 @@ export class Deps extends MastraBase {
 
   public async checkDependencies(dependencies: string[]): Promise<string> {
     try {
-      const packageJsonPath = path.join(process.cwd(), 'package.json');
+      const packageJsonPath = path.join(this.rootDir, 'package.json');
 
       try {
         await fsPromises.access(packageJsonPath);
@@ -117,7 +120,7 @@ export class Deps extends MastraBase {
 
   public async getProjectName() {
     try {
-      const packageJsonPath = path.join(process.cwd(), 'package.json');
+      const packageJsonPath = path.join(this.rootDir, 'package.json');
       const packageJson = await fsPromises.readFile(packageJsonPath, 'utf-8');
       const pkg = JSON.parse(packageJson);
       return pkg.name;

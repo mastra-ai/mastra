@@ -4,15 +4,11 @@ import { rollup } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
 
 import { removeAllExceptDeployer } from './babel/get-deployer';
-import { FileService } from './fs';
 
-export async function getDeployer(mastraPath: string, outputDir: string) {
-  const fs = new FileService();
-  const file = fs.getFirstExistingFile([`${mastraPath}/index.ts`, `${mastraPath}/index.js`]);
-
+export async function getDeployer(entryFile: string, outputDir: string) {
   const bundle = await rollup({
     input: {
-      deployer: file,
+      deployer: entryFile,
     },
     treeshake: true,
     plugins: [

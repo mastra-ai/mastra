@@ -51,35 +51,6 @@ export class CloudflareDeployer extends Deployer {
     this.cloudflare = new Cloudflare(auth);
   }
 
-  async writePackageJson(outputDirectory: string) {
-    this.logger.debug(`Writing package.json`);
-    const pkgPath = join(outputDirectory, 'package.json');
-
-    writeFileSync(
-      pkgPath,
-      JSON.stringify(
-        {
-          name: 'server',
-          version: '1.0.0',
-          description: '',
-          type: 'module',
-          main: 'index.mjs',
-          scripts: {
-            start: 'node ./index.mjs',
-            build: 'echo "Already built"',
-          },
-          author: 'Mastra',
-          license: 'ISC',
-          dependencies: {
-            '@mastra/core': 'latest',
-          },
-        },
-        null,
-        2,
-      ),
-    );
-  }
-
   async writeFiles(outputDirectory: string): Promise<void> {
     const env = await this.loadEnvVars();
 
@@ -123,28 +94,13 @@ export default {
 }
 `;
   }
-
-  async bundle(mastraDir: string, outputDirectory: string): Promise<void> {
-    const bundler = await getBundler(
-      {
-        input: '#entry',
-        plugins: [virtual({ '#entry': this.getEntry() })],
-        external: [/^@opentelemetry\//],
-        treeshake: 'smallest',
-      },
-      { platform: 'browser' },
-    );
-
-    await bundler.write({
-      inlineDynamicImports: true,
-      file: join(outputDirectory, 'index.mjs'),
-      format: 'es',
-    });
-  }
-
   async prepare(outputDirectory: string): Promise<void> {
     await super.prepare(outputDirectory);
     await this.writeFiles(outputDirectory);
+  }
+
+  async bundle(entryFile: string, outputDirectory: string): Promise<void> {
+    return this._bundle(this.getEntry(), entryFile, outputDirectory);
   }
 
   async deploy(outputDirectory: string): Promise<void> {
