@@ -10,7 +10,7 @@ import { GithubLink } from '../../../components/github-link';
 After generating embeddings, you need to store them in a vector database for similarity search. The `QdrantVector` class provides methods to create collections and insert embeddings into Qdrant, a high-performance vector database. This example shows how to store embeddings in Qdrant for later retrieval.
 
 ```tsx copy
-import { QdrantVector } from '@mastra/vector-qdrant';
+import { QdrantVector } from '@mastra/qdrant';
 import { MDocument, embed } from '@mastra/rag';
 
 const doc = MDocument.fromText('Your text content...');

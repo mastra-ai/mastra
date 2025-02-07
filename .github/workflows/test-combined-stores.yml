@@ -17,6 +17,15 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    services:
+      qdrant:
+        image: qdrant/qdrant
+        ports:
+          - 6333:6333
+      chromadb:
+        image: chromadb/chroma
+        ports:
+          - 8000:8000
 
     steps:
       - uses: actions/checkout@v4
@@ -46,3 +55,7 @@ jobs:
         env:
           NODE_OPTIONS: "--max_old_space_size=8096"
           PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+          ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
+          ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}

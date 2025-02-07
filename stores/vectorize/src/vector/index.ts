@@ -4,7 +4,6 @@ import Cloudflare from 'cloudflare';
 
 import { VectorizeFilterTranslator } from './filter';
 
-// @deprecated Use @mastra/vectorize instead
 export class CloudflareVector extends MastraVector {
   client: Cloudflare;
   accountId: string;
@@ -149,6 +148,3 @@ export class CloudflareVector extends MastraVector {
     return res?.metadataIndexes ?? [];
   }
 }
-
-throw new Error('This package (@mastra/vector-vectorize) is deprecated. Please use @mastra/vectorize instead.');
-
