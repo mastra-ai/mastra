@@ -64,11 +64,7 @@ Create a tool for querying the vector database:
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  options: {
-    provider: "OPEN_AI",
-    model: "text-embedding-3-small",
-    maxRetries: 3,
-  },
+  model: openai.embedding('text-embedding-3-small'),
 });
 ```
 

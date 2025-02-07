@@ -5,6 +5,7 @@
     "start": "pnpx tsx index.ts"
   },
   "dependencies": {
+    "@ai-sdk/openai": "latest",
     "@mastra/rag": "workspace:*",
     "@mastra/vector-pinecone": "workspace:*"
   },

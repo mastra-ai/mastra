@@ -52,11 +52,7 @@ Using createVectorQueryTool imported from @mastra/rag, you can create a tool tha
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  options: {
-    provider: "OPEN_AI",
-    model: "text-embedding-3-small",
-    maxRetries: 3,
-  },
+  model: openai.embedding('text-embedding-3-small'),
 });
 ```
 

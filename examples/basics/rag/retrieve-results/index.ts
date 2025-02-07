@@ -1,3 +1,4 @@
+import { openai } from '@ai-sdk/openai';
 import { MDocument } from '@mastra/rag';
 import { PineconeVector } from '@mastra/vector-pinecone';
 import { embedMany } from 'ai';
@@ -6,9 +7,9 @@ const doc = MDocument.fromText('Your text content...');
 
 const chunks = await doc.chunk();
 
-const { embeddings } = await embedMany(chunks, {
-  provider: 'OPEN_AI',
-  model: 'text-embedding-3-small',
+const { embeddings } = await embedMany({
+  values: chunks,
+  model: openai.embedding('text-embedding-3-small'),
   maxRetries: 3,
 });
 

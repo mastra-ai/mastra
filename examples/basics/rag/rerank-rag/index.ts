@@ -1,21 +1,14 @@
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { embedMany, MDocument, createVectorQueryTool } from '@mastra/rag';
 import { PgVector } from '@mastra/pg';
+import { embedMany, MDocument, createVectorQueryTool } from '@mastra/rag';
 
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',
   indexName: 'embeddings',
-  options: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-3-small',
-    maxRetries: 3,
-  },
+  model: openai.embedding('text-embedding-3-small'),
   reranker: {
-    model: {
-      provider: 'OPEN_AI',
-      name: 'gpt-4o-mini',
-    },
+    model: openai('gpt-4o-mini'),
   },
 });
 

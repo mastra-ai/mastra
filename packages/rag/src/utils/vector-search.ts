@@ -11,6 +11,7 @@ interface VectorQuerySearchParams {
   queryFilter?: any;
   topK: number;
   includeVectors?: boolean;
+  maxRetries?: number;
 }
 
 interface VectorQuerySearchResult {
@@ -27,12 +28,13 @@ export const vectorQuerySearch = async ({
   queryFilter = {},
   topK,
   includeVectors = false,
+  maxRetries = 3,
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
   const chunkText = getChunkText(queryText);
   const { embedding } = await embed({
     value: chunkText,
     model,
-    maxRetries: 3,
+    maxRetries,
   });
   // Get relevant chunks from the vector database
   const results = await vectorStore.query(indexName, embedding, topK, queryFilter, includeVectors);
