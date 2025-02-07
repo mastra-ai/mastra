@@ -5,10 +5,11 @@ import { TestCase } from '../utils';
 
 import { SummarizationMetric } from './index';
 
-const model = createOpenAI({
-  name: 'gpt-4o',
+const openai = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+const model = openai('gpt-4o');
 
 const testCases: TestCase[] = [
   {
