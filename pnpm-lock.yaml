@@ -2831,12 +2831,12 @@ importers:
       js-tiktoken:
         specifier: ^1.0.15
         version: 1.0.16
-      jsdom:
-        specifier: ^25.0.1
-        version: 25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5)
       llamaindex:
         specifier: ^0.8.15
         version: 0.8.31(@aws-sdk/credential-providers@3.734.0)(@huggingface/transformers@3.3.2)(bufferutil@4.0.9)(encoding@0.1.13)(pg@8.13.1)(socks@2.8.3)(tree-sitter@0.22.4)(typescript@5.7.3)(utf-8-validate@6.0.5)(web-tree-sitter@0.24.7)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))
+      node-html-parser:
+        specifier: ^7.0.1
+        version: 7.0.1
       pathe:
         specifier: ^2.0.2
         version: 2.0.2
@@ -2853,9 +2853,6 @@ importers:
       '@tsconfig/recommended':
         specifier: ^1.0.7
         version: 1.0.8
-      '@types/jsdom':
-        specifier: ^21.1.7
-        version: 21.1.7
       '@types/node':
         specifier: ^22.9.0
         version: 22.12.0
@@ -9520,9 +9517,6 @@ packages:
   '@types/jsdom@20.0.1':
     resolution: {integrity: sha512-d0r18sZPmMQr1eG35u12FZfhIXNrnsPU/g5wvRKCUf/tOGilKKwYMYGqh33BNR6ba+2gkHw1EUiHoN3mn7E5IQ==}
 
-  '@types/jsdom@21.1.7':
-    resolution: {integrity: sha512-yOriVnggzrnQ3a9OKOCxaVuSug3w3/SbOj5i7VwXWZEyUNl3bLF9V3MfxGbZKuwqJOQyRfqXyROBB1CoZLFWzA==}
-
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
 
@@ -13738,6 +13732,10 @@ packages:
   hastscript@9.0.0:
     resolution: {integrity: sha512-jzaLBGavEDKHrc5EfFImKN7nZKKBdSLIdGvCwDZ9TfzbF2ffXiov8CKE445L2Z1Ek2t/m4SKQ2j6Ipv7NyUolw==}
 
+  he@1.2.0:
+    resolution: {integrity: sha512-F/1DnUGPopORZi0ni+CvrCgHQ5FyEAHRLSApuYWMmrbSwoN2Mn/7k+Gl38gJnR7yyDZk6WLXwiGod1JOWNDKGw==}
+    hasBin: true
+
   heap@0.2.7:
     resolution: {integrity: sha512-2bsegYkkHO+h/9MGbn6KWcE45cHZgPANo5LXF7EvWdT0yT2EguSVO1nDgU5c8+ZOPwp2vMNa7YFsJhVcDR9Sdg==}
 
@@ -16193,6 +16191,9 @@ packages:
     resolution: {integrity: sha512-olTJRgUtAb/hOXG0E93wZDs5YiJlgbXxTwQAFHyNlRsXQnYzUaF2aGgujZbw+hR8aF4ZG/rST57bWMWD16jr9w==}
     engines: {node: '>= 10.12.0'}
     hasBin: true
+
+  node-html-parser@7.0.1:
+    resolution: {integrity: sha512-KGtmPY2kS0thCWGK0VuPyOS+pBKhhe8gXztzA2ilAOhbUbxa9homF1bOyKvhGzMLXUoRds9IOmr/v5lr/lqNmA==}
 
   node-ical@0.20.1:
     resolution: {integrity: sha512-NrXgzDJd6XcyX9kDMJVA3xYCZmntY7ghA2BOdBeYr3iu8tydHOAb+68jPQhF9V2CRQ0/386X05XhmLzQUN0+Hw==}
@@ -28822,12 +28823,6 @@ snapshots:
       '@types/tough-cookie': 4.0.5
       parse5: 7.2.1
 
-  '@types/jsdom@21.1.7':
-    dependencies:
-      '@types/node': 22.13.1
-      '@types/tough-cookie': 4.0.5
-      parse5: 7.2.1
-
   '@types/json-schema@7.0.15': {}
 
   '@types/json5@0.0.29': {}
@@ -34492,6 +34487,8 @@ snapshots:
       property-information: 6.5.0
       space-separated-tokens: 2.0.2
 
+  he@1.2.0: {}
+
   heap@0.2.7: {}
 
   help-me@5.0.0: {}
@@ -35962,6 +35959,7 @@ snapshots:
       - bufferutil
       - supports-color
       - utf-8-validate
+    optional: true
 
   jsdom@25.0.1(bufferutil@4.0.9)(canvas@3.1.0)(utf-8-validate@6.0.5):
     dependencies:
@@ -37995,6 +37993,11 @@ snapshots:
       - bluebird
       - supports-color
     optional: true
+
+  node-html-parser@7.0.1:
+    dependencies:
+      css-select: 5.1.0
+      he: 1.2.0
 
   node-ical@0.20.1:
     dependencies:

@@ -1,5 +1,5 @@
-import { JSDOM } from 'jsdom';
 import { Document } from 'llamaindex';
+import { parse } from 'node-html-parser';
 
 import { RecursiveCharacterTransformer } from './character';
 
@@ -20,20 +20,19 @@ export class HTMLHeaderTransformer {
   }
 
   splitText({ text }: { text: string }): Document[] {
-    const dom = new JSDOM(text);
-    const { document } = dom.window;
+    const root = parse(text);
 
     const headerFilter = this.headersToSplitOn.map(([header]) => header);
     const headerMapping = Object.fromEntries(this.headersToSplitOn);
 
     const elements: ElementType[] = [];
-    const headers = document.querySelectorAll(headerFilter.join(','));
+    const headers = root.querySelectorAll(headerFilter.join(','));
 
     headers.forEach(header => {
       let content = '';
       let nextElement = header.nextElementSibling;
 
-      while (nextElement && !headerFilter.includes(nextElement.tagName.toLowerCase())) {
+      while (nextElement && !headerFilter.includes(nextElement.rawTagName.toLowerCase())) {
         content += nextElement.textContent + ' ';
         nextElement = nextElement.nextElementSibling;
       }
@@ -43,7 +42,7 @@ export class HTMLHeaderTransformer {
         xpath: this.getXPath(header),
         content: content.trim(),
         metadata: {
-          [headerMapping?.[header.tagName.toLowerCase()]!]: header.textContent?.trim() || '',
+          [headerMapping?.[header.rawTagName.toLowerCase()]!]: header.textContent?.trim() || '',
         },
       });
     });
@@ -59,19 +58,25 @@ export class HTMLHeaderTransformer {
       : this.aggregateElementsToChunks(elements);
   }
 
-  private getXPath(element: Element): string {
+  private getXPath(element: any): string {
     const parts: string[] = [];
-    let current: Element | null = element;
+    let current = element;
 
     while (current && current.nodeType === 1) {
       let index = 1;
-      for (let sibling = current.previousElementSibling; sibling; sibling = sibling.previousElementSibling) {
-        if (sibling.nodeName === current.nodeName) {
+      let sibling = current.previousElementSibling;
+
+      while (sibling) {
+        if (sibling.rawTagName === current.rawTagName) {
           index++;
         }
+        sibling = sibling.previousElementSibling;
       }
-      parts.unshift(`${current.tagName.toLowerCase()}[${index}]`);
-      current = current.parentElement;
+
+      if (current.rawTagName) {
+        parts.unshift(`${current.rawTagName.toLowerCase()}[${index}]`);
+      }
+      current = current.parentNode;
     }
 
     return '/' + parts.join('/');
@@ -169,6 +174,47 @@ export class HTMLSectionTransformer {
     );
   }
 
+  private splitHtmlByHeaders(htmlDoc: string): Array<{
+    header: string;
+    content: string;
+    tagName: string;
+  }> {
+    const sections: Array<{
+      header: string;
+      content: string;
+      tagName: string;
+    }> = [];
+
+    const root = parse(htmlDoc);
+    const headers = Object.keys(this.headersToSplitOn);
+    const headerElements = root.querySelectorAll(headers.join(','));
+
+    headerElements.forEach((headerElement, index) => {
+      const header = headerElement.textContent?.trim() || '';
+      const tagName = headerElement.rawTagName.toLowerCase();
+      let content = '';
+
+      let currentElement = headerElement.nextElementSibling;
+      const nextHeader = headerElements[index + 1];
+
+      while (currentElement && (!nextHeader || currentElement !== nextHeader)) {
+        if (currentElement.textContent) {
+          content += currentElement.textContent.trim() + ' ';
+        }
+        currentElement = currentElement.nextElementSibling;
+      }
+
+      content = content.trim();
+      sections.push({
+        header,
+        content,
+        tagName,
+      });
+    });
+
+    return sections;
+  }
+
   async splitDocuments(documents: Document[]): Promise<Document[]> {
     const texts: string[] = [];
     const metadatas: Record<string, any>[] = [];
@@ -212,61 +258,6 @@ export class HTMLSectionTransformer {
     }
 
     return documents;
-  }
-
-  private splitHtmlByHeaders(htmlDoc: string): Array<{
-    header: string;
-    content: string;
-    tagName: string;
-  }> {
-    const sections: Array<{
-      header: string;
-      content: string;
-      tagName: string;
-    }> = [];
-
-    const dom = new JSDOM(htmlDoc);
-    const { document } = dom.window;
-    const headers = ['body', ...Object.keys(this.headersToSplitOn)];
-
-    const headerElements = Array.from(document.querySelectorAll(headers.join(',')));
-
-    for (let i = 0; i < headerElements.length; i++) {
-      const headerElement = headerElements[i]!;
-      let currentHeader: string;
-      let currentHeaderTag: string;
-      let sectionContent: string[] = [];
-
-      if (i === 0) {
-        currentHeader = '#TITLE#';
-        currentHeaderTag = 'h1';
-      } else {
-        currentHeader = headerElement.textContent?.trim() || '';
-        currentHeaderTag = headerElement.tagName.toLowerCase();
-      }
-
-      // Get content until next header
-      let currentNode = headerElement.nextSibling;
-      const nextHeader = headerElements[i + 1];
-
-      while (currentNode && currentNode !== nextHeader) {
-        if (currentNode.textContent) {
-          sectionContent.push(currentNode.textContent);
-        }
-        currentNode = currentNode.nextSibling;
-      }
-
-      const content = sectionContent.join(' ').trim();
-      if (content) {
-        sections.push({
-          header: currentHeader,
-          content,
-          tagName: currentHeaderTag,
-        });
-      }
-    }
-
-    return sections;
   }
 
   transformDocuments(documents: Document[]): Document[] {
