@@ -3211,6 +3211,28 @@ importers:
         specifier: ^2.1.8
         version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.12.0)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
 
+  stores/astra:
+    dependencies:
+      '@datastax/astra-db-ts':
+        specifier: ^1.5.0
+        version: 1.5.0
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+    devDependencies:
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.8
+      '@types/node':
+        specifier: ^22.9.0
+        version: 22.13.1
+      tsup:
+        specifier: ^8.0.1
+        version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
+      vitest:
+        specifier: ^3.0.4
+        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.13.1)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
+
   stores/pg:
     dependencies:
       '@mastra/core':
@@ -3282,9 +3304,6 @@ importers:
       tsup:
         specifier: ^8.0.1
         version: 8.3.6(@swc/core@1.10.11(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.1)(tsx@4.19.2)(typescript@5.7.3)(yaml@2.7.0)
-      vitest:
-        specifier: ^3.0.4
-        version: 3.0.4(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@22.12.0)(jiti@2.4.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)(tsx@4.19.2)(yaml@2.7.0)
 
   vector-stores/chroma:
     dependencies:

@@ -164,13 +164,3 @@ export class AstraVector extends MastraVector {
     await collection.drop();
   }
 }
-
-throw new Error(
-  '@mastra/vector-astra is deprecated. Please use @mastra/astra instead.\n\n' +
-  'To migrate:\n' +
-  '1. Remove @mastra/vector-astra from your dependencies\n' +
-  '2. Install @mastra/astra: pnpm add @mastra/astra\n' +
-  '3. Update your imports:\n' +
-  '   from: import { AstraVector } from "@mastra/vector-astra"\n' +
-  '   to:   import { AstraVector } from "@mastra/astra"\n'
-);

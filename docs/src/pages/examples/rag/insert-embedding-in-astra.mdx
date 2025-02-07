@@ -10,7 +10,7 @@ import { GithubLink } from '../../../components/github-link';
 After generating embeddings, you need to store them in a vector database for similarity search. The `AstraVector` class provides methods to create collections and insert embeddings into DataStax Astra DB, a cloud-native vector database. This example shows how to store embeddings in Astra DB for later retrieval.
 
 ```tsx copy
-import { AstraVector } from '@mastra/vector-astra';
+import { AstraVector } from '@mastra/astra';
 import { MDocument, embed } from '@mastra/rag';
 
 const doc = MDocument.fromText('Your text content...');
