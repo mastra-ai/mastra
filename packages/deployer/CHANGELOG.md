@@ -1,5 +1,11 @@
 # @mastra/deployer
 
+## 0.1.0-alpha.40
+
+### Patch Changes
+
+- 8329f1a: Add debug env
+
 ## 0.1.0-alpha.39
 
 ### Patch Changes
