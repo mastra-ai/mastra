@@ -10,7 +10,7 @@ import {
 } from 'ai';
 
 import { MastraBase } from '../base';
-import { EmbeddingOptions } from '../embeddings';
+import { MastraEmbedder } from '../embeddings/model/providers/embedder';
 import { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { deepMerge } from '../utils';
 import { MastraVector } from '../vector';
@@ -58,19 +58,12 @@ export type MemoryConfig = {
   };
 };
 
-export type SharedMemoryConfig =
-  | {
-      storage: MastraStorage;
-      options?: MemoryConfig;
-      vector?: MastraVector;
-      embedding?: EmbeddingOptions;
-    }
-  | {
-      storage: MastraStorage;
-      options?: MemoryConfig;
-      vector: MastraVector;
-      embedding: EmbeddingOptions;
-    };
+export type SharedMemoryConfig = {
+  storage: MastraStorage;
+  options?: MemoryConfig;
+  vector?: MastraVector;
+  embedder?: MastraEmbedder;
+};
 
 /**
  * Abstract Memory class that defines the interface for storing and retrieving
@@ -81,7 +74,7 @@ export abstract class MastraMemory extends MastraBase {
 
   storage: MastraStorage;
   vector?: MastraVector;
-  embedding?: EmbeddingOptions;
+  embedder?: MastraEmbedder;
 
   protected threadConfig: MemoryConfig = {
     lastMessages: 40,
@@ -95,8 +88,8 @@ export abstract class MastraMemory extends MastraBase {
       this.vector = config.vector;
       this.threadConfig.semanticRecall = true;
     }
-    if (`embedding` in config) {
-      this.embedding = config.embedding;
+    if (config.embedder) {
+      this.embedder = config.embedder;
     }
     if (config.options) {
       this.threadConfig = this.getMergedThreadConfig(config.options);
@@ -112,25 +105,23 @@ export abstract class MastraMemory extends MastraBase {
     return null;
   }
 
-  protected parseEmbeddingOptions() {
-    if (!this.embedding) {
-      throw new Error(`Cannot use vector features without setting new Memory({ embedding: { ... } })
+  protected getEmbedder() {
+    if (!this.embedder) {
+      throw new Error(`Cannot use vector features without setting new Memory({ embedder: embedderInstance })
 
 For example:
 
 new Memory({
   storage,
   vector,
-  embedding: { // <- this is required
-    provider: "OPEN_AI",
+  embedder: new OpenAIEmbedder({ // <- this is required
     model: "text-embedding-3-small",
-    maxRetries: 3,
-  }
+  })
 });
 `);
     }
 
-    return this.embedding;
+    return this.embedder;
   }
 
   protected getMergedThreadConfig(config?: MemoryConfig): MemoryConfig {

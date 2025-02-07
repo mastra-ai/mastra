@@ -54,10 +54,11 @@ export class Memory extends MastraMemory {
           };
 
     if (selectBy?.vectorSearchString && this.vector) {
-      const { embeddings } = await this.vector.embed(selectBy.vectorSearchString, this.parseEmbeddingOptions());
+      const embedder = this.getEmbedder();
+      const { embedding } = await embedder.embed(selectBy.vectorSearchString);
 
       await this.vector.createIndex('memory_messages', 1536);
-      vectorResults = await this.vector.query('memory_messages', embeddings[0]!, vectorConfig.topK, {
+      vectorResults = await this.vector.query('memory_messages', embedding, vectorConfig.topK, {
         thread_id: threadId,
       });
     }
@@ -191,8 +192,9 @@ export class Memory extends MastraMemory {
       await this.vector.createIndex('memory_messages', 1536);
       for (const message of messages) {
         if (typeof message.content !== `string`) continue;
-        const { embeddings } = await this.vector.embed(message.content, this.parseEmbeddingOptions());
-        await this.vector.upsert('memory_messages', embeddings, [
+        const embedder = this.getEmbedder();
+        const { embedding } = await embedder.embed(message.content);
+        await this.vector.upsert('memory_messages', [embedding], [
           {
             text: message.content,
             message_id: message.id,
