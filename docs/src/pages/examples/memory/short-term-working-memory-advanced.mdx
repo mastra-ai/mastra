@@ -26,6 +26,7 @@ const memory = new Memory({
     },
   }),
   options: {
+    lastMessages: 1, // working memory means we can have a shorter context window but maintain coherence
     workingMemory: {
       enabled: true,
     },
@@ -41,6 +42,7 @@ Next, we'll define a template that shows the agent how to structure the todo lis
 const memory = new Memory({
   storage,
   options: {
+    lastMessages: 1,
     workingMemory: {
       enabled: true,
       template: `
@@ -100,7 +102,10 @@ const response = await todoAgent.stream(
 );
 
 // Process the stream, hiding working memory updates
-for await (const chunk of maskStreamTags(response.textStream, "working_memory")) {
+for await (const chunk of maskStreamTags(
+  response.textStream,
+  "working_memory",
+)) {
   process.stdout.write(chunk);
 }
 ```
