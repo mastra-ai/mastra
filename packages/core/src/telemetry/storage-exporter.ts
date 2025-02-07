@@ -7,7 +7,7 @@ import { MastraStorage } from '../storage/index.js';
 
 export class OTLPTraceExporter implements SpanExporter {
   private storage: MastraStorage;
-  private queue: ReadableSpan[] = [];
+  private queue: { data: any[]; resultCallback: (result: ExportResult) => void }[] = [];
   private serializer: typeof JsonTraceSerializer;
   private logger: Logger;
   private activeFlush: Promise<void> | undefined = undefined;
@@ -19,8 +19,6 @@ export class OTLPTraceExporter implements SpanExporter {
   }
 
   export(internalRepresentation: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
-    this.logger.debug('items to be sent', internalRepresentation);
-
     // don't do any work if too many exports are in progress.
     // if (this._promiseQueue.hasReachedLimit()) {
     //   resultCallback({
@@ -31,46 +29,78 @@ export class OTLPTraceExporter implements SpanExporter {
     // }
 
     const serializedRequest = this.serializer.serializeRequest(internalRepresentation);
+    // @ts-ignore
+    const payload = JSON.parse(Buffer.from(serializedRequest.buffer, 'utf8'));
+    console.dir(payload, { depth: 555 });
+    const items = payload?.resourceSpans?.[0]?.scopeSpans;
+    this.logger.debug('items to be sent: ' + items.length);
 
-    if (serializedRequest == null) {
-      resultCallback({
-        code: ExportResultCode.FAILED,
-        error: new Error('Nothing to send'),
-      });
-      return;
-    }
-
-    this.queue.push(...internalRepresentation);
-
-    resultCallback({
-      code: ExportResultCode.SUCCESS,
-    });
+    this.queue.push({ data: items, resultCallback });
 
     if (!this.activeFlush) {
-      this.activeFlush = this.flush().finally(() => {
-        this.activeFlush = undefined;
-      });
+      this.activeFlush = this.flush();
     }
   }
   shutdown(): Promise<void> {
-    return Promise.resolve();
+    return this.forceFlush();
   }
-  flush(): Promise<void> {
-    const items = this.queue;
-    this.queue = [];
 
-    return this.storage.batchInsert({ tableName: MastraStorage.TABLE_TRACES, records: items });
+  flush(): Promise<void> {
+    const now = Date.now();
+    const items = this.queue.shift();
+    if (!items) return Promise.resolve();
+
+    console.log('flushing', items.data.length);
+    const allSpans: any[] = items.data.reduce((acc, scopedSpans) => {
+      const { scope, spans } = scopedSpans;
+      console.log('spans', spans.length);
+      for (const span of spans) {
+        acc.push({
+          id: span.spanId,
+          traceId: span.traceId,
+          name: span.name,
+          scope,
+          startTime: Number(span.startTimeUnixNano),
+          endTime: Number(span.endTimeUnixNano),
+          payload: span,
+          createdAt: now,
+        });
+      }
+      return acc;
+    }, []);
+
+    console.log('sending spans', allSpans.length, allSpans);
+    return this.storage
+      .batchInsert({
+        tableName: MastraStorage.TABLE_TRACES,
+        records: allSpans,
+      })
+      .then(() => {
+        console.log('sent spans');
+        items.resultCallback({
+          code: ExportResultCode.SUCCESS,
+        });
+      })
+      .catch(e => {
+        console.log('span err', e);
+        items.resultCallback({
+          code: ExportResultCode.FAILED,
+          error: e,
+        });
+      })
+      .finally(() => {
+        this.activeFlush = undefined;
+      });
   }
   async forceFlush(): Promise<void> {
     if (!this.queue.length) {
       return;
     }
 
-    if (this.activeFlush) {
-      await this.activeFlush;
+    await this.activeFlush;
+    while (this.queue.length) {
+      await this.flush();
     }
-
-    return this.flush();
   }
 
   __setLogger(logger: Logger) {
