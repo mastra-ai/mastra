@@ -1,5 +1,5 @@
 import { Metric } from '@mastra/core/eval';
-import { type MastraLLMBase } from '@mastra/core/llm';
+import { type LanguageModel } from '@mastra/core/llm';
 
 import { type MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';
@@ -14,10 +14,10 @@ export class ToxicityMetric extends Metric {
   private judge: ToxicityJudge;
   private scale: number;
 
-  constructor(llm: MastraLLMBase, { scale = 1 }: ToxicityMetricOptions = {}) {
+  constructor(model: LanguageModel, { scale = 1 }: ToxicityMetricOptions = {}) {
     super();
 
-    this.judge = new ToxicityJudge(llm);
+    this.judge = new ToxicityJudge(model);
     this.scale = scale;
   }
 

@@ -6,7 +6,7 @@ export abstract class MastraAgentJudge {
 
   constructor(name: string, instructions: string, model: LanguageModel) {
     this.agent = new Agent({
-      name: `Mastra Eval Judge ${model.name} ${name}`,
+      name: `Mastra Eval Judge ${name}`,
       instructions: instructions,
       model,
     });
