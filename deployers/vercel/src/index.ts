@@ -33,7 +33,7 @@ export class VercelDeployer extends Deployer {
 
   writeFiles(outputDirectory: string): void {
     writeFileSync(
-      join(outputDirectory, 'vercel.json'),
+      join(outputDirectory, this.outputDir, 'vercel.json'),
       JSON.stringify(
         {
           version: 2,
@@ -134,17 +134,8 @@ export const POST = handle(app);
 `;
   }
 
-  async bundle(mastraDir: string, outputDirectory: string): Promise<void> {
-    const bundler = await getBundler({
-      input: '#entry',
-      plugins: [virtual({ '#entry': this.getEntry() })],
-    });
-
-    await bundler.write({
-      inlineDynamicImports: true,
-      file: `${outputDirectory}/index.mjs`,
-      format: 'es',
-    });
+  async bundle(entryFile: string, outputDirectory: string): Promise<void> {
+    return this._bundle(this.getEntry(), entryFile, outputDirectory);
   }
 
   async deploy(outputDirectory: string): Promise<void> {
@@ -155,7 +146,7 @@ export const POST = handle(app);
       '--scope',
       this.teamId as string,
       '--cwd',
-      outputDirectory,
+      join(outputDirectory, this.outputDir),
       '--token',
       this.token,
       'deploy',
@@ -165,7 +156,7 @@ export const POST = handle(app);
 
     // Run the Vercel deploy command
     child_process.execSync(`npx vercel ${commandArgs.join(' ')}`, {
-      cwd: outputDirectory,
+      cwd: join(outputDirectory, this.outputDir),
       env: {
         // ...this.env,
         PATH: process.env.PATH,

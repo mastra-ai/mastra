@@ -15,9 +15,6 @@ export async function getInputOptions(entryFile: string, platform: 'node' | 'bro
     platform,
   );
 
-  //
-  inputOptions.logLevel = 'debug';
-
   if (Array.isArray(inputOptions.plugins)) {
     // filter out node-resolve plugin so all node_modules are external
     inputOptions.plugins = inputOptions.plugins.filter(
@@ -27,8 +24,6 @@ export async function getInputOptions(entryFile: string, platform: 'node' | 'bro
 
     inputOptions.plugins.push(aliasHono());
   }
-
-  console.log(inputOptions);
 
   return inputOptions;
 }

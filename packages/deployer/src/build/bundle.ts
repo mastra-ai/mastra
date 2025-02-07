@@ -77,7 +77,7 @@ function getOptions(inputOptions: NormalizedInputOptions, platform: 'node' | 'br
         ],
       }),
       commonjs({
-        strictRequires: 'debug',
+        strictRequires: 'strict',
         transformMixedEsModules: true,
         // dynamicRequireTargets: ['node_modules/**/@libsql+win32-*/*'],
       }),

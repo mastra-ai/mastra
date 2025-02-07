@@ -4,7 +4,15 @@ import { readFile } from 'fs/promises';
 
 import { MastraBase } from '../base';
 
-export abstract class MastraBundler extends MastraBase {
+export interface IBundler {
+  loadEnvVars(): Promise<Map<string, string>>;
+  getEnvFiles(): Promise<string[]>;
+  bundle(entryFile: string, outputDirectory: string): Promise<void>;
+  prepare(outputDirectory: string): Promise<void>;
+  writePackageJson(outputDirectory: string, dependencies: Map<string, string>): Promise<void>;
+}
+
+export abstract class MastraBundler extends MastraBase implements IBundler {
   constructor({ name, component = 'BUNDLER' }: { name: string; component?: 'BUNDLER' | 'DEPLOYER' }) {
     super({ component, name });
   }

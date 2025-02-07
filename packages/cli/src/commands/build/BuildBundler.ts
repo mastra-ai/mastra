@@ -36,6 +36,9 @@ export class BuildBundler extends Bundler {
       overwrite: true,
     });
   }
+  bundle(entryFile: string, outputDirectory: string): Promise<void> {
+    return this._bundle(this.getEntry(), entryFile, outputDirectory);
+  }
 
   protected getEntry(): string {
     const __filename = fileURLToPath(import.meta.url);

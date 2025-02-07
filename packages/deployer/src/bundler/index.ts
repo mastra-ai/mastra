@@ -11,24 +11,21 @@ import fsExtra from 'fs-extra/esm';
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
 import { Deps } from '../build/deps';
-import { FileService } from '../build/fs';
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
   protected outputDir = 'output';
 
-  constructor(name: string) {
-    super({ name, component: 'BUNDLER' });
+  constructor(name: string, component: 'BUNDLER' | 'DEPLOYER' = 'BUNDLER') {
+    super({ name, component });
   }
 
-  protected abstract getEntry(): string;
-
   async prepare(outputDirectory: string): Promise<void> {
-    await ensureDir(join(outputDirectory, this.analyzeOutputDir));
-    await ensureDir(join(outputDirectory, this.outputDir));
-
     // Clean up the output directory first
     await fsExtra.emptyDir(outputDirectory);
+
+    await ensureDir(join(outputDirectory, this.analyzeOutputDir));
+    await ensureDir(join(outputDirectory, this.outputDir));
   }
 
   async writePackageJson(outputDirectory: string, dependencies: Map<string, string>) {
@@ -36,6 +33,16 @@ export abstract class Bundler extends MastraBundler {
     await ensureDir(outputDirectory);
     const pkgPath = join(outputDirectory, 'package.json');
 
+    const dependenciesObject: Record<string, string> = {};
+    for (const [key, value] of dependencies.entries()) {
+      if (key.startsWith('@') && key.split('/').length > 2) {
+        continue;
+      }
+
+      dependenciesObject[key] = value;
+    }
+
+    console.log('writePackageJson', dependencies);
     await writeFile(
       pkgPath,
       JSON.stringify(
@@ -50,7 +57,7 @@ export abstract class Bundler extends MastraBundler {
           },
           author: 'Mastra',
           license: 'ISC',
-          dependencies: Object.fromEntries(dependencies),
+          dependencies: dependenciesObject,
         },
         null,
         2,
@@ -73,26 +80,19 @@ export abstract class Bundler extends MastraBundler {
     await deps.install({ dir: join(outputDirectory, this.outputDir) });
   }
 
-  async bundle(mastraDir: string, outputDirectory: string): Promise<void> {
+  protected async _bundle(serverFile: string, mastraEntryFile: string, outputDirectory: string): Promise<void> {
     this.logger.info('Start bundling Mastra');
-    const fileService = new FileService();
-    const mastraEntryFile = fileService.getFirstExistingFile([
-      join(mastraDir, 'src/mastra/index.ts'),
-      join(mastraDir, 'src/mastra/index.js'),
-    ]);
-
-    const inputFileOrVirtual = this.getEntry();
-    const isVirtual = inputFileOrVirtual.includes('\n') || existsSync(inputFileOrVirtual);
+    const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
 
     const analyzedBundleInfo = await analyzeBundle(
-      inputFileOrVirtual,
+      serverFile,
       mastraEntryFile,
       join(outputDirectory, this.analyzeOutputDir),
       'node',
       this.logger,
     );
 
-    this.writePackageJson(
+    await this.writePackageJson(
       join(outputDirectory, this.outputDir),
       Array.from(analyzedBundleInfo.externalDependencies).reduce((acc, dep) => {
         acc.set(dep, 'latest');
@@ -100,18 +100,19 @@ export abstract class Bundler extends MastraBundler {
       }, new Map<string, string>()),
     );
 
+    this.logger.info('Bundling Mastra application');
     const inputOptions: InputOptions = await getInputOptions(mastraEntryFile, analyzedBundleInfo, 'node');
 
     if (isVirtual) {
       inputOptions.input = { index: '#entry' };
 
       if (Array.isArray(inputOptions.plugins)) {
-        inputOptions.plugins.unshift(virtual({ '#entry': this.getEntry() }));
+        inputOptions.plugins.unshift(virtual({ '#entry': serverFile }));
       } else {
-        inputOptions.plugins = [virtual({ '#entry': this.getEntry() })];
+        inputOptions.plugins = [virtual({ '#entry': serverFile })];
       }
     } else {
-      inputOptions.input = { index: inputFileOrVirtual };
+      inputOptions.input = { index: serverFile };
     }
 
     const bundler = await this.createBundler(inputOptions, { dir: join(outputDirectory, this.outputDir) });

@@ -64,7 +64,7 @@ async function analyze(
         platform,
         minify: false,
       }),
-      removeDeployer(entry),
+      removeDeployer(mastraEntry),
       esbuild({
         target: 'node20',
         platform,
@@ -87,6 +87,8 @@ async function analyze(
     }
   }
 
+  // todo fix, coulds should add it itself but somehow doesnt
+  depsToOptimize.set('@hono/node-server', ['serve']);
   return depsToOptimize;
 }
 
