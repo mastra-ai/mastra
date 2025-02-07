@@ -35,7 +35,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
-import { Mastra, Agent, Step, Workflow } from "@mastra/core";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { Step, Workflow } from "@mastra/core/workflows";
 import { PgVector } from "@mastra/vector-pg";
 import { createVectorQueryTool, embedMany, MDocument } from "@mastra/rag";
 import { z } from "zod";

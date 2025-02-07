@@ -10,7 +10,8 @@ import { GithubLink } from "../../../components/github-link";
 This example demonstrates how to create a workflow that streams responses from an LLM, showing both real-time output and final text handling.
 
 ```ts showLineNumbers copy
-import { Mastra, Step, Workflow } from "@mastra/core";
+import { Mastra } from "@mastra/core";
+import { Step, Workflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const newWorkflow = new Workflow({

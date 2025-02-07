@@ -67,7 +67,7 @@ touch src/agents/stockAgent.ts src/tools/stockPrices.ts src/index.ts
 Next, we'll create a tool that fetches the last day's closing stock price for a given symbol.
 
 ```ts filename="src/tools/stockPrices.ts"
-import { createTool } from "@mastra/core";
+import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 const getStockPrice = async (symbol: string) => {
@@ -100,7 +100,7 @@ export const stockPrices = createTool({
 We'll create an agent and add the `stockPrices` tool to it.
 
 ```ts filename="src/agents/stockAgent.ts"
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 import * as tools from "../tools/stockPrices";
 

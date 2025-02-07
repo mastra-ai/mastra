@@ -27,7 +27,7 @@ In this guide, we'll walk through creating a "Chef Assistant" agent that helps u
 Create a new file `src/mastra/agents/chefAgent.ts` and define your agent:
 
 ```ts copy filename="src/mastra/agents/chefAgent.ts"
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 export const chefAgent = new Agent({
   name: "chef-agent",

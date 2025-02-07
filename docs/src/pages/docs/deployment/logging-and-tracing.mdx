@@ -20,7 +20,8 @@ In Mastra, logs can detail when certain functions run, what input data they rece
 Here's a minimal example that sets up a **console logger** at the `INFO` level. This will print out informational messages and above (i.e., `INFO`, `WARN`, `ERROR`) to the console.
 
 ```typescript filename="mastra.config.ts" showLineNumbers copy
-import { Mastra, createLogger } from "@mastra/core";
+import { Mastra } from "@mastra/core";
+import { createLogger } from "@mastra/core/logger";
 
 export const mastra = new Mastra({
   // Other Mastra configuration...

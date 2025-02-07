@@ -129,7 +129,7 @@ mkdir -p src/mastra/tools && touch src/mastra/tools/weather-tool.ts
 Then, add the following code to `src/mastra/tools/weather-tool.ts`:
 
 ```ts filename="src/mastra/tools/weather-tool.ts" showLineNumbers copy
-import { createTool } from "@mastra/core";
+import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 interface WeatherResponse {
@@ -237,7 +237,7 @@ mkdir -p src/mastra/agents && touch src/mastra/agents/weather.ts
 Then, add the following code to `src/mastra/agents/weather.ts`:
 
 ```ts filename="src/mastra/agents/weather.ts" showLineNumbers
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
 
 export const weatherAgent = new Agent({

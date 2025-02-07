@@ -16,7 +16,8 @@ Below is a concise version of the workflow. It starts by importing the necessary
 You need to import Mastra tools and Zod to handle workflow definitions and data validation.
 
 ```typescript filename="src/mastra/index.ts" copy
-import { Step, Workflow, Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core";
+import { Step, Workflow } from "@mastra/core/workflows";
 import { z } from "zod";
 ```
 

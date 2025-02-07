@@ -24,7 +24,7 @@ To create a workflow, you define one or more steps, link them, and then commit t
 Typically, you would call an LLM or other service in some way in some step. But for this example, we'll just double the input value in the first step and increment it in the second.
 
 ```typescript copy showLineNumbers
-import { Workflow, Step } from "@mastra/core";
+import { Workflow, Step } from "@mastra/core/workflows";
 import { z } from "zod";
 
 // 1. Define the workflow

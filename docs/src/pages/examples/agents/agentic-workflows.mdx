@@ -10,7 +10,8 @@ import { GithubLink } from "../../../components/github-link";
 When building AI applications, you often need to coordinate multiple steps that depend on each other's outputs. This example shows how to create an AI workflow that fetches weather data and uses it to suggest activities, demonstrating how to integrate external APIs with LLM-powered planning.
 
 ```ts showLineNumbers copy
-import { Mastra, Step, Workflow } from "@mastra/core";
+import { Mastra } from "@mastra/core";
+import { Step, Workflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const fetchWeather = new Step({

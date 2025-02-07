@@ -69,7 +69,8 @@ The Mastra class is the core entry point for your application. It manages agents
 The Mastra class is typically initialized in your `src/mastra/index.ts` file:
 
 ```typescript copy filename=src/mastra/index.ts
-import { Mastra, createLogger } from "@mastra/core";
+import { Mastra } from "@mastra/core";
+import { createLogger } from "@mastra/core/logger";
 
 // Basic initialization
 export const mastra = new Mastra({});
