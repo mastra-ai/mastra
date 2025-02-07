@@ -53,7 +53,7 @@ export async function embedMany(
   });
 }
 
-export class Embedder extends MastraEmbedder {
+export class VoyageEmbedder extends MastraEmbedder {
   apiKey: string;
   model: VoyageEmbeddingModelNames;
   baseURL: string | undefined;

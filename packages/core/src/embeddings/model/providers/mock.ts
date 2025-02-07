@@ -16,7 +16,7 @@ export async function embed(
     maxRetries?: number;
   } = {},
 ) {
-  return await embedAi({ model, value, maxRetries });
+  return await embedAi<string>({ model, value, maxRetries });
 }
 
 export async function embedMany(
@@ -27,25 +27,31 @@ export async function embedMany(
     maxRetries?: number;
   } = {},
 ) {
-  return await embedManyAi({
+  return await embedManyAi<string>({
     model,
     values,
     maxRetries,
   });
 }
 
-export class Embedder extends MastraEmbedder {
+export class MockEmbedder extends MastraEmbedder {
   constructor() {
     super();
   }
 
-  async embed(value: string, { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }): Promise<EmbedResult<string>> {
+  async embed(
+    value: string,
+    { maxRetries }: { maxRetries?: number } = { maxRetries: 3 },
+  ): Promise<EmbedResult<string>> {
     return embed(value, {
       maxRetries,
     });
   }
 
-  async embedMany(values: string[], { maxRetries }: { maxRetries?: number } = { maxRetries: 3 }): Promise<EmbedManyResult<string>> {
+  async embedMany(
+    values: string[],
+    { maxRetries }: { maxRetries?: number } = { maxRetries: 3 },
+  ): Promise<EmbedManyResult<string>> {
     return embedMany(values, {
       maxRetries,
     });

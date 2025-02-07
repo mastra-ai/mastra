@@ -1,16 +1,16 @@
 import dotenv from 'dotenv';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { Embedder } from './cohere';
+import { CohereEmbedder } from './cohere';
 
 // Load environment variables
 dotenv.config();
 
 describe('Cohere Embeddings', () => {
-  let embedder: Embedder;
+  let embedder: CohereEmbedder;
 
   beforeEach(() => {
-    embedder = new Embedder({
+    embedder = new CohereEmbedder({
       model: 'embed-english-v3.0',
     });
   });

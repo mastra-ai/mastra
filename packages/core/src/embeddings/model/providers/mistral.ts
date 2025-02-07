@@ -53,7 +53,7 @@ export async function embedMany(
   });
 }
 
-export class Embedder extends MastraEmbedder {
+export class MistralEmbedder extends MastraEmbedder {
   apiKey: string;
   model: MistralEmbeddingModelNames;
   baseURL: string | undefined;

@@ -58,7 +58,7 @@ export async function embedMany(
   });
 }
 
-export class Embedder extends MastraEmbedder {
+export class CohereEmbedder extends MastraEmbedder {
   apiKey: string;
   model: CohereEmbeddingModelNames;
   baseURL: string | undefined;

@@ -1,16 +1,16 @@
 import dotenv from 'dotenv';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { Embedder } from './voyage';
+import { VoyageEmbedder } from './voyage';
 
 // Load environment variables
 dotenv.config();
 
 describe('Voyage Embeddings', () => {
-  let embedder: Embedder;
+  let embedder: VoyageEmbedder;
 
   beforeEach(() => {
-    embedder = new Embedder({
+    embedder = new VoyageEmbedder({
       model: 'voyage-01',
     });
   });

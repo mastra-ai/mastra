@@ -70,7 +70,7 @@ export async function embedMany(
   });
 }
 
-export class Embedder extends MastraEmbedder {
+export class BedrockEmbedder extends MastraEmbedder {
   region: string;
   accessKeyId: string;
   secretAccessKey: string;

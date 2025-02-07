@@ -53,7 +53,7 @@ export async function embedMany(
   });
 }
 
-export class Embedder extends MastraEmbedder {
+export class GoogleEmbedder extends MastraEmbedder {
   apiKey: string;
   model: GoogleEmbeddingModelNames;
   baseURL: string | undefined;

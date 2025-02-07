@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 
-import { Embedder } from './providers/mock';
+import { MockEmbedder } from './providers/mock';
 
 describe('MastraEmbedding', () => {
-  let embedder: Embedder;
+  let embedder: MockEmbedder;
 
   beforeEach(() => {
-    embedder = new Embedder();
+    embedder = new MockEmbedder();
   });
   test('should create embedding for single text', async () => {
     const text = 'Hello, world!';

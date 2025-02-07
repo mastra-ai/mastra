@@ -1,16 +1,16 @@
 import dotenv from 'dotenv';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { Embedder } from './google';
+import { GoogleEmbedder } from './google';
 
 // Load environment variables
 dotenv.config();
 
 describe('Google Embeddings', () => {
-  let embedder: Embedder;
+  let embedder: GoogleEmbedder;
 
   beforeEach(() => {
-    embedder = new Embedder({
+    embedder = new GoogleEmbedder({
       model: 'textembedding-gecko',
     });
   });

@@ -1,16 +1,16 @@
 import dotenv from 'dotenv';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { Embedder } from './mistral';
+import { MistralEmbedder } from './mistral';
 
 // Load environment variables
 dotenv.config();
 
 describe('Mistral Embeddings', () => {
-  let embedder: Embedder;
+  let embedder: MistralEmbedder;
 
   beforeEach(() => {
-    embedder = new Embedder({
+    embedder = new MistralEmbedder({
       model: 'mistral-embed',
     });
   });

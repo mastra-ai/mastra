@@ -57,7 +57,7 @@ export async function embedMany(
   });
 }
 
-export class Embedder extends MastraEmbedder {
+export class OpenAIEmbedder extends MastraEmbedder {
   apiKey: string;
   model: OpenAIEmbeddingModelNames;
   baseURL: string | undefined;

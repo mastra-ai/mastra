@@ -1,16 +1,16 @@
 import dotenv from 'dotenv';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { Embedder } from './openai';
+import { OpenAIEmbedder } from './openai';
 
 // Load environment variables
 dotenv.config();
 
 describe('OpenAI Embeddings', () => {
-  let embedder: Embedder;
+  let embedder: OpenAIEmbedder;
 
   beforeEach(() => {
-    embedder = new Embedder({
+    embedder = new OpenAIEmbedder({
       model: 'text-embedding-3-small',
     });
   });

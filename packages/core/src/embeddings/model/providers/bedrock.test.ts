@@ -1,16 +1,16 @@
 import dotenv from 'dotenv';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { Embedder } from './bedrock';
+import { BedrockEmbedder } from './bedrock';
 
 // Load environment variables
 dotenv.config();
 
 describe('Bedrock Embeddings', () => {
-  let embedder: Embedder;
+  let embedder: BedrockEmbedder;
 
   beforeEach(() => {
-    embedder = new Embedder({
+    embedder = new BedrockEmbedder({
       model: 'amazon.titan-embed-text-v1',
     });
   });
