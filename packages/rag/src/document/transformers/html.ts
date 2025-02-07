@@ -1,5 +1,5 @@
 import { Document } from 'llamaindex';
-import { parse } from 'node-html-parser';
+import { parse } from 'node-html-better-parser';
 
 import { RecursiveCharacterTransformer } from './character';
 
@@ -30,11 +30,27 @@ export class HTMLHeaderTransformer {
 
     headers.forEach(header => {
       let content = '';
-      let nextElement = header.nextElementSibling;
+      const parentNode = header.parentNode;
 
-      while (nextElement && !headerFilter.includes(nextElement.rawTagName.toLowerCase())) {
-        content += nextElement.textContent + ' ';
-        nextElement = nextElement.nextElementSibling;
+      if (parentNode && parentNode.childNodes) {
+        let foundHeader = false;
+        for (const node of parentNode.childNodes) {
+          // Start collecting content after we find our header
+          if (node === header) {
+            foundHeader = true;
+            continue;
+          }
+
+          // If we found our header and hit another header, stop
+          if (foundHeader && node.tagName && headerFilter.includes(node.tagName.toLowerCase())) {
+            break;
+          }
+
+          // Collect content between headers
+          if (foundHeader) {
+            content += this.getTextContent(node) + ' ';
+          }
+        }
       }
 
       elements.push({
@@ -42,7 +58,7 @@ export class HTMLHeaderTransformer {
         xpath: this.getXPath(header),
         content: content.trim(),
         metadata: {
-          [headerMapping?.[header.rawTagName.toLowerCase()]!]: header.textContent?.trim() || '',
+          [headerMapping?.[header.tagName.toLowerCase()]!]: header.text || '',
         },
       });
     });
@@ -59,27 +75,53 @@ export class HTMLHeaderTransformer {
   }
 
   private getXPath(element: any): string {
+    if (!element) return '';
+
     const parts: string[] = [];
     let current = element;
 
-    while (current && current.nodeType === 1) {
+    while (current && current.tagName) {
       let index = 1;
-      let sibling = current.previousElementSibling;
+      const parent = current.parentNode;
 
-      while (sibling) {
-        if (sibling.rawTagName === current.rawTagName) {
-          index++;
+      if (parent && parent.childNodes) {
+        // Count preceding siblings with same tag
+        for (const sibling of parent.childNodes) {
+          if (sibling === current) break;
+          if (sibling.tagName === current.tagName) {
+            index++;
+          }
         }
-        sibling = sibling.previousElementSibling;
       }
 
-      if (current.rawTagName) {
-        parts.unshift(`${current.rawTagName.toLowerCase()}[${index}]`);
-      }
+      parts.unshift(`${current.tagName.toLowerCase()}[${index}]`);
       current = current.parentNode;
     }
 
     return '/' + parts.join('/');
+  }
+
+  private getTextContent(element: any): string {
+    if (!element) return '';
+
+    // For text nodes, return their content
+    if (!element.tagName) {
+      return element.text || '';
+    }
+
+    // For element nodes, combine their text with children's text
+    let content = element.text || '';
+
+    if (element.childNodes) {
+      for (const child of element.childNodes) {
+        const childText = this.getTextContent(child);
+        if (childText) {
+          content += ' ' + childText;
+        }
+      }
+    }
+
+    return content.trim();
   }
 
   private aggregateElementsToChunks(elements: ElementType[]): Document[] {
@@ -115,7 +157,6 @@ export class HTMLHeaderTransformer {
       const chunks = this.splitText({ text: texts[i]! });
       for (const chunk of chunks) {
         const metadata = { ...(_metadatas[i] || {}) };
-
         const chunkMetadata = chunk.metadata;
 
         if (chunkMetadata) {
@@ -156,7 +197,7 @@ export class HTMLSectionTransformer {
   private options: Record<string, any>;
 
   constructor(headersToSplitOn: [string, string][], options: Record<string, any> = {}) {
-    this.headersToSplitOn = Object.fromEntries(headersToSplitOn);
+    this.headersToSplitOn = Object.fromEntries(headersToSplitOn.map(([tag, name]) => [tag.toLowerCase(), name]));
     this.options = options;
   }
 
@@ -168,7 +209,7 @@ export class HTMLSectionTransformer {
         new Document({
           text: section.content,
           metadata: {
-            [this.headersToSplitOn[section.tagName]!]: section.header,
+            [this.headersToSplitOn[section.tagName.toLowerCase()]!]: section.header,
             xpath: section.xpath,
           },
         }),
@@ -181,17 +222,17 @@ export class HTMLSectionTransformer {
 
     while (current && current.nodeType === 1) {
       let index = 1;
-      let sibling = current.previousElementSibling;
+      let sibling = current.previousSibling;
 
       while (sibling) {
-        if (sibling.rawTagName === current.rawTagName) {
+        if (sibling.nodeType === 1 && sibling.tagName === current.tagName) {
           index++;
         }
-        sibling = sibling.previousElementSibling;
+        sibling = sibling.previousSibling;
       }
 
-      if (current.rawTagName) {
-        parts.unshift(`${current.rawTagName.toLowerCase()}[${index}]`);
+      if (current.tagName) {
+        parts.unshift(`${current.tagName.toLowerCase()}[${index}]`);
       }
       current = current.parentNode;
     }
@@ -217,8 +258,8 @@ export class HTMLSectionTransformer {
     const headerElements = root.querySelectorAll(headers.join(','));
 
     headerElements.forEach((headerElement, index) => {
-      const header = headerElement.textContent?.trim() || '';
-      const tagName = headerElement.rawTagName.toLowerCase();
+      const header = headerElement.text?.trim() || '';
+      const tagName = headerElement.tagName;
       const xpath = this.getXPath(headerElement);
       let content = '';
 
@@ -226,8 +267,8 @@ export class HTMLSectionTransformer {
       const nextHeader = headerElements[index + 1];
 
       while (currentElement && (!nextHeader || currentElement !== nextHeader)) {
-        if (currentElement.textContent) {
-          content += currentElement.textContent.trim() + ' ';
+        if (currentElement.text) {
+          content += currentElement.text.trim() + ' ';
         }
         currentElement = currentElement.nextElementSibling;
       }

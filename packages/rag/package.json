@@ -28,7 +28,7 @@
     "@paralleldrive/cuid2": "^2.2.2",
     "js-tiktoken": "^1.0.15",
     "llamaindex": "^0.8.15",
-    "node-html-parser": "^7.0.1",
+    "node-html-better-parser": "^1.4.7",
     "pathe": "^2.0.2",
     "zod": "^3.24.1"
   },
