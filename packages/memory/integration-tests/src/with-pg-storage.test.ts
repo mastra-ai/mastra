@@ -1,3 +1,4 @@
+import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
 import { Memory } from '@mastra/memory';
 import { PostgresStore } from '@mastra/store-pg';
 import { PgVector } from '@mastra/vector-pg';
@@ -38,11 +39,9 @@ describe('Memory with PostgresStore Integration', () => {
         messageRange: 2,
       },
     },
-    embedding: {
-      provider: 'OPEN_AI',
-      model: 'text-embedding-ada-002',
-      maxRetries: 3,
-    },
+    embedder: new OpenAIEmbedder({
+      model: 'text-embedding-3-small',
+    }),
   });
 
   getResuableTests(memory);
