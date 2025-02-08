@@ -1,16 +1,16 @@
 ---
-title: "LibSQL Vector Store | Vector Databases | RAG | Mastra Docs"
-description: Documentation for the LibSQLVector class in Mastra, which provides vector search using LibSQL with vector extensions.
+title: "Default Vector Store | Vector Databases | RAG | Mastra Docs"
+description: Documentation for the DefaultVectorDB class in Mastra, which provides vector search using LibSQL with vector extensions.
 ---
 
-# LibSQL Vector Store
+# DefaultVectorDB Store
 
-The LibSQLVector class provides vector search using [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
+The DefaultVectorDB class provides vector search using [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
 It's part of the `@mastra/core` package and offers efficient vector similarity search with metadata filtering.
 
 ## Installation
 
-LibSQL vector store is included in the core package:
+Default vector store is included in the core package:
 
 ```bash copy
 npm install @mastra/core
@@ -19,10 +19,10 @@ npm install @mastra/core
 ## Usage
 
 ```typescript copy showLineNumbers
-import { LibSQLVector } from '@mastra/core/vector/libsql';
+import { DefaultVectorDB } from '@mastra/core/storage';
 
 // Create a new vector store instance
-const store = new LibSQLVector({
+const store = new DefaultVectorDB({
   connectionUrl: process.env.DATABASE_URL,
   // Optional: for Turso cloud databases
   authToken: process.env.DATABASE_AUTH_TOKEN,
@@ -56,7 +56,8 @@ const results = await store.query(
     {
       name: "connectionUrl",
       type: "string",
-      description: "LibSQL database URL. Use ':memory:' for in-memory database, 'file:local.db' for local file, or a LibSQL-compatible connection string like 'libsql://your-database.turso.io'.",
+      description:
+        "LibSQL database URL. Use ':memory:' for in-memory database, 'file:local.db' for local file, or a LibSQL-compatible connection string like 'libsql://your-database.turso.io'.",
     },
     {
       name: "authToken",
@@ -74,7 +75,8 @@ const results = await store.query(
       name: "syncInterval",
       type: "number",
       isOptional: true,
-      description: "Interval in milliseconds for database sync (Turso specific)",
+      description:
+        "Interval in milliseconds for database sync (Turso specific)",
     },
   ]}
 />
@@ -102,7 +104,8 @@ Creates a new vector collection. The index name must start with a letter or unde
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
       defaultValue: "cosine",
-      description: "Distance metric for similarity search. Note: Currently only cosine similarity is supported by LibSQL.",
+      description:
+        "Distance metric for similarity search. Note: Currently only cosine similarity is supported by LibSQL.",
     },
   ]}
 />
@@ -264,17 +267,20 @@ try {
   await store.query("my-collection", queryVector);
 } catch (error) {
   // Handle specific error cases
-  if (error.message.includes('Invalid index name format')) {
-    console.error('Index name must start with a letter/underscore and contain only alphanumeric characters');
-  } else if (error.message.includes('Table not found')) {
-    console.error('The specified index does not exist');
+  if (error.message.includes("Invalid index name format")) {
+    console.error(
+      "Index name must start with a letter/underscore and contain only alphanumeric characters",
+    );
+  } else if (error.message.includes("Table not found")) {
+    console.error("The specified index does not exist");
   } else {
-    console.error('Vector store error:', error.message);
+    console.error("Vector store error:", error.message);
   }
 }
 ```
 
 Common error cases include:
+
 - Invalid index name format
 - Invalid vector dimensions
 - Table/index not found
@@ -282,4 +288,5 @@ Common error cases include:
 - Transaction failures during upsert
 
 ### Related
+
 - [Metadata Filters](./metadata-filters)

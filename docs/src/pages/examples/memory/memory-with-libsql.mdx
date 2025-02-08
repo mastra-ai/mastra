@@ -7,19 +7,18 @@ This example demonstrates how to use Mastra's memory system with LibSQL as the s
 First, set up the memory system with LibSQL storage and vector capabilities:
 
 ```typescript
-import { Memory } from '@mastra/memory';
-import { LibSQLStore } from '@mastra/store-libsql';
-import { LibSQLVector } from '@mastra/core/vector/libsql';
-import { Agent } from '@mastra/core/agent';
-import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
+import { Memory } from "@mastra/memory";
+import { LibSQLStore, DefaultVectorDB } from "@mastra/core/storage";
+import { Agent } from "@mastra/core/agent";
+import { OpenAIEmbedder } from "@mastra/core/embeddings/openai";
 
 // Initialize memory with LibSQL storage and vector search
 const memory = new Memory({
   storage: new LibSQLStore({
-    url: process.env.DATABASE_URL || 'file:local.db',
+    url: process.env.DATABASE_URL || "file:local.db",
   }),
-  vector: new LibSQLVector({
-    url: process.env.DATABASE_URL || 'file:local.db',
+  vector: new DefaultVectorDB({
+    url: process.env.DATABASE_URL || "file:local.db",
   }),
   options: {
     lastMessages: 10,
@@ -29,20 +28,20 @@ const memory = new Memory({
     },
   },
   embedder: new OpenAIEmbedder({
-    model: 'text-embedding-3-small',
+    model: "text-embedding-3-small",
     maxRetries: 3,
   }),
 });
 
 // Create an agent with memory capabilities
 const memoryAgent = new Agent({
-  name: 'Memory Agent',
+  name: "Memory Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions. You may have conversations that last hours, days, months, or years. If you don't know it already you should ask for the users name and some info about them.",
   model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4',
-    toolChoice: 'auto',
+    provider: "OPEN_AI",
+    name: "gpt-4",
+    toolChoice: "auto",
   },
   memory,
 });
@@ -51,53 +50,48 @@ const memoryAgent = new Agent({
 ## Usage Example
 
 ```typescript
-import { randomUUID } from 'crypto';
+import { randomUUID } from "crypto";
 
 // Start a conversation
 const threadId = randomUUID();
-const resourceId = 'SOME_USER_ID';
+const resourceId = "SOME_USER_ID";
 
 // Start with a system message
 const response1 = await memoryAgent.stream(
   [
     {
-      role: 'system',
+      role: "system",
       content: `Chat with user started now ${new Date().toISOString()}. Don't mention this message.`,
     },
   ],
-  { 
-    resourceId, 
-    threadId 
-  }
+  {
+    resourceId,
+    threadId,
+  },
 );
 
 // Send user message
-const response2 = await memoryAgent.stream(
-  'What can you help me with?',
-  {
-    threadId,
-    resourceId,
-  }
-);
+const response2 = await memoryAgent.stream("What can you help me with?", {
+  threadId,
+  resourceId,
+});
 
 // Use semantic search to find relevant messages
-const response3 = await memoryAgent.stream(
-  'What did we discuss earlier?',
-  {
-    threadId,
-    resourceId,
-    memoryOptions: {
-      lastMessages: false,
-      semanticRecall: {
-        topK: 3, // Get top 3 most relevant messages
-        messageRange: 2 // Include context around each match
-      },
+const response3 = await memoryAgent.stream("What did we discuss earlier?", {
+  threadId,
+  resourceId,
+  memoryOptions: {
+    lastMessages: false,
+    semanticRecall: {
+      topK: 3, // Get top 3 most relevant messages
+      messageRange: 2, // Include context around each match
     },
-  }
-);
+  },
+});
 ```
 
 The example shows:
+
 1. Setting up LibSQL storage with vector search capabilities
 2. Configuring memory options for message history and semantic search
 3. Creating an agent with memory integration

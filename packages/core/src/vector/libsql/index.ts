@@ -6,7 +6,7 @@ import { MastraVector, type IndexStats, type QueryResult } from '../index';
 import { LibSQLFilterTranslator } from './filter';
 import { buildFilterQuery } from './sql-builder';
 
-export class LibSQLVector extends MastraVector {
+export class DefaultVectorDB extends MastraVector {
   private turso: TursoClient;
 
   constructor({
@@ -256,3 +256,5 @@ export class LibSQLVector extends MastraVector {
     });
   }
 }
+
+export { DefaultVectorDB as LibSQLVector };

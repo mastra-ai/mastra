@@ -12,7 +12,7 @@ The storage package provides a flexible and extensible storage system for Mastra
    - Handles table initialization and management
    - Provides common storage operations for all implementations
 
-2. **LibSQL Implementation (`MastraStorageLibSql`)**
+2. **LibSQL Implementation (`DefaultStorage`)**
    - Concrete implementation using LibSQL/SQLite
    - Supports both in-memory and file-based storage
    - Implements atomic transactions for data integrity
@@ -49,9 +49,9 @@ The storage system manages four primary tables:
 ### Basic Setup
 
 ```typescript
-import { MastraStorageLibSql } from '@mastra/core/storage';
+import { DefaultStorage } from '@mastra/core/storage';
 
-const storage = new MastraStorageLibSql({
+const storage = new DefaultStorage({
   name: 'my-storage',
   config: {
     url: 'file:my-database.db', // or 'file:memory:' for in-memory

@@ -1,6 +1,5 @@
 import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
-import { MastraStorageLibSql } from '@mastra/core/storage';
-import { LibSQLVector } from '@mastra/core/vector/libsql';
+import { DefaultStorage, DefaultVectorDB } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 import dotenv from 'dotenv';
 import { describe } from 'vitest';
@@ -10,12 +9,12 @@ import { getResuableTests } from './reusable-tests';
 dotenv.config({ path: '.env.test' });
 
 describe('Memory with LibSQL Integration', () => {
-  const vector = new LibSQLVector({
+  const vector = new DefaultVectorDB({
     connectionUrl: 'file:test.db',
   });
 
   const memory = new Memory({
-    storage: new MastraStorageLibSql({
+    storage: new DefaultStorage({
       config: {
         url: 'file:test.db',
       },

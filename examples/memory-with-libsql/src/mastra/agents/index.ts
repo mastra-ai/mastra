@@ -1,16 +1,15 @@
 import { Agent } from '@mastra/core/agent';
 import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
-import { MastraStorageLibSql } from '@mastra/core/storage';
-import { LibSQLVector } from '@mastra/core/vector/libsql';
+import { DefaultStorage, DefaultVectorDB } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 
 const memory = new Memory({
-  storage: new MastraStorageLibSql({
+  storage: new DefaultStorage({
     config: {
       url: 'file:example.db',
     },
   }),
-  vector: new LibSQLVector({
+  vector: new DefaultVectorDB({
     connectionUrl: 'file:example.db',
   }),
   options: {
@@ -22,7 +21,6 @@ const memory = new Memory({
   },
   embedder: new OpenAIEmbedder({
     model: 'text-embedding-3-small',
-    maxRetries: 3,
   }),
 });
 
