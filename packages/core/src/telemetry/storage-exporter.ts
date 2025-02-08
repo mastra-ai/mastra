@@ -89,7 +89,7 @@ export class OTLPTraceExporter implements SpanExporter {
           }, {}),
           startTime: Number(startTimeUnixNano),
           endTime: Number(endTimeUnixNano),
-          payload: rest,
+          other: rest,
           createdAt: now,
         });
       }
