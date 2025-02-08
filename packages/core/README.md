@@ -89,7 +89,10 @@ const memory = new MastraMemory({
 });
 ```
 
-[More memory documentation →](https://mastra.ai/docs/reference/memory/overview)
+**Note:** this is the base `MastraMemory` class. This class in `@mastra/core` is intended to be extended when developing custom agent memory strategies.
+To use a premade memory strategy (recommended), with long and short term memory built in, use `import { Memory } from "@mastra/memory"` instead.
+
+[Visit the memory documentation to use Memory in your project →](https://mastra.ai/docs/reference/memory/overview)
 
 ### Vector Stores (`/vector`)
 
