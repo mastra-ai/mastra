@@ -11,6 +11,9 @@ const meta = {
   rag: {
     title: "RAG",
   },
+  memory: {
+    title: "Memory",
+  },
 };
 
 export default meta;

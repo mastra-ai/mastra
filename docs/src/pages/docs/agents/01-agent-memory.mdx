@@ -401,7 +401,7 @@ const agent = new Agent({
   name: "Customer Service",
   instructions:
     "You are a helpful customer service agent. Remember customer preferences and past interactions.",
-  model: openai("gpt-4o"),
+  model: openai("gpt-4o-mini"),
 
   memory: new Memory({
     storage: new DefaultStorage({ url: ":memory:" }),

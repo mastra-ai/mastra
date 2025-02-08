@@ -1,3 +1,4 @@
+import { openai } from '@ai-sdk/openai';
 import { Agent, Mastra, Step, Workflow } from '@mastra/core';
 import { z } from 'zod';
 
@@ -5,10 +6,7 @@ async function main() {
   const penguin = new Agent({
     name: 'agent skipper',
     instructions: `You are skipper from penguin of madagascar, reply as that`,
-    model: {
-      provider: 'OPEN_AI',
-      name: 'gpt-4o',
-    },
+    model: openai('gpt-4o-mini'),
   });
 
   const newWorkflow = new Workflow({

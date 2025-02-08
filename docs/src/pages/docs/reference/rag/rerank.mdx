@@ -22,10 +22,12 @@ function rerank(
 import { openai } from "@ai-sdk/openai";
 import { rerank } from "@mastra/rag";
 
+const model = openai("gpt-4o-mini");
+
 const rerankedResults = await rerank(
   vectorSearchResults,
   "How do I deploy to production?",
-  openai("gpt-4o-mini"),
+  model,
   {
     weights: {
       semantic: 0.5,

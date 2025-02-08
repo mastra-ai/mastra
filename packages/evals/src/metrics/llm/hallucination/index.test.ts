@@ -1,4 +1,4 @@
-import { OpenAI } from '@mastra/core/llm/openai';
+import { openai } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
 
 import { TestCaseWithContext } from '../utils';
@@ -127,87 +127,83 @@ const testCases: TestCaseWithContext[] = [
   },
 ];
 
-const llm = new OpenAI({
-  name: 'gpt-4o',
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
+const model = openai('gpt-4o');
 describe(
   'HallucinationMetric',
   () => {
     it('should handle perfect alignment', async () => {
       const testCase = testCases[0]!;
-      const metric = new HallucinationMetric(llm, { context: testCase.context });
+      const metric = new HallucinationMetric(model, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
     });
 
     it('should handle complete hallucination', async () => {
       const testCase = testCases[1]!;
-      const metric = new HallucinationMetric(llm, { context: testCase.context });
+      const metric = new HallucinationMetric(model, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
     });
 
     it('should handle partial hallucination', async () => {
       const testCase = testCases[2]!;
-      const metric = new HallucinationMetric(llm, { context: testCase.context });
+      const metric = new HallucinationMetric(model, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
     });
 
     it('should handle empty output', async () => {
       const testCase = testCases[3]!;
-      const metric = new HallucinationMetric(llm, { context: testCase.context });
+      const metric = new HallucinationMetric(model, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
       expect(result.score).toBe(testCase.expectedResult.score);
     });
 
     it('should handle speculative language', async () => {
       const testCase = testCases[4]!;
-      const metric = new HallucinationMetric(llm, { context: testCase.context });
+      const metric = new HallucinationMetric(model, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
     });
 
     it('should handle empty context', async () => {
       const testCase = testCases[5]!;
-      const metric = new HallucinationMetric(llm, { context: testCase.context });
+      const metric = new HallucinationMetric(model, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
       expect(result.score).toBe(testCase.expectedResult.score);
     });
 
     it('should handle implicit contradictions', async () => {
       const testCase = testCases[6]!;
-      const metric = new HallucinationMetric(llm, { context: testCase.context });
+      const metric = new HallucinationMetric(model, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
     });
 
     it('should handle numerical approximations', async () => {
       const testCase = testCases[7]!;
-      const metric = new HallucinationMetric(llm, { context: testCase.context });
+      const metric = new HallucinationMetric(model, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
     });
 
     it('should handle out of scope additions', async () => {
       const testCase = testCases[8]!;
-      const metric = new HallucinationMetric(llm, { context: testCase.context });
+      const metric = new HallucinationMetric(model, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
     });
 
     it('should handle temporal contradictions', async () => {
       const testCase = testCases[9]!;
-      const metric = new HallucinationMetric(llm, { context: testCase.context });
+      const metric = new HallucinationMetric(model, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
     });
 
     it('should handle numerical contradiction despite approximation', async () => {
       const testCase = testCases[10]!;
-      const metric = new HallucinationMetric(llm, { context: testCase.context });
+      const metric = new HallucinationMetric(model, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
     });

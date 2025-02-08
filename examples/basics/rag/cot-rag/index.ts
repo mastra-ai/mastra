@@ -30,10 +30,7 @@ THOUGHT PROCESS:
 
 FINAL ANSWER:
 [Your concise answer based on the retrieved context]`,
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o-mini',
-  },
+  model: openai('gpt-4o-mini'),
   tools: { vectorQueryTool },
 });
 
