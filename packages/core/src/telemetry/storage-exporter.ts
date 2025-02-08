@@ -50,10 +50,8 @@ export class OTLPTraceExporter implements SpanExporter {
     const items = this.queue.shift();
     if (!items) return Promise.resolve();
 
-    console.log('flushing', items.data.length);
     const allSpans: any[] = items.data.reduce((acc, scopedSpans) => {
       const { scope, spans } = scopedSpans;
-      console.log('spans', spans.length);
       for (const span of spans) {
         const {
           spanId,
@@ -96,14 +94,12 @@ export class OTLPTraceExporter implements SpanExporter {
       return acc;
     }, []);
 
-    console.log('sending spans', allSpans.length, allSpans);
     return this.storage
       .batchInsert({
         tableName: MastraStorage.TABLE_TRACES,
         records: allSpans,
       })
       .then(() => {
-        console.log('sent spans');
         items.resultCallback({
           code: ExportResultCode.SUCCESS,
         });
