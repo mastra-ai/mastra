@@ -7,6 +7,7 @@
     "start": "pnpx tsx index.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "latest",
     "@mastra/core": "workspace:*",
     "zod": "^3.24.1"
   }

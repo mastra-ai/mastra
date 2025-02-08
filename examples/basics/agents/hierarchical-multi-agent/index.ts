@@ -57,10 +57,7 @@ const publisherAgent = new Agent({
   name: 'publisherAgent',
   instructions:
     'You are a publisher agent that first calls the copywriter agent to write blog post copy about a specific topic and then calls the editor agent to edit the copy. Just return the final edited copy.',
-  model: {
-    provider: 'ANTHROPIC',
-    name: 'claude-3-5-sonnet-20241022',
-  },
+  model: anthropic('claude-3-5-sonnet-20241022'),
   tools: { copywriterTool, editorTool },
 });
 
