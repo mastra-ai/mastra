@@ -33,14 +33,12 @@ const memory = new Memory({
 Add the memory instance to an agent
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+
 const todoAgent = new Agent({
   name: "Memory agent",
   instructions: "You are a helpful AI assistant.",
-  model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-    toolChoice: "auto",
-  },
+  model: openai("gpt-4o-mini"),
   memory,
 });
 ```

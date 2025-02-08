@@ -7,17 +7,17 @@ This example demonstrates how to use Mastra's memory system with PostgreSQL as t
 First, set up the memory system with PostgreSQL storage and vector capabilities:
 
 ```typescript
-import { Memory } from '@mastra/memory';
-import { PostgresStore, PgVector } from '@mastra/pg';
-import { Agent } from '@mastra/core/agent';
-import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
+import { Memory } from "@mastra/memory";
+import { PostgresStore, PgVector } from "@mastra/pg";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
 
 // PostgreSQL connection details
-const host = 'localhost';
+const host = "localhost";
 const port = 5432;
-const user = 'postgres';
-const database = 'postgres';
-const password = 'postgres';
+const user = "postgres";
+const database = "postgres";
+const password = "postgres";
 const connectionString = `postgresql://${user}:${password}@${host}:${port}`;
 
 // Initialize memory with PostgreSQL storage and vector search
@@ -37,22 +37,15 @@ const memory = new Memory({
       messageRange: 2,
     },
   },
-  embedder: new OpenAIEmbedder({
-    model: 'text-embedding-3-small',
-    maxRetries: 3,
-  }),
+  embedder: openai.embedding("text-embedding-3-small"),
 });
 
 // Create an agent with memory capabilities
 const chefAgent = new Agent({
-  name: 'chefAgent',
+  name: "chefAgent",
   instructions:
-    'You are Michel, a practical and experienced home chef who helps people cook great meals with whatever ingredients they have available.',
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4',
-    toolChoice: 'auto',
-  },
+    "You are Michel, a practical and experienced home chef who helps people cook great meals with whatever ingredients they have available.",
+  model: openai("gpt-4o-mini"),
   memory,
 });
 ```
@@ -60,19 +53,19 @@ const chefAgent = new Agent({
 ## Usage Example
 
 ```typescript
-import { randomUUID } from 'crypto';
+import { randomUUID } from "crypto";
 
 // Start a conversation
 const threadId = randomUUID();
-const resourceId = 'SOME_USER_ID';
+const resourceId = "SOME_USER_ID";
 
 // Ask about ingredients
 const response1 = await chefAgent.stream(
-  'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?',
+  "In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?",
   {
     threadId,
     resourceId,
-  }
+  },
 );
 
 // Ask about different ingredients
@@ -81,23 +74,24 @@ const response2 = await chefAgent.stream(
   {
     threadId,
     resourceId,
-  }
+  },
 );
 
 // Use memory to recall previous conversation
 const response3 = await chefAgent.stream(
-  'What did we cook before I went to my friends house?',
+  "What did we cook before I went to my friends house?",
   {
     threadId,
     resourceId,
     memoryOptions: {
       lastMessages: 3, // Get last 3 messages for context
-    }
-  }
+    },
+  },
 );
 ```
 
 The example shows:
+
 1. Setting up PostgreSQL storage with vector search capabilities
 2. Configuring memory options for message history and semantic search
 3. Creating an agent with memory integration
