@@ -183,9 +183,12 @@ export abstract class MastraStorage extends MastraBase {
       tableName: MastraStorage.TABLE_TRACES,
       schema: {
         id: { type: 'text', nullable: false, primaryKey: true },
+        parentSpanId: { type: 'text', nullable: true },
         name: { type: 'text', nullable: false },
         traceId: { type: 'text', nullable: false },
         scope: { type: 'text', nullable: false },
+        kind: { type: 'integer', nullable: false },
+        attributes: { type: 'jsonb', nullable: false },
         payload: { type: 'text', nullable: false },
         startTime: { type: 'timestamp', nullable: false },
         endTime: { type: 'timestamp', nullable: false },
