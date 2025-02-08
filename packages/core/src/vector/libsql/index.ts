@@ -256,3 +256,5 @@ export class LibSQLVector extends MastraVector {
     });
   }
 }
+
+export const DefaultVector = LibSQLVector;

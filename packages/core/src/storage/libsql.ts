@@ -5,6 +5,8 @@ import { MessageType, StorageThreadType } from '../memory';
 import { MastraStorage, TABLE_NAMES } from './base';
 import { StorageColumn, StorageGetMessagesArg } from './types';
 
+export * from '../vector/libsql/index';
+
 export interface LibSQLConfig {
   url: string;
   authToken?: string;
@@ -348,3 +350,5 @@ export class MastraStorageLibSql extends MastraStorage {
     }
   }
 }
+
+export const DefaultStorage = MastraStorageLibSql;
