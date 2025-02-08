@@ -1,6 +1,13 @@
 import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { Step, Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
+
+const recruiter = new Agent({
+  id: 'recruiter',
+  instructions: `You are a recruiter.`,
+  model: openai('gpt-4o-mini'),
+});
 
 const gatherCandidateInfo = new Step({
   id: 'gatherCandidateInfo',
@@ -14,18 +21,13 @@ const gatherCandidateInfo = new Step({
     resumeText: z.string(),
   }),
   execute: async ({ context, mastra }) => {
-    if (!mastra?.llm) {
-      throw new Error('Mastra instance is required to run this step');
-    }
     const resumeText = context.machineContext?.getStepPayload<{ resumeText: string }>('trigger')?.resumeText;
-
-    const llm = mastra.llm({ provider: 'OPEN_AI', name: 'gpt-4o' });
 
     const prompt = `
           You are given this resume text:
           "${resumeText}"
         `;
-    const res = await llm.generate(prompt, {
+    const res = await recruiter.generate(prompt, {
       output: z.object({
         candidateName: z.string(),
         isTechnical: z.boolean(),
@@ -51,19 +53,14 @@ const askAboutSpecialty = new Step({
     question: z.string(),
   }),
   execute: async ({ context, mastra }) => {
-    if (!mastra?.llm) {
-      throw new Error('Mastra instance is required to run this step');
-    }
-
     const candidateInfo = context.machineContext?.getStepPayload<CandidateInfo>('gatherCandidateInfo');
 
-    const llm = mastra.llm({ provider: 'OPEN_AI', name: 'gpt-4o' });
     const prompt = `
           You are a recruiter. Given the resume below, craft a short question
           for ${candidateInfo?.candidateName} about how they got into "${candidateInfo?.specialty}".
           Resume: ${candidateInfo?.resumeText}
         `;
-    const res = await llm.generate(prompt);
+    const res = await recruiter.generate(prompt);
     return { question: res?.text?.trim() || '' };
   },
 });
@@ -74,18 +71,14 @@ const askAboutRole = new Step({
     question: z.string(),
   }),
   execute: async ({ context, mastra }) => {
-    if (!mastra?.llm) {
-      throw new Error('Mastra instance is required to run this step');
-    }
     const candidateInfo = context.machineContext?.getStepPayload<CandidateInfo>('gatherCandidateInfo');
 
-    const llm = mastra.llm({ provider: 'OPEN_AI', name: 'gpt-4o' });
     const prompt = `
           You are a recruiter. Given the resume below, craft a short question
           for ${candidateInfo?.candidateName} asking what interests them most about this role.
           Resume: ${candidateInfo?.resumeText}
         `;
-    const res = await llm.generate(prompt);
+    const res = await recruiter.generate(prompt);
     return { question: res?.text?.trim() || '' };
   },
 });
