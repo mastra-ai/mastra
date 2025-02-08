@@ -17,7 +17,15 @@ export class Memory extends MastraMemory {
     // Check for deprecated embeddings object
     if (config.embeddings) {
       throw new Error(
-        'The `embeddings` option is deprecated. Please use `embedder` instead. Example: new Memory({ embedder: new OpenAIEmbedder({ model: "text-embedding-3-small" }) })',
+        `The \`embeddings\` option is deprecated. Please use \`embedder\` instead.
+Example: 
+
+  import { openai } from '@ai-sdk/openai';
+
+  new Memory({ 
+    embedder: openai.embedding(\`text-embedding-3-small\`)
+  })
+`,
       );
     }
 
@@ -40,11 +48,11 @@ export class Memory extends MastraMemory {
     let vectorResults:
       | null
       | {
-        id: string;
-        score: number;
-        metadata?: Record<string, any>;
-        vector?: number[];
-      }[] = null;
+          id: string;
+          score: number;
+          metadata?: Record<string, any>;
+          vector?: number[];
+        }[] = null;
 
     this.logger.info(`Memory query() with:`, {
       threadId,
@@ -57,13 +65,13 @@ export class Memory extends MastraMemory {
     const vectorConfig =
       typeof config?.semanticRecall === `boolean`
         ? {
-          topK: 2,
-          messageRange: { before: 2, after: 2 },
-        }
+            topK: 2,
+            messageRange: { before: 2, after: 2 },
+          }
         : {
-          topK: config?.semanticRecall?.topK || 2,
-          messageRange: config?.semanticRecall?.messageRange || { before: 2, after: 2 },
-        };
+            topK: config?.semanticRecall?.topK || 2,
+            messageRange: config?.semanticRecall?.messageRange || { before: 2, after: 2 },
+          };
 
     if (selectBy?.vectorSearchString && this.vector) {
       const embedder = this.getEmbedder();
@@ -87,18 +95,18 @@ export class Memory extends MastraMemory {
         ...selectBy,
         ...(vectorResults?.length
           ? {
-            include: vectorResults.map(r => ({
-              id: r.metadata?.message_id,
-              withNextMessages:
-                typeof vectorConfig.messageRange === 'number'
-                  ? vectorConfig.messageRange
-                  : vectorConfig.messageRange.after,
-              withPreviousMessages:
-                typeof vectorConfig.messageRange === 'number'
-                  ? vectorConfig.messageRange
-                  : vectorConfig.messageRange.before,
-            })),
-          }
+              include: vectorResults.map(r => ({
+                id: r.metadata?.message_id,
+                withNextMessages:
+                  typeof vectorConfig.messageRange === 'number'
+                    ? vectorConfig.messageRange
+                    : vectorConfig.messageRange.after,
+                withPreviousMessages:
+                  typeof vectorConfig.messageRange === 'number'
+                    ? vectorConfig.messageRange
+                    : vectorConfig.messageRange.before,
+              })),
+            }
           : {}),
       },
       threadConfig: config,
@@ -289,9 +297,9 @@ export class Memory extends MastraMemory {
       : typeof latestMessage.content === 'string'
         ? latestMessage.content
         : latestMessage.content
-          .filter(c => c.type === 'text')
-          .map(c => c.text)
-          .join('\n');
+            .filter(c => c.type === 'text')
+            .map(c => c.text)
+            .join('\n');
 
     const threadId = latestMessage?.threadId;
     if (!latestContent || !threadId) {
