@@ -59,7 +59,7 @@ import { embedMany } from "ai";
 
 Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
 
-```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{12} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
@@ -129,7 +129,7 @@ export const ragAgentThree = new Agent({
 
 Instantiate PgVector and Mastra with all components:
 
-```typescript copy showLineNumbers{72} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{64} filename="src/mastra/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
@@ -145,7 +145,7 @@ const processAgent = mastra.getAgent("ragAgentThree");
 
 Chunk the initial document clean them using the processAgent.
 
-```typescript copy showLineNumbers{82} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{74} filename="src/mastra/index.ts"
 const chunks = await doc.chunk({
   strategy: "recursive",
   size: 256,
@@ -170,7 +170,7 @@ const updatedChunks = await updatedDoc.chunk({
 
 Generate and store both raw and cleaned embeddings:
 
-```typescript copy showLineNumbers{101} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{93} filename="src/mastra/index.ts"
 const { embeddings } = await embedMany({
   model: openai.embedding('text-embedding-3-small'),
   values: chunks.map(chunk => chunk.text),
@@ -204,7 +204,7 @@ await vectorStore.upsert(
 
 Function to generate responses with index selection:
 
-```typescript copy showLineNumbers{129} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{121} filename="src/mastra/index.ts"
 async function generateResponse(query: string, agent: Agent) {
   const prompt = `
       Please answer the following question:
@@ -222,7 +222,7 @@ async function generateResponse(query: string, agent: Agent) {
 
 ## Example Usage
 
-```typescript copy showLineNumbers{143} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{135} filename="src/mastra/index.ts"
 async function answerQueries(queries: string[], agent: Agent) {
   for (const query of queries) {
     try {

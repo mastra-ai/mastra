@@ -15,7 +15,8 @@ This example shows how to retrieve similar chunks from a Pinecone vector databas
 
 ```tsx copy
 import { openai } from "@ai-sdk/openai";
-import { MDocument, PineconeVector } from "@mastra/rag";
+import { PineconeVector } from "@mastra/pinecone";
+import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
 
 const doc = MDocument.fromText("Your text content...");

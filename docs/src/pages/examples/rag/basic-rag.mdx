@@ -46,7 +46,7 @@ import { PgVector } from '@mastra/pg';
 
 Create a tool that can query the vector database:
 
-```typescript copy showLineNumbers{4} filename="src/index.ts"
+```typescript copy showLineNumbers{7} filename="src/index.ts"
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',
   indexName: 'embeddings',
@@ -58,7 +58,7 @@ const vectorQueryTool = createVectorQueryTool({
 
 Set up the Mastra agent that will handle the responses:
 
-```typescript copy showLineNumbers{15} filename="src/index.ts"
+```typescript copy showLineNumbers{13} filename="src/index.ts"
 export const ragAgent = new Agent({
   name: 'RAG Agent',
   instructions:
@@ -74,7 +74,7 @@ export const ragAgent = new Agent({
 
 Instantiate PgVector and Mastra with all components:
 
-```typescript copy showLineNumbers{28} filename="src/index.ts"
+```typescript copy showLineNumbers{23} filename="src/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
@@ -87,7 +87,7 @@ const agent = mastra.getAgent('ragAgent');
 
 ## Example Usage
 
-```typescript copy showLineNumbers{37} filename="src/index.ts"
+```typescript copy showLineNumbers{32} filename="src/index.ts"
 const prompt = `
 [Insert query based on document here]
 Please base your answer only on the context provided in the tool. 

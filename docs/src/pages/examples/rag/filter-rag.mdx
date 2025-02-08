@@ -50,7 +50,7 @@ import { embedMany } from 'ai';
 
 Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database with filtering capabilities.
 
-```typescript copy showLineNumbers{7} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{9} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
   id: 'vectorQueryTool',
   vectorStoreName: "pgVector",
@@ -64,7 +64,7 @@ const vectorQueryTool = createVectorQueryTool({
 
 Create a document and process it into chunks:
 
-```typescript copy showLineNumbers{19} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{17} filename="src/mastra/index.ts"
 const doc = MDocument.fromText(
   `The Impact of Climate Change on Global Agriculture...`
 );
@@ -84,7 +84,7 @@ const chunks = await doc.chunk({
 
 Transform chunks into metadata that can be filtered:
 
-```typescript copy showLineNumbers{33} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{31} filename="src/mastra/index.ts"
 const chunkMetadata = chunks?.map((chunk: any, index: number) => ({
   text: chunk.text,
   ...chunk.metadata,
@@ -102,7 +102,7 @@ const chunkMetadata = chunks?.map((chunk: any, index: number) => ({
 
 Set up the Mastra agent that will handle the responses:
 
-```typescript copy showLineNumbers{45} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{43} filename="src/mastra/index.ts"
 export const ragAgent = new Agent({
   name: 'RAG Agent',
   llm: new OpenAI({
@@ -136,7 +136,7 @@ We can provide an example of how the metadata is structured for the agent to use
 
 Instantiate PgVector and Mastra with all components:
 
-```typescript copy showLineNumbers{71} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{69} filename="src/mastra/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
@@ -151,7 +151,7 @@ const agent = mastra.getAgent('ragAgent');
 
 Generate embeddings for the chunks and store them in the vector database along with their metadata:
 
-```typescript copy showLineNumbers{80} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{78} filename="src/mastra/index.ts"
 const { embeddings } = await embedMany({
   model: openai.embedding('text-embedding-3-small'),
   values: chunks.map(chunk => chunk.text),
@@ -171,7 +171,7 @@ The `upsert` operation stores both the vector embeddings and their associated me
 
 Function to generate responses based on retrieved context:
 
-```typescript copy showLineNumbers{92} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{90} filename="src/mastra/index.ts"
 async function generateResponse(query: string) {
   const prompt = `
       Please answer the following question:
@@ -190,7 +190,7 @@ async function generateResponse(query: string) {
 
 ## Example Usage
 
-```typescript copy showLineNumbers{107} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{105} filename="src/mastra/index.ts"
 const queries = [
   "What adaptation strategies are mentioned? Use regex to search for the word 'adaptation' in the 'nested.keywords' field.",
   "Show me recent sections. Check the 'nested.id' field and return values that are greater than 2.",
