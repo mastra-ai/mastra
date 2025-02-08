@@ -79,13 +79,11 @@ const documentChunkerTool = createDocumentChunkerTool({
   },
 });
 
-const model = openai('gpt-4o-mini');
-
 export const ragAgentOne = new Agent({
   name: 'RAG Agent One',
   instructions:
     'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
-  model,
+  model: openai('gpt-4o-mini'),
   tools: {
     vectorQueryTool,
   },
@@ -95,7 +93,7 @@ export const ragAgentTwo = new Agent({
   name: 'RAG Agent Two',
   instructions:
     'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
-  model,
+  model: openai('gpt-4o-mini'),
   tools: {
     cleanedVectorQueryTool,
   },
@@ -104,7 +102,7 @@ export const ragAgentTwo = new Agent({
 export const ragAgentThree = new Agent({
   name: 'RAG Agent Three',
   instructions: 'You are a helpful assistant that processes, cleans, and labels data before storage.',
-  model,
+  model: openai('gpt-4o-mini'),
   tools: { documentChunkerTool },
 });
 
