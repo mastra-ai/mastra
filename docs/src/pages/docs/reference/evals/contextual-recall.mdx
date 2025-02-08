@@ -10,14 +10,11 @@ The `ContextualRecallMetric` class evaluates how effectively an LLM's response i
 ## Basic Usage
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
 import { ContextualRecallMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = {
-  provider: "OPEN_AI",
-  name: "gpt-4",
-  apiKey: process.env.OPENAI_API_KEY
-};
+const model = openai("gpt-4o-mini");
 
 const metric = new ContextualRecallMetric(model, {
   context: [
@@ -143,11 +140,7 @@ score = (number of correctly recalled items) / (total number of relevant items i
 
 ```typescript
 const metric = new ContextualRecallMetric(
-  {
-    provider: "OPEN_AI",
-    name: "gpt-4",
-    apiKey: process.env.OPENAI_API_KEY
-  },
+  model,
   {
     scale: 100, // Use 0-100 scale instead of 0-1
     context: [
