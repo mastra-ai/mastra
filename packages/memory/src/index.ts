@@ -92,7 +92,6 @@ ${embedderExample}`,
       const { embedding } = await embed({
         value: selectBy.vectorSearchString,
         model: embedder,
-        maxRetries: 3,
       });
 
       await this.vector.createIndex('memory_messages', 1536);

@@ -10,7 +10,6 @@ const chunks = await doc.chunk();
 const { embeddings } = await embedMany({
   model: openai.embedding('text-embedding-3-small'),
   values: chunks.map(chunk => chunk.text),
-  maxRetries: 3,
 });
 
 const pgVector = new PgVector('postgresql://localhost:5432/mydb'); // TODO: change to your database

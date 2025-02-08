@@ -9,7 +9,6 @@ const chunks = await doc.chunk();
 const { embeddings } = await embedMany({
   model: cohere.embedding('embed-english-v3.0'),
   values: chunks.map(chunk => chunk.text),
-  maxRetries: 3,
 });
 
 console.log(embeddings);

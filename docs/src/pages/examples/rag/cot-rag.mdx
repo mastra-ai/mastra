@@ -124,7 +124,6 @@ Generate embeddings for the chunks and store them in the vector database:
 const { embeddings } = await embedMany({
   values: chunks.map(chunk => chunk.text),
   model: openai.embedding("text-embedding-3-small"),
-  maxRetries: 3,
 });
 
 const vectorStore = mastra.getVector("pgVector");

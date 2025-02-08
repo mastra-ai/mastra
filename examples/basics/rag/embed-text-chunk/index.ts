@@ -9,7 +9,6 @@ const chunks = await doc.chunk();
 const { embedding } = await embed({
   model: openai.embedding('text-embedding-3-small'),
   value: chunks[0].text,
-  maxRetries: 3,
 });
 
 console.log(embedding);
