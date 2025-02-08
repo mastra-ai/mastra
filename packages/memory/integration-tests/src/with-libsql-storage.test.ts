@@ -1,6 +1,5 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { MastraStorageLibSql } from '@mastra/core/storage';
-import { LibSQLVector } from '@mastra/core/vector/libsql';
+import { DefaultStorage, DefaultVectorDB } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 import dotenv from 'dotenv';
 import { describe } from 'vitest';
@@ -12,12 +11,12 @@ dotenv.config({ path: '.env.test' });
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 describe('Memory with LibSQL Integration', () => {
-  const vector = new LibSQLVector({
+  const vector = new DefaultVectorDB({
     connectionUrl: 'file:test.db',
   });
 
   const memory = new Memory({
-    storage: new MastraStorageLibSql({
+    storage: new DefaultStorage({
       config: {
         url: 'file:test.db',
       },

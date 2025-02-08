@@ -17,10 +17,10 @@ First, we'll configure the memory system using LibSQL storage. You can use any o
 
 ```typescript
 import { Memory } from "@mastra/memory";
-import { MastraStorageLibSql } from "@mastra/core/storage";
+import { DefaultStorage } from "@mastra/core/storage";
 
 const memory = new Memory({
-  storage: new MastraStorageLibSql({
+  storage: new DefaultStorage({
     config: {
       url: "file:example.db",
     },

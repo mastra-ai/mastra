@@ -1,5 +1,5 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { LibSQLVector } from '@mastra/core/vector/libsql';
+import { DefaultVectorDB } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 import { UpstashStore } from '@mastra/upstash';
 import dotenv from 'dotenv';
@@ -17,7 +17,7 @@ if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 describe('Memory with UpstashStore Integration', () => {
-  const vector = new LibSQLVector({
+  const vector = new DefaultVectorDB({
     connectionUrl: 'file:test.db',
   });
 

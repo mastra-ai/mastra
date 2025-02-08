@@ -1,16 +1,15 @@
-import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
-import { MastraStorageLibSql } from '@mastra/core/storage';
-import { LibSQLVector } from '@mastra/core/vector/libsql';
+import { Agent } from '@mastra/core/agent';
+import { DefaultStorage, DefaultVectorDB } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 
 const memory = new Memory({
-  storage: new MastraStorageLibSql({
+  storage: new DefaultStorage({
     config: {
       url: 'file:example.db',
     },
   }),
-  vector: new LibSQLVector({
+  vector: new DefaultVectorDB({
     connectionUrl: 'file:example.db',
   }),
   options: {
@@ -20,7 +19,7 @@ const memory = new Memory({
       messageRange: 2,
     },
   },
-  embedder: openai.embedding('text-embedding-3-small')
+  embedder: openai.embedding('text-embedding-3-small'),
 });
 
 export const chefAgent = new Agent({
