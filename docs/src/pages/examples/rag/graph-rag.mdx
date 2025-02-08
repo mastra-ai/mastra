@@ -50,7 +50,7 @@ import { embedMany } from "ai";
 
 Using createGraphRAGTool imported from @mastra/rag, you can create a tool that queries the vector database and converts the results into a knowledge graph.
 
-```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{8} filename="src/mastra/index.ts"
 const graphRagTool = createGraphRAGTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
@@ -90,7 +90,7 @@ Keep each section brief and focus on the most important points.`,
 
 Instantiate PgVector and Mastra with all components:
 
-```typescript copy showLineNumbers{37} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{36} filename="src/mastra/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
@@ -105,7 +105,7 @@ const agent = mastra.getAgent("ragAgent");
 
 Create a document and process it into chunks:
 
-```typescript copy showLineNumbers{46} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{45} filename="src/mastra/index.ts"
 const doc = MDocument.fromText(
   `Riverdale Heights: Community Development Study...`,
 );
@@ -122,7 +122,7 @@ const chunks = await doc.chunk({
 
 Generate embeddings for the chunks and store them in the vector database:
 
-```typescript copy showLineNumbers{55} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{56} filename="src/mastra/index.ts"
 const { embeddings } = await embedMany({
   values: chunks.map(chunk => chunk.text),
   model: openai.embedding("text-embedding-3-small"),
@@ -142,7 +142,7 @@ await vectorStore.upsert(
 
 Function to generate responses based on retrieved context:
 
-```typescript copy showLineNumbers{69} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{70} filename="src/mastra/index.ts"
 async function generateResponse(query: string) {
   const prompt = `
     Please answer the following question using both semantic and graph-based context:
@@ -158,7 +158,7 @@ async function generateResponse(query: string) {
 
 ## Example Usage
 
-```typescript copy showLineNumbers{81} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{82} filename="src/mastra/index.ts"
 async function answerQueries(queries: string[]) {
   for (const query of queries) {
     try {

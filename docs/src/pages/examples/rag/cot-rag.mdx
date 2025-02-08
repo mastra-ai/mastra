@@ -48,7 +48,7 @@ import { embedMany } from "ai";
 
 Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
 
-```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{8} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
@@ -60,8 +60,7 @@ const vectorQueryTool = createVectorQueryTool({
 
 Set up the Mastra agent with chain-of-thought prompting instructions:
 
-```typescript copy showLineNumbers{15} filename="src/mastra/index.ts"
-
+```typescript copy showLineNumbers{14} filename="src/mastra/index.ts"
 export const ragAgent = new Agent({
   name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context.
@@ -90,7 +89,7 @@ FINAL ANSWER:
 
 Instantiate PgVector and Mastra with all components:
 
-```typescript copy showLineNumbers{41} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{36} filename="src/mastra/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
@@ -104,7 +103,7 @@ const agent = mastra.getAgent("ragAgent");
 
 Create a document and process it into chunks:
 
-```typescript copy showLineNumbers{49} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{44} filename="src/mastra/index.ts"
 const doc = MDocument.fromText(
   `The Impact of Climate Change on Global Agriculture...`,
 );
@@ -121,7 +120,7 @@ const chunks = await doc.chunk({
 
 Generate embeddings for the chunks and store them in the vector database:
 
-```typescript copy showLineNumbers{58} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{55} filename="src/mastra/index.ts"
 const { embeddings } = await embedMany({
   values: chunks.map(chunk => chunk.text),
   model: openai.embedding("text-embedding-3-small"),
@@ -141,7 +140,7 @@ await vectorStore.upsert(
 
 Function to generate responses using chain-of-thought reasoning:
 
-```typescript copy showLineNumbers{72} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{69} filename="src/mastra/index.ts"
 async function generateResponse(query: string) {
   const prompt = `
     Please answer the following question using chain-of-thought reasoning:
@@ -159,7 +158,7 @@ async function generateResponse(query: string) {
 
 ## Example Usage
 
-```typescript copy showLineNumbers{86} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{83} filename="src/mastra/index.ts"
 async function answerQueries(queries: string[]) {
   for (const query of queries) {
     try {

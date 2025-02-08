@@ -51,7 +51,7 @@ per week.`);
 
 Extract metadata directly from the document:
 
-```typescript copy showLineNumbers{16} filename="src/index.ts"
+```typescript copy showLineNumbers{17} filename="src/index.ts"
 // Configure metadata extraction options
 await doc.extractMetadata({
   keywords: true,  // Extract important keywords
@@ -80,7 +80,7 @@ console.log('Extracted Metadata:', meta);
 
 Combine document chunking with metadata extraction:
 
-```typescript copy showLineNumbers{16} filename="src/index.ts"
+```typescript copy showLineNumbers{40} filename="src/index.ts"
 // Configure chunking with metadata extraction
 await doc.chunk({
   strategy: 'recursive',  // Use recursive chunking strategy
