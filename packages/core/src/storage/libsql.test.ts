@@ -3,13 +3,13 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 
 import { WorkflowRunState } from '../workflows';
 
-import { MastraStorageLibSql } from './libsql';
+import { DefaultStorage } from './libsql';
 
 // Test database configuration
 const TEST_DB_URL = 'file:memory:'; // Use in-memory SQLite for tests
 
-describe('MastraStorageLibSql', () => {
-  const storage = new MastraStorageLibSql({
+describe('DefaultStorage', () => {
+  const storage = new DefaultStorage({
     config: { url: TEST_DB_URL },
   });
 

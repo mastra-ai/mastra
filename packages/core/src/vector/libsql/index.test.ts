@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 
-import { LibSQLVector } from './index.js';
+import { DefaultVectorDB } from './index.js';
 
-describe('LibSQLVector', () => {
-  let vectorDB: LibSQLVector;
+describe('DefaultVectorDB', () => {
+  let vectorDB: DefaultVectorDB;
   const testIndexName = 'test_vectors';
   const testIndexName2 = 'test_vectors1';
 
   beforeAll(async () => {
-    vectorDB = new LibSQLVector({
+    vectorDB = new DefaultVectorDB({
       connectionUrl: 'file::memory:?cache=shared',
     });
   });

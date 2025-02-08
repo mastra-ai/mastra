@@ -1,9 +1,9 @@
 ---
-title: 'Storing Embeddings in A Vector Database | Mastra Docs'
+title: "Storing Embeddings in A Vector Database | Mastra Docs"
 description: Guide on vector storage options in Mastra, including embedded and dedicated vector databases for similarity search.
 ---
 
-import { Tabs } from 'nextra/components';
+import { Tabs } from "nextra/components";
 
 ## Storing Embeddings in A Vector Database
 
@@ -20,12 +20,12 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { PgVector } from '@mastra/pg';
 
-  const store = new PgVector(process.env.POSTGRES_CONNECTION_STRING)
-  await store.createIndex("my-collection", 1536);
-  await store.upsert(
-    "my-collection",
-    embeddings,
-    chunks.map(chunk => ({ text: chunk.text }))
+const store = new PgVector(process.env.POSTGRES_CONNECTION_STRING)
+await store.createIndex("my-collection", 1536);
+await store.upsert(
+"my-collection",
+embeddings,
+chunks.map(chunk => ({ text: chunk.text }))
 )
 
 ````
@@ -92,9 +92,9 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
 </Tabs.Tab>
 <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
-  import { LibSQLVector } from '@mastra/core/vector/libsql'
+  import { DefaultVectorDB } from '@mastra/core/storage'
 
-  const store = new LibSQLVector(process.env.DATABASE_URL)
+  const store = new DefaultVectorDB(process.env.DATABASE_URL)
   await store.createIndex("my-collection", 1536);
   await store.upsert(
     "my-collection",
@@ -160,9 +160,9 @@ All vector stores support adding metadata to your vectors, which enables filteri
 ```ts showLineNumbers copy
 // Store embeddings with rich metadata
 await vectorStore.upsert(
-  'embeddings',
+  "embeddings",
   embeddings,
-  chunks.map(chunk => ({
+  chunks.map((chunk) => ({
     text: chunk.text,
     source: chunk.source,
     category: chunk.category,

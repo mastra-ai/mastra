@@ -3,40 +3,45 @@ title: "Example: Insert Embeddings in LibSQL | RAG | Mastra Docs"
 description: Example of using Mastra to store embeddings in LibSQL for similarity search.
 ---
 
-import { GithubLink } from '../../../components/github-link';
+import { GithubLink } from "../../../components/github-link";
 
 # Insert Embedding in LibSQL
 
-After generating embeddings, you need to store them in a vector database for similarity search. The `LibSQLVector` class provides methods to create collections and insert embeddings into LibSQL, a fork of SQLite with vector extensions. This example shows how to store embeddings in LibSQL for later retrieval.
+After generating embeddings, you need to store them in a vector database for similarity search. The `DefaultVectorDB` class provides methods to create collections and insert embeddings into LibSQL, a fork of SQLite with vector extensions. This example shows how to store embeddings in LibSQL for later retrieval.
 
 ```tsx copy
-import { LibSQLVector } from '@mastra/core/vector/libsql';
-import { MDocument, embed } from '@mastra/rag';
+import { DefaultVectorDB } from "@mastra/core/storage";
+import { MDocument, embed } from "@mastra/rag";
 
-const doc = MDocument.fromText('Your text content...');
+const doc = MDocument.fromText("Your text content...");
 
 const chunks = await doc.chunk();
 
 const { embeddings } = await embed(chunks, {
-  provider: 'OPEN_AI',
-  model: 'text-embedding-3-small',
+  provider: "OPEN_AI",
+  model: "text-embedding-3-small",
   maxRetries: 3,
 });
 
-const libsql = new LibSQLVector(process.env.DATABASE_URL);
+const libsql = new DefaultVectorDB(process.env.DATABASE_URL);
 
-await libsql.createIndex('test_collection', 1536);
+await libsql.createIndex("test_collection", 1536);
 
 await libsql.upsert(
-  'test_collection',
+  "test_collection",
   embeddings,
-  chunks?.map(chunk => ({ text: chunk.text })),
+  chunks?.map((chunk) => ({ text: chunk.text })),
 );
 ```
 
-{/* <br />
+{/\* <br />
+
 <br />
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-libsql'} /> */}
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-libsql"
+  }
+/> */}
