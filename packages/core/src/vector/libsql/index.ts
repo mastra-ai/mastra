@@ -257,4 +257,4 @@ export class DefaultVectorDB extends MastraVector {
   }
 }
 
-export const LibSQLVector = DefaultVectorDB;
+export { DefaultVectorDB as LibSQLVector };

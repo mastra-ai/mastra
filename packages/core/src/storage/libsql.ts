@@ -12,7 +12,7 @@ export interface LibSQLConfig {
   authToken?: string;
 }
 
-export class MastraStorageLibSql extends MastraStorage {
+export class DefaultStorage extends MastraStorage {
   private client: Client;
 
   constructor({ config }: { config: LibSQLConfig }) {
@@ -351,4 +351,4 @@ export class MastraStorageLibSql extends MastraStorage {
   }
 }
 
-export const DefaultStorage = MastraStorageLibSql;
+export { DefaultStorage as MastraStorageLibSql };
