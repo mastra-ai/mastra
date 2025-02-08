@@ -26,7 +26,7 @@ export const vectorQuerySearch = async ({
   queryFilter = {},
   topK,
   includeVectors = false,
-  maxRetries = 3,
+  maxRetries = 2,
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
   const { embedding } = await embed({
     value: queryText,

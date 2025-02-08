@@ -10,7 +10,6 @@ const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 const { embedding } = await embed({
   value: '[Insert query based on document here]',
   model: openai.embedding('text-embedding-3-small'),
-  maxRetries: 3,
 });
 
 const result = await pgVector.query('embeddings', embedding, 3, {

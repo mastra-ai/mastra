@@ -31,7 +31,6 @@ import { PgVector } from "@mastra/pg";
 const { embedding } = await embed({
   value: "What are the main points in the article?",
   model: openai.embedding('text-embedding-3-small'),
-  maxRetries: 3,
 });
 
 // Query vector store

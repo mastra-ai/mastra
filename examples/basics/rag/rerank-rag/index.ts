@@ -63,7 +63,6 @@ const chunks = await doc1.chunk({
 const { embeddings } = await embedMany({
   model: openai.embedding('text-embedding-3-small'),
   values: chunks.map(chunk => chunk.text),
-  maxRetries: 3,
 });
 
 const vectorStore = mastra.getVector('pgVector');
