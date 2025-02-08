@@ -47,11 +47,11 @@ export type MessageResponse<T extends 'raw' | 'core_message'> = {
 export type MemoryConfig = {
   lastMessages?: number | false;
   semanticRecall?:
-  | boolean
-  | {
-    topK: number;
-    messageRange: number | { before: number; after: number };
-  };
+    | boolean
+    | {
+        topK: number;
+        messageRange: number | { before: number; after: number };
+      };
   workingMemory?: {
     enabled: boolean;
     template?: string;
@@ -114,9 +114,7 @@ For example:
 new Memory({
   storage,
   vector,
-  embedder: new OpenAIEmbedder({ // <- this is required
-    model: "text-embedding-3-small",
-  })
+  embedder: openai("text-embedding-3-small") // example
 });
 `);
     }
