@@ -1,8 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { MessageType } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { MastraStorageLibSql } from '@mastra/core/storage';
-import { LibSQLVector } from '@mastra/core/vector/libsql';
+import { DefaultStorage, DefaultVectorDB } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 import dotenv from 'dotenv';
 import { randomUUID } from 'node:crypto';
@@ -40,17 +39,17 @@ const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 describe('Working Memory Tests', () => {
   let memory: Memory;
   let thread: any;
-  let vector: LibSQLVector;
+  let vector: DefaultVectorDB;
 
   beforeEach(async () => {
     // Initialize vector storage
-    vector = new LibSQLVector({
+    vector = new DefaultVectorDB({
       connectionUrl: 'file:test.db',
     });
 
     // Create memory instance with working memory enabled
     memory = new Memory({
-      storage: new MastraStorageLibSql({
+      storage: new DefaultStorage({
         config: {
           url: 'file:test.db',
         },
@@ -250,7 +249,7 @@ describe('Working Memory Tests', () => {
   it('should respect working memory enabled/disabled setting', async () => {
     // Create memory instance with working memory disabled
     const disabledMemory = new Memory({
-      storage: new MastraStorageLibSql({
+      storage: new DefaultStorage({
         config: {
           url: 'file:test.db',
         },

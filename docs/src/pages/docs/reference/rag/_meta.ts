@@ -10,7 +10,7 @@ const meta = {
   chroma: "ChromaVector",
   vectorize: "CloudflareVector",
   pg: "PgVector",
-  libsql: "LibSQLVector",
+  default: "DefaultVectorDB",
   pinecone: "PineconeVector",
   qdrant: "QdrantVector",
   upstash: "UpstashVector",

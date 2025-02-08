@@ -16,15 +16,15 @@ npm install @mastra/storage-libsql
 ## Usage
 
 ```typescript copy showLineNumbers
-import { MastraStorageLibSql } from "@mastra/core/storage";
+import { DefaultStorage } from "@mastra/core/storage";
 
 // In-memory database (development)
-const storage = new MastraStorageLibSql({
+const storage = new DefaultStorage({
   url: ":memory:",
 });
 
 // Persistent database (production)
-const storage = new MastraStorageLibSql({
+const storage = new DefaultStorage({
   url: process.env.DATABASE_URL,
 });
 ```

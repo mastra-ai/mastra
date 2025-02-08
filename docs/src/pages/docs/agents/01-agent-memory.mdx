@@ -177,9 +177,9 @@ Mastra currently supports several storage backends:
 ### LibSQL Storage
 
 ```typescript
-import { MastraStorageLibSql } from "@mastra/core/storage";
+import { DefaultStorage } from "@mastra/core/storage";
 
-const storage = new MastraStorageLibSql({
+const storage = new DefaultStorage({
   config: {
     url: "file:example.db",
   },
@@ -397,7 +397,7 @@ const agent = new Agent({
     "You are a helpful customer service agent. Remember customer preferences and past interactions.",
   model: openai("gpt-4o"),
   memory: new Memory({
-    storage: new MastraStorageLibSql({ url: ":memory:" }),
+    storage: new DefaultStorage({ url: ":memory:" }),
     options: {
       workingMemory: {
         enabled: true,
@@ -425,7 +425,7 @@ const todoAgent = new Agent({
     "You are a TODO list manager. Update the todo list in working memory whenever tasks are added, completed, or modified.",
   model: openai("gpt-4o-mini"),
   memory: new Memory({
-    storage: new MastraStorageLibSql({ url: ":memory:" }),
+    storage: new DefaultStorage({ url: ":memory:" }),
     options: {
       workingMemory: {
         enabled: true,
