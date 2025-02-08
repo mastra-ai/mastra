@@ -14,10 +14,7 @@ export class Memory extends MastraMemory {
       embeddings?: any;
     },
   ) {
-    // Check for deprecated embeddings object
-    if (config.embeddings) {
-      throw new Error(
-        `The \`embeddings\` option is deprecated. Please use \`embedder\` instead.
+    const embedderExample = `
 Example: 
 
   import { openai } from '@ai-sdk/openai';
@@ -25,7 +22,23 @@ Example:
   new Memory({ 
     embedder: openai.embedding(\`text-embedding-3-small\`)
   })
+
+`;
+
+    // Check for deprecated embeddings object
+    if (config.embeddings) {
+      throw new Error(
+        `The \`embeddings\` option is deprecated. Please use \`embedder\` instead.
+${embedderExample}
 `,
+      );
+    }
+
+    if (config.vector && !config.embedder) {
+      throw new Error(
+        `The \`embedder\` option is required when a vector DB is attached to new Memory({ vector })
+
+${embedderExample}`,
       );
     }
 
