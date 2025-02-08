@@ -4,6 +4,14 @@ import { DefaultStorage, DefaultVectorDB } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 
 const memory = new Memory({
+  options: {
+    lastMessages: 100,
+    semanticRecall: {
+      topK: 2,
+      messageRange: 2,
+    },
+  },
+
   storage: new DefaultStorage({
     config: {
       url: 'file:example.db',
@@ -12,13 +20,6 @@ const memory = new Memory({
   vector: new DefaultVectorDB({
     connectionUrl: 'file:example.db',
   }),
-  options: {
-    lastMessages: 100,
-    semanticRecall: {
-      topK: 2,
-      messageRange: 2,
-    },
-  },
   embedder: openai.embedding('text-embedding-3-small'),
 });
 
