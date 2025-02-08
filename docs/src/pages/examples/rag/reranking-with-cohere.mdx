@@ -15,10 +15,7 @@ import { rerank } from "@mastra/rag";
 const results = rerank(
   searchResults,
   "deployment configuration",
-  {
-    provider: "COHERE",
-    name: "rerank-v3.5",
-  },
+  cohere("rerank-v3.5"),
   {
     topK: 5,
     weights: {
