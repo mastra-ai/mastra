@@ -106,8 +106,7 @@ const graphQueryTool = createGraphQueryTool({
   indexName: 'embeddings',
   model: openai.embedding('text-embedding-3-small'),
   graphOptions: {
-    relationTypes: ['references', 'similar_to'],
-    maxHops: 2
+    threshold: 0.7,
   }
 });
 ```
