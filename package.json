@@ -22,7 +22,7 @@
     "build:integrations": "pnpm --filter \"./integrations/*\" build",
     "build:packages": "pnpm --filter \"./packages/*\" build",
     "build:vector-stores": "pnpm --filter \"./vector-stores/*\" build",
-    "build:stores": "pnpm --filter \"./storage/*\" build",
+    "build:stores": "pnpm --filter \"./storage/*\" build && pnpm --filter \"./stores/*\" build",
     "build:combined-stores": "pnpm --filter \"./stores/*\" build",
     "build:deployers": "pnpm --filter \"./deployers/*\" build",
     "build:speech": "pnpm --filter \"./speech/*\" build",
