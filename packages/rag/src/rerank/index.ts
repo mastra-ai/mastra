@@ -88,16 +88,11 @@ export async function rerank(
   model: LanguageModelV1,
   options: RerankerFunctionOptions,
 ): Promise<RerankResult[]> {
-  const { provider } = model;
   let semanticProvider: RelevanceScoreProvider;
-  if ('model' in model) {
-    semanticProvider = new MastraAgentRelevanceScorer(provider, model);
-  } else if (provider === 'COHERE' && 'name' in model && model.name === 'rerank-v3.5') {
-    semanticProvider = new CohereRelevanceScorer(model.name);
-  } else if ('name' in model) {
-    semanticProvider = new MastraAgentRelevanceScorer(provider, model);
+  if (model.modelId === 'rerank-v3.5') {
+    semanticProvider = new CohereRelevanceScorer(model.modelId);
   } else {
-    throw new Error('Invalid model configuration');
+    semanticProvider = new MastraAgentRelevanceScorer(model.provider, model);
   }
   const { queryEmbedding, topK = 3 } = options;
   const weights = {

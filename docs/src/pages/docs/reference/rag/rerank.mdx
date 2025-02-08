@@ -19,15 +19,13 @@ function rerank(
 ## Usage Example
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
 import { rerank } from "@mastra/rag";
 
 const rerankedResults = await rerank(
   vectorSearchResults,
   "How do I deploy to production?",
-  {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-  },
+  openai("gpt-4o-mini"),
   {
     weights: {
       semantic: 0.5,
