@@ -10,14 +10,11 @@ The `AnswerRelevancyMetric` class evaluates how well an LLM's output answers or 
 ## Basic Usage
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
 import { AnswerRelevancyMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = {
-  provider: "OPEN_AI",
-  name: "gpt-4o-mini",
-  apiKey: process.env.OPENAI_API_KEY,
-};
+const model = openai("gpt-4o-mini");
 
 const metric = new AnswerRelevancyMetric(model, {
   uncertaintyWeight: 0.3,
@@ -143,11 +140,7 @@ Score interpretation:
 
 ```typescript
 const metric = new AnswerRelevancyMetric(
-  {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-    apiKey: process.env.OPENAI_API_KEY,
-  },
+  model,
   {
     uncertaintyWeight: 0.5, // Higher weight for uncertain verdicts
     scale: 5, // Use 0-5 scale instead of 0-1

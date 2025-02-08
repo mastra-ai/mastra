@@ -10,14 +10,11 @@ The `ContextRelevancyMetric` class evaluates the quality of your RAG (Retrieval-
 ## Basic Usage
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
 import { ContextRelevancyMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = {
-  provider: "OPEN_AI",
-  name: "gpt-4",
-  apiKey: process.env.OPENAI_API_KEY
-};
+const model = openai("gpt-4o-mini");
 
 const metric = new ContextRelevancyMetric(model, {
   context: [
