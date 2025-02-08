@@ -1,3 +1,4 @@
+import { cohere } from '@ai-sdk/cohere';
 import { CohereRelevanceScorer } from '@mastra/core/relevance';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -25,12 +26,7 @@ describe('rerank', () => {
       { id: '3', metadata: { text: 'Test result 3' }, score: 0.9 },
     ];
     await expect(
-      rerank(
-        results,
-        'test query',
-        { provider: 'COHERE', name: 'rerank-v3.5' },
-        { weights: { semantic: 0.5, vector: 0.3, position: 0.5 } },
-      ),
+      rerank(results, 'test query', cohere('rerank-v3.5'), { weights: { semantic: 0.5, vector: 0.3, position: 0.5 } }),
     ).rejects.toThrow('Weights must add up to 1');
   });
 
@@ -41,15 +37,7 @@ describe('rerank', () => {
       { id: '3', metadata: { text: 'Test result 3' }, score: 0.9 },
     ];
 
-    const rerankedResults = await rerank(
-      results,
-      'test query',
-      {
-        provider: 'COHERE',
-        name: 'rerank-v3.5',
-      },
-      { topK: 2 },
-    );
+    const rerankedResults = await rerank(results, 'test query', cohere('rerank-v3.5'), { topK: 2 });
 
     expect(rerankedResults).toHaveLength(2);
     expect(rerankedResults[0]).toStrictEqual({
@@ -83,22 +71,14 @@ describe('rerank', () => {
       { id: '3', metadata: { text: 'Test result 3' }, score: 0.9 },
     ];
 
-    const rerankedResults = await rerank(
-      results,
-      'test query',
-      {
-        provider: 'COHERE',
-        name: 'rerank-v3.5',
+    const rerankedResults = await rerank(results, 'test query', cohere('rerank-v3.5'), {
+      weights: {
+        semantic: 0.5,
+        vector: 0.4,
+        position: 0.1,
       },
-      {
-        weights: {
-          semantic: 0.5,
-          vector: 0.4,
-          position: 0.1,
-        },
-        topK: 2,
-      },
-    );
+      topK: 2,
+    });
 
     expect(rerankedResults).toHaveLength(2);
     expect(rerankedResults[0]).toStrictEqual({
@@ -130,18 +110,10 @@ describe('rerank', () => {
       { id: '2', metadata: { text: 'Test result 2' }, score: 0.6 },
     ];
 
-    const rerankedResults = await rerank(
-      results,
-      'test query',
-      {
-        provider: 'COHERE',
-        name: 'rerank-v3.5',
-      },
-      {
-        queryEmbedding: [0.5, 0.3, -0.2, 0.4],
-        topK: 2,
-      },
-    );
+    const rerankedResults = await rerank(results, 'test query', cohere('rerank-v3.5'), {
+      queryEmbedding: [0.5, 0.3, -0.2, 0.4],
+      topK: 2,
+    });
 
     // Ensure query embedding analysis is being applied (we don't know exact score without knowing internals)
     expect(rerankedResults).toHaveLength(2);
