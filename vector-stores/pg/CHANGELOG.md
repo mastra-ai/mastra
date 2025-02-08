@@ -1,5 +1,17 @@
 # @mastra/vector-pg
 
+## 0.1.0-alpha.27
+
+### Minor Changes
+
+- c87eb4e: Combine PostgreSQL packages into `@mastra/pg`.
+
+  - Move and combine packages to `stores/pg`
+  - Reorganize source files into `src/vector` and `src/store`
+  - Add deprecation notices to old packages
+  - Update documentation and examples
+  - No breaking changes in functionality
+
 ## 0.1.0-alpha.26
 
 ### Patch Changes

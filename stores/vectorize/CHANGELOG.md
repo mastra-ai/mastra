@@ -2,6 +2,14 @@
 
 ## 0.1.0-alpha.28
 
+### Minor Changes
+
+- 91c81f5: Move @mastra/vector-vectorize to @mastra/vectorize
+
+  BREAKING CHANGE: The package @mastra/vector-vectorize has been moved to @mastra/vectorize. The old package is now deprecated and will display a warning message. Please update your imports from '@mastra/vector-vectorize' to '@mastra/vectorize'.
+
+## 0.1.0-alpha.28
+
 ### Major Changes
 
 - Package renamed from @mastra/vector-vectorize to @mastra/vectorize
