@@ -55,14 +55,25 @@ export class OTLPTraceExporter implements SpanExporter {
       const { scope, spans } = scopedSpans;
       console.log('spans', spans.length);
       for (const span of spans) {
+        const { spanId, parentSpanId, traceId, name, kind, attributes, startTimeUnixNano, endTimeUnixNano, ...rest } =
+          span;
         acc.push({
-          id: span.spanId,
-          traceId: span.traceId,
-          name: span.name,
+          id: spanId,
+          parentSpanId,
+          traceId,
+          name,
           scope,
-          startTime: Number(span.startTimeUnixNano),
-          endTime: Number(span.endTimeUnixNano),
-          payload: span,
+          kind,
+          attributes: attributes.reduce((acc: Record<string, any>, attr: any) => {
+            const valueKey = Object.keys(attr.value)[0];
+            if (valueKey) {
+              acc[attr.key] = attr.value[valueKey];
+            }
+            return acc;
+          }, {}),
+          startTime: Number(startTimeUnixNano),
+          endTime: Number(endTimeUnixNano),
+          payload: rest,
           createdAt: now,
         });
       }
