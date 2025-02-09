@@ -1,5 +1,12 @@
 # @mastra/ragie
 
+## 1.0.1-alpha.69
+
+### Patch Changes
+
+- Updated dependencies [5285356]
+  - @mastra/core@0.2.0-alpha.93
+
 ## 1.0.1-alpha.68
 
 ### Patch Changes

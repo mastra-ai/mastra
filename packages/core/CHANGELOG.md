@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.2.0-alpha.93
+
+### Minor Changes
+
+- 5285356: Renamed MastraLibSQLStorage and MastraLibSQLVector to DefaultStorage and DefaultVectorDB. I left the old export names so that it wont break anyones projects but all docs now show the new names
+
 ## 0.2.0-alpha.92
 
 ### Minor Changes
