@@ -12,8 +12,8 @@ import { validateBody } from './utils';
 // Agent handlers
 export async function getAgentsHandler(c: Context) {
   try {
-    const mastra = c.get('mastra');
-    const agents: Mastra = mastra.getAgents();
+    const mastra: Mastra = c.get('mastra');
+    const agents = mastra.getAgents();
 
     const serializedAgents = Object.entries(agents).reduce<any>((acc, [_id, _agent]) => {
       const agent = _agent as any;
@@ -28,7 +28,6 @@ export async function getAgentsHandler(c: Context) {
       }, {});
       acc[_id] = {
         name: agent.name,
-        model: agent.model,
         instructions: agent.instructions,
         tools: serializedAgentTools,
         provider: agent.llm?.getProvider(),
@@ -64,7 +63,6 @@ export async function getAgentByIdHandler(c: Context) {
 
     return c.json({
       name: agent.name,
-      model: agent.model,
       instructions: agent.instructions,
       tools: serializedAgentTools,
       provider: agent.llm?.getProvider(),
