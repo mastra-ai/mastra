@@ -34,7 +34,7 @@ const packages_llm_text = `
   - Format: @mastra/store-{name} -> storage/{name}
   - Example: @mastra/store-pg -> storage/pg
 
-  ## 5. Store packages (combined vector + storage packages) - STRICT RULES:
+  ## 5. Store packages - STRICT RULES:
   - ALL store packages must be directly under stores/
   - Format: @mastra/{name} -> stores/{name}
   - Example: @mastra/pg -> stores/pg

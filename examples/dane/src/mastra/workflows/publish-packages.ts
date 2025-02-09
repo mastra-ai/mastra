@@ -1,6 +1,8 @@
 import { Step, Workflow } from '@mastra/core/workflows';
 import chalk from 'chalk';
+import { execa } from 'execa';
 import { existsSync } from 'fs';
+import { readFileSync } from 'fs';
 import path from 'path';
 import { z } from 'zod';
 
@@ -271,244 +273,76 @@ const assemblePackages = new Step({
   },
 });
 
-const buildPackages = new Step({
+const buildAllPackages = new Step({
   id: 'buildPackages',
-  outputSchema,
-  execute: async ({ context, mastra }) => {
-    if (context.machineContext?.stepResults.assemblePackages?.status !== 'success') {
-      return defaultSet;
-    }
-
-    const pkgSet = context.machineContext.stepResults.assemblePackages.payload.packages;
-    const deploySet = context.machineContext.stepResults.assemblePackages.payload.deployers;
-    const integrationSet = context.machineContext.stepResults.assemblePackages.payload.integrations;
-    const vectorStoreSet = context.machineContext.stepResults.assemblePackages.payload.vector_stores;
-    const storeSet = context.machineContext.stepResults.assemblePackages.payload.stores;
-    const combinedStoreSet = context.machineContext.stepResults.assemblePackages.payload.combined_stores;
-    const speechSet = context.machineContext.stepResults.assemblePackages.payload.speech;
-
-    console.log({
-      pkgSet,
-      deploySet,
-      integrationSet,
-      vectorStoreSet,
-      storeSet,
-      combinedStoreSet,
-      speechSet,
+  execute: async () => {
+    console.log(chalk.green('Building all packages'));
+    await execa('pnpm', ['run', 'build'], {
+      stdio: 'inherit',
+      reject: false,
+      cwd: process.cwd(),
     });
-
-    const agent = mastra?.agents?.['danePackagePublisher'];
-
-    if (!agent) {
-      throw new Error('Agent not found');
-    }
-
-    async function buildSet(list: string[]) {
-      for (const pkg of list) {
-        await pnpmBuild.execute({
-          context: {
-            name: pkg,
-            packagePath: pkg,
-          },
-          suspend: async () => {},
-        });
-      }
-    }
-
-    let built = false;
-
-    if (pkgSet.length > 0) {
-      built = true;
-      await buildSet(pkgSet);
-    }
-
-    if (deploySet.length > 0) {
-      await buildSet(deploySet);
-      built = true;
-    }
-
-    if (integrationSet.length > 0) {
-      await buildSet(integrationSet);
-      built = true;
-    }
-
-    if (vectorStoreSet.length > 0) {
-      await buildSet(vectorStoreSet);
-      built = true;
-    }
-
-    if (speechSet.length > 0) {
-      await buildSet(speechSet);
-      built = true;
-    }
-
-    if (!built) {
-      console.error(chalk.red('Failed to build one or more packages'));
-      throw new Error('Failed to build one or more packages');
-    }
-
-    return {
-      packages: pkgSet,
-      deployers: deploySet,
-      integrations: integrationSet,
-      vector_stores: vectorStoreSet,
-      stores: storeSet,
-      combined_stores: combinedStoreSet,
-      speech: speechSet,
-    };
   },
 });
 
-const verifyBuild = new Step({
-  id: 'verifyBuild',
-  outputSchema: z.object({
-    packages: z.array(z.string()),
-  }),
-  execute: async ({ context }) => {
-    if (context.machineContext?.stepResults.buildPackages?.status !== 'success') {
-      return {
-        packages: [],
-      };
-    }
+const publishAllPackages = new Step({
+  id: 'publishPackages',
+  execute: async () => {
+    console.log(chalk.green('Publishing all packages'));
+    await execa('pnpm', ['changeset', 'publish'], {
+      stdio: 'inherit',
+      reject: false,
+      cwd: process.cwd(),
+    });
+  },
+});
 
-    const pkgSet = context.machineContext.stepResults.buildPackages.payload.packages;
-    const deploySet = context.machineContext.stepResults.buildPackages.payload.deployers;
-    const integrationSet = context.machineContext.stepResults.buildPackages.payload.integrations;
-    const vectorStoreSet = context.machineContext.stepResults.buildPackages.payload.vector_stores;
-    const storeSet = context.machineContext.stepResults.buildPackages.payload.stores;
-    const combinedStoreSet = context.machineContext.stepResults.buildPackages.payload.combined_stores;
-    const speechSet = context.machineContext.stepResults.buildPackages.payload.speech;
+const setAllDistTags = new Step({
+  id: 'setAllDistTags',
+  execute: async () => {
+    console.log(chalk.green('Setting dist tags for all packages'));
 
-    const allPackages = [
-      ...pkgSet,
-      ...deploySet,
-      ...integrationSet,
-      ...vectorStoreSet,
-      ...storeSet,
-      ...combinedStoreSet,
-      ...speechSet,
-    ];
+    // Get all package.json files from relevant directories
+    const packageDirs = ['packages', 'deployers', 'storage', 'vector-stores', 'stores', 'integrations', 'speech'];
+    const packages = [];
 
-    function checkMissingPackages(pkgSet: string[]) {
-      const missingPackages = [];
+    for (const dir of packageDirs) {
+      const dirPath = path.join(process.cwd(), dir);
+      if (!existsSync(dirPath)) continue;
 
-      for (const pkg of pkgSet) {
-        if (!existsSync(`${pkg}/dist`)) {
-          console.error(chalk.red(`We did not find the dist folder for ${pkg}.`));
-          missingPackages.push(pkg);
+      const { stdout } = await execa('find', [dirPath, '-name', 'package.json'], {
+        reject: false,
+      });
+
+      const packagePaths = stdout.split('\n').filter(Boolean);
+      for (const packagePath of packagePaths) {
+        const pkgJson = JSON.parse(readFileSync(packagePath, 'utf-8'));
+        if (pkgJson.name && pkgJson.version) {
+          packages.push({
+            name: pkgJson.name,
+            version: pkgJson.version,
+            path: path.dirname(packagePath),
+          });
         }
       }
-
-      return missingPackages;
     }
 
-    console.log('Verifying the output for:', context.machineContext.stepResults.buildPackages.payload.allPackages);
+    console.log(packages);
 
-    const missingPackages = checkMissingPackages(allPackages);
-
-    if (missingPackages.length > 0) {
-      console.error(chalk.red(`Missing packages: ${missingPackages.join(', ')}`));
-      throw new Error('Failed to build one or more packages');
+    // Set dist tags for each package
+    for (const pkg of packages) {
+      console.log(chalk.blue(`Setting dist tag for ${pkg.name}@${pkg.version}`));
+      try {
+        await execa('npm', ['dist-tag', 'add', `${pkg.name}@${pkg.version}`, 'latest'], {
+          stdio: 'inherit',
+          cwd: pkg.path,
+          reject: false,
+        });
+      } catch (error) {
+        console.error(chalk.red(`Failed to set dist tag for ${pkg.name}: ${error.message}`));
+      }
     }
-
-    return {
-      packages: allPackages,
-    };
   },
 });
 
-const publishChangeset = new Step({
-  id: 'publishChangeset',
-  outputSchema: z.object({
-    packages: z.array(z.string()),
-  }),
-  execute: async ({ context, mastra }) => {
-    if (context.machineContext?.stepResults.buildPackages?.status !== 'success') {
-      return {
-        packages: [],
-      };
-    }
-
-    const pkgSet = context.machineContext.stepResults.buildPackages.payload.packages;
-
-    const agent = mastra?.agents?.['danePackagePublisher'];
-
-    if (!agent) {
-      throw new Error('Agent not found');
-    }
-
-    const res = await agent.generate(PUBLISH_PACKAGES_PROMPT);
-
-    console.log(chalk.green(res.text));
-
-    return { packages: pkgSet };
-  },
-});
-
-const setLatestDistTag = new Step({
-  id: 'setLatestDistTag',
-  outputSchema: z.object({
-    packages: z.array(z.string()),
-  }),
-  execute: async ({ context, mastra }) => {
-    if (context.machineContext?.stepResults.publishChangeset?.status !== 'success') {
-      return {
-        packages: [],
-      };
-    }
-
-    const pkgSet = context.machineContext.stepResults.publishChangeset.payload.packages;
-
-    const agent = mastra?.agents?.['danePackagePublisher'];
-
-    if (!agent) {
-      throw new Error('Agent not found');
-    }
-
-    let res = await agent.generate(`
-            Set the active tag for these packages ${pkgSet.join(',')}.
-        `);
-
-    console.log(chalk.green(res.text));
-
-    return { packages: pkgSet };
-  },
-});
-
-packagePublisher
-  .step(getPacakgesToPublish)
-  .then(assemblePackages)
-  .then(buildPackages, {
-    when: async ({ context }) => {
-      return (
-        context.stepResults.assemblePackages?.status === 'success' &&
-        context.stepResults.assemblePackages?.payload?.packages.length > 0
-      );
-    },
-  })
-  .then(verifyBuild, {
-    when: async ({ context }) => {
-      return (
-        context.stepResults.buildPackages?.status === 'success' &&
-        context.stepResults.buildPackages?.payload?.packages.length > 0
-      );
-    },
-  })
-  .after(verifyBuild)
-  .step(publishChangeset, {
-    when: async ({ context }) => {
-      return (
-        context.stepResults.buildPackages?.status === 'success' &&
-        context.stepResults.buildPackages?.payload?.packages.length > 0
-      );
-    },
-  })
-  .then(setLatestDistTag, {
-    when: async ({ context }) => {
-      return (
-        context.stepResults.publishChangeset?.status === 'success' &&
-        context.stepResults.publishChangeset?.payload?.packages.length > 0
-      );
-    },
-  })
-  .commit();
+packagePublisher.step(buildAllPackages).then(publishAllPackages).then(setAllDistTags).commit();
