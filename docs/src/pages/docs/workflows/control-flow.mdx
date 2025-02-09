@@ -137,49 +137,43 @@ myWorkflow.step(
 );
 ```
 
-## Renaming Variables
+## Accessing Previous Step Results
 
-Variables let you pass outputs from one step into another step’s inputs.
+Steps access data from previous steps through the `context` object. The context contains a record of all step results and their payloads.
 
-### Passing Trigger Data
+### Using getStepPayload
 
-```typescript
-myWorkflow.step(stepOne).then(stepTwo, {
-  variables: {
-    valueToIncrement: {
-      step: "trigger",
-      path: "inputValue",
+`getStepPayload` retrieves a step's output with type safety:
+
+```typescript copy showLineNumbers
+workflow.step(
+  new Step({
+    id: "processOrder",
+    execute: async ({ context }) => {
+      const userData = context.getStepPayload<{ userId: string }>("fetchUser");
+      return {
+        userId: userData?.userId,
+        status: "processing"
+      };
     },
-  },
-});
+  })
+);
 ```
 
-### Passing Output from a Previous Step
+### Using Path Notation
 
-```typescript
-myWorkflow.step(stepOne).then(stepTwo, {
-  variables: {
-    valueToIncrement: {
-      step: stepOne,
-      path: "doubledValue",
+Path notation accesses step results through the machine context. For example, to access the status of the `processOrder` step:
+
+```typescript copy showLineNumbers
+workflow.step(
+  new Step({
+    id: "sendEmail",
+    execute: async ({ context }) => {
+      const orderStatus = context.machineContext.stepResults.processOrder.payload.status;
+      console.log(orderStatus);
     },
-  },
-});
+  })
+);
 ```
 
-### Passing Output Using a Step ID
-
-```typescript
-myWorkflow.step(stepOne).then(stepTwo, {
-  variables: {
-    valueToIncrement: {
-      step: {
-        id: "stepOne",
-      },
-      path: "doubledValue",
-    },
-  },
-});
-```
-
-In all these examples, you pick the specific data you want to pass forward. This approach helps decouple steps and keep your workflow logic clear.
+The context object maintains type information when used with TypeScript. Nested objects in step outputs can be accessed with either method.
