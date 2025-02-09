@@ -32,7 +32,7 @@ export class MastraLLM extends MastraLLMBase {
   #mastra?: MastraPrimitives;
 
   constructor({ model, mastra }: { model: LanguageModel; mastra?: MastraPrimitives }) {
-    super({ name: 'aisdk' });
+    super({ name: 'aisdk', model });
 
     this.#model = model;
 
@@ -54,6 +54,10 @@ export class MastraLLM extends MastraLLMBase {
     }
 
     this.#mastra = p;
+  }
+
+  getProvider() {
+    return this.#model.provider;
   }
 
   convertTools(tools?: ToolsInput): Record<string, Tool> {

@@ -2,8 +2,12 @@ import { Agent } from '@mastra/core/agent';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+interface PlaygroundAgent extends Agent {
+  provider: string;
+}
+
 export const useAgents = () => {
-  const [agents, setAgents] = useState<Record<string, Agent>>({});
+  const [agents, setAgents] = useState<Record<string, PlaygroundAgent>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -36,7 +40,7 @@ export const useAgents = () => {
 };
 
 export const useAgent = (agentId: string) => {
-  const [agent, setAgent] = useState<Agent | null>(null);
+  const [agent, setAgent] = useState<PlaygroundAgent | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
