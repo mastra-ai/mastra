@@ -49,7 +49,6 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
     vectorStore = new UpstashVector({ url, token });
   });
 
-
   afterAll(async () => {
     if (!vectorStore) return;
 

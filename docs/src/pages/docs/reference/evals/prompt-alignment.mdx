@@ -10,14 +10,11 @@ The `PromptAlignmentMetric` class evaluates how strictly an LLM's output follows
 ## Basic Usage
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
 import { PromptAlignmentMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = {
-  provider: "OPEN_AI",
-  name: "gpt-4o-mini",
-  apiKey: process.env.OPENAI_API_KEY,
-};
+const model = openai("gpt-4o-mini");
 
 const instructions = [
   "Start sentences with capital letters",

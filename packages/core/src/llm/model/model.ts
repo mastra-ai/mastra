@@ -12,9 +12,6 @@ import {
 import { JSONSchema7 } from 'json-schema';
 import { z, ZodSchema } from 'zod';
 
-import { MastraPrimitives } from '../../action';
-import { ToolsInput } from '../../agent/types';
-import { delay } from '../../utils';
 import {
   GenerateReturn,
   LLMTextOptions,
@@ -23,7 +20,10 @@ import {
   LLMStreamOptions,
   LLMTextObjectOptions,
   StreamReturn,
-} from '../types';
+} from '../';
+import { MastraPrimitives } from '../../action';
+import { ToolsInput } from '../../agent/types';
+import { delay } from '../../utils';
 
 import { MastraLLMBase } from './base';
 
@@ -164,6 +164,7 @@ export class MastraLLM extends MastraLLMBase {
     structuredOutput,
     runId,
     temperature,
+    toolChoice = 'auto',
   }: LLMTextObjectOptions<T>) {
     const model = this.#model;
 
@@ -178,6 +179,7 @@ export class MastraLLM extends MastraLLMBase {
         ...finalTools,
       },
       maxSteps,
+      toolChoice,
       onStepFinish: async (props: any) => {
         onStepFinish?.(JSON.stringify(props, null, 2));
 
@@ -231,6 +233,7 @@ export class MastraLLM extends MastraLLMBase {
     convertedTools,
     runId,
     temperature,
+    toolChoice = 'auto',
   }: LLMInnerStreamOptions) {
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {
@@ -249,6 +252,7 @@ export class MastraLLM extends MastraLLMBase {
         ...finalTools,
       },
       maxSteps,
+      toolChoice,
       onStepFinish: async (props: any) => {
         onStepFinish?.(JSON.stringify(props, null, 2));
 
@@ -300,6 +304,7 @@ export class MastraLLM extends MastraLLMBase {
     structuredOutput,
     runId,
     temperature,
+    toolChoice = 'auto',
   }: LLMStreamObjectOptions<T>) {
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming structured output`, {
@@ -318,6 +323,7 @@ export class MastraLLM extends MastraLLMBase {
         ...finalTools,
       },
       maxSteps,
+      toolChoice,
       onStepFinish: async (props: any) => {
         onStepFinish?.(JSON.stringify(props, null, 2));
 

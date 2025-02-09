@@ -1,4 +1,4 @@
-import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
+import { createOpenAI } from '@ai-sdk/openai';
 import { DefaultStorage, DefaultVectorDB } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 import dotenv from 'dotenv';
@@ -7,6 +7,8 @@ import { describe } from 'vitest';
 import { getResuableTests } from './reusable-tests';
 
 dotenv.config({ path: '.env.test' });
+
+const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 describe('Memory with LibSQL Integration', () => {
   const vector = new DefaultVectorDB({
@@ -27,9 +29,7 @@ describe('Memory with LibSQL Integration', () => {
         messageRange: 2,
       },
     },
-    embedder: new OpenAIEmbedder({
-      model: 'text-embedding-3-small',
-    }),
+    embedder: openai.embedding('text-embedding-3-small'),
   });
 
   getResuableTests(memory);

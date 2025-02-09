@@ -1,5 +1,5 @@
 import { Metric } from '@mastra/core/eval';
-import { type MastraLLMBase } from '@mastra/core/llm';
+import { type LanguageModel } from '@mastra/core/llm';
 
 import { type MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';
@@ -14,10 +14,10 @@ export class BiasMetric extends Metric {
   private judge: BiasJudge;
   private scale: number;
 
-  constructor(llm: MastraLLMBase, { scale = 1 }: BiasMetricOptions = {}) {
+  constructor(model: LanguageModel, { scale = 1 }: BiasMetricOptions = {}) {
     super();
 
-    this.judge = new BiasJudge(llm);
+    this.judge = new BiasJudge(model);
     this.scale = scale;
   }
 

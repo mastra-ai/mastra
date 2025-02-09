@@ -1,14 +1,15 @@
-import { MDocument, embedMany } from '@mastra/rag';
+import { openai } from '@ai-sdk/openai';
 import { PgVector } from '@mastra/pg';
+import { MDocument } from '@mastra/rag';
+import { embedMany } from 'ai';
 
 const doc = MDocument.fromText('Your text content...');
 
 const chunks = await doc.chunk();
 
-const { embeddings } = await embedMany(chunks, {
-  provider: 'OPEN_AI',
-  model: 'text-embedding-3-small',
-  maxRetries: 3,
+const { embeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
 });
 
 const pgVector = new PgVector('postgresql://localhost:5432/mydb'); // TODO: change to your database

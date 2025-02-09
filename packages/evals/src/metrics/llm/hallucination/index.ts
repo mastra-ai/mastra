@@ -1,5 +1,5 @@
 import { Metric } from '@mastra/core/eval';
-import { type MastraLLMBase } from '@mastra/core/llm';
+import { type LanguageModel } from '@mastra/core/llm';
 
 import { type MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';
@@ -16,11 +16,11 @@ export class HallucinationMetric extends Metric {
   private scale: number;
   private context: string[];
 
-  constructor(llm: MastraLLMBase, { scale = 1, context }: HallucinationMetricOptions) {
+  constructor(model: LanguageModel, { scale = 1, context }: HallucinationMetricOptions) {
     super();
 
     this.context = context;
-    this.judge = new HallucinationJudge(llm);
+    this.judge = new HallucinationJudge(model);
     this.scale = scale;
   }
 

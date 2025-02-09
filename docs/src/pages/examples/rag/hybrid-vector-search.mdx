@@ -42,8 +42,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
-import { embed } from '@mastra/rag';
+import { embed } from 'ai';
 import { PgVector } from '@mastra/pg';
+import { openai } from '@ai-sdk/openai';
 ```
 
 ## Vector Store Initialization
@@ -58,12 +59,11 @@ const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 ### Filter by Metadata Value
 
-```typescript copy showLineNumbers{55} filename="src/index.ts"
+```typescript copy showLineNumbers{6} filename="src/index.ts"
 // Create embedding for the query
-const { embedding } = await embed('[Insert query based on document here]', {
-  provider: 'OPEN_AI',
-  model: 'text-embedding-3-small',
-  maxRetries: 3,
+const { embedding } = await embed({
+  model: openai.embedding('text-embedding-3-small'),
+  value: '[Insert query based on document here]',
 });
 
 // Query with metadata filter

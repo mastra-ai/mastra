@@ -154,10 +154,10 @@ export class ChromaVector extends MastraVector {
 
 throw new Error(
   '@mastra/vector-chroma is deprecated. Please use @mastra/chroma instead.\n\n' +
-  'To migrate:\n' +
-  '1. Remove @mastra/vector-chroma from your dependencies\n' +
-  '2. Install @mastra/chroma: pnpm add @mastra/chroma\n' +
-  '3. Update your imports:\n' +
-  '   from: import { ChromaVector } from "@mastra/vector-chroma"\n' +
-  '   to:   import { ChromaVector } from "@mastra/chroma"\n'
+    'To migrate:\n' +
+    '1. Remove @mastra/vector-chroma from your dependencies\n' +
+    '2. Install @mastra/chroma: pnpm add @mastra/chroma\n' +
+    '3. Update your imports:\n' +
+    '   from: import { ChromaVector } from "@mastra/vector-chroma"\n' +
+    '   to:   import { ChromaVector } from "@mastra/chroma"\n',
 );

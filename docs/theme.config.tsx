@@ -67,7 +67,7 @@ const docs: DocsThemeConfig = {
     icon: (
       <svg
         height="24"
-        stroke-linejoin="round"
+        strokeLinejoin="round"
         viewBox="0 0 16 16"
         width="24"
         className="w-5 h-5 text-inherit"

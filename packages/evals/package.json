@@ -46,12 +46,17 @@
     "string-similarity": "^4.0.4",
     "zod": "^3.24.1"
   },
+  "peerDependencies": {
+    "ai": "^4.0.0"
+  },
   "devDependencies": {
+    "@ai-sdk/openai": "latest",
     "@tsconfig/recommended": "^1.0.7",
     "@types/difflib": "^0.2.7",
     "@types/fs-extra": "^11.0.4",
     "@types/sentiment": "^5.0.4",
     "@types/string-similarity": "^4.0.2",
+    "ai": "^4.0.34",
     "tsup": "^8.0.1",
     "vitest": "^3.0.4"
   }

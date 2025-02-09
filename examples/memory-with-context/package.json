@@ -11,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@ai-sdk/openai": "^1.1.9",
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
     "chalk": "^5.3.0",

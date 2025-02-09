@@ -1,4 +1,6 @@
-import { embedMany } from '../embeddings';
+import { createOpenAI } from '@ai-sdk/openai';
+import { embedMany } from 'ai';
+import { describe, it, expect } from 'vitest';
 
 import { MDocument } from './document';
 import { Language } from './types';
@@ -13,6 +15,10 @@ Welcome to our comprehensive guide on modern web development. This resource cove
 - Intermediate developers wanting to modernize their skillset
 - Senior developers seeking a refresher on current best practices
 `;
+
+const openai = createOpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 describe('MDocument', () => {
   describe('basics', () => {
@@ -48,10 +54,9 @@ describe('MDocument', () => {
     }, 15000);
 
     it('embed - create embedding from chunk', async () => {
-      const embeddings = await embedMany(chunks, {
-        provider: 'OPEN_AI',
-        model: 'text-embedding-3-small',
-        maxRetries: 3,
+      const embeddings = await embedMany({
+        values: chunks.map(chunk => chunk.text),
+        model: openai.embedding('text-embedding-3-small'),
       });
 
       console.log(embeddings);

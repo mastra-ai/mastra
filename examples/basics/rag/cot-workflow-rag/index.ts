@@ -1,8 +1,10 @@
+import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Step, Workflow } from '@mastra/core/workflows';
-import { createVectorQueryTool, embedMany, MDocument } from '@mastra/rag';
 import { PgVector } from '@mastra/pg';
+import { createVectorQueryTool, MDocument } from '@mastra/rag';
+import { embedMany } from 'ai';
 import { z } from 'zod';
 
 export const ragWorkflow = new Workflow({
@@ -15,20 +17,13 @@ export const ragWorkflow = new Workflow({
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',
   indexName: 'embeddings',
-  options: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-3-small',
-    maxRetries: 3,
-  },
+  model: openai.embedding('text-embedding-3-small'),
 });
 
 export const ragAgent = new Agent({
   name: 'RAG Agent',
   instructions: `You are a helpful assistant that answers questions based on the provided context.`,
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o-mini',
-  },
+  model: openai('gpt-4o-mini'),
   tools: {
     vectorQueryTool,
   },
@@ -197,10 +192,9 @@ const chunks = await doc.chunk({
   separator: '\n',
 });
 
-const { embeddings } = await embedMany(chunks, {
-  provider: 'OPEN_AI',
-  model: 'text-embedding-3-small',
-  maxRetries: 3,
+const { embeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
 });
 
 const vectorStore = mastra.getVector('pgVector');

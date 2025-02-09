@@ -146,10 +146,10 @@ export class QdrantVector extends MastraVector {
 
 throw new Error(
   '@mastra/vector-qdrant is deprecated. Please use @mastra/qdrant instead.\n\n' +
-  'To migrate:\n' +
-  '1. Remove @mastra/vector-qdrant from your dependencies\n' +
-  '2. Install @mastra/qdrant: pnpm add @mastra/qdrant\n' +
-  '3. Update your imports:\n' +
-  '   from: import { QdrantVector } from "@mastra/vector-qdrant"\n' +
-  '   to:   import { QdrantVector } from "@mastra/qdrant"\n'
+    'To migrate:\n' +
+    '1. Remove @mastra/vector-qdrant from your dependencies\n' +
+    '2. Install @mastra/qdrant: pnpm add @mastra/qdrant\n' +
+    '3. Update your imports:\n' +
+    '   from: import { QdrantVector } from "@mastra/vector-qdrant"\n' +
+    '   to:   import { QdrantVector } from "@mastra/qdrant"\n',
 );

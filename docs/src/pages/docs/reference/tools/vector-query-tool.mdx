@@ -10,16 +10,13 @@ The `createVectorQueryTool()` function creates a tool for semantic search over v
 ## Basic Usage
 
 ```typescript
+import { openai } from '@ai-sdk/openai';
 import { createVectorQueryTool } from "@mastra/rag";
 
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  options: {
-    provider: "OPEN_AI",
-    model: "text-embedding-3-small",
-    maxRetries: 3
-  }
+  model: openai.embedding('text-embedding-3-small'),
 });
 ```
 
@@ -40,9 +37,9 @@ const queryTool = createVectorQueryTool({
       isOptional: false,
     },
     {
-      name: "options",
-      type: "EmbeddingOptions",
-      description: "Configuration for embedding generation",
+      name: "model",
+      type: "EmbeddingModel",
+      description: "Embedding model to use for vector search",
       isOptional: false,
     },
     {
@@ -72,8 +69,8 @@ const queryTool = createVectorQueryTool({
   content={[
     {
       name: "model",
-      type: "ModelConfig",
-      description: "Configuration for the reranking method",
+      type: "LanguageModelV1",
+      description: "Language model to use for reranking",
       isOptional: false,
     },
     {
@@ -131,11 +128,7 @@ The default tool description provides:
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  options: {
-    provider: "OPEN_AI",
-    model: "text-embedding-3-small",
-    maxRetries: 3
-  },
+  model: openai.embedding('text-embedding-3-small'),
   enableFilters: true,
 });
 ```
@@ -153,16 +146,9 @@ For detailed filter syntax and store-specific capabilities, see the [Metadata Fi
 const queryTool = createVectorQueryTool({
   vectorStoreName: "milvus",
   indexName: "documentation",
-  options: {
-    provider: "OPEN_AI",
-    model: "text-embedding-3-small",
-    maxRetries: 3
-  },
+  model: openai.embedding('text-embedding-3-small'),
   reranker: {
-    model: {
-      provider: "OPEN_AI",
-      name: "gpt-4o-mini",
-    },
+    model: openai('gpt-4o-mini'),
     options: {
       weights: {
         semantic: 0.5,  // Semantic relevance weight

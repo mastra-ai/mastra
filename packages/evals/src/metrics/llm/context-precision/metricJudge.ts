@@ -1,4 +1,4 @@
-import { type MastraLLMBase } from '@mastra/core/llm';
+import { type LanguageModel } from '@mastra/core/llm';
 import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';
@@ -7,8 +7,8 @@ import './prompts';
 import { CONTEXT_PRECISION_AGENT_INSTRUCTIONS, generateEvaluatePrompt, generateReasonPrompt } from './prompts';
 
 export class ContextPrecisionJudge extends MastraAgentJudge {
-  constructor(llm: MastraLLMBase) {
-    super('Context Precision', CONTEXT_PRECISION_AGENT_INSTRUCTIONS, llm);
+  constructor(model: LanguageModel) {
+    super('Context Precision', CONTEXT_PRECISION_AGENT_INSTRUCTIONS, model);
   }
 
   async evaluate(

@@ -13,6 +13,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/pg": "workspace:*"

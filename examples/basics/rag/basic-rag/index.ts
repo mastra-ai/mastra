@@ -1,26 +1,20 @@
+import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { createVectorQueryTool } from '@mastra/rag';
 import { PgVector } from '@mastra/pg';
+import { createVectorQueryTool } from '@mastra/rag';
 
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',
   indexName: 'embeddings',
-  options: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-3-small',
-    maxRetries: 3,
-  },
+  model: openai.embedding('text-embedding-3-small'),
 });
 
 export const ragAgent = new Agent({
   name: 'RAG Agent',
   instructions:
     'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o-mini',
-  },
+  model: openai('gpt-4o-mini'),
   tools: {
     vectorQueryTool,
   },

@@ -12,12 +12,14 @@ This package has been moved to `@mastra/vectorize`. Please update your dependenc
 ## Migration
 
 1. Update your package.json:
+
 ```diff
 - "@mastra/vector-vectorize": "^0.1.0"
 + "@mastra/vectorize": "^0.1.0"
 ```
 
 2. Update your imports:
+
 ```diff
 - import { CloudflareVector } from '@mastra/vector-vectorize';
 + import { CloudflareVector } from '@mastra/vectorize';

@@ -1,4 +1,4 @@
-import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
+import { createOpenAI } from '@ai-sdk/openai';
 import { DefaultVectorDB } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 import { UpstashStore } from '@mastra/upstash';
@@ -13,6 +13,8 @@ dotenv.config({ path: '.env.test' });
 if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
   throw new Error('Required Vercel KV environment variables are not set');
 }
+
+const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 describe('Memory with UpstashStore Integration', () => {
   const vector = new DefaultVectorDB({
@@ -32,9 +34,7 @@ describe('Memory with UpstashStore Integration', () => {
         messageRange: 2,
       },
     },
-    embedder: new OpenAIEmbedder({
-      model: 'text-embedding-3-small',
-    }),
+    embedder: openai.embedding('text-embedding-3-small'),
   });
 
   getResuableTests(memory);

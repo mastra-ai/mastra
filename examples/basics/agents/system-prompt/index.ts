@@ -1,3 +1,4 @@
+import { openai } from '@ai-sdk/openai';
 import { Agent, createTool } from '@mastra/core';
 import { z } from 'zod';
 
@@ -33,11 +34,7 @@ const catFact = createTool({
 const catOne = new Agent({
   name: 'cat-one',
   instructions: instructions,
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o',
-    toolChoice: 'required',
-  },
+  model: openai('gpt-4o-mini'),
   tools: {
     catFact,
   },

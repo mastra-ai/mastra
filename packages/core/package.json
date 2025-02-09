@@ -21,24 +21,6 @@
         "default": "./dist/*/index.js"
       }
     },
-    "./llm/*": {
-      "import": {
-        "types": "./dist/llm/model/providers/*.d.ts",
-        "default": "./dist/llm/model/providers/*.js"
-      }
-    },
-    "./llm": {
-      "import": {
-        "types": "./dist/llm/model/index.d.ts",
-        "default": "./dist/llm/model/index.js"
-      }
-    },
-    "./embeddings/*": {
-      "import": {
-        "types": "./dist/embeddings/model/providers/*.d.ts",
-        "default": "./dist/embeddings/model/providers/*.js"
-      }
-    },
     "./vector/libsql": {
       "import": {
         "types": "./dist/vector/libsql/index.d.ts",
@@ -66,29 +48,12 @@
   "scripts": {
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
-    "build": "tsup-node src/index.ts src/base.ts src/utils.ts src/*/index.ts src/vector/libsql/index.ts src/llm/model/index.ts src/llm/model/providers/*.ts src/embeddings/model/providers/*.ts --format esm --clean --dts --treeshake",
+    "build": "tsup-node src/index.ts src/base.ts src/utils.ts src/*/index.ts src/vector/libsql/index.ts --format esm --clean --dts --treeshake",
     "build:dev": "pnpm build --watch",
     "size": "size-limit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-sdk/amazon-bedrock": "^1.1.6",
-    "@ai-sdk/anthropic": "^1.1.6",
-    "@ai-sdk/azure": "^1.1.9",
-    "@ai-sdk/cerebras": "^0.1.8",
-    "@ai-sdk/cohere": "^1.1.6",
-    "@ai-sdk/deepinfra": "^0.1.9",
-    "@ai-sdk/deepseek": "^0.1.8",
-    "@ai-sdk/fireworks": "^0.1.8",
-    "@ai-sdk/google": "^1.0.16",
-    "@ai-sdk/google-vertex": "^2.1.9",
-    "@ai-sdk/groq": "^1.1.7",
-    "@ai-sdk/mistral": "^1.1.6",
-    "@ai-sdk/openai": "^1.0.18",
-    "@ai-sdk/perplexity": "^0.0.7",
-    "@ai-sdk/provider": "^1.0.7",
-    "@ai-sdk/togetherai": "^0.1.9",
-    "@ai-sdk/xai": "^1.1.8",
     "@libsql/client": "^0.14.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.53.0",
@@ -99,21 +64,36 @@
     "@opentelemetry/sdk-trace-base": "^1.28.0",
     "@opentelemetry/sdk-trace-node": "^1.28.0",
     "@opentelemetry/semantic-conventions": "^1.28.0",
-    "@pinecone-database/pinecone": "^3.0.3",
-    "@portkey-ai/vercel-provider": "^1.0.1",
-    "ai": "^4.0.34",
-    "anthropic-vertex-ai": "^1.0.2",
-    "cohere-ai": "^7.15.2",
+    "cohere-ai": "^7.15.4",
     "date-fns": "^3.0.5",
     "json-schema": "^0.4.0",
-    "ollama-ai-provider": "^1.2.0",
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
     "radash": "^12.1.0",
     "sift": "^17.1.3",
-    "voyage-ai-provider": "^1.0.1",
     "xstate": "^5.19.0",
     "zod": "^3.24.1"
+  },
+  "peerDependencies": {
+    "ai": "^4.0.0"
+  },
+  "devDependencies": {
+    "@ai-sdk/openai": "latest",
+    "@babel/preset-env": "^7.26.0",
+    "@babel/preset-typescript": "^7.26.0",
+    "@size-limit/preset-small-lib": "^11.1.4",
+    "@tsconfig/recommended": "^1.0.7",
+    "@types/json-schema": "^7.0.15",
+    "@types/lodash-es": "^4.17.12",
+    "@types/node": "^22.1.0",
+    "@types/pino": "^7.0.5",
+    "@types/qs": "^6.9.15",
+    "ai": "^4.0.34",
+    "size-limit": "^11.1.4",
+    "ts-node": "^10.9.2",
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.4"
   },
   "engines": {
     "node": ">=20"
@@ -128,22 +108,6 @@
       "limit": "10 KB"
     }
   ],
-  "devDependencies": {
-    "@babel/preset-env": "^7.26.0",
-    "@babel/preset-typescript": "^7.26.0",
-    "@size-limit/preset-small-lib": "^11.1.4",
-    "@tsconfig/recommended": "^1.0.7",
-    "@types/json-schema": "^7.0.15",
-    "@types/lodash-es": "^4.17.12",
-    "@types/node": "^22.1.0",
-    "@types/pino": "^7.0.5",
-    "@types/qs": "^6.9.15",
-    "size-limit": "^11.1.4",
-    "ts-node": "^10.9.2",
-    "tsup": "^8.3.6",
-    "typescript": "^5.7.3",
-    "vitest": "^3.0.4"
-  },
   "keywords": [
     "ai",
     "llm",

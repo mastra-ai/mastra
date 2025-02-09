@@ -19,4 +19,3 @@ import { UpstashVector } from '@mastra/upstash';
 ```
 
 The new package combines both vector store and storage functionality in one place. See the documentation at `@mastra/upstash` for more details.
-

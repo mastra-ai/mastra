@@ -32,11 +32,17 @@
     "pathe": "^2.0.2",
     "zod": "^3.24.1"
   },
+  "peerDependencies": {
+    "ai": "^4.0.0"
+  },
   "devDependencies": {
+    "@ai-sdk/openai": "latest",
+    "@ai-sdk/cohere": "latest",
     "@babel/preset-env": "^7.26.0",
     "@babel/preset-typescript": "^7.26.0",
     "@tsconfig/recommended": "^1.0.7",
     "@types/node": "^22.9.0",
+    "ai": "^4.0.34",
     "tsup": "^8.0.1",
     "vitest": "^3.0.4"
   },

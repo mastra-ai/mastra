@@ -33,6 +33,7 @@ Make sure to set up your environment variables:
 
 ```bash filename=".env"
 POSTGRES_CONNECTION_STRING=your_connection_string_here
+OPENAI_API_KEY=your_openai_api_key_here
 ```
 
 ### Dependencies
@@ -40,15 +41,16 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
+import { openai } from '@ai-sdk/openai';
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
 import { PgVector } from "@mastra/pg";
 import {
-  embedMany,
   MDocument,
   createVectorQueryTool,
   createDocumentChunkerTool,
 } from "@mastra/rag";
+import { embedMany } from "ai";
 ```
 
 ## Tool Creation
@@ -57,25 +59,17 @@ import {
 
 Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
 
-```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{12} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  options: {
-    provider: "OPEN_AI",
-    model: "text-embedding-3-small",
-    maxRetries: 3,
-  },
+  model: openai.embedding('text-embedding-3-small'),
 });
 
 const cleanedVectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "cleanedEmbeddings",
-  options: {
-    provider: "OPEN_AI",
-    model: "text-embedding-3-small",
-    maxRetries: 3,
-  },
+  model: openai.embedding('text-embedding-3-small'),
 });
 ```
 
@@ -106,10 +100,7 @@ export const ragAgentOne = new Agent({
   name: "RAG Agent One",
   instructions:
     "You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.",
-  model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-  },
+  model: openai('gpt-4o-mini'),
   tools: {
     vectorQueryTool,
   },
@@ -119,10 +110,7 @@ export const ragAgentTwo = new Agent({
   name: "RAG Agent Two",
   instructions:
     "You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.",
-  model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-  },
+  model: openai('gpt-4o-mini'),
   tools: {
     cleanedVectorQueryTool,
   },
@@ -132,10 +120,7 @@ export const ragAgentThree = new Agent({
   name: "RAG Agent Three",
   instructions:
     "You are a helpful assistant that processes, cleans, and labels data before storage.",
-  model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-  },
+  model: openai('gpt-4o-mini'),
   tools: { documentChunkerTool },
 });
 ```
@@ -144,7 +129,7 @@ export const ragAgentThree = new Agent({
 
 Instantiate PgVector and Mastra with all components:
 
-```typescript copy showLineNumbers{72} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{64} filename="src/mastra/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
@@ -160,7 +145,7 @@ const processAgent = mastra.getAgent("ragAgentThree");
 
 Chunk the initial document clean them using the processAgent.
 
-```typescript copy showLineNumbers{82} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{74} filename="src/mastra/index.ts"
 const chunks = await doc.chunk({
   strategy: "recursive",
   size: 256,
@@ -185,17 +170,15 @@ const updatedChunks = await updatedDoc.chunk({
 
 Generate and store both raw and cleaned embeddings:
 
-```typescript copy showLineNumbers{101} filename="src/mastra/index.ts"
-const { embeddings } = await embedMany(chunks, {
-  provider: "OPEN_AI",
-  model: "text-embedding-3-small",
-  maxRetries: 3,
+```typescript copy showLineNumbers{93} filename="src/mastra/index.ts"
+const { embeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
 });
 
-const { embeddings: cleanedEmbeddings } = await embedMany(updatedChunks, {
-  provider: "OPEN_AI",
-  model: "text-embedding-3-small",
-  maxRetries: 3,
+const { embeddings: cleanedEmbeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: updatedChunks.map(chunk => chunk.text),
 });
 
 const vectorStore = mastra.getVector("pgVector");
@@ -219,7 +202,7 @@ await vectorStore.upsert(
 
 Function to generate responses with index selection:
 
-```typescript copy showLineNumbers{129} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{121} filename="src/mastra/index.ts"
 async function generateResponse(query: string, agent: Agent) {
   const prompt = `
       Please answer the following question:
@@ -237,7 +220,7 @@ async function generateResponse(query: string, agent: Agent) {
 
 ## Example Usage
 
-```typescript copy showLineNumbers{143} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{135} filename="src/mastra/index.ts"
 async function answerQueries(queries: string[], agent: Agent) {
   for (const query of queries) {
     try {

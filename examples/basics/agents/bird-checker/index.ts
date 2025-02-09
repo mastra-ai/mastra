@@ -1,3 +1,4 @@
+import { anthropic } from '@ai-sdk/anthropic';
 import { Agent } from '@mastra/core';
 import { z } from 'zod';
 
@@ -70,11 +71,7 @@ const instructions = `
 export const birdCheckerAgent = new Agent({
   name: 'Bird checker',
   instructions,
-  model: {
-    provider: 'ANTHROPIC',
-    name: 'claude-3-haiku-20240307',
-    toolChoice: 'auto',
-  },
+  model: anthropic('claude-3-haiku-20240307'),
 });
 
 const queries: string[] = ['wildlife', 'feathers', 'flying', 'birds'];

@@ -10,6 +10,7 @@ import { GithubLink } from "../../../components/github-link";
 When building AI agents, you often need to give them specific instructions and capabilities to handle specialized tasks effectively. System prompts allow you to define an agent's personality, knowledge domain, and behavioral guidelines. This example shows how to create an AI agent with custom instructions and integrate it with a dedicated tool for retrieving verified information.
 
 ```ts showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
 
@@ -49,11 +50,7 @@ const catFact = createTool({
 const catOne = new Agent({
   name: "cat-one",
   instructions: instructions,
-  model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-    toolChoice: "required",
-  },
+  model: openai("gpt-4o-mini"),
   tools: {
     catFact,
   },

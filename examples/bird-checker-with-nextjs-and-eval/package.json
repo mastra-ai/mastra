@@ -11,6 +11,7 @@
     "braintrust:eval": "npx braintrust eval src/lib/evals"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "latest",
     "@mastra/core": "workspace:*",
     "braintrust": "^0.0.168",
     "class-variance-authority": "^0.7.0",

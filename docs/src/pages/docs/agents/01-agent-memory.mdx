@@ -83,6 +83,7 @@ await agent.stream("What did we decide about the search feature last week?", {
 The Mastra memory system is highly configurable and supports multiple storage backends. Here's a basic configuration example:
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
 import { Memory } from "@mastra/memory";
 import { PostgresStore, PgVector } from "@mastra/pg";
 
@@ -111,11 +112,7 @@ const memory = new Memory({
   },
 
   // Required if using vector search
-  embedding: {
-    provider: "OPEN_AI",
-    model: "text-embedding-3-small",
-    maxRetries: 3,
-  },
+  embedder: openai.embedding("text-embedding-3-small"),
 });
 ```
 
@@ -224,27 +221,33 @@ Mastra supports semantic search through vector embeddings. When configured with 
 import { PgVector } from "@mastra/pg";
 
 const vector = new PgVector(connectionString);
+
+const memory = new Memory({ vector });
 ```
 
 2. Configure embedding options:
 
 ```typescript
-const embedding = {
-  provider: "OPEN_AI",
-  model: "text-embedding-3-small",
-  maxRetries: 3,
-};
+const memory = new Memory({
+  vector,
+  embedder: openai.embedding("text-embedding-3-small"),
+});
 ```
 
 3. Enable vector search in memory configuration options:
 
 ```typescript
-const optionsConfig = {
-  historySearch: {
-    topK: 3, // Number of similar messages to find
-    messageRange: 2, // Context around each result
+const memory = new Memory({
+  vector,
+  embedder,
+
+  options: {
+    historySearch: {
+      topK: 3, // Number of similar messages to find
+      messageRange: 2, // Context around each result
+    },
   },
-};
+});
 ```
 
 ## Using Memory in Agents
@@ -392,24 +395,19 @@ The agent is instructed to be proactive about storing information - if there's a
 #### Basic Usage
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+
 const agent = new Agent({
   name: "Customer Service",
   instructions:
     "You are a helpful customer service agent. Remember customer preferences and past interactions.",
-  model: { provider: "OPEN_AI", name: "gpt-4" },
+  model: openai("gpt-4o-mini"),
+
   memory: new Memory({
     storage: new DefaultStorage({ url: ":memory:" }),
     options: {
       workingMemory: {
-        enabled: true,
-        template: `<customer>
-  <name></name>
-  <preferences>
-    <communication_style></communication_style>
-    <product_interests></product_interests>
-  </preferences>
-  <past_purchases></past_purchases>
-</customer>`,
+        enabled: true, // enables working memory
       },
       lastMessages: 5, // Only keep recent context
     },
@@ -424,12 +422,15 @@ const todoAgent = new Agent({
   name: "TODO Manager",
   instructions:
     "You are a TODO list manager. Update the todo list in working memory whenever tasks are added, completed, or modified.",
-  model: { provider: "OPEN_AI", name: "gpt-4o-mini" },
+  model: openai("gpt-4o-mini"),
   memory: new Memory({
     storage: new DefaultStorage({ url: ":memory:" }),
     options: {
       workingMemory: {
         enabled: true,
+
+        // optional XML-like template to encourage agent to store specific kinds of info.
+        // if you leave this out a default template will be used
         template: `<todos>
   <in-progress></in-progress>
   <pending></pending>

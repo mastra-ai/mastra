@@ -51,24 +51,24 @@ Transform chunks into embeddings using your preferred provider. Mastra supports 
 ### Using OpenAI
 
 ```ts showLineNumbers copy
-import { embedMany } from "@mastra/core/embeddings/openai";
+import { openai } from "@ai-sdk/openai";
+import { embedMany } from "ai";
 
-const { embeddings } = await embedMany(chunks, {
-  provider: "OPEN_AI",
-  model: "text-embedding-3-small",
-  maxRetries: 3,
+const { embeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
 });
 ```
 
 ### Using Cohere
 
 ```ts showLineNumbers copy
-import { embed } from '@mastra/core/embeddings/cohere';
+import { embedMany } from 'ai';
+import { cohere } from '@ai-sdk/cohere';
 
-const embeddings = await embed(chunks, {
-  provider: "COHERE",
-  model: "embed-english-v3.0",
-  maxRetries: 3,
+const { embeddings } = await embedMany({
+  model: cohere.embedding('embed-english-v3.0'),
+  values: chunks.map(chunk => chunk.text),
 });
 ```
 
@@ -79,8 +79,9 @@ The embedding functions return vectors, arrays of numbers representing the seman
 Here's an example showing document processing and embedding generation with both providers:
 
 ```ts showLineNumbers copy
-import { embedMany as openAIEmbedMany } from "@mastra/core/embeddings/openai";
-import { embedMany as cohereEmbedMany } from "@mastra/core/embeddings/cohere";
+import { embedMany } from "ai";
+import { openai } from "@ai-sdk/openai";
+import { cohere } from "@ai-sdk/cohere";
 
 import { MDocument } from "@mastra/rag";
 
@@ -98,15 +99,17 @@ const chunks = await doc.chunk({
 });
 
 // Generate embeddings with OpenAI
-const { embeddings: openAIEmbeddings } = await openAIEmbedMany(chunks, {
-  model: "text-embedding-3-small",
+const { embeddings: openAIEmbeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
 });
 
 // OR
 
 // Generate embeddings with Cohere
-const { embeddings: cohereEmbeddings } = await cohereEmbedMany(chunks, {
-  model: "embed-english-v3.0",
+const { embeddings: cohereEmbeddings } = await embedMany({
+  model: cohere.embedding('embed-english-v3.0'),
+  values: chunks.map(chunk => chunk.text),
 });
 
 // Store embeddings in your vector database

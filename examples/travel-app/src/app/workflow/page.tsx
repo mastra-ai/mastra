@@ -26,16 +26,13 @@ export default function Page() {
           fileName="src/mastra/agents/index.ts"
           language="typescript"
           code={`import { Agent } from '@mastra/core';
+import { anthropic } from '@ai-sdk/anthropic';
 
 export const travelAnalyzer = new Agent({
   name: 'travel-analyzer',
   instructions:
     'You are an expert travel agent responsible for finding a flight, hotel, and three attractions for a user. You will be given a set of user preferences along with some data to find the best options for them.',
-  model: {
-    provider: 'ANTHROPIC',
-    name: 'claude-3-5-sonnet-20240620',
-    toolChoice: 'auto',
-  },
+  model: anthropic('claude-3-5-sonnet-20240620'),
 });`}
         />
 

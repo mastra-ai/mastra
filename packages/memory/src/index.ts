@@ -1,7 +1,7 @@
 import { CoreMessage, deepMerge } from '@mastra/core';
 import { MastraMemory, MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import { StorageGetMessagesArg } from '@mastra/core/storage';
-import { Message as AiMessage } from 'ai';
+import { embed, Message as AiMessage } from 'ai';
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -14,10 +14,31 @@ export class Memory extends MastraMemory {
       embeddings?: any;
     },
   ) {
+    const embedderExample = `
+Example: 
+
+  import { openai } from '@ai-sdk/openai';
+
+  new Memory({ 
+    embedder: openai.embedding(\`text-embedding-3-small\`)
+  })
+
+`;
+
     // Check for deprecated embeddings object
     if (config.embeddings) {
       throw new Error(
-        'The `embeddings` option is deprecated. Please use `embedder` instead. Example: new Memory({ embedder: new OpenAIEmbedder({ model: "text-embedding-3-small" }) })',
+        `The \`embeddings\` option is deprecated. Please use \`embedder\` instead.
+${embedderExample}
+`,
+      );
+    }
+
+    if (config.vector && !config.embedder) {
+      throw new Error(
+        `The \`embedder\` option is required when a vector DB is attached to new Memory({ vector })
+
+${embedderExample}`,
       );
     }
 
@@ -67,7 +88,11 @@ export class Memory extends MastraMemory {
 
     if (selectBy?.vectorSearchString && this.vector) {
       const embedder = this.getEmbedder();
-      const { embedding } = await embedder.embed(selectBy.vectorSearchString);
+
+      const { embedding } = await embed({
+        value: selectBy.vectorSearchString,
+        model: embedder,
+      });
 
       await this.vector.createIndex('memory_messages', 1536);
       vectorResults = await this.vector.query('memory_messages', embedding, vectorConfig.topK, {
@@ -205,7 +230,7 @@ export class Memory extends MastraMemory {
       for (const message of messages) {
         if (typeof message.content !== `string`) continue;
         const embedder = this.getEmbedder();
-        const { embedding } = await embedder.embed(message.content);
+        const { embedding } = await embed({ value: message.content, model: embedder, maxRetries: 3 });
         await this.vector.upsert(
           'memory_messages',
           [embedding],

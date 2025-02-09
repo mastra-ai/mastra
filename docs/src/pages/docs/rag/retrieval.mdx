@@ -23,18 +23,15 @@ Mastra provides flexible retrieval options with support for semantic search, fil
 The simplest approach is direct semantic search. This method uses vector similarity to find chunks that are semantically similar to the query:
 
 ```ts showLineNumbers copy
-import { embed } from "@mastra/core/embeddings/openai"
+import { openai } from "@ai-sdk/openai";
+import { embed } from "ai";
 import { PgVector } from "@mastra/pg";
-import { embed } from "@mastra/rag";
 
 // Convert query to embedding
-const { embedding } = await embed(
-  "What are the main points in the article?",
-  {
-    model: "text-embedding-3-small",
-    maxRetries: 3,
-  }
-);
+const { embedding } = await embed({
+  value: "What are the main points in the article?",
+  model: openai.embedding('text-embedding-3-small'),
+});
 
 // Query vector store
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING);
@@ -86,15 +83,9 @@ Here's how to set up re-ranking:
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',
   indexName: 'embeddings',
-  options: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-3-small'
-  },
+  model: openai.embedding('text-embedding-3-small'),
   reranker: {
-    model: {
-      provider: 'OPEN_AI',
-      name: 'gpt-4o-mini',
-    },
+    model: openai('gpt-4o-mini'),
   }
 });
 ```
@@ -113,9 +104,9 @@ Example setup:
 const graphQueryTool = createGraphQueryTool({
   vectorStoreName: 'pgVector',
   indexName: 'embeddings',
+  model: openai.embedding('text-embedding-3-small'),
   graphOptions: {
-    relationTypes: ['references', 'similar_to'],
-    maxHops: 2
+    threshold: 0.7,
   }
 });
 ```

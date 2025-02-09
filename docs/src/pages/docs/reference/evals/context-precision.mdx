@@ -10,14 +10,11 @@ The `ContextPrecisionMetric` class evaluates how relevant and precise the retrie
 ## Basic Usage
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
 import { ContextPrecisionMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = {
-  provider: "OPEN_AI",
-  name: "gpt-4o-mini",
-  apiKey: process.env.OPENAI_API_KEY,
-};
+const model = openai("gpt-4o-mini");
 
 const metric = new ContextPrecisionMetric(model, {
   context: [

@@ -13,8 +13,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:*",
-    "@mastra/deployer-cloudflare": "workspace:*",
+    "ai": "latest",
     "zod": "^3.24.0"
   }
 }

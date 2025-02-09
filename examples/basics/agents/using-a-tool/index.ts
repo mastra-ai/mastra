@@ -1,3 +1,4 @@
+import { openai } from '@ai-sdk/openai';
 import { createTool, Agent, Mastra } from '@mastra/core';
 import { z } from 'zod';
 
@@ -102,10 +103,7 @@ Your primary function is to help users get weather details for specific location
 - Include relevant details like humidity, wind conditions, and precipitation
 - Keep responses concise but informative
 Use the weatherTool to fetch current weather data.`,
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o',
-  },
+  model: openai('gpt-4o-mini'),
   tools: { weatherTool },
 });
 

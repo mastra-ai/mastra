@@ -1,20 +1,18 @@
 # Mastra <img align="cener" alt="Project Status: Alpha" src="https://img.shields.io/badge/Status-Alpha-red"> <img align="cener" alt="Project Status: Alpha" src="https://img.shields.io/badge/Y%20Combinator-W25-orange?style=flat-square">
 
-
-
 Mastra is an opinionated Typescript framework that helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations and evals. You can run Mastra on your local machine, or deploy to a serverless cloud.
 
 The main Mastra features are:
 
-| Features                                                      | Description                                                                                                                                                                                                                                                                              |
-| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [LLM Models](https://mastra.ai/docs/llm-models/00-overview)   | Mastra supports a variety of LLM providers, including OpenAI, Anthropic, Google Gemini. You can choose the specific model and provider, choose system and user prompts, and decide whether to stream the response.                                                                       |
-| [Agents](https://mastra.ai/docs/agents/00-overview)           | Agents are systems where the language model chooses a sequence of actions. In Mastra, agents provide LLM models with tools, workflows, and synced data. Agents can call your own functions or APIs of third-party integrations and access knowledge bases you build.                     |
-| [Tools](https://mastra.ai/docs/agents/02-adding-tools)        | Tools are typed functions that can be executed by agents or workflows, with built-in integration access and parameter validation. Each tool has a schema that defines its inputs, an executor function that implements its logic, and access to configured integrations.                 |
-| [Workflows](https://mastra.ai/docs/workflows/00-overview)     | Workflows are durable graph-based state machines. They have loops, branching, wait for human input, embed other workflows, do error handling, retries, parsing and so on. They can be built in code or with a visual editor. Each step in a workflow has built-in OpenTelemetry tracing. |
-| [RAG](https://mastra.ai/docs/rag/overview)                    | Retrieval-augemented generation (RAG) lets you construct a knowledge base for agents. RAG is an ETL pipeline with specific querying techniques, including chunking, embedding, and vector search.                                                                                        |
-| [Integrations](https://mastra.ai/docs/local-dev/integrations) | In Mastra, integrations are auto-generated, type-safe API clients for third-party services that can be used as tools for agents or steps in workflows.                                                                                                                                   |
-| [Evals](https://mastra.ai/docs/08-running-evals)              | Evals are automated tests that evaluate LLM outputs using model-graded, rule-based, and statistical methods. Each eval returns a normalized score between 0-1 that can be logged and compared. Evals can be customized with your own prompts and scoring functions.                      |
+| Features                                                      | Description                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| LLM Models                                                    | Mastra uses the [Vercel AI SDK](https://sdk.vercel.ai/docs/introduction) for model routing, providing a unified interface to interact with any LLM provider including OpenAI, Anthropic, and Google Gemini. You can choose the specific model and provider, and decide whether to stream the response. |
+| [Agents](https://mastra.ai/docs/agents/00-overview)           | Agents are systems where the language model chooses a sequence of actions. In Mastra, agents provide LLM models with tools, workflows, and synced data. Agents can call your own functions or APIs of third-party integrations and access knowledge bases you build.                                   |
+| [Tools](https://mastra.ai/docs/agents/02-adding-tools)        | Tools are typed functions that can be executed by agents or workflows, with built-in integration access and parameter validation. Each tool has a schema that defines its inputs, an executor function that implements its logic, and access to configured integrations.                               |
+| [Workflows](https://mastra.ai/docs/workflows/00-overview)     | Workflows are durable graph-based state machines. They have loops, branching, wait for human input, embed other workflows, do error handling, retries, parsing and so on. They can be built in code or with a visual editor. Each step in a workflow has built-in OpenTelemetry tracing.               |
+| [RAG](https://mastra.ai/docs/rag/overview)                    | Retrieval-augemented generation (RAG) lets you construct a knowledge base for agents. RAG is an ETL pipeline with specific querying techniques, including chunking, embedding, and vector search.                                                                                                      |
+| [Integrations](https://mastra.ai/docs/local-dev/integrations) | In Mastra, integrations are auto-generated, type-safe API clients for third-party services that can be used as tools for agents or steps in workflows.                                                                                                                                                 |
+| [Evals](https://mastra.ai/docs/08-running-evals)              | Evals are automated tests that evaluate LLM outputs using model-graded, rule-based, and statistical methods. Each eval returns a normalized score between 0-1 that can be logged and compared. Evals can be customized with your own prompts and scoring functions.                                    |
 
 ## Quick Start
 
@@ -59,16 +57,13 @@ touch src/index.ts
 Then, add this code to `src/index.ts`:
 
 ```typescript
+import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 
 async function main() {
   const agent = new Agent({
     name: 'story-writer',
-    model: {
-      provider: 'OPEN_AI',
-      name: 'gpt-4o-mini',
-      toolChoice: 'auto',
-    },
+    model: openai('gpt-4o-mini'),
     instructions: `You are a helpful assistant who writes creative stories.`,
     tools: {},
   });

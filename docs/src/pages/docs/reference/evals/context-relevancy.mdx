@@ -10,14 +10,11 @@ The `ContextRelevancyMetric` class evaluates the quality of your RAG (Retrieval-
 ## Basic Usage
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
 import { ContextRelevancyMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = {
-  provider: "OPEN_AI",
-  name: "gpt-4",
-  apiKey: process.env.OPENAI_API_KEY
-};
+const model = openai("gpt-4o-mini");
 
 const metric = new ContextRelevancyMetric(model, {
   context: [
@@ -145,23 +142,16 @@ Score interpretation:
 ## Example with Custom Configuration
 
 ```typescript
-const metric = new ContextRelevancyMetric(
-  {
-    provider: "OPEN_AI",
-    name: "gpt-4",
-    apiKey: process.env.OPENAI_API_KEY
-  },
-  {
-    scale: 100, // Use 0-100 scale instead of 0-1
-    context: [
-      "Basic plan costs $10/month",
-      "Pro plan includes advanced features at $30/month",
-      "Enterprise plan has custom pricing",
-      "Our company was founded in 2020",
-      "We have offices worldwide"
-    ]
-  }
-);
+const metric = new ContextRelevancyMetric(model, {
+  scale: 100, // Use 0-100 scale instead of 0-1
+  context: [
+    "Basic plan costs $10/month",
+    "Pro plan includes advanced features at $30/month",
+    "Enterprise plan has custom pricing",
+    "Our company was founded in 2020",
+    "We have offices worldwide"
+  ]
+});
 
 const result = await metric.measure(
   "What are our pricing plans?",

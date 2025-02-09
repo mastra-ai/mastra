@@ -1,26 +1,20 @@
-import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
-import { embedMany, MDocument, createVectorQueryTool, createDocumentChunkerTool } from '@mastra/rag';
+import { Agent } from '@mastra/core/agent';
 import { PgVector } from '@mastra/pg';
+import { MDocument, createVectorQueryTool, createDocumentChunkerTool } from '@mastra/rag';
+import { embedMany } from 'ai';
 
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',
   indexName: 'embeddings',
-  options: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-3-small',
-    maxRetries: 3,
-  },
+  model: openai.embedding('text-embedding-3-small'),
 });
 
 const cleanedVectorQueryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',
   indexName: 'cleanedEmbeddings',
-  options: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-3-small',
-    maxRetries: 3,
-  },
+  model: openai.embedding('text-embedding-3-small'),
 });
 
 const doc =
@@ -89,10 +83,7 @@ export const ragAgentOne = new Agent({
   name: 'RAG Agent One',
   instructions:
     'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o-mini',
-  },
+  model: openai('gpt-4o-mini'),
   tools: {
     vectorQueryTool,
   },
@@ -102,10 +93,7 @@ export const ragAgentTwo = new Agent({
   name: 'RAG Agent Two',
   instructions:
     'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o-mini',
-  },
+  model: openai('gpt-4o-mini'),
   tools: {
     cleanedVectorQueryTool,
   },
@@ -114,10 +102,7 @@ export const ragAgentTwo = new Agent({
 export const ragAgentThree = new Agent({
   name: 'RAG Agent Three',
   instructions: 'You are a helpful assistant that processes, cleans, and labels data before storage.',
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o-mini',
-  },
+  model: openai('gpt-4o-mini'),
   tools: { documentChunkerTool },
 });
 
@@ -152,16 +137,14 @@ const updatedChunks = await updatedDoc.chunk({
   separator: '\n',
 });
 
-const { embeddings } = await embedMany(chunks, {
-  provider: 'OPEN_AI',
-  model: 'text-embedding-3-small',
-  maxRetries: 3,
+const { embeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
 });
 
-const { embeddings: cleanedEmbeddings } = await embedMany(updatedChunks, {
-  provider: 'OPEN_AI',
-  model: 'text-embedding-3-small',
-  maxRetries: 3,
+const { embeddings: cleanedEmbeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: updatedChunks.map(chunk => chunk.text),
 });
 
 const vectorStore = mastra.getVector('pgVector');

@@ -1,18 +1,15 @@
+import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { OpenAI } from '@mastra/core/llm/openai';
-import { createVectorQueryTool, embedMany, MDocument, PGVECTOR_PROMPT } from '@mastra/rag';
 import { PgVector } from '@mastra/pg';
+import { createVectorQueryTool, MDocument, PGVECTOR_PROMPT } from '@mastra/rag';
+import { embedMany } from 'ai';
 
 const vectorQueryTool = createVectorQueryTool({
   id: 'vectorQueryTool',
   vectorStoreName: 'pgVector',
   indexName: 'embeddings',
-  options: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-3-small',
-    maxRetries: 3,
-  },
+  model: openai.embedding('text-embedding-3-small'),
   enableFilter: true,
 });
 
@@ -60,9 +57,7 @@ const chunkMetadata = chunks?.map((chunk: any, index: number) => ({
 
 export const ragAgent = new Agent({
   name: 'RAG Agent',
-  llm: new OpenAI({
-    name: 'gpt-4o-mini',
-  }),
+  model: openai('gpt-4o-mini'),
   instructions: `
   You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
 
@@ -92,10 +87,9 @@ export const mastra = new Mastra({
 });
 
 const agent = mastra.getAgent('ragAgent');
-const { embeddings } = await embedMany(chunks, {
-  provider: 'OPEN_AI',
-  model: 'text-embedding-3-small',
-  maxRetries: 3,
+const { embeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
 });
 
 const vectorStore = mastra.getVector('pgVector');

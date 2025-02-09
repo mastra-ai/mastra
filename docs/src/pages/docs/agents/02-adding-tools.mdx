@@ -42,17 +42,14 @@ Now we'll add the tool to an agent. We'll create an agent that can answer questi
 
 ```typescript filename="src/mastra/agents/weatherAgent.ts"
 import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
 import * as tools from "../tools/weatherInfo";
 
 export const weatherAgent = new Agent<typeof tools>({
   name: "Weather Agent",
   instructions:
     "You are a helpful assistant that provides current weather information. When asked about the weather, use the weather information tool to fetch the data.",
-  model: {
-    provider: "OPEN_AI",
-    name: "gpt-4",
-    toolChoice: "required",
-  },
+  model: openai("gpt-4o-mini"),
   tools: {
     weatherInfo: tools.weatherInfo,
   },

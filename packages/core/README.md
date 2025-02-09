@@ -29,15 +29,13 @@ For comprehensive documentation, visit our [official documentation](https://mast
 Agents are autonomous AI entities that can understand instructions, use tools, and complete tasks. They encapsulate LLM interactions and can maintain conversation history, use provided tools, and follow specific behavioral guidelines through instructions.
 
 ```typescript
+import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 
 const agent = new Agent({
   name: 'my-agent',
   instructions: 'Your task-specific instructions',
-  model: {
-    provider: 'openai',
-    model: 'gpt-4',
-  },
+  model: openai('gpt-4o-mini'),
   tools: {}, // Optional tools
 });
 ```
@@ -49,10 +47,12 @@ const agent = new Agent({
 The embeddings module provides a unified interface for converting text into vector representations across multiple AI providers. These vectors are essential for semantic search, similarity comparisons, and other NLP tasks.
 
 ```typescript
-import { embed } from '@mastra/core/embeddings/openai';
+import { openai } from '@ai-sdk/openai';
+import { embed } from 'ai';
 
-const embeddings = await embed('text to embed', {
-  model: 'text-embedding-3-small',
+const embeddings = await embed({
+  model: openai.embedding('text-embedding-3-small'),
+  value: 'text to embed',
 });
 ```
 
@@ -89,7 +89,10 @@ const memory = new MastraMemory({
 });
 ```
 
-[More memory documentation →](https://mastra.ai/docs/reference/memory/overview)
+**Note:** this is the base `MastraMemory` class. This class in `@mastra/core` is intended to be extended when developing custom agent memory strategies.
+To use a premade memory strategy (recommended), with long and short term memory built in, use `import { Memory } from "@mastra/memory"` instead.
+
+[Visit the memory documentation to use Memory in your project →](https://mastra.ai/docs/reference/memory/overview)
 
 ### Vector Stores (`/vector`)
 

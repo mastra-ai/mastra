@@ -1,16 +1,14 @@
+import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { embedMany, MDocument, createGraphRAGTool } from '@mastra/rag';
 import { PgVector } from '@mastra/pg';
+import { MDocument, createGraphRAGTool } from '@mastra/rag';
+import { embedMany } from 'ai';
 
 const graphRagTool = createGraphRAGTool({
   vectorStoreName: 'pgVector',
   indexName: 'embeddings',
-  options: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-3-small',
-    maxRetries: 3,
-  },
+  model: openai.embedding('text-embedding-3-small'),
   graphOptions: {
     dimension: 1536,
     threshold: 0.7,
@@ -26,10 +24,7 @@ export const ragAgent = new Agent({
 3. CONCLUSION: One sentence summary that ties everything together
 
 Keep each section brief and focus on the most important points.`,
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o-mini',
-  },
+  model: openai('gpt-4o-mini'),
   tools: {
     graphRagTool,
   },
@@ -83,10 +78,9 @@ const chunks = await doc.chunk({
   separator: '\n',
 });
 
-const { embeddings } = await embedMany(chunks, {
-  provider: 'OPEN_AI',
-  model: 'text-embedding-3-small',
-  maxRetries: 3,
+const { embeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
 });
 
 const vectorStore = mastra.getVector('pgVector');

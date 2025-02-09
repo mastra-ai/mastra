@@ -136,10 +136,10 @@ export class PineconeVector extends MastraVector {
 
 throw new Error(
   '@mastra/vector-pinecone is deprecated. Please use @mastra/pinecone instead.\n\n' +
-  'To migrate:\n' +
-  '1. Remove @mastra/vector-pinecone from your dependencies\n' +
-  '2. Install @mastra/pinecone: pnpm add @mastra/pinecone\n' +
-  '3. Update your imports:\n' +
-  '   from: import { PineconeVector } from "@mastra/vector-pinecone"\n' +
-  '   to:   import { PineconeVector } from "@mastra/pinecone"\n'
+    'To migrate:\n' +
+    '1. Remove @mastra/vector-pinecone from your dependencies\n' +
+    '2. Install @mastra/pinecone: pnpm add @mastra/pinecone\n' +
+    '3. Update your imports:\n' +
+    '   from: import { PineconeVector } from "@mastra/vector-pinecone"\n' +
+    '   to:   import { PineconeVector } from "@mastra/pinecone"\n',
 );

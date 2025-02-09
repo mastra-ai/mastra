@@ -17,6 +17,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@ai-sdk/openai": "latest",
     "@types/node": "^22.10.7",
     "mastra": "workspace:^",
     "tsx": "^4.19.2",

@@ -1,4 +1,4 @@
-import { OpenAI } from '@mastra/core/llm/openai';
+import { createOpenAI } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
 
 import { isCloserTo } from '../utils';
@@ -56,31 +56,32 @@ const testCases: TestCaseWithContext[] = [
 
 const SECONDS = 10000;
 
-const llm = new OpenAI({
-  name: 'gpt-4o',
+const openai = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+const model = openai('gpt-4o');
 
 describe(
   'ContextRelevancyMetric',
   () => {
     it('should measure perfect context relevancy with all relevant items', async () => {
       const testCase = testCases[0]!;
-      const metric = new ContextRelevancyMetric(llm, { context: testCase.context });
+      const metric = new ContextRelevancyMetric(model, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
     });
 
     it('should measure mixed relevancy where only some contexts are relevant', async () => {
       const testCase = testCases[1]!;
-      const metric = new ContextRelevancyMetric(llm, { context: testCase.context });
+      const metric = new ContextRelevancyMetric(model, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
       expect(isCloserTo(result.score, testCase.expectedResult.score, 0)).toBe(true);
     });
 
     it('should measure no relevancy where contexts are completely unrelated', async () => {
       const testCase = testCases[2]!;
-      const metric = new ContextRelevancyMetric(llm, { context: testCase.context });
+      const metric = new ContextRelevancyMetric(model, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
     });

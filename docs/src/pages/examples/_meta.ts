@@ -2,9 +2,6 @@ const meta = {
   index: {
     title: "Overview",
   },
-  llms: {
-    title: "LLM Models",
-  },
   agents: {
     title: "Agents",
   },
@@ -13,6 +10,9 @@ const meta = {
   },
   rag: {
     title: "RAG",
+  },
+  memory: {
+    title: "Memory",
   },
 };
 

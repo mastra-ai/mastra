@@ -1,5 +1,5 @@
-import { type EmbeddingOptions } from '@mastra/core/embeddings';
 import { createTool } from '@mastra/core/tools';
+import { EmbeddingModel } from 'ai';
 import { z } from 'zod';
 
 import { GraphRAG } from '../graph-rag';
@@ -8,7 +8,7 @@ import { vectorQuerySearch, defaultGraphRagDescription } from '../utils';
 export const createGraphRAGTool = ({
   vectorStoreName,
   indexName,
-  options,
+  model,
   enableFilter = false,
   graphOptions = {
     dimension: 1536,
@@ -21,7 +21,7 @@ export const createGraphRAGTool = ({
 }: {
   vectorStoreName: string;
   indexName: string;
-  options: EmbeddingOptions;
+  model: EmbeddingModel<string>;
   enableFilter?: boolean;
   graphOptions?: {
     dimension?: number;
@@ -31,7 +31,7 @@ export const createGraphRAGTool = ({
   };
   id?: string;
   description?: string;
-}) => {
+}): ReturnType<typeof createTool> => {
   const toolId = id || `GraphRAG ${vectorStoreName} ${indexName} Tool`;
   const toolDescription = description || defaultGraphRagDescription(vectorStoreName, indexName);
 
@@ -73,7 +73,7 @@ export const createGraphRAGTool = ({
           indexName,
           vectorStore,
           queryText,
-          options,
+          model,
           queryFilter: Object.keys(queryFilter || {}).length > 0 ? queryFilter : undefined,
           topK,
           includeVectors: true,

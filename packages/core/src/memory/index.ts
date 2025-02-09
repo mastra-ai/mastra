@@ -7,10 +7,10 @@ import {
   CoreToolMessage,
   ToolInvocation,
   CoreMessage,
+  EmbeddingModel,
 } from 'ai';
 
 import { MastraBase } from '../base';
-import { MastraEmbedder } from '../embeddings/model/providers/embedder';
 import { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { deepMerge } from '../utils';
 import { MastraVector } from '../vector';
@@ -62,7 +62,7 @@ export type SharedMemoryConfig = {
   storage: MastraStorage;
   options?: MemoryConfig;
   vector?: MastraVector;
-  embedder?: MastraEmbedder;
+  embedder?: EmbeddingModel<string>;
 };
 
 /**
@@ -74,7 +74,7 @@ export abstract class MastraMemory extends MastraBase {
 
   storage: MastraStorage;
   vector?: MastraVector;
-  embedder?: MastraEmbedder;
+  embedder?: EmbeddingModel<string>;
 
   protected threadConfig: MemoryConfig = {
     lastMessages: 40,
@@ -114,9 +114,7 @@ For example:
 new Memory({
   storage,
   vector,
-  embedder: new OpenAIEmbedder({ // <- this is required
-    model: "text-embedding-3-small",
-  })
+  embedder: openai("text-embedding-3-small") // example
 });
 `);
     }

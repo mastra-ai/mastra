@@ -1,8 +1,8 @@
+import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
-import { OpenAIEmbedder } from '@mastra/core/embeddings/openai';
 import { Memory } from '@mastra/memory';
-import { UpstashStore } from '@mastra/upstash';
 import { PgVector } from '@mastra/pg';
+import { UpstashStore } from '@mastra/upstash';
 
 import { chefAgent, memoryAgent } from './agents';
 
@@ -19,10 +19,7 @@ const memory = new Memory({
       messageRange: 2,
     },
   },
-  embedder: new OpenAIEmbedder({
-    model: 'text-embedding-3-small',
-    maxRetries: 3,
-  }),
+  embedder: openai.embedding('text-embedding-3-small'),
 });
 
 export const mastra = new Mastra({

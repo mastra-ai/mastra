@@ -1,3 +1,4 @@
+import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { DefaultStorage, DefaultVectorDB } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
@@ -21,20 +22,12 @@ const memory = new Memory({
       enabled: true,
     },
   },
-  embedding: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-3-small',
-    maxRetries: 3,
-  },
+  embedder: openai.embedding('text-embedding-3-small'),
 });
 
 export const memoryAgent = new Agent({
   name: 'Memory Agent',
   instructions: 'You are a helpful AI agent, looking to assist however you can.',
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o',
-    toolChoice: 'auto',
-  },
+  model: openai('gpt-4o-mini'),
   memory,
 });

@@ -1,4 +1,4 @@
-import { type MastraLLMBase } from '@mastra/core/llm';
+import { type LanguageModel } from '@mastra/core/llm';
 import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';
@@ -11,8 +11,8 @@ import {
 } from './prompts';
 
 export class FaithfulnessJudge extends MastraAgentJudge {
-  constructor(llm: MastraLLMBase) {
-    super('Faithfulness', FAITHFULNESS_AGENT_INSTRUCTIONS, llm);
+  constructor(model: LanguageModel) {
+    super('Faithfulness', FAITHFULNESS_AGENT_INSTRUCTIONS, model);
   }
 
   async evaluate(output: string, context: string[]): Promise<{ claim: string; verdict: string; reason: string }[]> {

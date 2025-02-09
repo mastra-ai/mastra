@@ -92,10 +92,7 @@ const similarityMetric = new ContentSimilarityMetric({
 });
 
 const toxicityMetric = new ToxicityMetric({
-  model: {
-    provider: 'openai',
-    model: 'gpt-4',
-  },
+  model: openai('gpt-4'),
   scale: 1, // Optional: adjust scoring scale
 });
 
@@ -117,10 +114,7 @@ import { FaithfulnessMetric } from '@mastra/evals';
 
 // Initialize with context
 const faithfulnessMetric = new FaithfulnessMetric({
-  model: {
-    provider: 'openai',
-    model: 'gpt-4',
-  },
+  model: openai('gpt-4'),
   context: ['Paris is the capital of France', 'Paris has a population of 2.2 million'],
   scale: 1,
 });

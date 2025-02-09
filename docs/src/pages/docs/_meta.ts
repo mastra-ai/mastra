@@ -8,10 +8,6 @@ const meta = {
     title: "Guides",
     collapsed: false,
   },
-  "llm-models": {
-    title: "LLM Models",
-    collapsed: false,
-  },
   agents: {
     title: "Agents",
     collapsed: false,

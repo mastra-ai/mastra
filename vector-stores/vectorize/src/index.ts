@@ -151,4 +151,3 @@ export class CloudflareVector extends MastraVector {
 }
 
 throw new Error('This package (@mastra/vector-vectorize) is deprecated. Please use @mastra/vectorize instead.');
-

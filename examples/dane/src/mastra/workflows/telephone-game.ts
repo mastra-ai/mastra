@@ -1,6 +1,14 @@
+import { anthropic } from '@ai-sdk/anthropic';
 import { input } from '@inquirer/prompts';
 import { Step, Workflow, getStepResult } from '@mastra/core/workflows';
 import { z } from 'zod';
+
+const llm = anthropic('claude-3-5-sonnet-20241022');
+
+const agent = new Agent({
+  instructions: `Telephone game agent`,
+  model: llm,
+});
 
 export const telephoneGameWorkflow = new Workflow({
   name: 'telephoneGame',
@@ -67,21 +75,15 @@ const stepC2 = new Step({
     if (context?.machineContext?.stepResults.stepC2?.status === 'success') {
       const msg = getStepResult(context?.machineContext?.stepResults.stepC2);
       if (msg.confirm) {
-        if (mastra?.llm) {
-          const llm = mastra?.llm({
-            provider: 'ANTHROPIC',
-            name: 'claude-3-5-haiku-20241022',
-          });
-          const result = await llm.generate(`
+        const result = await agent.generate(`
             You are playing a game of telephone.
             Here is the message the previous person sent ${oMsg.message}. 
             But you want to change the message. 
             Only return the message
             `);
-          return {
-            message: result.text,
-          };
-        }
+        return {
+          message: result.text,
+        };
       }
 
       return oMsg;

@@ -33,9 +33,9 @@ const memory = new Memory({
     },
     {
       name: "embedder",
-      type: "MastraEmbedder",
+      type: "EmbeddingModel",
       description:
-        "Embedder instance for vector embeddings (e.g., OpenAIEmbedder, CohereEmbedder)",
+        "Embedder instance for vector embeddings",
       isOptional: true,
     },
     {
@@ -112,6 +112,7 @@ The embedder instance to use for generating vector embeddings. This should be an
 When using vector search capabilities, ensure you configure both the vector store and appropriate search options. Here's an example (just using the in-memory store):
 
 ```typescript copy showLineNumbers
+import { openai } from "@ai-sdk/openai";
 import { Memory } from "@mastra/memory";
 import { DefaultStorage, DefaultVectorDB } from "@mastra/core/storage";
 
@@ -122,10 +123,7 @@ const memory = new Memory({
   vector: new DefaultVectorDB({
     url: ":memory:",
   }),
-  embedder: new OpenAIEmbedder({
-    model: "text-embedding-3-small",
-    maxRetries: 3,
-  }),
+  embedder: openai.embedding("text-embedding-3-small"),
   options: {
     semanticRecall: {
       topK: 5,

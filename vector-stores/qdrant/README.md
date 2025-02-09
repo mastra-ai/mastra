@@ -5,16 +5,19 @@
 ## Migration Guide
 
 1. Remove this package from your dependencies:
+
    ```bash
    pnpm remove @mastra/vector-qdrant
    ```
 
 2. Install the new package:
+
    ```bash
    pnpm add @mastra/qdrant
    ```
 
 3. Update your imports:
+
    ```typescript
    // Old import
    import { QdrantVector } from "@mastra/vector-qdrant";

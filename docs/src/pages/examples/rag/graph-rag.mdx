@@ -38,25 +38,23 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
+import { openai } from "@ai-sdk/openai";
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
 import { PgVector } from "@mastra/pg";
-import { embedMany, MDocument, createGraphRAGTool } from "@mastra/rag";
+import { MDocument, createGraphRAGTool } from "@mastra/rag";
+import { embedMany } from "ai";
 ```
 
 ## GraphRAG Tool Creation
 
 Using createGraphRAGTool imported from @mastra/rag, you can create a tool that queries the vector database and converts the results into a knowledge graph.
 
-```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{8} filename="src/mastra/index.ts"
 const graphRagTool = createGraphRAGTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  options: {
-    provider: "OPEN_AI",
-    model: "text-embedding-3-small",
-    maxRetries: 3,
-  },
+  model: openai.embedding("text-embedding-3-small"),
   graphOptions: {
     dimension: 1536,
     threshold: 0.7,
@@ -70,6 +68,8 @@ const graphRagTool = createGraphRAGTool({
 Set up the Mastra agent that will handle the responses:
 
 ```typescript copy showLineNumbers{19} filename="src/mastra/index.ts"
+import { openai } from "@ai-sdk/openai";
+
 export const ragAgent = new Agent({
   name: "GraphRAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context. Format your answers as follows:
@@ -79,10 +79,7 @@ export const ragAgent = new Agent({
 3. CONCLUSION: One sentence summary that ties everything together
 
 Keep each section brief and focus on the most important points.`,
-  model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-  },
+  model: openai("gpt-4o-mini"),
   tools: {
     graphRagTool,
   },
@@ -93,7 +90,7 @@ Keep each section brief and focus on the most important points.`,
 
 Instantiate PgVector and Mastra with all components:
 
-```typescript copy showLineNumbers{37} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{36} filename="src/mastra/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
@@ -108,7 +105,7 @@ const agent = mastra.getAgent("ragAgent");
 
 Create a document and process it into chunks:
 
-```typescript copy showLineNumbers{46} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{45} filename="src/mastra/index.ts"
 const doc = MDocument.fromText(
   `Riverdale Heights: Community Development Study...`,
 );
@@ -125,11 +122,10 @@ const chunks = await doc.chunk({
 
 Generate embeddings for the chunks and store them in the vector database:
 
-```typescript copy showLineNumbers{55} filename="src/mastra/index.ts"
-const { embeddings } = await embedMany(chunks, {
-  provider: "OPEN_AI",
-  model: "text-embedding-3-small",
-  maxRetries: 3,
+```typescript copy showLineNumbers{56} filename="src/mastra/index.ts"
+const { embeddings } = await embedMany({
+  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
 });
 
 const vectorStore = mastra.getVector("pgVector");
@@ -145,7 +141,7 @@ await vectorStore.upsert(
 
 Function to generate responses based on retrieved context:
 
-```typescript copy showLineNumbers{69} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{70} filename="src/mastra/index.ts"
 async function generateResponse(query: string) {
   const prompt = `
     Please answer the following question using both semantic and graph-based context:
@@ -161,7 +157,7 @@ async function generateResponse(query: string) {
 
 ## Example Usage
 
-```typescript copy showLineNumbers{81} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{82} filename="src/mastra/index.ts"
 async function answerQueries(queries: string[]) {
   for (const query of queries) {
     try {

@@ -19,15 +19,15 @@ function rerank(
 ## Usage Example
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
 import { rerank } from "@mastra/rag";
+
+const model = openai("gpt-4o-mini");
 
 const rerankedResults = await rerank(
   vectorSearchResults,
   "How do I deploy to production?",
-  {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-  },
+  model,
   {
     weights: {
       semantic: 0.5,
@@ -56,9 +56,9 @@ const rerankedResults = await rerank(
       isOptional: false,
     },
     {
-      name: "modelConfig",
-      type: "ModelConfig",
-      description: "Rerank model configuration",
+      name: "model",
+      type: "LanguageModelV1",
+      description: "The language model to use for reranking",
       isOptional: false,
     },
     {
@@ -70,38 +70,7 @@ const rerankedResults = await rerank(
   ]}
 />
 
-### ModelConfig
-
-The rerank function accepts any standard Mastra `ModelConfig`. When using Cohere's provider with the model name `rerank-v3.5`, it will automatically use Cohere's reranking capabilities.
-
-<PropertiesTable
-  content={[
-    {
-      name: "provider",
-      type: "LLMProvider | string",
-      description: "Provider to use for reranking (use 'COHERE' with name 'rerank-v3.5' for Cohere's reranker)",
-      isOptional: false,
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Name of the model to use",
-      isOptional: false,
-    },
-    {
-      name: "apiKey",
-      type: "string",
-      description: "API key for the provider",
-      isOptional: true,
-    },
-    {
-      name: "model",
-      type: "LanguageModelV1 | (() => Promise<LanguageModelV1>)",
-      description: "Custom model implementation",
-      isOptional: true,
-    }
-  ]}
-/>
+The rerank function accepts any LanguageModel from the Vercel AI SDK. When using the Cohere model `rerank-v3.5`, it will automatically use Cohere's reranking capabilities.
 
 ### RerankerFunctionOptions
 

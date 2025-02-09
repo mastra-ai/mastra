@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import { createTool } from '../../tools';
 
-import { MockProvider } from './providers/mock';
+import { MockProvider } from './mock';
 
 describe('MastraLLM', () => {
   const mockMastra = {

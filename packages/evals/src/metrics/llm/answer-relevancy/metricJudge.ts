@@ -1,4 +1,4 @@
-import { type MastraLLMBase } from '@mastra/core/llm';
+import { type LanguageModel } from '@mastra/core/llm';
 import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';
@@ -11,8 +11,8 @@ import {
 } from './prompts';
 
 export class AnswerRelevancyJudge extends MastraAgentJudge {
-  constructor(llm: MastraLLMBase) {
-    super('Answer Relevancy', ANSWER_RELEVANCY_AGENT_INSTRUCTIONS, llm);
+  constructor(model: LanguageModel) {
+    super('Answer Relevancy', ANSWER_RELEVANCY_AGENT_INSTRUCTIONS, model);
   }
 
   async evaluate(input: string, actualOutput: string): Promise<{ verdict: string; reason: string }[]> {

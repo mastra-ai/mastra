@@ -1,14 +1,12 @@
+import { anthropic } from '@ai-sdk/anthropic';
+import { openai } from '@ai-sdk/openai';
 import { Agent, createTool, Mastra } from '@mastra/core';
 import { z } from 'zod';
 
 const copywriterAgent = new Agent({
   name: 'Copywriter',
   instructions: 'You are a copywriter agent that writes blog post copy.',
-  model: {
-    provider: 'ANTHROPIC',
-    name: 'claude-3-5-sonnet-20241022',
-    toolChoice: 'required',
-  },
+  model: anthropic('claude-3-5-sonnet-20241022'),
 });
 
 const copywriterTool = createTool({
@@ -32,10 +30,7 @@ const copywriterTool = createTool({
 const editorAgent = new Agent({
   name: 'Editor',
   instructions: 'You are an editor agent that edits blog post copy.',
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o',
-  },
+  model: openai('gpt-4o-mini'),
 });
 
 const editorTool = createTool({
@@ -62,10 +57,7 @@ const publisherAgent = new Agent({
   name: 'publisherAgent',
   instructions:
     'You are a publisher agent that first calls the copywriter agent to write blog post copy about a specific topic and then calls the editor agent to edit the copy. Just return the final edited copy.',
-  model: {
-    provider: 'ANTHROPIC',
-    name: 'claude-3-5-sonnet-20241022',
-  },
+  model: anthropic('claude-3-5-sonnet-20241022'),
   tools: { copywriterTool, editorTool },
 });
 

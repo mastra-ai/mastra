@@ -35,6 +35,7 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { createVectorQueryTool } from '@mastra/rag';
@@ -45,15 +46,11 @@ import { PgVector } from '@mastra/pg';
 
 Create a tool that can query the vector database:
 
-```typescript copy showLineNumbers{4} filename="src/index.ts"
+```typescript copy showLineNumbers{7} filename="src/index.ts"
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',
   indexName: 'embeddings',
-  options: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-3-small',
-    maxRetries: 3,
-  },
+  model: openai.embedding('text-embedding-3-small'),
 });
 ```
 
@@ -61,15 +58,12 @@ const vectorQueryTool = createVectorQueryTool({
 
 Set up the Mastra agent that will handle the responses:
 
-```typescript copy showLineNumbers{15} filename="src/index.ts"
+```typescript copy showLineNumbers{13} filename="src/index.ts"
 export const ragAgent = new Agent({
   name: 'RAG Agent',
   instructions:
     'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o-mini',
-  },
+  model: openai('gpt-4o-mini'),
   tools: {
     vectorQueryTool,
   },
@@ -80,7 +74,7 @@ export const ragAgent = new Agent({
 
 Instantiate PgVector and Mastra with all components:
 
-```typescript copy showLineNumbers{28} filename="src/index.ts"
+```typescript copy showLineNumbers{23} filename="src/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
@@ -93,7 +87,7 @@ const agent = mastra.getAgent('ragAgent');
 
 ## Example Usage
 
-```typescript copy showLineNumbers{37} filename="src/index.ts"
+```typescript copy showLineNumbers{32} filename="src/index.ts"
 const prompt = `
 [Insert query based on document here]
 Please base your answer only on the context provided in the tool. 

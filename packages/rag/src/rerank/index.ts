@@ -1,6 +1,6 @@
-import { type ModelConfig } from '@mastra/core';
 import { MastraAgentRelevanceScorer, CohereRelevanceScorer, RelevanceScoreProvider } from '@mastra/core/relevance';
 import { QueryResult } from '@mastra/core/vector';
+import { LanguageModelV1 } from 'ai';
 
 // Default weights for different scoring components (must add up to 1)
 const DEFAULT_WEIGHTS = {
@@ -46,7 +46,7 @@ export interface RerankerFunctionOptions {
 
 export interface RerankConfig {
   options?: RerankerOptions;
-  model: ModelConfig;
+  model: LanguageModelV1;
 }
 
 // Calculate position score based on position in original list
@@ -85,19 +85,14 @@ function adjustScores(score: number, queryAnalysis: { magnitude: number; dominan
 export async function rerank(
   results: QueryResult[],
   query: string,
-  modelConfig: ModelConfig,
+  model: LanguageModelV1,
   options: RerankerFunctionOptions,
 ): Promise<RerankResult[]> {
-  const { provider } = modelConfig;
   let semanticProvider: RelevanceScoreProvider;
-  if ('model' in modelConfig) {
-    semanticProvider = new MastraAgentRelevanceScorer(provider, 'CUSTOM_MODEL', modelConfig.model);
-  } else if (provider === 'COHERE' && 'name' in modelConfig && modelConfig.name === 'rerank-v3.5') {
-    semanticProvider = new CohereRelevanceScorer(modelConfig.name, modelConfig.apiKey);
-  } else if ('name' in modelConfig) {
-    semanticProvider = new MastraAgentRelevanceScorer(provider, modelConfig.name);
+  if (model.modelId === 'rerank-v3.5') {
+    semanticProvider = new CohereRelevanceScorer(model.modelId);
   } else {
-    throw new Error('Invalid model configuration');
+    semanticProvider = new MastraAgentRelevanceScorer(model.provider, model);
   }
   const { queryEmbedding, topK = 3 } = options;
   const weights = {

@@ -1,16 +1,15 @@
-import { type EmbeddingOptions } from '@mastra/core/embeddings';
 import { type MastraVector, type QueryResult } from '@mastra/core/vector';
-
-import { embed } from '../embeddings';
+import { embed, EmbeddingModel } from 'ai';
 
 interface VectorQuerySearchParams {
   indexName: string;
   vectorStore: MastraVector;
   queryText: string;
-  options: EmbeddingOptions;
+  model: EmbeddingModel<string>;
   queryFilter?: any;
   topK: number;
   includeVectors?: boolean;
+  maxRetries?: number;
 }
 
 interface VectorQuerySearchResult {
@@ -23,12 +22,17 @@ export const vectorQuerySearch = async ({
   indexName,
   vectorStore,
   queryText,
-  options,
+  model,
   queryFilter = {},
   topK,
   includeVectors = false,
+  maxRetries = 2,
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
-  const { embedding } = await embed(queryText, options);
+  const { embedding } = await embed({
+    value: queryText,
+    model,
+    maxRetries,
+  });
   // Get relevant chunks from the vector database
   const results = await vectorStore.query(indexName, embedding, topK, queryFilter, includeVectors);
 

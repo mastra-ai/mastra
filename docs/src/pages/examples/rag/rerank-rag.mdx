@@ -36,30 +36,25 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/mastra/index.ts"
+import { openai } from "@ai-sdk/openai";
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
 import { PgVector } from "@mastra/pg";
-import { embedMany, MDocument, createVectorQueryTool } from "@mastra/rag";
+import { MDocument, createVectorQueryTool } from "@mastra/rag";
+import { embedMany } from "ai";
 ```
 
 ## Vector Query Tool Creation with Re-ranking
 
 Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database and re-rank results:
 
-```typescript copy showLineNumbers{4} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{8} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  options: {
-    provider: "OPEN_AI",
-    model: "text-embedding-3-small",
-    maxRetries: 3,
-  },
+  model: openai.embedding("text-embedding-3-small"),
   reranker: {
-    model: {
-      provider: "OPEN_AI",
-      name: "gpt-4o-mini",
-    },
+    model: openai("gpt-4o-mini"),
   },
 });
 ```
@@ -68,15 +63,14 @@ const vectorQueryTool = createVectorQueryTool({
 
 Set up the Mastra agent that will handle the responses:
 
-```typescript copy showLineNumbers{22} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{17} filename="src/mastra/index.ts"
+import { openai } from "@ai-sdk/openai";
+
 export const ragAgent = new Agent({
   name: "RAG Agent",
   instructions:
     "You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.",
-  model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-  },
+  model: openai("gpt-4o-mini"),
   tools: {
     vectorQueryTool,
   },
@@ -87,7 +81,7 @@ export const ragAgent = new Agent({
 
 Instantiate PgVector and Mastra with all components:
 
-```typescript copy showLineNumbers{35} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{29} filename="src/mastra/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
@@ -102,7 +96,7 @@ const agent = mastra.getAgent("ragAgent");
 
 Create a document and process it into chunks:
 
-```typescript copy showLineNumbers{44} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{38} filename="src/mastra/index.ts"
 const doc1 = MDocument.fromText(`
 market data shows price resistance levels.
 technical charts display moving averages.
@@ -136,15 +130,16 @@ const chunks = await doc1.chunk({
 
 Generate embeddings for the chunks and store them in the vector database:
 
-```typescript copy showLineNumbers{72} filename="src/mastra/index.ts"
-const { embeddings } = await embedMany(chunks, {
-  provider: "OPEN_AI",
-  model: "text-embedding-3-small",
-  maxRetries: 3,
+```typescript copy showLineNumbers{66} filename="src/mastra/index.ts"
+const { embeddings } = await embedMany({
+  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
 });
 
 const vectorStore = mastra.getVector("pgVector");
+
 await vectorStore.createIndex("embeddings", 1536);
+
 await vectorStore.upsert(
   "embeddings",
   embeddings,
@@ -156,7 +151,7 @@ await vectorStore.upsert(
 
 Function to generate responses based on retrieved and re-ranked context:
 
-```typescript copy showLineNumbers{86} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{82} filename="src/mastra/index.ts"
 async function generateResponse(query: string) {
   const prompt = `
       Please answer the following question:
@@ -173,7 +168,7 @@ async function generateResponse(query: string) {
 
 ## Example Usage
 
-```typescript copy showLineNumbers{99} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{95} filename="src/mastra/index.ts"
 async function answerQueries(queries: string[]) {
   for (const query of queries) {
     try {

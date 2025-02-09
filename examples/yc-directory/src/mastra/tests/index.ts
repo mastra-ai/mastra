@@ -1,12 +1,10 @@
+import { openai } from '@ai-sdk/openai';
 import { evaluate } from '@mastra/evals';
 import { AnswerRelevancyMetric } from '@mastra/evals/llm';
 
 import { ycAgent } from '../agents';
 
-const model = {
-  provider: 'OPEN_AI',
-  name: 'gpt-4o',
-} as const;
+const model = openai('gpt-4o');
 
 const metric = new AnswerRelevancyMetric(model, {
   scale: 1,

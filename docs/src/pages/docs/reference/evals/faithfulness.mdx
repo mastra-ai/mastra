@@ -10,14 +10,11 @@ The `FaithfulnessMetric` in Mastra evaluates how factually accurate an LLM's out
 ## Basic Usage
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
 import { FaithfulnessMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = {
-  provider: "OPEN_AI",
-  name: "gpt-4o-mini",
-  apiKey: process.env.OPENAI_API_KEY,
-};
+const model = openai("gpt-4o-mini");
 
 const metric = new FaithfulnessMetric(model, {
   context: [

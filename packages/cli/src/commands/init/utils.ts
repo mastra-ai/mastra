@@ -1,5 +1,4 @@
 import * as p from '@clack/prompts';
-import type { ModelConfig } from '@mastra/core';
 import child_process from 'node:child_process';
 import util from 'node:util';
 import path from 'path';
@@ -19,14 +18,21 @@ const exec = util.promisify(child_process.exec);
 export type LLMProvider = 'openai' | 'anthropic' | 'groq';
 export type Components = 'agents' | 'workflows' | 'tools';
 
-export const modelToConfigMap: Record<LLMProvider, ModelConfig> = {
-  openai: { provider: 'OPEN_AI', name: 'gpt-4o', toolChoice: 'auto' },
-  anthropic: { provider: 'ANTHROPIC', name: 'claude-3-5-sonnet-20241022', toolChoice: 'auto' },
-  groq: { provider: 'GROQ', name: 'llama3-groq-70b-8192-tool-use-preview', toolChoice: 'auto' },
-};
-
 export async function writeAgentSample(llmProvider: LLMProvider, destPath: string, addExampleTool: boolean) {
-  const model = modelToConfigMap[llmProvider];
+  let providerImport = '';
+  let modelItem = '';
+
+  if (llmProvider === 'openai') {
+    providerImport = `import { openai } from '@ai-sdk/openai';`;
+    modelItem = `openai('gpt-4o')`;
+  } else if (llmProvider === 'anthropic') {
+    providerImport = `import { anthropic } from '@ai-sdk/anthropic';`;
+    modelItem = `anthropic('claude-3-5-sonnet-20241022')`;
+  } else if (llmProvider === 'groq') {
+    providerImport = `import { groq } from '@ai-sdk/groq';`;
+    modelItem = `groq('llama3-groq-70b-8192-tool-use-preview')`;
+  }
+
   const instructions = `
       You are a helpful weather assistant that provides accurate weather information.
 
@@ -39,13 +45,14 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
       ${addExampleTool ? 'Use the weatherTool to fetch current weather data.' : ''}
 `;
   const content = `
+${providerImport}  
 import { Agent } from '@mastra/core/agent';
 ${addExampleTool ? `import { weatherTool } from '../tools';` : ''}
 
 export const weatherAgent = new Agent({
   name: 'Weather Agent',
   instructions: \`${instructions}\`,
-  model: ${JSON.stringify(model, null, 2)},
+  model: ${modelItem},
   ${addExampleTool ? 'tools: { weatherTool },' : ''}
 });
     `;

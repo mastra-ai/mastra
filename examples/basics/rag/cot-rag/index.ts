@@ -1,16 +1,14 @@
+import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { createVectorQueryTool, embedMany, MDocument } from '@mastra/rag';
 import { PgVector } from '@mastra/pg';
+import { createVectorQueryTool, MDocument } from '@mastra/rag';
+import { embedMany } from 'ai';
 
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',
   indexName: 'embeddings',
-  options: {
-    provider: 'OPEN_AI',
-    model: 'text-embedding-3-small',
-    maxRetries: 3,
-  },
+  model: openai.embedding('text-embedding-3-small'),
 });
 
 export const ragAgent = new Agent({
@@ -32,10 +30,7 @@ THOUGHT PROCESS:
 
 FINAL ANSWER:
 [Your concise answer based on the retrieved context]`,
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o-mini',
-  },
+  model: openai('gpt-4o-mini'),
   tools: { vectorQueryTool },
 });
 
@@ -74,10 +69,9 @@ const chunks = await doc.chunk({
   separator: '\n',
 });
 
-const { embeddings } = await embedMany(chunks, {
-  provider: 'OPEN_AI',
-  model: 'text-embedding-3-small',
-  maxRetries: 3,
+const { embeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
 });
 
 const vectorStore = mastra.getVector('pgVector');

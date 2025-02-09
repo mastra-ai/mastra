@@ -1,3 +1,4 @@
+import { createOpenAI } from '@ai-sdk/openai';
 import { config } from 'dotenv';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
@@ -6,7 +7,7 @@ import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { Mastra } from '../mastra';
 import { createTool } from '../tools';
 
-import { Agent, type ModelConfig } from '..';
+import { Agent } from './index';
 
 config();
 
@@ -22,20 +23,16 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
   return userInfo;
 });
 
+const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
 describe('agent', () => {
   const integration = new TestIntegration();
-
-  const modelConfig: ModelConfig = {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o',
-    toolChoice: 'auto',
-  };
 
   it('should get a text response from the agent', async () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: modelConfig,
+      model: openai('gpt-4o'),
     });
 
     const mastra = new Mastra({
@@ -56,7 +53,7 @@ describe('agent', () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: modelConfig,
+      model: openai('gpt-4o'),
     });
 
     const mastra = new Mastra({
@@ -85,7 +82,7 @@ describe('agent', () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: modelConfig,
+      model: openai('gpt-4o'),
     });
 
     const mastra = new Mastra({
@@ -109,7 +106,7 @@ describe('agent', () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: modelConfig,
+      model: openai('gpt-4o'),
     });
 
     const mastra = new Mastra({
@@ -146,7 +143,7 @@ describe('agent', () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: modelConfig,
+      model: openai('gpt-4o'),
     });
 
     const mastra = new Mastra({
@@ -190,10 +187,7 @@ describe('agent', () => {
     const userAgent = new Agent({
       name: 'User agent',
       instructions: 'You are an agent that can get list of users using findUserTool.',
-      model: {
-        ...modelConfig,
-        toolChoice: 'required',
-      },
+      model: openai('gpt-4o'),
       tools: { findUserTool },
     });
 
@@ -205,6 +199,7 @@ describe('agent', () => {
 
     const response = await agentOne.generate('Find the user with name - Dero Israel', {
       maxSteps: 2,
+      toolChoice: 'required',
     });
 
     const toolCall: any = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
@@ -219,10 +214,7 @@ describe('agent', () => {
     const testAgent = new Agent({
       name: 'Test agent',
       instructions: 'You are an agent that call testTool',
-      model: {
-        ...modelConfig,
-        toolChoice: 'required',
-      },
+      model: openai('gpt-4o'),
       tools: integration.getStaticTools(),
     });
 
@@ -234,7 +226,9 @@ describe('agent', () => {
 
     const agentOne = mastra.getAgent('testAgent');
 
-    const response = await agentOne.generate('Call testTool');
+    const response = await agentOne.generate('Call testTool', {
+      toolChoice: 'required',
+    });
 
     const toolCall: any = response.toolResults.find((result: any) => result.toolName === 'testTool');
 

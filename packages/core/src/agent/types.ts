@@ -1,10 +1,10 @@
+import { LanguageModelV1 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
 import type { MastraPrimitives } from '../action';
 import type { Metric } from '../eval';
-import { MastraLLMBase } from '../llm/model';
-import type { CoreMessage, ModelConfig, OutputType } from '../llm/types';
+import type { CoreMessage, OutputType } from '../llm';
 import type { MastraMemory } from '../memory';
 import { MemoryConfig } from '../memory';
 import type { ToolAction } from '../tools';
@@ -19,8 +19,7 @@ export interface AgentConfig<
 > {
   name: string;
   instructions: string;
-  model?: ModelConfig;
-  llm?: MastraLLMBase;
+  model: LanguageModelV1;
   tools?: TTools;
   mastra?: MastraPrimitives;
   metrics?: TMetrics;
@@ -38,6 +37,7 @@ export interface AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefi
   maxSteps?: number;
   output?: OutputType | Z;
   temperature?: number;
+  toolChoice?: 'auto' | 'required';
 }
 
 export interface AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> {
@@ -52,4 +52,5 @@ export interface AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefine
   maxSteps?: number;
   output?: OutputType | Z;
   temperature?: number;
+  toolChoice?: 'auto' | 'required';
 }

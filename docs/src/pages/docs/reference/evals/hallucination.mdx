@@ -10,14 +10,11 @@ The `HallucinationMetric` evaluates whether an LLM generates factually correct i
 ## Basic Usage
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
 import { HallucinationMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = {
-  provider: "OPEN_AI",
-  name: "gpt-4o-mini",
-  apiKey: process.env.OPENAI_API_KEY,
-};
+const model = openai("gpt-4o-mini");
 
 const metric = new HallucinationMetric(model, {
   context: [
