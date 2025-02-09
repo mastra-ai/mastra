@@ -265,8 +265,6 @@ const stepA2 = new Step({
 
       console.log(chalk.green(result.text));
 
-      writeFileSync(`generated-changelogs/changelog-${today}`, result.text);
-
       return {
         message: result.text,
       };
