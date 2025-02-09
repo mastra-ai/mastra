@@ -51,10 +51,25 @@ const stepA1 = new Step({
       `main@{${weekAgo}}`,
       `main@{${today}}`,
       '--',
-      'packages/**',
-      // 'docs/**'
+      '.', // Target entire repo
+      ':!/examples/**', // Exclude examples directory
+      ':!**/node_modules/**', // Exclude dependency directories
+      ':!**/.turbo/**', // Exclude Turbo cache
+      ':!**/.next/**', // Exclude Next.js build
+      ':!**/coverage/**', // Exclude test coverage
+      ':!**/package-lock.json',
+      ':!**/pnpm-lock.yaml',
+      ':!**/yarn.lock',
+      ':!**/*.bin',
+      ':!**/*.exe',
+      ':!**/*.dll',
+      ':!**/*.so',
+      ':!**/*.dylib',
+      ':!**/*.class',
+      ':!**/dist/**',
     ];
-    console.log(args);
+    console.log(`git ${args.join(' ')}`);
+
     const p = execa('git', args, {
       cwd,
     });
@@ -62,7 +77,7 @@ const stepA1 = new Step({
     try {
       const diff = await p;
       return {
-        message: diff.stdout,
+        message: diff.stdout.trim().slice(0, 190000),
       };
     } catch (e) {
       console.error(e);
@@ -94,26 +109,6 @@ const stepA2 = new Step({
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     const tools = await slack.tools();
-
-    if (existsSync(`changelog-${today}`)) {
-      const existing = readFileSync(`changelog-${today}`, 'utf-8');
-
-      await agent.generate(
-        `
-                Send this ${existing} to this slack channel: "${context.machineContext.triggerData.channelId}" with the tool slack_post_message.
-                Format it in markdown so it displays nicely in slack.
-                `,
-        {
-          toolsets: {
-            slack: tools,
-          },
-        },
-      );
-
-      return {
-        message: existing,
-      };
-    }
 
     const channelId = context.machineContext.triggerData.channelId;
 
@@ -157,19 +152,27 @@ const stepA2 = new Step({
         `;
 
     console.log(chalk.green(`Generating...`));
-    const result = await agent.generate(prompt, {
-      toolsets: {
-        slack: tools,
-      },
-    });
 
-    console.log(chalk.green(result.text));
+    try {
+      const result = await agent.generate(prompt, {
+        toolsets: {
+          slack: tools,
+        },
+      });
 
-    writeFileSync(`changelog-${today}`, result.text);
+      console.log(chalk.green(result.text));
 
-    return {
-      message: result.text,
-    };
+      writeFileSync(`changelog-${today}`, result.text);
+
+      return {
+        message: result.text,
+      };
+    } catch (e) {
+      console.log(chalk.red(e));
+      return {
+        message: e as string,
+      };
+    }
   },
 });
 

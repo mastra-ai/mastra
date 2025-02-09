@@ -28,6 +28,7 @@
     "tsx": "^4.19.2"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^1.1.6",
     "@inquirer/prompts": "^7.2.1",
     "@libsql/client": "^0.14.0",
     "@mastra/core": "workspace:*",
