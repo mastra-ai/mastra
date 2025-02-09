@@ -10,8 +10,8 @@ import { validateBody } from './utils';
 export async function getTelemetryHandler(c: Context) {
   try {
     const mastra = c.get('mastra');
-    const telemetry: Telemetry = mastra.telemetry;
-    const storage: MastraStorage = mastra.storage;
+    const telemetry: typeof Telemetry = mastra.telemetry;
+    const storage: typeof MastraStorage = mastra.storage;
 
     const { name, scope, page, perPage } = c.req.query();
 
