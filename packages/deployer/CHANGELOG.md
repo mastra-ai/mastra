@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 0.1.0-alpha.42
+
+### Patch Changes
+
+- 42a2e69: Fix playground error parsing
+- Updated dependencies [5285356]
+  - @mastra/core@0.2.0-alpha.93
+
 ## 0.1.0-alpha.41
 
 ### Patch Changes

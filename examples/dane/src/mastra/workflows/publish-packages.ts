@@ -1,514 +1,349 @@
 import { Step, Workflow } from '@mastra/core/workflows';
 import chalk from 'chalk';
+import { execa } from 'execa';
 import { existsSync } from 'fs';
+import { readFileSync } from 'fs';
 import path from 'path';
-import { z } from 'zod';
 
-import { PACKAGES_LIST_PROMPT, PUBLISH_PACKAGES_PROMPT } from '../agents/package-publisher.js';
-import { pnpmBuild } from '../tools/pnpm.js';
+// import { z } from 'zod';
+
+// import { PACKAGES_LIST_PROMPT, /*PUBLISH_PACKAGES_PROMPT*/ } from '../agents/package-publisher.js';
+// import { pnpmBuild } from '../tools/pnpm.js';
 
 export const packagePublisher = new Workflow({
   name: 'pnpm-changset-publisher',
 });
 
-const outputSchema = z.object({
-  packages: z.array(z.string()),
-  integrations: z.array(z.string()),
-  deployers: z.array(z.string()),
-  speech: z.array(z.string()),
-  // deprecated
-  vector_stores: z.array(z.string()),
-  stores: z.array(z.string()),
-  // combined deprecated stores
-  combined_stores: z.array(z.string()),
-});
+// const outputSchema = z.object({
+//   packages: z.array(z.string()),
+//   integrations: z.array(z.string()),
+//   deployers: z.array(z.string()),
+//   speech: z.array(z.string()),
+//   // deprecated
+//   vector_stores: z.array(z.string()),
+//   stores: z.array(z.string()),
+//   // combined deprecated stores
+//   combined_stores: z.array(z.string()),
+// });
 
-const defaultSet = {
-  packages: [],
-  deployers: [],
-  integrations: [],
-  speech: [],
-  // deprecated
-  vector_stores: [],
-  stores: [],
-  // combined vector + storage
-  combined_stores: [],
-};
+// const defaultSet = {
+//   packages: [],
+//   deployers: [],
+//   integrations: [],
+//   speech: [],
+//   // deprecated
+//   vector_stores: [],
+//   stores: [],
+//   // combined vector + storage
+//   combined_stores: [],
+// };
 
-const getPacakgesToPublish = new Step({
-  id: 'getPacakgesToPublish',
-  outputSchema,
-  execute: async ({ mastra }) => {
-    const agent = mastra?.agents?.['danePackagePublisher'];
+// const getPacakgesToPublish = new Step({
+//   id: 'getPacakgesToPublish',
+//   outputSchema,
+//   execute: async ({ mastra }) => {
+//     const agent = mastra?.agents?.['danePackagePublisher'];
 
-    if (!agent) {
-      throw new Error('Agent not found');
-    }
+//     if (!agent) {
+//       throw new Error('Agent not found');
+//     }
 
-    const result = await agent.generate(PACKAGES_LIST_PROMPT);
+//     const result = await agent.generate(PACKAGES_LIST_PROMPT);
 
-    console.log(chalk.green(`\n${result.text}`));
+//     console.log(chalk.green(`\n${result.text}`));
 
-    const resultObj = await agent.generate(
-      `
-      Please convert this into a structured object:
+//     const resultObj = await agent.generate(
+//       `
+//       Please convert this into a structured object:
 
-      Input Text: ${result.text}
+//       Input Text: ${result.text}
 
-      1. Order Requirements:
-         - @mastra/core MUST be first within packages
-         - @mastra/deployer MUST be second within packages
-         - Group parallel builds by directory type
+//       1. Order Requirements:
+//          - @mastra/core MUST be first within packages
+//          - @mastra/deployer MUST be second within packages
+//          - Group parallel builds by directory type
 
-      2. Output Format:
-         - Group into: packages[], integrations[], deployers[], vector_stores[], stores[], combined_stores[]
-         - Place create-mastra in packages[] array
-         - Maintain correct order within each group
+//       2. Output Format:
+//          - Group into: packages[], integrations[], deployers[], vector_stores[], stores[], combined_stores[]
+//          - Place create-mastra in packages[] array
+//          - Maintain correct order within each group
 
-      3. Critical Rules:
-         - Never publish without building first
-         - Only include packages that need updates
-         - Follow dependency order strictly
-    `,
-      {
-        output: z.object({
-          packages: z.array(z.string()),
-          integrations: z.array(z.string()),
-          deployers: z.array(z.string()),
-          vector_stores: z.array(z.string()),
-          stores: z.array(z.string()),
-          combined_stores: z.array(z.string()),
-          speech: z.array(z.string()),
-        }),
-      },
-    );
+//       3. Critical Rules:
+//          - Never publish without building first
+//          - Only include packages that need updates
+//          - Follow dependency order strictly
+//     `,
+//       {
+//         output: z.object({
+//           packages: z.array(z.string()),
+//           integrations: z.array(z.string()),
+//           deployers: z.array(z.string()),
+//           vector_stores: z.array(z.string()),
+//           stores: z.array(z.string()),
+//           combined_stores: z.array(z.string()),
+//           speech: z.array(z.string()),
+//         }),
+//       },
+//     );
 
-    return {
-      packages: resultObj?.object?.packages!,
-      integrations: resultObj?.object?.integrations!,
-      deployers: resultObj?.object?.deployers!,
-      vector_stores: resultObj?.object?.vector_stores!,
-      stores: resultObj?.object?.stores!,
-      combined_stores: resultObj?.object?.stores!,
-      speech: resultObj?.object?.speech!,
-    };
-  },
-});
+//     return {
+//       packages: resultObj?.object?.packages!,
+//       integrations: resultObj?.object?.integrations!,
+//       deployers: resultObj?.object?.deployers!,
+//       vector_stores: resultObj?.object?.vector_stores!,
+//       stores: resultObj?.object?.stores!,
+//       combined_stores: resultObj?.object?.stores!,
+//       speech: resultObj?.object?.speech!,
+//     };
+//   },
+// });
 
-const assemblePackages = new Step({
-  id: 'assemblePackages',
-  outputSchema,
-  execute: async ({ context }) => {
-    if (context.machineContext?.stepResults.getPacakgesToPublish?.status !== 'success') {
-      return {
-        packages: [],
-        integrations: [],
-        deployers: [],
-        vector_stores: [],
-        stores: [],
-        combined_stores: [],
-        speech: [],
-      };
-    }
+// const assemblePackages = new Step({
+//   id: 'assemblePackages',
+//   outputSchema,
+//   execute: async ({ context }) => {
+//     if (context.machineContext?.stepResults.getPacakgesToPublish?.status !== 'success') {
+//       return {
+//         packages: [],
+//         integrations: [],
+//         deployers: [],
+//         vector_stores: [],
+//         stores: [],
+//         combined_stores: [],
+//         speech: [],
+//       };
+//     }
 
-    const payload = context.machineContext.stepResults.getPacakgesToPublish.payload;
-    const packagesToBuild: Set<string> = new Set();
-    const deployersToBuild: Set<string> = new Set();
-    const integrationsToBuild: Set<string> = new Set();
-    const vector_storesToBuild: Set<string> = new Set();
-    const storesToBuild: Set<string> = new Set();
-    const combined_storesToBuild: Set<string> = new Set();
-    const speechToBuild: Set<string> = new Set();
+//     const payload = context.machineContext.stepResults.getPacakgesToPublish.payload;
+//     const packagesToBuild: Set<string> = new Set();
+//     const deployersToBuild: Set<string> = new Set();
+//     const integrationsToBuild: Set<string> = new Set();
+//     const vector_storesToBuild: Set<string> = new Set();
+//     const storesToBuild: Set<string> = new Set();
+//     const combined_storesToBuild: Set<string> = new Set();
+//     const speechToBuild: Set<string> = new Set();
 
-    if (payload?.packages) {
-      payload.packages.forEach((pkg: string) => {
-        let pkgName = pkg.replace('@mastra/', '');
+//     if (payload?.packages) {
+//       payload.packages.forEach((pkg: string) => {
+//         let pkgName = pkg.replace('@mastra/', '');
 
-        if (pkgName === 'mastra') {
-          pkgName = 'cli';
-        }
+//         if (pkgName === 'mastra') {
+//           pkgName = 'cli';
+//         }
 
-        const pkgPath = path.join(process.cwd(), 'packages', pkgName);
-        packagesToBuild.add(pkgPath);
-      });
-    }
+//         const pkgPath = path.join(process.cwd(), 'packages', pkgName);
+//         packagesToBuild.add(pkgPath);
+//       });
+//     }
 
-    if (payload?.deployers) {
-      payload.deployers.forEach((pkg: string) => {
-        let pkgName = pkg.replace('@mastra/deployer-', '');
+//     if (payload?.deployers) {
+//       payload.deployers.forEach((pkg: string) => {
+//         let pkgName = pkg.replace('@mastra/deployer-', '');
 
-        if (pkgName === 'mastra') {
-          pkgName = 'cli';
-        }
+//         if (pkgName === 'mastra') {
+//           pkgName = 'cli';
+//         }
 
-        const pkgPath = path.join(process.cwd(), 'deployers', pkgName);
-        deployersToBuild.add(pkgPath);
-      });
-    }
+//         const pkgPath = path.join(process.cwd(), 'deployers', pkgName);
+//         deployersToBuild.add(pkgPath);
+//       });
+//     }
 
-    if (payload?.vector_stores) {
-      payload.vector_stores.forEach((pkg: string) => {
-        let pkgName = pkg.replace('@mastra/vector-', '');
+//     if (payload?.vector_stores) {
+//       payload.vector_stores.forEach((pkg: string) => {
+//         let pkgName = pkg.replace('@mastra/vector-', '');
 
-        const pkgPath = path.join(process.cwd(), 'vector-stores', pkgName);
-        vector_storesToBuild.add(pkgPath);
-      });
-    }
+//         const pkgPath = path.join(process.cwd(), 'vector-stores', pkgName);
+//         vector_storesToBuild.add(pkgPath);
+//       });
+//     }
 
-    if (payload?.stores) {
-      payload.stores.forEach((pkg: string) => {
-        let pkgName = pkg.replace('@mastra/store-', '');
+//     if (payload?.stores) {
+//       payload.stores.forEach((pkg: string) => {
+//         let pkgName = pkg.replace('@mastra/store-', '');
 
-        const pkgPath = path.join(process.cwd(), 'storage', pkgName);
-        storesToBuild.add(pkgPath);
-      });
-    }
+//         const pkgPath = path.join(process.cwd(), 'storage', pkgName);
+//         storesToBuild.add(pkgPath);
+//       });
+//     }
 
-    if (payload?.combined_stores) {
-      payload.combined_stores.forEach((pkg: string) => {
-        let pkgName = pkg.replace('@mastra/', '');
+//     if (payload?.combined_stores) {
+//       payload.combined_stores.forEach((pkg: string) => {
+//         let pkgName = pkg.replace('@mastra/', '');
 
-        const pkgPath = path.join(process.cwd(), 'stores', pkgName);
-        combined_storesToBuild.add(pkgPath);
-      });
-    }
+//         const pkgPath = path.join(process.cwd(), 'stores', pkgName);
+//         combined_storesToBuild.add(pkgPath);
+//       });
+//     }
 
-    if (payload?.integrations) {
-      const integrations = payload.integrations;
-      integrations.forEach((integration: string) => {
-        let pkgName = integration.replace('@mastra/', '');
-        const integrationPath = path.join(process.cwd(), 'integrations', pkgName);
+//     if (payload?.integrations) {
+//       const integrations = payload.integrations;
+//       integrations.forEach((integration: string) => {
+//         let pkgName = integration.replace('@mastra/', '');
+//         const integrationPath = path.join(process.cwd(), 'integrations', pkgName);
 
-        integrationsToBuild.add(integrationPath);
-      });
-    }
+//         integrationsToBuild.add(integrationPath);
+//       });
+//     }
 
-    if (payload?.speech) {
-      const speecs = payload.speech;
-      speecs.forEach((speech: string) => {
-        let pkgName = speech.replace('@mastra/speech-', '');
-        const speechPath = path.join(process.cwd(), 'speech', pkgName);
-        speechToBuild.add(speechPath);
-      });
-    }
+//     if (payload?.speech) {
+//       const speecs = payload.speech;
+//       speecs.forEach((speech: string) => {
+//         let pkgName = speech.replace('@mastra/speech-', '');
+//         const speechPath = path.join(process.cwd(), 'speech', pkgName);
+//         speechToBuild.add(speechPath);
+//       });
+//     }
 
-    const pkgSet = Array.from(packagesToBuild.keys());
-    const deploySet = Array.from(deployersToBuild.keys());
-    const integrationSet = Array.from(integrationsToBuild.keys());
-    const vectorStoreSet = Array.from(vector_storesToBuild.keys());
-    const storeSet = Array.from(storesToBuild.keys());
-    const combinedStoreSet = Array.from(combined_storesToBuild.keys());
-    const speechSet = Array.from(speechToBuild.keys());
+//     const pkgSet = Array.from(packagesToBuild.keys());
+//     const deploySet = Array.from(deployersToBuild.keys());
+//     const integrationSet = Array.from(integrationsToBuild.keys());
+//     const vectorStoreSet = Array.from(vector_storesToBuild.keys());
+//     const storeSet = Array.from(storesToBuild.keys());
+//     const combinedStoreSet = Array.from(combined_storesToBuild.keys());
+//     const speechSet = Array.from(speechToBuild.keys());
 
-    if (
-      !packagesToBuild.size &&
-      !deployersToBuild.size &&
-      !integrationsToBuild.size &&
-      !vector_storesToBuild.size &&
-      !storesToBuild.size &&
-      !combined_storesToBuild.size
-    ) {
-      console.error(chalk.red('No packages to build.'));
-      return defaultSet;
-    }
+//     if (
+//       !packagesToBuild.size &&
+//       !deployersToBuild.size &&
+//       !integrationsToBuild.size &&
+//       !vector_storesToBuild.size &&
+//       !storesToBuild.size &&
+//       !combined_storesToBuild.size
+//     ) {
+//       console.error(chalk.red('No packages to build.'));
+//       return defaultSet;
+//     }
 
-    console.log(chalk.green(`\nBuilding packages:\n`));
-    pkgSet.forEach((pkg: string) => {
-      console.log(chalk.green(pkg));
-    });
+//     console.log(chalk.green(`\nBuilding packages:\n`));
+//     pkgSet.forEach((pkg: string) => {
+//       console.log(chalk.green(pkg));
+//     });
 
-    if (deploySet.length > 0) {
-      console.log(chalk.green(`\nBuilding deployers:\n`));
-      deploySet.forEach((pkg: string) => {
-        console.log(chalk.green(pkg));
-      });
-    }
+//     if (deploySet.length > 0) {
+//       console.log(chalk.green(`\nBuilding deployers:\n`));
+//       deploySet.forEach((pkg: string) => {
+//         console.log(chalk.green(pkg));
+//       });
+//     }
 
-    if (integrationSet.length > 0) {
-      console.log(chalk.green(`\nBuilding integrations:\n`));
-      integrationSet.forEach((pkg: string) => {
-        console.log(chalk.green(pkg));
-      });
-    }
+//     if (integrationSet.length > 0) {
+//       console.log(chalk.green(`\nBuilding integrations:\n`));
+//       integrationSet.forEach((pkg: string) => {
+//         console.log(chalk.green(pkg));
+//       });
+//     }
 
-    if (vectorStoreSet.length > 0) {
-      console.log(chalk.green(`\nBuilding vector stores:\n`));
-      vectorStoreSet.forEach((pkg: string) => {
-        console.log(chalk.green(pkg));
-      });
-    }
+//     if (vectorStoreSet.length > 0) {
+//       console.log(chalk.green(`\nBuilding vector stores:\n`));
+//       vectorStoreSet.forEach((pkg: string) => {
+//         console.log(chalk.green(pkg));
+//       });
+//     }
 
-    if (storeSet.length > 0) {
-      console.log(chalk.green(`\nBuilding storage packages:\n`));
-      storeSet.forEach((pkg: string) => {
-        console.log(chalk.green(pkg));
-      });
-    }
+//     if (storeSet.length > 0) {
+//       console.log(chalk.green(`\nBuilding storage packages:\n`));
+//       storeSet.forEach((pkg: string) => {
+//         console.log(chalk.green(pkg));
+//       });
+//     }
 
-    if (combinedStoreSet.length > 0) {
-      console.log(chalk.green(`\nBuilding store packages:\n`));
-      combinedStoreSet.forEach((pkg: string) => {
-        console.log(chalk.green(pkg));
-      });
-    }
+//     if (combinedStoreSet.length > 0) {
+//       console.log(chalk.green(`\nBuilding store packages:\n`));
+//       combinedStoreSet.forEach((pkg: string) => {
+//         console.log(chalk.green(pkg));
+//       });
+//     }
 
-    if (speechSet.length > 0) {
-      console.log(chalk.green(`\nBuilding speech:\n`));
-      speechSet.forEach((pkg: string) => {
-        console.log(chalk.green(pkg));
-      });
-    }
+//     if (speechSet.length > 0) {
+//       console.log(chalk.green(`\nBuilding speech:\n`));
+//       speechSet.forEach((pkg: string) => {
+//         console.log(chalk.green(pkg));
+//       });
+//     }
 
-    return {
-      packages: pkgSet!,
-      deployers: deploySet!,
-      integrations: integrationSet!,
-      vector_stores: vectorStoreSet!,
-      stores: storeSet!,
-      combined_stores: combinedStoreSet!,
-      speech: speechSet!,
-    };
-  },
-});
+//     return {
+//       packages: pkgSet!,
+//       deployers: deploySet!,
+//       integrations: integrationSet!,
+//       vector_stores: vectorStoreSet!,
+//       stores: storeSet!,
+//       combined_stores: combinedStoreSet!,
+//       speech: speechSet!,
+//     };
+//   },
+// });
 
-const buildPackages = new Step({
+const buildAllPackages = new Step({
   id: 'buildPackages',
-  outputSchema,
-  execute: async ({ context, mastra }) => {
-    if (context.machineContext?.stepResults.assemblePackages?.status !== 'success') {
-      return defaultSet;
-    }
-
-    const pkgSet = context.machineContext.stepResults.assemblePackages.payload.packages;
-    const deploySet = context.machineContext.stepResults.assemblePackages.payload.deployers;
-    const integrationSet = context.machineContext.stepResults.assemblePackages.payload.integrations;
-    const vectorStoreSet = context.machineContext.stepResults.assemblePackages.payload.vector_stores;
-    const storeSet = context.machineContext.stepResults.assemblePackages.payload.stores;
-    const combinedStoreSet = context.machineContext.stepResults.assemblePackages.payload.combined_stores;
-    const speechSet = context.machineContext.stepResults.assemblePackages.payload.speech;
-
-    console.log({
-      pkgSet,
-      deploySet,
-      integrationSet,
-      vectorStoreSet,
-      storeSet,
-      combinedStoreSet,
-      speechSet,
+  execute: async () => {
+    console.log(chalk.green('Building all packages'));
+    await execa('pnpm', ['run', 'build'], {
+      stdio: 'inherit',
+      reject: false,
+      cwd: process.cwd(),
     });
-
-    const agent = mastra?.agents?.['danePackagePublisher'];
-
-    if (!agent) {
-      throw new Error('Agent not found');
-    }
-
-    async function buildSet(list: string[]) {
-      for (const pkg of list) {
-        await pnpmBuild.execute({
-          context: {
-            name: pkg,
-            packagePath: pkg,
-          },
-          suspend: async () => {},
-        });
-      }
-    }
-
-    let built = false;
-
-    if (pkgSet.length > 0) {
-      built = true;
-      await buildSet(pkgSet);
-    }
-
-    if (deploySet.length > 0) {
-      await buildSet(deploySet);
-      built = true;
-    }
-
-    if (integrationSet.length > 0) {
-      await buildSet(integrationSet);
-      built = true;
-    }
-
-    if (vectorStoreSet.length > 0) {
-      await buildSet(vectorStoreSet);
-      built = true;
-    }
-
-    if (speechSet.length > 0) {
-      await buildSet(speechSet);
-      built = true;
-    }
-
-    if (!built) {
-      console.error(chalk.red('Failed to build one or more packages'));
-      throw new Error('Failed to build one or more packages');
-    }
-
-    return {
-      packages: pkgSet,
-      deployers: deploySet,
-      integrations: integrationSet,
-      vector_stores: vectorStoreSet,
-      stores: storeSet,
-      combined_stores: combinedStoreSet,
-      speech: speechSet,
-    };
   },
 });
 
-const verifyBuild = new Step({
-  id: 'verifyBuild',
-  outputSchema: z.object({
-    packages: z.array(z.string()),
-  }),
-  execute: async ({ context }) => {
-    if (context.machineContext?.stepResults.buildPackages?.status !== 'success') {
-      return {
-        packages: [],
-      };
-    }
+const publishAllPackages = new Step({
+  id: 'publishPackages',
+  execute: async () => {
+    console.log(chalk.green('Publishing all packages'));
+    await execa('pnpm', ['changeset', 'publish'], {
+      stdio: 'inherit',
+      reject: false,
+      cwd: process.cwd(),
+    });
+  },
+});
 
-    const pkgSet = context.machineContext.stepResults.buildPackages.payload.packages;
-    const deploySet = context.machineContext.stepResults.buildPackages.payload.deployers;
-    const integrationSet = context.machineContext.stepResults.buildPackages.payload.integrations;
-    const vectorStoreSet = context.machineContext.stepResults.buildPackages.payload.vector_stores;
-    const storeSet = context.machineContext.stepResults.buildPackages.payload.stores;
-    const combinedStoreSet = context.machineContext.stepResults.buildPackages.payload.combined_stores;
-    const speechSet = context.machineContext.stepResults.buildPackages.payload.speech;
+const setAllDistTags = new Step({
+  id: 'setAllDistTags',
+  execute: async () => {
+    console.log(chalk.green('Setting dist tags for all packages'));
 
-    const allPackages = [
-      ...pkgSet,
-      ...deploySet,
-      ...integrationSet,
-      ...vectorStoreSet,
-      ...storeSet,
-      ...combinedStoreSet,
-      ...speechSet,
-    ];
+    // Get all package.json files from relevant directories
+    const packageDirs = ['packages', 'deployers', 'storage', 'vector-stores', 'stores', 'integrations', 'speech'];
+    const packages = [];
 
-    function checkMissingPackages(pkgSet: string[]) {
-      const missingPackages = [];
+    for (const dir of packageDirs) {
+      const dirPath = path.join(process.cwd(), dir);
+      if (!existsSync(dirPath)) continue;
 
-      for (const pkg of pkgSet) {
-        if (!existsSync(`${pkg}/dist`)) {
-          console.error(chalk.red(`We did not find the dist folder for ${pkg}.`));
-          missingPackages.push(pkg);
+      const { stdout } = await execa('find', [dirPath, '-name', 'package.json'], {
+        reject: false,
+      });
+
+      const packagePaths = stdout.split('\n').filter(Boolean);
+      for (const packagePath of packagePaths) {
+        const pkgJson = JSON.parse(readFileSync(packagePath, 'utf-8'));
+        if (pkgJson.name && pkgJson.version) {
+          packages.push({
+            name: pkgJson.name,
+            version: pkgJson.version,
+            path: path.dirname(packagePath),
+          });
         }
       }
-
-      return missingPackages;
     }
 
-    console.log('Verifying the output for:', context.machineContext.stepResults.buildPackages.payload.allPackages);
+    console.log(packages);
 
-    const missingPackages = checkMissingPackages(allPackages);
-
-    if (missingPackages.length > 0) {
-      console.error(chalk.red(`Missing packages: ${missingPackages.join(', ')}`));
-      throw new Error('Failed to build one or more packages');
+    // Set dist tags for each package
+    for (const pkg of packages) {
+      console.log(chalk.blue(`Setting dist tag for ${pkg.name}@${pkg.version}`));
+      try {
+        await execa('npm', ['dist-tag', 'add', `${pkg.name}@${pkg.version}`, 'latest'], {
+          stdio: 'inherit',
+          cwd: pkg.path,
+          reject: false,
+        });
+      } catch (error: any) {
+        console.error(chalk.red(`Failed to set dist tag for ${pkg.name}: ${error.message}`));
+      }
     }
-
-    return {
-      packages: allPackages,
-    };
   },
 });
 
-const publishChangeset = new Step({
-  id: 'publishChangeset',
-  outputSchema: z.object({
-    packages: z.array(z.string()),
-  }),
-  execute: async ({ context, mastra }) => {
-    if (context.machineContext?.stepResults.buildPackages?.status !== 'success') {
-      return {
-        packages: [],
-      };
-    }
-
-    const pkgSet = context.machineContext.stepResults.buildPackages.payload.packages;
-
-    const agent = mastra?.agents?.['danePackagePublisher'];
-
-    if (!agent) {
-      throw new Error('Agent not found');
-    }
-
-    const res = await agent.generate(PUBLISH_PACKAGES_PROMPT);
-
-    console.log(chalk.green(res.text));
-
-    return { packages: pkgSet };
-  },
-});
-
-const setLatestDistTag = new Step({
-  id: 'setLatestDistTag',
-  outputSchema: z.object({
-    packages: z.array(z.string()),
-  }),
-  execute: async ({ context, mastra }) => {
-    if (context.machineContext?.stepResults.publishChangeset?.status !== 'success') {
-      return {
-        packages: [],
-      };
-    }
-
-    const pkgSet = context.machineContext.stepResults.publishChangeset.payload.packages;
-
-    const agent = mastra?.agents?.['danePackagePublisher'];
-
-    if (!agent) {
-      throw new Error('Agent not found');
-    }
-
-    let res = await agent.generate(`
-            Set the active tag for these packages ${pkgSet.join(',')}.
-        `);
-
-    console.log(chalk.green(res.text));
-
-    return { packages: pkgSet };
-  },
-});
-
-packagePublisher
-  .step(getPacakgesToPublish)
-  .then(assemblePackages)
-  .then(buildPackages, {
-    when: async ({ context }) => {
-      return (
-        context.stepResults.assemblePackages?.status === 'success' &&
-        context.stepResults.assemblePackages?.payload?.packages.length > 0
-      );
-    },
-  })
-  .then(verifyBuild, {
-    when: async ({ context }) => {
-      return (
-        context.stepResults.buildPackages?.status === 'success' &&
-        context.stepResults.buildPackages?.payload?.packages.length > 0
-      );
-    },
-  })
-  .after(verifyBuild)
-  .step(publishChangeset, {
-    when: async ({ context }) => {
-      return (
-        context.stepResults.buildPackages?.status === 'success' &&
-        context.stepResults.buildPackages?.payload?.packages.length > 0
-      );
-    },
-  })
-  .then(setLatestDistTag, {
-    when: async ({ context }) => {
-      return (
-        context.stepResults.publishChangeset?.status === 'success' &&
-        context.stepResults.publishChangeset?.payload?.packages.length > 0
-      );
-    },
-  })
-  .commit();
+packagePublisher.step(buildAllPackages).then(publishAllPackages).then(setAllDistTags).commit();

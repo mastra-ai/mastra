@@ -53,6 +53,7 @@ export function MastraRuntimeProvider({
       let buffer = '';
       let assistantMessage = '';
       let assistantMessageAdded = false;
+      let errorMessage = '';
 
       try {
         while (true) {
@@ -62,21 +63,24 @@ export function MastraRuntimeProvider({
           const chunk = decoder.decode(value);
           buffer += chunk;
 
-          const errorMatch = buffer.match(/\d+:"([^"]*Error[^"]*)"/);
-          if (errorMatch) {
-            const errorMessage = errorMatch[1].replace(/^An error occurred while processing your request\.\s*/, '');
-            setMessages(currentConversation => [
-              ...currentConversation,
-              {
-                role: 'assistant',
-                content: [{ type: 'text', text: errorMessage }],
-                isError: true,
-              },
-            ]);
-            return;
+          const matches = buffer.matchAll(/0:"([^"]*)"/g);
+          const errorMatches = buffer.matchAll(/3:"([^"]*)"/g);
+
+          if (errorMatches) {
+            for (const match of errorMatches) {
+              const content = match[1];
+              errorMessage += content;
+              setMessages(currentConversation => [
+                ...currentConversation.slice(0, -1),
+                {
+                  role: 'assistant',
+                  content: [{ type: 'text', text: errorMessage }],
+                  isError: true,
+                },
+              ]);
+            }
           }
 
-          const matches = buffer.matchAll(/0:"([^"]*)"/g);
           for (const match of matches) {
             const content = match[1];
             assistantMessage += content;

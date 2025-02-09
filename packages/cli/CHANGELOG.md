@@ -1,5 +1,16 @@
 # mastra
 
+## 0.2.0-alpha.150
+
+### Patch Changes
+
+- 0209290: Add env to starter gitignore file
+- 42a2e69: Fix playground error parsing
+- Updated dependencies [5285356]
+- Updated dependencies [42a2e69]
+  - @mastra/core@0.2.0-alpha.93
+  - @mastra/deployer@0.1.0-alpha.42
+
 ## 0.2.0-alpha.149
 
 ### Patch Changes
