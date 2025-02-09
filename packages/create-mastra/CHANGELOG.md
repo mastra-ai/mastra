@@ -1,5 +1,16 @@
 # create-mastra
 
+## 0.1.0-alpha.33
+
+### Minor Changes
+
+- 8b416d9: Breaking changes
+
+### Patch Changes
+
+- 9c10484: new create-mastra version
+- 9c10484: update all packages
+
 ## 0.1.0-alpha.32
 
 ### Minor Changes

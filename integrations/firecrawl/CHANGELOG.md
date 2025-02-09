@@ -1,5 +1,19 @@
 # @mastra/firecrawl
 
+## 1.1.0-alpha.89
+
+### Minor Changes
+
+- 8b416d9: Breaking changes
+
+### Patch Changes
+
+- 9c10484: update all packages
+- Updated dependencies [9c10484]
+- Updated dependencies [8b416d9]
+  - @mastra/core@0.2.0-alpha.94
+  - @mastra/rag@0.1.0-alpha.87
+
 ## 1.1.0-alpha.88
 
 ### Patch Changes

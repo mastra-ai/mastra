@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 0.2.0-alpha.94
+
+### Minor Changes
+
+- 8b416d9: Breaking changes
+
+### Patch Changes
+
+- 9c10484: update all packages
+
 ## 0.2.0-alpha.93
 
 ### Minor Changes
