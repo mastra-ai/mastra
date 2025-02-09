@@ -1,5 +1,12 @@
 # @mastra/speech-deepgram
 
+## 0.1.0-alpha.20
+
+### Patch Changes
+
+- Updated dependencies [9fb59d6]
+  - @mastra/core@0.2.0-alpha.95
+
 ## 0.1.0-alpha.19
 
 ### Minor Changes

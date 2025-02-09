@@ -1,5 +1,12 @@
 # @mastra/github
 
+## 1.1.0-alpha.80
+
+### Patch Changes
+
+- Updated dependencies [9fb59d6]
+  - @mastra/core@0.2.0-alpha.95
+
 ## 1.1.0-alpha.79
 
 ### Minor Changes
