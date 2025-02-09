@@ -3,15 +3,13 @@ import {
   DeepPartial,
   GenerateObjectResult,
   GenerateTextResult,
+  LanguageModel,
   StreamObjectResult,
   StreamTextResult,
 } from 'ai';
 import { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
 
-import { MastraPrimitives } from '../../action';
-import { MastraBase } from '../../base';
-import { RegisteredLogger } from '../../logger';
 import {
   GenerateReturn,
   LLMInnerStreamOptions,
@@ -21,16 +19,26 @@ import {
   LLMTextOptions,
   StreamReturn,
 } from '../';
+import { MastraPrimitives } from '../../action';
+import { MastraBase } from '../../base';
+import { RegisteredLogger } from '../../logger';
 
 export class MastraLLMBase extends MastraBase {
   // @ts-ignore
   #mastra?: MastraPrimitives;
+  #model: LanguageModel;
 
-  constructor({ name }: { name: string }) {
+  constructor({ name, model }: { name: string; model: LanguageModel }) {
     super({
       component: RegisteredLogger.LLM,
       name,
     });
+
+    this.#model = model;
+  }
+
+  getProvider() {
+    return this.#model.provider;
   }
 
   convertToMessages(messages: string | string[] | CoreMessage[]): CoreMessage[] {

@@ -55,11 +55,11 @@ export function AgentDetails({ agentId }: { agentId: string }) {
         </div>
         <div className="grid grid-cols-[100px_1fr] gap-2">
           <p className="text-mastra-el-3">Model</p>
-          <p className="text-mastra-el-5">{(agent?.model as any)?.name}</p>
+          <p className="text-mastra-el-5">{agent?.provider}</p>
         </div>
         <div className="grid grid-cols-[100px_1fr] gap-2">
           <p className="text-mastra-el-3">Provider</p>
-          <p className="text-mastra-el-5">{agent?.model.provider}</p>
+          <p className="text-mastra-el-5">{agent?.provider.split('.')[0].toUpperCase()}</p>
         </div>
         <div className="grid grid-cols-[100px_1fr] gap-2">
           <p className="text-mastra-el-3">Tools</p>

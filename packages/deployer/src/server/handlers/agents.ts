@@ -1,3 +1,4 @@
+import type { Mastra } from '@mastra/core';
 import type { Context } from 'hono';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
@@ -12,7 +13,7 @@ import { validateBody } from './utils';
 export async function getAgentsHandler(c: Context) {
   try {
     const mastra = c.get('mastra');
-    const agents = mastra.getAgents();
+    const agents: Mastra = mastra.getAgents();
 
     const serializedAgents = Object.entries(agents).reduce<any>((acc, [_id, _agent]) => {
       const agent = _agent as any;
@@ -30,6 +31,7 @@ export async function getAgentsHandler(c: Context) {
         model: agent.model,
         instructions: agent.instructions,
         tools: serializedAgentTools,
+        provider: agent.llm?.getProvider(),
       };
       return acc;
     }, {});
@@ -42,7 +44,7 @@ export async function getAgentsHandler(c: Context) {
 
 export async function getAgentByIdHandler(c: Context) {
   try {
-    const mastra = c.get('mastra');
+    const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const agent = mastra.getAgent(agentId);
 
@@ -65,6 +67,7 @@ export async function getAgentByIdHandler(c: Context) {
       model: agent.model,
       instructions: agent.instructions,
       tools: serializedAgentTools,
+      provider: agent.llm?.getProvider(),
     });
   } catch (error) {
     return handleError(error, 'Error getting agent');
