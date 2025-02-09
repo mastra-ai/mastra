@@ -55,7 +55,7 @@ const response = await agent.generate({
 Stream a response from the agent for real-time interactions:
 
 ```typescript
-const stream = await agent.stream({
+const response = await agent.stream({
   messages: [
     {
       role: "user",
@@ -68,8 +68,8 @@ const stream = await agent.stream({
   ],
 });
 
-// Read from the stream
-const reader = stream.getReader();
+// Read from response body
+const reader = response.body.getReader();
 while (true) {
   const { done, value } = await reader.read();
   if (done) break;
