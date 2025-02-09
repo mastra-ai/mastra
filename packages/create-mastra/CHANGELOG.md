@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.0-alpha.34
+
+### Patch Changes
+
+- 9fb59d6: changeset
+
 ## 0.1.0-alpha.33
 
 ### Minor Changes

@@ -1,5 +1,14 @@
 # mastra
 
+## 0.2.0-alpha.152
+
+### Patch Changes
+
+- 9fb59d6: changeset
+- Updated dependencies [9fb59d6]
+  - @mastra/deployer@0.1.0-alpha.44
+  - @mastra/core@0.2.0-alpha.95
+
 ## 0.2.0-alpha.151
 
 ### Minor Changes

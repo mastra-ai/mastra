@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.2.0-alpha.95
+
+### Patch Changes
+
+- 9fb59d6: changeset
+
 ## 0.2.0-alpha.94
 
 ### Minor Changes
