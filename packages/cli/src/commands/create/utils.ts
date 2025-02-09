@@ -86,6 +86,8 @@ export const createMastraProject = async () => {
   await exec(`echo node_modules >> .gitignore`);
   await exec(`echo dist >> .gitignore`);
   await exec(`echo .mastra >> .gitignore`);
+  await exec(`echo .env.development >> .gitignore`);
+  await exec(`echo .env >> .gitignore`);
   s.stop('.gitignore added');
 
   p.outro('Project created successfully');
