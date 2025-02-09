@@ -1,5 +1,15 @@
 # docs
 
+## 0.1.0-alpha.2
+
+### Minor Changes
+
+- 8b416d9: Breaking changes
+
+### Patch Changes
+
+- 9c10484: update all packages
+
 ## 0.0.1-alpha.1
 
 ### Patch Changes

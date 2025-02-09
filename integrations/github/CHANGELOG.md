@@ -1,5 +1,18 @@
 # @mastra/github
 
+## 1.1.0-alpha.79
+
+### Minor Changes
+
+- 8b416d9: Breaking changes
+
+### Patch Changes
+
+- 9c10484: update all packages
+- Updated dependencies [9c10484]
+- Updated dependencies [8b416d9]
+  - @mastra/core@0.2.0-alpha.94
+
 ## 1.0.3-alpha.78
 
 ### Patch Changes
