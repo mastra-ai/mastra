@@ -56,19 +56,13 @@ export function Chat({ agentId, initialMessages = [], agentName, threadId, memor
         }),
       });
 
-      if (!response.body) return;
+      if (!response.body) {
+        throw new Error('No response body');
+      }
 
       if (response.status !== 200) {
         const error = await response.json();
-        setMessages(prev => [
-          ...prev.slice(0, -1),
-          {
-            ...prev[prev.length - 1],
-            content: error.message,
-            isError: true,
-          },
-        ]);
-        return;
+        throw new Error(error.message);
       }
 
       mutate(`/api/memory/threads?resourceid=${agentId}`);
@@ -77,37 +71,42 @@ export function Chat({ agentId, initialMessages = [], agentName, threadId, memor
       const decoder = new TextDecoder();
       let buffer = '';
       let assistantMessage = '';
+      let errorMessage = '';
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          buffer += chunk;
+
+          const matches = buffer.matchAll(/0:"([^"]*)"/g);
+          const errorMatches = buffer.matchAll(/3:"([^"]*)"/g);
+
+          if (errorMatches) {
+            for (const match of errorMatches) {
+              const content = match[1];
+              errorMessage += content;
+              setMessages(prev => [
+                ...prev.slice(0, -1),
+                { ...prev[prev.length - 1], content: errorMessage, isError: true },
+              ]);
+            }
+          }
+
+          for (const match of matches) {
+            const content = match[1];
+            assistantMessage += content;
+            setMessages(prev => [...prev.slice(0, -1), { ...prev[prev.length - 1], content: assistantMessage }]);
+          }
+          buffer = '';
         }
-
-        const chunk = decoder.decode(value);
-        buffer += chunk;
-
-        const errorMatch = buffer.match(/\d+:"([^"]*Error[^"]*)"/);
-        if (errorMatch) {
-          const errorMessage = errorMatch[1].replace(/^An error occurred while processing your request\.\s*/, '');
-          setMessages(prev => [
-            ...prev.slice(0, -1),
-            {
-              ...prev[prev.length - 1],
-              content: errorMessage,
-              isError: true,
-            },
-          ]);
-          return;
-        }
-
-        const matches = buffer.matchAll(/0:"([^"]*)"/g);
-        for (const match of matches) {
-          const content = match[1];
-          assistantMessage += content;
-          setMessages(prev => [...prev.slice(0, -1), { ...prev[prev.length - 1], content: assistantMessage }]);
-        }
-        buffer = '';
+      } catch (error: any) {
+        throw new Error(error.message);
+      } finally {
+        reader.releaseLock();
       }
     } catch (error: any) {
       setMessages(prev => [
