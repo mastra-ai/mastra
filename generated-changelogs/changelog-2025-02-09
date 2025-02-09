@@ -1,0 +1,38 @@
+## packages/core
+
+Here's the structured changelog for the core package updates between 2025-02-02 and 2025-02-09:
+
+### Breaking Changes
+
+- Renamed `MastraLibSQLStorage` and `MastraLibSQLVector` to `DefaultStorage` and `DefaultVectorDB` respectively for better clarity (legacy names still exported for backwards compatibility) (#5285356)
+- Memory API now requires an embedder instance instead of embeddings config object (#d7d465a)
+- Moved `@mastra/vector-libsql` functionality into `@mastra/core/vector/libsql` (#16e5b04)
+
+### New Features
+
+- Added new short-term "working" memory for agents with `maskStreamTags` helper to hide working memory blocks in streams (#27275c9)
+- Added new LLM primitive architecture with support for OpenAI, AmazonBedrock, and Anthropic (#6fa4bd2, #e2e76de)
+- Added filter translators for Chroma and Qdrant vector stores (#7f24c29, #2f17a5f)
+
+### Improvements
+
+- Memory API improvements:
+  - Renamed `historySearch` to `semanticRecall` for clarity
+  - Renamed `embeddingOptions` to `embedding` (#e9d1b47)
+  - Added ability to pass configured Memory instances directly to Agent (#b4d416)
+  - Added fallback title generation for threads (#2017553)
+  - Added helpful error message for vector usage (#3700be1)
+
+### Notable Bug Fixes
+
+- Fixed storage bugs related to the new Memory API (#67637ba)
+- Updated operator validation and handling for all vector stores (#ccbc581)
+- Added `__registerPrimitives` to model.ts for proper initialization (#8151f44)
+
+### Build/Deployment
+
+- Updated deployer logic and configuration (#4d4f6b6, #38b7f66)
+- Added `sideEffects: false` flag for better tree-shaking
+- Streamlined dependencies by moving several packages to peer dependencies
+
+This release focuses on improving the developer experience through better naming conventions, enhanced memory capabilities, and more robust vector store support. The changes to the Memory API represent a significant improvement in usability while maintaining backwards compatibility.
