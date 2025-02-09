@@ -154,19 +154,15 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
 
     const streamResponse = output
       ? streamResult.toTextStreamResponse()
-      : streamResult.toDataStream({
+      : streamResult.toDataStreamResponse({
+          sendUsage: true,
+          sendReasoning: true,
           getErrorMessage: (error: any) => {
             return `An error occurred while processing your request. ${error}`;
           },
         });
 
-    return new Response(streamResponse, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'content-encoding': 'identity',
-        'transfer-encoding': 'chunked',
-      },
-    });
+    return streamResponse;
   } catch (error) {
     return handleError(error, 'Error streaming from agent');
   }
