@@ -134,7 +134,7 @@ The final score is calculated using Mean Average Precision (MAP):
 
 1. Converts verdicts to binary scores (1 for relevant, 0 for not)
 2. Calculates precision at each position
-3. Weights earlier positions more heavily
+3. Weight earlier positions more heavily
 4. Normalizes to the configured scale (default 0-1)
 
 Score interpretation:
@@ -185,3 +185,4 @@ const result = await metric.measure(
 - [Answer Relevancy Metric](./answer-relevancy)
 - [Context Position Metric](./context-position)
 - [Completeness Metric](./completeness)
+- [Context Relevancy Metric](./context-relevancy)

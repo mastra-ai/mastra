@@ -5,7 +5,7 @@ description: Documentation for the Hallucination Metric in Mastra, which evaluat
 
 # HallucinationMetric
 
-The `HallucinationMetric` evaluates whether an LLM generates factually correct information by comparing its output against provided context. This metric measures hallucination by identifying direct contradictions between the context and the output.
+The `HallucinationMetric` evaluates whether an LLM generates factually correct information by comparing its output against the provided context. This metric measures hallucination by identifying direct contradictions between the context and the output.
 
 ## Basic Usage
 
@@ -163,7 +163,7 @@ Score interpretation:
 - 0.75: High hallucination - contradicts 75% of context statements
 - 1.0: Complete hallucination - contradicts all context statements
 
-Note: The score represents the degree of hallucination, so a lower score indicates better factual alignment with the provided context.
+**Note:** The score represents the degree of hallucination, so a lower score indicates better factual alignment with the provided context.
 
 ## Example with Analysis
 
@@ -205,3 +205,4 @@ const result = await metric.measure({
 - [Faithfulness Metric](./faithfulness)
 - [Answer Relevancy Metric](./answer-relevancy)
 - [Context Precision Metric](./context-precision)
+- [Context Relevancy Metric](./context-relevancy)
