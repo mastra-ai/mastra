@@ -2,7 +2,7 @@ import { Control, FieldErrors } from 'react-hook-form';
 import { z } from 'zod';
 
 import { getDefaultFieldMap } from './default-field-map';
-import { ObjectField, UnionField } from './fields';
+import { ArrayField, ObjectField, UnionField } from './fields';
 import { schemaToFormFieldRenderer } from './schema';
 
 interface ResolveSchemaProps {
@@ -153,16 +153,26 @@ function resolveSchemaComponent({
   }
 
   if (schema instanceof z.ZodArray) {
-    return resolveSchemaComponent({
-      schema: schema.element,
-      parentField,
-      control,
-      formValues,
-      errors,
-      handleFieldChange,
-      isOptional,
-      isNullable,
-    });
+    return (
+      <div key={parentField} className="flex w-full flex-col gap-8 py-8">
+        <ArrayField
+          control={control}
+          name={parentField}
+          renderField={props => {
+            const fieldSchema = schema.element;
+            const currentField = `${parentField}[${props.index}]`;
+            return resolveSchemaComponent({
+              schema: fieldSchema,
+              parentField: currentField,
+              control,
+              formValues,
+              errors,
+              handleFieldChange,
+            });
+          }}
+        />
+      </div>
+    );
   }
 
   return (
