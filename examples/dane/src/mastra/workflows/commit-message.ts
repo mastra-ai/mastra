@@ -19,7 +19,7 @@ const getDiff = new Step({
     diff: z.string(),
   }),
   execute: async ({ context }) => {
-    const repoPath = context?.machineContext?.getStepPayload<{ repoPath: string }>('trigger')?.repoPath;
+    const repoPath = context?.getStepPayload<{ repoPath: string }>('trigger')?.repoPath;
 
     // Get the git diff of staged changes
     const diff = execSync('git diff --staged', {
@@ -54,8 +54,8 @@ const generateMessage = new Step({
     guidelines: z.array(z.string()),
   }),
   execute: async ({ context, mastra }) => {
-    const diffData = context?.machineContext?.getStepPayload<{ diff: string }>('getDiff');
-    const fileData = context?.machineContext?.getStepPayload<{ fileData: any }>('readConventionalCommitSpec');
+    const diffData = context?.getStepPayload<{ diff: string }>('getDiff');
+    const fileData = context?.getStepPayload<{ fileData: any }>('readConventionalCommitSpec');
 
     if (!diffData) {
       return { commitMessage: '', generated: false, guidelines: [] };
@@ -113,16 +113,16 @@ const confirmationStep = new Step({
     confirm: z.boolean(),
   }),
   execute: async ({ context }) => {
-    const parentStep = context?.machineContext?.stepResults?.generateMessage;
+    const parentStep = context?.steps?.generateMessage;
     if (!parentStep || parentStep.status !== 'success') {
       return { confirm: false };
     }
 
-    if (!parentStep.payload.generated) {
+    if (!parentStep.output.generated) {
       return { confirm: false };
     }
 
-    const commitMessage = parentStep.payload.commitMessage;
+    const commitMessage = parentStep.output.commitMessage;
 
     const confirmationMessage = await confirm({
       message: `\n Would you like to use this commit message? \n\n ${chalk.yellow(commitMessage)}\n\n`,
@@ -138,18 +138,18 @@ const commitStep = new Step({
     commit: z.boolean(),
   }),
   execute: async ({ context }) => {
-    const parentStep = context?.machineContext?.stepResults?.confirmation;
-    if (!parentStep || parentStep.status !== 'success' || !parentStep.payload.confirm) {
+    const parentStep = context?.steps?.confirmation;
+    if (!parentStep || parentStep.status !== 'success' || !parentStep.output.confirm) {
       throw new Error('Commit message generation cancelled');
     }
 
-    if (context?.machineContext?.stepResults?.generateMessage?.status !== 'success') {
+    if (context?.steps?.generateMessage?.status !== 'success') {
       throw new Error('Failed to generate commit message');
     }
 
-    const commitMessage = context?.machineContext?.stepResults?.generateMessage?.payload?.commitMessage;
+    const commitMessage = context?.steps?.generateMessage?.output?.commitMessage;
     execSync(`git commit -m "${commitMessage}"`, {
-      cwd: context?.machineContext?.triggerData?.repoPath,
+      cwd: context?.triggerData?.repoPath,
       encoding: 'utf-8',
     });
 

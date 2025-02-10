@@ -20,7 +20,7 @@ async function main() {
           doubledValue: z.number(),
         }),
         execute: async ({ context }) => {
-          const doubledValue = context.machineContext?.triggerData?.inputValue * 2;
+          const doubledValue = context?.triggerData?.inputValue * 2;
           return { doubledValue };
         },
       }),

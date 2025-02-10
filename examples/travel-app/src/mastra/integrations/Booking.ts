@@ -220,7 +220,7 @@ export class Booking {
     let place = placeId;
 
     if (payload?.status === "success") {
-      place = payload.payload?.id;
+      place = payload.output?.id;
     }
 
     const url = `${this.uri}/searchPropertyByPlace?id=${place}&totalRecords=10&currency=USD&adults=1&typeOfPlace=${typeOfPlace}&checkin=${checkIn}&checkout=${checkOut}`;

@@ -60,7 +60,7 @@ const reportBrokenLinks = new Step({
     message: z.string(),
   }),
   execute: async ({ context, mastra }) => {
-    const brokenLinks = context.machineContext?.getStepPayload<{ brokenLinks: z.infer<typeof linkSchema>[] }>(
+    const brokenLinks = context?.getStepPayload<{ brokenLinks: z.infer<typeof linkSchema>[] }>(
       'get-broken-links',
     );
 
@@ -82,7 +82,7 @@ const reportBrokenLinks = new Step({
       console.error(e);
     }
 
-    const triggerPayload = context.machineContext?.getStepPayload<{ channelId: string; targetUrl: string }>('trigger');
+    const triggerPayload = context?.getStepPayload<{ channelId: string; targetUrl: string }>('trigger');
 
     if (!triggerPayload) {
       return {

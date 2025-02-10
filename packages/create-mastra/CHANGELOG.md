@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.1.0-alpha.35
+
+### Patch Changes
+
+- 7db55f6: Install aisdk model provider for in create-mastra init
+- c18a0c0: Fix creation of new threads in dev playground
+
 ## 0.1.0-alpha.34
 
 ### Patch Changes

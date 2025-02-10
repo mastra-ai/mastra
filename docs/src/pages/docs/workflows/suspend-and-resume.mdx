@@ -5,7 +5,7 @@ description: "Suspend and resume in Mastra workflows allows you to pause executi
 
 # Suspend and Resume in Workflows
 
-Complex workflows often need to pause execution while waiting for external input or resources. 
+Complex workflows often need to pause execution while waiting for external input or resources.
 
 Mastra's suspend and resume features let you pause workflow execution at any step, persist the workflow state, and continue when ready.
 
@@ -13,7 +13,7 @@ Mastra's suspend and resume features let you pause workflow execution at any ste
 
 Common scenarios for suspending workflows include:
 - Waiting for human approval or input
-- Pausing until external API resources become available  
+- Pausing until external API resources become available
 - Collecting additional data needed for later steps
 - Rate limiting or throttling expensive operations
 
@@ -25,11 +25,11 @@ Here's a simple workflow that suspends when a value is too low and resumes when 
 const stepTwo = new Step({
   id: "stepTwo",
   outputSchema: z.object({
-    incrementedValue: z.number(), 
+    incrementedValue: z.number(),
   }),
   execute: async ({ context, suspend }) => {
-    const currentValue = context.stepResults.stepOne.payload.doubledValue;
-    
+    const currentValue = context.steps.stepOne.output.doubledValue;
+
     if (currentValue < 100) {
       await suspend();
       return { incrementedValue: 0 };
@@ -45,23 +45,23 @@ To handle suspended workflows, use the `watch` method to monitor workflow status
 
 ```typescript
 // Create and start the workflow
-const { runId, start } = myWorkflow.createRun({ 
-  triggerData: { inputValue: 45 } 
+const { runId, start } = myWorkflow.createRun({
+  triggerData: { inputValue: 45 }
 });
 
 // Start watching the workflow before executing it
 myWorkflow.watch(runId, async ({ context }) => {
   // Check each step's status
-  const stepStatus = context.stepResults?.stepTwo?.status;
-  
+  const stepStatus = context.steps?.stepTwo?.status;
+
   if (stepStatus === 'suspended') {
     console.log('Workflow suspended, resuming with new value');
-    
+
     // Resume the workflow with new context
     await myWorkflow.resume({
       runId,
       stepId: 'stepTwo',
-      context: { 
+      context: {
         secondValue: 60  // This value will be added to the original value
       },
     });

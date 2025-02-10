@@ -31,30 +31,30 @@ import { z } from "zod"
 
 const stepOne = new Step({
   id: "stepOne",
-  execute: async ({ context: { machineContext } }) => ({ 
-    doubledValue: machineContext.triggerData.inputValue * 2
+  execute: async ({ context }) => ({
+    doubledValue: context.triggerData.inputValue * 2
   })
 });
 
 const stepTwo = new Step({
   id: "stepTwo",
-  execute: async ({ context: { machineContext } }) => ({ 
-    isDivisibleByFive: machineContext.stepResults.stepOne.payload.doubledValue % 5 === 0
+  execute: async ({ context }) => ({
+    isDivisibleByFive: context.steps.stepOne.output.doubledValue % 5 === 0
   })
 });
 
 
 const stepThree = new Step({
   id: "stepThree",
-  execute: async ({ context: { machineContext } }) => ({ 
-    incrementedValue: machineContext.stepResults.stepOne.payload.doubledValue + 1
+  execute: async ({ context }) => ({
+    incrementedValue: context.steps.stepOne.output.doubledValue + 1
   })
 });
 
 const stepFour = new Step({
   id: "stepFour",
-  execute: async ({ context: { machineContext } }) => ({ 
-    isDivisibleByThree: machineContext.stepResults.stepThree.payload.incrementedValue % 3 === 0
+  execute: async ({ context }) => ({
+    isDivisibleByThree: context.steps.stepThree.output.incrementedValue % 3 === 0
   })
 });
 

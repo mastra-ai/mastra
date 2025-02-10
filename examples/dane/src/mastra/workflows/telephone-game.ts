@@ -54,11 +54,11 @@ const stepB2 = new Step({
     message: z.string(),
   }),
   execute: async ({ context }) => {
-    if (context.machineContext?.stepResults.stepA2?.status !== 'success') {
+    if (context?.steps.stepA2?.status !== 'success') {
       throw new Error('Message not found');
     }
 
-    const msg = context.machineContext.stepResults.stepA2.payload.message;
+    const msg = context.steps.stepA2.output.message;
 
     return {
       message: msg,
@@ -73,14 +73,14 @@ const stepC2 = new Step({
     message: z.string(),
   }),
   execute: async ({ suspend, context, mastra }) => {
-    const oMsg = getStepResult(context?.machineContext?.stepResults.stepA2);
-    if (context?.machineContext?.stepResults.stepC2?.status === 'success') {
-      const msg = getStepResult(context?.machineContext?.stepResults.stepC2);
+    const oMsg = getStepResult(context?.steps.stepA2);
+    if (context?.steps.stepC2?.status === 'success') {
+      const msg = getStepResult(context?.steps.stepC2);
       if (msg.confirm) {
         const result = await agent.generate(`
             You are playing a game of telephone.
-            Here is the message the previous person sent ${oMsg.message}. 
-            But you want to change the message. 
+            Here is the message the previous person sent ${oMsg.message}.
+            But you want to change the message.
             Only return the message
             `);
         return {
@@ -102,7 +102,7 @@ const stepD2 = new Step({
     message: z.string(),
   }),
   execute: async ({ context }) => {
-    const msg = getStepResult(context?.machineContext?.stepResults.stepC2);
+    const msg = getStepResult(context?.steps.stepC2);
     return msg;
   },
 });

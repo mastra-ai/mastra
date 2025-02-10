@@ -13,7 +13,7 @@ Pauses workflow execution at the current step until explicitly resumed. The work
 const approvalStep = new Step({
   id: "needsApproval",
   execute: async ({ context, suspend }) => {
-    if (context.stepResults.amount > 1000) {
+    if (context.steps.amount > 1000) {
       await suspend();
     }
     return { approved: true };
@@ -77,4 +77,4 @@ workflow.watch((state) => {
 
 - [Suspend & Resume Workflows](../../workflows/suspend-and-resume.mdx)
 - [.resume()](./resume.mdx)
-- [.watch()](./watch.mdx) 
+- [.watch()](./watch.mdx)

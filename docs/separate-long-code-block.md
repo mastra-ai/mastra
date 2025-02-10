@@ -30,12 +30,12 @@ const copywriterAgent = new Agent({
 
 const copywriterStep = new Step({
   id: "copywriterStep",
-  execute: async ({ context: { machineContext } }) => {
-    if (!machineContext?.triggerData?.topic) {
+  execute: async ({ context }) => {
+    if (!context?.triggerData?.topic) {
       throw new Error("Topic not found in trigger data");
     }
     const result = await copywriterAgent.generate(
-      `Create a blog post about ${machineContext.triggerData.topic}`,
+      `Create a blog post about ${context.triggerData.topic}`,
     );
     console.log("copywriter result", result.text);
     return {
@@ -53,7 +53,7 @@ const editorAgent = new Agent({
 const editorStep = new Step({
   id: "editorStep",
   execute: async ({ context }) => {
-    const copy = context?.machineContext?.getStepPayload<{ copy: number }>(
+    const copy = context?.getStepPayload<{ copy: number }>(
       "copywriterStep",
     )?.copy;
 
@@ -102,12 +102,12 @@ Create a step to execute the copywriter's task:
 ```typescript
 const copywriterStep = new Step({
   id: "copywriterStep",
-  execute: async ({ context: { machineContext } }) => {
-    if (!machineContext?.triggerData?.topic) {
+  execute: async ({ context }) => {
+    if (!context?.triggerData?.topic) {
       throw new Error("Topic not found in trigger data");
     }
     const result = await copywriterAgent.generate(
-      `Create a blog post about ${machineContext.triggerData.topic}`,
+      `Create a blog post about ${context.triggerData.topic}`,
     );
     console.log("copywriter result", result.text);
     return {
@@ -133,7 +133,7 @@ Create a step to execute the editor's task:
 const editorStep = new Step({
   id: "editorStep",
   execute: async ({ context }) => {
-    const copy = context?.machineContext?.getStepPayload<{ copy: number }>(
+    const copy = context?.getStepPayload<{ copy: number }>(
       "copywriterStep",
     )?.copy;
 

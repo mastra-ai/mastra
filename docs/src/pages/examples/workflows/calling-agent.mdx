@@ -38,7 +38,7 @@ const replyAsSkipper = new Step({
     const kowalski = mastra?.agents?.penguin;
 
     const res = await kowalski?.generate(
-      context.machineContext?.triggerData?.message,
+      context?.triggerData?.message,
     );
     return { reply: res?.text || "" };
   },

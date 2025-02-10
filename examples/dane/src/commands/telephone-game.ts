@@ -16,7 +16,7 @@ export async function telephone() {
   await workflow.watch(runId, {
     onTransition: async ({ activePaths, context }) => {
       for (const path of activePaths) {
-        const ctx = context.stepResults?.[path.stepId]?.status;
+        const ctx = context.steps?.[path.stepId]?.status;
         if (ctx === 'suspended') {
           // Handle suspension
           if (path.stepId === 'stepC2' && ctx === 'suspended') {

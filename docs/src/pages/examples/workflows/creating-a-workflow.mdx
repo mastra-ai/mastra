@@ -29,7 +29,7 @@ const stepOne = new Step({
     doubledValue: z.number(),
   }),
   execute: async ({ context }) => {
-    const doubledValue = context.machineContext?.triggerData?.input * 2;
+    const doubledValue = context?.triggerData?.input * 2;
     return { doubledValue };
   },
 })
@@ -38,8 +38,8 @@ myWorkflow.step(
   stepOne
 ).commit();
 
-const { runId, start } = myWorkflow.createRun({ 
-  triggerData: { input: 90 } 
+const { runId, start } = myWorkflow.createRun({
+  triggerData: { input: 90 }
 });
 
 const res = await start();

@@ -39,7 +39,7 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
       name: 'Crawl and Sync',
       description: 'Crawl and Sync',
       execute: async ({ context }) => {
-        const triggerData = context.machineContext?.triggerData;
+        const triggerData = context?.triggerData;
         console.log('Starting crawl', triggerData?.url);
 
         const entityType = `CRAWL_${triggerData?.url}`;
