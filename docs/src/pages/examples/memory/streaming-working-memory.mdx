@@ -9,19 +9,12 @@ This example demonstrates how to create an agent that maintains a working memory
 
 ## Setup
 
-First, set up the memory system with LibSQL storage (or any other [storage provider](/docs/agents/01-agent-memory#storage-options)
-and a working memory template for the todo list:
+First, set up the memory system with working memory enabled. Memory uses LibSQL storage by default, but you can use any other [storage provider](/docs/agents/01-agent-memory#storage-options) if needed:
 
 ```typescript
 import { Memory } from "@mastra/memory";
-import { DefaultStorage } from "@mastra/core/storage";
 
 const memory = new Memory({
-  storage: new DefaultStorage({
-    config: {
-      url: "file:example.db",
-    },
-  }),
   options: {
     workingMemory: {
       enabled: true,

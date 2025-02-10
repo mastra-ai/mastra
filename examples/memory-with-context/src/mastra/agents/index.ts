@@ -1,14 +1,9 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { DefaultStorage, DefaultVectorDB } from '@mastra/core/storage';
+import { DefaultVectorDB } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 
 const memory = new Memory({
-  storage: new DefaultStorage({
-    config: {
-      url: 'file:example.db',
-    },
-  }),
   vector: new DefaultVectorDB({
     connectionUrl: 'file:example.db',
   }),
