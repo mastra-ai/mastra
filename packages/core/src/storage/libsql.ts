@@ -444,7 +444,13 @@ export class DefaultStorage extends MastraStorage {
 
   // TODO: add types
   async getTraces(
-    { name, scope, page, perPage }: { name?: string; scope?: string; page: number; perPage: number } = {
+    {
+      name,
+      scope,
+      page,
+      perPage,
+      attributes,
+    }: { name?: string; scope?: string; page: number; perPage: number; attributes?: Record<string, string> } = {
       page: 0,
       perPage: 100,
     },
@@ -454,10 +460,20 @@ export class DefaultStorage extends MastraStorage {
 
     const args: (string | number)[] = [];
 
-    let hasArgs = false;
-    if (name || scope) {
-      hasArgs = true;
+    const conditions: string[] = [];
+    if (name) {
+      conditions.push("name LIKE CONCAT(?, '%')");
     }
+    if (scope) {
+      conditions.push('scope = ?');
+    }
+    if (attributes) {
+      Object.keys(attributes).forEach(key => {
+        conditions.push(`attributes->>'$.${key}' = ?`);
+      });
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     if (name) {
       args.push(name);
@@ -467,10 +483,21 @@ export class DefaultStorage extends MastraStorage {
       args.push(scope);
     }
 
+    if (attributes) {
+      for (const [_key, value] of Object.entries(attributes)) {
+        args.push(value);
+      }
+    }
+
     args.push(limit, offset);
 
+    console.log({
+      sql: `SELECT * FROM ${MastraStorage.TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
+      args,
+    });
+
     const result = await this.client.execute({
-      sql: `SELECT * FROM ${MastraStorage.TABLE_TRACES} ${hasArgs ? 'WHERE' : ''} ${name ? `name LIKE CONCAT(?, '%')` : ''} ${scope ? 'scope = ?' : ''} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
+      sql: `SELECT * FROM ${MastraStorage.TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
       args,
     });
 
