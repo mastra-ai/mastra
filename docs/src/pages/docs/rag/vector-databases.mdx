@@ -212,15 +212,12 @@ await vectorStore.upsert(
 );
 ```
 
+**Reminder:** Metadata is stored as a JSON field with no fixed schema, so you'll want to name your fields consistently and apply a consistent schema, or your queries will return unexpected results.
+
 Key metadata considerations:
-- Metadata is stored as schemaless JSON - this flexibility requires careful planning
-- Design and document your schema upfront to ensure team-wide consistency
-- Be strict about field naming - inconsistencies like 'category' vs 'Category' will affect queries
-- Only store fields you plan to filter or sort by
-- Use clear, unambiguous names (e.g., prefer 'createdAt' over 'date' or 'timestamp')
-- Track content freshness with timestamps (e.g., 'createdAt', 'lastUpdated') for filtering outdated information
-- Include schema version to handle metadata structure changes over time (e.g., 'schemaVersion: "2.0"')
-- Structure metadata to match your most common query patterns
+- Be strict with field naming - inconsistencies like 'category' vs 'Category' will affect queries
+- Only include fields you plan to filter or sort by - extra fields add overhead
+- Add timestamps (e.g., 'createdAt', 'lastUpdated') to track content freshness
 
 ## Best Practices
 
