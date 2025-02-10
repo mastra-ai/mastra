@@ -184,7 +184,9 @@ The upsert operation:
 
 ## Adding Metadata
 
-Vector stores support rich metadata for advanced filtering and organization. You can add any JSON-serializable fields that will help with retrieval:
+Vector stores support rich metadata for advanced filtering and organization. You can add any JSON-serializable fields that will help with retrieval.
+
+**Reminder:** Metadata is stored as a JSON field with no fixed schema, so you'll want to name your fields consistently and apply a consistent schema, or your queries will return unexpected results.
 
 ```ts showLineNumbers copy
 // Store embeddings with rich metadata for better organization and filtering
@@ -211,8 +213,6 @@ await vectorStore.upsert(
   })),
 );
 ```
-
-**Reminder:** Metadata is stored as a JSON field with no fixed schema, so you'll want to name your fields consistently and apply a consistent schema, or your queries will return unexpected results.
 
 Key metadata considerations:
 - Be strict with field naming - inconsistencies like 'category' vs 'Category' will affect queries
