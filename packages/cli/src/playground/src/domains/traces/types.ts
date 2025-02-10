@@ -33,9 +33,10 @@ export type Span = {
   status: SpanStatus;
   events: any[]; // You might want to type this more specifically if you have event structure
   links: any[]; // You might want to type this more specifically if you have link structure
-  attributes: SpanAttributes;
+  attributes: Record<string, string | number | boolean | null>;
   startTime: string;
   endTime: string;
+  duration: number;
   other: SpanOther;
   createdAt: string;
 };
@@ -43,4 +44,12 @@ export type Span = {
 export type SpanNode = Span & {
   children: SpanNode[];
   relativePercentage?: number;
+};
+
+export type RefinedTrace = {
+  traceId: string;
+  serviceName: string;
+  duration: number;
+  started: number;
+  trace: Span[];
 };
