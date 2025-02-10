@@ -38,10 +38,6 @@ const response = await agent.generate({
     {
       role: "user",
       content: "Hello, how are you?",
-      id: "1",
-      createdAt: new Date(),
-      threadId: "thread-1",
-      type: "text",
     },
   ],
   threadId: "thread-1", // Optional: Thread ID for conversation context
@@ -60,10 +56,6 @@ const response = await agent.stream({
     {
       role: "user",
       content: "Tell me a story",
-      id: "1",
-      createdAt: new Date(),
-      threadId: "thread-1",
-      type: "text",
     },
   ],
 });
