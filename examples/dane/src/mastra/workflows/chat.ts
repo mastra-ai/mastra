@@ -36,17 +36,17 @@ const messageOutputStep = new Step({
   // SHOULD BE ABLE TO ACCESS ALL MASTRA PRIMS FROM EXECTUE
   execute: async ({ context, mastra }) => {
     // WISH THIS WAS TYPED
-    const threadId = context?.machineContext?.triggerData?.threadId;
-    const resourceId = context?.machineContext?.triggerData?.resourceId;
+    const threadId = context?.triggerData?.threadId;
+    const resourceId = context?.triggerData?.resourceId;
 
-    const messageInputStatus = context?.machineContext?.stepResults?.['message-input']?.status;
+    const messageInputStatus = context?.steps?.['message-input']?.status;
 
     if (messageInputStatus !== 'success') {
       return { message: 'Failure in workflow' };
     }
 
     // is there someway to know what steps are flowing into this one and type their props
-    const message = context?.machineContext?.stepResults?.['message-input']?.payload?.message;
+    const message = context?.steps?.['message-input']?.output?.message;
 
     try {
       // TODO: why was this unused?

@@ -135,7 +135,7 @@ const stepA1 = new Step({
             Module: ${modulePath}
 
             Git diff to generate from: ${output}
-            
+
             # Task
             1. Create a structured narrative changelog that highlights key updates and improvements for this module.
             2. Focus only on meaningful changes, ignore trivial ones.
@@ -199,7 +199,7 @@ const stepA2 = new Step({
     message: z.string(),
   }),
   execute: async ({ context, mastra }) => {
-    if (context.machineContext?.stepResults.stepA1?.status !== 'success') {
+    if (context?.steps.stepA1?.status !== 'success') {
       throw new Error('Message not found');
     }
 
@@ -214,12 +214,12 @@ const stepA2 = new Step({
 
     const tools = await slack.tools();
 
-    const channelId = context.machineContext.triggerData.channelId;
+    const channelId = context.triggerData.channelId;
 
     const prompt = `
             Time: ${weekAgo} - ${today}
 
-            ${context.machineContext.stepResults.stepA1.payload.message}
+            ${context.steps.stepA1.output.message}
             # Task
             1. create a structured narrative changelog that highlights key updates and improvements.
             2. Include what packages were changed

@@ -102,7 +102,7 @@ export const packagePublisher = new Workflow({
 //   id: 'assemblePackages',
 //   outputSchema,
 //   execute: async ({ context }) => {
-//     if (context.machineContext?.stepResults.getPacakgesToPublish?.status !== 'success') {
+//     if (context?.steps.getPacakgesToPublish?.status !== 'success') {
 //       return {
 //         packages: [],
 //         integrations: [],
@@ -114,7 +114,7 @@ export const packagePublisher = new Workflow({
 //       };
 //     }
 
-//     const payload = context.machineContext.stepResults.getPacakgesToPublish.payload;
+//     const payload = context.steps.getPacakgesToPublish.output;
 //     const packagesToBuild: Set<string> = new Set();
 //     const deployersToBuild: Set<string> = new Set();
 //     const integrationsToBuild: Set<string> = new Set();

@@ -102,8 +102,8 @@ export const generateSpecTool = createTool({
   description: "Generate a spec from a website",
   execute: async ({ context, runId, mastra }) => {
     const crawledData =
-      context.machineContext?.stepResults?.["site-crawl"]?.status === "success"
-        ? context.machineContext?.stepResults?.["site-crawl"]?.payload
+      context?.steps?.["site-crawl"]?.status === "success"
+        ? context?.steps?.["site-crawl"]?.output
             ?.crawlData
         : [];
 

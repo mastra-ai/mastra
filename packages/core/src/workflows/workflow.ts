@@ -267,8 +267,8 @@ export class Workflow<
     const machineInput = snapshot
       ? (snapshot as any).context
       : {
-          // Maintain the original step results and their payloads
-          stepResults: {},
+          // Maintain the original step results and their output
+          steps: {},
           triggerData: triggerData || {},
           attempts: Object.keys(this.#steps).reduce(
             (acc, stepKey) => {
@@ -355,7 +355,7 @@ export class Workflow<
           this.#cleanup();
           resolve({
             triggerData,
-            results: state.context.stepResults,
+            results: state.context.steps,
             runId: this.#runId,
           });
         } catch (error) {
@@ -366,7 +366,7 @@ export class Workflow<
           this.#cleanup();
           resolve({
             triggerData,
-            results: state.context.stepResults,
+            results: state.context.steps,
             runId: this.#runId,
           });
         }
@@ -466,13 +466,13 @@ export class Workflow<
                 target: 'suspended',
                 actions: [
                   assign({
-                    stepResults: ({ context, event }) => {
-                      if (event.output.type !== 'SUSPENDED') return context.stepResults;
+                    steps: ({ context, event }) => {
+                      if (event.output.type !== 'SUSPENDED') return context.steps;
                       return {
-                        ...context.stepResults,
+                        ...context.steps,
                         [stepNode.step.id]: {
                           status: 'suspended',
-                          ...(context.stepResults?.[stepNode.step.id] || {}),
+                          ...(context.steps?.[stepNode.step.id] || {}),
                         },
                       };
                     },
@@ -492,10 +492,10 @@ export class Workflow<
                 actions: [
                   { type: 'decrementAttemptCount', params: { stepId: stepNode.step.id } },
                   assign({
-                    stepResults: ({ context, event }) => {
-                      if (event.output.type !== 'WAITING') return context.stepResults;
+                    steps: ({ context, event }) => {
+                      if (event.output.type !== 'WAITING') return context.steps;
                       return {
-                        ...context.stepResults,
+                        ...context.steps,
                         [stepNode.step.id]: {
                           status: 'waiting',
                         },
@@ -516,8 +516,8 @@ export class Workflow<
                 },
                 target: 'failed',
                 actions: assign({
-                  stepResults: ({ context, event }) => {
-                    if (event.output.type !== 'CONDITION_FAILED') return context.stepResults;
+                  steps: ({ context, event }) => {
+                    if (event.output.type !== 'CONDITION_FAILED') return context.steps;
 
                     this.logger.debug(`workflow condition check failed`, {
                       error: event.output.error,
@@ -525,7 +525,7 @@ export class Workflow<
                     });
 
                     return {
-                      ...context.stepResults,
+                      ...context.steps,
                       [stepNode.step.id]: {
                         status: 'failed',
                         error: event.output.error,
@@ -557,10 +557,10 @@ export class Workflow<
               this.logger.debug(`Step ${stepNode.step.id} suspended`);
             },
             assign({
-              stepResults: ({ context }: { context: WorkflowContext }) => ({
-                ...context.stepResults,
+              steps: ({ context }: { context: WorkflowContext }) => ({
+                ...context.steps,
                 [stepNode.step.id]: {
-                  ...(context?.stepResults?.[stepNode.step.id] || {}),
+                  ...(context?.steps?.[stepNode.step.id] || {}),
                   status: 'suspended',
                 },
               }),
@@ -600,8 +600,8 @@ export class Workflow<
               target: 'suspended',
               actions: [
                 assign({
-                  stepResults: ({ context }: { context: WorkflowContext }) => ({
-                    ...context.stepResults,
+                  steps: ({ context }: { context: WorkflowContext }) => ({
+                    ...context.steps,
                     [stepNode.step.id]: {
                       status: 'suspended',
                     },
@@ -648,9 +648,9 @@ export class Workflow<
               target: nextStep ? nextStep.step.id : 'completed',
               actions: [
                 assign({
-                  stepResults: ({ context, event }: { context: WorkflowContext; event: any }) => ({
-                    ...context.stepResults,
-                    ...event.output.stepResults,
+                  steps: ({ context, event }: { context: WorkflowContext; event: any }) => ({
+                    ...context.steps,
+                    ...event.output.steps,
                   }),
                 }),
                 () => this.logger.debug(`Subscriber execution completed`, { stepId: stepNode.step.id }),
@@ -715,30 +715,30 @@ export class Workflow<
   #getDefaultActions() {
     return {
       updateStepResult: assign({
-        stepResults: ({ context, event }: { context: WorkflowContext; event: any }) => {
-          if (!isTransitionEvent(event)) return context.stepResults;
+        steps: ({ context, event }: { context: WorkflowContext; event: any }) => {
+          if (!isTransitionEvent(event)) return context.steps;
 
           const { stepId, result } = event.output as ResolverFunctionOutput;
 
           return {
-            ...context.stepResults,
+            ...context.steps,
             [stepId]: {
               status: 'success' as const,
-              payload: result,
+              output: result,
             },
           };
         },
       }),
       setStepError: assign({
-        stepResults: ({ context, event }: { context: WorkflowContext; event: any }, params: WorkflowActionParams) => {
-          if (!isErrorEvent(event)) return context.stepResults;
+        steps: ({ context, event }: { context: WorkflowContext; event: any }, params: WorkflowActionParams) => {
+          if (!isErrorEvent(event)) return context.steps;
 
           const { stepId } = params;
 
-          if (!stepId) return context.stepResults;
+          if (!stepId) return context.steps;
 
           return {
-            ...context.stepResults,
+            ...context.steps,
             [stepId]: {
               status: 'failed' as const,
               error: event.error.message,
@@ -802,14 +802,11 @@ export class Workflow<
         });
 
         const result = await stepNode.config.handler({
-          context: {
-            machineContext: context,
-            ...resolvedData,
-          },
+          context: resolvedData,
           suspend: async () => {
             if (this.#actor) {
               // Update context with current result
-              context.stepResults[stepNode.step.id] = {
+              context.steps[stepNode.step.id] = {
                 status: 'suspended',
               };
               await this.#persistWorkflowSnapshot();
@@ -899,7 +896,7 @@ export class Workflow<
 
           if (!stepGraph) {
             return {
-              stepResults: {},
+              steps: {},
             };
           }
 
@@ -943,7 +940,7 @@ export class Workflow<
               if (allStatesComplete) {
                 actor.stop();
                 resolve({
-                  stepResults: state.context.stepResults,
+                  steps: state.context.steps,
                 });
               }
             });
@@ -1009,22 +1006,19 @@ export class Workflow<
     context: WorkflowContext;
     stepId: TStepId;
   }): Record<string, any> {
-    const resolvedData: Record<string, any> = {};
-
     this.logger.debug(`Resolving variables for ${stepId}`, {
       runId: this.#runId,
     });
 
-    // Add machineContext with getStepPayload helper
-    resolvedData.machineContext = {
+    const resolvedData: Record<string, any> = {
       ...context,
       getStepPayload: ((stepId: string) => {
         if (stepId === 'trigger') {
           return context.triggerData;
         }
-        const result = context.stepResults[stepId];
+        const result = context.steps[stepId];
         if (result && result.status === 'success') {
-          return result.payload;
+          return result.output;
         }
         return undefined;
       }) as WorkflowContext<TTriggerSchema>['getStepPayload'],
@@ -1033,7 +1027,7 @@ export class Workflow<
     for (const [key, variable] of Object.entries(stepConfig.data)) {
       // Check if variable comes from trigger data or a previous step's result
       const sourceData =
-        variable.step === 'trigger' ? context.triggerData : getStepResult(context.stepResults[variable.step.id]);
+        variable.step === 'trigger' ? context.triggerData : getStepResult(context.steps[variable.step.id]);
 
       this.logger.debug(
         `Got source data for ${key} variable from ${variable.step === 'trigger' ? 'trigger' : variable.step.id}`,
@@ -1082,7 +1076,7 @@ export class Workflow<
       const path = pathParts.join('.');
 
       const sourceData =
-        stepId === 'trigger' ? context.triggerData : getStepResult(context.stepResults[stepId as string]);
+        stepId === 'trigger' ? context.triggerData : getStepResult(context.steps[stepId as string]);
 
       this.logger.debug(`Got condition data from ${stepId}`, {
         sourceData,
@@ -1114,7 +1108,7 @@ export class Workflow<
     // Base condition
     if ('ref' in condition) {
       const { ref, query } = condition;
-      const sourceData = ref.step === 'trigger' ? context.triggerData : getStepResult(context.stepResults[ref.step.id]);
+      const sourceData = ref.step === 'trigger' ? context.triggerData : getStepResult(context.steps[ref.step.id]);
 
       this.logger.debug(`Got condition data from ${ref.step === 'trigger' ? 'trigger' : ref.step.id}`, {
         sourceData,
@@ -1322,7 +1316,7 @@ export class Workflow<
     }
 
     // Check if step results changed
-    if (JSON.stringify(previous.context.stepResults) !== JSON.stringify(current.context.stepResults)) return true;
+    if (JSON.stringify(previous.context.steps) !== JSON.stringify(current.context.steps)) return true;
 
     return false;
   }
@@ -1449,10 +1443,10 @@ export class Workflow<
     // Update context if provided
 
     if (resumeContext) {
-      parsedSnapshot.context.stepResults[stepId] = {
+      parsedSnapshot.context.steps[stepId] = {
         status: 'success',
-        payload: {
-          ...(parsedSnapshot?.context?.stepResults?.[stepId]?.payload || {}),
+        output: {
+          ...(parsedSnapshot?.context?.steps?.[stepId]?.output || {}),
           ...resumeContext,
         },
       };

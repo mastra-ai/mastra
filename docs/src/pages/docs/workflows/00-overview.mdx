@@ -5,7 +5,7 @@ description: "Workflows in Mastra help you orchestrate complex sequences of oper
 
 # Handling Complex LLM Operations with Workflows
 
-Workflows in Mastra help you orchestrate complex sequences of operations with features like branching, parallel execution, resource suspension, and more. 
+Workflows in Mastra help you orchestrate complex sequences of operations with features like branching, parallel execution, resource suspension, and more.
 
 ## When to use workflows
 
@@ -38,15 +38,15 @@ const myWorkflow = new Workflow({
 // 2. Create steps
 const stepOne = new Step({
   id: "stepOne",
-  execute: async ({ context: { machineContext } }) => ({
-    doubledValue: machineContext.triggerData.inputValue * 2
+  execute: async ({ context }) => ({
+    doubledValue: context.triggerData.inputValue * 2
   })
 });
 
 const stepTwo = new Step({
   id: "stepTwo",
-  execute: async ({ context: { machineContext } }) => ({
-    incrementedValue: machineContext.stepResults.stepOne.payload.doubledValue + 1
+  execute: async ({ context }) => ({
+    incrementedValue: context.steps.stepOne.output.doubledValue + 1
   })
 });
 
@@ -60,7 +60,7 @@ const result = await start();
 console.log("Workflow result:", result.results);
 ```
 
-This example shows the essentials: define your workflow, add steps, commit the workflow, then execute it. 
+This example shows the essentials: define your workflow, add steps, commit the workflow, then execute it.
 
 ## Defining Steps
 
@@ -76,7 +76,7 @@ When you need to pause execution for external data, user input, or asynchronous 
 
 ## Observability and Debugging
 
-Mastra workflows automatically [log the input and output of each step within a workflow run](../reference/observability/otel-config.mdx), allowing you to send this data to your preferred logging, telemetry, or observability tools. 
+Mastra workflows automatically [log the input and output of each step within a workflow run](../reference/observability/otel-config.mdx), allowing you to send this data to your preferred logging, telemetry, or observability tools.
 
 You can:
 

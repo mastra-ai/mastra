@@ -23,8 +23,8 @@ export interface IExecutionContext<
   TContext extends WorkflowContext = WorkflowContext,
 > {
   context: TSchemaIn extends z.ZodSchema
-    ? z.infer<TSchemaIn> & { machineContext?: TContext }
-    : { machineContext?: TContext };
+    ? z.infer<TSchemaIn> & TContext
+    : TContext;
   runId?: string;
   mastra?: MastraPrimitives;
   suspend: () => Promise<void>;

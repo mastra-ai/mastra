@@ -30,9 +30,9 @@ const stepTwo = new Step({
     incrementedValue: z.number(),
   }),
   execute: async ({ context, suspend }) => {
-    const stepValue = context.stepResults.stepTwo.payload.secondValue || 0;
-    
-    const incrementedValue = context.stepResults.stepOne.payload.doubledValue + stepValue;
+    const stepValue = context.steps.stepTwo.output.secondValue || 0;
+
+    const incrementedValue = context.steps.stepOne.output.doubledValue + stepValue;
 
     if (incrementedValue < 100) {
       await suspend();
@@ -62,7 +62,7 @@ const res = await start({ triggerData: { inputValue: 90 } });
 
 await myWorkflow.watch(runId, async ({ activePaths }) => {
     for (const path of activePaths) {
-        const stepTwoStatus = context.stepResults?.stepTwo?.status;
+        const stepTwoStatus = context.steps?.stepTwo?.status;
         if (stepTwoStatus === 'suspended') {
             await myWorkflow.resume({
                 runId,
