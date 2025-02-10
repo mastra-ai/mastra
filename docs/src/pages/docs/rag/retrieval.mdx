@@ -116,22 +116,14 @@ For an example of how to use the metadata filtering method, see the [Metadata Fi
 
 ### Vector Query Tool
 
-For more advanced retrieval scenarios, Mastra provides a unified vector query tool that combines semantic search, filtering, and reranking capabilities. This tool is particularly useful when:
+Sometimes you want to give your agent the ability to query a vector database directly. The Vector Query Tool allows your agent to be in charge of retrieval decisions, combining semantic search with optional filtering and reranking based on the agent's understanding of the user's needs.
 
-- You need to combine multiple retrieval features
-- You want a consistent interface across different vector stores
-- You're integrating retrieval into Mastra agents
+When creating the tool, pay special attention to the tool's name and description - these help the agent understand when and how to use the retrieval capabilities. For example, you might name it "SearchKnowledgeBase" and describe it as "Search through our documentation to find relevant information about X topic."
 
-Here's a basic setup of the vector query tool:
-
-```ts showLineNumbers copy
-const queryTool = createVectorQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'embeddings',
-  model: openai.embedding('text-embedding-3-small'),
-  enableFilters: true
-});
-```
+This is particularly useful when:
+- Your agent needs to dynamically decide what information to retrieve
+- The retrieval process requires complex decision-making
+- You want the agent to combine multiple retrieval strategies based on context
 
 For detailed configuration options and advanced usage, see the [Vector Query Tool Reference](/docs/reference/tools/vector-query-tool).
 
@@ -156,7 +148,7 @@ const vectorQueryTool = createVectorQueryTool({
 });
 ```
 
-For more details about re-ranking, see the [rerank()](../reference/rag/rerank) method.
+For more details about re-ranking, see the [rerank()](/docs/reference/rag/rerank) method.
 
 For an example of how to use the re-ranking method, see the [Re-ranking Results](../../examples/rag/rerank-rag.mdx) example.
 
@@ -181,6 +173,6 @@ const graphQueryTool = createGraphQueryTool({
 });
 ```
 
-For more details about graph-based retrieval, see the [GraphRAG](../reference/rag/graph-rag) class and the [createGraphQueryTool()](../reference/tools/graph-rag-tool) function.
+For more details about graph-based retrieval, see the [GraphRAG](/docs/reference/rag/graph-rag) class and the [createGraphQueryTool()](/docs/reference/tools/graph-rag-tool) function.
 
 For an example of how to use the graph-based retrieval method, see the [Graph-based Retrieval](../../examples/rag/graph-rag.mdx) example.
