@@ -25,7 +25,7 @@ describe('Workflow', () => {
       expect(execute).toHaveBeenCalled();
       expect(result.results['step1']).toEqual({
         status: 'success',
-        payload: { result: 'success' },
+        output: { result: 'success' },
       });
     });
 
@@ -51,8 +51,8 @@ describe('Workflow', () => {
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
       expect(result.results).toEqual({
-        step1: { status: 'success', payload: { value: 'step1' } },
-        step2: { status: 'success', payload: { value: 'step2' } },
+        step1: { status: 'success', output: { value: 'step1' } },
+        step2: { status: 'success', output: { value: 'step2' } },
       });
     });
 
@@ -81,8 +81,8 @@ describe('Workflow', () => {
 
       expect(executionOrder).toEqual(['step1', 'step2']);
       expect(result.results).toEqual({
-        step1: { status: 'success', payload: { value: 'step1' } },
-        step2: { status: 'success', payload: { value: 'step2' } },
+        step1: { status: 'success', output: { value: 'step1' } },
+        step2: { status: 'success', output: { value: 'step2' } },
       });
     });
   });
@@ -143,8 +143,8 @@ describe('Workflow', () => {
       expect(step2Action).toHaveBeenCalled();
       expect(step3Action).not.toHaveBeenCalled();
       expect(result.results).toEqual({
-        step1: { status: 'success', payload: { status: 'success' } },
-        step2: { status: 'success', payload: { result: 'step2' } },
+        step1: { status: 'success', output: { status: 'success' } },
+        step2: { status: 'success', output: { result: 'step2' } },
         step3: { status: 'failed', error: 'Step:step3 condition check failed' },
       });
     });
@@ -200,8 +200,8 @@ describe('Workflow', () => {
       expect(step2Action).toHaveBeenCalled();
       expect(step3Action).not.toHaveBeenCalled();
       expect(result.results).toEqual({
-        step1: { status: 'success', payload: { status: 'success' } },
-        step2: { status: 'success', payload: { result: 'step2' } },
+        step1: { status: 'success', output: { status: 'success' } },
+        step2: { status: 'success', output: { result: 'step2' } },
         step3: { status: 'failed', error: 'Step:step3 condition check failed' },
       });
     });
@@ -226,7 +226,7 @@ describe('Workflow', () => {
         .then(step2, {
           when: async ({ context }) => {
             const step1Result = context.steps.step1;
-            return step1Result && step1Result.status === 'success' && step1Result.payload.count > 3;
+            return step1Result && step1Result.status === 'success' && step1Result.output.count > 3;
           },
         })
         .commit();
@@ -236,11 +236,11 @@ describe('Workflow', () => {
       expect(step2Action).toHaveBeenCalled();
       expect(result.results.step1).toEqual({
         status: 'success',
-        payload: { count: 5 },
+        output: { count: 5 },
       });
       expect(result.results.step2).toEqual({
         status: 'success',
-        payload: undefined,
+        output: undefined,
       });
     });
   });
@@ -271,8 +271,8 @@ describe('Workflow', () => {
 
       const result = await workflow.execute({ triggerData: { inputData: 'test-input' } });
 
-      expect(result.results.step1).toEqual({ status: 'success', payload: { result: 'success' } });
-      expect(result.results.step2).toEqual({ status: 'success', payload: { result: 'success' } });
+      expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success' } });
+      expect(result.results.step2).toEqual({ status: 'success', output: { result: 'success' } });
     });
 
     it('should provide access to step results and trigger data via getStepPayload helper', async () => {
@@ -321,8 +321,8 @@ describe('Workflow', () => {
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
       expect(result.results).toEqual({
-        step1: { status: 'success', payload: { value: 'step1-result' } },
-        step2: { status: 'success', payload: { value: 'step2-result' } },
+        step1: { status: 'success', output: { value: 'step1-result' } },
+        step2: { status: 'success', output: { value: 'step2-result' } },
       });
     });
 
@@ -451,7 +451,7 @@ describe('Workflow', () => {
             ...baseContext,
             steps: {
               step1: {
-                payload: {
+                output: {
                   nested: {
                     value: 'step1-data',
                   },
@@ -517,12 +517,12 @@ describe('Workflow', () => {
         results: {
           step1: {
             status: 'success',
-            payload: {
+            output: {
               data: 'success',
             },
           },
           step2: {
-            payload: undefined,
+            output: undefined,
             status: 'success',
           },
         },
@@ -614,7 +614,7 @@ describe('Workflow', () => {
 
       expect(step2Action).toHaveBeenCalled();
       expect(step3Action).not.toHaveBeenCalled();
-      expect(result.results.step2).toEqual({ status: 'success', payload: { result: 'step2' } });
+      expect(result.results.step2).toEqual({ status: 'success', output: { result: 'step2' } });
     });
   });
 
@@ -703,8 +703,8 @@ describe('Workflow', () => {
           context: {
             ...baseContext,
             steps: {
-              step1: { status: 'success', payload: { result: 'success1' } },
-              step4: { status: 'success', payload: { result: 'success4' } },
+              step1: { status: 'success', output: { result: 'success1' } },
+              step4: { status: 'success', output: { result: 'success4' } },
             },
             name: 'Dero Israel',
           },
@@ -718,10 +718,10 @@ describe('Workflow', () => {
           context: expect.objectContaining({
             ...baseContext,
             steps: {
-              step1: { status: 'success', payload: { result: 'success1' } },
-              step2: { status: 'success', payload: { result: 'success2' } },
-              step4: { status: 'success', payload: { result: 'success4' } },
-              step5: { status: 'success', payload: { result: 'success5' } },
+              step1: { status: 'success', output: { result: 'success1' } },
+              step2: { status: 'success', output: { result: 'success2' } },
+              step4: { status: 'success', output: { result: 'success4' } },
+              step5: { status: 'success', output: { result: 'success5' } },
             },
           }),
           suspend: expect.any(Function),
@@ -734,8 +734,8 @@ describe('Workflow', () => {
           context: expect.objectContaining({
             ...baseContext,
             steps: {
-              step1: { status: 'success', payload: { result: 'success1' } },
-              step4: { status: 'success', payload: { result: 'success4' } },
+              step1: { status: 'success', output: { result: 'success1' } },
+              step4: { status: 'success', output: { result: 'success4' } },
             },
           }),
           suspend: expect.any(Function),
@@ -758,11 +758,11 @@ describe('Workflow', () => {
 
       const result = await workflow.execute();
 
-      expect(result.results.step1).toEqual({ status: 'success', payload: { result: 'success1' } });
-      expect(result.results.step2).toEqual({ status: 'success', payload: { result: 'success2' } });
-      expect(result.results.step3).toEqual({ status: 'success', payload: { result: 'success3' } });
-      expect(result.results.step4).toEqual({ status: 'success', payload: { result: 'success4' } });
-      expect(result.results.step5).toEqual({ status: 'success', payload: { result: 'success5' } });
+      expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success1' } });
+      expect(result.results.step2).toEqual({ status: 'success', output: { result: 'success2' } });
+      expect(result.results.step3).toEqual({ status: 'success', output: { result: 'success3' } });
+      expect(result.results.step4).toEqual({ status: 'success', output: { result: 'success4' } });
+      expect(result.results.step5).toEqual({ status: 'success', output: { result: 'success5' } });
     });
   });
 
@@ -797,7 +797,7 @@ describe('Workflow', () => {
 
       const result = await workflow.execute();
 
-      expect(result.results.step1).toEqual({ status: 'success', payload: { result: 'success' } });
+      expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success' } });
       expect(result.results.step2).toEqual({ status: 'suspended' });
     });
   });
@@ -825,11 +825,11 @@ describe('Workflow', () => {
       expect(step3Action).toHaveBeenCalled();
       expect(step4Action).toHaveBeenCalled();
       expect(step5Action).toHaveBeenCalledTimes(2);
-      expect(result.results.step1).toEqual({ status: 'success', payload: { result: 'success1' } });
-      expect(result.results.step2).toEqual({ status: 'success', payload: { result: 'success2' } });
-      expect(result.results.step3).toEqual({ status: 'success', payload: { result: 'success3' } });
-      expect(result.results.step4).toEqual({ status: 'success', payload: { result: 'success4' } });
-      expect(result.results.step5).toEqual({ status: 'success', payload: { result: 'success5' } });
+      expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success1' } });
+      expect(result.results.step2).toEqual({ status: 'success', output: { result: 'success2' } });
+      expect(result.results.step3).toEqual({ status: 'success', output: { result: 'success3' } });
+      expect(result.results.step4).toEqual({ status: 'success', output: { result: 'success4' } });
+      expect(result.results.step5).toEqual({ status: 'success', output: { result: 'success5' } });
     });
 
     it('should conditionally run subscribers', async () => {
@@ -867,9 +867,9 @@ describe('Workflow', () => {
       expect(step3Action).not.toHaveBeenCalled();
       expect(step4Action).not.toHaveBeenCalled();
       expect(step5Action).toHaveBeenCalledTimes(1);
-      expect(result.results.step1).toEqual({ status: 'success', payload: { result: 'success1' } });
-      expect(result.results.step2).toEqual({ status: 'success', payload: { result: 'success2' } });
-      expect(result.results.step5).toEqual({ status: 'success', payload: { result: 'success5' } });
+      expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success1' } });
+      expect(result.results.step2).toEqual({ status: 'success', output: { result: 'success2' } });
+      expect(result.results.step5).toEqual({ status: 'success', output: { result: 'success5' } });
     });
 
     // don't unskip this please.. actually unskip it 😈
@@ -888,8 +888,8 @@ describe('Workflow', () => {
       expect(step1Action).toHaveBeenCalled();
 
       expect(step3Action).toHaveBeenCalled();
-      expect(result.results.step1).toEqual({ status: 'success', payload: { result: 'success1' } });
-      expect(result.results.step3).toEqual({ status: 'success', payload: { result: 'success3' } });
+      expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success1' } });
+      expect(result.results.step3).toEqual({ status: 'success', output: { result: 'success3' } });
     });
   });
 

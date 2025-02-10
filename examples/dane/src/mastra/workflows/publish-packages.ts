@@ -114,7 +114,7 @@ export const packagePublisher = new Workflow({
 //       };
 //     }
 
-//     const payload = context.steps.getPacakgesToPublish.payload;
+//     const payload = context.steps.getPacakgesToPublish.output;
 //     const packagesToBuild: Set<string> = new Set();
 //     const deployersToBuild: Set<string> = new Set();
 //     const integrationsToBuild: Set<string> = new Set();

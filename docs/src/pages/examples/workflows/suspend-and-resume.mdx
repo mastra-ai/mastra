@@ -30,9 +30,9 @@ const stepTwo = new Step({
     incrementedValue: z.number(),
   }),
   execute: async ({ context, suspend }) => {
-    const stepValue = context.steps.stepTwo.payload.secondValue || 0;
+    const stepValue = context.steps.stepTwo.output.secondValue || 0;
 
-    const incrementedValue = context.steps.stepOne.payload.doubledValue + stepValue;
+    const incrementedValue = context.steps.stepOne.output.doubledValue + stepValue;
 
     if (incrementedValue < 100) {
       await suspend();

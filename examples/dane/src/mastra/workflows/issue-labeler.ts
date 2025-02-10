@@ -60,9 +60,9 @@ const labelIssue = new Step({
     const res = await daneIssueLabeler?.generate(
       `
             Hey Dane, given:
-            * this issue title: ${parentStep?.payload?.title}
-            * this issue body: ${parentStep?.payload?.body}
-            * these labels: ${parentStep?.payload?.labelNames}
+            * this issue title: ${parentStep?.output?.title}
+            * this issue body: ${parentStep?.output?.body}
+            * these labels: ${parentStep?.output?.labelNames}
 
             What label or labels would you assign?
         `,
@@ -95,7 +95,7 @@ const applyLabels = new Step({
         issue_number: context?.triggerData?.issue_number,
       },
       body: {
-        labels: parentStep.payload.labels,
+        labels: parentStep.output.labels,
       },
     });
   },

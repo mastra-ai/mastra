@@ -19,6 +19,6 @@ export function isVariableReference(value: any): value is VariableReference<any,
 }
 
 export function getStepResult(result?: StepResult<any>) {
-  if (result?.status === 'success') return result.payload;
+  if (result?.status === 'success') return result.output;
   return undefined;
 }

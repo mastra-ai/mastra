@@ -35,7 +35,7 @@ myWorkflow
       }),
       execute: async ({ context }) => {
         if (context?.steps.stepOne.status === 'success') {
-          const incrementedValue = context?.steps.stepOne.payload.doubledValue + 1;
+          const incrementedValue = context?.steps.stepOne.output.doubledValue + 1;
           return { incrementedValue };
         }
         return { incrementedValue: 0 };

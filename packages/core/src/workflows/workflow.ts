@@ -267,7 +267,7 @@ export class Workflow<
     const machineInput = snapshot
       ? (snapshot as any).context
       : {
-          // Maintain the original step results and their payloads
+          // Maintain the original step results and their output
           steps: {},
           triggerData: triggerData || {},
           attempts: Object.keys(this.#steps).reduce(
@@ -724,7 +724,7 @@ export class Workflow<
             ...context.steps,
             [stepId]: {
               status: 'success' as const,
-              payload: result,
+              output: result,
             },
           };
         },
@@ -1018,7 +1018,7 @@ export class Workflow<
         }
         const result = context.steps[stepId];
         if (result && result.status === 'success') {
-          return result.payload;
+          return result.output;
         }
         return undefined;
       }) as WorkflowContext<TTriggerSchema>['getStepPayload'],
@@ -1445,8 +1445,8 @@ export class Workflow<
     if (resumeContext) {
       parsedSnapshot.context.steps[stepId] = {
         status: 'success',
-        payload: {
-          ...(parsedSnapshot?.context?.steps?.[stepId]?.payload || {}),
+        output: {
+          ...(parsedSnapshot?.context?.steps?.[stepId]?.output || {}),
           ...resumeContext,
         },
       };

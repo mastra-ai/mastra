@@ -219,7 +219,7 @@ const stepA2 = new Step({
     const prompt = `
             Time: ${weekAgo} - ${today}
 
-            ${context.steps.stepA1.payload.message}
+            ${context.steps.stepA1.output.message}
             # Task
             1. create a structured narrative changelog that highlights key updates and improvements.
             2. Include what packages were changed

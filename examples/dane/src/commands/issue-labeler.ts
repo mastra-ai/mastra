@@ -29,7 +29,7 @@ export async function issueLabelerCommand() {
 
   console.log(
     chalk.green(
-      `Issue: ${result.triggerData?.issue_number} has been labeled with: ${result.results?.labelIssue?.payload?.labels.join(', ')}`,
+      `Issue: ${result.triggerData?.issue_number} has been labeled with: ${result.results?.labelIssue?.output?.labels.join(', ')}`,
     ),
   );
 }

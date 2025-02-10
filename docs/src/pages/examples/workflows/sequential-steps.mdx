@@ -40,7 +40,7 @@ const stepTwo = new Step({
   id: "stepTwo",
   execute: async ({ context }) => ({
     incrementedValue:
-      context.steps.stepOne.payload.doubledValue + 1,
+      context.steps.stepOne.output.doubledValue + 1,
   }),
 });
 
@@ -48,7 +48,7 @@ const stepThree = new Step({
   id: "stepThree",
   execute: async ({ context }) => ({
     tripledValue:
-      context.steps.stepTwo.payload.incrementedValue * 3,
+      context.steps.stepTwo.output.incrementedValue * 3,
   }),
 });
 

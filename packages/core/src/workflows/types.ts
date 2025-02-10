@@ -136,7 +136,7 @@ export interface StepConfig<
 
 type StepSuccess<T> = {
   status: 'success';
-  payload: T;
+  output: T;
 };
 
 type StepSuspended = {

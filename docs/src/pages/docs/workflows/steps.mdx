@@ -43,7 +43,7 @@ myWorkflow
         incrementedValue: z.number(),
       }),
       execute: async ({ context }) => ({
-        incrementedValue: context.steps.stepOne.payload.doubledValue + 1,
+        incrementedValue: context.steps.stepOne.output.doubledValue + 1,
       }),
     }),
   );
@@ -74,7 +74,7 @@ const stepTwo = new Step({
     incrementedValue: z.number(),
   }),
   execute: async ({ context }) => ({
-    incrementedValue: context.steps.stepOne.payload.doubledValue + 1,
+    incrementedValue: context.steps.stepOne.output.doubledValue + 1,
   }),
 });
 

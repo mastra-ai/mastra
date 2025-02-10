@@ -58,7 +58,7 @@ const stepB2 = new Step({
       throw new Error('Message not found');
     }
 
-    const msg = context.steps.stepA2.payload.message;
+    const msg = context.steps.stepA2.output.message;
 
     return {
       message: msg,

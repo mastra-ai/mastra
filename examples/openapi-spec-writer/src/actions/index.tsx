@@ -40,7 +40,7 @@ export async function generateOpenApiSpec({
 
     const openApiSpec = (
       res.results["generate-spec"] as { payload: { mergedSpec: string } }
-    )?.payload?.mergedSpec;
+    )?.output?.mergedSpec;
 
     const logs =
       (await mastra.getLogsByRunId({
@@ -79,7 +79,7 @@ export async function makeMastraPR({
 
     const prUrl = (
       res.results["add-to-github"] as { payload: { pr_url: string } }
-    )?.payload?.pr_url;
+    )?.output?.pr_url;
 
     const pr_url = prUrl;
 

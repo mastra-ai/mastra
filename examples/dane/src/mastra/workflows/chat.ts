@@ -46,7 +46,7 @@ const messageOutputStep = new Step({
     }
 
     // is there someway to know what steps are flowing into this one and type their props
-    const message = context?.steps?.['message-input']?.payload?.message;
+    const message = context?.steps?.['message-input']?.output?.message;
 
     try {
       // TODO: why was this unused?

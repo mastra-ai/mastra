@@ -118,11 +118,11 @@ const confirmationStep = new Step({
       return { confirm: false };
     }
 
-    if (!parentStep.payload.generated) {
+    if (!parentStep.output.generated) {
       return { confirm: false };
     }
 
-    const commitMessage = parentStep.payload.commitMessage;
+    const commitMessage = parentStep.output.commitMessage;
 
     const confirmationMessage = await confirm({
       message: `\n Would you like to use this commit message? \n\n ${chalk.yellow(commitMessage)}\n\n`,
@@ -139,7 +139,7 @@ const commitStep = new Step({
   }),
   execute: async ({ context }) => {
     const parentStep = context?.steps?.confirmation;
-    if (!parentStep || parentStep.status !== 'success' || !parentStep.payload.confirm) {
+    if (!parentStep || parentStep.status !== 'success' || !parentStep.output.confirm) {
       throw new Error('Commit message generation cancelled');
     }
 
@@ -147,7 +147,7 @@ const commitStep = new Step({
       throw new Error('Failed to generate commit message');
     }
 
-    const commitMessage = context?.steps?.generateMessage?.payload?.commitMessage;
+    const commitMessage = context?.steps?.generateMessage?.output?.commitMessage;
     execSync(`git commit -m "${commitMessage}"`, {
       cwd: context?.triggerData?.repoPath,
       encoding: 'utf-8',

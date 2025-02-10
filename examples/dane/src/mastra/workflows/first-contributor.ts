@@ -65,14 +65,14 @@ const generateMessage = new Step({
       `
 Hey Dane, given:
 START TITLE
-${parentStep?.payload?.title}
+${parentStep?.output?.title}
 END TITLE
 
 START BODY
-${parentStep?.payload?.body}
+${parentStep?.output?.body}
 END BODY
 START DIFF
-${parentStep?.payload?.diff}
+${parentStep?.output?.diff}
 END DIFF
 
 I'll give you some more context about Mastra:
@@ -128,11 +128,11 @@ const createMessage = new Step({
         issue_number: context?.triggerData?.pr_number,
       },
       body: {
-        body: `${parentStep.payload.intro}
+        body: `${parentStep.output.intro}
 
-${parentStep.payload.checklist.map((s: string) => `- [ ] ${s}`).join('\n')}
+${parentStep.output.checklist.map((s: string) => `- [ ] ${s}`).join('\n')}
 
-${parentStep.payload.outro}`,
+${parentStep.output.outro}`,
       },
     });
 

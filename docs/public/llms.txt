@@ -14249,7 +14249,7 @@ const stepOne = new Step({
 const stepTwo = new Step({
   id: "stepTwo",
   execute: async ({ context }) => ({
-    incrementedValue: context.steps.stepOne.payload.doubledValue + 1
+    incrementedValue: context.steps.stepOne.output.doubledValue + 1
   })
 });
 
@@ -14538,7 +14538,7 @@ myWorkflow
         incrementedValue: z.number(),
       }),
       execute: async ({ context }) => ({
-        incrementedValue: context.steps.stepOne.payload.doubledValue + 1,
+        incrementedValue: context.steps.stepOne.output.doubledValue + 1,
       }),
     }),
   );
@@ -14569,7 +14569,7 @@ const stepTwo = new Step({
     incrementedValue: z.number(),
   }),
   execute: async ({ context }) => ({
-    incrementedValue: context.steps.stepOne.payload.doubledValue + 1,
+    incrementedValue: context.steps.stepOne.output.doubledValue + 1,
   }),
 });
 
@@ -14620,7 +14620,7 @@ const stepTwo = new Step({
     incrementedValue: z.number(),
   }),
   execute: async ({ context, suspend }) => {
-    const currentValue = context.steps.stepOne.payload.doubledValue;
+    const currentValue = context.steps.stepOne.output.doubledValue;
 
     if (currentValue < 100) {
       await suspend();
@@ -18964,7 +18964,7 @@ const stepOne = new Step({
 const stepTwo = new Step({
   id: "stepTwo",
   execute: async ({ context }) => ({
-    isDivisibleByFive: context.steps.stepOne.payload.doubledValue % 5 === 0
+    isDivisibleByFive: context.steps.stepOne.output.doubledValue % 5 === 0
   })
 });
 
@@ -18972,14 +18972,14 @@ const stepTwo = new Step({
 const stepThree = new Step({
   id: "stepThree",
   execute: async ({ context }) => ({
-    incrementedValue: context.steps.stepOne.payload.doubledValue + 1
+    incrementedValue: context.steps.stepOne.output.doubledValue + 1
   })
 });
 
 const stepFour = new Step({
   id: "stepFour",
   execute: async ({ context }) => ({
-    isDivisibleByThree: context.steps.stepThree.payload.incrementedValue % 3 === 0
+    isDivisibleByThree: context.steps.stepThree.output.incrementedValue % 3 === 0
   })
 });
 
@@ -19313,7 +19313,7 @@ const stepTwo = new Step({
   id: "stepTwo",
   execute: async ({ context }) => ({
     incrementedValue:
-      context.steps.stepOne.payload.doubledValue + 1,
+      context.steps.stepOne.output.doubledValue + 1,
   }),
 });
 
@@ -19327,7 +19327,7 @@ const stepThree = new Step({
 const stepFour = new Step({
   id: "stepFour",
   execute: async ({ context }) => ({
-    isEven: context.steps.stepThree.payload.tripledValue % 2 === 0,
+    isEven: context.steps.stepThree.output.tripledValue % 2 === 0,
   }),
 });
 
@@ -19414,7 +19414,7 @@ const stepTwo = new Step({
   id: "stepTwo",
   execute: async ({ context }) => ({
     incrementedValue:
-      context.steps.stepOne.payload.doubledValue + 1,
+      context.steps.stepOne.output.doubledValue + 1,
   }),
 });
 
@@ -19422,7 +19422,7 @@ const stepThree = new Step({
   id: "stepThree",
   execute: async ({ context }) => ({
     tripledValue:
-      context.steps.stepTwo.payload.incrementedValue * 3,
+      context.steps.stepTwo.output.incrementedValue * 3,
   }),
 });
 
@@ -19498,9 +19498,9 @@ const stepTwo = new Step({
     incrementedValue: z.number(),
   }),
   execute: async ({ context, suspend }) => {
-    const stepValue = context.steps.stepTwo.payload.secondValue || 0;
+    const stepValue = context.steps.stepTwo.output.secondValue || 0;
 
-    const incrementedValue = context.steps.stepOne.payload.doubledValue + stepValue;
+    const incrementedValue = context.steps.stepOne.output.doubledValue + stepValue;
 
     if (incrementedValue < 100) {
       await suspend();
