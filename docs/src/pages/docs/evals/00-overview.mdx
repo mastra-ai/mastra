@@ -35,14 +35,51 @@ We support any testing framework that supports ESM modules. For example, you can
 ```typescript copy showLineNumbers filename="src/mastra/agents/index.test.ts"
 import { describe, it, expect } from 'vitest';
 import { evaluate } from '@mastra/core/eval';
+import { myAgent } from './index';
 
 describe('My Agent', () => {
   it('should be able to validate tone consistency', async () => {
     const metric = new ToneConsistencyMetric();
-    const result = await evaluate(myAGent, 'Hello, world!', metric)
+    const result = await evaluate(myAgent, 'Hello, world!', metric)
 
     expect(result.score).toBe(1);
   });
 });
 
+```
+
+You will need to configure a testSetup and globalSetup script for your testing framework to capture the eval results. It allows us to show these results in your mastra dashboard.
+
+
+#### Vitest
+
+These are the files you need to add to your project to run evals in your CI/CD pipeline and allow us to capture the results.
+Without these files, the evals will still run and fail when necessary but you won't be able to see the results in the Mastra dashboard.
+
+```typescript copy showLineNumbers filename="globalSetup.ts"
+import { globalSetup } from '@mastra/evals';
+
+export default function setup() {
+  globalSetup()
+}
+```
+
+```typescript copy showLineNumbers filename="testSetup.ts"
+import { beforeAll } from 'vitest';
+import { attachListeners } from '@mastra/evals';
+
+beforeAll(async () => {
+  await attachListeners();
+});
+```
+
+```typescript copy showLineNumbers filename="vitest.config.ts"
+import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  test: {
+    globalSetup: './globalSetup.ts',
+    setupFiles: ['./testSetup.ts'],
+  },
+})
 ```
