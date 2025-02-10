@@ -10,6 +10,7 @@ type TraceContextType = {
   traces: RefinedTrace[];
   setTraces: React.Dispatch<React.SetStateAction<RefinedTrace[]>>;
   currentTraceIndex: number;
+  setCurrentTraceIndex: React.Dispatch<React.SetStateAction<number>>;
   nextTrace: () => void;
   prevTrace: () => void;
   span: Span | null;
@@ -68,6 +69,7 @@ export function TraceProvider({ children }: { children: React.ReactNode }) {
         traces,
         setTraces,
         currentTraceIndex,
+        setCurrentTraceIndex,
         nextTrace,
         prevTrace,
         span,

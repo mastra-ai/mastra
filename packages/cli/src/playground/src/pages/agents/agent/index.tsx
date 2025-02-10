@@ -94,7 +94,7 @@ function Agent() {
           </Button>
         </Header>
         {isTracesPage ? (
-          <AgentTraces agentId={agentId!} />
+          <AgentTraces agentId={agentId!} agentName={agent?.name!} />
         ) : isEvalsPage ? (
           <main className="flex-1">
             <AgentEvals agentId={agentId!} />

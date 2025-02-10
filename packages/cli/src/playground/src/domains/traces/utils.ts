@@ -5,7 +5,7 @@
  * @returns duration in milliseconds in fixed points
  */
 export function formatDuration(duration: number, fixedPoint = 2) {
-  const durationInSecs = duration / 1_000_000;
+  const durationInSecs = duration / 1_000_000_000;
 
   return durationInSecs.toFixed(fixedPoint);
 }

@@ -3,17 +3,18 @@ import { useContext, useEffect } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+
+import { cn } from '@/lib/utils';
 
 import { TraceContext } from './context/trace-context';
 import { RefinedTrace, Span } from './types';
 import { formatDuration, formatOtelTimestamp } from './utils';
 
 export function Traces({ traces }: { traces: RefinedTrace[] }) {
-  const isLoading = false;
+  const { setTraces, trace: currentTrace } = useContext(TraceContext);
 
-  const { setTraces } = useContext(TraceContext);
+  const currentTraceParentSpan = currentTrace?.find(span => span.parentSpanId === undefined) || currentTrace?.[0];
 
   useEffect(() => {
     setTraces(traces);
@@ -35,26 +36,22 @@ export function Traces({ traces }: { traces: RefinedTrace[] }) {
             </TableRow>
           </TableHeader>
           <TableBody className="border-b border-gray-6">
-            {isLoading ? (
+            {!traces.length ? (
               <TableRow className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem]">
-                <TableCell>
-                  <Skeleton className="h-8 w-full" />
-                </TableCell>
-                <TableCell>
-                  <Skeleton className="h-8 w-full" />
-                </TableCell>
-                <TableCell>
-                  <Skeleton className="h-8 w-full" />
-                </TableCell>
-                <TableCell>
-                  <Skeleton className="h-8 w-full" />
+                <TableCell colSpan={4} className="h-24 text-center">
+                  No traces found
                 </TableCell>
               </TableRow>
             ) : (
-              traces.map(trace => (
-                <TableRow key={trace.traceId} className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem]">
+              traces.map((trace, index) => (
+                <TableRow
+                  key={trace.traceId}
+                  className={cn('border-b-gray-6 border-b-[0.1px] text-[0.8125rem]', {
+                    'bg-muted/50': currentTraceParentSpan?.traceId === trace.traceId,
+                  })}
+                >
                   <TableCell>
-                    <TraceButton trace={trace.trace} name={trace.serviceName} />
+                    <TraceButton trace={trace.trace} name={trace.serviceName} traceIndex={index} />
                   </TableCell>
                   <TableCell className="text-mastra-el-5">{trace.traceId}</TableCell>
                   <TableCell className="text-mastra-el-5 text-sm">{formatOtelTimestamp(trace.started)}</TableCell>
@@ -74,7 +71,7 @@ export function Traces({ traces }: { traces: RefinedTrace[] }) {
   );
 }
 
-function TraceButton({ trace, name }: { trace: Span[]; name: string }) {
+function TraceButton({ trace, name, traceIndex }: { trace: Span[]; name: string; traceIndex: number }) {
   const {
     setTrace,
     isOpen: open,
@@ -82,6 +79,7 @@ function TraceButton({ trace, name }: { trace: Span[]; name: string }) {
     trace: currentTrace,
     setSpan,
     setOpenDetail,
+    setCurrentTraceIndex,
   } = useContext(TraceContext);
   return (
     <Button
@@ -91,6 +89,7 @@ function TraceButton({ trace, name }: { trace: Span[]; name: string }) {
         setTrace(trace);
         const parentSpan = trace.find(span => span.parentSpanId === undefined) || trace[0];
         setSpan(parentSpan);
+        setCurrentTraceIndex(traceIndex);
         if (open && currentTrace?.[0]?.id !== trace[0].id) return;
         setOpen(prev => !prev);
         setOpenDetail(prev => !prev);
