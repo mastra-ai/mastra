@@ -49,11 +49,6 @@ describe('Working Memory Tests', () => {
 
     // Create memory instance with working memory enabled
     memory = new Memory({
-      storage: new DefaultStorage({
-        config: {
-          url: 'file:test.db',
-        },
-      }),
       vector,
       options: {
         workingMemory: {
