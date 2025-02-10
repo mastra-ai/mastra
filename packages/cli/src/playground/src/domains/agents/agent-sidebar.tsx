@@ -48,7 +48,7 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
       <div className="p-4 w-full space-y-2 h-full">
         <div className="flex justify-between items-center">
           <div className="text-sm text-mastra-el-5">Chat history</div>
-          <Button variant="primary" size="icon" onClick={() => navigate(`/agents/${agentId}`)}>
+          <Button variant="primary" size="icon" onClick={() => navigate(`/agents/${agentId}/${crypto.randomUUID()}`)}>
             <Plus />
           </Button>
         </div>
@@ -62,7 +62,7 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
       <div className="space-y-2">
         <div className="flex justify-between items-center pl-2 sticky top-0 bg-mastra-bg-2 pt-4">
           <div className="text-sm text-mastra-el-5">Chat history</div>
-          <Button variant="primary" size="icon" onClick={() => navigate(`/agents/${agentId}`)}>
+          <Button variant="primary" size="icon" onClick={() => navigate(`/agents/${agentId}/${crypto.randomUUID()}`)}>
             <Plus />
           </Button>
         </div>

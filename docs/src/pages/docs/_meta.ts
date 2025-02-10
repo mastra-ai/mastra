@@ -28,7 +28,10 @@ const meta = {
     title: "Deployment",
     collapsed: false,
   },
-  "08-running-evals": "Evals",
+  evals: {
+    title: "Evals",
+    collapsed: false,
+  },
   reference: "Reference",
 };
 
