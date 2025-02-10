@@ -56,6 +56,8 @@ Results include both the text content and a similarity score:
 ]
 ```
 
+For an example of how to use the basic retrieval method, see the [Retrieve Results](../../examples/rag/retrieve-results.mdx) example.
+
 ## Advanced Retrieval options
 
 ### Metadata Filtering
@@ -110,6 +112,8 @@ Common use cases for metadata filtering:
 - Combine multiple conditions for precise querying
 - Filter by document attributes (e.g., language, author)
 
+For an example of how to use the metadata filtering method, see the [Metadata Filtering](../../examples/rag/filter-rag.mdx) example.
+
 ### Vector Query Tool
 
 For more advanced retrieval scenarios, Mastra provides a unified vector query tool that combines semantic search, filtering, and reranking capabilities. This tool is particularly useful when:
@@ -118,24 +122,14 @@ For more advanced retrieval scenarios, Mastra provides a unified vector query to
 - You want a consistent interface across different vector stores
 - You're integrating retrieval into Mastra agents
 
-Here's how to set up the vector query tool:
+Here's a basic setup of the vector query tool:
 
 ```ts showLineNumbers copy
 const queryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',
   indexName: 'embeddings',
   model: openai.embedding('text-embedding-3-small'),
-  enableFilters: true,
-  reranker: {
-    model: openai('gpt-4o-mini'),
-    options: {
-      weights: {
-        semantic: 0.5,
-        vector: 0.3,
-        position: 0.2
-      }
-    }
-  }
+  enableFilters: true
 });
 ```
 
@@ -162,6 +156,10 @@ const vectorQueryTool = createVectorQueryTool({
 });
 ```
 
+For more details about re-ranking, see the [rerank()](../reference/rag/rerank) method.
+
+For an example of how to use the re-ranking method, see the [Re-ranking Results](../../examples/rag/rerank-rag.mdx) example.
+
 ### Graph-based Retrieval
 
 For documents with complex relationships, graph-based retrieval can follow connections between chunks. This helps when:
@@ -183,11 +181,6 @@ const graphQueryTool = createGraphQueryTool({
 });
 ```
 
-## Example implementations
+For more details about graph-based retrieval, see the [GraphRAG](../reference/rag/graph-rag) class and the [createGraphQueryTool()](../reference/tools/graph-rag-tool) function.
 
-For complete examples of these retrieval methods in action, see:
-
-- [Basic Retrieval](../../examples/rag/retrieve-results.mdx)
-- [Metadata Filtering](../../examples/rag/filter-rag.mdx)
-- [Re-ranking Results](../../examples/rag/rerank-rag.mdx)
-- [Graph-based Retrieval](../../examples/rag/graph-rag.mdx)
+For an example of how to use the graph-based retrieval method, see the [Graph-based Retrieval](../../examples/rag/graph-rag.mdx) example.
