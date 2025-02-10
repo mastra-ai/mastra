@@ -39,7 +39,7 @@ console.log(result.score); // Score from 0-1
   content={[
     {
       name: "model",
-      type: "ModelConfig",
+      type: "LanguageModel",
       description: "Configuration for the model used to evaluate contextual recall",
       isOptional: false,
     },
@@ -139,6 +139,12 @@ score = (number of correctly recalled items) / (total number of relevant items i
 ## Example with Custom Configuration
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+import { ContextualRecallMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
 const metric = new ContextualRecallMetric(
   model,
   {

@@ -118,6 +118,8 @@ The metric processes text in the following ways when configured:
 ## Example with Different Options
 
 ```typescript
+import { ContentSimilarityMetric } from "@mastra/evals/nlp";
+
 // Case-sensitive comparison
 const caseSensitiveMetric = new ContentSimilarityMetric({
   ignoreCase: false,

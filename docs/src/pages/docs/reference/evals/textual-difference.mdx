@@ -117,6 +117,8 @@ The scoring process:
 ## Example with Analysis
 
 ```typescript
+import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+
 const metric = new TextualDifferenceMetric();
 
 const result = await metric.measure(

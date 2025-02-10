@@ -42,7 +42,7 @@ console.log(result.info.reason); // Explanation of the score
   content={[
     {
       name: "model",
-      type: "ModelConfig",
+      type: "LanguageModel",
       description:
         "Configuration for the model used to evaluate instruction alignment",
       isOptional: false,
@@ -153,6 +153,12 @@ Score interpretation:
 ## Example with Analysis
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+import { PromptAlignmentMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
 const metric = new PromptAlignmentMetric(model, {
   instructions: [
     "Use bullet points for each item",

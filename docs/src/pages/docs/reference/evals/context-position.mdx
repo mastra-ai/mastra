@@ -149,6 +149,12 @@ Score interpretation:
 ## Example with Analysis
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+import { ContextPositionMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
 const metric = new ContextPositionMetric(model, {
   context: [
     "A balanced diet is important for health.",

@@ -40,7 +40,7 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
   content={[
     {
       name: "model",
-      type: "ModelConfig",
+      type: "LanguageModel",
       description: "Configuration for the model used to evaluate context relevancy",
       isOptional: false,
     },
@@ -142,6 +142,12 @@ Score interpretation:
 ## Example with Custom Configuration
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+import { ContextRelevancyMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
 const metric = new ContextRelevancyMetric(model, {
   scale: 100, // Use 0-100 scale instead of 0-1
   context: [

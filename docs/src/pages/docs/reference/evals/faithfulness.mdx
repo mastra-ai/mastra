@@ -38,7 +38,7 @@ console.log(result.info.reason); // "All claims are supported by the context."
   content={[
     {
       name: "model",
-      type: "ModelConfig",
+      type: "LanguageModel",
       description: "Configuration for the model used to evaluate faithfulness.",
       isOptional: false,
     },
@@ -150,6 +150,12 @@ Score interpretation:
 ## Advanced Example
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+import { FaithfulnessMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
 const metric = new FaithfulnessMetric(model, {
   context: [
     "The company had 100 employees in 2020.",

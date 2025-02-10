@@ -36,7 +36,7 @@ console.log(result.info.reason); // Explanation of the score
   content={[
     {
       name: "model",
-      type: "ModelConfig",
+      type: "LanguageModel",
       description: "Configuration for the model used to evaluate relevancy",
       isOptional: false,
     },
@@ -139,8 +139,10 @@ Score interpretation:
 ## Example with Custom Configuration
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+
 const metric = new AnswerRelevancyMetric(
-  model,
+  openai("gpt-4o-mini"),
   {
     uncertaintyWeight: 0.5, // Higher weight for uncertain verdicts
     scale: 5, // Use 0-5 scale instead of 0-1

@@ -47,7 +47,7 @@ console.log(result.info.reason); // Explanation of the score
   content={[
     {
       name: "model",
-      type: "ModelConfig",
+      type: "LanguageModel",
       description: "Configuration for the model used to evaluate hallucination",
       isOptional: false,
     },
@@ -168,6 +168,12 @@ Note: The score represents the degree of hallucination, so a lower score indicat
 ## Example with Analysis
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+import { HallucinationMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
 const metric = new HallucinationMetric(model, {
   context: [
     "OpenAI was founded in December 2015 by Sam Altman, Greg Brockman, and others.",
