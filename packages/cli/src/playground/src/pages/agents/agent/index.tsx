@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { AgentEvals } from '@/domains/agents/agent-evals';
 import { AgentInformation } from '@/domains/agents/agent-information';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
+import { AgentTraces } from '@/domains/agents/agent-traces';
 import { useAgent } from '@/hooks/use-agents';
 import { useMemory, useMessages } from '@/hooks/use-memory';
 import { Message } from '@/types';
@@ -20,6 +21,8 @@ import { Message } from '@/types';
 function Agent() {
   const { agentId, threadId } = useParams();
   const isEvalsPage = useMatch(`/agents/${agentId}/evals`);
+  const isChatPage = useMatch(`/agents/${agentId}`);
+  const isTracesPage = useMatch(`/agents/${agentId}/traces`);
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { memory } = useMemory();
   const navigate = useNavigate();
@@ -59,15 +62,34 @@ function Agent() {
     {
       label: agent?.name,
       href: `/agents/${agentId}`,
-      isCurrent: isEvalsPage ? false : true,
+      isCurrent: true,
     },
-    ...(isEvalsPage ? [{ label: 'Evals', href: `/agents/${agentId}/evals`, isCurrent: true }] : []),
   ];
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <Header title={<Breadcrumb items={breadcrumbItems} />} />
-      {isEvalsPage ? (
+      <Header title={<Breadcrumb items={breadcrumbItems} />}>
+        <Button variant={isChatPage ? 'primary' : 'outline'} size="slim" onClick={() => navigate(`/agents/${agentId}`)}>
+          Chat
+        </Button>
+        <Button
+          variant={isTracesPage ? 'primary' : 'outline'}
+          size="slim"
+          onClick={() => navigate(`/agents/${agentId}/traces`)}
+        >
+          Traces
+        </Button>
+        <Button
+          variant={isEvalsPage ? 'primary' : 'outline'}
+          size="slim"
+          onClick={() => navigate(`/agents/${agentId}/evals`)}
+        >
+          Evals
+        </Button>
+      </Header>
+      {isTracesPage ? (
+        <AgentTraces />
+      ) : isEvalsPage ? (
         <main className="flex-1">
           <AgentEvals agentId={agentId!} />
         </main>
