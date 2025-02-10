@@ -1,4 +1,14 @@
-import { SpanStatusCode, trace, Tracer } from '@opentelemetry/api';
+import {
+  context as otlpContext,
+  SpanStatusCode,
+  trace,
+  Tracer,
+  propagation,
+  SpanOptions,
+  Context,
+  context,
+  Span,
+} from '@opentelemetry/api';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter as OTLPHttpExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { Resource } from '@opentelemetry/resources';
@@ -230,6 +240,20 @@ export class Telemetry {
           span.setAttributes(context.attributes);
         }
 
+        // @ts-ignore
+        let ctx = otlpContext.active();
+        if (this && this.name) {
+          // @ts-ignore
+          span.setAttribute('componentName', this.name);
+          // @ts-ignore
+          ctx = propagation.setBaggage(ctx, { componentName: this.name });
+        } else {
+          const currentBaggage = propagation.getBaggage(otlpContext.active());
+          console.log({ currentBaggage });
+          // @ts-ignore
+          span.setAttribute('componentName', currentBaggage?.componentName);
+        }
+
         // Record input arguments as span attributes
         args.forEach((arg, index) => {
           try {
@@ -260,5 +284,75 @@ export class Telemetry {
         throw error;
       }
     }) as unknown as TMethod;
+  }
+
+  getBaggageTracer(): Tracer {
+    return new BaggageTracer(this.tracer);
+  }
+}
+
+class BaggageTracer implements Tracer {
+  private _tracer: Tracer;
+
+  constructor(tracer: Tracer) {
+    this._tracer = tracer;
+  }
+
+  startSpan(name: string, options: SpanOptions = {}, ctx: Context) {
+    ctx = ctx ?? otlpContext.active();
+    const span = this._tracer.startSpan(name, options, ctx);
+    const currentBaggage = propagation.getBaggage(ctx);
+    console.log({ currentBaggage });
+    // @ts-ignore
+    span.setAttribute('componentName', currentBaggage?.componentName);
+
+    return span;
+  }
+
+  startActiveSpan<F extends (span: Span) => unknown>(name: string, fn: F): ReturnType<F>;
+  startActiveSpan<F extends (span: Span) => unknown>(name: string, options: SpanOptions, fn: F): ReturnType<F>;
+  startActiveSpan<F extends (span: Span) => unknown>(
+    name: string,
+    options: SpanOptions,
+    ctx: Context,
+    fn: F,
+  ): ReturnType<F>;
+  startActiveSpan<F extends (span: Span) => unknown>(
+    name: string,
+    optionsOrFn: SpanOptions | F,
+    ctxOrFn?: Context | F,
+    fn?: F,
+  ): ReturnType<F> {
+    if (typeof optionsOrFn === 'function') {
+      const wrappedFn = (span: Span) => {
+        const currentBaggage = propagation.getBaggage(otlpContext.active());
+        console.log({ currentBaggage });
+        // @ts-ignore
+        span.setAttribute('componentName', currentBaggage?.componentName);
+
+        return optionsOrFn(span);
+      };
+      return this._tracer.startActiveSpan(name, {}, context.active(), wrappedFn as F);
+    }
+    if (typeof ctxOrFn === 'function') {
+      const wrappedFn = (span: Span) => {
+        const currentBaggage = propagation.getBaggage(otlpContext.active());
+        console.log({ currentBaggage });
+        // @ts-ignore
+        span.setAttribute('componentName', currentBaggage?.componentName);
+
+        return ctxOrFn(span);
+      };
+      return this._tracer.startActiveSpan(name, optionsOrFn, context.active(), wrappedFn as F);
+    }
+    const wrappedFn = (span: Span) => {
+      const currentBaggage = propagation.getBaggage(ctxOrFn ?? otlpContext.active());
+      console.log({ currentBaggage });
+      // @ts-ignore
+      span.setAttribute('componentName', currentBaggage?.componentName);
+
+      return fn!(span);
+    };
+    return this._tracer.startActiveSpan(name, optionsOrFn, ctxOrFn!, wrappedFn as F);
   }
 }
