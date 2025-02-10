@@ -1,24 +1,26 @@
 # Memory with LibSQL
 
-This example demonstrates how to use Mastra's memory system with LibSQL as the storage backend.
+This example demonstrates how to use Mastra's memory system with LibSQL. While Memory uses LibSQL as its default storage backend, you can also configure it explicitly for custom settings.
 
 ## Setup
 
-First, set up the memory system with LibSQL storage and vector capabilities:
+First, set up the memory system with vector capabilities:
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { LibSQLStore, DefaultVectorDB } from "@mastra/core/storage";
+import { DefaultStorage, DefaultVectorDB } from "@mastra/core/storage";
 import { Memory } from '@mastra/memory';
 
-// Initialize memory with LibSQL storage and vector search
+// Initialize memory with vector search capabilities
 const memory = new Memory({
-  storage: new LibSQLStore({
+  // The storage configuration is optional as Memory uses LibSQL by default
+  // Only specify it if you need custom configuration
+  storage: new DefaultStorage({
     url: process.env.DATABASE_URL || "file:local.db",
   }),
   vector: new DefaultVectorDB({
-    url: process.env.DATABASE_URL || "file:local.db",
+    connectionUrl: process.env.DATABASE_URL || "file:local.db",
   }),
   options: {
     lastMessages: 10,
