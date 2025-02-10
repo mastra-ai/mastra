@@ -24,9 +24,9 @@ const getPullRequest = new Step({
 
     const pullRequest = await client.pullsGet({
       path: {
-        owner: context?.machineContext?.triggerData?.owner,
-        repo: context?.machineContext?.triggerData?.repo,
-        pull_number: context?.machineContext?.triggerData?.pr_number,
+        owner: context?.triggerData?.owner,
+        repo: context?.triggerData?.repo,
+        pull_number: context?.triggerData?.pr_number,
       },
     });
 
@@ -51,7 +51,7 @@ const generateMessage = new Step({
     message: z.array(z.string()),
   }),
   execute: async ({ context, mastra }) => {
-    const parentStep = context?.machineContext?.stepResults?.getPullRequest;
+    const parentStep = context?.steps?.getPullRequest;
     if (!parentStep || parentStep.status !== 'success') {
       return { message: [] };
     }
@@ -114,7 +114,7 @@ and an outro that just says thank you again and that we will review it shortly. 
 const createMessage = new Step({
   id: 'create-message',
   execute: async ({ context }) => {
-    const parentStep = context?.machineContext?.stepResults?.['message-generator'];
+    const parentStep = context?.steps?.['message-generator'];
 
     if (!parentStep || parentStep.status !== 'success') {
       return;
@@ -123,9 +123,9 @@ const createMessage = new Step({
     const client = await github.getApiClient();
     const res = await client.issuesCreateComment({
       path: {
-        owner: context?.machineContext?.triggerData?.owner,
-        repo: context?.machineContext?.triggerData?.repo,
-        issue_number: context?.machineContext?.triggerData?.pr_number,
+        owner: context?.triggerData?.owner,
+        repo: context?.triggerData?.repo,
+        issue_number: context?.triggerData?.pr_number,
       },
       body: {
         body: `${parentStep.payload.intro}

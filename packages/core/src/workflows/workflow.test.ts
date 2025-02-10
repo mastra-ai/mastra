@@ -225,7 +225,7 @@ describe('Workflow', () => {
         .step(step1)
         .then(step2, {
           when: async ({ context }) => {
-            const step1Result = context.stepResults.step1;
+            const step1Result = context.steps.step1;
             return step1Result && step1Result.status === 'success' && step1Result.payload.count > 3;
           },
         })
@@ -278,41 +278,29 @@ describe('Workflow', () => {
     it('should provide access to step results and trigger data via getStepPayload helper', async () => {
       type TestTriggerSchema = z.ZodObject<{ inputValue: z.ZodString }>;
 
-      const step1Action = vi.fn().mockImplementation(
-        async ({
-          context,
-        }: {
-          context: {
-            machineContext?: WorkflowContext<TestTriggerSchema>;
-          };
-        }) => {
+      const step1Action = vi
+        .fn()
+        .mockImplementation(async ({ context }: { context: WorkflowContext<TestTriggerSchema> }) => {
           // Test accessing trigger data with correct type
-          const triggerData = context.machineContext?.getStepPayload<{ inputValue: string }>('trigger');
+          const triggerData = context?.getStepPayload<{ inputValue: string }>('trigger');
           expect(triggerData).toEqual({ inputValue: 'test-input' });
           return { value: 'step1-result' };
-        },
-      );
+        });
 
-      const step2Action = vi.fn().mockImplementation(
-        async ({
-          context,
-        }: {
-          context: {
-            machineContext?: WorkflowContext<TestTriggerSchema>;
-          };
-        }) => {
+      const step2Action = vi
+        .fn()
+        .mockImplementation(async ({ context }: { context: WorkflowContext<TestTriggerSchema> }) => {
           // Test accessing previous step result with type
           type Step1Result = { value: string };
-          const step1Result = context.machineContext?.getStepPayload<Step1Result>('step1');
+          const step1Result = context?.getStepPayload<Step1Result>('step1');
           expect(step1Result).toEqual({ value: 'step1-result' });
 
           // Verify that failed steps return undefined
-          const failedStep = context.machineContext?.getStepPayload<never>('non-existent-step');
+          const failedStep = context?.getStepPayload<never>('non-existent-step');
           expect(failedStep).toBeUndefined();
 
           return { value: 'step2-result' };
-        },
-      );
+        });
 
       const step1 = new Step({ id: 'step1', execute: step1Action });
       const step2 = new Step({ id: 'step2', execute: step2Action });
@@ -359,16 +347,14 @@ describe('Workflow', () => {
 
       const baseContext = {
         attempts: { step1: 3 },
-        stepResults: {},
+        steps: {},
         triggerData: { inputData: 'test-input' },
         getStepPayload: expect.any(Function),
       };
 
       expect(execute).toHaveBeenCalledWith(
         expect.objectContaining({
-          context: {
-            machineContext: expect.objectContaining(baseContext),
-          },
+          context: expect.objectContaining(baseContext),
           runId: results.runId,
         }),
       );
@@ -401,7 +387,7 @@ describe('Workflow', () => {
 
       const baseContext = {
         attempts: { step1: 3 },
-        stepResults: {},
+        steps: {},
         triggerData: { inputData: { nested: { value: 'test' } } },
         getStepPayload: expect.any(Function),
       };
@@ -411,10 +397,8 @@ describe('Workflow', () => {
       expect(execute).toHaveBeenCalledWith(
         expect.objectContaining({
           context: {
-            machineContext: {
-              ...baseContext,
-              triggerData: { inputData: { nested: { value: 'test' } } },
-            },
+            ...baseContext,
+            triggerData: { inputData: { nested: { value: 'test' } } },
             tData: { inputData: { nested: { value: 'test' } } },
           },
           runId: expect.any(String),
@@ -456,29 +440,27 @@ describe('Workflow', () => {
 
       const baseContext = {
         attempts: { step1: 3, step2: 3 },
-        stepResults: {},
+        steps: {},
         triggerData: {},
         getStepPayload: expect.any(Function),
       };
 
       expect(step2Action).toHaveBeenCalledWith(
         expect.objectContaining({
-          context: {
-            machineContext: expect.objectContaining({
-              ...baseContext,
-              stepResults: {
-                step1: {
-                  payload: {
-                    nested: {
-                      value: 'step1-data',
-                    },
+          context: expect.objectContaining({
+            ...baseContext,
+            steps: {
+              step1: {
+                payload: {
+                  nested: {
+                    value: 'step1-data',
                   },
-                  status: 'success',
                 },
+                status: 'success',
               },
-            }),
+            },
             previousValue: 'step1-data',
-          },
+          }),
           runId: results.runId,
         }),
       );
@@ -694,7 +676,7 @@ describe('Workflow', () => {
 
       const baseContext = {
         attempts: { step1: 3, step2: 3, step3: 3, step4: 3, step5: 3 },
-        stepResults: {},
+        steps: {},
         triggerData: {},
         getStepPayload: expect.any(Function),
       };
@@ -710,9 +692,7 @@ describe('Workflow', () => {
       expect(action1).toHaveBeenCalledWith(
         expect.objectContaining({
           mastra: undefined,
-          context: {
-            machineContext: expect.objectContaining(baseContext),
-          },
+          context: expect.objectContaining(baseContext),
           suspend: expect.any(Function),
           runId: expect.any(String),
         }),
@@ -721,13 +701,11 @@ describe('Workflow', () => {
         expect.objectContaining({
           mastra: undefined,
           context: {
-            machineContext: expect.objectContaining({
-              ...baseContext,
-              stepResults: {
-                step1: { status: 'success', payload: { result: 'success1' } },
-                step4: { status: 'success', payload: { result: 'success4' } },
-              },
-            }),
+            ...baseContext,
+            steps: {
+              step1: { status: 'success', payload: { result: 'success1' } },
+              step4: { status: 'success', payload: { result: 'success4' } },
+            },
             name: 'Dero Israel',
           },
           suspend: expect.any(Function),
@@ -737,17 +715,15 @@ describe('Workflow', () => {
       expect(action3).toHaveBeenCalledWith(
         expect.objectContaining({
           mastra: undefined,
-          context: {
-            machineContext: expect.objectContaining({
-              ...baseContext,
-              stepResults: {
-                step1: { status: 'success', payload: { result: 'success1' } },
-                step2: { status: 'success', payload: { result: 'success2' } },
-                step4: { status: 'success', payload: { result: 'success4' } },
-                step5: { status: 'success', payload: { result: 'success5' } },
-              },
-            }),
-          },
+          context: expect.objectContaining({
+            ...baseContext,
+            steps: {
+              step1: { status: 'success', payload: { result: 'success1' } },
+              step2: { status: 'success', payload: { result: 'success2' } },
+              step4: { status: 'success', payload: { result: 'success4' } },
+              step5: { status: 'success', payload: { result: 'success5' } },
+            },
+          }),
           suspend: expect.any(Function),
           runId: expect.any(String),
         }),
@@ -755,15 +731,13 @@ describe('Workflow', () => {
       expect(action5).toHaveBeenCalledWith(
         expect.objectContaining({
           mastra: undefined,
-          context: {
-            machineContext: expect.objectContaining({
-              ...baseContext,
-              stepResults: {
-                step1: { status: 'success', payload: { result: 'success1' } },
-                step4: { status: 'success', payload: { result: 'success4' } },
-              },
-            }),
-          },
+          context: expect.objectContaining({
+            ...baseContext,
+            steps: {
+              step1: { status: 'success', payload: { result: 'success1' } },
+              step4: { status: 'success', payload: { result: 'success4' } },
+            },
+          }),
           suspend: expect.any(Function),
           runId: expect.any(String),
         }),

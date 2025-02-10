@@ -24,17 +24,17 @@ const getIssue = new Step({
 
     const issue = await client.issuesGet({
       path: {
-        // TODO: Type triggerData in machineContext to the triggerSchema
-        owner: context?.machineContext?.triggerData?.owner,
-        repo: context?.machineContext?.triggerData?.repo,
-        issue_number: context?.machineContext?.triggerData?.issue_number,
+        // TODO: Type triggerData in context to the triggerSchema
+        owner: context?.triggerData?.owner,
+        repo: context?.triggerData?.repo,
+        issue_number: context?.triggerData?.issue_number,
       },
     });
 
     const labels = await client.issuesListLabelsForRepo({
       path: {
-        owner: context?.machineContext?.triggerData?.owner,
-        repo: context?.machineContext?.triggerData?.repo,
+        owner: context?.triggerData?.owner,
+        repo: context?.triggerData?.repo,
       },
     });
 
@@ -50,7 +50,7 @@ const labelIssue = new Step({
     labels: z.array(z.string()),
   }),
   execute: async ({ context, mastra }) => {
-    const parentStep = context?.machineContext?.stepResults?.getIssue;
+    const parentStep = context?.steps?.getIssue;
     if (!parentStep || parentStep.status !== 'success') {
       return { labels: [] };
     }
@@ -80,7 +80,7 @@ const labelIssue = new Step({
 const applyLabels = new Step({
   id: 'applyLabels',
   execute: async ({ context }) => {
-    const parentStep = context?.machineContext?.stepResults?.labelIssue;
+    const parentStep = context?.steps?.labelIssue;
 
     if (!parentStep || parentStep.status !== 'success') {
       return;
@@ -90,9 +90,9 @@ const applyLabels = new Step({
 
     await client.issuesAddLabels({
       path: {
-        owner: context?.machineContext?.triggerData?.owner,
-        repo: context?.machineContext?.triggerData?.repo,
-        issue_number: context?.machineContext?.triggerData?.issue_number,
+        owner: context?.triggerData?.owner,
+        repo: context?.triggerData?.repo,
+        issue_number: context?.triggerData?.issue_number,
       },
       body: {
         labels: parentStep.payload.labels,
