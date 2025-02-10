@@ -3,7 +3,6 @@ const meta = {
   cli: "CLI",
   memory: "Memory",
   rag: "RAG",
-  embedder: "Embedder",
   tools: "Tools",
   tts: "TTS",
   storage: "Storage",
