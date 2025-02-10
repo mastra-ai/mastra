@@ -140,9 +140,13 @@ Score interpretation:
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
+import { AnswerRelevancyMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
 
 const metric = new AnswerRelevancyMetric(
-  openai("gpt-4o-mini"),
+  model,
   {
     uncertaintyWeight: 0.5, // Higher weight for uncertain verdicts
     scale: 5, // Use 0-5 scale instead of 0-1
