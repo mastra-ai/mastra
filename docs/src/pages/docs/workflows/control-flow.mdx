@@ -169,7 +169,7 @@ workflow.step(
   new Step({
     id: "sendEmail",
     execute: async ({ context }) => {
-      const orderStatus = context.machineContext.stepResults.processOrder.payload.status;
+      const orderStatus = context.steps.processOrder.payload.status;
       console.log(orderStatus);
     },
   })
