@@ -208,22 +208,19 @@ await vectorStore.upsert(
     language: chunk.language,
     author: chunk.author,
     confidenceScore: chunk.score,
-    
-    // Hierarchical data
-    section: {
-      name: chunk.sectionName,
-      index: chunk.sectionIndex
-    }
   })),
 );
 ```
 
 Key metadata considerations:
-- Only store metadata fields you plan to filter or sort by
-- Structure metadata to match your querying patterns
-- Use consistent field names across your application
-- Consider adding timestamps for versioning
-- Include hierarchical data when needed for complex filtering
+- Metadata is stored as schemaless JSON - this flexibility requires careful planning
+- Design and document your schema upfront to ensure team-wide consistency
+- Be strict about field naming - inconsistencies like 'category' vs 'Category' will affect queries
+- Only store fields you plan to filter or sort by
+- Use clear, unambiguous names (e.g., prefer 'createdAt' over 'date' or 'timestamp')
+- Track content freshness with timestamps (e.g., 'createdAt', 'lastUpdated') for filtering outdated information
+- Include schema version to handle metadata structure changes over time (e.g., 'schemaVersion: "2.0"')
+- Structure metadata to match your most common query patterns
 
 ## Best Practices
 
