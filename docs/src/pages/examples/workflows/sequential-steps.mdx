@@ -31,24 +31,24 @@ import { z } from "zod";
 
 const stepOne = new Step({
   id: "stepOne",
-  execute: async ({ context: { machineContext } }) => ({
-    doubledValue: machineContext.triggerData.inputValue * 2,
+  execute: async ({ context }) => ({
+    doubledValue: context.triggerData.inputValue * 2,
   }),
 });
 
 const stepTwo = new Step({
   id: "stepTwo",
-  execute: async ({ context: { machineContext } }) => ({
+  execute: async ({ context }) => ({
     incrementedValue:
-      machineContext.stepResults.stepOne.payload.doubledValue + 1,
+      context.steps.stepOne.output.doubledValue + 1,
   }),
 });
 
 const stepThree = new Step({
   id: "stepThree",
-  execute: async ({ context: { machineContext } }) => ({
+  execute: async ({ context }) => ({
     tripledValue:
-      machineContext.stepResults.stepTwo.payload.incrementedValue * 3,
+      context.steps.stepTwo.output.incrementedValue * 3,
   }),
 });
 

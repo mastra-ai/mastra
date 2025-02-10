@@ -136,7 +136,7 @@ export interface StepConfig<
 
 type StepSuccess<T> = {
   status: 'success';
-  payload: T;
+  output: T;
 };
 
 type StepSuspended = {
@@ -155,7 +155,7 @@ export type StepResult<T> = StepSuccess<T> | StepFailure | StepSuspended | StepW
 
 // Update WorkflowContext
 export interface WorkflowContext<TTrigger extends z.ZodType<any> = any> {
-  stepResults: Record<string, StepResult<any>>;
+  steps: Record<string, StepResult<any>>;
   triggerData: z.infer<TTrigger>;
   attempts: Record<string, number>;
   getStepPayload: <T = unknown>(stepId: string) => T | undefined;
@@ -320,7 +320,7 @@ export interface WorkflowRunState {
   // Core state info
   value: Record<string, string>;
   context: {
-    stepResults: Record<
+    steps: Record<
       string,
       {
         status: 'success' | 'failed' | 'suspended' | 'waiting';

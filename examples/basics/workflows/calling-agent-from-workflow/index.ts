@@ -24,7 +24,7 @@ async function main() {
     execute: async ({ context, mastra }) => {
       const kowalski = mastra?.agents?.penguin;
 
-      const res = await kowalski?.generate(context.machineContext?.triggerData?.message);
+      const res = await kowalski?.generate(context?.triggerData?.message);
       return { reply: res?.text || '' };
     },
   });

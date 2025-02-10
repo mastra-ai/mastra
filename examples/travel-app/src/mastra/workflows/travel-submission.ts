@@ -71,7 +71,7 @@ function createArrangementStep({
       }),
     }),
     execute: async ({
-      context: { travelForm, userId, sessionId, machineContext },
+      context: { travelForm, userId, sessionId, steps },
       runId,
     }) => {
       const items = await booking[method]({
@@ -84,7 +84,7 @@ function createArrangementStep({
         checkOut: travelForm.endDate,
         placeId: travelForm.arrivalAttractionId,
         place: travelForm.arrivalAttractionId,
-        payload: machineContext?.stepResults?.airbnbLocationSelection,
+        payload: steps?.airbnbLocationSelection,
       });
 
       if (!items || items?.length === 0) {

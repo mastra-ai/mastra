@@ -19,7 +19,7 @@ myWorkflow
         doubledValue: z.number(),
       }),
       execute: async ({ context }) => {
-        const doubledValue = context.machineContext?.triggerData.inputValue * 2;
+        const doubledValue = context?.triggerData.inputValue * 2;
         return { doubledValue };
       },
     }),
@@ -34,8 +34,8 @@ myWorkflow
         incrementedValue: z.number(),
       }),
       execute: async ({ context }) => {
-        if (context.machineContext?.stepResults.stepOne.status === 'success') {
-          const incrementedValue = context.machineContext?.stepResults.stepOne.payload.doubledValue + 1;
+        if (context?.steps.stepOne.status === 'success') {
+          const incrementedValue = context?.steps.stepOne.output.doubledValue + 1;
           return { incrementedValue };
         }
         return { incrementedValue: 0 };
