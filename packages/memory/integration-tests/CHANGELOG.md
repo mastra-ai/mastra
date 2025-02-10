@@ -1,5 +1,15 @@
 # @mastra/memory-integration-tests
 
+## 0.1.0-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [74b3078]
+  - @mastra/core@0.2.0-alpha.96
+  - @mastra/memory@0.1.0-alpha.78
+  - @mastra/pg@0.1.0-alpha.6
+  - @mastra/upstash@0.1.0-alpha.6
+
 ## 0.1.0-alpha.11
 
 ### Patch Changes

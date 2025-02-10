@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.2.0-alpha.96
+
+### Minor Changes
+
+- 74b3078: Reduce verbosity in workflows API
+
 ## 0.2.0-alpha.95
 
 ### Patch Changes
