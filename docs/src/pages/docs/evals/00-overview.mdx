@@ -1,0 +1,48 @@
+---
+title: "Overview"
+description: "Mastra evals help you measure LLM output quality with metrics for relevance, bias, hallucination, and more."
+---
+
+# Testing your agents with evals
+
+Evals are automated tests that evaluate Agents outputs using model-graded, rule-based, and statistical methods. Each eval returns a normalized score between 0-1 that can be logged and compared. Evals can be customized with your own prompts and scoring functions.
+
+Evals can be run in the cloud, capturing real-time results. But evals can also be part of your CI/CD pipeline, allowing you to test and monitor your agents over time.
+
+## How to use evals
+
+Evals need to be added to an agent. To use any of [the default metrics](/docs/evals/01-supported-evals), you can do the following:
+
+```typescript copy showLineNumbers filename="src/mastra/agents/index.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { ToneConsistencyMetric } from "@mastra/evals/nlp/tone";
+ 
+export const myAgent = new Agent({
+  name: "My Agent",
+  instructions: "You are a helpful assistant.",
+  model: openai("gpt-4o-mini"),
+  metrics: [new ToneConsistencyMetric()],
+});
+```
+
+You can now view the evals in the Mastra dashboard, when using `mastra dev`.
+
+### Executing evals in your CI/CD pipeline
+
+We support any testing framework that supports ESM modules. For example, you can use [Vitest](https://vitest.dev/), [Jest](https://jestjs.io/) or [Mocha](https://mochajs.org/) to run evals in your CI/CD pipeline.
+
+```typescript copy showLineNumbers filename="src/mastra/agents/index.test.ts"
+import { describe, it, expect } from 'vitest';
+import { evaluate } from '@mastra/core/eval';
+
+describe('My Agent', () => {
+  it('should be able to validate tone consistency', async () => {
+    const metric = new ToneConsistencyMetric();
+    const result = await evaluate(myAGent, 'Hello, world!', metric)
+
+    expect(result.score).toBe(1);
+  });
+});
+
+```
