@@ -1,5 +1,20 @@
 # mastra
 
+## 0.2.0-alpha.153
+
+### Minor Changes
+
+- 74b3078: Reduce verbosity in workflows API
+
+### Patch Changes
+
+- 813c719: Fix watcher in mastra dev, now listens to all files
+- 7db55f6: Install aisdk model provider for in create-mastra init
+- c18a0c0: Fix creation of new threads in dev playground
+- Updated dependencies [74b3078]
+  - @mastra/core@0.2.0-alpha.96
+  - @mastra/deployer@0.1.0-alpha.45
+
 ## 0.2.0-alpha.152
 
 ### Patch Changes

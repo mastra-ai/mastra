@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.0-alpha.3
+
+### Minor Changes
+
+- 74b3078: Reduce verbosity in workflows API
+
 ## 0.1.0-alpha.2
 
 ### Minor Changes
