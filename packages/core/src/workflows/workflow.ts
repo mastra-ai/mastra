@@ -1075,8 +1075,7 @@ export class Workflow<
       const [stepId, ...pathParts] = key.split('.');
       const path = pathParts.join('.');
 
-      const sourceData =
-        stepId === 'trigger' ? context.triggerData : getStepResult(context.steps[stepId as string]);
+      const sourceData = stepId === 'trigger' ? context.triggerData : getStepResult(context.steps[stepId as string]);
 
       this.logger.debug(`Got condition data from ${stepId}`, {
         sourceData,
@@ -1434,7 +1433,7 @@ export class Workflow<
 
     let parsedSnapshot;
     try {
-      parsedSnapshot = JSON.parse(snapshot as unknown as string);
+      parsedSnapshot = typeof snapshot === 'string' ? JSON.parse(snapshot as unknown as string) : snapshot;
     } catch (error) {
       this.logger.debug('Failed to parse workflow snapshot for resume', { error, runId });
       throw new Error('Failed to parse workflow snapshot');
