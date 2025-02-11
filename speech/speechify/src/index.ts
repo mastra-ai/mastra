@@ -1,5 +1,5 @@
 import { MastraTTS } from '@mastra/core/tts';
-import { type AudioSpeechRequest, type AudioStreamRequest, Speechify, VoiceModelName } from '@speechify/api-sdk';
+import { type AudioSpeechRequest, type AudioStreamRequest, Speechify, type VoiceModelName } from '@speechify/api-sdk';
 import { Readable } from 'stream';
 
 import { SPEECHIFY_VOICES, type SpeechifyVoice } from './voices';

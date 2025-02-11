@@ -1,11 +1,11 @@
 import {
-  BasicOperator,
-  NumericOperator,
-  ArrayOperator,
-  ElementOperator,
-  LogicalOperator,
-  RegexOperator,
-  Filter,
+  type BasicOperator,
+  type NumericOperator,
+  type ArrayOperator,
+  type ElementOperator,
+  type LogicalOperator,
+  type RegexOperator,
+  type Filter,
 } from '@mastra/core/filter';
 
 export type OperatorType =

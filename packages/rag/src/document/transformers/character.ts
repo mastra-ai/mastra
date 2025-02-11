@@ -1,4 +1,4 @@
-import { ChunkOptions, Language } from '../types';
+import { type ChunkOptions, Language } from '../types';
 
 import { TextTransformer } from './text';
 

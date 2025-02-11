@@ -1,5 +1,5 @@
 import { type MastraVector, type QueryResult } from '@mastra/core/vector';
-import { embed, EmbeddingModel } from 'ai';
+import { embed, type EmbeddingModel } from 'ai';
 
 interface VectorQuerySearchParams {
   indexName: string;

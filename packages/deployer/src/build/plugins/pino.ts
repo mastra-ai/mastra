@@ -70,7 +70,7 @@ export function pino() {
 
         if (matches.length > 0) {
           // Get the last import's position
-          const lastImport = matches[matches.length - 1];
+          const lastImport = matches[matches.length - 1]!;
           const lastImportEnd = lastImport.index + lastImport[0].length;
 
           // Insert the code after the last import with a newline

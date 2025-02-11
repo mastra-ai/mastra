@@ -12,7 +12,16 @@ async function createNetlifySite({ token, name, scope }: { token: string; name: 
     }),
   });
 
-  const data = await response.json();
+  const data = (await response.json()) as
+    | {
+        id: string;
+        name: string;
+        ssl_url: string;
+        url: string;
+        admin_url: string;
+        message?: never;
+      }
+    | { message: string; id?: never; name?: never; ssl_url?: never; url?: never; admin_url?: never };
 
   if (!response.ok) {
     console.error(JSON.stringify(data));
@@ -35,14 +44,22 @@ async function findNetlifySite({ token, name, scope }: { token: string; name: st
     },
   });
 
-  const data = await response.json();
+  const data = (await response.json()) as
+    | {
+        id: string;
+        name: string;
+        ssl_url: string;
+        url: string;
+        admin_url: string;
+      }[]
+    | { message: string };
 
-  if (!response.ok) {
-    throw new Error(`Failed to search sites: ${data.message || 'Unknown error'}`);
+  if (!response.ok || !Array.isArray(data)) {
+    throw new Error(`Failed to search sites: ${(data as { message: string }).message || 'Unknown error'}`);
   }
 
   // Find exact match (filter can return partial matches)
-  return data.find((site: any) => site.name === name);
+  return data.find(site => site.name === name);
 }
 
 export async function getOrCreateSite({ token, name, scope }: { token: string; name: string; scope: string }) {

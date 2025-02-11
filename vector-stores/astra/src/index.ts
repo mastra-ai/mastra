@@ -1,6 +1,6 @@
 import { DataAPIClient, Db, UUID } from '@datastax/astra-db-ts';
-import { Filter } from '@mastra/core/filter';
-import { MastraVector, QueryResult, IndexStats } from '@mastra/core/vector';
+import { type Filter } from '@mastra/core/filter';
+import { MastraVector, type QueryResult, type IndexStats } from '@mastra/core/vector';
 
 import { AstraFilterTranslator } from './filter';
 
