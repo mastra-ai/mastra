@@ -62,10 +62,11 @@
   "devDependencies": {
     "@hono/node-server": "^1.13.7",
     "@hono/swagger-ui": "^0.5.0",
+    "@microsoft/api-extractor": "^7.49.2",
     "@types/babel__core": "^7.20.5",
     "@types/babel__helper-module-imports": "^7.18.3",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "^22.9.0",
+    "@types/node": "^22.13.1",
     "concurrently": "^9.1.0",
     "hono-openapi": "^0.4.3",
     "rollup-plugin-visualizer": "^5.14.0",

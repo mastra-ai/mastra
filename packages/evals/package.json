@@ -50,7 +50,7 @@
   },
   "devDependencies": {
     "@ai-sdk/openai": "latest",
-    "@tsconfig/recommended": "^1.0.7",
+    "@microsoft/api-extractor": "^7.49.2",
     "@types/difflib": "^0.2.7",
     "@types/fs-extra": "^11.0.4",
     "@types/sentiment": "^5.0.4",

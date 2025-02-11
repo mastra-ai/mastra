@@ -24,8 +24,8 @@
     "@pinecone-database/pinecone": "^3.0.3"
   },
   "devDependencies": {
-    "@tsconfig/recommended": "^1.0.7",
-    "@types/node": "^22.9.0",
+    "@microsoft/api-extractor": "^7.49.2",
+    "@types/node": "^22.13.1",
     "tsup": "^8.0.1"
   }
 }
