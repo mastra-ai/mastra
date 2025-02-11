@@ -1,3 +1,5 @@
+import { RefinedTrace, Span } from './types';
+
 /**
  *
  * @param duration duration of the span
@@ -5,13 +7,27 @@
  * @returns duration in milliseconds in fixed points
  */
 export function formatDuration(duration: number, fixedPoint = 2) {
-  const durationInSecs = duration / 1_000_000_000;
+  const durationInSecs = duration / 1_000;
 
   return durationInSecs.toFixed(fixedPoint);
 }
 
 export function formatOtelTimestamp(otelTimestamp: number) {
   const date = new Date(otelTimestamp / 1000);
+
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'numeric',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hour12: true,
+  }).format(date);
+}
+
+export function formatOtelTimestamp2(otelTimestamp: number) {
+  const date = new Date(otelTimestamp / 1000000);
 
   return new Intl.DateTimeFormat('en-US', {
     month: 'numeric',
@@ -45,3 +61,31 @@ export function cleanString(string: string) {
       .trim()
   );
 }
+
+export const refineTraces = (traces: Span[]): RefinedTrace[] => {
+  const groupedTraces = traces.reduce<Record<string, Span[]>>((acc, curr) => {
+    const newCurr = { ...curr, duration: curr.endTime - curr.startTime };
+
+    return { ...acc, [curr.traceId]: [...(acc[curr.traceId] || []), newCurr] };
+  }, {});
+
+  const tracesData = Object.entries(groupedTraces).map(([key, value]) => {
+    const parentSpan = value.find(span => !span.parentSpanId);
+
+    const enrichedSpans = value.map(span => ({
+      ...span,
+      relativePercentage: parentSpan ? span.duration / parentSpan.duration : 0,
+    }));
+    const failedStatus = value.find(span => span.status.code !== 0)?.status;
+    return {
+      traceId: key,
+      serviceName: parentSpan?.name || key,
+      duration: value.reduce((acc, curr) => acc + curr.duration, 0),
+      status: failedStatus || parentSpan?.status || value[0].status,
+      started: value[0].startTime,
+      trace: enrichedSpans,
+    };
+  });
+
+  return tracesData;
+};

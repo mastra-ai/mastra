@@ -75,7 +75,7 @@ const AgentTool = () => {
     },
     {
       label: agentId,
-      href: `/agents/${agentId}`,
+      href: `/agents/${agentId}/chat`,
     },
     {
       label: toolId,

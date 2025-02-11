@@ -14,7 +14,7 @@ export function TraceDetails() {
       <div className="flex items-center justify-between px-6 pt-[1.56rem]">
         <div className="flex items-center gap-2">
           <h3 className="text-[1.125rem]">Trace Span{trace?.length && trace.length > 1 ? 's' : ''}</h3>
-          <span className="text-xs text-[#939393]">
+          <span className="text-xs text-mastra-el-3">
             {trace?.length ? trace.length : 0} span{trace?.length && trace.length > 1 ? 's' : ''}
           </span>
         </div>
@@ -27,7 +27,7 @@ export function TraceDetails() {
               disabled={currentTraceIndex === 0}
               variant={'secondary'}
               size={'icon'}
-              className="!h-3 !w-3 rotate-180 !px-3 py-3 text-[#939393] transition-colors hover:text-white"
+              className="!h-3 !w-3 rotate-180 !px-3 py-3 text-mastra-el-3 transition-colors hover:text-white"
             >
               <ChevronDown />
             </Button>{' '}
@@ -38,7 +38,7 @@ export function TraceDetails() {
               disabled={currentTraceIndex === traces.length - 1}
               variant={'secondary'}
               size={'icon'}
-              className="!h-3 !w-3 !px-3 py-3 text-[#939393] transition-colors hover:text-white"
+              className="!h-3 !w-3 !px-3 py-3 text-mastra-el-3 transition-colors hover:text-white"
             >
               <ChevronDown />
             </Button>
@@ -50,13 +50,13 @@ export function TraceDetails() {
             }}
             variant={'secondary'}
             size={'icon'}
-            className="!h-3 !w-3 !px-3 py-3 text-[#939393] transition-colors hover:text-white"
+            className="!h-3 !w-3 !px-3 py-3 text-mastra-el-3 transition-colors hover:text-white"
           >
             <XIcon />
           </Button>
         </div>
       </div>
-      <div className="p-6 px-0"> {trace && <SpanView trace={trace} />}</div>
+      <div className="p-6 px-1"> {trace && <SpanView trace={trace} />}</div>
     </div>
   );
 }

@@ -23,6 +23,13 @@ export type SpanOther = {
   droppedLinksCount: number;
 };
 
+export type SpanEvent = {
+  attributes: Record<string, string | number | boolean | null>[];
+  name: string;
+  timeUnixNano: string;
+  droppedAttributesCount: number;
+};
+
 export type Span = {
   id: string;
   parentSpanId: string | null;
@@ -31,7 +38,7 @@ export type Span = {
   scope: string;
   kind: number;
   status: SpanStatus;
-  events: any[]; // You might want to type this more specifically if you have event structure
+  events: SpanEvent[];
   links: any[]; // You might want to type this more specifically if you have link structure
   attributes: Record<string, string | number | boolean | null>;
   startTime: number;
@@ -51,5 +58,6 @@ export type RefinedTrace = {
   serviceName: string;
   duration: number;
   started: number;
+  status: SpanStatus;
   trace: Span[];
 };
