@@ -18,7 +18,7 @@
     "pretest": "docker compose up -d",
     "test": "vitest run",
     "posttest": "docker compose down",
-    "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
+    "build": "tsup src/index.ts --format esm --experimental-dts --clean --treeshake",
     "build:watch": "pnpm build --watch"
   },
   "dependencies": {

@@ -19,7 +19,7 @@
   },
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "cross-env NODE_OPTIONS='--max-old-space-size=8192' tsup src/index.ts --format esm --dts --clean --treeshake",
+    "build": "cross-env NODE_OPTIONS='--max-old-space-size=8192' tsup src/index.ts --format esm --experimental-dts --clean --treeshake",
     "build:watch": "pnpm build --watch",
     "lint": "dts lint",
     "size": "size-limit",
