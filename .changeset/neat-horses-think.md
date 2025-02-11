@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Fix messages send not rendering when evals are on
+Fix messages sent not rendering when evals are on
