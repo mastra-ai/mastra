@@ -106,11 +106,9 @@ const chunkMetadata = chunks?.map((chunk: any, index: number) => ({
 
 The agent is configured to understand user queries and translate them into appropriate metadata filters.
 
-In our instructions we do the following:
-- Provide the agent with the metadata structure so that it knows the fields available for filtering.
-- Provide a prompt (e.g. PGVECTOR_PROMPT) that provides the agent with filter operations and syntax for the vector store queries.
-
-> Note: Different vector stores have specific prompts available. See [Vector Store Prompts](../../docs/reference/tools/vector-query-tool#vector-store-prompts) for details.
+The agent requires both the vector query tool and a system prompt containing:
+- Metadata structure for available filter fields
+- Vector store prompt for filter operations and syntax
 
 ```typescript copy showLineNumbers{43} filename="src/mastra/index.ts"
 export const ragAgent = new Agent({
@@ -143,6 +141,8 @@ The agent's instructions are designed to:
 - Use the metadata structure to find relevant information
 - Apply appropriate filters through the vectorQueryTool and the provided vector store prompt
 - Generate responses based on the filtered context
+
+> Note: Different vector stores have specific prompts available. See [Vector Store Prompts](/docs/rag/retrieval#vector-store-prompts) for details.
 
 ## Instantiate PgVector and Mastra
 

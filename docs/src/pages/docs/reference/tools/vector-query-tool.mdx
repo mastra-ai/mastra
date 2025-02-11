@@ -122,21 +122,6 @@ The default tool description provides:
 - Instructions for querying the specified vector store
 - Examples of filter syntax when filtering is enabled
 
-## Vector Store Prompts
-
-Each vector store has optimized prompts available in `@mastra/rag`:
-
-```typescript
-// For PostgreSQL with pgvector
-import { PGVECTOR_PROMPT } from '@mastra/rag';
-// For Pinecone
-import { PINECONE_PROMPT } from '@mastra/rag';
-// For Qdrant
-import { QDRANT_PROMPT } from '@mastra/rag';
-```
-
-These prompts are designed to work with the specific query capabilities of each vector store.
-
 ## Result Handling
 
 The tool determines the number of results to return based on the user's query, with a default of 10 results. This can be adjusted based on the query requirements.
