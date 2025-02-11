@@ -97,10 +97,11 @@ export function getLiveEvalsByAgentIdHandler(evalStore: any) {
       const mastra = c.get('mastra');
       const agentId = c.req.param('agentId');
       const agent = mastra.getAgent(agentId);
-      const parsedEvals = evalStore.filter((line: any) => line?.meta?.agentName === agent.name);
+      const evals = await mastra.memory.storage.getEvalsByAgentName(agent.name);
+
       return c.json({
         ...agent,
-        evals: parsedEvals,
+        evals,
       });
     } catch (error) {
       return handleError(error, 'Error getting evals');

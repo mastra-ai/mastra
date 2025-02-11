@@ -377,6 +377,23 @@ export class DefaultStorage extends MastraStorage {
       throw error;
     }
   }
+
+  async getEvalsByAgentName(agentName: string): Promise<any[]> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM ${MastraStorage.TABLE_EVALS} WHERE meta->>'$.agentName' = ? ORDER BY createdAt DESC`,
+      args: [agentName],
+    });
+
+    if (!result.rows) {
+      return [];
+    }
+
+    return result.rows.map(row => ({
+      ...row,
+      result: typeof row.result === 'string' ? JSON.parse(row.result) : row.result,
+      meta: typeof row.meta === 'string' ? JSON.parse(row.meta) : row.meta,
+    }));
+  }
 }
 
 export { DefaultStorage as MastraStorageLibSql };
