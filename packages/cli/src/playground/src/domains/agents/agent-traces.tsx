@@ -90,7 +90,7 @@ export function AgentTraces({ agentId, agentName }: { agentId: string; agentName
   }
 
   const groupedTraces = traces.reduce<Record<string, Span[]>>((acc, curr) => {
-    const newCurr = { ...curr, duration: Number(curr.endTime) - Number(curr.startTime) };
+    const newCurr = { ...curr, duration: curr.endTime - curr.startTime };
 
     return { ...acc, [curr.traceId]: [...(acc[curr.traceId] || []), newCurr] };
   }, {});
@@ -106,7 +106,7 @@ export function AgentTraces({ agentId, agentName }: { agentId: string; agentName
       traceId: key,
       serviceName: parentSpan?.name || key,
       duration: value.reduce((acc, curr) => acc + curr.duration, 0),
-      started: Number(value[0].startTime),
+      started: value[0].startTime,
       trace: enrichedSpans,
     };
   });

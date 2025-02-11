@@ -34,8 +34,8 @@ export type Span = {
   events: any[]; // You might want to type this more specifically if you have event structure
   links: any[]; // You might want to type this more specifically if you have link structure
   attributes: Record<string, string | number | boolean | null>;
-  startTime: string;
-  endTime: string;
+  startTime: number;
+  endTime: number;
   duration: number;
   other: SpanOther;
   createdAt: string;
