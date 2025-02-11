@@ -32,3 +32,11 @@ export type StorageGetMessagesArg = {
   };
   threadConfig?: MemoryConfig;
 };
+
+export type EvalRow = {
+  result: string;
+  meta: string;
+  input: string;
+  output: string;
+  createdAt: string;
+};

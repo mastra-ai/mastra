@@ -4,7 +4,7 @@ import { join } from 'path';
 import { MessageType, StorageThreadType } from '../memory';
 
 import { MastraStorage, TABLE_NAMES } from './base';
-import { StorageColumn, StorageGetMessagesArg } from './types';
+import { StorageColumn, StorageGetMessagesArg, EvalRow } from './types';
 
 export * from '../vector/libsql/index';
 
@@ -378,7 +378,7 @@ export class DefaultStorage extends MastraStorage {
     }
   }
 
-  async getEvalsByAgentName(agentName: string): Promise<any[]> {
+  async getEvalsByAgentName(agentName: string): Promise<EvalRow[]> {
     const result = await this.client.execute({
       sql: `SELECT * FROM ${MastraStorage.TABLE_EVALS} WHERE meta->>'$.agentName' = ? ORDER BY createdAt DESC`,
       args: [agentName],
@@ -392,7 +392,10 @@ export class DefaultStorage extends MastraStorage {
       ...row,
       result: typeof row.result === 'string' ? JSON.parse(row.result) : row.result,
       meta: typeof row.meta === 'string' ? JSON.parse(row.meta) : row.meta,
-    }));
+      input: row.input,
+      output: row.output,
+      createdAt: row.createdAt,
+    })) as EvalRow[];
   }
 }
 

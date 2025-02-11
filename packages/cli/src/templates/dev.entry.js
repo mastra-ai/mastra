@@ -7,9 +7,7 @@ import { AvailableHooks, registerHook } from '@mastra/core/hooks';
 import { MastraStorage } from '@mastra/core/storage';
 
 // @ts-ignore
-const evalStore = [];
-// @ts-ignore
-await createNodeServer(mastra, { playground: true, swaggerUI: true, evalStore });
+await createNodeServer(mastra, { playground: true, swaggerUI: true });
 
 registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName }) => {
   evaluate({
@@ -23,7 +21,7 @@ registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agen
 });
 
 registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
-  if (mastra?.memory?.storage) {
+  if (mastra && mastra.memory && mastra.memory.storage) {
     await mastra.memory.storage.insert({
       tableName: MastraStorage.TABLE_EVALS,
       record: {
