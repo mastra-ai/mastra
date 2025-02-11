@@ -29,7 +29,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "build": "pnpm run check && tsup src/index.ts --format esm --dts --clean --treeshake",
-    "dev": "tsup src/index.ts --format esm --dts --clean --watch",
+    "build:watch": "pnpm build --watch",
     "test:integration": "cd integration-tests && pnpm run test",
     "test": "pnpm test:integration"
   },

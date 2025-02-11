@@ -48,8 +48,9 @@
   "scripts": {
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
-    "build": "pnpm check && tsup-node src/index.ts src/base.ts src/utils.ts src/*/index.ts src/vector/libsql/index.ts --format esm --clean --dts --treeshake",
-    "build:dev": "pnpm build --watch",
+    "prebuild": "pnpm check",
+    "build": "tsup src/index.ts src/base.ts src/utils.ts !src/action/index.ts src/*/index.ts src/vector/libsql/index.ts --format esm --clean --dts --treeshake",
+    "build:watch": "pnpm build --watch",
     "size": "size-limit",
     "test": "vitest run"
   },
@@ -66,6 +67,7 @@
     "@opentelemetry/semantic-conventions": "^1.28.0",
     "cohere-ai": "^7.15.4",
     "date-fns": "^3.0.5",
+    "dotenv": "^16.4.7",
     "json-schema": "^0.4.0",
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
