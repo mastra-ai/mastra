@@ -7,7 +7,7 @@ import { GithubLink } from "../../../components/github-link";
 
 # Chunk Markdown
 
-Markdown uses a compact syntax compared to HTML. The `chunk` method segments Markdown content by preserving structural elements such as headers, lists, and code blocks. This example demonstrates Markdown document chunking for search and retrieval.
+Markdown is more information-dense than raw HTML, making it easier to work with for RAG pipelines. When working with markdown, you need to split it into smaller pieces while preserving headers and formatting. The `chunk` method handles Markdown-specific elements like headers, lists, and code blocks intelligently. This example shows how to chunk markdown documents for search or retrieval purposes.
 
 ```tsx copy
 import { MDocument } from "@mastra/rag";
