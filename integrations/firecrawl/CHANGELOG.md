@@ -1,5 +1,17 @@
 # @mastra/firecrawl
 
+## 1.1.0-alpha.91
+
+### Minor Changes
+
+- 74b3078: Reduce verbosity in workflows API
+
+### Patch Changes
+
+- Updated dependencies [74b3078]
+  - @mastra/core@0.2.0-alpha.96
+  - @mastra/rag@0.1.0-alpha.89
+
 ## 1.1.0-alpha.90
 
 ### Patch Changes

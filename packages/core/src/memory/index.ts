@@ -11,7 +11,7 @@ import {
 } from 'ai';
 
 import { MastraBase } from '../base';
-import { MastraStorage, StorageGetMessagesArg } from '../storage';
+import { DefaultStorage, MastraStorage, StorageGetMessagesArg } from '../storage';
 import { deepMerge } from '../utils';
 import { MastraVector } from '../vector';
 
@@ -59,8 +59,11 @@ export type MemoryConfig = {
 };
 
 export type SharedMemoryConfig = {
-  storage: MastraStorage;
+  /* @default new DefaultStorage({ config: { url: "file:memory.db" } }) */
+  storage?: MastraStorage;
+
   options?: MemoryConfig;
+
   vector?: MastraVector;
   embedder?: EmbeddingModel<string>;
 };
@@ -83,7 +86,13 @@ export abstract class MastraMemory extends MastraBase {
 
   constructor(config: { name: string } & SharedMemoryConfig) {
     super({ component: 'MEMORY', name: config.name });
-    this.storage = config.storage;
+    this.storage =
+      config.storage ||
+      new DefaultStorage({
+        config: {
+          url: 'file:memory.db',
+        },
+      });
     if (config.vector) {
       this.vector = config.vector;
       this.threadConfig.semanticRecall = true;
@@ -112,7 +121,6 @@ export abstract class MastraMemory extends MastraBase {
 For example:
 
 new Memory({
-  storage,
   vector,
   embedder: openai("text-embedding-3-small") // example
 });

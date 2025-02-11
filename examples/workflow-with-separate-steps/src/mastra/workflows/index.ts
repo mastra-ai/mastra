@@ -4,7 +4,7 @@ import { z } from 'zod';
 const stepOne = new Step({
   id: 'stepOne',
   execute: async ({ context }) => {
-    const triggerData = context.machineContext?.triggerData;
+    const triggerData = context?.triggerData;
     const doubledValue = triggerData.inputValue * 2;
     return { doubledValue };
   },
@@ -13,7 +13,7 @@ const stepOne = new Step({
 const stepTwo = new Step({
   id: 'stepTwo',
   execute: async ({ context }) => {
-    const stepOneResult = context.machineContext?.stepResults.stepOne?.payload;
+    const stepOneResult = context?.steps.stepOne?.output;
     const incrementedValue = stepOneResult.doubledValue + 1;
     return { incrementedValue };
   },
@@ -22,7 +22,7 @@ const stepTwo = new Step({
 const stepThree = new Step({
   id: 'stepThree',
   execute: async ({ context }) => {
-    const triggerData = context.machineContext?.triggerData;
+    const triggerData = context?.triggerData;
     const tripledValue = triggerData.inputValue * 3;
     return { tripledValue };
   },
@@ -31,7 +31,7 @@ const stepThree = new Step({
 const stepFour = new Step({
   id: 'stepFour',
   execute: async ({ context }) => {
-    const stepThreeResult = context.machineContext?.stepResults.stepThree?.payload;
+    const stepThreeResult = context?.steps.stepThree?.output;
     const isEven = stepThreeResult.tripledValue % 2 === 0;
     return { isEven };
   },

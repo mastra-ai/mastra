@@ -139,37 +139,85 @@ chunks.map(chunk => ({ text: chunk.text }))
 
 ## Using Vector Storage
 
-Once initialized, all vector stores share the same interface for creating indexes, upserting embeddings, and querying:
+Once initialized, all vector stores share the same interface for creating indexes, upserting embeddings, and querying.
+
+### Creating Indexes
+
+Before storing embeddings, you need to create an index with the appropriate dimension size for your embedding model:
 
 ```ts filename="store-embeddings.ts" showLineNumbers copy
-// 1. Create an index (dimension = 1536 for text-embedding-3-small)
+// Create an index with dimension 1536 (for text-embedding-3-small)
 await store.createIndex('my-collection', 1536);
 
-// 2. Store embeddings with metadata
+// For other models, use their corresponding dimensions:
+// - text-embedding-3-large: 3072
+// - text-embedding-ada-002: 1536
+// - cohere-embed-multilingual-v3: 1024
+```
+
+The dimension size must match the output dimension of your chosen embedding model. Common dimension sizes are:
+- OpenAI text-embedding-3-small: 1536 dimensions
+- OpenAI text-embedding-3-large: 3072 dimensions
+- Cohere embed-multilingual-v3: 1024 dimensions
+
+### Upserting Embeddings
+
+After creating an index, you can store embeddings along with their basic metadata:
+
+```ts filename="store-embeddings.ts" showLineNumbers copy
+// Store embeddings with their corresponding metadata
 await store.upsert(
-'my-collection',
-embeddings,
-chunks.map(chunk => ({ text: chunk.text })),
+  'my-collection',  // index name
+  embeddings,       // array of embedding vectors
+  chunks.map(chunk => ({
+    text: chunk.text,  // The original text content
+    id: chunk.id       // Optional unique identifier
+  }))
 );
-````
+```
+
+The upsert operation:
+- Takes an array of embedding vectors and their corresponding metadata
+- Updates existing vectors if they share the same ID
+- Creates new vectors if they don't exist
+- Automatically handles batching for large datasets
 
 ## Adding Metadata
 
-All vector stores support adding metadata to your vectors, which enables filtering during retrieval:
+Vector stores support rich metadata for advanced filtering and organization. You can add any JSON-serializable fields that will help with retrieval.
+
+**Reminder:** Metadata is stored as a JSON field with no fixed schema, so you'll want to name your fields consistently and apply a consistent schema, or your queries will return unexpected results.
 
 ```ts showLineNumbers copy
-// Store embeddings with rich metadata
+// Store embeddings with rich metadata for better organization and filtering
 await vectorStore.upsert(
   "embeddings",
   embeddings,
   chunks.map((chunk) => ({
+    // Basic content
     text: chunk.text,
+    id: chunk.id,
+    
+    // Document organization
     source: chunk.source,
     category: chunk.category,
-    timestamp: new Date().toISOString(),
+    
+    // Temporal metadata
+    createdAt: new Date().toISOString(),
+    version: "1.0",
+    
+    // Custom fields
+    language: chunk.language,
+    author: chunk.author,
+    confidenceScore: chunk.score,
   })),
 );
 ```
+
+Key metadata considerations:
+- Be strict with field naming - inconsistencies like 'category' vs 'Category' will affect queries
+- Only include fields you plan to filter or sort by - extra fields add overhead
+- Add timestamps (e.g., 'createdAt', 'lastUpdated') to track content freshness
 
 ## Best Practices
 

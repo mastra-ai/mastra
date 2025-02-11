@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.2.0-alpha.95",
+  "version": "0.2.0-alpha.96",
   "license": "MIT",
   "type": "module",
   "main": "dist/core.esm.js",
@@ -48,8 +48,8 @@
   "scripts": {
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
-    "build": "tsup src/index.ts src/base.ts src/utils.ts src/*/index.ts src/vector/libsql/index.ts --format esm --clean --dts --treeshake",
-    "build:watch": "pnpm build --watch",
+    "build": "pnpm check && tsup-node src/index.ts src/base.ts src/utils.ts src/*/index.ts src/vector/libsql/index.ts --format esm --clean --dts --treeshake",
+    "build:dev": "pnpm build --watch",
     "size": "size-limit",
     "test": "vitest run"
   },

@@ -1,0 +1,74 @@
+---
+title: "Creating Mastra Projects | Mastra Local Development Docs"
+description: "Initialize new Mastra projects or add Mastra to existing Node.js applications using the CLI"
+---
+
+# Creating Mastra Projects
+
+Mastra provides two CLI commands for project setup:
+
+1. [`mastra create`](/docs/reference/cli/create): Generate a new project
+2. [`mastra init`](/docs/reference/cli/init): Add Mastra to an existing project
+
+## Creating a New Project
+
+You can create a new project using either a package manager or the mastra CLI:
+
+```bash npm2yarn copy
+npm create mastra@latest 
+```
+
+```bash npm2yarn copy
+npm install -g mastra@latest 
+mastra create
+```
+
+Generated project structure:
+```
+my-project/
+├── src/
+│   └── mastra/
+│       └── index.ts    # Mastra entry point
+├── package.json
+└── tsconfig.json
+```
+
+## Adding to an Existing Project
+
+```bash
+mastra init
+```
+
+Changes made to project:
+1. Creates `src/mastra` directory with entry point
+2. Adds required dependencies
+3. Configures TypeScript compiler options
+
+## Command Arguments
+
+```bash
+Arguments:
+  --components     Specify components: agents, memory, storage
+  --llm-provider   LLM provider: openai, anthropic
+  --add-example   Include example implementation
+  --llm-api-key   Provider API key
+```
+
+## Interactive Setup
+
+Running commands without arguments starts a CLI prompt for:
+1. Component selection
+2. LLM provider configuration
+3. API key setup
+4. Example code inclusion
+
+## Project Initialization
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server on port 3000
+mastra dev
+
+# Access playground at http://localhost:3000

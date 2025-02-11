@@ -21,7 +21,7 @@ const syncStep = new Step({
     "Crawl a website and extract the markdown content and sync it to the database",
   execute: async ({ context, mastra, runId, suspend }) => {
     const toolResult = await siteCrawlTool.execute({
-      context: context.machineContext?.triggerData,
+      context: context?.triggerData,
       runId,
       suspend,
     });
