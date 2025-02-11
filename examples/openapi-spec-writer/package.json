@@ -9,7 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@libsql/client": "^0.14.0",
     "@mastra/core": "workspace:*",
     "@mastra/firecrawl": "workspace:*",
     "@mastra/github": "workspace:*",

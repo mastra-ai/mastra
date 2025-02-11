@@ -30,7 +30,6 @@
     "@rollup/plugin-virtual": "^3.0.2",
     "cloudflare": "^4.0.0",
     "date-fns": "^4.1.0",
-    "dotenv": "^16.3.1",
     "execa": "^9.3.1",
     "rollup-plugin-polyfill-node": "^0.13.0",
     "rollup-plugin-shim": "^1.0.0",

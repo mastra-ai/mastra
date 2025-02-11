@@ -20,9 +20,6 @@ importers:
       '@types/node':
         specifier: ^22.13.1
         version: 22.13.1
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.4.7
       husky:
         specifier: ^9.1.4
         version: 9.1.7
@@ -65,9 +62,6 @@ importers:
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.4.7
       execa:
         specifier: ^9.3.1
         version: 9.5.2
@@ -111,9 +105,6 @@ importers:
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.4.7
       execa:
         specifier: ^9.3.1
         version: 9.5.2
@@ -1361,9 +1352,6 @@ importers:
 
   examples/openapi-spec-writer:
     dependencies:
-      '@libsql/client':
-        specifier: ^0.14.0
-        version: 0.14.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -15459,9 +15447,6 @@ packages:
   long@4.0.0:
     resolution: {integrity: sha512-XsP+KhQif4bjX1kbuSiySJFNAehNxgLb6hPRGJ9QsUr8ajHkuXGdrHmFUTUUXhDwVX2R5bY4JNZEwbUiMhV+MA==}
 
-  long@5.2.4:
-    resolution: {integrity: sha512-qtzLbJE8hq7VabR3mISmVGtoXP8KGc2Z/AT8OuqlYD7JTR3oqrgwdjnk07wpj1twXxYmgDXgoKVWUG/fReSzHg==}
-
   long@5.3.0:
     resolution: {integrity: sha512-5vvY5yF1zF/kXk+L94FRiTDa1Znom46UjPCH6/XbSvS8zBKMFBHTJk8KDMqJ+2J6QezQFi7k1k8v21ClJYHPaw==}
 
@@ -23729,7 +23714,7 @@ snapshots:
   '@grpc/proto-loader@0.7.13':
     dependencies:
       lodash.camelcase: 4.3.0
-      long: 5.2.4
+      long: 5.3.0
       protobufjs: 7.4.0
       yargs: 17.7.2
 
@@ -36765,8 +36750,6 @@ snapshots:
 
   long@4.0.0: {}
 
-  long@5.2.4: {}
-
   long@5.3.0: {}
 
   longest-streak@3.1.0: {}
@@ -39614,7 +39597,7 @@ snapshots:
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.0
       '@types/node': 22.13.1
-      long: 5.2.4
+      long: 5.3.0
 
   proxy-addr@2.0.7:
     dependencies:
@@ -43013,7 +42996,7 @@ snapshots:
       abort-controller-x: 0.4.3
       graphql: 16.10.0
       graphql-request: 6.1.0(encoding@0.1.13)(graphql@16.10.0)
-      long: 5.2.4
+      long: 5.3.0
       nice-grpc: 2.1.10
       nice-grpc-client-middleware-retry: 3.1.9
       nice-grpc-common: 2.0.2

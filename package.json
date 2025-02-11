@@ -6,7 +6,6 @@
     "@changesets/cli": "^2.27.10",
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
     "@types/node": "^22.13.1",
-    "dotenv": "^16.3.1",
     "husky": "^9.1.4",
     "lint-staged": "^15.2.10",
     "npm-run-all": "^4.1.5",
