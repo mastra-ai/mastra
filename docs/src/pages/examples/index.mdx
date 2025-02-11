@@ -3,16 +3,15 @@ title: "Examples List: Workflows, Agents, RAG | Mastra Docs"
 description: "Explore practical examples of AI development with Mastra, including text generation, RAG implementations, structured outputs, and multi-modal interactions. Learn how to build AI applications using OpenAI, Anthropic, and Google Gemini."
 ---
 
-import { CardItems, CardItem } from "../../components/example-cards";
+import { CardItems, CardItem, CardTitle } from "../../components/example-cards";
+import { Tabs } from "nextra/components";
 
-# Examples List
+# Examples
 
 The Examples section is a short list of example projects demonstrating basic AI engineering with Mastra, including text generation, structured output, streaming responses, and retrieval‐augmented generation (RAG).
 
-<CardItems>
-  <CardItem
-    title="Agent"
-    links={[
+<CardItems titles={["Agent", "Workflow", "Memory", "RAG"]} items={
+  {Agent: [
       {
         title: "Agent with System Prompt",
         href: "/examples/agents/system-prompt",
@@ -37,11 +36,8 @@ The Examples section is a short list of example projects demonstrating basic AI 
         title: "Bird Checker",
         href: "/examples/agents/bird-checker",
       },
-    ]}
-  />
-  <CardItem
-    title="Workflow"
-    links={[
+    ],
+    Workflow: [
       {
         title: "Creating a Workflow",
         href: "/examples/workflows/creating-a-workflow",
@@ -65,11 +61,8 @@ The Examples section is a short list of example projects demonstrating basic AI 
         href: "/examples/workflows/suspend-and-resume",
       },
       { title: "Calling an Agent", href: "/examples/workflows/calling-agent" },
-    ]}
-  />
-  <CardItem
-    title="Memory"
-    links={[
+    ],
+    Memory:[
       {
         title: "Long-term Memory with LibSQL",
         href: "/examples/memory/memory-with-libsql",
@@ -90,14 +83,8 @@ The Examples section is a short list of example projects demonstrating basic AI 
         title: "Streaming Working Memory (advanced)",
         href: "/examples/memory/streaming-working-memory-advanced",
       },
-
-    ]}
-
-/>
-
-  <CardItem
-    title="RAG"
-    links={[
+    ],
+  RAG: [
       { title: "Chunk Text", href: "/examples/rag/chunk-text" },
       { title: "Chunk Markdown", href: "/examples/rag/chunk-markdown" },
       { title: "Chunk HTML", href: "/examples/rag/chunk-html" },
@@ -167,6 +154,7 @@ The Examples section is a short list of example projects demonstrating basic AI 
         href: "/examples/rag/cot-rag",
       },
       { title: "Graph RAG", href: "/examples/rag/graph-rag" },
-    ]}
-  />
+    ]
+}}>
+
 </CardItems>
