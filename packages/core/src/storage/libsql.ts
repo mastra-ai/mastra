@@ -378,9 +378,17 @@ export class DefaultStorage extends MastraStorage {
     }
   }
 
-  async getEvalsByAgentName(agentName: string): Promise<EvalRow[]> {
+  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
+    const baseQuery = `SELECT * FROM ${MastraStorage.TABLE_EVALS} WHERE meta->>'$.agentName' = ?`;
+    const typeCondition =
+      type === 'test'
+        ? " AND meta->>'$.testPath' IS NOT NULL"
+        : type === 'live'
+          ? " AND meta->>'$.testPath' IS NULL"
+          : '';
+
     const result = await this.client.execute({
-      sql: `SELECT * FROM ${MastraStorage.TABLE_EVALS} WHERE meta->>'$.agentName' = ? ORDER BY createdAt DESC`,
+      sql: `${baseQuery}${typeCondition} ORDER BY createdAt DESC`,
       args: [agentName],
     });
 
