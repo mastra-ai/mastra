@@ -55,7 +55,7 @@ type Variables = {
 
 export async function createHonoServer(
   mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; evalStore?: any; apiReqLogs?: boolean } = {},
+  options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean } = {},
 ) {
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -199,7 +199,7 @@ export async function createHonoServer(
         },
       },
     }),
-    getLiveEvalsByAgentIdHandler(options.evalStore),
+    getLiveEvalsByAgentIdHandler,
   );
 
   app.post(
@@ -1038,7 +1038,7 @@ export async function createHonoServer(
 
 export async function createNodeServer(
   mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; evalStore?: any; apiReqLogs?: boolean } = {},
+  options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean } = {},
 ) {
   const app = await createHonoServer(mastra, options);
   return serve(
