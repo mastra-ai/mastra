@@ -23,7 +23,7 @@ registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agen
 });
 
 registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
-  if (mastra.memory.storage) {
+  if (mastra?.memory?.storage) {
     await mastra.memory.storage.insert({
       tableName: MastraStorage.TABLE_EVALS,
       record: {
