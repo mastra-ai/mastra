@@ -3,6 +3,8 @@ title: "Retrieval, Semantic Search, Reranking | RAG | Mastra Docs"
 description: Guide on retrieval processes in Mastra's RAG systems, including semantic search, filtering, and re-ranking.
 ---
 
+import { Tabs } from "nextra/components";
+
 ## Retrieval in RAG Systems
 
 After storing embeddings, you need to retrieve relevant chunks to answer user queries. 
@@ -112,11 +114,19 @@ Common use cases for metadata filtering:
 - Combine multiple conditions for precise querying
 - Filter by document attributes (e.g., language, author)
 
-For an example of how to use the metadata filtering method, see the [Metadata Filtering](../../examples/rag/filter-rag.mdx) example.
+For an example of how to use metadata filtering, see the [Hybrid Vector Search](../../examples/rag/hybrid-vector-search.mdx) example.
 
 ### Vector Query Tool
 
 Sometimes you want to give your agent the ability to query a vector database directly. The Vector Query Tool allows your agent to be in charge of retrieval decisions, combining semantic search with optional filtering and reranking based on the agent's understanding of the user's needs.
+
+```ts showLineNumbers copy
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  model: openai.embedding('text-embedding-3-small'),
+});
+```
 
 When creating the tool, pay special attention to the tool's name and description - these help the agent understand when and how to use the retrieval capabilities. For example, you might name it "SearchKnowledgeBase" and describe it as "Search through our documentation to find relevant information about X topic."
 
@@ -126,6 +136,143 @@ This is particularly useful when:
 - You want the agent to combine multiple retrieval strategies based on context
 
 For detailed configuration options and advanced usage, see the [Vector Query Tool Reference](/docs/reference/tools/vector-query-tool).
+
+### Vector Store Prompts
+
+Vector store prompts define query patterns and filtering capabilities for each vector database implementation. 
+When implementing filtering, these prompts are required in the agent's instructions to specify valid operators and syntax for each vector store implementation.
+
+<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare']}>
+  <Tabs.Tab>
+  ```ts showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { PGVECTOR_PROMPT } from "@mastra/rag";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${PGVECTOR_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { PINECONE_PROMPT } from "@mastra/rag";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${PINECONE_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { QDRANT_PROMPT } from "@mastra/rag";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${QDRANT_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { CHROMA_PROMPT } from "@mastra/rag";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${CHROMA_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { ASTRA_PROMPT } from "@mastra/rag";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${ASTRA_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { LIBSQL_PROMPT } from "@mastra/rag";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${LIBSQL_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { UPSTASH_PROMPT } from "@mastra/rag";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${UPSTASH_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { VECTORIZE_PROMPT } from "@mastra/rag";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${VECTORIZE_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+</Tabs.Tab>
+</Tabs>
 
 ### Re-ranking
 

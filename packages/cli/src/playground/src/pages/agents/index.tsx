@@ -24,6 +24,7 @@ function Agents() {
                 <TableHead className="w-[50px]"></TableHead>
                 <TableHead className="text-mastra-el-3">Name</TableHead>
                 <TableHead className="text-mastra-el-3 w-1/2">Instruction</TableHead>
+                <TableHead className="text-mastra-el-3">Provider</TableHead>
                 <TableHead className="text-mastra-el-3">Model</TableHead>
                 <TableHead className="text-mastra-el-3">Action</TableHead>
               </TableRow>
@@ -56,7 +57,8 @@ function Agents() {
                     <TableCell className="truncate w-1/2 max-w-[500px] text-mastra-el-5">
                       {agent.instructions}
                     </TableCell>
-                    <TableCell className="text-mastra-el-5 text-sm">{agent.provider}</TableCell>
+                    <TableCell className="text-mastra-el-5 text-sm">{agent.provider?.toUpperCase()}</TableCell>
+                    <TableCell className="text-mastra-el-5 text-sm">{agent.modelId}</TableCell>
                     <TableCell className="text-mastra-el-5 text-sm">
                       <span
                         onClick={() => {
