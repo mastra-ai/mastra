@@ -11,7 +11,7 @@ import {
 } from 'ai';
 
 import { MastraBase } from '../base';
-import { MastraStorage, type StorageGetMessagesArg } from '../storage';
+import { MastraStorage, DefaultStorage, type StorageGetMessagesArg } from '../storage';
 import { deepMerge } from '../utils';
 import { MastraVector } from '../vector';
 
