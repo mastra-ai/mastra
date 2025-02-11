@@ -1,10 +1,10 @@
 import { Mastra } from '@mastra/core';
-import { ToneConsistencyMetric } from '@mastra/evals/nlp';
 
-import { catOne } from './agents/agent';
+import { catOne, agentTwo } from './agents/agent';
+import { logCatWorkflow } from './workflow';
 
 export const mastra = new Mastra({
-  agents: { catOne },
+  agents: { catOne, agentTwo },
   logger: false,
-  metrics: [new ToneConsistencyMetric()],
+  workflows: { logCatWorkflow },
 });
