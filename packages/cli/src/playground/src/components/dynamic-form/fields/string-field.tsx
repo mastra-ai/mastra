@@ -23,6 +23,7 @@ export function StringField({ name, control, handleFieldChange, isMultiline, pla
       render={({ field }) => (
         <Component
           {...field}
+          className="w-full"
           placeholder={placeholder}
           onChange={e => {
             field.onChange(e);

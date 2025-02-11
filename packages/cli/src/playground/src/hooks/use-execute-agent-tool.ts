@@ -11,7 +11,7 @@ export const useExecuteTool = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(input),
+        body: JSON.stringify({ data: input }),
       });
 
       if (!response.ok) {
