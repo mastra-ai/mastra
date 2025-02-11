@@ -222,8 +222,8 @@ export abstract class MastraStorage extends MastraBase {
         events: { type: 'jsonb', nullable: true },
         links: { type: 'jsonb', nullable: true },
         other: { type: 'text', nullable: true },
-        startTime: { type: 'timestamp', nullable: false },
-        endTime: { type: 'timestamp', nullable: false },
+        startTime: { type: 'bigint', nullable: false },
+        endTime: { type: 'bigint', nullable: false },
         createdAt: { type: 'timestamp', nullable: false },
       },
     });
