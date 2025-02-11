@@ -103,7 +103,7 @@ function resolveSchemaComponent({
 
   if (schema instanceof z.ZodObject) {
     return (
-      <div key={parentField} className="flex flex-col gap-8 py-8">
+      <div key={parentField} className="flex flex-col gap-8 py-8 w-full">
         <ObjectField
           schema={schema}
           control={control}
@@ -176,7 +176,7 @@ function resolveSchemaComponent({
   }
 
   return (
-    <div key={parentField}>
+    <div key={parentField} className="w-full">
       {schemaToFormFieldRenderer({
         schema,
         schemaField: parentField,
