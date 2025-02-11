@@ -119,6 +119,8 @@ The extraction process includes:
 ## Example with Analysis
 
 ```typescript
+import { CompletenessMetric } from "@mastra/evals/nlp";
+
 const metric = new CompletenessMetric();
 
 const result = await metric.measure(
@@ -143,3 +145,4 @@ const result = await metric.measure(
 - [Answer Relevancy Metric](./answer-relevancy)
 - [Content Similarity Metric](./content-similarity)
 - [Textual Difference Metric](./textual-difference) 
+- [Keyword Coverage Metric](./keyword-coverage)

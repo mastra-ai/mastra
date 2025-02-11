@@ -5,7 +5,7 @@ description: Documentation for the Faithfulness Metric in Mastra, which evaluate
 
 # FaithfulnessMetric Reference
 
-The `FaithfulnessMetric` in Mastra evaluates how factually accurate an LLM's output is compared to the provided context. It extracts claims from the output and verifies them against the context, making it essential for measuring the reliability of RAG pipeline responses.
+The `FaithfulnessMetric` in Mastra evaluates how factually accurate an LLM's output is compared to the provided context. It extracts claims from the output and verifies them against the context, making it essential to measure RAG pipeline responses' reliability.
 
 ## Basic Usage
 
@@ -38,7 +38,7 @@ console.log(result.info.reason); // "All claims are supported by the context."
   content={[
     {
       name: "model",
-      type: "ModelConfig",
+      type: "LanguageModel",
       description: "Configuration for the model used to evaluate faithfulness.",
       isOptional: false,
     },
@@ -145,11 +145,17 @@ Score interpretation:
 - 0.67: Two-thirds of claims are supported
 - 0.5: Half of the claims are supported
 - 0.33: One-third of claims are supported
-- 0: No claims are supported or output is empty
+- 0: No claims are supported or the output is empty
 
 ## Advanced Example
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+import { FaithfulnessMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
 const metric = new FaithfulnessMetric(model, {
   context: [
     "The company had 100 employees in 2020.",
@@ -178,4 +184,5 @@ const result = await metric.measure(
 ### Related
 
 - [Answer Relevancy Metric](./answer-relevancy)
-- [Context Precision Metric](./context-precision)
+- [Hallucination Metric](./hallucination)
+- [Context Relevancy Metric](./context-relevancy)

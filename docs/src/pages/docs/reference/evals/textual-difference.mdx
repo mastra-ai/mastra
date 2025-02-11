@@ -5,7 +5,7 @@ description: Documentation for the Textual Difference Metric in Mastra, which me
 
 # TextualDifferenceMetric
 
-The `TextualDifferenceMetric` class measures the textual differences between two strings using sequence matching. It provides detailed information about changes, including the number of operations needed to transform one text into another.
+The `TextualDifferenceMetric` class uses sequence matching to measure the textual differences between two strings. It provides detailed information about changes, including the number of operations needed to transform one text into another.
 
 ## Basic Usage
 
@@ -110,13 +110,15 @@ The metric calculates several measures:
 
 The scoring process:
 1. Performs sequence matching between input and output
-2. Counts number of change operations required
+2. Counts the number of change operations required
 3. Calculates length-based confidence
 4. Returns detailed metrics for analysis
 
 ## Example with Analysis
 
 ```typescript
+import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+
 const metric = new TextualDifferenceMetric();
 
 const result = await metric.measure(
@@ -140,4 +142,4 @@ const result = await metric.measure(
 
 - [Content Similarity Metric](./content-similarity)
 - [Completeness Metric](./completeness)
-- [Answer Relevancy Metric](./answer-relevancy) 
+- [Keyword Coverage Metric](./keyword-coverage)

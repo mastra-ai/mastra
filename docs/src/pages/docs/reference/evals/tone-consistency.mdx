@@ -5,7 +5,7 @@ description: Documentation for the Tone Consistency Metric in Mastra, which eval
 
 # ToneConsistencyMetric
 
-The `ToneConsistencyMetric` class evaluates the emotional tone and sentiment consistency in text. It can operate in two modes: comparing tone between input/output pairs, or analyzing tone stability within a single text.
+The `ToneConsistencyMetric` class evaluates the text's emotional tone and sentiment consistency.  It can operate in two modes: comparing tone between input/output pairs or analyzing tone stability within a single text.
 
 ## Basic Usage
 
@@ -111,17 +111,19 @@ console.log(result2.score); // Tone stability score from 0-1
 When both input and output are provided:
 - Compares sentiment between the two texts
 - Calculates sentiment difference
-- Higher score indicates more consistent tone
+- Higher score indicates a more consistent tone
 
 ### 2. Tone Stability (single input)
 When output is empty:
 - Analyzes sentiment stability across sentences
 - Calculates variance in sentiment
-- Higher score indicates more stable tone
+- Higher score indicates a more stable tone
 
 ## Example with Both Modes
 
 ```typescript
+import { ToneConsistencyMetric } from "@mastra/evals/nlp";
+
 const metric = new ToneConsistencyMetric();
 
 // Tone Consistency Mode
@@ -156,6 +158,5 @@ const stabilityResult = await metric.measure(
 
 ## Related
 
-- [Answer Relevancy Metric](./answer-relevancy)
 - [Content Similarity Metric](./content-similarity)
-- [Completeness Metric](./completeness) 
+- [Toxicity Metric](./toxicity)

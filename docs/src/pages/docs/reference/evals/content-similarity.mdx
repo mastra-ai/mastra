@@ -118,6 +118,8 @@ The metric processes text in the following ways when configured:
 ## Example with Different Options
 
 ```typescript
+import { ContentSimilarityMetric } from "@mastra/evals/nlp";
+
 // Case-sensitive comparison
 const caseSensitiveMetric = new ContentSimilarityMetric({
   ignoreCase: false,
@@ -158,3 +160,4 @@ const result2 = await strictWhitespaceMetric.measure(
 - [Completeness Metric](./completeness)
 - [Textual Difference Metric](./textual-difference) 
 - [Answer Relevancy Metric](./answer-relevancy)
+- [Keyword Coverage Metric](./keyword-coverage)

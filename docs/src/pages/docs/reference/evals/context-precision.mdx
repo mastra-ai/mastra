@@ -39,7 +39,7 @@ console.log(result.info.reason); // Explanation of the score
   content={[
     {
       name: "model",
-      type: "ModelConfig",
+      type: "LanguageModel",
       description:
         "Configuration for the model used to evaluate context relevance",
       isOptional: false,
@@ -134,7 +134,7 @@ The final score is calculated using Mean Average Precision (MAP):
 
 1. Converts verdicts to binary scores (1 for relevant, 0 for not)
 2. Calculates precision at each position
-3. Weights earlier positions more heavily
+3. Weight earlier positions more heavily
 4. Normalizes to the configured scale (default 0-1)
 
 Score interpretation:
@@ -148,6 +148,12 @@ Score interpretation:
 ## Example with Analysis
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+import { ContextPrecisionMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
 const metric = new ContextPrecisionMetric(model, {
   context: [
     "Exercise strengthens the heart and improves blood circulation.",
@@ -179,3 +185,4 @@ const result = await metric.measure(
 - [Answer Relevancy Metric](./answer-relevancy)
 - [Context Position Metric](./context-position)
 - [Completeness Metric](./completeness)
+- [Context Relevancy Metric](./context-relevancy)
