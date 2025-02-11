@@ -64,6 +64,7 @@ export class DefaultStorage extends MastraStorage {
       let type = col.type.toUpperCase();
       if (type === 'TEXT') type = 'TEXT';
       if (type === 'TIMESTAMP') type = 'TEXT'; // Store timestamps as ISO strings
+      // if (type === 'BIGINT') type = 'INTEGER';
 
       const nullable = col.nullable ? '' : 'NOT NULL';
       const primaryKey = col.primaryKey ? 'PRIMARY KEY' : '';
