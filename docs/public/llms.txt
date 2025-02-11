@@ -3,164 +3,164 @@ Combined MDX Documentation
 Total files processed: 152
 
 Files included:
-- src\pages\docs\08-running-evals.mdx
-- src\pages\docs\agents\00-overview.mdx
-- src\pages\docs\agents\01-agent-memory.mdx
-- src\pages\docs\agents\02-adding-tools.mdx
-- src\pages\docs\deployment\deployment.mdx
-- src\pages\docs\deployment\logging-and-tracing.mdx
-- src\pages\docs\getting-started\installation.mdx
-- src\pages\docs\getting-started\project-structure.mdx
-- src\pages\docs\guides\01-chef-michel.mdx
-- src\pages\docs\guides\02-stock-agent.mdx
-- src\pages\docs\guides\03-recruiter.mdx
-- src\pages\docs\index.mdx
-- src\pages\docs\local-dev\integrations.mdx
-- src\pages\docs\local-dev\mastra-dev.mdx
-- src\pages\docs\local-dev\mastra-init.mdx
-- src\pages\docs\rag\chunking-and-embedding.mdx
-- src\pages\docs\rag\overview.mdx
-- src\pages\docs\rag\retrieval.mdx
-- src\pages\docs\rag\vector-databases.mdx
-- src\pages\docs\reference\agents\createTool.mdx
-- src\pages\docs\reference\agents\generate.mdx
-- src\pages\docs\reference\agents\getAgent.mdx
-- src\pages\docs\reference\agents\stream.mdx
-- src\pages\docs\reference\cli\deploy.mdx
-- src\pages\docs\reference\cli\dev.mdx
-- src\pages\docs\reference\cli\init.mdx
-- src\pages\docs\reference\core\mastra-class.mdx
-- src\pages\docs\reference\evals\answer-relevancy.mdx
-- src\pages\docs\reference\evals\bias.mdx
-- src\pages\docs\reference\evals\completeness.mdx
-- src\pages\docs\reference\evals\content-similarity.mdx
-- src\pages\docs\reference\evals\context-position.mdx
-- src\pages\docs\reference\evals\context-precision.mdx
-- src\pages\docs\reference\evals\context-relevancy.mdx
-- src\pages\docs\reference\evals\contextual-recall.mdx
-- src\pages\docs\reference\evals\faithfulness.mdx
-- src\pages\docs\reference\evals\hallucination.mdx
-- src\pages\docs\reference\evals\keyword-coverage.mdx
-- src\pages\docs\reference\evals\prompt-alignment.mdx
-- src\pages\docs\reference\evals\summarization.mdx
-- src\pages\docs\reference\evals\textual-difference.mdx
-- src\pages\docs\reference\evals\tone-consistency.mdx
-- src\pages\docs\reference\evals\toxicity.mdx
-- src\pages\docs\reference\memory\createThread.mdx
-- src\pages\docs\reference\memory\getThreadById.mdx
-- src\pages\docs\reference\memory\getThreadsByResourceId.mdx
-- src\pages\docs\reference\memory\Memory.mdx
-- src\pages\docs\reference\memory\query.mdx
-- src\pages\docs\reference\observability\create-logger.mdx
-- src\pages\docs\reference\observability\logger.mdx
-- src\pages\docs\reference\observability\otel-config.mdx
-- src\pages\docs\reference\observability\providers\braintrust.mdx
-- src\pages\docs\reference\observability\providers\index.mdx
-- src\pages\docs\reference\observability\providers\laminar.mdx
-- src\pages\docs\reference\observability\providers\langfuse.mdx
-- src\pages\docs\reference\observability\providers\langsmith.mdx
-- src\pages\docs\reference\observability\providers\langwatch.mdx
-- src\pages\docs\reference\observability\providers\new-relic.mdx
-- src\pages\docs\reference\observability\providers\signoz.mdx
-- src\pages\docs\reference\observability\providers\traceloop.mdx
-- src\pages\docs\reference\rag\astra.mdx
-- src\pages\docs\reference\rag\chroma.mdx
-- src\pages\docs\reference\rag\chunk.mdx
-- src\pages\docs\reference\rag\default.mdx
-- src\pages\docs\reference\rag\document.mdx
-- src\pages\docs\reference\rag\embeddings.mdx
-- src\pages\docs\reference\rag\extract-params.mdx
-- src\pages\docs\reference\rag\graph-rag.mdx
-- src\pages\docs\reference\rag\metadata-filters.mdx
-- src\pages\docs\reference\rag\pg.mdx
-- src\pages\docs\reference\rag\pinecone.mdx
-- src\pages\docs\reference\rag\qdrant.mdx
-- src\pages\docs\reference\rag\rerank.mdx
-- src\pages\docs\reference\rag\upstash.mdx
-- src\pages\docs\reference\rag\vectorize.mdx
-- src\pages\docs\reference\storage\libsql.mdx
-- src\pages\docs\reference\storage\postgresql.mdx
-- src\pages\docs\reference\storage\upstash.mdx
-- src\pages\docs\reference\tools\client.mdx
-- src\pages\docs\reference\tools\document-chunker-tool.mdx
-- src\pages\docs\reference\tools\graph-rag-tool.mdx
-- src\pages\docs\reference\tools\vector-query-tool.mdx
-- src\pages\docs\reference\tts\generate.mdx
-- src\pages\docs\reference\tts\providers-and-models.mdx
-- src\pages\docs\reference\tts\stream.mdx
-- src\pages\docs\reference\workflows\after.mdx
-- src\pages\docs\reference\workflows\commit.mdx
-- src\pages\docs\reference\workflows\createRun.mdx
-- src\pages\docs\reference\workflows\execute.mdx
-- src\pages\docs\reference\workflows\resume.mdx
-- src\pages\docs\reference\workflows\start.mdx
-- src\pages\docs\reference\workflows\step-class.mdx
-- src\pages\docs\reference\workflows\step-condition.mdx
-- src\pages\docs\reference\workflows\step-function.mdx
-- src\pages\docs\reference\workflows\step-options.mdx
-- src\pages\docs\reference\workflows\suspend.mdx
-- src\pages\docs\reference\workflows\then.mdx
-- src\pages\docs\reference\workflows\watch.mdx
-- src\pages\docs\reference\workflows\workflow.mdx
-- src\pages\docs\workflows\00-overview.mdx
-- src\pages\docs\workflows\control-flow.mdx
-- src\pages\docs\workflows\steps.mdx
-- src\pages\docs\workflows\suspend-and-resume.mdx
-- src\pages\examples\agents\agentic-workflows.mdx
-- src\pages\examples\agents\bird-checker.mdx
-- src\pages\examples\agents\hierarchical-multi-agent.mdx
-- src\pages\examples\agents\multi-agent-workflow.mdx
-- src\pages\examples\agents\system-prompt.mdx
-- src\pages\examples\agents\using-a-tool.mdx
-- src\pages\examples\index.mdx
-- src\pages\examples\memory\memory-with-libsql.mdx
-- src\pages\examples\memory\memory-with-pg.mdx
-- src\pages\examples\memory\memory-with-upstash.mdx
-- src\pages\examples\memory\streaming-working-memory-advanced.mdx
-- src\pages\examples\memory\streaming-working-memory.mdx
-- src\pages\examples\rag\adjust-chunk-delimiters.mdx
-- src\pages\examples\rag\adjust-chunk-size.mdx
-- src\pages\examples\rag\basic-rag.mdx
-- src\pages\examples\rag\chunk-html.mdx
-- src\pages\examples\rag\chunk-json.mdx
-- src\pages\examples\rag\chunk-markdown.mdx
-- src\pages\examples\rag\chunk-text.mdx
-- src\pages\examples\rag\cleanup-rag.mdx
-- src\pages\examples\rag\cot-rag.mdx
-- src\pages\examples\rag\cot-workflow-rag.mdx
-- src\pages\examples\rag\embed-chunk-array.mdx
-- src\pages\examples\rag\embed-text-chunk.mdx
-- src\pages\examples\rag\embed-text-with-cohere.mdx
-- src\pages\examples\rag\filter-rag.mdx
-- src\pages\examples\rag\graph-rag.mdx
-- src\pages\examples\rag\hybrid-vector-search.mdx
-- src\pages\examples\rag\insert-embedding-in-astra.mdx
-- src\pages\examples\rag\insert-embedding-in-chroma.mdx
-- src\pages\examples\rag\insert-embedding-in-libsql.mdx
-- src\pages\examples\rag\insert-embedding-in-pgvector.mdx
-- src\pages\examples\rag\insert-embedding-in-pinecone.mdx
-- src\pages\examples\rag\insert-embedding-in-qdrant.mdx
-- src\pages\examples\rag\insert-embedding-in-upstash.mdx
-- src\pages\examples\rag\insert-embedding-in-vectorize.mdx
-- src\pages\examples\rag\metadata-extraction.mdx
-- src\pages\examples\rag\rerank-rag.mdx
-- src\pages\examples\rag\reranking-with-cohere.mdx
-- src\pages\examples\rag\retrieve-results.mdx
-- src\pages\examples\workflows\branching-paths.mdx
-- src\pages\examples\workflows\calling-agent.mdx
-- src\pages\examples\workflows\creating-a-workflow.mdx
-- src\pages\examples\workflows\cyclical-dependencies.mdx
-- src\pages\examples\workflows\parallel-steps.mdx
-- src\pages\examples\workflows\sequential-steps.mdx
-- src\pages\examples\workflows\suspend-and-resume.mdx
-- src\pages\examples\workflows\using-a-tool-as-a-step.mdx
-- src\pages\showcase\index.mdx
+- src/pages/docs/08-running-evals.mdx
+- src/pages/docs/agents/00-overview.mdx
+- src/pages/docs/agents/01-agent-memory.mdx
+- src/pages/docs/agents/02-adding-tools.mdx
+- src/pages/docs/deployment/deployment.mdx
+- src/pages/docs/deployment/logging-and-tracing.mdx
+- src/pages/docs/getting-started/installation.mdx
+- src/pages/docs/getting-started/project-structure.mdx
+- src/pages/docs/guides/01-chef-michel.mdx
+- src/pages/docs/guides/02-stock-agent.mdx
+- src/pages/docs/guides/03-recruiter.mdx
+- src/pages/docs/index.mdx
+- src/pages/docs/local-dev/integrations.mdx
+- src/pages/docs/local-dev/mastra-dev.mdx
+- src/pages/docs/local-dev/mastra-init.mdx
+- src/pages/docs/rag/chunking-and-embedding.mdx
+- src/pages/docs/rag/overview.mdx
+- src/pages/docs/rag/retrieval.mdx
+- src/pages/docs/rag/vector-databases.mdx
+- src/pages/docs/reference/agents/createTool.mdx
+- src/pages/docs/reference/agents/generate.mdx
+- src/pages/docs/reference/agents/getAgent.mdx
+- src/pages/docs/reference/agents/stream.mdx
+- src/pages/docs/reference/cli/deploy.mdx
+- src/pages/docs/reference/cli/dev.mdx
+- src/pages/docs/reference/cli/init.mdx
+- src/pages/docs/reference/core/mastra-class.mdx
+- src/pages/docs/reference/evals/answer-relevancy.mdx
+- src/pages/docs/reference/evals/bias.mdx
+- src/pages/docs/reference/evals/completeness.mdx
+- src/pages/docs/reference/evals/content-similarity.mdx
+- src/pages/docs/reference/evals/context-position.mdx
+- src/pages/docs/reference/evals/context-precision.mdx
+- src/pages/docs/reference/evals/context-relevancy.mdx
+- src/pages/docs/reference/evals/contextual-recall.mdx
+- src/pages/docs/reference/evals/faithfulness.mdx
+- src/pages/docs/reference/evals/hallucination.mdx
+- src/pages/docs/reference/evals/keyword-coverage.mdx
+- src/pages/docs/reference/evals/prompt-alignment.mdx
+- src/pages/docs/reference/evals/summarization.mdx
+- src/pages/docs/reference/evals/textual-difference.mdx
+- src/pages/docs/reference/evals/tone-consistency.mdx
+- src/pages/docs/reference/evals/toxicity.mdx
+- src/pages/docs/reference/memory/Memory.mdx
+- src/pages/docs/reference/memory/createThread.mdx
+- src/pages/docs/reference/memory/getThreadById.mdx
+- src/pages/docs/reference/memory/getThreadsByResourceId.mdx
+- src/pages/docs/reference/memory/query.mdx
+- src/pages/docs/reference/observability/create-logger.mdx
+- src/pages/docs/reference/observability/logger.mdx
+- src/pages/docs/reference/observability/otel-config.mdx
+- src/pages/docs/reference/observability/providers/braintrust.mdx
+- src/pages/docs/reference/observability/providers/index.mdx
+- src/pages/docs/reference/observability/providers/laminar.mdx
+- src/pages/docs/reference/observability/providers/langfuse.mdx
+- src/pages/docs/reference/observability/providers/langsmith.mdx
+- src/pages/docs/reference/observability/providers/langwatch.mdx
+- src/pages/docs/reference/observability/providers/new-relic.mdx
+- src/pages/docs/reference/observability/providers/signoz.mdx
+- src/pages/docs/reference/observability/providers/traceloop.mdx
+- src/pages/docs/reference/rag/astra.mdx
+- src/pages/docs/reference/rag/chroma.mdx
+- src/pages/docs/reference/rag/chunk.mdx
+- src/pages/docs/reference/rag/default.mdx
+- src/pages/docs/reference/rag/document.mdx
+- src/pages/docs/reference/rag/embeddings.mdx
+- src/pages/docs/reference/rag/extract-params.mdx
+- src/pages/docs/reference/rag/graph-rag.mdx
+- src/pages/docs/reference/rag/metadata-filters.mdx
+- src/pages/docs/reference/rag/pg.mdx
+- src/pages/docs/reference/rag/pinecone.mdx
+- src/pages/docs/reference/rag/qdrant.mdx
+- src/pages/docs/reference/rag/rerank.mdx
+- src/pages/docs/reference/rag/upstash.mdx
+- src/pages/docs/reference/rag/vectorize.mdx
+- src/pages/docs/reference/storage/libsql.mdx
+- src/pages/docs/reference/storage/postgresql.mdx
+- src/pages/docs/reference/storage/upstash.mdx
+- src/pages/docs/reference/tools/client.mdx
+- src/pages/docs/reference/tools/document-chunker-tool.mdx
+- src/pages/docs/reference/tools/graph-rag-tool.mdx
+- src/pages/docs/reference/tools/vector-query-tool.mdx
+- src/pages/docs/reference/tts/generate.mdx
+- src/pages/docs/reference/tts/providers-and-models.mdx
+- src/pages/docs/reference/tts/stream.mdx
+- src/pages/docs/reference/workflows/after.mdx
+- src/pages/docs/reference/workflows/commit.mdx
+- src/pages/docs/reference/workflows/createRun.mdx
+- src/pages/docs/reference/workflows/execute.mdx
+- src/pages/docs/reference/workflows/resume.mdx
+- src/pages/docs/reference/workflows/start.mdx
+- src/pages/docs/reference/workflows/step-class.mdx
+- src/pages/docs/reference/workflows/step-condition.mdx
+- src/pages/docs/reference/workflows/step-function.mdx
+- src/pages/docs/reference/workflows/step-options.mdx
+- src/pages/docs/reference/workflows/suspend.mdx
+- src/pages/docs/reference/workflows/then.mdx
+- src/pages/docs/reference/workflows/watch.mdx
+- src/pages/docs/reference/workflows/workflow.mdx
+- src/pages/docs/workflows/00-overview.mdx
+- src/pages/docs/workflows/control-flow.mdx
+- src/pages/docs/workflows/steps.mdx
+- src/pages/docs/workflows/suspend-and-resume.mdx
+- src/pages/examples/agents/agentic-workflows.mdx
+- src/pages/examples/agents/bird-checker.mdx
+- src/pages/examples/agents/hierarchical-multi-agent.mdx
+- src/pages/examples/agents/multi-agent-workflow.mdx
+- src/pages/examples/agents/system-prompt.mdx
+- src/pages/examples/agents/using-a-tool.mdx
+- src/pages/examples/index.mdx
+- src/pages/examples/memory/memory-with-libsql.mdx
+- src/pages/examples/memory/memory-with-pg.mdx
+- src/pages/examples/memory/memory-with-upstash.mdx
+- src/pages/examples/memory/streaming-working-memory-advanced.mdx
+- src/pages/examples/memory/streaming-working-memory.mdx
+- src/pages/examples/rag/adjust-chunk-delimiters.mdx
+- src/pages/examples/rag/adjust-chunk-size.mdx
+- src/pages/examples/rag/basic-rag.mdx
+- src/pages/examples/rag/chunk-html.mdx
+- src/pages/examples/rag/chunk-json.mdx
+- src/pages/examples/rag/chunk-markdown.mdx
+- src/pages/examples/rag/chunk-text.mdx
+- src/pages/examples/rag/cleanup-rag.mdx
+- src/pages/examples/rag/cot-rag.mdx
+- src/pages/examples/rag/cot-workflow-rag.mdx
+- src/pages/examples/rag/embed-chunk-array.mdx
+- src/pages/examples/rag/embed-text-chunk.mdx
+- src/pages/examples/rag/embed-text-with-cohere.mdx
+- src/pages/examples/rag/filter-rag.mdx
+- src/pages/examples/rag/graph-rag.mdx
+- src/pages/examples/rag/hybrid-vector-search.mdx
+- src/pages/examples/rag/insert-embedding-in-astra.mdx
+- src/pages/examples/rag/insert-embedding-in-chroma.mdx
+- src/pages/examples/rag/insert-embedding-in-libsql.mdx
+- src/pages/examples/rag/insert-embedding-in-pgvector.mdx
+- src/pages/examples/rag/insert-embedding-in-pinecone.mdx
+- src/pages/examples/rag/insert-embedding-in-qdrant.mdx
+- src/pages/examples/rag/insert-embedding-in-upstash.mdx
+- src/pages/examples/rag/insert-embedding-in-vectorize.mdx
+- src/pages/examples/rag/metadata-extraction.mdx
+- src/pages/examples/rag/rerank-rag.mdx
+- src/pages/examples/rag/reranking-with-cohere.mdx
+- src/pages/examples/rag/retrieve-results.mdx
+- src/pages/examples/workflows/branching-paths.mdx
+- src/pages/examples/workflows/calling-agent.mdx
+- src/pages/examples/workflows/creating-a-workflow.mdx
+- src/pages/examples/workflows/cyclical-dependencies.mdx
+- src/pages/examples/workflows/parallel-steps.mdx
+- src/pages/examples/workflows/sequential-steps.mdx
+- src/pages/examples/workflows/suspend-and-resume.mdx
+- src/pages/examples/workflows/using-a-tool-as-a-step.mdx
+- src/pages/showcase/index.mdx
 
 ================================================================================
 
 
 ================================================================================
-Source: src\pages\docs\08-running-evals.mdx
+Source: src/pages/docs/08-running-evals.mdx
 ================================================================================
 
 ---
@@ -200,7 +200,7 @@ Mastra provides several eval metrics for assessing LLM outputs:
 
 
 ================================================================================
-Source: src\pages\docs\agents\00-overview.mdx
+Source: src/pages/docs/agents/00-overview.mdx
 ================================================================================
 
 ---
@@ -391,7 +391,7 @@ curl -X POST http://localhost:4111/api/agents/myAgent/generate \
 
 
 ================================================================================
-Source: src\pages\docs\agents\01-agent-memory.mdx
+Source: src/pages/docs/agents/01-agent-memory.mdx
 ================================================================================
 
 ---
@@ -403,51 +403,39 @@ description: Documentation on how agents in Mastra use memory to store conversat
 
 Agents in Mastra have a sophisticated memory system that stores conversation history and contextual information. This memory system supports both traditional message storage and vector-based semantic search, enabling agents to maintain state across interactions and retrieve relevant historical context.
 
-## Threads and Resources
+## How Memory Works
 
-In Mastra, you can organize conversations by a `thread_id`. This allows the system to maintain context and retrieve historical messages that belong to the same discussion.
-
-Mastra also supports the concept of a `resource_id`, which typically represents the user involved in the conversation, ensuring that the agent’s memory and context are correctly associated with the right entity.
-
-This separation allows you to manage multiple conversations (threads) for a single user or even share conversation context across users if needed.
-
-```typescript copy showLineNumbers
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-
-const agent = new Agent({
-  name: "Project Manager",
-  instructions: "You are a project manager. You are responsible for managing the project and the team.",
-  model: openai("gpt-4o-mini"),
-});
-
-await agent.stream("When will the project be completed?", {
-  threadId: "project_123",
-  resourceId: "user_123",
-});
-```
-
-## Managing Conversation Context
-
-The key to getting good responses from LLMs is feeding them the right context.
-
-Mastra has a Memory API that stores and manages conversation history and contextual information. The Memory API uses a storage backend to persist conversation history and contextual information (more on this later). 
-
-The Memory API uses two main mechanisms to maintain context in conversations, recent message history and semantic search.
+The Memory API uses two main mechanisms to maintain context in conversations:
 
 ### Recent Message History
 
 The `lastMessages` setting maintains a sliding window of the most recent messages. This ensures your agent always has access to the immediate conversation context:
 
-```typescript copy showLineNumbers
+```tsx
 const memory = new Memory({
   options: {
-    lastMessages: 5, // Keep 5 most recent messages
+    lastMessages: 1, // Keep 1 most recent messages
   },
 });
 
-// When user asks this question, the agent will see the last 10 messages,
+// Example conversation flow:
+// 1. User asks about project timeline
+await agent.stream("When will the project be completed?", {
+  threadId: "project_123",
+  resourceId: "user_123",
+});
+
+// 2. User asks about specific feature
+await agent.stream("How will the new search feature work?", {
+  threadId: "project_123",
+  resourceId: "user_123",
+});
+
+// 3. When user asks this question, the agent will see the last 10 messages,
+// allowing them to remember the conversation further back than the default we set above (lastMessages: 1)
 await agent.stream("Can you summarize the search feature requirements?", {
+  threadId: "project_123",
+  resourceId: "user_123",
   memoryOptions: {
     lastMessages: 10,
   },
@@ -458,7 +446,7 @@ await agent.stream("Can you summarize the search feature requirements?", {
 
 When vector search is enabled, Memory can find relevant past messages using semantic similarity. This allows your agent to recall information from earlier in the conversation:
 
-```typescript copy showLineNumbers
+```tsx
 const memory = new Memory({
   options: {
     semanticRecall: {
@@ -470,6 +458,8 @@ const memory = new Memory({
 
 // Example: User asks about a past feature discussion
 await agent.stream("What did we decide about the search feature last week?", {
+  threadId: "support_123",
+  resourceId: "user_123",
   memoryOptions: {
     lastMessages: 10,
     semanticRecall: {
@@ -488,7 +478,7 @@ await agent.stream("What did we decide about the search feature last week?", {
 
 The Mastra memory system is highly configurable and supports multiple storage backends. Here's a basic configuration example:
 
-```typescript copy showLineNumbers
+```typescript
 import { openai } from "@ai-sdk/openai";
 import { Memory } from "@mastra/memory";
 import { PostgresStore, PgVector } from "@mastra/pg";
@@ -526,7 +516,7 @@ const memory = new Memory({
 
 When you initialize a Mastra instance with memory configuration, all agents will automatically use these memory settings when you call their `stream()` or `generate()` methods. You can override these default settings for individual calls:
 
-```typescript copy showLineNumbers
+```typescript
 // Use default memory settings from Memory configuration
 const response1 = await agent.generate("What were we discussing earlier?", {
   resourceId: "user_123",
@@ -551,14 +541,14 @@ const response2 = await agent.generate("What were we discussing earlier?", {
 
 You can adjust memory settings based on your agent's needs:
 
-```typescript copy showLineNumbers
+```tsx
 // Customer support agent with minimal context
 await agent.stream("What are your store hours?", {
   threadId,
   resourceId,
   memoryOptions: {
     lastMessages: 5, // Quick responses need minimal conversation history
-    semanticRecall: false, // no need to search through earlier messages
+    historySearch: false, // no need to search through earlier messages
   },
 });
 
@@ -582,7 +572,7 @@ Mastra currently supports several storage backends:
 
 ### LibSQL Storage
 
-```typescript copy showLineNumbers
+```typescript
 import { DefaultStorage } from "@mastra/core/storage";
 
 const storage = new DefaultStorage({
@@ -594,7 +584,7 @@ const storage = new DefaultStorage({
 
 ### PostgreSQL Storage
 
-```typescript copy showLineNumbers
+```typescript
 import { PostgresStore } from "@mastra/pg";
 
 const storage = new PostgresStore({
@@ -608,7 +598,7 @@ const storage = new PostgresStore({
 
 ### Upstash KV Storage
 
-```typescript copy showLineNumbers
+```typescript
 import { UpstashStore } from "@mastra/upstash";
 
 const storage = new UpstashStore({
@@ -623,7 +613,7 @@ Mastra supports semantic search through vector embeddings. When configured with 
 
 1. Configure a vector store (currently supports PostgreSQL):
 
-```typescript copy showLineNumbers
+```typescript
 import { PgVector } from "@mastra/pg";
 
 const vector = new PgVector(connectionString);
@@ -633,7 +623,7 @@ const memory = new Memory({ vector });
 
 2. Configure embedding options:
 
-```typescript copy showLineNumbers
+```typescript
 const memory = new Memory({
   vector,
   embedder: openai.embedding("text-embedding-3-small"),
@@ -642,13 +632,13 @@ const memory = new Memory({
 
 3. Enable vector search in memory configuration options:
 
-```typescript copy showLineNumbers
+```typescript
 const memory = new Memory({
   vector,
   embedder,
 
   options: {
-    semanticRecall: {
+    historySearch: {
       topK: 3, // Number of similar messages to find
       messageRange: 2, // Context around each result
     },
@@ -660,7 +650,7 @@ const memory = new Memory({
 
 Once configured, the memory system is automatically used by agents. Here's how to use it:
 
-```typescript copy showLineNumbers
+```typescript
 // Initialize Mastra with memory
 const mastra = new Mastra({
   agents: { myAgent },
@@ -695,7 +685,7 @@ While threads are automatically managed when using agent methods, you can also m
 
 Here's how to manually work with threads:
 
-```typescript copy showLineNumbers
+```typescript
 import { Memory } from "@mastra/memory";
 import { PostgresStore } from "@mastra/pg";
 
@@ -800,7 +790,7 @@ The agent is instructed to be proactive about storing information - if there's a
 
 #### Basic Usage
 
-```typescript copy showLineNumbers
+```typescript
 import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
@@ -823,7 +813,7 @@ const agent = new Agent({
 
 Working memory becomes particularly powerful when combined with specialized system prompts. For example, you could create a TODO list manager that maintains state even though it only has access to the previous message:
 
-```typescript copy showLineNumbers
+```typescript
 const todoAgent = new Agent({
   name: "TODO Manager",
   instructions:
@@ -853,14 +843,14 @@ const todoAgent = new Agent({
 
 When an agent responds, it includes working memory updates directly in its response stream. These updates appear as XML blocks in the text:
 
-```typescript copy showLineNumbers
+```
 // Raw agent response stream:
 Let me help you with that! <working_memory><user><first_name>John</first_name>...</user></working_memory> Based on your question...
 ```
 
 To prevent these memory blocks from being visible to users while still allowing the system to process them, use the `maskStreamTags` utility:
 
-```typescript copy showLineNumbers
+```typescript
 import { maskStreamTags } from "@mastra/core/utils";
 
 // Basic usage - just mask the working_memory tags
@@ -877,7 +867,7 @@ for await (const chunk of maskStreamTags(
 
 You can also hook into memory update events:
 
-```typescript copy showLineNumbers
+```typescript
 const maskedStream = maskStreamTags(response.textStream, "working_memory", {
   onStart: () => showLoadingSpinner(),
   onEnd: () => hideLoadingSpinner(),
@@ -893,7 +883,7 @@ The `maskStreamTags` utility:
 
 
 ================================================================================
-Source: src\pages\docs\agents\02-adding-tools.mdx
+Source: src/pages/docs/agents/02-adding-tools.mdx
 ================================================================================
 
 ---
@@ -998,7 +988,7 @@ The agent will use the `weatherInfo` tool to get the current weather in New York
 
 
 ================================================================================
-Source: src\pages\docs\deployment\deployment.mdx
+Source: src/pages/docs/deployment/deployment.mdx
 ================================================================================
 
 ---
@@ -1116,7 +1106,7 @@ For platform-specific deployment details or troubleshooting, refer to the respec
 
 
 ================================================================================
-Source: src\pages\docs\deployment\logging-and-tracing.mdx
+Source: src/pages/docs/deployment/logging-and-tracing.mdx
 ================================================================================
 
 ---
@@ -1290,7 +1280,7 @@ This configuration is only necessary for local development to ensure proper inst
 
 
 ================================================================================
-Source: src\pages\docs\getting-started\installation.mdx
+Source: src/pages/docs/getting-started/installation.mdx
 ================================================================================
 
 ---
@@ -1658,7 +1648,7 @@ This should output the agent's response to your console.
 
 
 ================================================================================
-Source: src\pages\docs\getting-started\project-structure.mdx
+Source: src/pages/docs/getting-started/project-structure.mdx
 ================================================================================
 
 ---
@@ -1744,7 +1734,7 @@ root/
 
 
 ================================================================================
-Source: src\pages\docs\guides\01-chef-michel.mdx
+Source: src/pages/docs/guides/01-chef-michel.mdx
 ================================================================================
 
 ---
@@ -1992,7 +1982,7 @@ curl -X POST http://localhost:4111/api/agents/chefAgent/generate \
 
 
 ================================================================================
-Source: src\pages\docs\guides\02-stock-agent.mdx
+Source: src/pages/docs/guides/02-stock-agent.mdx
 ================================================================================
 
 ---
@@ -2180,7 +2170,7 @@ This indicates that your agent successfully processed the request, used the `sto
 
 
 ================================================================================
-Source: src\pages\docs\guides\03-recruiter.mdx
+Source: src/pages/docs/guides/03-recruiter.mdx
 ================================================================================
 
 ---
@@ -2372,7 +2362,7 @@ You've just built a workflow to parse a resume and decide which question to ask 
 
 
 ================================================================================
-Source: src\pages\docs\index.mdx
+Source: src/pages/docs/index.mdx
 ================================================================================
 
 ---
@@ -2400,7 +2390,7 @@ The main features include:
 
 
 ================================================================================
-Source: src\pages\docs\local-dev\integrations.mdx
+Source: src/pages/docs/local-dev/integrations.mdx
 ================================================================================
 
 ---
@@ -2533,7 +2523,7 @@ Remember to consult the documentation of each integration for specific usage det
 
 
 ================================================================================
-Source: src\pages\docs\local-dev\mastra-dev.mdx
+Source: src/pages/docs/local-dev/mastra-dev.mdx
 ================================================================================
 
 ---
@@ -2576,7 +2566,7 @@ By default, the server runs at http://localhost:4111, but you can change the por
 
 
 ================================================================================
-Source: src\pages\docs\local-dev\mastra-init.mdx
+Source: src/pages/docs/local-dev/mastra-init.mdx
 ================================================================================
 
 ---
@@ -2646,7 +2636,7 @@ This allows you to specify your preferences upfront without being prompted.
 
 
 ================================================================================
-Source: src\pages\docs\rag\chunking-and-embedding.mdx
+Source: src/pages/docs/rag/chunking-and-embedding.mdx
 ================================================================================
 
 ---
@@ -2777,7 +2767,7 @@ For more examples of different chunking strategies and embedding configurations,
 
 
 ================================================================================
-Source: src\pages\docs\rag\overview.mdx
+Source: src/pages/docs/rag/overview.mdx
 ================================================================================
 
 ---
@@ -2861,7 +2851,7 @@ See the [OTel Configuration](../reference/observability/otel-config.mdx) page fo
 
 
 ================================================================================
-Source: src\pages\docs\rag\retrieval.mdx
+Source: src/pages/docs/rag/retrieval.mdx
 ================================================================================
 
 ---
@@ -2987,7 +2977,7 @@ For complete examples of these retrieval methods in action, see:
 - [Graph-based Retrieval](../../examples/rag/graph-rag.mdx)
 
 ================================================================================
-Source: src\pages\docs\rag\vector-databases.mdx
+Source: src/pages/docs/rag/vector-databases.mdx
 ================================================================================
 
 ---
@@ -3186,7 +3176,7 @@ For complete examples of different vector store implementations, see:
 
 
 ================================================================================
-Source: src\pages\docs\reference\agents\createTool.mdx
+Source: src/pages/docs/reference/agents/createTool.mdx
 ================================================================================
 
 ---
@@ -3351,7 +3341,7 @@ export const stockPrices = createTool({
 
 
 ================================================================================
-Source: src\pages\docs\reference\agents\generate.mdx
+Source: src/pages/docs/reference/agents/generate.mdx
 ================================================================================
 
 ---
@@ -3502,7 +3492,7 @@ For real-time streaming responses, see the [`stream()`](./stream.mdx) method doc
 
 
 ================================================================================
-Source: src\pages\docs\reference\agents\getAgent.mdx
+Source: src/pages/docs/reference/agents/getAgent.mdx
 ================================================================================
 
 ---
@@ -3562,7 +3552,7 @@ async function getAgent({
 
 
 ================================================================================
-Source: src\pages\docs\reference\agents\stream.mdx
+Source: src/pages/docs/reference/agents/stream.mdx
 ================================================================================
 
 ---
@@ -3726,7 +3716,7 @@ The key difference between Agent's `stream()` and LLM's `stream()` is that Agent
 
 
 ================================================================================
-Source: src\pages\docs\reference\cli\deploy.mdx
+Source: src/pages/docs/reference/cli/deploy.mdx
 ================================================================================
 
 ---
@@ -3754,7 +3744,7 @@ Deploy your Mastra project to Netlify.
 
 
 ================================================================================
-Source: src\pages\docs\reference\cli\dev.mdx
+Source: src/pages/docs/reference/cli/dev.mdx
 ================================================================================
 
 ---
@@ -3864,7 +3854,7 @@ curl -X POST http://localhost:4111/api/agents/myAgent/generate \
 
 
 ================================================================================
-Source: src\pages\docs\reference\cli\init.mdx
+Source: src/pages/docs/reference/cli/init.mdx
 ================================================================================
 
 ---
@@ -3913,7 +3903,7 @@ This creates a new Mastra project. You can run it in three different ways:
 
 
 ================================================================================
-Source: src\pages\docs\reference\core\mastra-class.mdx
+Source: src/pages/docs/reference/core/mastra-class.mdx
 ================================================================================
 
 ---
@@ -4054,7 +4044,7 @@ try {
 
 
 ================================================================================
-Source: src\pages\docs\reference\evals\answer-relevancy.mdx
+Source: src/pages/docs/reference/evals/answer-relevancy.mdx
 ================================================================================
 
 ---
@@ -4232,7 +4222,7 @@ const result = await metric.measure(
 
 
 ================================================================================
-Source: src\pages\docs\reference\evals\bias.mdx
+Source: src/pages/docs/reference/evals/bias.mdx
 ================================================================================
 
 ---
@@ -4392,7 +4382,7 @@ const results = await Promise.all([
 - [Faithfulness Metric](./faithfulness)
 
 ================================================================================
-Source: src\pages\docs\reference\evals\completeness.mdx
+Source: src/pages/docs/reference/evals/completeness.mdx
 ================================================================================
 
 ---
@@ -4542,7 +4532,7 @@ const result = await metric.measure(
 - [Textual Difference Metric](./textual-difference)
 
 ================================================================================
-Source: src\pages\docs\reference\evals\content-similarity.mdx
+Source: src/pages/docs/reference/evals/content-similarity.mdx
 ================================================================================
 
 ---
@@ -4707,7 +4697,7 @@ const result2 = await strictWhitespaceMetric.measure(
 - [Answer Relevancy Metric](./answer-relevancy)
 
 ================================================================================
-Source: src\pages\docs\reference\evals\context-position.mdx
+Source: src/pages/docs/reference/evals/context-position.mdx
 ================================================================================
 
 ---
@@ -4895,7 +4885,7 @@ const result = await metric.measure(
 
 
 ================================================================================
-Source: src\pages\docs\reference\evals\context-precision.mdx
+Source: src/pages/docs/reference/evals/context-precision.mdx
 ================================================================================
 
 ---
@@ -5082,7 +5072,7 @@ const result = await metric.measure(
 
 
 ================================================================================
-Source: src\pages\docs\reference\evals\context-relevancy.mdx
+Source: src/pages/docs/reference/evals/context-relevancy.mdx
 ================================================================================
 
 ---
@@ -5262,7 +5252,7 @@ const result = await metric.measure(
 - [Context Precision Metric](./context-precision)
 
 ================================================================================
-Source: src\pages\docs\reference\evals\contextual-recall.mdx
+Source: src/pages/docs/reference/evals/contextual-recall.mdx
 ================================================================================
 
 ---
@@ -5441,7 +5431,7 @@ const result = await metric.measure(
 - [Context Precision Metric](./context-precision)
 
 ================================================================================
-Source: src\pages\docs\reference\evals\faithfulness.mdx
+Source: src/pages/docs/reference/evals/faithfulness.mdx
 ================================================================================
 
 ---
@@ -5628,7 +5618,7 @@ const result = await metric.measure(
 
 
 ================================================================================
-Source: src\pages\docs\reference\evals\hallucination.mdx
+Source: src/pages/docs/reference/evals/hallucination.mdx
 ================================================================================
 
 ---
@@ -5835,7 +5825,7 @@ const result = await metric.measure({
 
 
 ================================================================================
-Source: src\pages\docs\reference\evals\keyword-coverage.mdx
+Source: src/pages/docs/reference/evals/keyword-coverage.mdx
 ================================================================================
 
 ---
@@ -5998,7 +5988,7 @@ The metric handles several special cases:
 - [Answer Relevancy Metric](./answer-relevancy)
 
 ================================================================================
-Source: src\pages\docs\reference\evals\prompt-alignment.mdx
+Source: src/pages/docs/reference/evals/prompt-alignment.mdx
 ================================================================================
 
 ---
@@ -6207,7 +6197,7 @@ const result2 = await metric.measure(
 
 
 ================================================================================
-Source: src\pages\docs\reference\evals\summarization.mdx
+Source: src/pages/docs/reference/evals/summarization.mdx
 ================================================================================
 
 ---
@@ -6401,7 +6391,7 @@ const result = await metric.measure(
 
 
 ================================================================================
-Source: src\pages\docs\reference\evals\textual-difference.mdx
+Source: src/pages/docs/reference/evals/textual-difference.mdx
 ================================================================================
 
 ---
@@ -6549,7 +6539,7 @@ const result = await metric.measure(
 - [Answer Relevancy Metric](./answer-relevancy)
 
 ================================================================================
-Source: src\pages\docs\reference\evals\tone-consistency.mdx
+Source: src/pages/docs/reference/evals/tone-consistency.mdx
 ================================================================================
 
 ---
@@ -6715,7 +6705,7 @@ const stabilityResult = await metric.measure(
 - [Completeness Metric](./completeness)
 
 ================================================================================
-Source: src\pages\docs\reference\evals\toxicity.mdx
+Source: src/pages/docs/reference/evals/toxicity.mdx
 ================================================================================
 
 ---
@@ -6868,206 +6858,7 @@ const result = await metric.measure(
 
 
 ================================================================================
-Source: src\pages\docs\reference\memory\createThread.mdx
-================================================================================
-
-# createThread
-
-Creates a new conversation thread in the memory system. Each thread represents a distinct conversation or context and can contain multiple messages.
-
-## Usage Example
-
-```typescript
-import { Memory } from "@mastra/memory";
-
-const memory = new Memory({ /* config */ });
-const thread = await memory.createThread({
-  resourceId: "user-123",
-  title: "Support Conversation",
-  metadata: {
-    category: "support",
-    priority: "high"
-  }
-});
-```
-
-## Parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "resourceId",
-      type: "string",
-      description: "Identifier for the resource this thread belongs to (e.g., user ID, project ID)",
-      isOptional: false,
-    },
-    {
-      name: "threadId",
-      type: "string",
-      description: "Optional custom ID for the thread. If not provided, one will be generated.",
-      isOptional: true,
-    },
-    {
-      name: "title",
-      type: "string",
-      description: "Optional title for the thread",
-      isOptional: true,
-    },
-    {
-      name: "metadata",
-      type: "Record<string, unknown>",
-      description: "Optional metadata to associate with the thread",
-      isOptional: true,
-    },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier of the created thread",
-    },
-    {
-      name: "resourceId",
-      type: "string",
-      description: "Resource ID associated with the thread",
-    },
-    {
-      name: "title",
-      type: "string",
-      description: "Title of the thread (if provided)",
-    },
-    {
-      name: "createdAt",
-      type: "Date",
-      description: "Timestamp when the thread was created",
-    },
-    {
-      name: "updatedAt",
-      type: "Date",
-      description: "Timestamp when the thread was last updated",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, unknown>",
-      description: "Additional metadata associated with the thread",
-    },
-  ]}
-/>
-
-### Related
-
-- [Memory](/docs/reference/memory/Memory.mdx)
-- [getThreadById](/docs/reference/memory/getThreadById.mdx)
-- [getThreadsByResourceId](/docs/reference/memory/getThreadsByResourceId.mdx)
-
-
-================================================================================
-Source: src\pages\docs\reference\memory\getThreadById.mdx
-================================================================================
-
-# getThreadById Reference
-
-The `getThreadById` function retrieves a specific thread by its ID from storage.
-
-## Usage Example
-
-```typescript
-import { Memory } from "@mastra/core/memory";
-
-const memory = new Memory(config);
-
-const thread = await memory.getThreadById({ threadId: "thread-123" });
-```
-
-## Parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "threadId",
-      type: "string",
-      description: "The ID of the thread to be retrieved.",
-      isOptional: false,
-    },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "StorageThreadType | null",
-      type: "Promise",
-      description:
-        "A promise that resolves to the thread associated with the given ID, or null if not found.",
-    },
-  ]}
-/>
-
-### Related
-
-- [Memory](/docs/reference/memory/Memory.mdx)
-
-
-================================================================================
-Source: src\pages\docs\reference\memory\getThreadsByResourceId.mdx
-================================================================================
-
-# getThreadsByResourceId Reference
-
-The `getThreadsByResourceId` function retrieves all threads associated with a specific resource ID from storage.
-
-## Usage Example
-
-```typescript
-import { Memory } from "@mastra/core/memory";
-
-const memory = new Memory(config);
-
-const threads = await memory.getThreadsByResourceId({
-  resourceId: "resource-123",
-});
-```
-
-## Parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "resourceId",
-      type: "string",
-      description: "The ID of the resource whose threads are to be retrieved.",
-      isOptional: false,
-    },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "StorageThreadType[]",
-      type: "Promise",
-      description:
-        "A promise that resolves to an array of threads associated with the given resource ID.",
-    },
-  ]}
-/>
-
-### Related
-
-- [Memory](/docs/reference/memory/Memory.mdx)
-
-
-================================================================================
-Source: src\pages\docs\reference\memory\Memory.mdx
+Source: src/pages/docs/reference/memory/Memory.mdx
 ================================================================================
 
 # Memory Class Reference
@@ -7212,7 +7003,206 @@ const memory = new Memory({
 
 
 ================================================================================
-Source: src\pages\docs\reference\memory\query.mdx
+Source: src/pages/docs/reference/memory/createThread.mdx
+================================================================================
+
+# createThread
+
+Creates a new conversation thread in the memory system. Each thread represents a distinct conversation or context and can contain multiple messages.
+
+## Usage Example
+
+```typescript
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory({ /* config */ });
+const thread = await memory.createThread({
+  resourceId: "user-123",
+  title: "Support Conversation",
+  metadata: {
+    category: "support",
+    priority: "high"
+  }
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "resourceId",
+      type: "string",
+      description: "Identifier for the resource this thread belongs to (e.g., user ID, project ID)",
+      isOptional: false,
+    },
+    {
+      name: "threadId",
+      type: "string",
+      description: "Optional custom ID for the thread. If not provided, one will be generated.",
+      isOptional: true,
+    },
+    {
+      name: "title",
+      type: "string",
+      description: "Optional title for the thread",
+      isOptional: true,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description: "Optional metadata to associate with the thread",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier of the created thread",
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description: "Resource ID associated with the thread",
+    },
+    {
+      name: "title",
+      type: "string",
+      description: "Title of the thread (if provided)",
+    },
+    {
+      name: "createdAt",
+      type: "Date",
+      description: "Timestamp when the thread was created",
+    },
+    {
+      name: "updatedAt",
+      type: "Date",
+      description: "Timestamp when the thread was last updated",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description: "Additional metadata associated with the thread",
+    },
+  ]}
+/>
+
+### Related
+
+- [Memory](/docs/reference/memory/Memory.mdx)
+- [getThreadById](/docs/reference/memory/getThreadById.mdx)
+- [getThreadsByResourceId](/docs/reference/memory/getThreadsByResourceId.mdx)
+
+
+================================================================================
+Source: src/pages/docs/reference/memory/getThreadById.mdx
+================================================================================
+
+# getThreadById Reference
+
+The `getThreadById` function retrieves a specific thread by its ID from storage.
+
+## Usage Example
+
+```typescript
+import { Memory } from "@mastra/core/memory";
+
+const memory = new Memory(config);
+
+const thread = await memory.getThreadById({ threadId: "thread-123" });
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "threadId",
+      type: "string",
+      description: "The ID of the thread to be retrieved.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "StorageThreadType | null",
+      type: "Promise",
+      description:
+        "A promise that resolves to the thread associated with the given ID, or null if not found.",
+    },
+  ]}
+/>
+
+### Related
+
+- [Memory](/docs/reference/memory/Memory.mdx)
+
+
+================================================================================
+Source: src/pages/docs/reference/memory/getThreadsByResourceId.mdx
+================================================================================
+
+# getThreadsByResourceId Reference
+
+The `getThreadsByResourceId` function retrieves all threads associated with a specific resource ID from storage.
+
+## Usage Example
+
+```typescript
+import { Memory } from "@mastra/core/memory";
+
+const memory = new Memory(config);
+
+const threads = await memory.getThreadsByResourceId({
+  resourceId: "resource-123",
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "resourceId",
+      type: "string",
+      description: "The ID of the resource whose threads are to be retrieved.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "StorageThreadType[]",
+      type: "Promise",
+      description:
+        "A promise that resolves to an array of threads associated with the given resource ID.",
+    },
+  ]}
+/>
+
+### Related
+
+- [Memory](/docs/reference/memory/Memory.mdx)
+
+
+================================================================================
+Source: src/pages/docs/reference/memory/query.mdx
 ================================================================================
 
 # query
@@ -7375,7 +7365,7 @@ The `query` function returns two different message formats:
 
 
 ================================================================================
-Source: src\pages\docs\reference\observability\create-logger.mdx
+Source: src/pages/docs/reference/observability/create-logger.mdx
 ================================================================================
 
 ---
@@ -7487,7 +7477,7 @@ logger.info({
 
 
 ================================================================================
-Source: src\pages\docs\reference\observability\logger.mdx
+Source: src/pages/docs/reference/observability/logger.mdx
 ================================================================================
 
 ---
@@ -7548,7 +7538,7 @@ logger.error('An error occurred'); // Logged as ERROR
 
 
 ================================================================================
-Source: src\pages\docs\reference\observability\otel-config.mdx
+Source: src/pages/docs/reference/observability/otel-config.mdx
 ================================================================================
 
 ---
@@ -7673,7 +7663,7 @@ const otelConfig: OtelConfig = {
 />
 
 ================================================================================
-Source: src\pages\docs\reference\observability\providers\braintrust.mdx
+Source: src/pages/docs/reference/observability/providers/braintrust.mdx
 ================================================================================
 
 ---
@@ -7719,7 +7709,7 @@ Access your Braintrust dashboard at [braintrust.dev](https://www.braintrust.dev/
 
 
 ================================================================================
-Source: src\pages\docs\reference\observability\providers\index.mdx
+Source: src/pages/docs/reference/observability/providers/index.mdx
 ================================================================================
 
 ---
@@ -7739,7 +7729,7 @@ Observability providers include:
 - [Laminar](./providers/laminar.mdx)
 
 ================================================================================
-Source: src\pages\docs\reference\observability\providers\laminar.mdx
+Source: src/pages/docs/reference/observability/providers/laminar.mdx
 ================================================================================
 
 ---
@@ -7785,7 +7775,7 @@ Access your Laminar dashboard at [https://lmnr.ai/](https://lmnr.ai/)
 
 
 ================================================================================
-Source: src\pages\docs\reference\observability\providers\langfuse.mdx
+Source: src/pages/docs/reference/observability/providers/langfuse.mdx
 ================================================================================
 
 ---
@@ -7838,7 +7828,7 @@ Once configured, you can view your traces and analytics in the Langfuse dashboar
 
 
 ================================================================================
-Source: src\pages\docs\reference\observability\providers\langsmith.mdx
+Source: src/pages/docs/reference/observability/providers/langsmith.mdx
 ================================================================================
 
 ---
@@ -7884,7 +7874,7 @@ Access your traces and analytics in the LangSmith dashboard at [smith.langchain.
 
 
 ================================================================================
-Source: src\pages\docs\reference\observability\providers\langwatch.mdx
+Source: src/pages/docs/reference/observability/providers/langwatch.mdx
 ================================================================================
 
 ---
@@ -7935,7 +7925,7 @@ Access your LangWatch dashboard at [app.langwatch.ai](https://app.langwatch.ai)
 
 
 ================================================================================
-Source: src\pages\docs\reference\observability\providers\new-relic.mdx
+Source: src/pages/docs/reference/observability/providers/new-relic.mdx
 ================================================================================
 
 ---
@@ -7981,7 +7971,7 @@ View your telemetry data in the New Relic One dashboard at [one.newrelic.com](ht
 
 
 ================================================================================
-Source: src\pages\docs\reference\observability\providers\signoz.mdx
+Source: src/pages/docs/reference/observability/providers/signoz.mdx
 ================================================================================
 
 ---
@@ -8027,7 +8017,7 @@ Access your SigNoz dashboard at [cloud.signoz.io](https://cloud.signoz.io)
 
 
 ================================================================================
-Source: src\pages\docs\reference\observability\providers\traceloop.mdx
+Source: src/pages/docs/reference/observability/providers/traceloop.mdx
 ================================================================================
 
 ---
@@ -8073,7 +8063,7 @@ Access your traces and analytics in the Traceloop dashboard at [app.traceloop.co
 
 
 ================================================================================
-Source: src\pages\docs\reference\rag\astra.mdx
+Source: src/pages/docs/reference/rag/astra.mdx
 ================================================================================
 
 ---
@@ -8277,7 +8267,7 @@ Required environment variables:
 - [Metadata Filters](./metadata-filters)
 
 ================================================================================
-Source: src\pages\docs\reference\rag\chroma.mdx
+Source: src/pages/docs/reference/rag/chroma.mdx
 ================================================================================
 
 ---
@@ -8486,7 +8476,7 @@ try {
 - [Metadata Filters](./metadata-filters)
 
 ================================================================================
-Source: src\pages\docs\reference\rag\chunk.mdx
+Source: src/pages/docs/reference/rag/chunk.mdx
 ================================================================================
 
 ---
@@ -8728,7 +8718,7 @@ interface DocumentNode {
 ```
 
 ================================================================================
-Source: src\pages\docs\reference\rag\default.mdx
+Source: src/pages/docs/reference/rag/default.mdx
 ================================================================================
 
 ---
@@ -9026,7 +9016,7 @@ Common error cases include:
 
 
 ================================================================================
-Source: src\pages\docs\reference\rag\document.mdx
+Source: src/pages/docs/reference/rag/document.mdx
 ================================================================================
 
 ---
@@ -9160,7 +9150,7 @@ const metadata = doc.getMetadata();
 ```
 
 ================================================================================
-Source: src\pages\docs\reference\rag\embeddings.mdx
+Source: src/pages/docs/reference/rag/embeddings.mdx
 ================================================================================
 
 ---
@@ -9326,7 +9316,7 @@ For more detailed information about embeddings in the Vercel AI SDK, see:
 
 
 ================================================================================
-Source: src\pages\docs\reference\rag\extract-params.mdx
+Source: src/pages/docs/reference/rag/extract-params.mdx
 ================================================================================
 
 ---
@@ -9404,7 +9394,7 @@ Example:
 
 
 ================================================================================
-Source: src\pages\docs\reference\rag\graph-rag.mdx
+Source: src/pages/docs/reference/rag/graph-rag.mdx
 ================================================================================
 
 ---
@@ -9592,7 +9582,7 @@ const results = await graphRag.query({
 
 
 ================================================================================
-Source: src\pages\docs\reference\rag\metadata-filters.mdx
+Source: src/pages/docs/reference/rag/metadata-filters.mdx
 ================================================================================
 
 ---
@@ -9896,7 +9886,7 @@ const results = await store.query(
 
 
 ================================================================================
-Source: src\pages\docs\reference\rag\pg.mdx
+Source: src/pages/docs/reference/rag/pg.mdx
 ================================================================================
 
 ---
@@ -10093,7 +10083,7 @@ try {
 - [Metadata Filters](./metadata-filters)
 
 ================================================================================
-Source: src\pages\docs\reference\rag\pinecone.mdx
+Source: src/pages/docs/reference/rag/pinecone.mdx
 ================================================================================
 
 ---
@@ -10291,7 +10281,7 @@ Required environment variables:
 - [Metadata Filters](./metadata-filters)
 
 ================================================================================
-Source: src\pages\docs\reference\rag\qdrant.mdx
+Source: src/pages/docs/reference/rag/qdrant.mdx
 ================================================================================
 
 ---
@@ -10483,7 +10473,7 @@ try {
 - [Metadata Filters](./metadata-filters)
 
 ================================================================================
-Source: src\pages\docs\reference\rag\rerank.mdx
+Source: src/pages/docs/reference/rag/rerank.mdx
 ================================================================================
 
 ---
@@ -10699,7 +10689,7 @@ The function returns an array of `RerankResult` objects:
 
 
 ================================================================================
-Source: src\pages\docs\reference\rag\upstash.mdx
+Source: src/pages/docs/reference/rag/upstash.mdx
 ================================================================================
 
 ---
@@ -10898,7 +10888,7 @@ Required environment variables:
 - [Metadata Filters](./metadata-filters)
 
 ================================================================================
-Source: src\pages\docs\reference\rag\vectorize.mdx
+Source: src/pages/docs/reference/rag/vectorize.mdx
 ================================================================================
 
 ---
@@ -11152,7 +11142,7 @@ Required environment variables:
 - [Metadata Filters](./metadata-filters)
 
 ================================================================================
-Source: src\pages\docs\reference\storage\libsql.mdx
+Source: src/pages/docs/reference/storage/libsql.mdx
 ================================================================================
 
 ---
@@ -11231,7 +11221,7 @@ The storage implementation handles schema creation and updates automatically. It
 
 
 ================================================================================
-Source: src\pages\docs\reference\storage\postgresql.mdx
+Source: src/pages/docs/reference/storage/postgresql.mdx
 ================================================================================
 
 ---
@@ -11285,7 +11275,7 @@ The storage implementation handles schema creation and updates automatically. It
 
 
 ================================================================================
-Source: src\pages\docs\reference\storage\upstash.mdx
+Source: src/pages/docs/reference/storage/upstash.mdx
 ================================================================================
 
 ---
@@ -11377,7 +11367,7 @@ For optimal performance:
 
 
 ================================================================================
-Source: src\pages\docs\reference\tools\client.mdx
+Source: src/pages/docs/reference/tools/client.mdx
 ================================================================================
 
 ---
@@ -11534,7 +11524,7 @@ async function main() {
 - For more details about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/typescript-sdk).
 
 ================================================================================
-Source: src\pages\docs\reference\tools\document-chunker-tool.mdx
+Source: src/pages/docs/reference/tools/document-chunker-tool.mdx
 ================================================================================
 
 ---
@@ -11681,7 +11671,7 @@ The chunker is created as a Mastra tool with the following properties:
 
 
 ================================================================================
-Source: src\pages\docs\reference\tools\graph-rag-tool.mdx
+Source: src/pages/docs/reference/tools/graph-rag-tool.mdx
 ================================================================================
 
 ---
@@ -11814,7 +11804,7 @@ const graphTool = createGraphRAGTool({
 - [GraphRAG](../rag/graph-rag)
 
 ================================================================================
-Source: src\pages\docs\reference\tools\vector-query-tool.mdx
+Source: src/pages/docs/reference/tools/vector-query-tool.mdx
 ================================================================================
 
 ---
@@ -12001,7 +11991,7 @@ The tool is created with:
 - [createGraphRAGTool](./graph-rag-tool)
 
 ================================================================================
-Source: src\pages\docs\reference\tts\generate.mdx
+Source: src/pages/docs/reference/tts/generate.mdx
 ================================================================================
 
 ---
@@ -12230,7 +12220,7 @@ For streaming audio responses, see the [`stream()`](./stream.mdx) method documen
 
 
 ================================================================================
-Source: src\pages\docs\reference\tts\providers-and-models.mdx
+Source: src/pages/docs/reference/tts/providers-and-models.mdx
 ================================================================================
 
 ---
@@ -12361,7 +12351,7 @@ const tts = new MurfTTS({
 
 
 ================================================================================
-Source: src\pages\docs\reference\tts\stream.mdx
+Source: src/pages/docs/reference/tts/stream.mdx
 ================================================================================
 
 ---
@@ -12677,7 +12667,7 @@ audioResult.pipe(writeStream);
 
 
 ================================================================================
-Source: src\pages\docs\reference\workflows\after.mdx
+Source: src/pages/docs/reference/workflows/after.mdx
 ================================================================================
 
 ---
@@ -12733,7 +12723,7 @@ workflow
 
 
 ================================================================================
-Source: src\pages\docs\reference\workflows\commit.mdx
+Source: src/pages/docs/reference/workflows/commit.mdx
 ================================================================================
 
 ---
@@ -12826,7 +12816,7 @@ try {
 
 
 ================================================================================
-Source: src\pages\docs\reference\workflows\createRun.mdx
+Source: src/pages/docs/reference/workflows/createRun.mdx
 ================================================================================
 
 ---
@@ -12891,7 +12881,7 @@ try {
 
 
 ================================================================================
-Source: src\pages\docs\reference\workflows\execute.mdx
+Source: src/pages/docs/reference/workflows/execute.mdx
 ================================================================================
 
 ---
@@ -13006,7 +12996,7 @@ if (status === "COMPLETED") {
 - [Workflow.start()](./start.mdx)
 
 ================================================================================
-Source: src\pages\docs\reference\workflows\resume.mdx
+Source: src/pages/docs/reference/workflows/resume.mdx
 ================================================================================
 
 ---
@@ -13111,7 +13101,7 @@ try {
 
 
 ================================================================================
-Source: src\pages\docs\reference\workflows\start.mdx
+Source: src/pages/docs/reference/workflows/start.mdx
 ================================================================================
 
 ---
@@ -13201,7 +13191,7 @@ try {
 
 
 ================================================================================
-Source: src\pages\docs\reference\workflows\step-class.mdx
+Source: src/pages/docs/reference/workflows/step-class.mdx
 ================================================================================
 
 ---
@@ -13302,7 +13292,7 @@ const processOrder = new Step({
 
 
 ================================================================================
-Source: src\pages\docs\reference\workflows\step-condition.mdx
+Source: src/pages/docs/reference/workflows/step-condition.mdx
 ================================================================================
 
 ---
@@ -13442,7 +13432,7 @@ This query syntax allows for readable conditional logic for determining whether 
 
 
 ================================================================================
-Source: src\pages\docs\reference\workflows\step-function.mdx
+Source: src/pages/docs/reference/workflows/step-function.mdx
 ================================================================================
 
 ---
@@ -13540,7 +13530,7 @@ workflow.step({
 
 
 ================================================================================
-Source: src\pages\docs\reference\workflows\step-options.mdx
+Source: src/pages/docs/reference/workflows/step-options.mdx
 ================================================================================
 
 ---
@@ -13614,7 +13604,7 @@ workflow.step(processOrder, {
 ```
 
 ================================================================================
-Source: src\pages\docs\reference\workflows\suspend.mdx
+Source: src/pages/docs/reference/workflows/suspend.mdx
 ================================================================================
 
 ---
@@ -13700,7 +13690,7 @@ workflow.watch((state) => {
 
 
 ================================================================================
-Source: src\pages\docs\reference\workflows\then.mdx
+Source: src/pages/docs/reference/workflows/then.mdx
 ================================================================================
 
 ---
@@ -13780,7 +13770,7 @@ try {
 
 
 ================================================================================
-Source: src\pages\docs\reference\workflows\watch.mdx
+Source: src/pages/docs/reference/workflows/watch.mdx
 ================================================================================
 
 ---
@@ -13902,7 +13892,7 @@ workflow.watch((state) => {
 
 
 ================================================================================
-Source: src\pages\docs\reference\workflows\workflow.mdx
+Source: src/pages/docs/reference/workflows/workflow.mdx
 ================================================================================
 
 ---
@@ -14171,7 +14161,7 @@ try {
 
 
 ================================================================================
-Source: src\pages\docs\workflows\00-overview.mdx
+Source: src/pages/docs/workflows/00-overview.mdx
 ================================================================================
 
 ---
@@ -14272,7 +14262,7 @@ You can:
 
 
 ================================================================================
-Source: src\pages\docs\workflows\control-flow.mdx
+Source: src/pages/docs/workflows/control-flow.mdx
 ================================================================================
 
 ---
@@ -14414,50 +14404,56 @@ myWorkflow.step(
 );
 ```
 
-## Accessing Previous Step Results
+## Renaming Variables
 
-Steps access data from previous steps through the `context` object. The context contains a record of all step results and their payloads.
+Variables let you pass outputs from one step into another step’s inputs.
 
-### Using getStepPayload
+### Passing Trigger Data
 
-`getStepPayload` retrieves a step's output with type safety:
-
-```typescript copy showLineNumbers
-workflow.step(
-  new Step({
-    id: "processOrder",
-    execute: async ({ context }) => {
-      const userData = context.getStepPayload<{ userId: string }>("fetchUser");
-      return {
-        userId: userData?.userId,
-        status: "processing"
-      };
+```typescript
+myWorkflow.step(stepOne).then(stepTwo, {
+  variables: {
+    valueToIncrement: {
+      step: "trigger",
+      path: "inputValue",
     },
-  })
-);
+  },
+});
 ```
 
-### Using Path Notation
+### Passing Output from a Previous Step
 
-Path notation accesses step results through the machine context. For example, to access the status of the `processOrder` step:
-
-```typescript copy showLineNumbers
-workflow.step(
-  new Step({
-    id: "sendEmail",
-    execute: async ({ context }) => {
-      const orderStatus = context.machineContext.stepResults.processOrder.payload.status;
-      console.log(orderStatus);
+```typescript
+myWorkflow.step(stepOne).then(stepTwo, {
+  variables: {
+    valueToIncrement: {
+      step: stepOne,
+      path: "doubledValue",
     },
-  })
-);
+  },
+});
 ```
 
-The context object maintains type information when used with TypeScript. Nested objects in step outputs can be accessed with either method.
+### Passing Output Using a Step ID
+
+```typescript
+myWorkflow.step(stepOne).then(stepTwo, {
+  variables: {
+    valueToIncrement: {
+      step: {
+        id: "stepOne",
+      },
+      path: "doubledValue",
+    },
+  },
+});
+```
+
+In all these examples, you pick the specific data you want to pass forward. This approach helps decouple steps and keep your workflow logic clear.
 
 
 ================================================================================
-Source: src\pages\docs\workflows\steps.mdx
+Source: src/pages/docs/workflows/steps.mdx
 ================================================================================
 
 ---
@@ -14554,7 +14550,7 @@ myWorkflow.commit();
 
 
 ================================================================================
-Source: src\pages\docs\workflows\suspend-and-resume.mdx
+Source: src/pages/docs/workflows/suspend-and-resume.mdx
 ================================================================================
 
 ---
@@ -14639,7 +14635,7 @@ const result = await start({
 
 
 ================================================================================
-Source: src\pages\examples\agents\agentic-workflows.mdx
+Source: src/pages/examples/agents/agentic-workflows.mdx
 ================================================================================
 
 ---
@@ -14850,7 +14846,7 @@ main();
 
 
 ================================================================================
-Source: src\pages\examples\agents\bird-checker.mdx
+Source: src/pages/examples/agents/bird-checker.mdx
 ================================================================================
 
 ---
@@ -15002,7 +14998,7 @@ console.log(response.object);
 
 
 ================================================================================
-Source: src\pages\examples\agents\hierarchical-multi-agent.mdx
+Source: src/pages/examples/agents/hierarchical-multi-agent.mdx
 ================================================================================
 
 ---
@@ -15123,7 +15119,7 @@ main();
 
 
 ================================================================================
-Source: src\pages\examples\agents\multi-agent-workflow.mdx
+Source: src/pages/examples/agents/multi-agent-workflow.mdx
 ================================================================================
 
 ---
@@ -15248,7 +15244,7 @@ console.log("Results: ", res.results);
 
 
 ================================================================================
-Source: src\pages\examples\agents\system-prompt.mdx
+Source: src/pages/examples/agents/system-prompt.mdx
 ================================================================================
 
 ---
@@ -15328,7 +15324,7 @@ console.log(result.text);
 
 
 ================================================================================
-Source: src\pages\examples\agents\using-a-tool.mdx
+Source: src/pages/examples/agents/using-a-tool.mdx
 ================================================================================
 
 ---
@@ -15481,7 +15477,7 @@ main();
 
 
 ================================================================================
-Source: src\pages\examples\index.mdx
+Source: src/pages/examples/index.mdx
 ================================================================================
 
 ---
@@ -15659,7 +15655,7 @@ The Examples section is a short list of example projects demonstrating basic AI 
 
 
 ================================================================================
-Source: src\pages\examples\memory\memory-with-libsql.mdx
+Source: src/pages/examples/memory/memory-with-libsql.mdx
 ================================================================================
 
 # Memory with LibSQL
@@ -15757,7 +15753,7 @@ The example shows:
 
 
 ================================================================================
-Source: src\pages\examples\memory\memory-with-pg.mdx
+Source: src/pages/examples/memory/memory-with-pg.mdx
 ================================================================================
 
 # Memory with Postgres
@@ -15861,7 +15857,7 @@ The example shows:
 
 
 ================================================================================
-Source: src\pages\examples\memory\memory-with-upstash.mdx
+Source: src/pages/examples/memory/memory-with-upstash.mdx
 ================================================================================
 
 # Memory with Upstash
@@ -15970,7 +15966,7 @@ The example shows:
 
 
 ================================================================================
-Source: src\pages\examples\memory\streaming-working-memory-advanced.mdx
+Source: src/pages/examples/memory/streaming-working-memory-advanced.mdx
 ================================================================================
 
 ---
@@ -16119,7 +16115,7 @@ To learn more about agent memory, including other memory types and storage optio
 
 
 ================================================================================
-Source: src\pages\examples\memory\streaming-working-memory.mdx
+Source: src/pages/examples/memory/streaming-working-memory.mdx
 ================================================================================
 
 ---
@@ -16224,7 +16220,7 @@ To learn more about agent memory, including other memory types and storage optio
 
 
 ================================================================================
-Source: src\pages\examples\rag\adjust-chunk-delimiters.mdx
+Source: src/pages/examples/rag/adjust-chunk-delimiters.mdx
 ================================================================================
 
 ---
@@ -16261,7 +16257,7 @@ const chunks = await doc.chunk({
 
 
 ================================================================================
-Source: src\pages\examples\rag\adjust-chunk-size.mdx
+Source: src/pages/examples/rag/adjust-chunk-size.mdx
 ================================================================================
 
 ---
@@ -16298,7 +16294,7 @@ const chunks = await doc.chunk({
 
 
 ================================================================================
-Source: src\pages\examples\rag\basic-rag.mdx
+Source: src/pages/examples/rag/basic-rag.mdx
 ================================================================================
 
 ---
@@ -16414,7 +16410,7 @@ console.log(completion.text);
 
 
 ================================================================================
-Source: src\pages\examples\rag\chunk-html.mdx
+Source: src/pages/examples/rag/chunk-html.mdx
 ================================================================================
 
 ---
@@ -16463,7 +16459,7 @@ console.log(chunks);
 
 
 ================================================================================
-Source: src\pages\examples\rag\chunk-json.mdx
+Source: src/pages/examples/rag/chunk-json.mdx
 ================================================================================
 
 ---
@@ -16508,7 +16504,7 @@ console.log(chunks);
 
 
 ================================================================================
-Source: src\pages\examples\rag\chunk-markdown.mdx
+Source: src/pages/examples/rag/chunk-markdown.mdx
 ================================================================================
 
 ---
@@ -16543,7 +16539,7 @@ const chunks = await doc.chunk();
 
 
 ================================================================================
-Source: src\pages\examples\rag\chunk-text.mdx
+Source: src/pages/examples/rag/chunk-text.mdx
 ================================================================================
 
 ---
@@ -16578,7 +16574,7 @@ const chunks = await doc.chunk();
 
 
 ================================================================================
-Source: src\pages\examples\rag\cleanup-rag.mdx
+Source: src/pages/examples/rag/cleanup-rag.mdx
 ================================================================================
 
 ---
@@ -16842,7 +16838,7 @@ await answerQueries(queries, dataAgentTwo);
 
 
 ================================================================================
-Source: src\pages\examples\rag\cot-rag.mdx
+Source: src/pages/examples/rag/cot-rag.mdx
 ================================================================================
 
 ---
@@ -17043,7 +17039,7 @@ await answerQueries(queries);
 
 
 ================================================================================
-Source: src\pages\examples\rag\cot-workflow-rag.mdx
+Source: src/pages/examples/rag/cot-workflow-rag.mdx
 ================================================================================
 
 ---
@@ -17396,7 +17392,7 @@ console.log(result.results);
 
 
 ================================================================================
-Source: src\pages\examples\rag\embed-chunk-array.mdx
+Source: src/pages/examples/rag/embed-chunk-array.mdx
 ================================================================================
 
 ---
@@ -17438,7 +17434,7 @@ const { embeddings } = await embed({
 
 
 ================================================================================
-Source: src\pages\examples\rag\embed-text-chunk.mdx
+Source: src/pages/examples/rag/embed-text-chunk.mdx
 ================================================================================
 
 ---
@@ -17480,7 +17476,7 @@ const { embedding } = await embed({
 
 
 ================================================================================
-Source: src\pages\examples\rag\embed-text-with-cohere.mdx
+Source: src/pages/examples/rag/embed-text-with-cohere.mdx
 ================================================================================
 
 ---
@@ -17522,7 +17518,7 @@ const { embeddings } = await embedMany({
 
 
 ================================================================================
-Source: src\pages\examples\rag\filter-rag.mdx
+Source: src/pages/examples/rag/filter-rag.mdx
 ================================================================================
 
 ---
@@ -17750,7 +17746,7 @@ await answerQueries();
 
 
 ================================================================================
-Source: src\pages\examples\rag\graph-rag.mdx
+Source: src/pages/examples/rag/graph-rag.mdx
 ================================================================================
 
 ---
@@ -17951,7 +17947,7 @@ await answerQueries(queries);
 
 
 ================================================================================
-Source: src\pages\examples\rag\hybrid-vector-search.mdx
+Source: src/pages/examples/rag/hybrid-vector-search.mdx
 ================================================================================
 
 ---
@@ -18045,7 +18041,7 @@ console.log('Results:', result);
 
 
 ================================================================================
-Source: src\pages\examples\rag\insert-embedding-in-astra.mdx
+Source: src/pages/examples/rag/insert-embedding-in-astra.mdx
 ================================================================================
 
 ---
@@ -18098,7 +18094,7 @@ await astra.upsert(
 
 
 ================================================================================
-Source: src\pages\examples\rag\insert-embedding-in-chroma.mdx
+Source: src/pages/examples/rag/insert-embedding-in-chroma.mdx
 ================================================================================
 
 ---
@@ -18149,7 +18145,7 @@ await chroma.upsert(
 
 
 ================================================================================
-Source: src\pages\examples\rag\insert-embedding-in-libsql.mdx
+Source: src/pages/examples/rag/insert-embedding-in-libsql.mdx
 ================================================================================
 
 ---
@@ -18203,7 +18199,7 @@ await libsql.upsert(
 
 
 ================================================================================
-Source: src\pages\examples\rag\insert-embedding-in-pgvector.mdx
+Source: src/pages/examples/rag/insert-embedding-in-pgvector.mdx
 ================================================================================
 
 ---
@@ -18256,7 +18252,7 @@ await pgVector.upsert(
 
 
 ================================================================================
-Source: src\pages\examples\rag\insert-embedding-in-pinecone.mdx
+Source: src/pages/examples/rag/insert-embedding-in-pinecone.mdx
 ================================================================================
 
 ---
@@ -18305,7 +18301,7 @@ await pinecone.upsert(
 
 
 ================================================================================
-Source: src\pages\examples\rag\insert-embedding-in-qdrant.mdx
+Source: src/pages/examples/rag/insert-embedding-in-qdrant.mdx
 ================================================================================
 
 ---
@@ -18358,7 +18354,7 @@ await qdrant.upsert(
 
 
 ================================================================================
-Source: src\pages\examples\rag\insert-embedding-in-upstash.mdx
+Source: src/pages/examples/rag/insert-embedding-in-upstash.mdx
 ================================================================================
 
 ---
@@ -18410,7 +18406,7 @@ await upstash.upsert(
 
 
 ================================================================================
-Source: src\pages\examples\rag\insert-embedding-in-vectorize.mdx
+Source: src/pages/examples/rag/insert-embedding-in-vectorize.mdx
 ================================================================================
 
 ---
@@ -18462,7 +18458,7 @@ await vectorize.upsert(
 
 
 ================================================================================
-Source: src\pages\examples\rag\metadata-extraction.mdx
+Source: src/pages/examples/rag/metadata-extraction.mdx
 ================================================================================
 
 ---
@@ -18588,7 +18584,7 @@ console.log('Chunk Metadata:', metaTwo);
 />
 
 ================================================================================
-Source: src\pages\examples\rag\rerank-rag.mdx
+Source: src/pages/examples/rag/rerank-rag.mdx
 ================================================================================
 
 ---
@@ -18785,7 +18781,7 @@ await answerQueries(queries);
 
 
 ================================================================================
-Source: src\pages\examples\rag\reranking-with-cohere.mdx
+Source: src/pages/examples/rag/reranking-with-cohere.mdx
 ================================================================================
 
 ---
@@ -18824,7 +18820,7 @@ const results = rerank(
 
 
 ================================================================================
-Source: src\pages\examples\rag\retrieve-results.mdx
+Source: src/pages/examples/rag/retrieve-results.mdx
 ================================================================================
 
 ---
@@ -18887,7 +18883,7 @@ console.log(results);
 
 
 ================================================================================
-Source: src\pages\examples\workflows\branching-paths.mdx
+Source: src/pages/examples/workflows/branching-paths.mdx
 ================================================================================
 
 ---
@@ -18990,7 +18986,7 @@ const result = await start({ triggerData: { inputValue: 3 } });
 
 
 ================================================================================
-Source: src\pages\examples\workflows\calling-agent.mdx
+Source: src/pages/examples/workflows/calling-agent.mdx
 ================================================================================
 
 ---
@@ -19069,7 +19065,7 @@ console.log(runResult.results);
 
 
 ================================================================================
-Source: src\pages\examples\workflows\creating-a-workflow.mdx
+Source: src/pages/examples/workflows/creating-a-workflow.mdx
 ================================================================================
 
 ---
@@ -19130,7 +19126,7 @@ console.log(res.results);
 
 
 ================================================================================
-Source: src\pages\examples\workflows\cyclical-dependencies.mdx
+Source: src/pages/examples/workflows/cyclical-dependencies.mdx
 ================================================================================
 
 ---
@@ -19235,7 +19231,7 @@ main();
 
 
 ================================================================================
-Source: src\pages\examples\workflows\parallel-steps.mdx
+Source: src/pages/examples/workflows/parallel-steps.mdx
 ================================================================================
 
 ---
@@ -19336,7 +19332,7 @@ const result = await start({ triggerData: { inputValue: 3 } });
 
 
 ================================================================================
-Source: src\pages\examples\workflows\sequential-steps.mdx
+Source: src/pages/examples/workflows/sequential-steps.mdx
 ================================================================================
 
 ---
@@ -19430,7 +19426,7 @@ const res = await start({ triggerData: { inputValue: 90 } });
 
 
 ================================================================================
-Source: src\pages\examples\workflows\suspend-and-resume.mdx
+Source: src/pages/examples/workflows/suspend-and-resume.mdx
 ================================================================================
 
 ---
@@ -19520,7 +19516,7 @@ await myWorkflow.watch(runId, async ({ activePaths }) => {
 
 
 ================================================================================
-Source: src\pages\examples\workflows\using-a-tool-as-a-step.mdx
+Source: src/pages/examples/workflows/using-a-tool-as-a-step.mdx
 ================================================================================
 
 ---
@@ -19572,7 +19568,7 @@ console.log(res.results);
 
 
 ================================================================================
-Source: src\pages\showcase\index.mdx
+Source: src/pages/showcase/index.mdx
 ================================================================================
 
 ---
