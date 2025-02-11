@@ -1,6 +1,6 @@
 ---
 title: "Example: Metadata Filtering | Retrieval | RAG | Mastra Docs"
-description: Example of using a Mastra agent to dynamically construct and apply metadata filters for precise document retrieval.
+description: Example of using a Mastra agent to construct and apply metadata filters for document retrieval.
 ---
 
 import { GithubLink } from "../../../components/github-link";
@@ -8,11 +8,11 @@ import { GithubLink } from "../../../components/github-link";
 # Agent-Driven Metadata Filtering
 
 This example demonstrates how to implement a Retrieval-Augmented Generation (RAG) system using Mastra, OpenAI embeddings, and PGVector for vector storage.
-This system uses an agent to dynamically construct metadata filters from a user's query to search for relevant chunks in the vector store, reducing the amount of results returned.
+This system uses an agent to construct metadata filters from a user's query to search for relevant chunks in the vector store, reducing the amount of results returned.
 
 ## Overview
 
-The system implements an intelligent RAG pipeline using Mastra and OpenAI, where an agent dynamically interprets queries and constructs appropriate metadata filters. Here's what it does:
+The implementation consists of the following components:
 
 1. Sets up a Mastra agent with gpt-4o-mini to understand queries and identify filter requirements
 2. Creates a vector query tool to handle metadata filtering and semantic search
