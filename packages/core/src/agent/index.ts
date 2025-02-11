@@ -185,7 +185,7 @@ export class Agent<
       } else {
         thread = await memory.getThreadById({ threadId });
         if (!thread) {
-          this.logger.debug(`Thread not found, creating new thread for agent ${this.name}`, {
+          this.logger.debug(`Thread with id ${threadId} not found, creating new thread for agent ${this.name}`, {
             runId: runId || this.name,
           });
           const title = await this.genTitle(userMessage);
@@ -334,12 +334,12 @@ export class Agent<
 
         if (memory) {
           this.logger.debug(
-            `[Agent:${this.name}] - Memory persistence: store=${this.#mastra?.memory?.constructor.name} threadId=${threadId}`,
+            `[Agent:${this.name}] - Memory persistence: store=${this.getMemory()?.constructor.name} threadId=${threadId}`,
             {
               runId,
               resourceId,
               threadId,
-              memoryStore: this.#mastra?.memory?.constructor.name,
+              memoryStore: this.getMemory()?.constructor.name,
             },
           );
 
@@ -630,12 +630,12 @@ export class Agent<
 
         if (this.getMemory() && resourceId) {
           this.logger.debug(
-            `[Agent:${this.name}] - Memory persistence enabled: store=${this.#mastra?.memory?.constructor.name}, resourceId=${resourceId}`,
+            `[Agent:${this.name}] - Memory persistence enabled: store=${this.getMemory()?.constructor.name}, resourceId=${resourceId}`,
             {
               runId,
               resourceId,
               threadId: threadIdToUse,
-              memoryStore: this.#mastra?.memory?.constructor.name,
+              memoryStore: this.getMemory()?.constructor.name,
             },
           );
           const preExecuteResult = await this.preExecute({
