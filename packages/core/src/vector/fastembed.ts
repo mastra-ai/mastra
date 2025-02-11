@@ -1,0 +1,90 @@
+import { experimental_customProvider } from 'ai';
+import { EmbeddingModel, FlagEmbedding } from 'fastembed';
+// @ts-expect-error no types for this package
+import node_modulesPath from 'node_modules-path';
+import path from 'path';
+
+let cachedPath: false | string = false;
+function getModelCachePath() {
+  if (cachedPath) return cachedPath;
+
+  // TODO: we can set this somewhere for cloud to drop models there in advance
+  // for now it's in node_modules/.fastembed-model-cache
+  const firstNodeModules = node_modulesPath().split('node_modules')[0];
+  cachedPath = path.join(firstNodeModules, 'node_modules', '.fastembed-model-cache');
+
+  return cachedPath;
+}
+
+const fastEmbedProvider = experimental_customProvider({
+  textEmbeddingModels: {
+    'bge-small-en-v1.5': {
+      specificationVersion: 'v1',
+      provider: 'fastembed',
+      modelId: 'bge-small-en-v1.5',
+      maxEmbeddingsPerCall: 1,
+      supportsParallelCalls: true,
+      async doEmbed({ values }) {
+        try {
+          const model = await FlagEmbedding.init({
+            model: EmbeddingModel.BGESmallENV15,
+            cacheDir: getModelCachePath(),
+          });
+          // model.embed() returns an AsyncGenerator that processes texts in batches (default size 256)
+          const embeddings = await model.embed(values);
+
+          const allResults = [];
+          for await (const result of embeddings) {
+            // result is an array of embeddings, one for each text in the batch
+            // We convert each Float32Array embedding to a regular number array
+            allResults.push(...result.map(embedding => Array.from(embedding)));
+          }
+
+          if (allResults.length === 0) throw new Error('No embeddings generated');
+
+          return {
+            embeddings: allResults,
+          };
+        } catch (error) {
+          console.error('Error generating embeddings:', error);
+          throw error;
+        }
+      },
+    },
+    'bge-base-en-v1.5': {
+      specificationVersion: 'v1',
+      provider: 'fastembed',
+      modelId: 'bge-base-en-v1.5',
+      maxEmbeddingsPerCall: 1,
+      supportsParallelCalls: true,
+      async doEmbed({ values }) {
+        try {
+          const model = await FlagEmbedding.init({
+            model: EmbeddingModel.BGEBaseEN,
+            cacheDir: getModelCachePath(),
+          });
+          // model.embed() returns an AsyncGenerator that processes texts in batches (default size 256)
+          const embeddings = await model.embed(values);
+
+          const allResults = [];
+          for await (const result of embeddings) {
+            // result is an array of embeddings, one for each text in the batch
+            // We convert each Float32Array embedding to a regular number array
+            allResults.push(...result.map(embedding => Array.from(embedding)));
+          }
+
+          if (allResults.length === 0) throw new Error('No embeddings generated');
+
+          return {
+            embeddings: allResults,
+          };
+        } catch (error) {
+          console.error('Error generating embeddings:', error);
+          throw error;
+        }
+      },
+    },
+  },
+});
+
+export const localEmbedder = fastEmbedProvider.textEmbeddingModel;
