@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 
 interface PlaygroundAgent extends Agent {
   provider: string;
+  modelId?: string;
 }
 
 export const useAgents = () => {
