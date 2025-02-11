@@ -69,7 +69,7 @@ const { embedding } = await embed({
 // Query with metadata filter
 const result = await pgVector.query('embeddings', embedding, 3, {
   'path.to.metadata': {
-    eq: 'value',
+    $eq: 'value',
   },
 });
 

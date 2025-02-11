@@ -1,26 +1,30 @@
 ---
 title: "Example: Metadata Filtering | Retrieval | RAG | Mastra Docs"
-description: Example of implementing a RAG system in Mastra using metadata filters to search for relevant chunks in the vector store.
+description: Example of using a Mastra agent to dynamically construct and apply metadata filters for precise document retrieval.
 ---
 
 import { GithubLink } from "../../../components/github-link";
 
-# Metadata Filtering
+# Agent-Driven Metadata Filtering
 
 This example demonstrates how to implement a Retrieval-Augmented Generation (RAG) system using Mastra, OpenAI embeddings, and PGVector for vector storage.
-This system uses metadata filters to search for relevant chunks in the vector store, reducing the amount of results returned.
+This system uses an agent to dynamically construct metadata filters from a user's query to search for relevant chunks in the vector store, reducing the amount of results returned.
 
 ## Overview
 
-The system implements RAG using Mastra and OpenAI. Here's what it does:
+The system implements an intelligent RAG pipeline using Mastra and OpenAI, where an agent dynamically interprets queries and constructs appropriate metadata filters. Here's what it does:
 
-1. Sets up a Mastra agent with gpt-4o-mini for response generation
-2. Creates a vector query tool to manage vector store interactions
-3. Chunks text documents into smaller segments
-4. Creates embeddings for these chunks
-5. Stores them in a PostgreSQL vector database
-6. Retrieves relevant chunks based on queries using vector query tool
-7. Generates context-aware responses using the Mastra agent
+1. Sets up a Mastra agent with gpt-4o-mini to understand queries and identify filter requirements
+2. Creates a vector query tool to handle metadata filtering and semantic search
+3. Processes documents into chunks with metadata and embeddings
+4. Stores both vectors and metadata in PGVector for efficient retrieval
+5. Processes queries by combining metadata filters with semantic search
+
+When a user asks a question:
+   - The agent analyzes the query to understand the intent
+   - Constructs appropriate metadata filters (e.g., by topic, date, category)
+   - Uses the vector query tool to find the most relevant information
+   - Generates a contextual response based on the filtered results
 
 ## Setup
 
@@ -48,7 +52,7 @@ import { embedMany } from 'ai';
 
 ## Vector Query Tool Creation
 
-Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database with filtering capabilities.
+Using createVectorQueryTool imported from @mastra/rag, you can create a tool that enables the agent to query the vector database with filtering capabilities.
 
 ```typescript copy showLineNumbers{9} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
@@ -100,7 +104,13 @@ const chunkMetadata = chunks?.map((chunk: any, index: number) => ({
 
 ## Agent Configuration
 
-Set up the Mastra agent that will handle the responses:
+The agent is configured to understand user queries and translate them into appropriate metadata filters.
+
+In our instructions we do the following:
+- Provide the agent with the metadata structure so that it knows the fields available for filtering.
+- Provide a prompt (e.g. PGVECTOR_PROMPT) that provides the agent with filter operations and syntax for the vector store queries.
+
+> Note: Different vector stores have specific prompts available. See [Vector Store Prompts](../../docs/reference/tools/vector-query-tool#vector-store-prompts) for details.
 
 ```typescript copy showLineNumbers{43} filename="src/mastra/index.ts"
 export const ragAgent = new Agent({
@@ -128,7 +138,11 @@ export const ragAgent = new Agent({
 });
 ```
 
-We can provide an example of how the metadata is structured for the agent to use when filtering with the tool.
+The agent's instructions are designed to:
+- Process user queries to identify filter requirements
+- Use the metadata structure to find relevant information
+- Apply appropriate filters through the vectorQueryTool and the provided vector store prompt
+- Generate responses based on the filtered context
 
 ## Instantiate PgVector and Mastra
 
