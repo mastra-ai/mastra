@@ -17,6 +17,7 @@ import {
   getAgentsHandler,
   getEvalsByAgentIdHandler,
   getLiveEvalsByAgentIdHandler,
+  setAgentInstructionsHandler,
   streamGenerateHandler,
 } from './handlers/agents.js';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client.js';
@@ -51,6 +52,7 @@ type Variables = {
   mastra: Mastra;
   clients: Set<{ controller: ReadableStreamDefaultController }>;
   tools: Record<string, any>;
+  playground: boolean;
 };
 
 export async function createHonoServer(
@@ -100,6 +102,7 @@ export async function createHonoServer(
   app.use('*', async (c, next) => {
     c.set('mastra', mastra);
     c.set('tools', tools);
+    c.set('playground', options.playground === true);
     await next();
   });
 
@@ -290,6 +293,51 @@ export async function createHonoServer(
       },
     }),
     streamGenerateHandler,
+  );
+
+  app.post(
+    '/api/agents/:agentId/instructions',
+    describeRoute({
+      description: "Update an agent's instructions",
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                instructions: {
+                  type: 'string',
+                  description: 'New instructions for the agent',
+                },
+              },
+              required: ['instructions'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Instructions updated successfully',
+        },
+        403: {
+          description: 'Not allowed in non-playground environment',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    setAgentInstructionsHandler,
   );
 
   app.post(

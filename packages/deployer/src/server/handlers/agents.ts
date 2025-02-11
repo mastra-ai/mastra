@@ -32,6 +32,7 @@ export async function getAgentsHandler(c: Context) {
         instructions: agent.instructions,
         tools: serializedAgentTools,
         provider: agent.llm?.getProvider(),
+        modelId: agent.llm?.getModelId(),
       };
       return acc;
     }, {});
@@ -67,6 +68,7 @@ export async function getAgentByIdHandler(c: Context) {
       instructions: agent.instructions,
       tools: serializedAgentTools,
       provider: agent.llm?.getProvider(),
+      modelId: agent.llm?.getModelId(),
     });
   } catch (error) {
     return handleError(error, 'Error getting agent');
@@ -166,5 +168,39 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
     return streamResponse;
   } catch (error) {
     return handleError(error, 'Error streaming from agent');
+  }
+}
+
+export async function setAgentInstructionsHandler(c: Context) {
+  try {
+    // Check if this is a playground request
+    const isPlayground = c.get('playground') === true;
+    if (!isPlayground) {
+      return c.json({ error: 'This API is only available in the playground environment' }, 403);
+    }
+
+    const agentId = c.req.param('agentId');
+    const { instructions } = await c.req.json();
+
+    if (!agentId || !instructions) {
+      return c.json({ error: 'Missing required fields' }, 400);
+    }
+
+    const mastra: Mastra = c.get('mastra');
+    const agent = mastra.getAgent(agentId);
+    if (!agent) {
+      return c.json({ error: 'Agent not found' }, 404);
+    }
+
+    agent.__updateInstructions(instructions);
+
+    return c.json(
+      {
+        instructions,
+      },
+      200,
+    );
+  } catch (error) {
+    return handleError(error, 'Error setting agent instructions');
   }
 }

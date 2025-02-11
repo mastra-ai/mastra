@@ -36,7 +36,7 @@ export class Agent<
 > extends MastraBase {
   public name: string;
   readonly llm: MastraLLMBase;
-  readonly instructions: string;
+  instructions: string;
   readonly model?: LanguageModelV1;
   #mastra?: MastraPrimitives;
   #memory?: MastraMemory;
@@ -81,6 +81,11 @@ export class Agent<
   }
   public getMemory(): MastraMemory | undefined {
     return this.#memory ?? this.#mastra?.memory;
+  }
+
+  __updateInstructions(newInstructions: string) {
+    this.instructions = newInstructions;
+    this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
   }
 
   __registerPrimitives(p: MastraPrimitives) {
