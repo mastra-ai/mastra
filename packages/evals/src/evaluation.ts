@@ -1,8 +1,15 @@
-import { type Agent, type Metric, evaluate as coreEvaluate } from '@mastra/core';
+import { type Metric, evaluate as coreEvaluate } from '@mastra/core';
+import { type Agent } from '@mastra/core/agent';
+import { type Mastra } from '@mastra/core/mastra';
 
 import { GLOBAL_RUN_ID_ENV_KEY } from './constants';
 
-export async function evaluate<T extends Agent>(agent: T, input: Parameters<T['generate']>[0], metric: Metric) {
+export async function evaluate<T extends Agent>(
+  mastra: Mastra,
+  agent: T,
+  input: Parameters<T['generate']>[0],
+  metric: Metric,
+) {
   const testInfo = await getCurrentTestInfo();
   let globalRunId = process.env[GLOBAL_RUN_ID_ENV_KEY];
   const runId = crypto.randomUUID();
@@ -16,6 +23,7 @@ export async function evaluate<T extends Agent>(agent: T, input: Parameters<T['g
   }
 
   const metricResult = await coreEvaluate({
+    mastra,
     agentName: agent.name,
     input,
     metric,

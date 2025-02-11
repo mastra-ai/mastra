@@ -1,9 +1,12 @@
 import { type Agent } from '../agent';
 import { AvailableHooks, executeHook } from '../hooks';
+import { type Mastra } from '../mastra';
+import { MastraStorage } from '../storage';
 
 import { type Metric } from './metric';
 
 export async function evaluate<T extends Agent>({
+  mastra,
   agentName,
   input,
   metric,
@@ -12,6 +15,7 @@ export async function evaluate<T extends Agent>({
   globalRunId,
   testInfo,
 }: {
+  mastra: Mastra;
   agentName: string;
   input: Parameters<T['generate']>[0];
   metric: Metric;
@@ -42,6 +46,19 @@ export async function evaluate<T extends Agent>({
       metricName: metric.constructor.name,
     },
   };
+
+  if (mastra?.memory?.storage) {
+    await mastra.memory.storage.insert({
+      tableName: MastraStorage.TABLE_EVALS,
+      record: {
+        result: JSON.stringify(traceObject.result),
+        meta: JSON.stringify(traceObject.meta),
+        input: traceObject.input,
+        output: traceObject.output,
+        createdAt: new Date().toISOString(),
+      },
+    });
+  }
 
   executeHook(AvailableHooks.ON_EVALUATION, traceObject);
 
