@@ -1,13 +1,12 @@
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+
 import { useState } from "react";
 
 export function CardItem({
-  title,
   links,
 }: {
-  title: string;
   links: Array<{ title: string; href: string }>;
 }) {
   return (
@@ -43,7 +42,7 @@ export function CardItems({
         setActiveTab={setActiveTab}
       />
       <div className="mt-6">
-        <CardItem title={activeTab} links={items[activeTab] || []} />
+        <CardItem links={items[activeTab] || []} />
       </div>
     </div>
   );
