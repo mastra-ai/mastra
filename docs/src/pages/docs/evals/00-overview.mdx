@@ -22,7 +22,9 @@ export const myAgent = new Agent({
   name: "My Agent",
   instructions: "You are a helpful assistant.",
   model: openai("gpt-4o-mini"),
-  metrics: [new ToneConsistencyMetric()],
+  metrics: {
+    tone: new ToneConsistencyMetric()
+  },
 });
 ```
 
