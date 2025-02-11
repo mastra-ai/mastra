@@ -19,7 +19,7 @@ const syncStep = new Step({
   }),
   description:
     "Crawl a website and extract the markdown content and sync it to the database",
-  execute: async ({ context, mastra, runId, suspend }) => {
+  execute: async ({ context, runId, suspend }) => {
     const toolResult = await siteCrawlTool.execute({
       context: context?.triggerData,
       runId,
@@ -36,25 +36,25 @@ const syncStep = new Step({
       };
     }
 
-    const recordsToPersist = await Promise.all(
-      crawlData?.flatMap(async ({ markdown, metadata }) => {
-        const doc = MDocument.fromMarkdown(markdown, metadata);
+    // const recordsToPersist = await Promise.all(
+    //   crawlData?.flatMap(async ({ markdown, metadata }) => {
+    //     const doc = MDocument.fromMarkdown(markdown, metadata);
 
-        await doc.chunk({
-          strategy: "markdown",
-          maxSize: 8190,
-        });
+    //     await doc.chunk({
+    //       strategy: "markdown",
+    //       maxSize: 8190,
+    //     });
 
-        const chunks = doc.getDocs();
+    //     const chunks = doc.getDocs();
 
-        return chunks.map((c, i) => {
-          return {
-            externalId: `${c.metadata?.sourceURL}_chunk_${i}`,
-            data: { markdown: c.text },
-          };
-        });
-      })
-    );
+    //     return chunks.map((c, i) => {
+    //       return {
+    //         externalId: `${c.metadata?.sourceURL}_chunk_${i}`,
+    //         data: { markdown: c.text },
+    //       };
+    //     });
+    //   })
+    // );
 
     return {
       success: true,
