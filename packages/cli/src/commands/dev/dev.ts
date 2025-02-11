@@ -104,8 +104,6 @@ export async function dev({ port, dir, root }: { dir?: string; root?: string; po
 
   await bundler.prepare(dotMastraPath);
 
-  writeFileSync(join(dotMastraPath, 'evals.json'), ``);
-
   const watcher = await bundler.watch(dotMastraPath);
 
   await startServer(dotMastraPath, port, env);

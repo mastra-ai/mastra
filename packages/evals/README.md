@@ -146,7 +146,7 @@ Some metrics also provide:
 
 The package includes built-in telemetry and logging capabilities:
 
-- Automatic evaluation tracking in `.mastra/evals.json`
+- Automatic evaluation tracking through Mastra Storage
 - Integration with OpenTelemetry for performance monitoring
 - Detailed evaluation traces for debugging
 

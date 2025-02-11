@@ -80,7 +80,7 @@ export async function getEvalsByAgentIdHandler(c: Context) {
     const mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const agent = mastra.getAgent(agentId);
-    const evals: EvalRow[] = (await mastra?.memory?.storage?.getEvalsByAgentName?.(agent.name, 'test')) || [];
+    const evals: EvalRow[] = (await mastra.memory?.storage?.getEvalsByAgentName?.(agent.name, 'test')) || [];
     return c.json({
       ...agent,
       evals,
@@ -95,7 +95,7 @@ export async function getLiveEvalsByAgentIdHandler(c: Context) {
     const mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const agent = mastra.getAgent(agentId);
-    const evals: EvalRow[] = (await mastra?.memory?.storage?.getEvalsByAgentName?.(agent.name, 'live')) || [];
+    const evals: EvalRow[] = (await mastra.memory?.storage?.getEvalsByAgentName?.(agent.name, 'live')) || [];
 
     return c.json({
       ...agent,
