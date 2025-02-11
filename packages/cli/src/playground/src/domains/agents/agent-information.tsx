@@ -1,5 +1,3 @@
-import { useNavigate } from 'react-router';
-
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { AgentDetails } from './agent-details';
@@ -7,7 +5,6 @@ import { AgentEndpoints } from './agent-endpoints';
 import { AgentLogs } from './agent-logs';
 
 export function AgentInformation({ agentId }: { agentId: string }) {
-  const navigate = useNavigate();
   return (
     <Tabs defaultValue="details">
       <TabsList className="flex shrink-0 border-b">
@@ -26,9 +23,6 @@ export function AgentInformation({ agentId }: { agentId: string }) {
             Log Drains
           </p>
         </TabsTrigger>
-        <button className="group" onClick={() => navigate(`/agents/${agentId}/evals`)}>
-          <p className="text-xs p-3 text-mastra-el-3">Evals</p>
-        </button>
       </TabsList>
       <TabsContent value="details">{agentId ? <AgentDetails agentId={agentId} /> : null}</TabsContent>
       <TabsContent value="endpoints">
