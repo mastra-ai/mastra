@@ -18,6 +18,27 @@ export class UpstashStore extends MastraStorage {
       token: config.token,
     });
   }
+  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    for (const record of records) {
+      await this.insert({ tableName, record });
+    }
+  }
+
+  async getTraces({
+    name,
+    scope,
+    page,
+    perPage,
+    attributes,
+  }: {
+    name?: string;
+    scope?: string;
+    page: number;
+    perPage: number;
+    attributes?: Record<string, string>;
+  }): Promise<any[]> {
+    throw new Error('Method not implemented.');
+  }
 
   private getKey(tableName: TABLE_NAMES, keys: Record<string, any>): string {
     const keyParts = Object.entries(keys).map(([key, value]) => `${key}:${value}`);
