@@ -1,5 +1,5 @@
-import { MemoryConfig } from '../memory';
-import { WorkflowRunState } from '../workflows';
+import { type MemoryConfig } from '../memory';
+import { type WorkflowRunState } from '../workflows';
 
 export interface StorageColumn {
   type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer';

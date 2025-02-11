@@ -1,28 +1,28 @@
 import {
-  AssistantContent,
-  CoreAssistantMessage,
-  CoreMessage,
-  CoreToolMessage,
-  CoreUserMessage,
-  TextPart,
-  ToolCallPart,
-  UserContent,
+  type AssistantContent,
+  type CoreAssistantMessage,
+  type CoreMessage,
+  type CoreToolMessage,
+  type CoreUserMessage,
+  type TextPart,
+  type ToolCallPart,
+  type UserContent,
 } from 'ai';
 import { type LanguageModelV1 } from 'ai';
 import { randomUUID } from 'crypto';
-import { JSONSchema7 } from 'json-schema';
+import { type JSONSchema7 } from 'json-schema';
 import { z, ZodSchema } from 'zod';
 
-import { MastraPrimitives } from '../action';
+import { type MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 import { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
 import { MastraLLM, MastraLLMBase } from '../llm/model';
 import { LogLevel, RegisteredLogger } from '../logger';
-import { MastraMemory, MemoryConfig, StorageThreadType } from '../memory';
+import { MastraMemory, type MemoryConfig, type StorageThreadType } from '../memory';
 import { InstrumentClass } from '../telemetry';
-import { CoreTool, ToolAction } from '../tools/types';
+import { type CoreTool, type ToolAction } from '../tools/types';
 
 import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
 

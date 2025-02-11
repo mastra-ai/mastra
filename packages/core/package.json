@@ -39,9 +39,6 @@
         "default": "./dist/base.js"
       }
     },
-    "./action": null,
-    "./queue": null,
-    "./run": null,
     "./package.json": "./package.json"
   },
   "sideEffects": false,
@@ -85,6 +82,7 @@
     "@ai-sdk/openai": "latest",
     "@babel/preset-env": "^7.26.0",
     "@babel/preset-typescript": "^7.26.0",
+    "@microsoft/api-extractor": "^7.49.2",
     "@size-limit/preset-small-lib": "^11.1.4",
     "@tsconfig/recommended": "^1.0.7",
     "@types/json-schema": "^7.0.15",

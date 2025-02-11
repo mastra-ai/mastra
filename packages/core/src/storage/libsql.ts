@@ -1,10 +1,9 @@
-import { createClient, Client } from '@libsql/client';
-import { join } from 'path';
+import { createClient, type Client } from '@libsql/client';
 
-import { MessageType, StorageThreadType } from '../memory';
+import { type MessageType, type StorageThreadType } from '../memory';
 
-import { MastraStorage, TABLE_NAMES } from './base';
-import { StorageColumn, StorageGetMessagesArg, EvalRow } from './types';
+import { MastraStorage, type TABLE_NAMES } from './base';
+import { type StorageColumn, type StorageGetMessagesArg, type EvalRow } from './types';
 
 export * from '../vector/libsql/index';
 
