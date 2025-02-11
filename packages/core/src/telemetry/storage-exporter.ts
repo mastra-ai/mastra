@@ -46,7 +46,7 @@ export class OTLPTraceExporter implements SpanExporter {
   }
 
   flush(): Promise<void> {
-    const now = Date.now();
+    const now = new Date();
     const items = this.queue.shift();
     if (!items) return Promise.resolve();
 
@@ -68,6 +68,9 @@ export class OTLPTraceExporter implements SpanExporter {
           ...rest
         } = span;
 
+        const startTime = Number(BigInt(startTimeUnixNano) / 1000n);
+        const endTime = Number(BigInt(endTimeUnixNano) / 1000n);
+
         acc.push({
           id: spanId,
           parentSpanId,
@@ -75,19 +78,21 @@ export class OTLPTraceExporter implements SpanExporter {
           name,
           scope: scope.name,
           kind,
-          status,
-          events,
-          links,
-          attributes: attributes.reduce((acc: Record<string, any>, attr: any) => {
-            const valueKey = Object.keys(attr.value)[0];
-            if (valueKey) {
-              acc[attr.key] = attr.value[valueKey];
-            }
-            return acc;
-          }, {}),
-          startTime: Number(startTimeUnixNano),
-          endTime: Number(endTimeUnixNano),
-          other: rest,
+          status: JSON.stringify(status),
+          events: JSON.stringify(events),
+          links: JSON.stringify(links),
+          attributes: JSON.stringify(
+            attributes.reduce((acc: Record<string, any>, attr: any) => {
+              const valueKey = Object.keys(attr.value)[0];
+              if (valueKey) {
+                acc[attr.key] = attr.value[valueKey];
+              }
+              return acc;
+            }, {}),
+          ),
+          startTime,
+          endTime,
+          other: JSON.stringify(rest),
           createdAt: now,
         });
       }

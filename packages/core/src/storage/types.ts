@@ -2,7 +2,7 @@ import { MemoryConfig } from '../memory';
 import { WorkflowRunState } from '../workflows';
 
 export interface StorageColumn {
-  type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer';
+  type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'bigint';
   primaryKey?: boolean;
   nullable?: boolean;
   references?: {
