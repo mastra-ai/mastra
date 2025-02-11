@@ -58,6 +58,11 @@ export class Telemetry {
   private constructor(config: OtelConfig) {
     this.name = config.serviceName ?? 'default-service';
 
+    if (!config.enabled || config.sampling?.type === 'always_off') {
+      Telemetry.isInitialized = false;
+      return;
+    }
+
     // Only initialize in server environment
     if (typeof window === 'undefined') {
       // In development, always create a new instance
