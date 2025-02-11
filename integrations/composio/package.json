@@ -20,7 +20,7 @@
   "scripts": {
     "analyze": "size-limit --why",
     "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
-    "build:dev": "tsup src/index.ts --format esm --dts --clean --treeshake --watch",
+    "build:watch": "pnpm build --watch",
     "lint": "dts lint",
     "size": "size-limit",
     "start": "dts watch",

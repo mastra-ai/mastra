@@ -48,8 +48,8 @@
   "scripts": {
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
-    "build": "tsup-node src/index.ts src/base.ts src/utils.ts src/*/index.ts src/vector/libsql/index.ts --format esm --clean --dts --treeshake",
-    "build:dev": "pnpm build --watch",
+    "build": "tsup src/index.ts src/base.ts src/utils.ts src/*/index.ts src/vector/libsql/index.ts --format esm --clean --dts --treeshake",
+    "build:watch": "pnpm build --watch",
     "size": "size-limit",
     "test": "vitest run"
   },

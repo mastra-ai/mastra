@@ -18,8 +18,8 @@
     "pretest": "docker compose up -d",
     "test": "vitest run",
     "posttest": "docker compose down",
-    "build": "tsup-node src/index.ts --format esm --dts --clean --treeshake",
-    "dev": "tsup-node src/index.ts --format esm --dts --clean --treeshake --watch"
+    "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
+    "build:watch": "pnpm build --watch"
   },
   "dependencies": {
     "@mastra/core": "workspace:^",

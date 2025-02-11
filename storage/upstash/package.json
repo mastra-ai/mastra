@@ -15,7 +15,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup-node src/index.ts --format esm --dts --clean --treeshake",
+    "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
     "test": "echo deprecated"
   },
   "dependencies": {
