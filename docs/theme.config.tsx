@@ -104,11 +104,15 @@ const docs: DocsThemeConfig = {
       </svg>
     ),
   },
+
   head: () => {
     const config = useConfig();
     const router = useRouter();
+    const domain = process.env.NEXT_PUBLIC_APP_URL;
     const { title, frontMatter } = config;
     const description = frontMatter?.description;
+    const ogImage =
+      frontMatter?.ogImage || `${domain}/api/og/docs?title=${title}`;
 
     const ogTitle = `${title}`;
     return (
@@ -116,10 +120,14 @@ const docs: DocsThemeConfig = {
         <title>{ogTitle}</title>
         <meta property="og:title" content={ogTitle} />
         {description && <meta name="description" content={description} />}
-        <link
-          rel="canonical"
-          href={`${process.env.NEXT_PUBLIC_APP_URL}${router.route}`}
-        />
+        <link rel="canonical" href={`${domain}${router.route}`} />
+        <meta property="og:image" content={ogImage} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={ogTitle} />
+        {description && (
+          <meta name="twitter:description" content={description} />
+        )}
+        <meta name="twitter:image" content={ogImage} />
       </>
     );
   },
@@ -127,8 +135,8 @@ const docs: DocsThemeConfig = {
     defaultMenuCollapseLevel: 2,
   },
   components: {
-    PropertiesTable,
-    OperatorsTable,
+    PropertiesTable: PropertiesTable as any,
+    OperatorsTable: OperatorsTable as any,
   },
   toc: {
     title: "On This Page",
