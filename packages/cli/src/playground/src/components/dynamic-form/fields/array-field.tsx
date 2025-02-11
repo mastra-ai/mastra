@@ -20,9 +20,9 @@ export function ArrayField({ name, control, renderField }: ArrayFieldProps) {
   });
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 w-full">
       {fields.map((field, index) => (
-        <div key={field.id} className="relative flex items-center gap-2">
+        <div key={field.id} className="relative w-full flex items-center gap-2">
           {renderField({ fieldName: `${name}.${index}`, index })}
           <Button
             type="button"

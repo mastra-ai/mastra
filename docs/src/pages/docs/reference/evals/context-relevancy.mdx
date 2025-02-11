@@ -40,7 +40,7 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
   content={[
     {
       name: "model",
-      type: "ModelConfig",
+      type: "LanguageModel",
       description: "Configuration for the model used to evaluate context relevancy",
       isOptional: false,
     },
@@ -135,13 +135,19 @@ Context Relevancy = (Number of Relevant Statements) / (Total Number of Statement
 Score interpretation:
 - 1.0: Perfect relevancy - all retrieved context is relevant
 - 0.7-0.9: High relevancy - most context is relevant with few irrelevant pieces
-- 0.4-0.6: Moderate relevancy - mix of relevant and irrelevant context
+- 0.4-0.6: Moderate relevancy - a mix of relevant and irrelevant context
 - 0.1-0.3: Low relevancy - mostly irrelevant context
 - 0: No relevancy - completely irrelevant context
 
 ## Example with Custom Configuration
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+import { ContextRelevancyMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
 const metric = new ContextRelevancyMetric(model, {
   scale: 100, // Use 0-100 scale instead of 0-1
   context: [
@@ -170,6 +176,6 @@ const result = await metric.measure(
 
 ## Related
 
-- [Answer Relevancy Metric](./answer-relevancy)
 - [Contextual Recall Metric](./contextual-recall)
 - [Context Precision Metric](./context-precision)
+- [Context Position Metric](./context-position) 

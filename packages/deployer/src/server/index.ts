@@ -328,11 +328,9 @@ export async function createHonoServer(
             schema: {
               type: 'object',
               properties: {
-                args: { type: 'object' },
-                threadId: { type: 'string' },
-                resourceid: { type: 'string' },
+                data: { type: 'object' },
               },
-              required: ['args'],
+              required: ['data'],
             },
           },
         },
@@ -796,11 +794,9 @@ export async function createHonoServer(
             schema: {
               type: 'object',
               properties: {
-                args: { type: 'object' },
-                threadId: { type: 'string' },
-                resourceid: { type: 'string' },
+                data: { type: 'object' },
               },
-              required: ['args'],
+              required: ['data'],
             },
           },
         },

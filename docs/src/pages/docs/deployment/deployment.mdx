@@ -1,32 +1,32 @@
 ---
-title: "Mastra Cloud Deployment | Mastra Docs"
-description: Guide on deploying Mastra agents and workflows to various cloud platforms using deployers.
+title: "Deployment"
+description: "Build and deploy Mastra applications using platform-specific deployers or standard HTTP servers"
 ---
 
-# Deploying Mastra to the Cloud
+# Deploying Mastra Applications
 
-In this guide, we'll cover how to deploy your Mastra agents and workflows using deployers. Mastra provides dedicated deployers for various cloud platforms, making it easy to deploy your agents with minimal configuration.
+Mastra applications can be deployed in two ways:
 
-Currently, Mastra supports deploying to:
-- **Cloudflare Workers**
-- **Vercel**
-- **Netlify**
+1. **Direct Platform Deployment**: Using platform-specific deployers for Cloudflare Workers, Vercel, or Netlify
+2. **Universal Deployment**: Using `mastra build` to generate a standard Node.js server that can run anywhere
 
 ## Prerequisites
 
 Before you begin, ensure you have:
 
 - **Node.js** installed (version 18 or higher is recommended)
-- An account with your chosen deployment platform (Cloudflare, Vercel, or Netlify)
-- Required API keys or credentials for your deployment platform
+- If using a platform-specific deployer:
+  - An account with your chosen platform
+  - Required API keys or credentials
 
-## Using Deployers
+## Direct Platform Deployment
 
-Mastra uses a deployer-based system for cloud deployments. Each deployer is available as a separate package that you can install based on your needs.
+Platform-specific deployers handle configuration and deployment for:
+- **Cloudflare Workers**
+- **Vercel**
+- **Netlify**
 
 ### Installing Deployers
-
-Install the deployer package for your chosen platform:
 
 ```bash copy
 # For Cloudflare
@@ -41,19 +41,12 @@ npm install @mastra/deployer-netlify
 
 ### Configuring Deployers
 
-Configure your Mastra instance with the appropriate deployer in your entry file:
+Configure the deployer in your entry file:
 
-```typescript:src/mastra/index.ts
+```typescript copy showLineNumbers
 import { Mastra, createLogger } from '@mastra/core';
-
-// Import the deployer you want to use
 import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
-// OR
-import { VercelDeployer } from '@mastra/deployer-vercel';
-// OR
-import { NetlifyDeployer } from '@mastra/deployer-netlify';
 
-// Example with Cloudflare deployer
 export const mastra = new Mastra({
   agents: { /* your agents here */ },
   logger: createLogger({ name: 'MyApp', level: 'debug' }),
@@ -64,11 +57,11 @@ export const mastra = new Mastra({
 });
 ```
 
-### Deployer Configuration Options
+### Deployer Configuration
 
 #### Cloudflare Deployer
 
-```typescript
+```typescript copy showLineNumbers
 new CloudflareDeployer({
   scope: 'your-cloudflare-scope',
   projectName: 'your-project-name',
@@ -77,7 +70,7 @@ new CloudflareDeployer({
 
 #### Vercel Deployer
 
-```typescript
+```typescript copy showLineNumbers
 new VercelDeployer({
   scope: 'your-vercel-scope',
   projectName: 'your-project-name',
@@ -86,27 +79,65 @@ new VercelDeployer({
 
 #### Netlify Deployer
 
-```typescript
+```typescript copy showLineNumbers
 new NetlifyDeployer({
   scope: 'your-netlify-scope',
   projectName: 'your-project-name',
 })
 ```
 
+## Universal Deployment
+
+Since Mastra builds to a standard Node.js server, you can deploy to any platform that runs Node.js applications:
+- Cloud VMs (AWS EC2, DigitalOcean Droplets, GCP Compute Engine)
+- Container platforms (Docker, Kubernetes)
+- Platform as a Service (Heroku, Railway)
+- Self-hosted servers
+
+### Building
+
+Build the application:
+
+```bash copy
+# Build from current directory
+mastra build
+
+# Or specify a directory
+mastra build --dir ./my-project
+```
+
+The build process:
+1. Locates entry file (`src/mastra/index.ts` or `src/mastra/index.js`)
+2. Creates `.mastra` output directory
+3. Bundles code using Rollup with tree shaking and source maps
+4. Generates [Hono](https://hono.dev) HTTP server
+
+See [`mastra build`](/docs/reference/cli/build) for all options.
+
+### Running the Server
+
+Start the HTTP server:
+
+```bash copy
+node .mastra/index.js
+```
+
 ## Environment Variables
 
-Ensure you set up the necessary environment variables for:
+Required variables:
 
-1. Your deployment platform credentials
-2. Any API keys needed by your agents (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`)
+1. Platform deployer variables (if using platform deployers):
+   - Platform credentials
+2. Agent API keys:
+   - `OPENAI_API_KEY`
+   - `ANTHROPIC_API_KEY`
+3. Server configuration (for universal deployment):
+   - `PORT`: HTTP server port (default: 3000)
+   - `HOST`: Server host (default: 0.0.0.0)
 
-You can set these variables through your deployment platform's dashboard or configuration files.
+## Platform Documentation
 
-## Conclusion
-
-By using Mastra's deployer system, you can easily deploy your agents to your preferred cloud platform. The deployers handle the complexities of deployment, allowing you to focus on building your agents and workflows.
-
-For platform-specific deployment details or troubleshooting, refer to the respective platform's documentation:
-- [Cloudflare Workers Documentation](https://developers.cloudflare.com/workers/)
-- [Vercel Documentation](https://vercel.com/docs)
-- [Netlify Documentation](https://docs.netlify.com/)
+Platform deployment references:
+- [Cloudflare Workers](https://developers.cloudflare.com/workers/)
+- [Vercel](https://vercel.com/docs)
+- [Netlify](https://docs.netlify.com/)

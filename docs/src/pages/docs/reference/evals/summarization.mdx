@@ -4,8 +4,8 @@ description: Documentation for the Summarization Metric in Mastra, which evaluat
 ---
 
 # SummarizationMetric
-
-The `SummarizationMetric` evaluates how well an LLM's summary captures the original text's content while maintaining factual accuracy. It combines two aspects: alignment (factual correctness) and coverage (inclusion of key information), using the minimum of these scores to ensure both qualities are necessary for a good summary.
+,
+The `SummarizationMetric` evaluates how well an LLM's summary captures the original text's content while maintaining factual accuracy. It combines two aspects: alignment (factual correctness) and coverage (inclusion of key information), using the minimum scores to ensure both qualities are necessary for a good summary.
 
 ## Basic Usage
 
@@ -33,7 +33,7 @@ console.log(result.info); // Object containing detailed metrics about the summar
   content={[
     {
       name: "model",
-      type: "ModelConfig",
+      type: "LanguageModel",
       description: "Configuration for the model used to evaluate summaries",
       isOptional: false,
     },
@@ -143,7 +143,7 @@ The metric evaluates summaries through two components:
 
 2. **Coverage Score**: Measures inclusion of key information
    - Generates key questions from the original text
-   - Checks if the summary answers these questions
+   - Check if the summary answers these questions
    - Score = (number of answerable questions) / (total questions)
 
 The final score is calculated as: `min(alignmentScore, coverageScore)`
@@ -159,6 +159,12 @@ Score interpretation:
 ## Example with Analysis
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+import { SummarizationMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
 const metric = new SummarizationMetric(model);
 
 const result = await metric.measure(
@@ -184,5 +190,6 @@ const result = await metric.measure(
 ## Related
 
 - [Faithfulness Metric](./faithfulness)
-- [Answer Relevancy Metric](./answer-relevancy)
 - [Completeness Metric](./completeness)
+- [Contextual Recall Metric](./contextual-recall)
+- [Hallucination Metric](./hallucination)

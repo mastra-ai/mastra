@@ -36,7 +36,7 @@ console.log(result.info.reason); // Explanation of the score
   content={[
     {
       name: "model",
-      type: "ModelConfig",
+      type: "LanguageModel",
       description: "Configuration for the model used to evaluate relevancy",
       isOptional: false,
     },
@@ -139,6 +139,12 @@ Score interpretation:
 ## Example with Custom Configuration
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+import { AnswerRelevancyMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
 const metric = new AnswerRelevancyMetric(
   model,
   {
@@ -169,4 +175,4 @@ const result = await metric.measure(
 
 - [Prompt Alignment Metric](./prompt-alignment)
 - [Context Precision Metric](./context-precision)
-- [Tone Consistency Metric](./tone-consistency)
+- [Faithfulness Metric](./faithfulness)

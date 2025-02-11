@@ -2,7 +2,6 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader2 } from 'lucide-react';
-import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -15,7 +14,6 @@ import { resolveSchema } from './schema-resolver';
 interface DynamicFormProps<T extends z.ZodSchema> {
   schema: T;
   onSubmit: (values: z.infer<T>) => void | Promise<void>;
-  onChange?: (values: Partial<z.infer<T>>) => void;
   isSubmitLoading?: boolean;
   submitButtonLabel?: string;
 }
@@ -23,7 +21,6 @@ interface DynamicFormProps<T extends z.ZodSchema> {
 export function DynamicForm<T extends z.ZodSchema>({
   schema,
   onSubmit,
-  onChange,
   isSubmitLoading,
   submitButtonLabel = 'Submit',
 }: DynamicFormProps<T>) {
@@ -31,18 +28,21 @@ export function DynamicForm<T extends z.ZodSchema>({
   const discriminatedUnionSchemaOptions = (schema as any)?._def?.options;
   const discriminatedUnionSchemaDiscriminator = (schema as any)?._def?.discriminator;
 
-  const form = useForm<z.infer<T>>({
+  // Wrap non-object schemas in a container object
+  const wrappedSchema = schemaTypeName !== 'ZodObject' ? z.object({ items: schema }) : schema;
+
+  const form = useForm<z.infer<typeof wrappedSchema>>({
     resolver:
       schemaTypeName === 'ZodDiscriminatedUnion'
-        ? customZodUnionResolver(schema as any, discriminatedUnionSchemaDiscriminator)
-        : zodResolver(schema as any),
+        ? customZodUnionResolver(wrappedSchema as any, discriminatedUnionSchemaDiscriminator)
+        : zodResolver(wrappedSchema as any),
   });
 
   const { control, handleSubmit, watch } = form;
   const formValues = form.watch();
 
   const discriminatorValue = discriminatedUnionSchemaDiscriminator
-    ? watch(discriminatedUnionSchemaDiscriminator)
+    ? (watch(discriminatedUnionSchemaDiscriminator) as any)
     : undefined;
 
   const resolvedSchema =
@@ -50,25 +50,26 @@ export function DynamicForm<T extends z.ZodSchema>({
       ? discriminatedUnionSchemaOptions?.find(
           (option: any) => option?.shape?.[discriminatedUnionSchemaDiscriminator]?._def?.value === discriminatorValue,
         ) || z.object({ [discriminatedUnionSchemaDiscriminator]: z.string() })
-      : schema;
-
-  React.useEffect(() => {
-    onChange?.(formValues);
-  }, [formValues, onChange]);
+      : wrappedSchema;
 
   function handleFieldChange({ key, value }: { key: keyof z.infer<T>; value: any }) {
     if (key === discriminatedUnionSchemaDiscriminator) {
       form.setValue(key as any, value);
-      onChange?.({ ...formValues, [key]: value });
     } else {
       form.setValue(key as any, value);
-      onChange?.({ ...formValues, [key]: value });
     }
   }
 
+  const wrappedOnSubmit = (values: z.infer<typeof wrappedSchema>) => {
+    if (schemaTypeName !== 'ZodObject') {
+      return onSubmit(values.items);
+    }
+    return onSubmit(values as any);
+  };
+
   return (
     <ScrollArea className="h-full w-full">
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 p-4">
+      <form onSubmit={handleSubmit(wrappedOnSubmit)} className="flex flex-col gap-4 p-4 w-full">
         {resolveSchema({
           schema: resolvedSchema,
           parentField: '',

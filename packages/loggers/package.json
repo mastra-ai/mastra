@@ -28,7 +28,7 @@
   },
   "scripts": {
     "build": "tsup src/file/index.ts src/upstash/index.ts --format esm --dts --clean --treeshake",
-    "dev": "tsup src/file/index.ts src/upstash/index.ts --format esm --dts --clean --treeshake --watch",
+    "build:watch": "pnpm build --watch",
     "test": "vitest run"
   },
   "keywords": [],
