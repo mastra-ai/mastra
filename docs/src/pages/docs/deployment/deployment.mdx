@@ -43,13 +43,9 @@ npm install @mastra/deployer-netlify
 
 Configure the deployer in your entry file:
 
-```typescript:src/mastra/index.ts
+```typescript copy showLineNumbers
 import { Mastra, createLogger } from '@mastra/core';
 import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
-// OR
-import { VercelDeployer } from '@mastra/deployer-vercel';
-// OR
-import { NetlifyDeployer } from '@mastra/deployer-netlify';
 
 export const mastra = new Mastra({
   agents: { /* your agents here */ },
@@ -65,7 +61,7 @@ export const mastra = new Mastra({
 
 #### Cloudflare Deployer
 
-```typescript
+```typescript copy showLineNumbers
 new CloudflareDeployer({
   scope: 'your-cloudflare-scope',
   projectName: 'your-project-name',
@@ -74,7 +70,7 @@ new CloudflareDeployer({
 
 #### Vercel Deployer
 
-```typescript
+```typescript copy showLineNumbers
 new VercelDeployer({
   scope: 'your-vercel-scope',
   projectName: 'your-project-name',
@@ -83,7 +79,7 @@ new VercelDeployer({
 
 #### Netlify Deployer
 
-```typescript
+```typescript copy showLineNumbers
 new NetlifyDeployer({
   scope: 'your-netlify-scope',
   projectName: 'your-project-name',
