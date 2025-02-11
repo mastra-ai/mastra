@@ -12833,47 +12833,10 @@ One reason to use `.createRun()` vs `.execute()` is to get a unique run ID for t
 ## Usage
 
 ```typescript
-const { runId, start } = workflow.createRun({
-  triggerData: { inputValue: 42 },
-  metadata: {
-    requestId: "abc-123"
-  }
-});
+const { runId, start } = workflow.createRun();
 
 const result = await start();
 ```
-
-## Parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "config",
-      type: "object",
-      description: "Configuration options for the workflow run",
-      isOptional: true
-    }
-  ]}
-/>
-
-### config
-
-<PropertiesTable
-  content={[
-    {
-      name: "triggerData",
-      type: "Record<string, any>",
-      description: "Initial data passed to trigger the workflow execution",
-      isOptional: true
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>",
-      description: "Additional metadata to associate with this run",
-      isOptional: true
-    }
-  ]}
-/>
 
 ## Returns
 
@@ -14257,9 +14220,9 @@ const stepTwo = new Step({
 myWorkflow.step(stepOne).then(stepTwo).commit();
 
 // 4. Run the workflow
-const { runId, start } = myWorkflow.createRun({ triggerData: { inputValue: 3 } });
+const { runId, start } = myWorkflow.createRun();
 
-const result = await start();
+const result = await start({ triggerData: { inputValue: 3 } });
 console.log("Workflow result:", result.results);
 ```
 
@@ -14637,9 +14600,7 @@ To handle suspended workflows, use the `watch` method to monitor workflow status
 
 ```typescript
 // Create and start the workflow
-const { runId, start } = myWorkflow.createRun({
-  triggerData: { inputValue: 45 }
-});
+const { runId, start } = myWorkflow.createRun();
 
 // Start watching the workflow before executing it
 myWorkflow.watch(runId, async ({ context }) => {
@@ -14661,7 +14622,9 @@ myWorkflow.watch(runId, async ({ context }) => {
 });
 
 // Start the workflow execution
-const result = await start();
+const result = await start({
+  triggerData: { inputValue: 45 }
+});
 ```
 
 ## Related Resources
@@ -19145,11 +19108,11 @@ myWorkflow.step(
   stepOne
 ).commit();
 
-const { runId, start } = myWorkflow.createRun({
+const { runId, start } = myWorkflow.createRun();
+
+const res = await start({
   triggerData: { input: 90 }
 });
-
-const res = await start();
 
 console.log(res.results);
 ```
