@@ -94,8 +94,9 @@ ${embedderExample}`,
         model: embedder,
       });
 
-      await this.vector.createIndex('memory_messages', 1536);
-      vectorResults = await this.vector.query('memory_messages', embedding, vectorConfig.topK, {
+      const { indexName } = await this.createEmbeddingIndex();
+
+      vectorResults = await this.vector.query(indexName, embedding, vectorConfig.topK, {
         thread_id: threadId,
       });
     }
@@ -226,13 +227,14 @@ ${embedderExample}`,
     this.mutateMessagesToHideWorkingMemory(messages);
 
     if (this.vector) {
-      await this.vector.createIndex('memory_messages', 1536);
+      const embedder = this.getEmbedder();
+      const { indexName } = await this.createEmbeddingIndex();
+
       for (const message of messages) {
         if (typeof message.content !== `string`) continue;
-        const embedder = this.getEmbedder();
         const { embedding } = await embed({ value: message.content, model: embedder, maxRetries: 3 });
         await this.vector.upsert(
-          'memory_messages',
+          indexName,
           [embedding],
           [
             {
