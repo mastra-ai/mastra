@@ -55,7 +55,7 @@ export function AgentDetails({ agentId }: { agentId: string }) {
         </div>
         <div className="grid grid-cols-[100px_1fr] gap-2">
           <p className="text-mastra-el-3">Model</p>
-          <p className="text-mastra-el-5">{agent?.provider}</p>
+          <p className="text-mastra-el-5">{agent?.modelId}</p>
         </div>
         <div className="grid grid-cols-[100px_1fr] gap-2">
           <p className="text-mastra-el-3">Provider</p>
