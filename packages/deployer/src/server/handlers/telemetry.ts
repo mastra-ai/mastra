@@ -5,7 +5,6 @@ import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 
 import { handleError } from './error';
-import { validateBody } from './utils';
 
 export async function getTelemetryHandler(c: Context) {
   try {
