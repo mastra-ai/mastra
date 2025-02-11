@@ -80,8 +80,6 @@
   },
   "devDependencies": {
     "@ai-sdk/openai": "latest",
-    "@babel/preset-env": "^7.26.0",
-    "@babel/preset-typescript": "^7.26.0",
     "@microsoft/api-extractor": "^7.49.2",
     "@size-limit/preset-small-lib": "^11.1.4",
     "@types/json-schema": "^7.0.15",

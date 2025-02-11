@@ -84,12 +84,6 @@ importers:
         specifier: ^3.24.1
         version: 3.24.1
     devDependencies:
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.49.2(@types/node@22.13.1)
@@ -130,12 +124,6 @@ importers:
         specifier: ^3.24.1
         version: 3.24.1
     devDependencies:
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.49.2(@types/node@22.13.1)
@@ -164,12 +152,6 @@ importers:
         specifier: ^11.2.0
         version: 11.3.0
     devDependencies:
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.49.2(@types/node@22.13.1)
@@ -2458,12 +2440,6 @@ importers:
       '@ai-sdk/openai':
         specifier: latest
         version: 1.1.9(zod@3.24.1)
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.49.2(@types/node@22.13.1)
@@ -2732,12 +2708,6 @@ importers:
         specifier: workspace:^
         version: link:../core
     devDependencies:
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.49.2(@types/node@22.13.1)
@@ -2772,12 +2742,6 @@ importers:
       '@ai-sdk/anthropic':
         specifier: ^1.1.6
         version: 1.1.6(zod@3.24.1)
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.49.2(@types/node@22.13.1)
@@ -2815,12 +2779,6 @@ importers:
         specifier: ^4.7.0
         version: 4.7.0
     devDependencies:
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.49.2(@types/node@22.13.1)
@@ -2910,12 +2868,6 @@ importers:
       '@ai-sdk/openai':
         specifier: latest
         version: 1.1.9(zod@3.24.1)
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.49.2(@types/node@22.13.1)
@@ -2944,12 +2896,6 @@ importers:
         specifier: ^3.24.1
         version: 3.24.1
     devDependencies:
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.49.2(@types/node@22.13.1)
@@ -2975,12 +2921,6 @@ importers:
         specifier: ^3.24.1
         version: 3.24.1
     devDependencies:
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.49.2(@types/node@22.13.1)
@@ -3006,12 +2946,6 @@ importers:
         specifier: ^3.24.1
         version: 3.24.1
     devDependencies:
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.49.2(@types/node@22.13.1)
@@ -3037,12 +2971,6 @@ importers:
         specifier: ^3.24.1
         version: 3.24.1
     devDependencies:
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.49.2(@types/node@22.13.1)
@@ -3068,12 +2996,6 @@ importers:
         specifier: ^3.24.1
         version: 3.24.1
     devDependencies:
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.49.2(@types/node@22.13.1)
@@ -3099,12 +3021,6 @@ importers:
         specifier: ^3.24.1
         version: 3.24.1
     devDependencies:
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.49.2(@types/node@22.13.1)
@@ -3130,12 +3046,6 @@ importers:
         specifier: ^3.24.1
         version: 3.24.1
     devDependencies:
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.49.2(@types/node@22.13.1)
@@ -3158,12 +3068,6 @@ importers:
         specifier: ^3.24.1
         version: 3.24.1
     devDependencies:
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.49.2(@types/node@22.13.1)
@@ -3189,12 +3093,6 @@ importers:
         specifier: ^3.24.1
         version: 3.24.1
     devDependencies:
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.49.2(@types/node@22.13.1)
@@ -3220,12 +3118,6 @@ importers:
         specifier: ^3.24.1
         version: 3.24.1
     devDependencies:
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.7(@babel/core@7.26.7)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.7)
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.49.2(@types/node@22.13.1)
@@ -4777,12 +4669,6 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
 
-  '@babel/plugin-transform-typescript@7.26.7':
-    resolution: {integrity: sha512-5cJurntg+AT+cgelGP9Bt788DKiAw9gIMSMU2NJrLAilnj0m8WZWUNZPSLOmadYsujHutpgElO+50foX+ib/Wg==}
-    engines: {node: '>=6.9.0'}
-    peerDependencies:
-      '@babel/core': ^7.0.0-0
-
   '@babel/plugin-transform-unicode-escapes@7.25.9':
     resolution: {integrity: sha512-s5EDrE6bW97LtxOcGj1Khcx5AaXwiMmi4toFWRDP9/y0Woo6pXC+iyPu/KuhKtfSrNFd7jJB+/fkOtZy6aIC6Q==}
     engines: {node: '>=6.9.0'}
@@ -4817,12 +4703,6 @@ packages:
     resolution: {integrity: sha512-HrcgcIESLm9aIR842yhJ5RWan/gebQUJ6E/E5+rf0y9o6oj7w0Br+sWuL6kEQ/o/AdfvR1Je9jG18/gnpwjEyA==}
     peerDependencies:
       '@babel/core': ^7.0.0-0 || ^8.0.0-0 <8.0.0
-
-  '@babel/preset-typescript@7.26.0':
-    resolution: {integrity: sha512-NMk1IGZ5I/oHhoXEElcm+xUnL/szL6xflkFZmoEU9xj1qSJXpiS7rsspYo92B4DRCDvZn2erT5LdsCeXAKNCkg==}
-    engines: {node: '>=6.9.0'}
-    peerDependencies:
-      '@babel/core': ^7.0.0-0
 
   '@babel/runtime@7.26.7':
     resolution: {integrity: sha512-AOPI3D+a8dXnja+iwsUqGRjr1BbZIe771sXdapOtYI531gSqpi92vXivKcq2asu/DFpdl1ceFAKZyRzK2PCVcQ==}
@@ -22621,17 +22501,6 @@ snapshots:
       '@babel/core': 7.26.7
       '@babel/helper-plugin-utils': 7.26.5
 
-  '@babel/plugin-transform-typescript@7.26.7(@babel/core@7.26.7)':
-    dependencies:
-      '@babel/core': 7.26.7
-      '@babel/helper-annotate-as-pure': 7.25.9
-      '@babel/helper-create-class-features-plugin': 7.25.9(@babel/core@7.26.7)
-      '@babel/helper-plugin-utils': 7.26.5
-      '@babel/helper-skip-transparent-expression-wrappers': 7.25.9
-      '@babel/plugin-syntax-typescript': 7.25.9(@babel/core@7.26.7)
-    transitivePeerDependencies:
-      - supports-color
-
   '@babel/plugin-transform-unicode-escapes@7.25.9(@babel/core@7.26.7)':
     dependencies:
       '@babel/core': 7.26.7
@@ -22736,17 +22605,6 @@ snapshots:
       '@babel/helper-plugin-utils': 7.26.5
       '@babel/types': 7.26.7
       esutils: 2.0.3
-
-  '@babel/preset-typescript@7.26.0(@babel/core@7.26.7)':
-    dependencies:
-      '@babel/core': 7.26.7
-      '@babel/helper-plugin-utils': 7.26.5
-      '@babel/helper-validator-option': 7.25.9
-      '@babel/plugin-syntax-jsx': 7.25.9(@babel/core@7.26.7)
-      '@babel/plugin-transform-modules-commonjs': 7.26.3(@babel/core@7.26.7)
-      '@babel/plugin-transform-typescript': 7.26.7(@babel/core@7.26.7)
-    transitivePeerDependencies:
-      - supports-color
 
   '@babel/runtime@7.26.7':
     dependencies:
