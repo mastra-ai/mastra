@@ -1,7 +1,7 @@
 import { Workflow, Step } from "@mastra/core/workflows";
 import { z } from "zod";
 import { addToGitHubTool, generateSpecTool, siteCrawlTool } from "../tools";
-import { MDocument } from "@mastra/rag";
+// import { MDocument } from "@mastra/rag";
 
 const syncStep = new Step({
   id: "site-crawl-sync-step",
