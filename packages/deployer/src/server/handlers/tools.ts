@@ -66,12 +66,10 @@ export function executeToolHandler(tools: Record<string, any>) {
         return c.json({ error: 'Tool not found' }, 404);
       }
 
-      const body = await c.req.json();
+      const { data } = await c.req.json();
       const mastra = c.get('mastra');
       const result = await tool.execute({
-        context: {
-          ...body,
-        },
+        context: data,
         mastra,
         runId: mastra.runId,
       });
@@ -95,11 +93,9 @@ export async function executeAgentToolHandler(c: Context) {
       throw new HTTPException(404, { message: 'Tool not found' });
     }
 
-    const body = await c.req.json();
+    const { data } = await c.req.json();
     const result = await tool.execute({
-      context: {
-        ...body,
-      },
+      context: data,
       mastra,
       runId: agentId,
     });
