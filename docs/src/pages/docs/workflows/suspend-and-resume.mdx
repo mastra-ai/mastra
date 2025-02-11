@@ -12,6 +12,7 @@ Mastra's suspend and resume features let you pause workflow execution at any ste
 ## When to Use Suspend/Resume
 
 Common scenarios for suspending workflows include:
+
 - Waiting for human approval or input
 - Pausing until external API resources become available
 - Collecting additional data needed for later steps
@@ -45,31 +46,31 @@ To handle suspended workflows, use the `watch` method to monitor workflow status
 
 ```typescript
 // Create and start the workflow
-const { runId, start } = myWorkflow.createRun({
-  triggerData: { inputValue: 45 }
-});
+const { runId, start } = myWorkflow.createRun();
 
 // Start watching the workflow before executing it
 myWorkflow.watch(runId, async ({ context }) => {
   // Check each step's status
   const stepStatus = context.steps?.stepTwo?.status;
 
-  if (stepStatus === 'suspended') {
-    console.log('Workflow suspended, resuming with new value');
+  if (stepStatus === "suspended") {
+    console.log("Workflow suspended, resuming with new value");
 
     // Resume the workflow with new context
     await myWorkflow.resume({
       runId,
-      stepId: 'stepTwo',
+      stepId: "stepTwo",
       context: {
-        secondValue: 60  // This value will be added to the original value
+        secondValue: 60, // This value will be added to the original value
       },
     });
   }
 });
 
 // Start the workflow execution
-const result = await start();
+const result = await start({
+  triggerData: { inputValue: 45 },
+});
 ```
 
 ## Related Resources
