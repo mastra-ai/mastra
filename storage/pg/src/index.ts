@@ -70,7 +70,6 @@ export class PostgresStore extends MastraStorage {
     perPage: number;
     attributes?: Record<string, string>;
   }): Promise<any[]> {
-    // TODO
     const limit = perPage;
     const offset = page * perPage;
 
