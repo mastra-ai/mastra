@@ -5,7 +5,7 @@ description: Documentation for the Hallucination Metric in Mastra, which evaluat
 
 # HallucinationMetric
 
-The `HallucinationMetric` evaluates whether an LLM generates factually correct information by comparing its output against provided context. This metric measures hallucination by identifying direct contradictions between the context and the output.
+The `HallucinationMetric` evaluates whether an LLM generates factually correct information by comparing its output against the provided context. This metric measures hallucination by identifying direct contradictions between the context and the output.
 
 ## Basic Usage
 
@@ -47,7 +47,7 @@ console.log(result.info.reason); // Explanation of the score
   content={[
     {
       name: "model",
-      type: "ModelConfig",
+      type: "LanguageModel",
       description: "Configuration for the model used to evaluate hallucination",
       isOptional: false,
     },
@@ -163,11 +163,17 @@ Score interpretation:
 - 0.75: High hallucination - contradicts 75% of context statements
 - 1.0: Complete hallucination - contradicts all context statements
 
-Note: The score represents the degree of hallucination, so a lower score indicates better factual alignment with the provided context.
+**Note:** The score represents the degree of hallucination, so a lower score indicates better factual alignment with the provided context.
 
 ## Example with Analysis
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+import { HallucinationMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
 const metric = new HallucinationMetric(model, {
   context: [
     "OpenAI was founded in December 2015 by Sam Altman, Greg Brockman, and others.",
@@ -199,3 +205,4 @@ const result = await metric.measure({
 - [Faithfulness Metric](./faithfulness)
 - [Answer Relevancy Metric](./answer-relevancy)
 - [Context Precision Metric](./context-precision)
+- [Context Relevancy Metric](./context-relevancy)

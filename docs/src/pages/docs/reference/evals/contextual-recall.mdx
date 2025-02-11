@@ -39,7 +39,7 @@ console.log(result.score); // Score from 0-1
   content={[
     {
       name: "model",
-      type: "ModelConfig",
+      type: "LanguageModel",
       description: "Configuration for the model used to evaluate contextual recall",
       isOptional: false,
     },
@@ -131,7 +131,7 @@ Score interpretation:
 - 0.1-0.3: Low recall - significant information was missed
 - 0: No recall - failed to include any relevant information
 
-The score is calculated as:
+The score is calculated as follows:
 ```
 score = (number of correctly recalled items) / (total number of relevant items in context)
 ```
@@ -139,6 +139,12 @@ score = (number of correctly recalled items) / (total number of relevant items i
 ## Example with Custom Configuration
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+import { ContextualRecallMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
 const metric = new ContextualRecallMetric(
   model,
   {
@@ -170,5 +176,6 @@ const result = await metric.measure(
 
 ## Related
 
-- [Answer Relevancy Metric](./answer-relevancy)
-- [Context Precision Metric](./context-precision)
++ [Context Relevancy Metric](./context-relevancy) 
++ [Completeness Metric](./completeness)
++ [Summarization Metric](./summarization)

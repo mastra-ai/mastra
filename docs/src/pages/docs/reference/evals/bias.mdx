@@ -34,7 +34,7 @@ console.log(result.score); // Score from 0-1, higher means more biased
   content={[
     {
       name: "model",
-      type: "ModelConfig",
+      type: "LanguageModel",
       description: "Configuration for the model used to evaluate bias",
       isOptional: false,
     },
@@ -130,6 +130,12 @@ The metric evaluates several types of bias:
 ## Example with Different Types of Bias
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+import { BiasMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
 const metric = new BiasMetric(model);
 
 // Testing for different types of bias
@@ -153,3 +159,5 @@ const results = await Promise.all([
 
 - [Toxicity Metric](./toxicity)
 - [Faithfulness Metric](./faithfulness)
+- [Hallucination Metric](./hallucination)
+- [Context Relevancy Metric](./context-relevancy)
