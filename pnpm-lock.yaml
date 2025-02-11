@@ -223,8 +223,8 @@ importers:
         version: 2.6.0
     devDependencies:
       '@types/node':
-        specifier: ^22.13.1
-        version: 22.13.1
+        specifier: ^20
+        version: 20.17.17
       '@types/react':
         specifier: ^18
         version: 18.3.18
@@ -242,7 +242,7 @@ importers:
         version: 8.5.1
       tailwindcss:
         specifier: ^3.4.1
-        version: 3.4.17(ts-node@10.9.2(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/node@22.13.1)(typescript@5.7.3))
+        version: 3.4.17(ts-node@10.9.2(@swc/core@1.10.11(@swc/helpers@0.5.15))(@types/node@20.17.17)(typescript@5.7.3))
       tsx:
         specifier: ^4.19.2
         version: 4.19.2
@@ -1513,9 +1513,6 @@ importers:
         specifier: latest
         version: 4.1.34(react@19.0.0)(zod@3.24.1)
     devDependencies:
-      '@mastra/evals':
-        specifier: workspace:*
-        version: link:../../packages/evals
       '@types/node':
         specifier: ^22.10.1
         version: 22.13.1
