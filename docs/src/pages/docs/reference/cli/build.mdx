@@ -1,0 +1,48 @@
+---
+title: "mastra build"
+description: "Build your Mastra project for production deployment"
+---
+
+The `mastra build` command bundles your Mastra project into a production-ready Hono server. Hono is a lightweight web framework that provides type-safe routing and middleware support, making it ideal for deploying Mastra agents as HTTP endpoints.
+
+## Usage
+
+```bash
+mastra build [options]
+```
+
+## Options
+
+- `--dir <path>`: Directory containing your Mastra project (default: current directory)
+
+## What It Does
+
+1. Locates your Mastra entry file (either `src/mastra/index.ts` or `src/mastra/index.js`)
+2. Creates a `.mastra` output directory
+3. Bundles your code using Rollup with:
+   - Tree shaking for optimal bundle size
+   - Node.js environment targeting
+   - Source map generation for debugging
+
+## Example
+
+```bash
+# Build from current directory
+mastra build
+
+# Build from specific directory
+mastra build --dir ./my-mastra-project
+```
+
+## Output
+
+The command generates a production bundle in the `.mastra` directory, which includes:
+- A Hono-based HTTP server with your Mastra agents exposed as endpoints
+- Bundled JavaScript files optimized for production
+- Source maps for debugging
+- Required dependencies
+
+This output is suitable for:
+- Deploying to cloud servers (EC2, Digital Ocean)
+- Running in containerized environments
+- Using with container orchestration systems
