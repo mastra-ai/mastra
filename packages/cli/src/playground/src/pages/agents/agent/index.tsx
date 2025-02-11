@@ -21,8 +21,12 @@ function Agent() {
   const { agentId, threadId } = useParams();
   const isEvalsPage = useMatch(`/agents/${agentId}/evals`);
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
-  const { memory } = useMemory();
-  const { messages, isLoading: isMessagesLoading } = useMessages({ threadId: threadId!, memory: !!memory?.result });
+  const { memory } = useMemory(agentId);
+  const { messages, isLoading: isMessagesLoading } = useMessages({
+    agentId: agentId!,
+    threadId: threadId!,
+    memory: !!memory?.result,
+  });
   const [sidebar, setSidebar] = useState(true);
 
   if (isAgentLoading) {

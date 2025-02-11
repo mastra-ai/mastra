@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { useDeleteThread, useThreads } from '@/hooks/use-memory';
 
 export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId: string }) {
-  const { threads, isLoading } = useThreads({ resourceid: agentId });
+  const { threads, isLoading } = useThreads({ resourceid: agentId, agentId });
   const { deleteThread } = useDeleteThread();
   const navigate = useNavigate();
 
@@ -21,7 +21,7 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const handleDelete = async () => {
-    await deleteThread({ threadId: deleteId!, resourceid: agentId });
+    await deleteThread({ threadId: deleteId!, resourceid: agentId, agentId });
     setShowDeleteDialog(false);
     if (deleteId === threadId) {
       navigate(`/agents/${agentId}`);

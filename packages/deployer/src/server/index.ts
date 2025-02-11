@@ -228,7 +228,11 @@ export async function createHonoServer(
                 },
                 threadId: { type: 'string' },
                 resourceId: { type: 'string', description: 'The resource ID for the conversation' },
-                resourceid: { type: 'string', description: 'The resource ID for the conversation (deprecated, use resourceId instead)', deprecated: true },
+                resourceid: {
+                  type: 'string',
+                  description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
+                  deprecated: true,
+                },
                 output: { type: 'object' },
               },
               required: ['messages'],
@@ -274,7 +278,11 @@ export async function createHonoServer(
                 },
                 threadId: { type: 'string' },
                 resourceId: { type: 'string', description: 'The resource ID for the conversation' },
-                resourceid: { type: 'string', description: 'The resource ID for the conversation (deprecated, use resourceId instead)', deprecated: true },
+                resourceid: {
+                  type: 'string',
+                  description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
+                  deprecated: true,
+                },
                 output: { type: 'object' },
               },
               required: ['messages'],
@@ -347,6 +355,14 @@ export async function createHonoServer(
     describeRoute({
       description: 'Get memory status',
       tags: ['memory'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
       responses: {
         200: {
           description: 'Memory status',
@@ -364,6 +380,12 @@ export async function createHonoServer(
       parameters: [
         {
           name: 'resourceid',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'agentId',
           in: 'query',
           required: true,
           schema: { type: 'string' },
@@ -387,6 +409,12 @@ export async function createHonoServer(
         {
           name: 'threadId',
           in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'agentId',
+          in: 'query',
           required: true,
           schema: { type: 'string' },
         },
@@ -415,6 +443,12 @@ export async function createHonoServer(
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
       ],
       responses: {
         200: {
@@ -430,6 +464,14 @@ export async function createHonoServer(
     describeRoute({
       description: 'Create a new thread',
       tags: ['memory'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
       requestBody: {
         required: true,
         content: {
@@ -468,6 +510,12 @@ export async function createHonoServer(
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
       ],
       requestBody: {
         required: true,
@@ -501,6 +549,12 @@ export async function createHonoServer(
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
       ],
       responses: {
         200: {
@@ -519,6 +573,14 @@ export async function createHonoServer(
     describeRoute({
       description: 'Save messages',
       tags: ['memory'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
       requestBody: {
         required: true,
         content: {

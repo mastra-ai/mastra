@@ -5,7 +5,7 @@ import useSWR, { useSWRConfig } from 'swr';
 
 import { fetcher } from '@/lib/utils';
 
-export const useMemory = () => {
+export const useMemory = (agentId?: string) => {
   const {
     data: memory,
     isLoading,
@@ -16,12 +16,12 @@ export const useMemory = () => {
   return { memory, isLoading, mutate };
 };
 
-export const useThreads = ({ resourceid }: { resourceid: string }) => {
+export const useThreads = ({ resourceid, agentId }: { resourceid: string; agentId: string }) => {
   const {
     data: threads,
     isLoading,
     mutate,
-  } = useSWR<Array<ThreadType>>(`/api/memory/threads?resourceid=${resourceid}`, fetcher, {
+  } = useSWR<Array<ThreadType>>(`/api/memory/threads?resourceid=${resourceid}&agentId=${agentId}`, fetcher, {
     fallbackData: [],
     isPaused: () => !resourceid,
     revalidateOnFocus: false,
