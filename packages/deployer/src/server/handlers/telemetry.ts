@@ -13,7 +13,7 @@ export async function getTelemetryHandler(c: Context) {
     const telemetry: Telemetry = mastra.telemetry;
     const storage: MastraStorage = mastra.storage;
 
-    const { scope, page, perPage } = c.req.query();
+    const { name, scope, page, perPage } = c.req.query();
 
     if (!telemetry) {
       throw new HTTPException(400, { message: 'Telemetry is not initialized' });
@@ -23,7 +23,7 @@ export async function getTelemetryHandler(c: Context) {
       throw new HTTPException(400, { message: 'Storage is not initialized' });
     }
 
-    const traces = await storage.getTraces({ scope, page: Number(page) ?? 0, perPage: Number(perPage ?? 100) });
+    const traces = await storage.getTraces({ name, scope, page: Number(page ?? 0), perPage: Number(perPage ?? 100) });
 
     return c.json({ traces });
   } catch (error) {
