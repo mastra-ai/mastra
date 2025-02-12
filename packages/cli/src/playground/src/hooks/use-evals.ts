@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 export type Evals = {
+  input: string;
+  output: string;
   result: {
     score: number;
   };
@@ -10,6 +12,7 @@ export type Evals = {
     runId: string;
     timestamp: string;
     testName: string;
+    instructions: string;
   };
 };
 
