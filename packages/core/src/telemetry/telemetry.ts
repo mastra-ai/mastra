@@ -59,7 +59,6 @@ export class Telemetry {
     this.name = config.serviceName ?? 'default-service';
 
     // Only initialize in server environment
-    // @ts-expect-error window is not defined in node
     if (typeof window === 'undefined') {
       // In development, always create a new instance
       // In production, use existing instance if available
