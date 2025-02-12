@@ -4,11 +4,6 @@ import { MastraStorage } from '@mastra/core/storage';
 
 import { GLOBAL_RUN_ID_ENV_KEY } from './constants';
 
-/**
- * TODO(storage): Currently the mastrra instance passed here is not the same we use in dev.entry.js due to bundling.
- * This does not cause apparent problems for file storage, but is a problem for in-memory storage.
- * When using :memory: URL with libSQL, each client gets its own isolated memory database, so test evals do not properly show up in the UI.
- */
 export async function attachListeners(mastra?: Mastra) {
   if (mastra?.storage) {
     await mastra.storage.init();
