@@ -20,34 +20,6 @@ export class Memory extends MastraMemory {
       embeddings?: any;
     } = {},
   ) {
-    const embedderExample = `
-Example: 
-
-  import { openai } from '@ai-sdk/openai';
-
-  new Memory({ 
-    embedder: openai.embedding(\`text-embedding-3-small\`)
-  })
-
-`;
-
-    // Check for deprecated embeddings object
-    if (config.embeddings) {
-      throw new Error(
-        `The \`embeddings\` option is deprecated. Please use \`embedder\` instead.
-${embedderExample}
-`,
-      );
-    }
-
-    if (config.vector && !config.embedder) {
-      throw new Error(
-        `The \`embedder\` option is required when a vector DB is attached to new Memory({ vector })
-
-${embedderExample}`,
-      );
-    }
-
     super({ name: 'Memory', ...config });
 
     const mergedConfig = this.getMergedThreadConfig({
