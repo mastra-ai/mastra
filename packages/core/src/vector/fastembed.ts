@@ -19,7 +19,7 @@ function getModelCachePath() {
 async function generateEmbeddings(values: string[], modelType: 'BGESmallENV15' | 'BGEBaseENV15') {
   try {
     // Dynamically import fastembed only when this function is called
-    // this is to avoid importing fsatembed in runtimes that don't support its native bindings
+    // this is to avoid importing fastembed in runtimes that don't support its native bindings
     const { EmbeddingModel, FlagEmbedding } = await import('fastembed');
 
     const model = await FlagEmbedding.init({
