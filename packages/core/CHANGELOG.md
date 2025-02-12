@@ -1,5 +1,16 @@
 # @mastra/core
 
+## 0.2.0-alpha.97
+
+### Patch Changes
+
+- 07c069d: Add dotenv as dependency
+- 7892533: Updated test evals to use Mastra Storage
+- e6d8055: Added Mastra Storage to add and query live evals
+- 5950de5: Added update instructions API
+- df843d3: Fixed libsql db relative file paths so they're always outside the .mastra directory. If they're inside .mastra they will be deleted when code is re-bundled
+- a870123: Added local embedder class that uses fastembed-js, a Typescript/NodeJS implementation of @Qdrant/fastembed
+
 ## 0.2.0-alpha.96
 
 ### Minor Changes

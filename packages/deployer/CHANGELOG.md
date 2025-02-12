@@ -1,5 +1,22 @@
 # @mastra/deployer
 
+## 0.1.0-alpha.46
+
+### Patch Changes
+
+- 7892533: Updated test evals to use Mastra Storage
+- e6d8055: Added Mastra Storage to add and query live evals
+- a18e96c: Array schemas for dev tool playground
+- 5950de5: Added update instructions API
+- f1e3105: Now that memory can be added to an agent, the playground needs to look up memory on the agent, not on mastra. Now the playground looks up on the agent to properly access memory
+- Updated dependencies [07c069d]
+- Updated dependencies [7892533]
+- Updated dependencies [e6d8055]
+- Updated dependencies [5950de5]
+- Updated dependencies [df843d3]
+- Updated dependencies [a870123]
+  - @mastra/core@0.2.0-alpha.97
+
 ## 0.1.0-alpha.45
 
 ### Patch Changes

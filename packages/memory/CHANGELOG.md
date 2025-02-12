@@ -1,5 +1,18 @@
 # @mastra/memory
 
+## 0.1.0-alpha.79
+
+### Patch Changes
+
+- a870123: Added local embedder class that uses fastembed-js, a Typescript/NodeJS implementation of @Qdrant/fastembed
+- Updated dependencies [07c069d]
+- Updated dependencies [7892533]
+- Updated dependencies [e6d8055]
+- Updated dependencies [5950de5]
+- Updated dependencies [df843d3]
+- Updated dependencies [a870123]
+  - @mastra/core@0.2.0-alpha.97
+
 ## 0.1.0-alpha.78
 
 ### Patch Changes
