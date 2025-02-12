@@ -8,6 +8,14 @@ import { StorageColumn, StorageGetMessagesArg, EvalRow } from './types';
 
 export * from '../vector/libsql/index';
 
+function safelyParseJSON(jsonString: string): any {
+  try {
+    return JSON.parse(jsonString);
+  } catch (e) {
+    return {};
+  }
+}
+
 export interface LibSQLConfig {
   url: string;
   authToken?: string;
@@ -435,13 +443,32 @@ export class DefaultStorage extends MastraStorage {
   }
 
   // TODO: add types
-  async getTraces({ scope, page, perPage }: { scope?: string; page: number; perPage: number }): Promise<any[]> {
+  async getTraces(
+    { name, scope, page, perPage }: { name?: string; scope?: string; page: number; perPage: number } = {
+      page: 0,
+      perPage: 100,
+    },
+  ): Promise<any[]> {
     const limit = perPage;
-    const offset = (page - 1) * perPage;
+    const offset = page * perPage;
+
+    console.dir({ limit, offset, scope });
+
+    const args: (string | number)[] = [];
+
+    if (name) {
+      args.push(name);
+    }
+
+    if (scope) {
+      args.push(scope);
+    }
+
+    args.push(limit, offset);
 
     const result = await this.client.execute({
-      sql: `SELECT * FROM ${MastraStorage.TABLE_TRACES} ${scope ? 'WHERE resourceId = ?' : ''} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
-      args: scope ? [scope, limit, offset] : [limit, offset],
+      sql: `SELECT * FROM ${MastraStorage.TABLE_TRACES} ${name ? 'WHERE name = ?' : ''} ${scope ? 'WHERE scope = ?' : ''} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
+      args,
     });
 
     if (!result.rows) {
@@ -455,13 +482,13 @@ export class DefaultStorage extends MastraStorage {
       name: row.name,
       scope: row.scope,
       kind: row.kind,
-      status: row.status,
-      events: row.events,
-      links: row.links,
-      attributes: row.attributes,
+      status: safelyParseJSON(row.status as string),
+      events: safelyParseJSON(row.events as string),
+      links: safelyParseJSON(row.links as string),
+      attributes: safelyParseJSON(row.attributes as string),
       startTime: row.startTime,
       endTime: row.endTime,
-      other: row.other,
+      other: safelyParseJSON(row.other as string),
       createdAt: row.createdAt,
     })) as any;
   }

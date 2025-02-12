@@ -73,7 +73,7 @@ export class OTLPTraceExporter implements SpanExporter {
           parentSpanId,
           traceId,
           name,
-          scope,
+          scope: scope.name,
           kind,
           status,
           events,
