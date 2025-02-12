@@ -54,7 +54,7 @@ export const fastEmbedProvider = experimental_customProvider({
       specificationVersion: 'v1',
       provider: 'fastembed',
       modelId: 'bge-small-en-v1.5',
-      maxEmbeddingsPerCall: 1,
+      maxEmbeddingsPerCall: 256,
       supportsParallelCalls: true,
       async doEmbed({ values }) {
         return generateEmbeddings(values, 'BGESmallENV15');
@@ -64,7 +64,7 @@ export const fastEmbedProvider = experimental_customProvider({
       specificationVersion: 'v1',
       provider: 'fastembed',
       modelId: 'bge-base-en-v1.5',
-      maxEmbeddingsPerCall: 1,
+      maxEmbeddingsPerCall: 256,
       supportsParallelCalls: true,
       async doEmbed({ values }) {
         return generateEmbeddings(values, 'BGEBaseENV15');
