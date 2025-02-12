@@ -20,13 +20,13 @@ export const mastra = new Mastra({
   workflows: { logCatWorkflow },
   logger,
   storage,
-  telemetry: {
-    export: {
-      type: 'custom',
-      exporter: new OTLPStorageExporter({
-        logger,
-        storage,
-      }),
-    },
-  },
+  // telemetry: {
+  //   export: {
+  //     type: 'custom',
+  //     exporter: new OTLPStorageExporter({
+  //       logger,
+  //       storage,
+  //     }),
+  //   },
+  // },
 });
