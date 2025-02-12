@@ -18,6 +18,13 @@ function getModelCachePath() {
 // Shared function to generate embeddings using fastembed
 async function generateEmbeddings(values: string[], modelType: 'BGESmallENV15' | 'BGEBaseENV15') {
   try {
+    // NOTE: This dynamic import janky dance is due to some runtimes not having support for the native bindings used by onnxruntime-node
+    // I made a fork of fastembed-js and published it as https://www.npmjs.com/package/fastembed-web
+    // The fork uses onnxruntime-web instead of the node package. Theoretically this fork has greater compatibility while also being less performant.
+    // If we need greater compat for this embedder we can do a dynamic import for fastembed-js and if the import fails we can do a second dynamic import for fastembed-web and try that
+    // I haven't done this yet because I got fastembed-js to work locally and in Mastra Cloud.
+    // If we need this to also work places like Netlify and Vercel and it's not working we will likely need to try using fastembed-web.
+    //
     // Dynamically import fastembed only when this function is called
     // this is to avoid importing fastembed in runtimes that don't support its native bindings
     const fastEmbedImportPath = 'fastembed?d=' + Date.now(); // +? date to prevent esbuild from seeing this as statically analyzable and bundling this as a regular import.
