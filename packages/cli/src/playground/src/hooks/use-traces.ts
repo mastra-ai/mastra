@@ -30,15 +30,15 @@ export const useTraces = (componentName: string) => {
     }
   }, []);
 
-  const onError = useCallback((error: { msg: string }) => {
-    toast.error(error.msg);
+  const onError = useCallback((error: { message: string }) => {
+    toast.error(error.message);
   }, []);
 
   const shouldContinue = useCallback((result: RefinedTrace[]) => {
     return result.length > 0;
   }, []);
 
-  const { firstCallLoading, error } = usePolling<RefinedTrace[], { msg: string }>({
+  const { firstCallLoading, error } = usePolling<RefinedTrace[], { message: string }>({
     fetchFn,
     interval: 3000,
     onSuccess,

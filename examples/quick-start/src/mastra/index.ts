@@ -1,4 +1,4 @@
-import { Agent, MastraStorageLibSql, createLogger, Mastra, OTLPStorageExporter } from '@mastra/core';
+import { MastraStorageLibSql, createLogger, Mastra } from '@mastra/core';
 
 import { catOne, agentTwo } from './agents/agent';
 import { logCatWorkflow } from './workflow';
@@ -20,13 +20,4 @@ export const mastra = new Mastra({
   workflows: { logCatWorkflow },
   logger,
   storage,
-  // telemetry: {
-  //   export: {
-  //     type: 'custom',
-  //     exporter: new OTLPStorageExporter({
-  //       logger,
-  //       storage,
-  //     }),
-  //   },
-  // },
 });
