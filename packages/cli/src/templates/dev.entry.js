@@ -9,7 +9,7 @@ import { MastraStorage } from '@mastra/core/storage';
 // @ts-ignore
 await createNodeServer(mastra, { playground: true, swaggerUI: true });
 
-registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName }) => {
+registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
   evaluate({
     agentName,
     input,
@@ -17,6 +17,7 @@ registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agen
     output,
     runId,
     globalRunId: runId,
+    instructions,
   });
 });
 

@@ -26,6 +26,7 @@ export function registerHook(
     metric: Metric;
     runId: string;
     agentName: string;
+    instructions: string;
   }>,
 ): void;
 export function registerHook(hook: `${AvailableHooks}`, action: Handler<any>): void {
@@ -38,6 +39,7 @@ export function executeHook(
     input: string;
     output: string;
     result: MetricResult;
+    meta: Record<string, any>;
   },
 ): void;
 export function executeHook(
@@ -48,6 +50,7 @@ export function executeHook(
     metric: Metric;
     runId: string;
     agentName: string;
+    instructions: string;
   },
 ): void;
 
