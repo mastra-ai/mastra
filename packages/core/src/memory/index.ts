@@ -114,6 +114,27 @@ export abstract class MastraMemory extends MastraBase {
     return null;
   }
 
+  protected async createEmbeddingIndex(): Promise<{ indexName: string }> {
+    if (!this.vector) {
+      throw new Error(`Cannot call MastraMemory.createEmbeddingIndex() without a vector db attached.`);
+    }
+
+    const defaultDimensions = 1536;
+
+    // AI SDK doesn't expose a way to check how many dimensions a model uses.
+    const dimensionsByModelId: Record<string, number> = {
+      'bge-small-en-v1.5': 384,
+      'bge-base-en-v1.5': 768,
+    };
+
+    const dimensions = dimensionsByModelId[this.getEmbedder().modelId] || defaultDimensions;
+    const isDefault = dimensions === defaultDimensions;
+    const indexName = isDefault ? 'memory_messages' : `memory_messages_${dimensions}`;
+
+    await this.vector.createIndex(indexName, dimensions);
+    return { indexName };
+  }
+
   protected getEmbedder() {
     if (!this.embedder) {
       throw new Error(`Cannot use vector features without setting new Memory({ embedder: embedderInstance })
