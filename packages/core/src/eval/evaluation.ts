@@ -1,7 +1,7 @@
-import { type Agent } from '../agent';
+import type { Agent } from '../agent';
 import { AvailableHooks, executeHook } from '../hooks';
 
-import { type Metric } from './metric';
+import type { Metric } from './metric';
 
 export async function evaluate<T extends Agent>({
   agentName,

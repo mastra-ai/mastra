@@ -1,6 +1,6 @@
-import { Metric, MetricResult } from '../eval/metric';
+import { Metric, type MetricResult } from '../eval/metric';
 
-import mitt, { Handler } from './mitt';
+import mitt, { type Handler } from './mitt';
 
 export enum AvailableHooks {
   ON_EVALUATION = 'onEvaluation',

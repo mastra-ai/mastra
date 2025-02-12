@@ -1,4 +1,4 @@
-import { encodingForModel, getEncoding, Tiktoken, TiktokenModel, TiktokenEncoding } from 'js-tiktoken';
+import { encodingForModel, getEncoding, Tiktoken, type TiktokenModel, type TiktokenEncoding } from 'js-tiktoken';
 
 import { TextTransformer } from './text';
 

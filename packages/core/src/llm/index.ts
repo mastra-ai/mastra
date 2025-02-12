@@ -1,13 +1,23 @@
-import { CoreAssistantMessage as AiCoreAssistantMessage, CoreMessage as AiCoreMessage, CoreSystemMessage as AiCoreSystemMessage, CoreToolMessage as AiCoreToolMessage, CoreUserMessage as AiCoreUserMessage, EmbedManyResult as AiEmbedManyResult, EmbedResult as AiEmbedResult, GenerateObjectResult, GenerateTextResult, LanguageModelV1, StreamObjectResult, StreamTextResult } from 'ai';
-import { JSONSchema7 } from 'json-schema';
+import {
+  type CoreAssistantMessage as AiCoreAssistantMessage,
+  type CoreMessage as AiCoreMessage,
+  type CoreSystemMessage as AiCoreSystemMessage,
+  type CoreToolMessage as AiCoreToolMessage,
+  type CoreUserMessage as AiCoreUserMessage,
+  type EmbedManyResult as AiEmbedManyResult,
+  type EmbedResult as AiEmbedResult,
+  type GenerateObjectResult,
+  type GenerateTextResult,
+  type LanguageModelV1,
+  type StreamObjectResult,
+  type StreamTextResult,
+} from 'ai';
+import { type JSONSchema7 } from 'json-schema';
 import { z, ZodSchema } from 'zod';
 
-
-
-import { ToolsInput } from '../agent/types';
-import { Run } from '../run/types';
-import { CoreTool } from '../tools/types';
-
+import { type ToolsInput } from '../agent/types';
+import { type Run } from '../run/types';
+import { type CoreTool } from '../tools/types';
 
 export type LanguageModel = LanguageModelV1;
 
@@ -31,26 +41,26 @@ export type StructuredOutputType = 'array' | 'string' | 'number' | 'object' | 'b
 
 export type StructuredOutputArrayItem =
   | {
-    type: BaseStructuredOutputType;
-  }
+      type: BaseStructuredOutputType;
+    }
   | {
-    type: 'object';
-    items: StructuredOutput;
-  };
+      type: 'object';
+      items: StructuredOutput;
+    };
 
 export type StructuredOutput = {
   [key: string]:
-  | {
-    type: BaseStructuredOutputType;
-  }
-  | {
-    type: 'object';
-    items: StructuredOutput;
-  }
-  | {
-    type: 'array';
-    items: StructuredOutputArrayItem;
-  };
+    | {
+        type: BaseStructuredOutputType;
+      }
+    | {
+        type: 'object';
+        items: StructuredOutput;
+      }
+    | {
+        type: 'array';
+        items: StructuredOutputArrayItem;
+      };
 };
 
 export type GenerateReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends undefined

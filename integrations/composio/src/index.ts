@@ -1,10 +1,10 @@
 import { Integration } from '@mastra/core/integration';
-import { createTool, ToolAction } from '@mastra/core/tools';
+import { createTool, type ToolAction } from '@mastra/core/tools';
 import { jsonSchemaToModel } from '@mastra/core/utils';
 import { Composio } from 'composio-core';
 import { z } from 'zod';
 
-import { ComposioConfig } from './types';
+import { type ComposioConfig } from './types';
 
 type ComposioToolsetParams = {
   actions?: Array<string>;

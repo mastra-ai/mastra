@@ -1,7 +1,13 @@
-import { CoreMessage, deepMerge } from '@mastra/core';
-import { MastraMemory, MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
-import { StorageGetMessagesArg } from '@mastra/core/storage';
-import { embed, Message as AiMessage } from 'ai';
+import { type CoreMessage, deepMerge } from '@mastra/core';
+import {
+  MastraMemory,
+  type MessageType,
+  type MemoryConfig,
+  type SharedMemoryConfig,
+  type StorageThreadType,
+} from '@mastra/core/memory';
+import { type StorageGetMessagesArg } from '@mastra/core/storage';
+import { embed, type Message as AiMessage } from 'ai';
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration

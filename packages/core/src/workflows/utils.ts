@@ -1,4 +1,4 @@
-import { StepResult, VariableReference } from './types';
+import type { StepResult, VariableReference } from './types';
 
 export function isErrorEvent(stateEvent: any): stateEvent is {
   type: `xstate.error.actor.${string}`;

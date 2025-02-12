@@ -72,7 +72,7 @@ const stepC2 = new Step({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async ({ suspend, context, mastra }) => {
+  execute: async ({ suspend, context }) => {
     const oMsg = getStepResult(context?.steps.stepA2);
     if (context?.steps.stepC2?.status === 'success') {
       const msg = getStepResult(context?.steps.stepC2);
