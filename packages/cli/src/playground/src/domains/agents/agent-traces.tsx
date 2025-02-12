@@ -76,7 +76,7 @@ export function AgentTraces({ agentId, agentName }: { agentId: string; agentName
             <TableBody className="border-b border-gray-6">
               <TableRow className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem]">
                 <TableCell colSpan={4} className="h-24 text-center">
-                  {error?.msg || 'No traces found'}
+                  {error?.message || 'No traces found'}
                 </TableCell>
               </TableRow>
             </TableBody>
