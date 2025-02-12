@@ -6,6 +6,11 @@ import { evaluate } from '@mastra/core/eval';
 import { AvailableHooks, registerHook } from '@mastra/core/hooks';
 import { MastraStorage } from '@mastra/core/storage';
 
+// init storage
+if (mastra.storage) {
+  await mastra.storage.init();
+}
+
 // @ts-ignore
 await createNodeServer(mastra, { playground: true, swaggerUI: true });
 
