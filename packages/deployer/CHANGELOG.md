@@ -1,5 +1,11 @@
 # @mastra/deployer
 
+## 0.1.0-alpha.48
+
+### Patch Changes
+
+- 8aec8b7: Normalize imports to package name and dedupe while writing package.json after mastra build
+
 ## 0.1.0-alpha.47
 
 ### Patch Changes
