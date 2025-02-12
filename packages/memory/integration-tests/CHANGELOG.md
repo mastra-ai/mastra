@@ -1,5 +1,17 @@
 # @mastra/memory-integration-tests
 
+## 0.1.0-alpha.17
+
+### Patch Changes
+
+- 4f1d1a1: Enforce types ann cleanup package.json
+- Updated dependencies [66a03ec]
+- Updated dependencies [4f1d1a1]
+  - @mastra/core@0.2.0-alpha.101
+  - @mastra/memory@0.1.0-alpha.83
+  - @mastra/upstash@0.1.0-alpha.11
+  - @mastra/pg@0.1.0-alpha.11
+
 ## 0.1.0-alpha.16
 
 ### Patch Changes
