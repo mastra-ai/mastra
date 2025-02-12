@@ -252,7 +252,7 @@ export class Mastra<
     return this.workflows;
   }
 
-  public setStorage({ storage }: { storage: MastraStorage }) {
+  public setStorage(storage: MastraStorage) {
     this.storage = storage;
   }
 
