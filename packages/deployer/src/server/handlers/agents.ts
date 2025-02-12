@@ -82,7 +82,9 @@ export async function getEvalsByAgentIdHandler(c: Context) {
     const agent = mastra.getAgent(agentId);
     const evals: EvalRow[] = (await mastra.storage?.getEvalsByAgentName?.(agent.name, 'test')) || [];
     return c.json({
-      ...agent,
+      id: agentId,
+      name: agent.name,
+      instructions: agent.instructions,
       evals,
     });
   } catch (error) {
@@ -98,7 +100,9 @@ export async function getLiveEvalsByAgentIdHandler(c: Context) {
     const evals: EvalRow[] = (await mastra.storage?.getEvalsByAgentName?.(agent.name, 'live')) || [];
 
     return c.json({
-      ...agent,
+      id: agentId,
+      name: agent.name,
+      instructions: agent.instructions,
       evals,
     });
   } catch (error) {
