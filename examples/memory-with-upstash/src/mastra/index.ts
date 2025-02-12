@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Memory } from '@mastra/memory';
 import { PgVector } from '@mastra/pg';
@@ -19,7 +18,6 @@ const memory = new Memory({
       messageRange: 2,
     },
   },
-  embedder: openai.embedding('text-embedding-3-small'),
 });
 
 export const mastra = new Mastra({
