@@ -4,7 +4,6 @@ import type { Context } from 'hono';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 
-import { readFile } from 'fs/promises';
 import { HTTPException } from 'hono/http-exception';
 
 import { handleError } from './error';
