@@ -12,6 +12,7 @@ it('should be able to capture a hook', async () => {
     result: {
       score: 1,
     },
+    meta: {},
   });
 
   await new Promise(resolve => setTimeout(resolve, 0));
@@ -33,6 +34,7 @@ it('should not throw when a hook is not registered', async () => {
       result: {
         score: 1,
       },
+      meta: {},
     }),
   ).not.toThrow();
 });
@@ -47,6 +49,7 @@ it('should not block the main thread', async () => {
     result: {
       score: 1,
     },
+    meta: {},
   });
 
   expect(hook).not.toHaveBeenCalled();
