@@ -1,5 +1,12 @@
 # @mastra/speech-playai
 
+## 0.1.0-alpha.24
+
+### Patch Changes
+
+- Updated dependencies [7d83b92]
+  - @mastra/core@0.2.0-alpha.99
+
 ## 0.1.0-alpha.23
 
 ### Patch Changes

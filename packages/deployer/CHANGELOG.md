@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 0.1.0-alpha.49
+
+### Patch Changes
+
+- 7d83b92: Create default storage and move evals towards it
+- Updated dependencies [7d83b92]
+  - @mastra/core@0.2.0-alpha.99
+
 ## 0.1.0-alpha.48
 
 ### Patch Changes
