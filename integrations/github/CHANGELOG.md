@@ -1,5 +1,14 @@
 # @mastra/github
 
+## 1.1.0-alpha.83
+
+### Patch Changes
+
+- 70dabd9: Fix broken publish
+- Updated dependencies [70dabd9]
+- Updated dependencies [202d404]
+  - @mastra/core@0.2.0-alpha.98
+
 ## 1.1.0-alpha.82
 
 ### Patch Changes

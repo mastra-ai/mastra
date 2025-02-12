@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.2.0-alpha.98
+
+### Patch Changes
+
+- 70dabd9: Fix broken publish
+- 202d404: Added instructions when generating evals
+
 ## 0.2.0-alpha.97
 
 ### Patch Changes

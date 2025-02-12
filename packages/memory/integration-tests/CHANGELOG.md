@@ -1,5 +1,17 @@
 # @mastra/memory-integration-tests
 
+## 0.1.0-alpha.14
+
+### Patch Changes
+
+- 70dabd9: Fix broken publish
+- Updated dependencies [70dabd9]
+- Updated dependencies [202d404]
+  - @mastra/core@0.2.0-alpha.98
+  - @mastra/memory@0.1.0-alpha.80
+  - @mastra/pg@0.1.0-alpha.8
+  - @mastra/upstash@0.1.0-alpha.8
+
 ## 0.1.0-alpha.13
 
 ### Patch Changes
