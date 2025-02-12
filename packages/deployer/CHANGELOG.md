@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 0.1.0-alpha.50
+
+### Patch Changes
+
+- 9d1796d: Fix storage and eval serialization on api
+- Updated dependencies [9d1796d]
+  - @mastra/core@0.2.0-alpha.100
+
 ## 0.1.0-alpha.49
 
 ### Patch Changes
