@@ -112,7 +112,8 @@ const docs: DocsThemeConfig = {
     const { title, frontMatter } = config;
     const description = frontMatter?.description;
     const ogImage =
-      frontMatter?.ogImage || `${domain}/api/og/docs?title=${title}`;
+      frontMatter?.ogImage ||
+      `${domain}/api/og/docs?title=${encodeURIComponent(title)}`;
 
     const ogTitle = `${title}`;
     return (
