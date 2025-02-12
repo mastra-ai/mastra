@@ -15,12 +15,14 @@ function getModelCachePath() {
   return cachedPath;
 }
 
+const fastEmbedImportPath = 'fastembed?' + Date.now(); // +? date to prevent esbuild from seeing this as statically analyzable and bundling this as a regular import. top level var so we only get 1 cached import, not a new one per dynamic import (no new Date on each import)
+
 // Shared function to generate embeddings using fastembed
 async function generateEmbeddings(values: string[], modelType: 'BGESmallENV15' | 'BGEBaseENV15') {
   try {
     // Dynamically import fastembed only when this function is called
     // this is to avoid importing fastembed in runtimes that don't support its native bindings
-    const { EmbeddingModel, FlagEmbedding } = await import('fastembed');
+    const { EmbeddingModel, FlagEmbedding } = await import(fastEmbedImportPath);
 
     const model = await FlagEmbedding.init({
       model: EmbeddingModel[modelType],
@@ -34,6 +36,7 @@ async function generateEmbeddings(values: string[], modelType: 'BGESmallENV15' |
     for await (const result of embeddings) {
       // result is an array of embeddings, one for each text in the batch
       // We convert each Float32Array embedding to a regular number array
+      // @ts-ignore ? Date.now() import breaks types
       allResults.push(...result.map(embedding => Array.from(embedding)));
     }
 
