@@ -51,6 +51,7 @@
     "@rollup/plugin-virtual": "^3.0.2",
     "builtins": "^5.1.0",
     "detect-libc": "^2.0.3",
+    "dotenv": "^16.4.7",
     "esbuild": "^0.24.2",
     "fs-extra": "^11.2.0",
     "hono": "^4.6.17",
