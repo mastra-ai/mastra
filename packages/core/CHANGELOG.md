@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.2.0-alpha.100
+
+### Patch Changes
+
+- 9d1796d: Fix storage and eval serialization on api
+
 ## 0.2.0-alpha.99
 
 ### Patch Changes

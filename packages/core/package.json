@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.2.0-alpha.99",
+  "version": "0.2.0-alpha.100",
   "license": "MIT",
   "type": "module",
   "main": "dist/core.esm.js",
