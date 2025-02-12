@@ -31,7 +31,8 @@ async function generateEmbeddings(values: string[], modelType: 'BGESmallENV15' |
     const importErrors: Error[] = [];
 
     if (useFastEmbedWebFallback) {
-      mod = await unbundleableImport('fastembed-web');
+      // TODO: see below
+      // mod = await unbundleableImport('fastembed-web');
     } else {
       try {
         mod = await unbundleableImport('fastembed');
@@ -41,23 +42,24 @@ async function generateEmbeddings(values: string[], modelType: 'BGESmallENV15' |
         } else {
           throw e;
         }
-        try {
-          mod = await unbundleableImport('fastembed-web');
-          useFastEmbedWebFallback = true;
-        } catch (e) {
-          if (e instanceof Error) {
-            importErrors.push(e);
-          } else {
-            throw e;
-          }
-        }
+        // TODO: once vercel deploys are fixed, install fastembed-web and try it as a fallback
+        // try {
+        //   mod = await unbundleableImport('fastembed-web');
+        //   useFastEmbedWebFallback = true;
+        // } catch (e) {
+        //   if (e instanceof Error) {
+        //     importErrors.push(e);
+        //   } else {
+        //     throw e;
+        //   }
+        // }
       }
     }
 
     if (!mod) {
       throw new Error(`${importErrors.map(e => e.message).join(`\n`)}
 
-This runtime does not support fastembed-js or fastembed-web, which is the default embedder in Mastra. 
+This runtime does not support fastembed-js, which is the default embedder in Mastra. 
 Scroll up to read import errors. These errors mean you can't use the default Mastra embedder on this hosting platform.
 You can either use Mastra Cloud which supports the default embedder, or you can configure an alternate provider.
 
