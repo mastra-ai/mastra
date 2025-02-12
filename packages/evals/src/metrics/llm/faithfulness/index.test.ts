@@ -1,5 +1,4 @@
 import { openai } from '@ai-sdk/openai';
-import { OpenAI } from '@mastra/core/llm/openai';
 import { describe, it, expect } from 'vitest';
 
 import { TestCaseWithContext } from '../utils';
