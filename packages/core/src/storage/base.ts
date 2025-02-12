@@ -2,7 +2,7 @@ import { MastraBase } from '../base';
 import { type MessageType, type StorageThreadType } from '../memory';
 import { type WorkflowRunState } from '../workflows';
 
-import { type StorageColumn, type StorageGetMessagesArg } from './types';
+import { type EvalRow, type StorageColumn, type StorageGetMessagesArg } from './types';
 
 export type TABLE_NAMES =
   | typeof MastraStorage.TABLE_WORKFLOW_SNAPSHOT
@@ -215,4 +215,6 @@ export abstract class MastraStorage extends MastraBase {
 
     return d ? d.snapshot : null;
   }
+
+  abstract getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]>;
 }

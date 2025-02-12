@@ -185,7 +185,7 @@ export class PlayAITTS extends MastraTTS {
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(`PlayAI API Error: ${error.message || response.statusText}`);
+      throw new Error(`PlayAI API Error: ${(error as any)?.message || response.statusText}`);
     }
 
     return response;
@@ -194,7 +194,7 @@ export class PlayAITTS extends MastraTTS {
   private async pollJobStatus(jobId: string, maxAttempts = 60, interval = 1000): Promise<ArrayBuffer> {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const response = await this.makeRequest(`/tts/${jobId}`, undefined, 'GET');
-      const jobStatus: PlayAIJobResponse = await response.json();
+      const jobStatus = (await response.json()) as PlayAIJobResponse;
 
       console.log(jobStatus);
 
