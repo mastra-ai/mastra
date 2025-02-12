@@ -1,6 +1,6 @@
 import { SpanStatusCode, trace, Tracer } from '@opentelemetry/api';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { OTLPTraceExporter as OTLPHttpExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { Resource } from '@opentelemetry/resources';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import {
@@ -15,6 +15,8 @@ import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 
 import { OtelConfig } from './types';
 import { hasActiveTelemetry } from './utility';
+
+export { OTLPTraceExporter as OTLPStorageExporter } from './storage-exporter';
 
 // Add type declaration for global namespace
 declare global {
@@ -70,7 +72,7 @@ export class Telemetry {
 
         const exporter =
           config.export?.type === 'otlp'
-            ? new OTLPTraceExporter({
+            ? new OTLPHttpExporter({
                 url: config.export.endpoint,
                 headers: config.export.headers,
               })
