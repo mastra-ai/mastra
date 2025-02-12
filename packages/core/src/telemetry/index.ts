@@ -1,4 +1,4 @@
 export * from './types';
 export * from './telemetry.decorators';
 export * from './utility';
-export { Telemetry } from './telemetry';
+export { Telemetry, OTLPStorageExporter } from './telemetry';
