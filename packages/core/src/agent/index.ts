@@ -218,43 +218,6 @@ export class Agent<
           };
         });
 
-        const contextCallMessages: CoreMessage[] = [
-          {
-            role: 'system',
-            content: `\n
-             Analyze this message to determine if the user is referring to a previous conversation with the LLM.
-             Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation.
-             Extract any date ranges mentioned in the user message that could help identify the previous chat.
-             Return dates in ISO format.
-             If no specific dates are mentioned but time periods are (like "last week" or "past month"), calculate the appropriate date range.
-             For the end date, return the date 1 day after the end of the time period.
-             Today's date is ${new Date().toISOString()}`,
-          },
-          ...newMessages,
-        ];
-
-        let context;
-
-        try {
-          context = await this.llm.__textObject<{ usesContext: boolean; startDate: Date; endDate: Date }>({
-            messages: contextCallMessages,
-            structuredOutput: z.object({
-              usesContext: z.boolean(),
-              startDate: z.date(),
-              endDate: z.date(),
-            }),
-          });
-
-          this.logger.debug('Text Object result', {
-            contextObject: JSON.stringify(context.object, null, 2),
-            runId: runId || this.name,
-          });
-        } catch (e) {
-          if (e instanceof Error) {
-            this.log(LogLevel.DEBUG, `No context found: ${e.message}`);
-          }
-        }
-
         const memoryMessages =
           threadId && memory
             ? (
