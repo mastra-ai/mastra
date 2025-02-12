@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-murf",
-  "version": "0.1.0-alpha.26",
+  "version": "0.1.0-alpha.27",
   "description": "Mastra Murf speech integration",
   "type": "module",
   "main": "dist/index.js",

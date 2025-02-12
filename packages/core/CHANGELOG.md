@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.2.0-alpha.102
+
+### Patch Changes
+
+- a9345f9: Fixed tsc build for core types
+
 ## 0.2.0-alpha.101
 
 ### Patch Changes
