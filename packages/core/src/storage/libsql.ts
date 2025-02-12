@@ -1,4 +1,4 @@
-import { createClient, Client } from '@libsql/client';
+import { createClient, Client, InValue } from '@libsql/client';
 import { join } from 'path';
 
 import { MessageType, StorageThreadType } from '../memory';
@@ -103,22 +103,41 @@ export class DefaultStorage extends MastraStorage {
     }
   }
 
+  private prepareStatement({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): {
+    sql: string;
+    args: InValue[];
+  } {
+    const columns = Object.keys(record);
+    const values = Object.values(record).map(v => {
+      if (typeof v === `undefined`) {
+        // returning an undefined value will cause libsql to throw
+        return null;
+      }
+      return typeof v === 'object' ? JSON.stringify(v) : v;
+    });
+    const placeholders = values.map(() => '?').join(', ');
+
+    return {
+      sql: `INSERT OR REPLACE INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`,
+      args: values,
+    };
+  }
+
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
-      const columns = Object.keys(record);
-      const values = Object.values(record).map(v => {
-        if (typeof v === `undefined`) {
-          // returning an undefined value will cause libsql to throw
-          return null;
-        }
-        return typeof v === 'object' ? JSON.stringify(v) : v;
-      });
-      const placeholders = values.map(() => '?').join(', ');
+      await this.client.execute(this.prepareStatement({ tableName, record }));
+    } catch (error) {
+      this.logger.error(`Error upserting into table ${tableName}: ${error}`);
+      throw error;
+    }
+  }
 
-      await this.client.execute({
-        sql: `INSERT OR REPLACE INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`,
-        args: values,
-      });
+  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    if (records.length === 0) return;
+
+    try {
+      const batchStatements = records.map(r => this.prepareStatement({ tableName, record: r }));
+      await this.client.batch(batchStatements, 'write');
     } catch (error) {
       this.logger.error(`Error upserting into table ${tableName}: ${error}`);
       throw error;

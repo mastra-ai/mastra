@@ -8,13 +8,15 @@ export type TABLE_NAMES =
   | typeof MastraStorage.TABLE_WORKFLOW_SNAPSHOT
   | typeof MastraStorage.TABLE_EVALS
   | typeof MastraStorage.TABLE_MESSAGES
-  | typeof MastraStorage.TABLE_THREADS;
+  | typeof MastraStorage.TABLE_THREADS
+  | typeof MastraStorage.TABLE_TRACES;
 
 export abstract class MastraStorage extends MastraBase {
   static readonly TABLE_WORKFLOW_SNAPSHOT = 'mastra_workflow_snapshot';
   static readonly TABLE_EVALS = 'mastra_evals';
   static readonly TABLE_MESSAGES = 'mastra_messages';
   static readonly TABLE_THREADS = 'mastra_threads';
+  static readonly TABLE_TRACES = 'mastra_traces';
 
   hasInit = false;
 
@@ -30,6 +32,14 @@ export abstract class MastraStorage extends MastraBase {
   abstract clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void>;
 
   abstract insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void>;
+
+  abstract batchInsert({
+    tableName,
+    records,
+  }: {
+    tableName: TABLE_NAMES;
+    records: Record<string, any>[];
+  }): Promise<void>;
 
   abstract load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null>;
 
@@ -165,6 +175,16 @@ export abstract class MastraStorage extends MastraBase {
         content: { type: 'text', nullable: false },
         role: { type: 'text', nullable: false },
         type: { type: 'text', nullable: false },
+        createdAt: { type: 'timestamp', nullable: false },
+      },
+    });
+
+    await this.createTable({
+      tableName: MastraStorage.TABLE_TRACES,
+      schema: {
+        id: { type: 'text', nullable: false, primaryKey: true },
+        type: { type: 'text', nullable: false },
+        payload: { type: 'text', nullable: false },
         createdAt: { type: 'timestamp', nullable: false },
       },
     });
