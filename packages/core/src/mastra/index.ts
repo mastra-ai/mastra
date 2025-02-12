@@ -2,8 +2,8 @@ import { Agent } from '../agent';
 import { MastraDeployer } from '../deployer';
 import { LogLevel, Logger, createLogger, noopLogger } from '../logger';
 import { MastraMemory } from '../memory';
-import { MastraStorage } from '../storage';
-import { InstrumentClass, OtelConfig, Telemetry } from '../telemetry';
+import { MastraStorage, MastraStorageLibSql } from '../storage';
+import { InstrumentClass, OtelConfig, OTLPStorageExporter, Telemetry } from '../telemetry';
 import { MastraTTS } from '../tts';
 import { MastraVector } from '../vector';
 import { Workflow } from '../workflows';
@@ -60,8 +60,26 @@ export class Mastra<
     /*
     Telemetry
     */
-    if (config?.telemetry) {
-      this.telemetry = Telemetry.init(config.telemetry);
+    // if storage is a libsql instance, we need to default the telemetry exporter to OTLPStorageExporter
+    if (config?.storage && config?.storage instanceof MastraStorageLibSql) {
+      const logger = config?.logger
+        ? this.logger
+        : createLogger({
+            level: 'debug',
+          });
+      const newTelemetry = {
+        ...(config?.telemetry || {}),
+        export: {
+          type: 'custom',
+          exporter: new OTLPStorageExporter({
+            logger,
+            storage: config.storage,
+          }),
+        },
+      };
+      this.telemetry = Telemetry.init(newTelemetry as OtelConfig);
+    } else if (config?.telemetry) {
+      this.telemetry = Telemetry.init(config?.telemetry);
     }
 
     /**
