@@ -1,17 +1,63 @@
 # Memory Class Reference
 
-The `Memory` class provides a robust system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval.
+The `Memory` class provides a robust system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval. By default, it uses LibSQL for storage and vector search, and FastEmbed for embeddings.
 
-## Usage Example
+## Basic Usage
 
 ```typescript copy showLineNumbers
 import { Memory } from "@mastra/memory";
-import { DefaultStorage } from "@mastra/core/storage";
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  memory: new Memory(),
+  ...otherOptions,
+});
+```
+
+## Custom Configuration
+
+```typescript copy showLineNumbers
+import { Memory } from "@mastra/memory";
+import { DefaultStorage, DefaultVectorDB } from "@mastra/core/storage";
+import { Agent } from "@mastra/core/agent";
 
 const memory = new Memory({
+  // Custom storage configuration
   storage: new DefaultStorage({
-    url: ":memory:",
+    url: "file:memory.db",
   }),
+
+  // Custom vector database for semantic search
+  vector: new DefaultVectorDB({
+    url: "file:vector.db",
+  }),
+
+  // Memory configuration options
+  options: {
+    // Number of recent messages to include
+    lastMessages: 20,
+
+    // Semantic search configuration
+    semanticRecall: {
+      topK: 3, // Number of similar messages to retrieve
+      messageRange: {
+        // Messages to include around each result
+        before: 2,
+        after: 1,
+      },
+    },
+
+    // Working memory configuration
+    workingMemory: {
+      enabled: true,
+      template: "<user><first_name></first_name><last_name></last_name></user>",
+    },
+  },
+});
+
+const agent = new Agent({
+  memory,
+  ...otherOptions,
 });
 ```
 
@@ -35,7 +81,7 @@ const memory = new Memory({
       name: "embedder",
       type: "EmbeddingModel",
       description:
-        "Embedder instance for vector embeddings",
+        "Embedder instance for vector embeddings. Uses FastEmbed (bge-small-en-v1.5) by default",
       isOptional: true,
     },
     {
@@ -103,16 +149,15 @@ If no template is provided, the Memory class uses a default template that includ
 
 ### embedder
 
-The embedder instance to use for generating vector embeddings. This should be an instance of a class that implements the `MastraEmbedder` interface. See the [Embedder Reference](/docs/reference/embedder) for available embedders and their configuration options.
+By default, Memory uses FastEmbed with the `bge-small-en-v1.5` model, which provides a good balance of performance and model size (~130MB). You only need to specify an embedder if you want to use a different model or provider.
 
 ## Additional Notes
 
 ### Vector Search Configuration
 
-When using vector search capabilities, ensure you configure both the vector store and appropriate search options. Here's an example (just using the in-memory store):
+When using vector search capabilities with custom configuration, ensure you configure both the vector store and appropriate search options. Here's an example:
 
 ```typescript copy showLineNumbers
-import { openai } from "@ai-sdk/openai";
 import { Memory } from "@mastra/memory";
 import { DefaultStorage, DefaultVectorDB } from "@mastra/core/storage";
 
@@ -123,7 +168,6 @@ const memory = new Memory({
   vector: new DefaultVectorDB({
     url: ":memory:",
   }),
-  embedder: openai.embedding("text-embedding-3-small"),
   options: {
     semanticRecall: {
       topK: 5,

@@ -39,17 +39,10 @@ const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 describe('Working Memory Tests', () => {
   let memory: Memory;
   let thread: any;
-  let vector: DefaultVectorDB;
 
   beforeEach(async () => {
-    // Initialize vector storage
-    vector = new DefaultVectorDB({
-      connectionUrl: 'file:test.db',
-    });
-
     // Create memory instance with working memory enabled
     memory = new Memory({
-      vector,
       options: {
         workingMemory: {
           enabled: true,
@@ -66,7 +59,6 @@ describe('Working Memory Tests', () => {
           messageRange: 2,
         },
       },
-      embedder: openai.embedding('text-embedding-3-small'),
     });
 
     // Reset message counter
@@ -249,7 +241,6 @@ describe('Working Memory Tests', () => {
           url: 'file:test.db',
         },
       }),
-      vector,
       options: {
         workingMemory: {
           enabled: false,
@@ -261,7 +252,6 @@ describe('Working Memory Tests', () => {
           messageRange: 2,
         },
       },
-      embedder: openai.embedding('text-embedding-3-small'),
     });
 
     const thread = await disabledMemory.saveThread({

@@ -1,6 +1,6 @@
 import { MastraBase } from '../base';
 
-export { localEmbedder } from './fastembed';
+export { defaultEmbedder } from './fastembed';
 
 export interface QueryResult {
   id: string;

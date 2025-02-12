@@ -18,36 +18,8 @@ export class Memory extends MastraMemory {
     config: SharedMemoryConfig & {
       /* @deprecated use embedder instead */
       embeddings?: any;
-    },
+    } = {},
   ) {
-    const embedderExample = `
-Example: 
-
-  import { openai } from '@ai-sdk/openai';
-
-  new Memory({ 
-    embedder: openai.embedding(\`text-embedding-3-small\`)
-  })
-
-`;
-
-    // Check for deprecated embeddings object
-    if (config.embeddings) {
-      throw new Error(
-        `The \`embeddings\` option is deprecated. Please use \`embedder\` instead.
-${embedderExample}
-`,
-      );
-    }
-
-    if (config.vector && !config.embedder) {
-      throw new Error(
-        `The \`embedder\` option is required when a vector DB is attached to new Memory({ vector })
-
-${embedderExample}`,
-      );
-    }
-
     super({ name: 'Memory', ...config });
 
     const mergedConfig = this.getMergedThreadConfig({
@@ -93,11 +65,9 @@ ${embedderExample}`,
           };
 
     if (selectBy?.vectorSearchString && this.vector) {
-      const embedder = this.getEmbedder();
-
       const { embedding } = await embed({
         value: selectBy.vectorSearchString,
-        model: embedder,
+        model: this.embedder,
       });
 
       const { indexName } = await this.createEmbeddingIndex();
@@ -233,12 +203,11 @@ ${embedderExample}`,
     this.mutateMessagesToHideWorkingMemory(messages);
 
     if (this.vector) {
-      const embedder = this.getEmbedder();
       const { indexName } = await this.createEmbeddingIndex();
 
       for (const message of messages) {
         if (typeof message.content !== `string`) continue;
-        const { embedding } = await embed({ value: message.content, model: embedder, maxRetries: 3 });
+        const { embedding } = await embed({ value: message.content, model: this.embedder, maxRetries: 3 });
         await this.vector.upsert(
           indexName,
           [embedding],
