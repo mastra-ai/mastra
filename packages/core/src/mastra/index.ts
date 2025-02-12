@@ -57,11 +57,20 @@ export class Mastra<
     }
     this.logger = logger;
 
+    let storage = config?.storage;
+    if (!storage) {
+      storage = new DefaultStorage({
+        config: {
+          url: ':memory:',
+        },
+      });
+    }
+
     /*
     Telemetry
     */
     // if storage is a libsql instance, we need to default the telemetry exporter to OTLPStorageExporter
-    if (config?.storage && config?.storage instanceof DefaultStorage) {
+    if (storage instanceof DefaultStorage) {
       const logger = config?.logger
         ? this.logger
         : createLogger({
@@ -73,7 +82,7 @@ export class Mastra<
           type: 'custom',
           exporter: new OTLPStorageExporter({
             logger,
-            storage: config.storage,
+            storage,
           }),
         },
       };
@@ -93,15 +102,6 @@ export class Mastra<
         });
         this.deployer.__setTelemetry(this.telemetry);
       }
-    }
-
-    let storage = config?.storage;
-    if (!storage) {
-      storage = new DefaultStorage({
-        config: {
-          url: ':memory:',
-        },
-      });
     }
 
     /*
