@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.0-alpha.38
+
+### Patch Changes
+
+- 4f1d1a1: Enforce types ann cleanup package.json
+
 ## 0.1.0-alpha.37
 
 ### Patch Changes

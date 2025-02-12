@@ -1,5 +1,14 @@
 # @mastra/github
 
+## 1.1.0-alpha.86
+
+### Patch Changes
+
+- 4f1d1a1: Enforce types ann cleanup package.json
+- Updated dependencies [66a03ec]
+- Updated dependencies [4f1d1a1]
+  - @mastra/core@0.2.0-alpha.101
+
 ## 1.1.0-alpha.85
 
 ### Patch Changes

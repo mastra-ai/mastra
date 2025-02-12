@@ -1,6 +1,6 @@
 {
   "name": "@mastra/stabilityai",
-  "version": "1.1.0-alpha.75",
+  "version": "1.1.0-alpha.76",
   "description": "",
   "main": "dist/index.js",
   "type": "module",
