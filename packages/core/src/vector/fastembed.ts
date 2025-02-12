@@ -75,4 +75,4 @@ const fastEmbedProvider = experimental_customProvider({
   },
 });
 
-export const localEmbedder = fastEmbedProvider.textEmbeddingModel;
+export const defaultEmbedder = fastEmbedProvider.textEmbeddingModel;
