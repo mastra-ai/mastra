@@ -14,12 +14,7 @@ import { embed, type Message as AiMessage } from 'ai';
  * and message injection.
  */
 export class Memory extends MastraMemory {
-  constructor(
-    config: SharedMemoryConfig & {
-      /* @deprecated use embedder instead */
-      embeddings?: any;
-    } = {},
-  ) {
+  constructor(config: SharedMemoryConfig = {}) {
     super({ name: 'Memory', ...config });
 
     const mergedConfig = this.getMergedThreadConfig({
