@@ -1,8 +1,9 @@
 import { Braces } from 'lucide-react';
 import { useContext } from 'react';
 
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
+// import { ScrollArea } from '@/components/ui/scroll-area';
+// import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 import { cn } from '@/lib/utils';
@@ -13,54 +14,51 @@ import { Traces } from '../traces';
 import { TraceContext } from '../traces/context/trace-context';
 import { TraceDetails } from '../traces/trace-details';
 import { SpanDetail } from '../traces/trace-span-details';
-import { Span } from '../traces/types';
 
 import { AgentInformation } from './agent-information';
 
 export function AgentTraces({ agentId, agentName }: { agentId: string; agentName: string }) {
-  const { traces, isLoading } = useTraces(agentName);
+  const { traces, error, firstCallLoading } = useTraces(agentName);
 
-  if (isLoading) {
+  if (firstCallLoading) {
     return (
       <main className="flex-1 relative overflow-hidden">
         <div className="h-full w-[calc(100%_-_400px)]">
-          <ScrollArea className="rounded-lg h-full">
-            <Table>
-              <TableHeader className="bg-[#171717] sticky top-0 z-10">
-                <TableRow className="border-gray-6 border-b-[0.1px] text-[0.8125rem]">
-                  <TableHead className="text-mastra-el-3">Trace</TableHead>
-                  <TableHead className="text-mastra-el-3 flex items-center gap-1">
-                    <Braces className="h-3 w-3" /> Trace Id
-                  </TableHead>
-                  <TableHead className="text-mastra-el-3">Started</TableHead>
-                  <TableHead className="text-mastra-el-3">Total Duration</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody className="border-b border-gray-6">
-                <TableRow className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem]">
-                  <TableCell>
-                    <Skeleton className="h-8 w-full" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-8 w-full" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-8 w-full" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-8 w-full" />
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </ScrollArea>
+          <Table>
+            <TableHeader className="bg-[#171717] sticky top-0 z-10">
+              <TableRow className="border-gray-6 border-b-[0.1px] text-[0.8125rem]">
+                <TableHead className="text-mastra-el-3">Trace</TableHead>
+                <TableHead className="text-mastra-el-3 flex items-center gap-1">
+                  <Braces className="h-3 w-3" /> Trace Id
+                </TableHead>
+                <TableHead className="text-mastra-el-3">Started</TableHead>
+                <TableHead className="text-mastra-el-3">Total Duration</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="border-b border-gray-6">
+              <TableRow className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem]">
+                <TableCell>
+                  <Skeleton className="h-8 w-full" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-8 w-full" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-8 w-full" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-8 w-full" />
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
         </div>
         <SidebarItems agentId={agentId} />
       </main>
     );
   }
 
-  if (!traces) {
+  if (!traces || traces.length === 0) {
     return (
       <main className="flex-1 relative overflow-hidden">
         <div className="h-full w-[calc(100%_-_400px)]">
@@ -78,7 +76,7 @@ export function AgentTraces({ agentId, agentName }: { agentId: string; agentName
             <TableBody className="border-b border-gray-6">
               <TableRow className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem]">
                 <TableCell colSpan={4} className="h-24 text-center">
-                  No traces found
+                  {error?.msg || 'No traces found'}
                 </TableCell>
               </TableRow>
             </TableBody>
@@ -89,31 +87,9 @@ export function AgentTraces({ agentId, agentName }: { agentId: string; agentName
     );
   }
 
-  const groupedTraces = traces.reduce<Record<string, Span[]>>((acc, curr) => {
-    const newCurr = { ...curr, duration: Number(curr.endTime) - Number(curr.startTime) };
-
-    return { ...acc, [curr.traceId]: [...(acc[curr.traceId] || []), newCurr] };
-  }, {});
-
-  const tracesData = Object.entries(groupedTraces).map(([key, value]) => {
-    const parentSpan = value.find(span => !span.parentSpanId);
-
-    const enrichedSpans = value.map(span => ({
-      ...span,
-      relativePercentage: parentSpan ? span.duration / parentSpan.duration : 0,
-    }));
-    return {
-      traceId: key,
-      serviceName: parentSpan?.name || key,
-      duration: value.reduce((acc, curr) => acc + curr.duration, 0),
-      started: Number(value[0].startTime),
-      trace: enrichedSpans,
-    };
-  });
-
   return (
     <main className="flex-1 relative overflow-hidden">
-      <Traces traces={tracesData} />
+      <Traces traces={traces} />
       <SidebarItems agentId={agentId} />
     </main>
   );

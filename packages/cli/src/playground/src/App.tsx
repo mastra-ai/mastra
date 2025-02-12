@@ -2,11 +2,13 @@ import { Routes, Route, BrowserRouter, Navigate, Outlet } from 'react-router';
 
 import { Layout } from '@/components/layout';
 
+import { AgentLayout } from '@/domains/agents/agent-layout';
 import Tools from '@/pages/tools';
 
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentEvalsPage from './pages/agents/agent/evals';
+import AgentTracesPage from './pages/agents/agent/traces';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
 import Workflows from './pages/workflows';
@@ -24,9 +26,20 @@ function App() {
           }
         >
           <Route path="/agents" element={<Agents />} />
-          <Route path="/agents/:agentId" element={<Agent />} />
-          <Route path="/agents/:agentId/evals" element={<AgentEvalsPage />} />
-          <Route path="/agents/:agentId/:threadId" element={<Agent />} />
+          <Route path="/agents/:agentId" element={<Navigate to="/agents/:agentId/chat" />} />
+          <Route
+            path="/agents/:agentId"
+            element={
+              <AgentLayout>
+                <Outlet />
+              </AgentLayout>
+            }
+          >
+            <Route path="chat" element={<Agent />} />
+            <Route path="evals" element={<AgentEvalsPage />} />
+            <Route path="traces" element={<AgentTracesPage />} />
+            <Route path=":threadId" element={<Agent />} />
+          </Route>
           <Route path="/tools" element={<Tools />} />
           <Route path="/tools/:agentId/:toolId" element={<AgentTool />} />
           <Route path="/tools/all/:toolId" element={<Tool />} />

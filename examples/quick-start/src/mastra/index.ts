@@ -1,10 +1,32 @@
-import { Mastra } from '@mastra/core';
+import { Agent, MastraStorageLibSql, createLogger, Mastra, OTLPStorageExporter } from '@mastra/core';
 
 import { catOne, agentTwo } from './agents/agent';
 import { logCatWorkflow } from './workflow';
 
+const logger = createLogger({
+  level: 'debug',
+});
+
+const storage = new MastraStorageLibSql({
+  config: {
+    url: 'file:mastra.db',
+  },
+});
+
+storage.init();
+
 export const mastra = new Mastra({
   agents: { catOne, agentTwo },
-  logger: false,
   workflows: { logCatWorkflow },
+  logger,
+  storage,
+  telemetry: {
+    export: {
+      type: 'custom',
+      exporter: new OTLPStorageExporter({
+        logger,
+        storage,
+      }),
+    },
+  },
 });
