@@ -2,14 +2,20 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 export type Evals = {
+  input: string;
+  output: string;
   result: {
     score: number;
   };
-  meta: {
-    metricName: string;
-    runId: string;
-    timestamp: string;
-    testName: string;
+  agentName: string;
+  createdAt: string;
+  metricName: string;
+  instructions: string;
+  runId: string;
+  globalRunId: string;
+  testInfo?: {
+    testName?: string;
+    testPath?: string;
   };
 };
 

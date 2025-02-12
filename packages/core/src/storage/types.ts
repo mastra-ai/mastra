@@ -1,3 +1,4 @@
+import type { MetricResult } from '../eval';
 import { type MemoryConfig } from '../memory';
 import { type WorkflowRunState } from '../workflows';
 
@@ -34,9 +35,17 @@ export type StorageGetMessagesArg = {
 };
 
 export type EvalRow = {
-  result: string;
-  meta: string;
   input: string;
   output: string;
+  result: MetricResult;
+  agentName: string;
   createdAt: string;
+  metricName: string;
+  instructions: string;
+  runId: string;
+  globalRunId: string;
+  testInfo?: {
+    testName?: string;
+    testPath?: string;
+  };
 };

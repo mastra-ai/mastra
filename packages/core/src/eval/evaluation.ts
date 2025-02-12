@@ -20,9 +20,9 @@ export async function evaluate<T extends Agent>({
   globalRunId: string;
   runId?: string;
   testInfo?: {
-    testName?: string;
-    testPath?: string;
-  } | null;
+    testName: string;
+    testPath: string;
+  };
   instructions: string;
 }) {
   const runIdToUse = runId || crypto.randomUUID();
@@ -32,18 +32,12 @@ export async function evaluate<T extends Agent>({
     input: input.toString(),
     output: output,
     result: metricResult,
-    meta: {
-      ...(testInfo && {
-        testName: testInfo.testName,
-        testPath: testInfo.testPath,
-      }),
-      globalRunId,
-      runId: runIdToUse,
-      agentName,
-      timestamp: new Date().toISOString(),
-      metricName: metric.constructor.name,
-      instructions,
-    },
+    agentName,
+    metricName: metric.constructor.name,
+    instructions,
+    globalRunId,
+    runId: runIdToUse,
+    testInfo,
   };
 
   executeHook(AvailableHooks.ON_EVALUATION, traceObject);
