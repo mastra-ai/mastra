@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.0-alpha.36
+
+### Patch Changes
+
+- a18e96c: Array schemas for dev tool playground
+
 ## 0.1.0-alpha.35
 
 ### Patch Changes
