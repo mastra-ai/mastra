@@ -8,10 +8,8 @@ The `Memory` class provides a robust system for managing conversation history an
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 
-const memory = new Memory();
-
 const agent = new Agent({
-  memory,
+  memory: new Memory(),
   ...otherOptions,
 });
 ```
@@ -41,8 +39,9 @@ const memory = new Memory({
 
     // Semantic search configuration
     semanticRecall: {
-      topK: 3,           // Number of similar messages to retrieve
-      messageRange: {    // Messages to include around each result
+      topK: 3, // Number of similar messages to retrieve
+      messageRange: {
+        // Messages to include around each result
         before: 2,
         after: 1,
       },
@@ -51,7 +50,7 @@ const memory = new Memory({
     // Working memory configuration
     workingMemory: {
       enabled: true,
-      template: '<user><first_name></first_name><last_name></last_name></user>',
+      template: "<user><first_name></first_name><last_name></last_name></user>",
     },
   },
 });
