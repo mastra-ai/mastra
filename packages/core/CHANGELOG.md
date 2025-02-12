@@ -1,5 +1,24 @@
 # @mastra/core
 
+## 0.2.0-alpha.103
+
+### Patch Changes
+
+- 4534e77: Fix fastembed imports in mastra cloud for default embedder
+
+## 0.2.0-alpha.102
+
+### Patch Changes
+
+- a9345f9: Fixed tsc build for core types
+
+## 0.2.0-alpha.101
+
+### Patch Changes
+
+- 66a03ec: Removed an extra llm call that was needed for the old Memory API but is no longer needed
+- 4f1d1a1: Enforce types ann cleanup package.json
+
 ## 0.2.0-alpha.100
 
 ### Patch Changes

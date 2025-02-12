@@ -1,6 +1,6 @@
 {
   "name": "@mastra/store-pg",
-  "version": "0.0.0-alpha.20",
+  "version": "0.0.0-alpha.23",
   "description": "Postgres store provider for Mastra (deprecated - use @mastra/pg instead)",
   "type": "module",
   "main": "dist/index.js",

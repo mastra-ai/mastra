@@ -1,6 +1,6 @@
 {
   "name": "@mastra/vector-upstash",
-  "version": "0.1.0-alpha.35",
+  "version": "0.1.0-alpha.38",
   "description": "Upstash vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",

@@ -1,5 +1,28 @@
 # @mastra/ragie
 
+## 1.1.0-alpha.79
+
+### Patch Changes
+
+- Updated dependencies [4534e77]
+  - @mastra/core@0.2.0-alpha.103
+
+## 1.1.0-alpha.78
+
+### Patch Changes
+
+- Updated dependencies [a9345f9]
+  - @mastra/core@0.2.0-alpha.102
+
+## 1.1.0-alpha.77
+
+### Patch Changes
+
+- 4f1d1a1: Enforce types ann cleanup package.json
+- Updated dependencies [66a03ec]
+- Updated dependencies [4f1d1a1]
+  - @mastra/core@0.2.0-alpha.101
+
 ## 1.1.0-alpha.76
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-speechify",
-  "version": "0.1.0-alpha.25",
+  "version": "0.1.0-alpha.28",
   "description": "Mastra Speechify speech integration",
   "type": "module",
   "main": "dist/index.js",

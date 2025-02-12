@@ -1,6 +1,6 @@
 {
   "name": "@mastra/chroma",
-  "version": "0.1.0-alpha.35",
+  "version": "0.1.0-alpha.38",
   "description": "Chroma vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
