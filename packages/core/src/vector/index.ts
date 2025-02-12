@@ -1,5 +1,7 @@
 import { MastraBase } from '../base';
 
+export { localEmbedder } from './fastembed';
+
 export interface QueryResult {
   id: string;
   score: number;
