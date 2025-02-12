@@ -2,15 +2,18 @@ import { ExportResult, ExportResultCode } from '@opentelemetry/core';
 import { JsonTraceSerializer } from '@opentelemetry/otlp-transformer';
 import { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
 
-import { Logger } from '../logger';
+import { Logger } from '../logger/index.js';
+import { MastraStorage } from '../storage/index.js';
 
 export class OTLPTraceExporter implements SpanExporter {
+  private storage: MastraStorage;
   private queue: ReadableSpan[] = [];
   private serializer: typeof JsonTraceSerializer;
   private logger: Logger;
-  private flushing: boolean = false;
+  private activeFlush: Promise<void> | undefined = undefined;
 
-  constructor({ logger }: { logger: Logger }) {
+  constructor({ logger, storage }: { logger: Logger; storage: MastraStorage }) {
+    this.storage = storage;
     this.serializer = JsonTraceSerializer;
     this.logger = logger;
   }
@@ -37,12 +40,16 @@ export class OTLPTraceExporter implements SpanExporter {
       return;
     }
 
-    this.logger.debug('queueing items');
     this.queue.push(...internalRepresentation);
 
-    if (!this.flushing) {
-      this.flushing = true;
-      this.flush();
+    resultCallback({
+      code: ExportResultCode.SUCCESS,
+    });
+
+    if (!this.activeFlush) {
+      this.activeFlush = this.flush().finally(() => {
+        this.activeFlush = undefined;
+      });
     }
   }
   shutdown(): Promise<void> {
@@ -52,19 +59,17 @@ export class OTLPTraceExporter implements SpanExporter {
     const items = this.queue;
     this.queue = [];
 
-    console.log('flushing items', items);
-
-    // TODO: actually flush
-
-    this.flushing = false;
-    return Promise.resolve();
+    return this.storage.batchInsert({ tableName: MastraStorage.TABLE_TRACES, records: items });
   }
-  forceFlush(): Promise<void> {
+  async forceFlush(): Promise<void> {
     if (!this.queue.length) {
-      return Promise.resolve();
+      return;
     }
 
-    this.flushing = false;
+    if (this.activeFlush) {
+      await this.activeFlush;
+    }
+
     return this.flush();
   }
 
