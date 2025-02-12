@@ -78,6 +78,8 @@ export class Mastra<
         },
       };
       this.telemetry = Telemetry.init(newTelemetry as OtelConfig);
+    } else if (config?.telemetry) {
+      this.telemetry = Telemetry.init(config?.telemetry);
     }
 
     /**
