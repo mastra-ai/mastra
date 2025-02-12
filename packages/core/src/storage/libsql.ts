@@ -433,6 +433,38 @@ export class DefaultStorage extends MastraStorage {
       throw error;
     }
   }
+
+  // TODO: add types
+  async getTraces({ scope, page, perPage }: { scope?: string; page: number; perPage: number }): Promise<any[]> {
+    const limit = perPage;
+    const offset = (page - 1) * perPage;
+
+    const result = await this.client.execute({
+      sql: `SELECT * FROM ${MastraStorage.TABLE_TRACES} ${scope ? 'WHERE resourceId = ?' : ''} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
+      args: scope ? [scope, limit, offset] : [limit, offset],
+    });
+
+    if (!result.rows) {
+      return [];
+    }
+
+    return result.rows.map(row => ({
+      id: row.id,
+      parentSpanId: row.parentSpanId,
+      traceId: row.traceId,
+      name: row.name,
+      scope: row.scope,
+      kind: row.kind,
+      status: row.status,
+      events: row.events,
+      links: row.links,
+      attributes: row.attributes,
+      startTime: row.startTime,
+      endTime: row.endTime,
+      other: row.other,
+      createdAt: row.createdAt,
+    })) as any;
+  }
 }
 
 export { DefaultStorage as MastraStorageLibSql };
