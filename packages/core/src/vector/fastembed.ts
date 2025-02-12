@@ -36,12 +36,20 @@ async function generateEmbeddings(values: string[], modelType: 'BGESmallENV15' |
       try {
         mod = await unbundleableImport('fastembed');
       } catch (e) {
-        importErrors.push(e);
+        if (e instanceof Error) {
+          importErrors.push(e);
+        } else {
+          throw e;
+        }
         try {
           mod = await unbundleableImport('fastembed-web');
           useFastEmbedWebFallback = true;
         } catch (e) {
-          importErrors.push(e);
+          if (e instanceof Error) {
+            importErrors.push(e);
+          } else {
+            throw e;
+          }
         }
       }
     }
