@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.0-alpha.37
+
+### Patch Changes
+
+- 70dabd9: Fix broken publish
+
 ## 0.1.0-alpha.36
 
 ### Patch Changes

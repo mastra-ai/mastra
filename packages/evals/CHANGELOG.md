@@ -1,5 +1,15 @@
 # @mastra/evals
 
+## 0.1.0-alpha.40
+
+### Patch Changes
+
+- 70dabd9: Fix broken publish
+- 202d404: Added instructions when generating evals
+- Updated dependencies [70dabd9]
+- Updated dependencies [202d404]
+  - @mastra/core@0.2.0-alpha.98
+
 ## 0.1.0-alpha.39
 
 ### Patch Changes

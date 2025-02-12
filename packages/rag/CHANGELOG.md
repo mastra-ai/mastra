@@ -1,5 +1,14 @@
 # @mastra/rag
 
+## 0.1.0-alpha.91
+
+### Patch Changes
+
+- 70dabd9: Fix broken publish
+- Updated dependencies [70dabd9]
+- Updated dependencies [202d404]
+  - @mastra/core@0.2.0-alpha.98
+
 ## 0.1.0-alpha.90
 
 ### Patch Changes
