@@ -65,11 +65,9 @@ export class Memory extends MastraMemory {
           };
 
     if (selectBy?.vectorSearchString && this.vector) {
-      const embedder = this.getEmbedder();
-
       const { embedding } = await embed({
         value: selectBy.vectorSearchString,
-        model: embedder,
+        model: this.embedder,
       });
 
       const { indexName } = await this.createEmbeddingIndex();
@@ -205,12 +203,11 @@ export class Memory extends MastraMemory {
     this.mutateMessagesToHideWorkingMemory(messages);
 
     if (this.vector) {
-      const embedder = this.getEmbedder();
       const { indexName } = await this.createEmbeddingIndex();
 
       for (const message of messages) {
         if (typeof message.content !== `string`) continue;
-        const { embedding } = await embed({ value: message.content, model: embedder, maxRetries: 3 });
+        const { embedding } = await embed({ value: message.content, model: this.embedder, maxRetries: 3 });
         await this.vector.upsert(
           indexName,
           [embedding],
