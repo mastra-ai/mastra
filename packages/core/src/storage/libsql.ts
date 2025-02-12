@@ -1,10 +1,10 @@
-import { createClient, Client } from '@libsql/client';
-import { join } from 'path';
+import { createClient, type Client } from '@libsql/client';
+import { join } from 'node:path';
 
-import { MessageType, StorageThreadType } from '../memory';
+import { type MessageType, type StorageThreadType } from '../memory';
 
-import { MastraStorage, TABLE_NAMES } from './base';
-import { StorageColumn, StorageGetMessagesArg, EvalRow } from './types';
+import { MastraStorage, type TABLE_NAMES } from './base';
+import { type StorageColumn, type StorageGetMessagesArg, type EvalRow } from './types';
 
 export * from '../vector/libsql/index';
 
@@ -378,24 +378,41 @@ export class DefaultStorage extends MastraStorage {
     }
   }
 
-  async getEvalsByAgentName(agentName: string): Promise<EvalRow[]> {
-    const result = await this.client.execute({
-      sql: `SELECT * FROM ${MastraStorage.TABLE_EVALS} WHERE meta->>'$.agentName' = ? ORDER BY createdAt DESC`,
-      args: [agentName],
-    });
+  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
+    try {
+      const baseQuery = `SELECT * FROM ${MastraStorage.TABLE_EVALS} WHERE meta->>'$.agentName' = ?`;
+      const typeCondition =
+        type === 'test'
+          ? " AND meta->>'$.testPath' IS NOT NULL"
+          : type === 'live'
+            ? " AND meta->>'$.testPath' IS NULL"
+            : '';
 
-    if (!result.rows) {
-      return [];
+      const result = await this.client.execute({
+        sql: `${baseQuery}${typeCondition} ORDER BY createdAt DESC`,
+        args: [agentName],
+      });
+
+      if (!result.rows) {
+        return [];
+      }
+
+      return result.rows.map(row => ({
+        ...row,
+        result: typeof row.result === 'string' ? JSON.parse(row.result) : row.result,
+        meta: typeof row.meta === 'string' ? JSON.parse(row.meta) : row.meta,
+        input: row.input,
+        output: row.output,
+        createdAt: row.createdAt,
+      })) as EvalRow[];
+    } catch (error) {
+      // Handle case where table doesn't exist yet
+      if (error instanceof Error && error.message.includes('no such table')) {
+        return [];
+      }
+      console.error('Failed to get evals for the specified agent', error);
+      throw error;
     }
-
-    return result.rows.map(row => ({
-      ...row,
-      result: typeof row.result === 'string' ? JSON.parse(row.result) : row.result,
-      meta: typeof row.meta === 'string' ? JSON.parse(row.meta) : row.meta,
-      input: row.input,
-      output: row.output,
-      createdAt: row.createdAt,
-    })) as EvalRow[];
   }
 }
 

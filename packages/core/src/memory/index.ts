@@ -1,17 +1,17 @@
 import {
-  AssistantContent,
-  ToolContent,
-  ToolResultPart,
-  UserContent,
-  Message as AiMessage,
-  CoreToolMessage,
-  ToolInvocation,
-  CoreMessage,
-  EmbeddingModel,
+  type AssistantContent,
+  type ToolContent,
+  type ToolResultPart,
+  type UserContent,
+  type Message as AiMessage,
+  type CoreToolMessage,
+  type ToolInvocation,
+  type CoreMessage,
+  type EmbeddingModel,
 } from 'ai';
 
 import { MastraBase } from '../base';
-import { DefaultStorage, MastraStorage, StorageGetMessagesArg } from '../storage';
+import { MastraStorage, DefaultStorage, type StorageGetMessagesArg } from '../storage';
 import { deepMerge } from '../utils';
 import { MastraVector } from '../vector';
 
@@ -112,6 +112,27 @@ export abstract class MastraMemory extends MastraBase {
    */
   public async getSystemMessage(_input: { threadId: string; memoryConfig?: MemoryConfig }): Promise<string | null> {
     return null;
+  }
+
+  protected async createEmbeddingIndex(): Promise<{ indexName: string }> {
+    if (!this.vector) {
+      throw new Error(`Cannot call MastraMemory.createEmbeddingIndex() without a vector db attached.`);
+    }
+
+    const defaultDimensions = 1536;
+
+    // AI SDK doesn't expose a way to check how many dimensions a model uses.
+    const dimensionsByModelId: Record<string, number> = {
+      'bge-small-en-v1.5': 384,
+      'bge-base-en-v1.5': 768,
+    };
+
+    const dimensions = dimensionsByModelId[this.getEmbedder().modelId] || defaultDimensions;
+    const isDefault = dimensions === defaultDimensions;
+    const indexName = isDefault ? 'memory_messages' : `memory_messages_${dimensions}`;
+
+    await this.vector.createIndex(indexName, dimensions);
+    return { indexName };
   }
 
   protected getEmbedder() {

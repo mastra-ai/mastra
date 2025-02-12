@@ -1,5 +1,79 @@
 # mastra
 
+## 0.2.0-alpha.160
+
+### Patch Changes
+
+- Updated dependencies [a9345f9]
+  - @mastra/core@0.2.0-alpha.102
+  - @mastra/deployer@0.1.0-alpha.52
+
+## 0.2.0-alpha.159
+
+### Patch Changes
+
+- 4f1d1a1: Enforce types ann cleanup package.json
+- Updated dependencies [66a03ec]
+- Updated dependencies [4f1d1a1]
+  - @mastra/core@0.2.0-alpha.101
+  - @mastra/deployer@0.1.0-alpha.51
+
+## 0.2.0-alpha.158
+
+### Patch Changes
+
+- 9d1796d: Fix storage and eval serialization on api
+- Updated dependencies [9d1796d]
+  - @mastra/deployer@0.1.0-alpha.50
+  - @mastra/core@0.2.0-alpha.100
+
+## 0.2.0-alpha.157
+
+### Patch Changes
+
+- 7d83b92: Create default storage and move evals towards it
+- Updated dependencies [7d83b92]
+  - @mastra/deployer@0.1.0-alpha.49
+  - @mastra/core@0.2.0-alpha.99
+
+## 0.2.0-alpha.156
+
+### Patch Changes
+
+- Updated dependencies [8aec8b7]
+  - @mastra/deployer@0.1.0-alpha.48
+
+## 0.2.0-alpha.155
+
+### Patch Changes
+
+- 70dabd9: Fix broken publish
+- 202d404: Added instructions when generating evals
+- Updated dependencies [70dabd9]
+- Updated dependencies [202d404]
+  - @mastra/core@0.2.0-alpha.98
+  - @mastra/deployer@0.1.0-alpha.47
+
+## 0.2.0-alpha.154
+
+### Patch Changes
+
+- 7892533: Updated test evals to use Mastra Storage
+- e6d8055: Added Mastra Storage to add and query live evals
+- a18e96c: Array schemas for dev tool playground
+- 85c6935: Fix messages sent not rendering when evals are on
+- f1e3105: Now that memory can be added to an agent, the playground needs to look up memory on the agent, not on mastra. Now the playground looks up on the agent to properly access memory
+- Updated dependencies [07c069d]
+- Updated dependencies [7892533]
+- Updated dependencies [e6d8055]
+- Updated dependencies [a18e96c]
+- Updated dependencies [5950de5]
+- Updated dependencies [df843d3]
+- Updated dependencies [a870123]
+- Updated dependencies [f1e3105]
+  - @mastra/core@0.2.0-alpha.97
+  - @mastra/deployer@0.1.0-alpha.46
+
 ## 0.2.0-alpha.153
 
 ### Minor Changes

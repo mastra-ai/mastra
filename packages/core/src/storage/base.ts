@@ -1,8 +1,8 @@
 import { MastraBase } from '../base';
-import { MessageType, StorageThreadType } from '../memory';
-import { WorkflowRunState } from '../workflows';
+import { type MessageType, type StorageThreadType } from '../memory';
+import { type WorkflowRunState } from '../workflows';
 
-import { StorageColumn, StorageGetMessagesArg } from './types';
+import { type StorageColumn, type StorageGetMessagesArg } from './types';
 
 export type TABLE_NAMES =
   | typeof MastraStorage.TABLE_WORKFLOW_SNAPSHOT

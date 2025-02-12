@@ -1,5 +1,48 @@
 # @mastra/core
 
+## 0.2.0-alpha.102
+
+### Patch Changes
+
+- a9345f9: Fixed tsc build for core types
+
+## 0.2.0-alpha.101
+
+### Patch Changes
+
+- 66a03ec: Removed an extra llm call that was needed for the old Memory API but is no longer needed
+- 4f1d1a1: Enforce types ann cleanup package.json
+
+## 0.2.0-alpha.100
+
+### Patch Changes
+
+- 9d1796d: Fix storage and eval serialization on api
+
+## 0.2.0-alpha.99
+
+### Patch Changes
+
+- 7d83b92: Create default storage and move evals towards it
+
+## 0.2.0-alpha.98
+
+### Patch Changes
+
+- 70dabd9: Fix broken publish
+- 202d404: Added instructions when generating evals
+
+## 0.2.0-alpha.97
+
+### Patch Changes
+
+- 07c069d: Add dotenv as dependency
+- 7892533: Updated test evals to use Mastra Storage
+- e6d8055: Added Mastra Storage to add and query live evals
+- 5950de5: Added update instructions API
+- df843d3: Fixed libsql db relative file paths so they're always outside the .mastra directory. If they're inside .mastra they will be deleted when code is re-bundled
+- a870123: Added local embedder class that uses fastembed-js, a Typescript/NodeJS implementation of @Qdrant/fastembed
+
 ## 0.2.0-alpha.96
 
 ### Minor Changes

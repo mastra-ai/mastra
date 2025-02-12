@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "0.1.0-alpha.45",
+  "version": "0.1.0-alpha.52",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup src/index.ts src/build/index.ts src/server/index.ts src/build/bundler.ts src/build/analyze.ts src/bundler/index.ts --format esm --clean --dts --treeshake",
+    "build": "tsup src/index.ts src/build/index.ts src/server/index.ts src/build/bundler.ts src/build/analyze.ts src/bundler/index.ts --format esm --clean --experimental-dts --treeshake",
     "build:watch": "pnpm build --watch",
     "pull:openapispec": "node src/server/openapi.script.js",
     "test": "vitest run"
@@ -51,6 +51,7 @@
     "@rollup/plugin-virtual": "^3.0.2",
     "builtins": "^5.1.0",
     "detect-libc": "^2.0.3",
+    "dotenv": "^16.4.7",
     "esbuild": "^0.24.2",
     "fs-extra": "^11.2.0",
     "hono": "^4.6.17",
@@ -62,10 +63,11 @@
   "devDependencies": {
     "@hono/node-server": "^1.13.7",
     "@hono/swagger-ui": "^0.5.0",
+    "@microsoft/api-extractor": "^7.49.2",
     "@types/babel__core": "^7.20.5",
     "@types/babel__helper-module-imports": "^7.18.3",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "^22.9.0",
+    "@types/node": "^22.13.1",
     "concurrently": "^9.1.0",
     "hono-openapi": "^0.4.3",
     "rollup-plugin-visualizer": "^5.14.0",

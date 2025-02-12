@@ -4,7 +4,7 @@ import { Integration } from '@mastra/core';
 import RagieLogo from './assets/ragie.png';
 import * as integrationClient from './client/services.gen';
 import { RagieToolset } from './toolset';
-import { RagieConfig } from './types';
+import { type RagieConfig } from './types';
 
 export class RagieIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'RAGIE';

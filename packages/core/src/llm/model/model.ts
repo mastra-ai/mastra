@@ -1,28 +1,28 @@
 import {
   generateText,
-  LanguageModel,
-  Tool,
+  type LanguageModel,
+  type Tool,
   generateObject,
   jsonSchema,
-  Schema,
-  CoreMessage,
+  type Schema,
+  type CoreMessage,
   streamText,
   streamObject,
 } from 'ai';
-import { JSONSchema7 } from 'json-schema';
+import { type JSONSchema7 } from 'json-schema';
 import { z, ZodSchema } from 'zod';
 
 import {
-  GenerateReturn,
-  LLMTextOptions,
-  LLMInnerStreamOptions,
-  LLMStreamObjectOptions,
-  LLMStreamOptions,
-  LLMTextObjectOptions,
-  StreamReturn,
+  type GenerateReturn,
+  type LLMTextOptions,
+  type LLMInnerStreamOptions,
+  type LLMStreamObjectOptions,
+  type LLMStreamOptions,
+  type LLMTextObjectOptions,
+  type StreamReturn,
 } from '../';
-import { MastraPrimitives } from '../../action';
-import { ToolsInput } from '../../agent/types';
+import { type MastraPrimitives } from '../../action';
+import { type ToolsInput } from '../../agent/types';
 import { delay } from '../../utils';
 
 import { MastraLLMBase } from './base';
@@ -58,6 +58,10 @@ export class MastraLLM extends MastraLLMBase {
 
   getProvider() {
     return this.#model.provider;
+  }
+
+  getModelId() {
+    return this.#model.modelId;
   }
 
   convertTools(tools?: ToolsInput): Record<string, Tool> {

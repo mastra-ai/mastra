@@ -1,5 +1,23 @@
 # create-mastra
 
+## 0.1.0-alpha.38
+
+### Patch Changes
+
+- 4f1d1a1: Enforce types ann cleanup package.json
+
+## 0.1.0-alpha.37
+
+### Patch Changes
+
+- 70dabd9: Fix broken publish
+
+## 0.1.0-alpha.36
+
+### Patch Changes
+
+- a18e96c: Array schemas for dev tool playground
+
 ## 0.1.0-alpha.35
 
 ### Patch Changes

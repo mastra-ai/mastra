@@ -7,7 +7,7 @@ import { MastraStorage } from '../storage';
 import { Telemetry } from '../telemetry';
 import { MastraTTS } from '../tts';
 import { MastraVector } from '../vector';
-import { WorkflowContext } from '../workflows';
+import { type WorkflowContext } from '../workflows';
 
 export type MastraPrimitives = {
   logger?: Logger;

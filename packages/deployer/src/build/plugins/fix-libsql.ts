@@ -43,7 +43,7 @@ export function libSqlFix(): Plugin {
         throw new Error('No output options were given.');
       }
 
-      const outputDirectory = dir || dirname(file);
+      const outputDirectory = dir || dirname(file!);
 
       let target = currentTarget();
       // Workaround for Bun, which reports a musl target, but really wants glibc...

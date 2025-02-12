@@ -1,6 +1,6 @@
-import { Metric, MetricResult } from '../eval/metric';
+import { Metric, type MetricResult } from '../eval/metric';
 
-import mitt, { Handler } from './mitt';
+import mitt, { type Handler } from './mitt';
 
 export enum AvailableHooks {
   ON_EVALUATION = 'onEvaluation',
@@ -14,6 +14,8 @@ export function registerHook(
   action: Handler<{
     input: string;
     output: string;
+    result: MetricResult;
+    meta: Record<string, any>;
   }>,
 ): void;
 export function registerHook(
@@ -24,6 +26,7 @@ export function registerHook(
     metric: Metric;
     runId: string;
     agentName: string;
+    instructions: string;
   }>,
 ): void;
 export function registerHook(hook: `${AvailableHooks}`, action: Handler<any>): void {
@@ -36,6 +39,7 @@ export function executeHook(
     input: string;
     output: string;
     result: MetricResult;
+    meta: Record<string, any>;
   },
 ): void;
 export function executeHook(
@@ -46,6 +50,7 @@ export function executeHook(
     metric: Metric;
     runId: string;
     agentName: string;
+    instructions: string;
   },
 ): void;
 

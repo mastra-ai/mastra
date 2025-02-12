@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "0.1.0-alpha.78",
+  "version": "0.1.0-alpha.84",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -28,7 +28,7 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "pnpm run check && tsup src/index.ts --format esm --dts --clean --treeshake",
+    "build": "pnpm run check && tsup src/index.ts --format esm --experimental-dts --clean --treeshake",
     "build:watch": "pnpm build --watch",
     "test:integration": "cd integration-tests && pnpm run test",
     "test": "pnpm test:integration"
@@ -46,10 +46,8 @@
     "redis": "^4.7.0"
   },
   "devDependencies": {
-    "@babel/preset-env": "^7.26.0",
-    "@babel/preset-typescript": "^7.26.0",
-    "@tsconfig/recommended": "^1.0.7",
-    "@types/node": "^22.9.0",
+    "@microsoft/api-extractor": "^7.49.2",
+    "@types/node": "^22.13.1",
     "@types/pg": "^8.11.10",
     "tsup": "^8.0.1",
     "vitest": "^3.0.4"

@@ -75,6 +75,24 @@ beforeAll(async () => {
 });
 ```
 
+<details>
+  <summary>Store evals in Mastra Storage</summary>
+
+  Pass your Mastra instance to store evals in the configured storage:
+
+  ```typescript
+  import { mastra } from './your-mastra-setup';
+
+  beforeAll(async () => {
+    // Store evals in Mastra Storage (requires storage to be enabled)
+    await attachListeners(mastra);
+  });
+  ```
+
+  This allows you to save evals in Mastra Storage and query them later.
+</details>
+```
+
 ```typescript copy showLineNumbers filename="vitest.config.ts"
 import { defineConfig } from 'vitest/config'
 

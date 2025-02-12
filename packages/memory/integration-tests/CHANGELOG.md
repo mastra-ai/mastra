@@ -1,5 +1,75 @@
 # @mastra/memory-integration-tests
 
+## 0.1.0-alpha.18
+
+### Patch Changes
+
+- Updated dependencies [a9345f9]
+  - @mastra/core@0.2.0-alpha.102
+  - @mastra/memory@0.1.0-alpha.84
+  - @mastra/pg@0.1.0-alpha.12
+  - @mastra/upstash@0.1.0-alpha.12
+
+## 0.1.0-alpha.17
+
+### Patch Changes
+
+- 4f1d1a1: Enforce types ann cleanup package.json
+- Updated dependencies [66a03ec]
+- Updated dependencies [4f1d1a1]
+  - @mastra/core@0.2.0-alpha.101
+  - @mastra/memory@0.1.0-alpha.83
+  - @mastra/upstash@0.1.0-alpha.11
+  - @mastra/pg@0.1.0-alpha.11
+
+## 0.1.0-alpha.16
+
+### Patch Changes
+
+- Updated dependencies [9d1796d]
+  - @mastra/core@0.2.0-alpha.100
+  - @mastra/memory@0.1.0-alpha.82
+  - @mastra/pg@0.1.0-alpha.10
+  - @mastra/upstash@0.1.0-alpha.10
+
+## 0.1.0-alpha.15
+
+### Patch Changes
+
+- Updated dependencies [7d83b92]
+  - @mastra/core@0.2.0-alpha.99
+  - @mastra/memory@0.1.0-alpha.81
+  - @mastra/pg@0.1.0-alpha.9
+  - @mastra/upstash@0.1.0-alpha.9
+
+## 0.1.0-alpha.14
+
+### Patch Changes
+
+- 70dabd9: Fix broken publish
+- Updated dependencies [70dabd9]
+- Updated dependencies [202d404]
+  - @mastra/core@0.2.0-alpha.98
+  - @mastra/memory@0.1.0-alpha.80
+  - @mastra/pg@0.1.0-alpha.8
+  - @mastra/upstash@0.1.0-alpha.8
+
+## 0.1.0-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [07c069d]
+- Updated dependencies [07c069d]
+- Updated dependencies [7892533]
+- Updated dependencies [e6d8055]
+- Updated dependencies [5950de5]
+- Updated dependencies [df843d3]
+- Updated dependencies [a870123]
+  - @mastra/core@0.2.0-alpha.97
+  - @mastra/pg@0.1.0-alpha.7
+  - @mastra/upstash@0.1.0-alpha.7
+  - @mastra/memory@0.1.0-alpha.79
+
 ## 0.1.0-alpha.12
 
 ### Patch Changes

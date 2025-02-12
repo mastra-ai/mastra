@@ -1,5 +1,71 @@
 # @mastra/deployer-netlify
 
+## 0.1.0-alpha.55
+
+### Patch Changes
+
+- Updated dependencies [a9345f9]
+  - @mastra/core@0.2.0-alpha.102
+  - @mastra/deployer@0.1.0-alpha.52
+
+## 0.1.0-alpha.54
+
+### Patch Changes
+
+- 4f1d1a1: Enforce types ann cleanup package.json
+- Updated dependencies [66a03ec]
+- Updated dependencies [4f1d1a1]
+  - @mastra/core@0.2.0-alpha.101
+  - @mastra/deployer@0.1.0-alpha.51
+
+## 0.1.0-alpha.53
+
+### Patch Changes
+
+- Updated dependencies [9d1796d]
+  - @mastra/deployer@0.1.0-alpha.50
+  - @mastra/core@0.2.0-alpha.100
+
+## 0.1.0-alpha.52
+
+### Patch Changes
+
+- Updated dependencies [7d83b92]
+  - @mastra/deployer@0.1.0-alpha.49
+  - @mastra/core@0.2.0-alpha.99
+
+## 0.1.0-alpha.51
+
+### Patch Changes
+
+- Updated dependencies [8aec8b7]
+  - @mastra/deployer@0.1.0-alpha.48
+
+## 0.1.0-alpha.50
+
+### Patch Changes
+
+- 70dabd9: Fix broken publish
+- Updated dependencies [70dabd9]
+- Updated dependencies [202d404]
+  - @mastra/core@0.2.0-alpha.98
+  - @mastra/deployer@0.1.0-alpha.47
+
+## 0.1.0-alpha.49
+
+### Patch Changes
+
+- Updated dependencies [07c069d]
+- Updated dependencies [7892533]
+- Updated dependencies [e6d8055]
+- Updated dependencies [a18e96c]
+- Updated dependencies [5950de5]
+- Updated dependencies [df843d3]
+- Updated dependencies [a870123]
+- Updated dependencies [f1e3105]
+  - @mastra/core@0.2.0-alpha.97
+  - @mastra/deployer@0.1.0-alpha.46
+
 ## 0.1.0-alpha.48
 
 ### Patch Changes

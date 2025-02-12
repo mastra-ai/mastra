@@ -1,28 +1,28 @@
 import {
-  AssistantContent,
-  CoreAssistantMessage,
-  CoreMessage,
-  CoreToolMessage,
-  CoreUserMessage,
-  TextPart,
-  ToolCallPart,
-  UserContent,
+  type AssistantContent,
+  type CoreAssistantMessage,
+  type CoreMessage,
+  type CoreToolMessage,
+  type CoreUserMessage,
+  type TextPart,
+  type ToolCallPart,
+  type UserContent,
 } from 'ai';
 import { type LanguageModelV1 } from 'ai';
 import { randomUUID } from 'crypto';
-import { JSONSchema7 } from 'json-schema';
+import { type JSONSchema7 } from 'json-schema';
 import { z, ZodSchema } from 'zod';
 
-import { MastraPrimitives } from '../action';
+import { type MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 import { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
 import { MastraLLM, MastraLLMBase } from '../llm/model';
 import { LogLevel, RegisteredLogger } from '../logger';
-import { MastraMemory, MemoryConfig, StorageThreadType } from '../memory';
+import { MastraMemory, type MemoryConfig, type StorageThreadType } from '../memory';
 import { InstrumentClass } from '../telemetry';
-import { CoreTool, ToolAction } from '../tools/types';
+import { type CoreTool, type ToolAction } from '../tools/types';
 
 import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
 
@@ -36,7 +36,7 @@ export class Agent<
 > extends MastraBase {
   public name: string;
   readonly llm: MastraLLMBase;
-  readonly instructions: string;
+  instructions: string;
   readonly model?: LanguageModelV1;
   #mastra?: MastraPrimitives;
   #memory?: MastraMemory;
@@ -81,6 +81,11 @@ export class Agent<
   }
   public getMemory(): MastraMemory | undefined {
     return this.#memory ?? this.#mastra?.memory;
+  }
+
+  __updateInstructions(newInstructions: string) {
+    this.instructions = newInstructions;
+    this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
   }
 
   __registerPrimitives(p: MastraPrimitives) {
@@ -212,43 +217,6 @@ export class Agent<
             type: 'text' as 'text' | 'tool-call' | 'tool-result',
           };
         });
-
-        const contextCallMessages: CoreMessage[] = [
-          {
-            role: 'system',
-            content: `\n
-             Analyze this message to determine if the user is referring to a previous conversation with the LLM.
-             Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation.
-             Extract any date ranges mentioned in the user message that could help identify the previous chat.
-             Return dates in ISO format.
-             If no specific dates are mentioned but time periods are (like "last week" or "past month"), calculate the appropriate date range.
-             For the end date, return the date 1 day after the end of the time period.
-             Today's date is ${new Date().toISOString()}`,
-          },
-          ...newMessages,
-        ];
-
-        let context;
-
-        try {
-          context = await this.llm.__textObject<{ usesContext: boolean; startDate: Date; endDate: Date }>({
-            messages: contextCallMessages,
-            structuredOutput: z.object({
-              usesContext: z.boolean(),
-              startDate: z.date(),
-              endDate: z.date(),
-            }),
-          });
-
-          this.logger.debug('Text Object result', {
-            contextObject: JSON.stringify(context.object, null, 2),
-            runId: runId || this.name,
-          });
-        } catch (e) {
-          if (e instanceof Error) {
-            this.log(LogLevel.DEBUG, `No context found: ${e.message}`);
-          }
-        }
 
         const memoryMessages =
           threadId && memory
@@ -742,6 +710,7 @@ export class Agent<
               runId: runIdToUse,
               metric,
               agentName: this.name,
+              instructions: this.instructions,
             });
           }
         }

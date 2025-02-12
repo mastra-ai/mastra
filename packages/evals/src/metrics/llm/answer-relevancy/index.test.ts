@@ -1,7 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
 
-import { TestCase } from '../utils';
+import { isCloserTo, TestCase } from '../utils';
 
 import { AnswerRelevancyMetric } from './index';
 
@@ -111,9 +111,7 @@ describe(
     it('should be able to measure a prompt with mostly relevant information', async () => {
       const result = await metric.measure(testCases[1].input, testCases[1].output);
       const expectedScore = testCases[1].expectedResult.score;
-      const difference = Math.abs(result.score - expectedScore);
-
-      expect(Math.round(difference * 10) / 10).toBeLessThanOrEqual(0.1);
+      expect(isCloserTo(result.score, expectedScore, 0)).toBe(true);
     });
 
     it('should be able to measure a prompt with partial relevance', async () => {

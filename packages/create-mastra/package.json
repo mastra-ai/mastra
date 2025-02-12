@@ -1,6 +1,6 @@
 {
   "name": "create-mastra",
-  "version": "0.1.0-alpha.35",
+  "version": "0.1.0-alpha.38",
   "description": "Create Mastra apps with one command",
   "type": "module",
   "main": "dist/index.js",
@@ -43,11 +43,12 @@
     "prettier": "^3.3.3"
   },
   "devDependencies": {
+    "@microsoft/api-extractor": "^7.49.2",
     "@rollup/plugin-commonjs": "^28.0.2",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.0",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "^22.1.0",
+    "@types/node": "^22.13.1",
     "esbuild": "^0.24.2",
     "mastra": "workspace:^",
     "rollup": "^4.30.1",

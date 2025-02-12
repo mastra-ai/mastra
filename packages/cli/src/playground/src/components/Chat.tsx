@@ -65,7 +65,7 @@ export function Chat({ agentId, initialMessages = [], agentName, threadId, memor
         throw new Error(error.message);
       }
 
-      mutate(`/api/memory/threads?resourceid=${agentId}`);
+      mutate(`/api/memory/threads?resourceid=${agentId}&agentId=${agentId}`);
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
