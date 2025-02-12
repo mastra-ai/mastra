@@ -1,4 +1,4 @@
 export interface TestInfo {
-  testName: string;
-  testPath: string;
+  testName?: string;
+  testPath?: string;
 }
