@@ -1,7 +1,7 @@
 import { createClient, type Client } from '@libsql/client';
 import { join } from 'node:path';
 
-import type { MetricResult } from '../eval';
+import type { MetricResult, TestInfo } from '../eval';
 import { type MessageType, type StorageThreadType } from '../memory';
 
 import { MastraStorage, type TABLE_NAMES } from './base';
@@ -412,7 +412,7 @@ export class DefaultStorage extends MastraStorage {
           agentName: row.agent_name,
           metricName: row.metric_name,
           instructions: row.instructions,
-          testInfo: testInfoValue,
+          testInfo: testInfoValue as TestInfo,
           globalRunId: row.global_run_id,
           runId: row.run_id,
           createdAt: row.created_at,
