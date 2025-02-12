@@ -1,4 +1,5 @@
 import { Metric, type MetricResult } from '../eval/metric';
+import type { TestInfo } from '../eval/types';
 
 import mitt, { type Handler } from './mitt';
 
@@ -18,10 +19,7 @@ type EvaluationHookData = {
   instructions: string;
   runId: string;
   globalRunId: string;
-  testInfo?: {
-    testName: string;
-    testPath: string;
-  };
+  testInfo?: TestInfo;
 };
 
 type GenerationHookData = {

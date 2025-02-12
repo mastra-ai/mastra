@@ -398,8 +398,8 @@ export class DefaultStorage extends MastraStorage {
       }
 
       return result.rows.map(row => {
-        const resultValue = typeof row.result === 'string' ? JSON.parse(row.result) : row.result;
-        const testInfoValue = typeof row.test_info === 'string' ? JSON.parse(row.test_info) : row.test_info;
+        const resultValue = JSON.parse(row.result as string);
+        const testInfoValue = row.test_info ? JSON.parse(row.test_info as string) : undefined;
 
         if (!resultValue || typeof resultValue !== 'object' || !('score' in resultValue)) {
           throw new Error(`Invalid MetricResult format: ${JSON.stringify(resultValue)}`);
@@ -412,7 +412,7 @@ export class DefaultStorage extends MastraStorage {
           agentName: row.agent_name,
           metricName: row.metric_name,
           instructions: row.instructions,
-          testInfo: testInfoValue || undefined,
+          testInfo: testInfoValue,
           globalRunId: row.global_run_id,
           runId: row.run_id,
           createdAt: row.created_at,

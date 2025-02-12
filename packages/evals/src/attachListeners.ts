@@ -16,11 +16,11 @@ export async function attachListeners(mastra?: Mastra) {
         record: {
           input: traceObject.input,
           output: traceObject.output,
-          result: traceObject.result,
+          result: JSON.stringify(traceObject.result),
           agent_name: traceObject.agentName,
           metric_name: traceObject.metricName,
           instructions: traceObject.instructions,
-          test_info: traceObject.testInfo || null,
+          test_info: traceObject.testInfo ? JSON.stringify(traceObject.testInfo) : null,
           global_run_id: traceObject.globalRunId,
           run_id: traceObject.runId,
           created_at: new Date().toISOString(),

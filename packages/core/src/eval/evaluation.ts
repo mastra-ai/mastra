@@ -2,6 +2,7 @@ import type { Agent } from '../agent';
 import { AvailableHooks, executeHook } from '../hooks';
 
 import type { Metric } from './metric';
+import type { TestInfo } from './types';
 
 export async function evaluate<T extends Agent>({
   agentName,
@@ -19,10 +20,7 @@ export async function evaluate<T extends Agent>({
   output: string;
   globalRunId: string;
   runId?: string;
-  testInfo?: {
-    testName: string;
-    testPath: string;
-  };
+  testInfo?: TestInfo;
   instructions: string;
 }) {
   const runIdToUse = runId || crypto.randomUUID();

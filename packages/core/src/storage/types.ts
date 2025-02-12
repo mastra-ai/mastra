@@ -1,4 +1,4 @@
-import type { MetricResult } from '../eval';
+import type { MetricResult, TestInfo } from '../eval';
 import { type MemoryConfig } from '../memory';
 import { type WorkflowRunState } from '../workflows';
 
@@ -44,8 +44,5 @@ export type EvalRow = {
   instructions: string;
   runId: string;
   globalRunId: string;
-  testInfo?: {
-    testName?: string;
-    testPath?: string;
-  };
+  testInfo?: TestInfo;
 };
