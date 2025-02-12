@@ -48,7 +48,7 @@ async function generateEmbeddings(values: string[], modelType: 'BGESmallENV15' |
   }
 }
 
-export const fastEmbedProvider = experimental_customProvider({
+const fastEmbedProvider = experimental_customProvider({
   textEmbeddingModels: {
     'bge-small-en-v1.5': {
       specificationVersion: 'v1',
@@ -72,3 +72,5 @@ export const fastEmbedProvider = experimental_customProvider({
     },
   },
 });
+
+export const localEmbedder = fastEmbedProvider.textEmbeddingModel;
