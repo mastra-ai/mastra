@@ -1,42 +1,51 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
-import { Span } from '@/domains/traces/types';
+import usePolling from '@/lib/polls';
+
+import { RefinedTrace } from '@/domains/traces/types';
+import { refineTraces } from '@/domains/traces/utils';
 
 export const useTraces = (componentName: string) => {
-  const [traces, setTraces] = useState<Span[] | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [traces, setTraces] = useState<RefinedTrace[] | null>(null);
 
-  useEffect(() => {
-    const fetchTraces = async () => {
-      setIsLoading(true);
-      try {
-        if (!componentName) {
-          setTraces(null);
-          setIsLoading(false);
-          return;
-        }
-        const res = await fetch(`/api/telemetry?attribute=componentName:${componentName}`);
-        if (!res.ok) {
-          const error = await res.json();
-          setTraces(null);
-          console.error('Error fetching traces', error);
-          toast.error(error?.error || 'Error fetching traces');
-          return;
-        }
-        const traces = await res.json();
-        setTraces(traces?.traces || []);
-      } catch (error) {
-        setTraces(null);
-        console.error('Error fetching traces', error);
-        toast.error('Error fetching traces');
-      } finally {
-        setIsLoading(false);
+  const fetchFn = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/telemetry?attribute=componentName:${componentName}`);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error?.error || 'Error fetching traces');
       }
-    };
-
-    fetchTraces();
+      const traces = await res.json();
+      const refinedTraces = refineTraces(traces?.traces || []);
+      return refinedTraces;
+    } catch (error) {
+      throw error;
+    }
   }, [componentName]);
 
-  return { traces, isLoading };
+  const onSuccess = useCallback((newTraces: RefinedTrace[]) => {
+    if (newTraces.length > 0) {
+      setTraces(() => newTraces);
+    }
+  }, []);
+
+  const onError = useCallback((error: { msg: string }) => {
+    toast.error(error.msg);
+  }, []);
+
+  const shouldContinue = useCallback((result: RefinedTrace[]) => {
+    return result.length > 0;
+  }, []);
+
+  const { firstCallLoading, error } = usePolling<RefinedTrace[], { msg: string }>({
+    fetchFn,
+    interval: 3000,
+    onSuccess,
+    onError,
+    shouldContinue,
+    enabled: true,
+  });
+
+  return { traces, firstCallLoading, error };
 };

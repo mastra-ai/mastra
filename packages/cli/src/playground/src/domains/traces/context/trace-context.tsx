@@ -36,7 +36,7 @@ export function TraceProvider({ children }: { children: React.ReactNode }) {
       setCurrentTraceIndex(nextIndex);
       const nextTrace = traces[nextIndex].trace;
       setTrace(nextTrace);
-      const parentSpan = nextTrace.find(span => span.parentSpanId === undefined) || nextTrace[0];
+      const parentSpan = nextTrace.find(span => span.parentSpanId === null) || nextTrace[0];
       setSpan(parentSpan);
     }
   };
@@ -47,7 +47,7 @@ export function TraceProvider({ children }: { children: React.ReactNode }) {
       setCurrentTraceIndex(prevIndex);
       const prevTrace = traces[prevIndex].trace;
       setTrace(prevTrace);
-      const parentSpan = prevTrace.find(span => span.parentSpanId === undefined) || prevTrace[0];
+      const parentSpan = prevTrace.find(span => span.parentSpanId === null) || prevTrace[0];
       setSpan(parentSpan);
     }
   };

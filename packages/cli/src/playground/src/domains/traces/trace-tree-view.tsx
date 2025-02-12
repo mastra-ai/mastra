@@ -19,7 +19,9 @@ export function TreeNode({ node, depth = 0 }: { node: SpanNode; depth?: number }
     <div>
       <Button
         variant={'ghost'}
-        className="relative flex w-full items-center justify-start gap-2 py-3 pr-1 text-sm"
+        className={cn('relative flex w-full items-center justify-start gap-2 py-3 pr-1 text-sm', {
+          'text-accent-foreground bg-accent': span?.id === node.id,
+        })}
         onClick={e => {
           e.preventDefault();
           e.stopPropagation();
@@ -50,7 +52,14 @@ export function TreeNode({ node, depth = 0 }: { node: SpanNode; depth?: number }
           </div>
         ) : null}
         <div className="flex w-full gap-4 pr-4">
-          <p className="max-w-[400px] truncate px-1 text-sm text-white">{node.name}</p>
+          <p
+            className={cn('max-w-[400px] truncate px-1 text-sm', {
+              'text-white': node?.status?.code === 0,
+              'text-[#FF4500]': node?.status?.code !== 0,
+            })}
+          >
+            {node.name}
+          </p>
 
           {node.duration > 0 && (
             <div className="relative w-full max-w-[200px]">
@@ -67,8 +76,8 @@ export function TreeNode({ node, depth = 0 }: { node: SpanNode; depth?: number }
                   node.name.includes('ai') && 'left-2/4 w-5 bg-[#F09A56]',
                 )}
               ></div>
-              <span className="absolute left-0 top-3 text-[0.63rem] text-[#939393]">
-                {formatDuration(node.duration)}s
+              <span className="absolute left-0 top-3 text-[0.63rem] text-mastra-el-3">
+                {formatDuration(node.duration)}ms
               </span>
             </div>
           )}

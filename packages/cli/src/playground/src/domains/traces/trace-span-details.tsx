@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 
 import { TraceContext } from './context/trace-context';
 import { Span } from './types';
-import { cleanString, formatDuration, formatOtelTimestamp, transformKey } from './utils';
+import { cleanString, formatDuration, formatOtelTimestamp, formatOtelTimestamp2, transformKey } from './utils';
 
 export function SpanDetail() {
   const { span } = useContext(TraceContext);
@@ -30,27 +30,49 @@ export function SpanDetail() {
       </div>
       <div className="grid grid-cols-3 px-6">
         <div className="flex flex-col gap-1">
-          <span className="text-xs text-[#939393]">Duration</span>
-          <span className="font-mono text-xs"> {duration ? formatDuration(duration) : ''}s</span>
+          <span className="text-xs text-mastra-el-3">Duration</span>
+          <span className="font-mono text-xs"> {duration ? formatDuration(duration) : ''}ms</span>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-xs text-[#939393]">Time</span>
-          <span className="font-mono text-xs">
-            {span?.startTime ? formatOtelTimestamp(Number(span?.startTime)) : ''}
-          </span>
+          <span className="text-xs text-mastra-el-3">Time</span>
+          <span className="font-mono text-xs">{span?.startTime ? formatOtelTimestamp(span?.startTime) : ''}</span>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-xs text-[#939393]">Status</span>
+          <span className="text-xs text-mastra-el-3">Status</span>
           <span className={cn('font-mono text-xs', span?.status?.code == 0 ? 'text-[#6CD063]' : 'text-[#FF4500]')}>
             {span?.status?.code == 0 ? 'OK' : 'ERROR'}
           </span>
         </div>
       </div>
       <div className="border-t-[0.5px] px-6 pt-4">{span && <Attributes span={span} />}</div>
+      <div className="border-t-[0.5px] px-6 pt-4">{span && span?.events?.length > 0 && <Events span={span} />}</div>
     </div>
   );
 }
 
+function Events({ span }: { span: Span }) {
+  if (!span.events) return null;
+
+  return (
+    <div className="flex flex-col px-2">
+      <p className="text-lg">Events</p>
+      {span.events.map(event => (
+        <div
+          key={event.name}
+          className={cn('flex flex-col gap-2 border-b-[0.5px] pt-4 pb-2', event.attributes?.length === 0 && 'pb-4')}
+        >
+          <p className="text-xs text-mastra-el-3">Name</p>
+          <p className="font-mono text-xs">{event.name}</p>
+          <p className="text-xs text-mastra-el-3">Time</p>
+          <p className="font-mono text-xs">
+            {event.timeUnixNano ? formatOtelTimestamp2(Number(event.timeUnixNano)) : ''}
+          </p>
+          {event.attributes?.length > 0 ? <AttributesValues attributes={JSON.stringify(event.attributes)} /> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
 function Attributes({ span }: { span: Span }) {
   if (!span.attributes) return null;
 
@@ -99,7 +121,7 @@ function AttributesValues({ attributes, depth = 0 }: { attributes: unknown; dept
         <div className="mt-1">
           {entries.map(([key, val]) => (
             <div key={key} className="flex flex-col gap-2 p-2 pl-0">
-              <span className="text-sm capitalize text-[#939393]">{transformKey(key)}</span>
+              <span className="text-sm capitalize text-mastra-el-3">{transformKey(key)}</span>
               <AttributesValues attributes={val} depth={depth + 1} />
             </div>
           ))}
