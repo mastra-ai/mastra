@@ -4,7 +4,7 @@ import { MastraStorage } from '@mastra/core/storage';
 
 import { GLOBAL_RUN_ID_ENV_KEY } from './constants';
 
-export async function attachListeners(mastra: Mastra) {
+export async function attachListeners(mastra?: Mastra) {
   registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
     if (mastra?.memory?.storage) {
       await mastra.memory.storage.insert({

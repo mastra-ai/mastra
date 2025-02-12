@@ -153,8 +153,11 @@ The package includes built-in telemetry and logging capabilities:
 ```typescript
 import { attachListeners } from '@mastra/evals';
 
-// Enable evaluation tracking
+// Enable basic evaluation tracking
 await attachListeners();
+
+// Store evals in Mastra Storage (if storage is enabled)
+await attachListeners(mastra);
 ```
 
 ## Environment Variables

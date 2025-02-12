@@ -379,31 +379,40 @@ export class DefaultStorage extends MastraStorage {
   }
 
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    const baseQuery = `SELECT * FROM ${MastraStorage.TABLE_EVALS} WHERE meta->>'$.agentName' = ?`;
-    const typeCondition =
-      type === 'test'
-        ? " AND meta->>'$.testPath' IS NOT NULL"
-        : type === 'live'
-          ? " AND meta->>'$.testPath' IS NULL"
-          : '';
+    try {
+      const baseQuery = `SELECT * FROM ${MastraStorage.TABLE_EVALS} WHERE meta->>'$.agentName' = ?`;
+      const typeCondition =
+        type === 'test'
+          ? " AND meta->>'$.testPath' IS NOT NULL"
+          : type === 'live'
+            ? " AND meta->>'$.testPath' IS NULL"
+            : '';
 
-    const result = await this.client.execute({
-      sql: `${baseQuery}${typeCondition} ORDER BY createdAt DESC`,
-      args: [agentName],
-    });
+      const result = await this.client.execute({
+        sql: `${baseQuery}${typeCondition} ORDER BY createdAt DESC`,
+        args: [agentName],
+      });
 
-    if (!result.rows) {
-      return [];
+      if (!result.rows) {
+        return [];
+      }
+
+      return result.rows.map(row => ({
+        ...row,
+        result: typeof row.result === 'string' ? JSON.parse(row.result) : row.result,
+        meta: typeof row.meta === 'string' ? JSON.parse(row.meta) : row.meta,
+        input: row.input,
+        output: row.output,
+        createdAt: row.createdAt,
+      })) as EvalRow[];
+    } catch (error) {
+      // Handle case where table doesn't exist yet
+      if (error instanceof Error && error.message.includes('no such table')) {
+        return [];
+      }
+      console.error('Failed to get evals for the specified agent', error);
+      throw error;
     }
-
-    return result.rows.map(row => ({
-      ...row,
-      result: typeof row.result === 'string' ? JSON.parse(row.result) : row.result,
-      meta: typeof row.meta === 'string' ? JSON.parse(row.meta) : row.meta,
-      input: row.input,
-      output: row.output,
-      createdAt: row.createdAt,
-    })) as EvalRow[];
   }
 }
 

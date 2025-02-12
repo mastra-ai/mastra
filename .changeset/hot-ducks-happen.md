@@ -1,6 +1,8 @@
 ---
 '@mastra/deployer': patch
 '@mastra/evals': patch
+'mastra': patch
+'docs': patch
 '@mastra/core': patch
 ---
 
