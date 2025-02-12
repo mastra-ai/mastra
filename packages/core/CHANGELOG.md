@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.2.0-alpha.103
+
+### Patch Changes
+
+- 4534e77: Fix fastembed imports in mastra cloud for default embedder
+
 ## 0.2.0-alpha.102
 
 ### Patch Changes

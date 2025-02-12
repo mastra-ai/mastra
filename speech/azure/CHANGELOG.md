@@ -1,5 +1,12 @@
 # @mastra/speech-azure
 
+## 0.1.0-alpha.28
+
+### Patch Changes
+
+- Updated dependencies [4534e77]
+  - @mastra/core@0.2.0-alpha.103
+
 ## 0.1.0-alpha.27
 
 ### Patch Changes
