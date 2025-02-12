@@ -76,7 +76,7 @@ export async function getAgentByIdHandler(c: Context) {
 
 export async function getEvalsByAgentIdHandler(c: Context) {
   try {
-    const mastra = c.get('mastra');
+    const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const agent = mastra.getAgent(agentId);
     const evals: EvalRow[] = (await mastra.storage?.getEvalsByAgentName?.(agent.name, 'test')) || [];
@@ -93,7 +93,7 @@ export async function getEvalsByAgentIdHandler(c: Context) {
 
 export async function getLiveEvalsByAgentIdHandler(c: Context) {
   try {
-    const mastra = c.get('mastra');
+    const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const agent = mastra.getAgent(agentId);
     const evals: EvalRow[] = (await mastra.storage?.getEvalsByAgentName?.(agent.name, 'live')) || [];
