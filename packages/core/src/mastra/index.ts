@@ -307,6 +307,73 @@ export class Mastra<
     }
   }
 
+  public setTelemtry({ telemetry }: { telemetry: OtelConfig }) {
+    this.telemetry = Telemetry.init(telemetry);
+
+    if (this.agents) {
+      Object.keys(this.agents).forEach(key => {
+        if (this.telemetry) {
+          this.agents?.[key]?.__setTelemetry(this.telemetry);
+        }
+      });
+    }
+
+    if (this.workflows) {
+      Object.keys(this.workflows).forEach(key => {
+        if (this.telemetry) {
+          this.workflows?.[key]?.__setTelemetry(this.telemetry);
+        }
+      });
+    }
+
+    if (this.memory) {
+      this.memory = this.telemetry.traceClass(this.memory, {
+        excludeMethods: ['__setTelemetry', '__getTelemetry'],
+      });
+      this.memory.__setTelemetry(this.telemetry);
+    }
+
+    if (this.deployer) {
+      this.deployer = this.telemetry.traceClass(this.deployer, {
+        excludeMethods: ['__setTelemetry', '__getTelemetry'],
+      });
+      this.deployer.__setTelemetry(this.telemetry);
+    }
+
+    if (this.tts) {
+      let tts = {} as Record<string, MastraTTS>;
+      Object.entries(this.tts).forEach(([key, ttsCl]) => {
+        if (this.telemetry) {
+          tts[key] = this.telemetry.traceClass(ttsCl, {
+            excludeMethods: ['__setTelemetry', '__getTelemetry'],
+          });
+          tts[key].__setTelemetry(this.telemetry);
+        }
+      });
+      this.tts = tts as TTTS;
+    }
+
+    if (this.storage) {
+      this.storage = this.telemetry.traceClass(this.storage, {
+        excludeMethods: ['__setTelemetry', '__getTelemetry'],
+      });
+      this.storage.__setTelemetry(this.telemetry);
+    }
+
+    if (this.vectors) {
+      let vectors = {} as Record<string, MastraVector>;
+      Object.entries(this.vectors).forEach(([key, vector]) => {
+        if (this.telemetry) {
+          vectors[key] = this.telemetry.traceClass(vector, {
+            excludeMethods: ['__setTelemetry', '__getTelemetry'],
+          });
+          vectors[key].__setTelemetry(this.telemetry);
+        }
+      });
+      this.vectors = vectors as TVectors;
+    }
+  }
+
   public getLogger() {
     return this.logger;
   }
