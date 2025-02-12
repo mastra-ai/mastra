@@ -80,14 +80,10 @@ export async function getEvalsByAgentIdHandler(c: Context) {
     const mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const agent = mastra.getAgent(agentId);
-    const evals = await readFile('./evals.json', 'utf-8');
-    const parsedEvals = evals
-      .split('\n')
-      .map(line => line && JSON.parse(line))
-      .filter((line: any) => line?.meta?.agentName === agent.name);
+    const evals: EvalRow[] = (await mastra.memory?.storage?.getEvalsByAgentName?.(agent.name, 'test')) || [];
     return c.json({
       ...agent,
-      evals: parsedEvals,
+      evals,
     });
   } catch (error) {
     return handleError(error, 'Error getting evals');
@@ -99,7 +95,7 @@ export async function getLiveEvalsByAgentIdHandler(c: Context) {
     const mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const agent = mastra.getAgent(agentId);
-    const evals: EvalRow[] = (await mastra?.memory?.storage?.getEvalsByAgentName?.(agent.name)) || [];
+    const evals: EvalRow[] = (await mastra.memory?.storage?.getEvalsByAgentName?.(agent.name, 'live')) || [];
 
     return c.json({
       ...agent,

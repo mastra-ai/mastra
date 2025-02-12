@@ -14,6 +14,8 @@ export function registerHook(
   action: Handler<{
     input: string;
     output: string;
+    result: MetricResult;
+    meta: Record<string, any>;
   }>,
 ): void;
 export function registerHook(
