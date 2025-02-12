@@ -69,7 +69,6 @@ export class DefaultStorage extends MastraStorage {
                 ${columns.join(',\n')},
                 PRIMARY KEY (workflow_name, run_id)
             )`;
-      this.logger.info(stmnt);
       return stmnt;
     }
 

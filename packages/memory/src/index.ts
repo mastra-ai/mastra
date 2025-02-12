@@ -14,12 +14,7 @@ import { embed, type Message as AiMessage } from 'ai';
  * and message injection.
  */
 export class Memory extends MastraMemory {
-  constructor(
-    config: SharedMemoryConfig & {
-      /* @deprecated use embedder instead */
-      embeddings?: any;
-    } = {},
-  ) {
+  constructor(config: SharedMemoryConfig = {}) {
     super({ name: 'Memory', ...config });
 
     const mergedConfig = this.getMergedThreadConfig({
@@ -60,8 +55,8 @@ export class Memory extends MastraMemory {
             messageRange: { before: 2, after: 2 },
           }
         : {
-            topK: config?.semanticRecall?.topK || 2,
-            messageRange: config?.semanticRecall?.messageRange || { before: 2, after: 2 },
+            topK: config?.semanticRecall?.topK ?? 2,
+            messageRange: config?.semanticRecall?.messageRange ?? { before: 2, after: 2 },
           };
 
     if (selectBy?.vectorSearchString && this.vector) {
