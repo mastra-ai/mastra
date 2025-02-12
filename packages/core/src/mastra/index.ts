@@ -2,7 +2,7 @@ import { Agent } from '../agent';
 import { MastraDeployer } from '../deployer';
 import { LogLevel, Logger, createLogger, noopLogger } from '../logger';
 import { MastraMemory } from '../memory';
-import { MastraStorage } from '../storage';
+import { DefaultStorage, MastraStorage } from '../storage';
 import { InstrumentClass, OtelConfig, Telemetry } from '../telemetry';
 import { MastraTTS } from '../tts';
 import { MastraVector } from '../vector';
@@ -77,18 +77,25 @@ export class Mastra<
       }
     }
 
+    let storage = config?.storage;
+    if (!storage) {
+      storage = new DefaultStorage({
+        config: {
+          url: ':memory:',
+        },
+      });
+    }
+
     /*
       Storage
     */
-    if (config?.storage) {
-      if (this.telemetry) {
-        this.storage = this.telemetry.traceClass(config.storage, {
-          excludeMethods: ['__setTelemetry', '__getTelemetry'],
-        });
-        this.storage.__setTelemetry(this.telemetry);
-      } else {
-        this.storage = config?.storage;
-      }
+    if (this.telemetry) {
+      this.storage = this.telemetry.traceClass(storage, {
+        excludeMethods: ['__setTelemetry', '__getTelemetry'],
+      });
+      this.storage.__setTelemetry(this.telemetry);
+    } else {
+      this.storage = storage;
     }
 
     /*
