@@ -60,7 +60,9 @@ await agent.stream("Can you summarize the search feature requirements?", {
 
 ### Semantic Search
 
-Semantic search is enabled by default using LibSQL for vector storage and FastEmbed for embeddings. This allows your agent to find and recall relevant information from earlier in the conversation:
+Semantic search is enabled by default in Mastra. While FastEmbed (bge-small-en-v1.5) and LibSQL are included by default, you can use any embedder (like OpenAI or Cohere) and vector database (like PostgreSQL, Pinecone, or Chroma) that fits your needs.
+
+This allows your agent to find and recall relevant information from earlier in the conversation:
 
 ```typescript copy showLineNumbers
 const memory = new Memory({
@@ -89,6 +91,22 @@ When semantic search is used:
 2. Similar messages are found using vector similarity search
 3. Surrounding context is included based on `messageRange`
 4. All relevant context is provided to the agent
+
+You can also customize the vector database and embedder:
+
+```typescript copy showLineNumbers
+import { openai } from '@ai-sdk/openai';
+import { PgVector } from '@mastra/pg';
+
+const memory = new Memory({
+  // Use a different vector database (libsql is default)
+  vector: new PgVector({
+    connectionString: "postgresql://user:pass@localhost:5432/db",
+  }),
+  // Or a different embedder (fastembed is default)
+  embedder: openai.embedding('text-embedding-3-small'),
+});
+```
 
 ## Memory Configuration
 
