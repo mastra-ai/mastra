@@ -13,10 +13,10 @@ import { TraceContext } from '../traces/context/trace-context';
 import { TraceDetails } from '../traces/trace-details';
 import { SpanDetail } from '../traces/trace-span-details';
 
-import { AgentInformation } from './agent-information';
+import { WorkflowInformation } from './workflow-information';
 
-export function AgentTraces({ agentId, agentName }: { agentId: string; agentName: string }) {
-  const { traces, error, firstCallLoading } = useTraces(agentName);
+export function WorkflowTraces({ workflowId, workflowName }: { workflowId: string; workflowName: string }) {
+  const { traces, error, firstCallLoading } = useTraces(workflowName);
 
   if (firstCallLoading) {
     return (
@@ -51,7 +51,7 @@ export function AgentTraces({ agentId, agentName }: { agentId: string; agentName
             </TableBody>
           </Table>
         </div>
-        <SidebarItems agentId={agentId} />
+        <SidebarItems workflowId={workflowId} />
       </main>
     );
   }
@@ -80,7 +80,7 @@ export function AgentTraces({ agentId, agentName }: { agentId: string; agentName
             </TableBody>
           </Table>
         </div>
-        <SidebarItems agentId={agentId} />
+        <SidebarItems workflowId={workflowId} />
       </main>
     );
   }
@@ -88,12 +88,12 @@ export function AgentTraces({ agentId, agentName }: { agentId: string; agentName
   return (
     <main className="flex-1 relative overflow-hidden">
       <Traces traces={traces} />
-      <SidebarItems agentId={agentId} />
+      <SidebarItems workflowId={workflowId} />
     </main>
   );
 }
 
-export function SidebarItems({ agentId }: { agentId: string }) {
+export function SidebarItems({ workflowId }: { workflowId: string }) {
   const { openDetail, isOpen: open } = useContext(TraceContext);
   return (
     <aside
@@ -108,7 +108,7 @@ export function SidebarItems({ agentId }: { agentId: string }) {
         </div>
       )}
       <div className="h-full w-full overflow-y-scroll border-l-[0.5px]">
-        {!openDetail ? <AgentInformation agentId={agentId} /> : <SpanDetail />}
+        {!openDetail ? <WorkflowInformation workflowId={workflowId} /> : <SpanDetail />}
       </div>
     </aside>
   );
