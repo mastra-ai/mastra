@@ -747,6 +747,7 @@ export class Agent<
               runId: runIdToUse,
               metric,
               agentName: this.name,
+              instructions: this.instructions,
             });
           }
         }

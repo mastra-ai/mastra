@@ -11,6 +11,7 @@ export async function evaluate<T extends Agent>({
   runId,
   globalRunId,
   testInfo,
+  instructions,
 }: {
   agentName: string;
   input: Parameters<T['generate']>[0];
@@ -22,6 +23,7 @@ export async function evaluate<T extends Agent>({
     testName?: string;
     testPath?: string;
   } | null;
+  instructions: string;
 }) {
   const runIdToUse = runId || crypto.randomUUID();
 
@@ -40,6 +42,7 @@ export async function evaluate<T extends Agent>({
       agentName,
       timestamp: new Date().toISOString(),
       metricName: metric.constructor.name,
+      instructions,
     },
   };
 
