@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.2.0-alpha.99
+
+### Patch Changes
+
+- 7d83b92: Create default storage and move evals towards it
+
 ## 0.2.0-alpha.98
 
 ### Patch Changes
