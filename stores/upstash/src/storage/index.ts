@@ -9,6 +9,24 @@ export interface UpstashConfig {
 }
 
 export class UpstashStore extends MastraStorage {
+  batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    throw new Error('Method not implemented.');
+  }
+  getTraces({
+    name,
+    scope,
+    page,
+    perPage,
+    attributes,
+  }: {
+    name?: string;
+    scope?: string;
+    page: number;
+    perPage: number;
+    attributes?: Record<string, string>;
+  }): Promise<any[]> {
+    throw new Error('Method not implemented.');
+  }
   private redis: Redis;
 
   constructor(config: UpstashConfig) {
