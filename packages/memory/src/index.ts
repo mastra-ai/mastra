@@ -18,7 +18,7 @@ export class Memory extends MastraMemory {
     config: SharedMemoryConfig & {
       /* @deprecated use embedder instead */
       embeddings?: any;
-    },
+    } = {},
   ) {
     const embedderExample = `
 Example: 
