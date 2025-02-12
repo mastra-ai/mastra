@@ -55,8 +55,8 @@ export class Memory extends MastraMemory {
             messageRange: { before: 2, after: 2 },
           }
         : {
-            topK: config?.semanticRecall?.topK || 2,
-            messageRange: config?.semanticRecall?.messageRange || { before: 2, after: 2 },
+            topK: config?.semanticRecall?.topK ?? 2,
+            messageRange: config?.semanticRecall?.messageRange ?? { before: 2, after: 2 },
           };
 
     if (selectBy?.vectorSearchString && this.vector) {
