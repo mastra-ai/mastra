@@ -64,6 +64,10 @@ export class MastraLLM extends MastraLLMBase {
     return this.#model.modelId;
   }
 
+  getModel() {
+    return this.#model;
+  }
+
   convertTools(tools?: ToolsInput): Record<string, Tool> {
     this.logger.debug('Starting tool conversion for LLM');
     const converted = Object.entries(tools || {}).reduce(

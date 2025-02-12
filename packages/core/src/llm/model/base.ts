@@ -45,6 +45,10 @@ export class MastraLLMBase extends MastraBase {
     return this.#model.modelId;
   }
 
+  getModel() {
+    return this.#model;
+  }
+
   convertToMessages(messages: string | string[] | CoreMessage[]): CoreMessage[] {
     if (Array.isArray(messages)) {
       return messages.map(m => {
