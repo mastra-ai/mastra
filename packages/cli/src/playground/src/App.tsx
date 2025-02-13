@@ -38,9 +38,9 @@ function App() {
             }
           >
             <Route path="chat" element={<Agent />} />
+            <Route path="chat/:threadId" element={<Agent />} />
             <Route path="evals" element={<AgentEvalsPage />} />
             <Route path="traces" element={<AgentTracesPage />} />
-            <Route path=":threadId" element={<Agent />} />
           </Route>
           <Route path="/tools" element={<Tools />} />
           <Route path="/tools/:agentId/:toolId" element={<AgentTool />} />
