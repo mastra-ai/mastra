@@ -3,7 +3,12 @@ import { trace, context, SpanStatusCode, SpanKind, propagation } from '@opentele
 import { hasActiveTelemetry } from './utility';
 
 // Decorator factory that takes optional spanName
-export function withSpan(options: { spanName?: string; skipIfNoTelemetry?: boolean; spanKind?: SpanKind }): any {
+export function withSpan(options: {
+  spanName?: string;
+  skipIfNoTelemetry?: boolean;
+  spanKind?: SpanKind;
+  tracerName?: string;
+}): any {
   return function (_target: any, propertyKey: string | symbol, descriptor?: PropertyDescriptor | number) {
     if (!descriptor || typeof descriptor === 'number') return;
 
@@ -12,11 +17,11 @@ export function withSpan(options: { spanName?: string; skipIfNoTelemetry?: boole
 
     descriptor.value = function (...args: any[]) {
       // Skip if no telemetry is available and skipIfNoTelemetry is true
-      if (options?.skipIfNoTelemetry && !hasActiveTelemetry()) {
+      if (options?.skipIfNoTelemetry && !hasActiveTelemetry(options?.tracerName)) {
         return originalMethod.apply(this, args);
       }
 
-      const tracer = trace.getTracer('default-tracer');
+      const tracer = trace.getTracer(options?.tracerName ?? 'default-tracer');
 
       // Determine span name and kind
       let spanName: string;
@@ -113,6 +118,7 @@ export function InstrumentClass(options?: {
   spanKind?: SpanKind;
   excludeMethods?: string[];
   methodFilter?: (methodName: string) => boolean;
+  tracerName?: string;
 }) {
   return function (target: any) {
     const methods = Object.getOwnPropertyNames(target.prototype);
@@ -132,6 +138,7 @@ export function InstrumentClass(options?: {
             spanName: options?.prefix ? `${options.prefix}.${method}` : method,
             skipIfNoTelemetry: true,
             spanKind: options?.spanKind || SpanKind.INTERNAL,
+            tracerName: options?.tracerName,
           })(target, method, descriptor),
         );
       }
