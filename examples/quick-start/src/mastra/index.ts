@@ -7,17 +7,8 @@ const logger = createLogger({
   level: 'debug',
 });
 
-const storage = new MastraStorageLibSql({
-  config: {
-    url: 'file:mastra.db',
-  },
-});
-
-storage.init();
-
 export const mastra = new Mastra({
   agents: { catOne, agentTwo },
   workflows: { logCatWorkflow },
   logger,
-  storage,
 });
