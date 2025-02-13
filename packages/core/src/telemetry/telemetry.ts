@@ -230,7 +230,7 @@ export class Telemetry {
       return method;
     }
 
-    return (async (...args: unknown[]) => {
+    return ((...args: unknown[]) => {
       const span = this.tracer.startSpan(context.spanName);
 
       try {
@@ -269,16 +269,24 @@ export class Telemetry {
           }
         });
 
-        const result = await method(...args);
+        const result = method(...args);
 
-        // Record result
-        try {
-          span.setAttribute(`${context.spanName}.result`, JSON.stringify(result));
-        } catch (e) {
-          span.setAttribute(`${context.spanName}.result`, '[Not Serializable]');
+        function recordResult(res: any) {
+          try {
+            span.setAttribute(`${context.spanName}.result`, JSON.stringify(res));
+          } catch (e) {
+            span.setAttribute(`${context.spanName}.result`, '[Not Serializable]');
+          }
+
+          span.end();
         }
 
-        span.end();
+        if (result instanceof Promise) {
+          return result.then(recordResult);
+        } else {
+          recordResult(result);
+        }
+
         return result;
       } catch (error) {
         span.recordException(error as Error);
