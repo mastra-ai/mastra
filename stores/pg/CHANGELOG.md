@@ -1,5 +1,12 @@
 # @mastra/pg
 
+## 0.1.0-alpha.19
+
+### Patch Changes
+
+- Updated dependencies [d5fccfb]
+  - @mastra/core@0.2.0-alpha.109
+
 ## 0.1.0-alpha.18
 
 ### Patch Changes
