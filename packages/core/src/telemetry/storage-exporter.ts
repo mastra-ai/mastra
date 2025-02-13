@@ -19,15 +19,6 @@ export class OTLPTraceExporter implements SpanExporter {
   }
 
   export(internalRepresentation: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
-    // don't do any work if too many exports are in progress.
-    // if (this._promiseQueue.hasReachedLimit()) {
-    //   resultCallback({
-    //     code: ExportResultCode.FAILED,
-    //     error: new Error('Concurrent export limit reached'),
-    //   });
-    //   return;
-    // }
-
     const serializedRequest = this.serializer.serializeRequest(internalRepresentation);
     // @ts-ignore
     const payload = JSON.parse(Buffer.from(serializedRequest.buffer, 'utf8'));
