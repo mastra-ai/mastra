@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.2.0-alpha.105
+
+### Patch Changes
+
+- 1420ae2: Fix storage logger
+- 99f1847: Clean up logs
+
 ## 0.2.0-alpha.104
 
 ### Patch Changes
