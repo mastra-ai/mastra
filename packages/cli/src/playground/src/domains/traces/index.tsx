@@ -136,7 +136,7 @@ function TraceButton({
         </svg>
       )}
 
-      {name}
+      <span className="truncate max-w-[150px]">{name}</span>
     </Button>
   );
 }
