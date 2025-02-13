@@ -233,13 +233,14 @@ export class Telemetry {
     return ((...args: unknown[]) => {
       const span = this.tracer.startSpan(context.spanName);
 
-      function recordError(error: Error) {
+      function handleError(error: Error) {
         span.recordException(error);
         span.setStatus({
           code: SpanStatusCode.ERROR,
           message: (error as Error).message,
         });
         span.end();
+        throw error;
       }
       try {
         // Add all context attributes to span
@@ -290,15 +291,14 @@ export class Telemetry {
         }
 
         if (result instanceof Promise) {
-          return result.then(recordResult).catch(recordError);
+          return result.then(recordResult).catch(handleError);
         } else {
           recordResult(result);
         }
 
         return result;
       } catch (error) {
-        recordError(error);
-        throw error;
+        handleError(error);
       }
     }) as unknown as TMethod;
   }
