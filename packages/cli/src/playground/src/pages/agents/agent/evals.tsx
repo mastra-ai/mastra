@@ -6,7 +6,7 @@ function AgentEvalsPage() {
   const { agentId } = useParams();
 
   return (
-    <main className="flex-1 min-h-0">
+    <main className="min-h-0">
       <AgentEvals agentId={agentId!} />
     </main>
   );
