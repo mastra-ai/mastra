@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.2.0-alpha.106
+
+### Patch Changes
+
+- 6f2c0f5: Prevent telemetry proxy from converting sync methods to async
+- a8a459a: Updated Evals table UI
+
 ## 0.2.0-alpha.105
 
 ### Patch Changes

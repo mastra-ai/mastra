@@ -1,5 +1,13 @@
 # @mastra/loggers
 
+## 0.1.0-alpha.39
+
+### Patch Changes
+
+- Updated dependencies [6f2c0f5]
+- Updated dependencies [a8a459a]
+  - @mastra/core@0.2.0-alpha.106
+
 ## 0.1.0-alpha.38
 
 ### Patch Changes

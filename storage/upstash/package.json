@@ -1,6 +1,6 @@
 {
   "name": "@mastra/store-upstash",
-  "version": "0.0.0-alpha.25",
+  "version": "0.0.0-alpha.26",
   "description": "Upstash Redis store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",

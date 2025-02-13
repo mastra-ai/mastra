@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 0.1.0-alpha.57
+
+### Patch Changes
+
+- a8a459a: Updated Evals table UI
+- 4a328af: Set request limit to 4.5MB
+- Updated dependencies [6f2c0f5]
+- Updated dependencies [a8a459a]
+  - @mastra/core@0.2.0-alpha.106
+
 ## 0.1.0-alpha.56
 
 ### Patch Changes
