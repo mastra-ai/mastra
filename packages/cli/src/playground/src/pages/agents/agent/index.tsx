@@ -17,7 +17,7 @@ import { Message } from '@/types';
 function Agent() {
   const { agentId, threadId } = useParams();
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
-  const { memory } = useMemory();
+  const { memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const { messages, isLoading: isMessagesLoading } = useMessages({
     agentId: agentId!,
