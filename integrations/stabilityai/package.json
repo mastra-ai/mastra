@@ -1,6 +1,6 @@
 {
   "name": "@mastra/stabilityai",
-  "version": "1.1.0-alpha.78",
+  "version": "1.1.0-alpha.84",
   "description": "",
   "main": "dist/index.js",
   "type": "module",
@@ -19,7 +19,7 @@
   },
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "tsup src/index.ts --format esm --experimental-dts --clean --treeshake",
+    "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
     "build:watch": "pnpm build --watch",
     "lint": "dts lint",
     "size": "size-limit",

@@ -1,5 +1,74 @@
 # mastra
 
+## 0.2.0-alpha.168
+
+### Patch Changes
+
+- Updated dependencies [d5fccfb]
+  - @mastra/core@0.2.0-alpha.109
+  - @mastra/deployer@0.1.0-alpha.60
+
+## 0.2.0-alpha.167
+
+### Patch Changes
+
+- Updated dependencies [5ee67d3]
+- Updated dependencies [95a4697]
+  - @mastra/core@0.2.0-alpha.108
+  - @mastra/deployer@0.1.0-alpha.59
+
+## 0.2.0-alpha.166
+
+### Patch Changes
+
+- Updated dependencies [8fa48b9]
+- Updated dependencies [66a5392]
+  - @mastra/deployer@0.1.0-alpha.58
+  - @mastra/core@0.2.0-alpha.107
+
+## 0.2.0-alpha.165
+
+### Patch Changes
+
+- de60682: Fix playground thread navigation
+- Updated dependencies [6f2c0f5]
+- Updated dependencies [a8a459a]
+- Updated dependencies [4a328af]
+  - @mastra/core@0.2.0-alpha.106
+  - @mastra/deployer@0.1.0-alpha.57
+
+## 0.2.0-alpha.164
+
+### Patch Changes
+
+- Updated dependencies [246f06c]
+  - @mastra/deployer@0.1.0-alpha.56
+
+## 0.2.0-alpha.163
+
+### Patch Changes
+
+- fa3c7cb: Fix trace name on table being too long
+- Updated dependencies [1420ae2]
+- Updated dependencies [99f1847]
+  - @mastra/core@0.2.0-alpha.105
+  - @mastra/deployer@0.1.0-alpha.55
+
+## 0.2.0-alpha.162
+
+### Patch Changes
+
+- b97ca96: Tracing into default storage
+- 72d1990: Updated evals table schema
+- Updated dependencies [5fdc87c]
+- Updated dependencies [b97ca96]
+- Updated dependencies [6780223]
+- Updated dependencies [72d1990]
+- Updated dependencies [cf6d825]
+- Updated dependencies [10870bc]
+  - @mastra/core@0.2.0-alpha.104
+  - @mastra/deployer@0.1.0-alpha.54
+
 ## 0.2.0-alpha.161
 
 ### Patch Changes

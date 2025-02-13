@@ -1,5 +1,4 @@
 import type { Mastra } from '@mastra/core';
-import { type EvalRow } from '@mastra/core/storage';
 import type { Context } from 'hono';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
@@ -76,10 +75,10 @@ export async function getAgentByIdHandler(c: Context) {
 
 export async function getEvalsByAgentIdHandler(c: Context) {
   try {
-    const mastra = c.get('mastra');
+    const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const agent = mastra.getAgent(agentId);
-    const evals: EvalRow[] = (await mastra.storage?.getEvalsByAgentName?.(agent.name, 'test')) || [];
+    const evals = (await mastra.storage?.getEvalsByAgentName?.(agent.name, 'test')) || [];
     return c.json({
       id: agentId,
       name: agent.name,
@@ -87,16 +86,16 @@ export async function getEvalsByAgentIdHandler(c: Context) {
       evals,
     });
   } catch (error) {
-    return handleError(error, 'Error getting evals');
+    return handleError(error, 'Error getting test evals');
   }
 }
 
 export async function getLiveEvalsByAgentIdHandler(c: Context) {
   try {
-    const mastra = c.get('mastra');
+    const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const agent = mastra.getAgent(agentId);
-    const evals: EvalRow[] = (await mastra.storage?.getEvalsByAgentName?.(agent.name, 'live')) || [];
+    const evals = (await mastra.storage?.getEvalsByAgentName?.(agent.name, 'live')) || [];
 
     return c.json({
       id: agentId,
@@ -105,7 +104,7 @@ export async function getLiveEvalsByAgentIdHandler(c: Context) {
       evals,
     });
   } catch (error) {
-    return handleError(error, 'Error getting evals');
+    return handleError(error, 'Error getting live evals');
   }
 }
 

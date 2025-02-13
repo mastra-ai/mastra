@@ -1,5 +1,71 @@
 # @mastra/deployer-vercel
 
+## 0.1.0-alpha.66
+
+### Patch Changes
+
+- Updated dependencies [d5fccfb]
+  - @mastra/core@0.2.0-alpha.109
+  - @mastra/deployer@0.1.0-alpha.60
+
+## 0.1.0-alpha.65
+
+### Patch Changes
+
+- Updated dependencies [5ee67d3]
+- Updated dependencies [95a4697]
+  - @mastra/core@0.2.0-alpha.108
+  - @mastra/deployer@0.1.0-alpha.59
+
+## 0.1.0-alpha.64
+
+### Patch Changes
+
+- Updated dependencies [8fa48b9]
+- Updated dependencies [66a5392]
+  - @mastra/deployer@0.1.0-alpha.58
+  - @mastra/core@0.2.0-alpha.107
+
+## 0.1.0-alpha.63
+
+### Patch Changes
+
+- Updated dependencies [6f2c0f5]
+- Updated dependencies [a8a459a]
+- Updated dependencies [4a328af]
+  - @mastra/core@0.2.0-alpha.106
+  - @mastra/deployer@0.1.0-alpha.57
+
+## 0.1.0-alpha.62
+
+### Patch Changes
+
+- Updated dependencies [246f06c]
+  - @mastra/deployer@0.1.0-alpha.56
+
+## 0.1.0-alpha.61
+
+### Patch Changes
+
+- Updated dependencies [1420ae2]
+- Updated dependencies [99f1847]
+  - @mastra/core@0.2.0-alpha.105
+  - @mastra/deployer@0.1.0-alpha.55
+
+## 0.1.0-alpha.60
+
+### Patch Changes
+
+- b97ca96: Tracing into default storage
+- Updated dependencies [5fdc87c]
+- Updated dependencies [b97ca96]
+- Updated dependencies [6780223]
+- Updated dependencies [72d1990]
+- Updated dependencies [cf6d825]
+- Updated dependencies [10870bc]
+  - @mastra/core@0.2.0-alpha.104
+  - @mastra/deployer@0.1.0-alpha.54
+
 ## 0.1.0-alpha.59
 
 ### Patch Changes

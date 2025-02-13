@@ -1,5 +1,48 @@
 # @mastra/core
 
+## 0.2.0-alpha.109
+
+### Patch Changes
+
+- d5fccfb: expose model function
+
+## 0.2.0-alpha.108
+
+### Patch Changes
+
+- 5ee67d3: make trace name configurable for telemetry exporter
+- 95a4697: Fixed trace method for telemetry
+
+## 0.2.0-alpha.107
+
+### Patch Changes
+
+- 66a5392: batchInsert needs init. Use private version for internal calls
+
+## 0.2.0-alpha.106
+
+### Patch Changes
+
+- 6f2c0f5: Prevent telemetry proxy from converting sync methods to async
+- a8a459a: Updated Evals table UI
+
+## 0.2.0-alpha.105
+
+### Patch Changes
+
+- 1420ae2: Fix storage logger
+- 99f1847: Clean up logs
+
+## 0.2.0-alpha.104
+
+### Patch Changes
+
+- 5fdc87c: Update evals storage in attachListeners
+- b97ca96: Tracing into default storage
+- 72d1990: Updated evals table schema
+- cf6d825: Fixed a bug where 0 values in memory configs were falling back to default val. Removed a noisy log. Removed a deprecated option
+- 10870bc: Added a default vector db (libsql) and embedder (fastembed) so that new Memory() can be initialized with zero config
+
 ## 0.2.0-alpha.103
 
 ### Patch Changes

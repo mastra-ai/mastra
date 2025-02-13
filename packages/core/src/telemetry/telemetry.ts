@@ -1,6 +1,16 @@
-import { SpanStatusCode, trace, type Tracer } from '@opentelemetry/api';
+import {
+  context as otlpContext,
+  SpanStatusCode,
+  trace,
+  type Tracer,
+  propagation,
+  type SpanOptions,
+  type Context,
+  context,
+  type Span,
+} from '@opentelemetry/api';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { OTLPTraceExporter as OTLPHttpExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { Resource } from '@opentelemetry/resources';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import {
@@ -71,7 +81,7 @@ export class Telemetry {
 
         const exporter =
           config.export?.type === 'otlp'
-            ? new OTLPTraceExporter({
+            ? new OTLPHttpExporter({
                 url: config.export.endpoint,
                 headers: config.export.headers,
               })
@@ -103,7 +113,7 @@ export class Telemetry {
     this.tracer = trace.getTracer(this.name);
   }
 
-  private async shutdown() {
+  public async shutdown() {
     if (this.sdk && Telemetry.isInitialized) {
       try {
         await this.sdk.shutdown();
@@ -220,13 +230,43 @@ export class Telemetry {
       return method;
     }
 
-    return (async (...args: unknown[]) => {
+    return ((...args: unknown[]) => {
       const span = this.tracer.startSpan(context.spanName);
 
+      function handleError(error: unknown) {
+        span.recordException(error as Error);
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: (error as Error).message,
+        });
+        span.end();
+        throw error;
+      }
       try {
         // Add all context attributes to span
         if (context.attributes) {
           span.setAttributes(context.attributes);
+        }
+
+        let ctx = otlpContext.active();
+        if (context.attributes?.componentName) {
+          // @ts-ignore
+          ctx = propagation.setBaggage(ctx, { componentName: this.name });
+        } else {
+          // @ts-ignore
+          const currentBaggage = propagation.getBaggage(ctx);
+          // @ts-ignore
+          if (currentBaggage?.componentName) {
+            // @ts-ignore
+            span.setAttribute('componentName', currentBaggage?.componentName);
+            // @ts-ignore
+          } else if (this && this.name) {
+            // @ts-ignore
+            span.setAttribute('componentName', this.name);
+            // @ts-ignore
+            ctx = propagation.setBaggage(ctx, { componentName: this.name });
+            // @ts-ignore
+          }
         }
 
         // Record input arguments as span attributes
@@ -238,26 +278,94 @@ export class Telemetry {
           }
         });
 
-        const result = await method(...args);
+        const result = method(...args);
 
-        // Record result
-        try {
-          span.setAttribute(`${context.spanName}.result`, JSON.stringify(result));
-        } catch (e) {
-          span.setAttribute(`${context.spanName}.result`, '[Not Serializable]');
+        function recordResult(res: any) {
+          try {
+            span.setAttribute(`${context.spanName}.result`, JSON.stringify(res));
+          } catch (e) {
+            span.setAttribute(`${context.spanName}.result`, '[Not Serializable]');
+          }
+
+          span.end();
+
+          return res;
         }
 
-        span.end();
-        return result;
+        if (result instanceof Promise) {
+          return result.then(recordResult).catch(handleError);
+        } else {
+          return recordResult(result);
+        }
       } catch (error) {
-        span.recordException(error as Error);
-        span.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: (error as Error).message,
-        });
-        span.end();
-        throw error;
+        handleError(error);
       }
     }) as unknown as TMethod;
+  }
+
+  getBaggageTracer(): Tracer {
+    return new BaggageTracer(this.tracer);
+  }
+}
+
+class BaggageTracer implements Tracer {
+  private _tracer: Tracer;
+
+  constructor(tracer: Tracer) {
+    this._tracer = tracer;
+  }
+
+  startSpan(name: string, options: SpanOptions = {}, ctx: Context) {
+    ctx = ctx ?? otlpContext.active();
+    const span = this._tracer.startSpan(name, options, ctx);
+    const currentBaggage = propagation.getBaggage(ctx);
+    // @ts-ignore
+    span.setAttribute('componentName', currentBaggage?.componentName);
+
+    return span;
+  }
+
+  startActiveSpan<F extends (span: Span) => unknown>(name: string, fn: F): ReturnType<F>;
+  startActiveSpan<F extends (span: Span) => unknown>(name: string, options: SpanOptions, fn: F): ReturnType<F>;
+  startActiveSpan<F extends (span: Span) => unknown>(
+    name: string,
+    options: SpanOptions,
+    ctx: Context,
+    fn: F,
+  ): ReturnType<F>;
+  startActiveSpan<F extends (span: Span) => unknown>(
+    name: string,
+    optionsOrFn: SpanOptions | F,
+    ctxOrFn?: Context | F,
+    fn?: F,
+  ): ReturnType<F> {
+    if (typeof optionsOrFn === 'function') {
+      const wrappedFn = (span: Span) => {
+        const currentBaggage = propagation.getBaggage(otlpContext.active());
+        // @ts-ignore
+        span.setAttribute('componentName', currentBaggage?.componentName);
+
+        return optionsOrFn(span);
+      };
+      return this._tracer.startActiveSpan(name, {}, context.active(), wrappedFn as F);
+    }
+    if (typeof ctxOrFn === 'function') {
+      const wrappedFn = (span: Span) => {
+        const currentBaggage = propagation.getBaggage(otlpContext.active());
+        // @ts-ignore
+        span.setAttribute('componentName', currentBaggage?.componentName);
+
+        return ctxOrFn(span);
+      };
+      return this._tracer.startActiveSpan(name, optionsOrFn, context.active(), wrappedFn as F);
+    }
+    const wrappedFn = (span: Span) => {
+      const currentBaggage = propagation.getBaggage(ctxOrFn ?? otlpContext.active());
+      // @ts-ignore
+      span.setAttribute('componentName', currentBaggage?.componentName);
+
+      return fn!(span);
+    };
+    return this._tracer.startActiveSpan(name, optionsOrFn, ctxOrFn!, wrappedFn as F);
   }
 }

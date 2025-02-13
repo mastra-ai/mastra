@@ -1,5 +1,67 @@
 # @mastra/deployer
 
+## 0.1.0-alpha.60
+
+### Patch Changes
+
+- Updated dependencies [d5fccfb]
+  - @mastra/core@0.2.0-alpha.109
+
+## 0.1.0-alpha.59
+
+### Patch Changes
+
+- Updated dependencies [5ee67d3]
+- Updated dependencies [95a4697]
+  - @mastra/core@0.2.0-alpha.108
+
+## 0.1.0-alpha.58
+
+### Patch Changes
+
+- 8fa48b9: Add an API to enhance agent instructions
+- Updated dependencies [66a5392]
+  - @mastra/core@0.2.0-alpha.107
+
+## 0.1.0-alpha.57
+
+### Patch Changes
+
+- a8a459a: Updated Evals table UI
+- 4a328af: Set request limit to 4.5MB
+- Updated dependencies [6f2c0f5]
+- Updated dependencies [a8a459a]
+  - @mastra/core@0.2.0-alpha.106
+
+## 0.1.0-alpha.56
+
+### Patch Changes
+
+- 246f06c: Fix import \* from telemetry package
+
+## 0.1.0-alpha.55
+
+### Patch Changes
+
+- Updated dependencies [1420ae2]
+- Updated dependencies [99f1847]
+  - @mastra/core@0.2.0-alpha.105
+
+## 0.1.0-alpha.54
+
+### Patch Changes
+
+- 5fdc87c: Update evals storage in attachListeners
+- b97ca96: Tracing into default storage
+- 6780223: fix workflow runId not unique per execution in dev
+- 72d1990: Updated evals table schema
+- Updated dependencies [5fdc87c]
+- Updated dependencies [b97ca96]
+- Updated dependencies [72d1990]
+- Updated dependencies [cf6d825]
+- Updated dependencies [10870bc]
+  - @mastra/core@0.2.0-alpha.104
+
 ## 0.1.0-alpha.53
 
 ### Patch Changes

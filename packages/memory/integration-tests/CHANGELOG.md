@@ -1,5 +1,73 @@
 # @mastra/memory-integration-tests
 
+## 0.1.0-alpha.25
+
+### Patch Changes
+
+- Updated dependencies [d5fccfb]
+  - @mastra/core@0.2.0-alpha.109
+  - @mastra/memory@0.1.0-alpha.91
+  - @mastra/pg@0.1.0-alpha.19
+  - @mastra/upstash@0.1.0-alpha.19
+
+## 0.1.0-alpha.24
+
+### Patch Changes
+
+- Updated dependencies [5ee67d3]
+- Updated dependencies [95a4697]
+  - @mastra/core@0.2.0-alpha.108
+  - @mastra/memory@0.1.0-alpha.90
+  - @mastra/pg@0.1.0-alpha.18
+  - @mastra/upstash@0.1.0-alpha.18
+
+## 0.1.0-alpha.23
+
+### Patch Changes
+
+- Updated dependencies [66a5392]
+  - @mastra/core@0.2.0-alpha.107
+  - @mastra/memory@0.1.0-alpha.89
+  - @mastra/pg@0.1.0-alpha.17
+  - @mastra/upstash@0.1.0-alpha.17
+
+## 0.1.0-alpha.22
+
+### Patch Changes
+
+- Updated dependencies [6f2c0f5]
+- Updated dependencies [a8a459a]
+  - @mastra/core@0.2.0-alpha.106
+  - @mastra/memory@0.1.0-alpha.88
+  - @mastra/pg@0.1.0-alpha.16
+  - @mastra/upstash@0.1.0-alpha.16
+
+## 0.1.0-alpha.21
+
+### Patch Changes
+
+- Updated dependencies [1420ae2]
+- Updated dependencies [99f1847]
+  - @mastra/core@0.2.0-alpha.105
+  - @mastra/memory@0.1.0-alpha.87
+  - @mastra/pg@0.1.0-alpha.15
+  - @mastra/upstash@0.1.0-alpha.15
+
+## 0.1.0-alpha.20
+
+### Patch Changes
+
+- b97ca96: Tracing into default storage
+- Updated dependencies [5fdc87c]
+- Updated dependencies [b97ca96]
+- Updated dependencies [72d1990]
+- Updated dependencies [cf6d825]
+- Updated dependencies [10870bc]
+  - @mastra/core@0.2.0-alpha.104
+  - @mastra/memory@0.1.0-alpha.86
+  - @mastra/pg@0.1.0-alpha.14
+  - @mastra/upstash@0.1.0-alpha.14
+
 ## 0.1.0-alpha.19
 
 ### Patch Changes

@@ -1,4 +1,4 @@
-import { MastraMemory as BaseMemory } from './index';
+import { MastraMemory as BaseMemory } from './memory';
 
 export * from './index';
 

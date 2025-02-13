@@ -1,5 +1,18 @@
 # create-mastra
 
+## 0.1.0-alpha.40
+
+### Patch Changes
+
+- de60682: Fix playground thread navigation
+
+## 0.1.0-alpha.39
+
+### Patch Changes
+
+- b97ca96: Tracing into default storage
+- fee6d63: Republish
+
 ## 0.1.0-alpha.38
 
 ### Patch Changes

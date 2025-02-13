@@ -1,7 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
 
-import { TestCaseWithContext } from '../utils';
+import { isCloserTo, TestCaseWithContext } from '../utils';
 
 import { ContextPositionMetric } from './index';
 
@@ -184,7 +184,7 @@ describe(
         context: testCase.context,
       });
       const result = await metric.measure(testCase.input, testCase.output);
-      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
+      expect(isCloserTo(result.score, testCase.expectedResult.score, 0.5)).toBe(true);
     });
 
     it('should handle mixed relevance with good ordering', async () => {

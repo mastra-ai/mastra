@@ -1160,8 +1160,6 @@ export class Workflow<
   #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
     stepId: TStepId,
   ): StepDef<TStepId, TSteps, any, any>[TStepId] {
-    const telemetry = this.#mastra?.telemetry;
-
     const handler = async ({ context, ...rest }: ActionContext<TSteps[number]['inputSchema']>) => {
       const targetStep = this.#steps[stepId];
       if (!targetStep) throw new Error(`Step not found`);
@@ -1176,9 +1174,10 @@ export class Workflow<
       };
 
       // Only trace if telemetry is available and action exists
-      const finalAction = telemetry
-        ? telemetry.traceMethod(execute, {
+      const finalAction = this.#mastra?.telemetry
+        ? this.#mastra?.telemetry.traceMethod(execute, {
             spanName: `workflow.${this.name}.action.${stepId}`,
+            attributes: { componentName: this.name },
           })
         : execute;
 
@@ -1186,11 +1185,17 @@ export class Workflow<
     };
 
     // Only trace handler if telemetry is available
-    const finalHandler = telemetry
-      ? telemetry.traceMethod(handler, {
+
+    const finalHandler = ({ context, ...rest }: ActionContext<TSteps[number]['inputSchema']>) => {
+      if (this.#mastra?.telemetry) {
+        return this.#mastra.telemetry.traceMethod(handler, {
           spanName: `workflow.${this.name}.step.${stepId}`,
-        })
-      : handler;
+          attributes: { componentName: this.name },
+        })({ context, ...rest });
+      }
+
+      return handler({ context, ...rest });
+    };
 
     return {
       handler: finalHandler,

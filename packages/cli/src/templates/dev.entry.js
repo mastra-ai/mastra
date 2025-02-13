@@ -4,7 +4,7 @@ import { mastra } from '#mastra';
 import { createNodeServer } from '#server';
 import { evaluate } from '@mastra/core/eval';
 import { AvailableHooks, registerHook } from '@mastra/core/hooks';
-import { MastraStorage } from '@mastra/core/storage';
+import { TABLE_EVALS } from '@mastra/core/storage';
 
 // init storage
 if (mastra.storage) {
@@ -29,13 +29,18 @@ registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agen
 registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
   if (mastra.storage) {
     await mastra.storage.insert({
-      tableName: MastraStorage.TABLE_EVALS,
+      tableName: TABLE_EVALS,
       record: {
-        result: JSON.stringify(traceObject.result),
-        meta: JSON.stringify(traceObject.meta),
         input: traceObject.input,
         output: traceObject.output,
-        createdAt: new Date().toISOString(),
+        result: JSON.stringify(traceObject.result),
+        agent_name: traceObject.agentName,
+        metric_name: traceObject.metricName,
+        instructions: traceObject.instructions,
+        test_info: null,
+        global_run_id: traceObject.globalRunId,
+        run_id: traceObject.runId,
+        created_at: new Date().toISOString(),
       },
     });
   }
