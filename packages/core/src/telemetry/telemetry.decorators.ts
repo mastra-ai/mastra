@@ -44,17 +44,18 @@ export function withSpan(options: { spanName?: string; skipIfNoTelemetry?: boole
         }
       });
 
+      const currentBaggage = propagation.getBaggage(ctx);
       // @ts-ignore
-      if (this && this.name) {
+      if (currentBaggage?.componentName) {
+        // @ts-ignore
+        span.setAttribute('componentName', currentBaggage?.componentName);
+        // @ts-ignore
+      } else if (this && this.name) {
         // @ts-ignore
         span.setAttribute('componentName', this.name);
         // @ts-ignore
         ctx = propagation.setBaggage(ctx, { componentName: this.name });
-      } else {
-        const currentBaggage = propagation.getBaggage(ctx);
-        console.log({ currentBaggage });
         // @ts-ignore
-        span.setAttribute('componentName', currentBaggage?.componentName);
       }
 
       let result;

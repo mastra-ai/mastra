@@ -240,18 +240,25 @@ export class Telemetry {
           span.setAttributes(context.attributes);
         }
 
-        // @ts-ignore
         let ctx = otlpContext.active();
-        if (this && this.name) {
-          // @ts-ignore
-          span.setAttribute('componentName', this.name);
+        if (context.attributes?.componentName) {
           // @ts-ignore
           ctx = propagation.setBaggage(ctx, { componentName: this.name });
         } else {
-          const currentBaggage = propagation.getBaggage(otlpContext.active());
-          console.log({ currentBaggage });
           // @ts-ignore
-          span.setAttribute('componentName', currentBaggage?.componentName);
+          const currentBaggage = propagation.getBaggage(ctx);
+          // @ts-ignore
+          if (currentBaggage?.componentName) {
+            // @ts-ignore
+            span.setAttribute('componentName', currentBaggage?.componentName);
+            // @ts-ignore
+          } else if (this && this.name) {
+            // @ts-ignore
+            span.setAttribute('componentName', this.name);
+            // @ts-ignore
+            ctx = propagation.setBaggage(ctx, { componentName: this.name });
+            // @ts-ignore
+          }
         }
 
         // Record input arguments as span attributes
