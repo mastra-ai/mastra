@@ -110,7 +110,7 @@ export class OTLPTraceExporter implements SpanExporter {
         });
       })
       .catch(e => {
-        console.log('span err', e);
+        this.logger.error('span err:' + e?.message);
         items.resultCallback({
           code: ExportResultCode.FAILED,
           error: e,
