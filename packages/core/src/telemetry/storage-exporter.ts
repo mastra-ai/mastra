@@ -24,7 +24,7 @@ export class OTLPTraceExporter implements SpanExporter {
     // @ts-ignore
     const payload = JSON.parse(Buffer.from(serializedRequest.buffer, 'utf8'));
     const items = payload?.resourceSpans?.[0]?.scopeSpans;
-    this.logger.debug('items to be sent: ' + items.length);
+    this.logger.debug(`Exporting telemetry: ${items.length} scope spans to be processed [trace batch]`);
 
     this.queue.push({ data: items, resultCallback });
 

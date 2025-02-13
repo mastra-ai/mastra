@@ -258,10 +258,7 @@ export class Workflow<
     if (runId) {
       this.#runId = runId;
       // First, let's log the incoming snapshot for debugging
-      this.logger.debug('Incoming snapshot', {
-        snapshot: snapshot,
-        runId: this.#runId,
-      });
+      this.logger.debug(`Workflow snapshot received`, { runId: this.#runId, snapshot });
     }
 
     const machineInput = snapshot
@@ -279,10 +276,7 @@ export class Workflow<
           ),
         };
 
-    this.logger.debug('Machine input prepared', {
-      machineInput,
-      runId: this.#runId,
-    });
+    this.logger.debug(`Machine input prepared`, { runId: this.#runId, machineInput });
 
     const actorSnapshot = snapshot
       ? {
@@ -291,11 +285,11 @@ export class Workflow<
         }
       : undefined;
 
-    this.logger.debug('Creating actor with configuration', {
+    this.logger.debug(`Creating actor with configuration`, {
+      runId: this.#runId,
       machineInput,
       actorSnapshot,
       machineStates: this.#machine.config.states,
-      runId: this.#runId,
     });
 
     this.#actor = createActor(this.#machine, {

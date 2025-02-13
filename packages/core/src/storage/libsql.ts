@@ -101,7 +101,7 @@ export class DefaultStorage extends MastraStorage {
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
     try {
-      this.logger.debug(`Creating table ${tableName}`);
+      this.logger.debug(`Database operation: Creating table '${tableName}' [schema init]`);
       const sql = this.getCreateTableSQL(tableName, schema);
       await this.client.execute(sql);
     } catch (error) {

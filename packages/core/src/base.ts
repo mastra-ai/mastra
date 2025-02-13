@@ -19,7 +19,7 @@ export class MastraBase {
    */
   __setLogger(logger: Logger) {
     this.logger = logger;
-    this.logger.debug(`Logger updated for ${this.component}:${this.name}`);
+    this.logger.debug(`Logger updated [component=${this.component}] [name=${this.name}]`);
   }
 
   /**
@@ -48,7 +48,7 @@ export class MastraBase {
    */
   __setTelemetry(telemetry: Telemetry) {
     this.telemetry = telemetry;
-    this.logger.debug(`Telemetry updated for ${this.component} ${this.telemetry.tracer}`);
+    this.logger.debug(`Telemetry updated [component=${this.component}] [tracer=${this.telemetry.tracer}]`);
   }
 
   /**
