@@ -1,9 +1,9 @@
 import { trace } from '@opentelemetry/api';
 
 // Helper function to check if telemetry is active
-export function hasActiveTelemetry(): boolean {
+export function hasActiveTelemetry(tracerName: string = 'default-tracer'): boolean {
   try {
-    return !!trace.getTracer('default-tracer');
+    return !!trace.getTracer(tracerName);
   } catch {
     return false;
   }

@@ -7797,6 +7797,8 @@ LANGFUSE_SECRET_KEY=your_secret_key
 LANGFUSE_BASEURL=https://cloud.langfuse.com  # Optional - defaults to cloud.langfuse.com
 ```
 
+**Important**: When configuring the telemetry export settings, the `traceName` parameter must be set to `"ai"` for the Langfuse integration to work properly.
+
 ## Implementation
 
 Here's how to configure Mastra to use Langfuse:
@@ -7813,6 +7815,8 @@ export const mastra = new Mastra({
     export: {
       type: "custom",
       exporter: new LangfuseExporter({
+        type: "custom",
+        traceName: "ai",
         publicKey: process.env.LANGFUSE_PUBLIC_KEY,
         secretKey: process.env.LANGFUSE_SECRET_KEY,
         baseUrl: process.env.LANGFUSE_BASEURL,
