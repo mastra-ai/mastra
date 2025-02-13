@@ -14,11 +14,16 @@ export async function attachListeners(mastra?: Mastra) {
       await mastra.storage.insert({
         tableName: MastraStorage.TABLE_EVALS,
         record: {
-          result: JSON.stringify(traceObject.result),
-          meta: JSON.stringify(traceObject.meta),
           input: traceObject.input,
           output: traceObject.output,
-          createdAt: new Date().toISOString(),
+          result: JSON.stringify(traceObject.result),
+          agent_name: traceObject.agentName,
+          metric_name: traceObject.metricName,
+          instructions: traceObject.instructions,
+          test_info: traceObject.testInfo ? JSON.stringify(traceObject.testInfo) : null,
+          global_run_id: traceObject.globalRunId,
+          run_id: traceObject.runId,
+          created_at: new Date().toISOString(),
         },
       });
     }

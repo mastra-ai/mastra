@@ -12,7 +12,7 @@ import { Evals, useEvalsByAgentId } from '@/hooks/use-evals';
 type GroupedEvals = {
   metricName: string;
   averageScore: number;
-  evals: any[];
+  evals: Evals[];
 };
 
 export function AgentEvals({ agentId }: { agentId: string }) {
@@ -92,14 +92,14 @@ function EvalTable({
 
   const groupEvals = (evaluations: Evals[]): GroupedEvals[] => {
     return evaluations.reduce((groups: GroupedEvals[], evaluation) => {
-      const existingGroup = groups.find(g => g.metricName === evaluation.meta.metricName);
+      const existingGroup = groups.find(g => g.metricName === evaluation.metricName);
       if (existingGroup) {
         existingGroup.evals.push(evaluation);
         existingGroup.averageScore =
           existingGroup.evals.reduce((sum, e) => sum + e.result.score, 0) / existingGroup.evals.length;
       } else {
         groups.push({
-          metricName: evaluation.meta.metricName,
+          metricName: evaluation.metricName,
           averageScore: evaluation.result.score,
           evals: [evaluation],
         });
@@ -173,11 +173,13 @@ function EvalTable({
                     <TableRow key={`${group.metricName}-${index}`} className="bg-mastra-bg-3 text-[0.8125rem]">
                       <TableCell className="w-[50px]"></TableCell>
                       <TableCell className="w-[300px] text-mastra-el-4 pl-8">
-                        {new Date(evaluation.meta.timestamp).toLocaleString()}
+                        {new Date(evaluation.createdAt).toLocaleString()}
                       </TableCell>
                       <TableCell className="w-[600px] text-mastra-el-4">{evaluation.input}</TableCell>
                       <TableCell className="w-[200px] text-mastra-el-4">{evaluation.result.score}</TableCell>
-                      {showTestName && <TableCell className="text-mastra-el-4">{evaluation.meta.testName}</TableCell>}
+                      {showTestName && (
+                        <TableCell className="text-mastra-el-4">{evaluation?.testInfo?.testName}</TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </>

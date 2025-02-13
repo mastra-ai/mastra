@@ -1,16 +1,18 @@
+import type { TestInfo, MetricResult } from '@mastra/core/eval';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 export type Evals = {
-  result: {
-    score: number;
-  };
-  meta: {
-    metricName: string;
-    runId: string;
-    timestamp: string;
-    testName: string;
-  };
+  input: string;
+  output: string;
+  result: MetricResult;
+  agentName: string;
+  createdAt: string;
+  metricName: string;
+  instructions: string;
+  runId: string;
+  globalRunId: string;
+  testInfo?: TestInfo;
 };
 
 export const useEvalsByAgentId = (agentId: string, type: 'ci' | 'live') => {
