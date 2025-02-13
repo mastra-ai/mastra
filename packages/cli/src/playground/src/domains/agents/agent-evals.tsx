@@ -1,6 +1,6 @@
 import { AnimatePresence } from 'framer-motion';
 import { ChevronRight, RefreshCcwIcon, Search, SortAsc, SortDesc } from 'lucide-react';
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -107,6 +107,18 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
   const [expandedMetrics, setExpandedMetrics] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'metricName', direction: 'asc' });
+  const [showLoading, setShowLoading] = useState(false);
+
+  useEffect(() => {
+    if (isLoading) {
+      const timer = setTimeout(() => {
+        setShowLoading(true);
+      }, 200); // Only show loading state if load takes more than 200ms
+      return () => clearTimeout(timer);
+    } else {
+      setShowLoading(false);
+    }
+  }, [isLoading]);
 
   return (
     <div className="min-h-0 grid grid-rows-[auto_1fr]">
@@ -124,8 +136,8 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
         <Badge variant="secondary" className="text-xs">
           {evals.length} Total Evaluations
         </Badge>
-        <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={isLoading} className="h-9 w-9">
-          {isLoading ? <RefreshCcwIcon className="h-4 w-4 animate-spin" /> : <RefreshCcwIcon className="h-4 w-4" />}
+        <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={showLoading} className="h-9 w-9">
+          {showLoading ? <RefreshCcwIcon className="h-4 w-4 animate-spin" /> : <RefreshCcwIcon className="h-4 w-4" />}
         </Button>
       </div>
 
@@ -148,7 +160,7 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
             </TableRow>
           </TableHeader>
           <TableBody className="border-b border-gray-6 relative">
-            {isLoading ? (
+            {showLoading ? (
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i} className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem]">
                   <TableCell className="w-12">
