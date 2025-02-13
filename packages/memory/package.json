@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "0.1.0-alpha.85",
+  "version": "0.1.0-alpha.86",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",

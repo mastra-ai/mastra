@@ -1,5 +1,19 @@
 # @mastra/deployer-netlify
 
+## 0.1.0-alpha.57
+
+### Patch Changes
+
+- b97ca96: Tracing into default storage
+- Updated dependencies [5fdc87c]
+- Updated dependencies [b97ca96]
+- Updated dependencies [6780223]
+- Updated dependencies [72d1990]
+- Updated dependencies [cf6d825]
+- Updated dependencies [10870bc]
+  - @mastra/core@0.2.0-alpha.104
+  - @mastra/deployer@0.1.0-alpha.54
+
 ## 0.1.0-alpha.56
 
 ### Patch Changes
