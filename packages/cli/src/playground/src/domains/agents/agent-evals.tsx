@@ -47,7 +47,7 @@ const scrollableContentClass = cn(
 
 const tabIndicatorClass = cn(
   'px-4 py-2 text-sm transition-all border-b-2 border-transparent',
-  'data-[state=active]:border-white data-[state=active]:text-mastra-el-1',
+  'data-[state=active]:border-white data-[state=active]:text-white font-medium',
   'data-[state=inactive]:text-mastra-el-4 hover:data-[state=inactive]:text-mastra-el-2',
   'focus-visible:outline-none',
 );
@@ -83,7 +83,7 @@ export function AgentEvals({ agentId }: { agentId: string }) {
             onValueChange={value => setActiveTab(value as 'live' | 'ci')}
             className="h-full flex flex-col"
           >
-            <div className="bg-mastra-bg-1 border-b border-mastra-border/10">
+            <div className="bg-mastra-bg-2 border-b border-mastra-border/10">
               <TabsList className="bg-transparent border-0 p-0 h-auto mx-4">
                 <TabsTrigger value="live" className={tabIndicatorClass}>
                   Live
