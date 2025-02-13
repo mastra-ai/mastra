@@ -1,0 +1,5 @@
+---
+'mastra': patch
+---
+
+Instructions playground
