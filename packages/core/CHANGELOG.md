@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.2.0-alpha.108
+
+### Patch Changes
+
+- 5ee67d3: make trace name configurable for telemetry exporter
+- 95a4697: Fixed trace method for telemetry
+
 ## 0.2.0-alpha.107
 
 ### Patch Changes
