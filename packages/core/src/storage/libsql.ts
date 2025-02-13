@@ -408,7 +408,7 @@ export class DefaultStorage extends MastraStorage {
 
       return messages;
     } catch (error) {
-      console.error('Failed to save messages in database', error);
+      this.logger.error('Failed to save messages in database: ' + (error as any)?.message);
       await tx.rollback();
       throw error;
     }
@@ -459,7 +459,7 @@ export class DefaultStorage extends MastraStorage {
       if (error instanceof Error && error.message.includes('no such table')) {
         return [];
       }
-      console.error('Failed to get evals for the specified agent', error);
+      this.logger.error('Failed to get evals for the specified agent: ' + (error as any)?.message);
       throw error;
     }
   }
@@ -512,11 +512,6 @@ export class DefaultStorage extends MastraStorage {
     }
 
     args.push(limit, offset);
-
-    console.log({
-      sql: `SELECT * FROM ${TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
-      args,
-    });
 
     const result = await this.client.execute({
       sql: `SELECT * FROM ${TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
