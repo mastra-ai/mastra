@@ -1,0 +1,94 @@
+# Memory API
+
+The Memory API provides methods to manage conversation threads and message history in Mastra.
+
+## Memory Thread Operations
+
+### Get All Threads
+
+Retrieve all memory threads for a specific resource:
+
+```typescript
+const threads = await client.getMemoryThreads({
+  resourceid: "resource-1",
+});
+```
+
+### Create a New Thread
+
+Create a new memory thread:
+
+```typescript
+const thread = await client.createMemoryThread({
+  title: "New Conversation",
+  metadata: { category: "support" },
+  resourceid: "resource-1",
+});
+```
+
+### Working with a Specific Thread
+
+Get an instance of a specific memory thread:
+
+```typescript
+const thread = client.getMemoryThread("thread-id");
+```
+
+## Thread Methods
+
+### Get Thread Details
+
+Retrieve details about a specific thread:
+
+```typescript
+const details = await thread.get();
+```
+
+### Update Thread
+
+Update thread properties:
+
+```typescript
+const updated = await thread.update({
+  title: "Updated Title",
+  metadata: { status: "resolved" },
+  resourceid: "resource-1",
+});
+```
+
+### Delete Thread
+
+Delete a thread and its messages:
+
+```typescript
+await thread.delete();
+```
+
+## Message Operations
+
+### Save Messages
+
+Save messages to memory:
+
+```typescript
+const savedMessages = await client.saveMessageToMemory({
+  messages: [
+    {
+      role: "user",
+      content: "Hello!",
+      id: "1",
+      threadId: "thread-1",
+      createdAt: new Date(),
+      type: "text",
+    },
+  ],
+});
+```
+
+### Get Memory Status
+
+Check the status of the memory system:
+
+```typescript
+const status = await client.getMemoryStatus();
+```
