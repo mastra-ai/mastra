@@ -34,6 +34,6 @@ export class ToxicityJudge extends MastraAgentJudge {
       }),
     });
 
-    return result.object;
+    return result.object.reason;
   }
 }
