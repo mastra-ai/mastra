@@ -1,5 +1,11 @@
 # @mastra/evals
 
+## 0.1.0-alpha.52
+
+### Patch Changes
+
+- b9c7047: Move to non deprecated table name for eval insertion
+
 ## 0.1.0-alpha.51
 
 ### Patch Changes
