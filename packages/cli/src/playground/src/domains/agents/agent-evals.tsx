@@ -52,6 +52,8 @@ const tabIndicatorClass = cn(
   'focus-visible:outline-none',
 );
 
+const tabContentClass = cn('data-[state=inactive]:mt-0 min-h-0 h-full grid grid-rows-[1fr]');
+
 export function AgentEvals({ agentId }: { agentId: string }) {
   const [activeTab, setActiveTab] = useState<'live' | 'ci'>('live');
   const {
@@ -71,7 +73,7 @@ export function AgentEvals({ agentId }: { agentId: string }) {
       <Tabs
         value={activeTab}
         onValueChange={value => setActiveTab(value as 'live' | 'ci')}
-        className="grid grid-rows-[auto_1fr] h-full min-h-0"
+        className="grid grid-rows-[auto_1fr] h-full min-h-0 pb-2"
       >
         <div className="bg-mastra-bg-2 border-b border-mastra-border/10">
           <TabsList className="bg-transparent border-0 h-auto mx-4 pt-5">
@@ -83,10 +85,10 @@ export function AgentEvals({ agentId }: { agentId: string }) {
             </TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="live" className="min-h-0 h-full grid grid-rows-[auto_1fr]">
+        <TabsContent value="live" className={tabContentClass}>
           <EvalTable evals={liveEvals} isCIMode={false} />
         </TabsContent>
-        <TabsContent value="ci" className="min-h-0 h-full grid grid-rows-[auto_1fr]">
+        <TabsContent value="ci" className={tabContentClass}>
           <EvalTable evals={ciEvals} isCIMode={true} />
         </TabsContent>
       </Tabs>
