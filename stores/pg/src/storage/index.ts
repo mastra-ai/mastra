@@ -9,6 +9,14 @@ import {
 import { type WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 
+function safelyParseJSON(json: string): any {
+  try {
+    return JSON.parse(json);
+  } catch (e) {
+    return {};
+  }
+}
+
 export type PostgresConfig =
   | {
       host: string;
@@ -43,6 +51,116 @@ export class PostgresStore extends MastraStorage {
 
   getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     throw new Error('Method not implemented.');
+  }
+
+  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    try {
+      await this.db.query('BEGIN');
+      for (const record of records) {
+        await this.insert({ tableName, record });
+      }
+      await this.db.query('COMMIT');
+    } catch (error) {
+      console.error(`Error inserting into ${tableName}:`, error);
+      await this.db.query('ROLLBACK');
+      throw error;
+    }
+  }
+
+  async getTraces({
+    name,
+    scope,
+    page,
+    perPage,
+    attributes,
+  }: {
+    name?: string;
+    scope?: string;
+    page: number;
+    perPage: number;
+    attributes?: Record<string, string>;
+  }): Promise<any[]> {
+    let idx = 1;
+    const limit = perPage;
+    const offset = page * perPage;
+
+    const args: (string | number)[] = [];
+
+    const conditions: string[] = [];
+    if (name) {
+      conditions.push(`name LIKE CONCAT(\$${idx++}, '%')`);
+    }
+    if (scope) {
+      conditions.push(`scope = \$${idx++}`);
+    }
+    if (attributes) {
+      Object.keys(attributes).forEach(key => {
+        conditions.push(`attributes->>'${key}' = \$${idx++}`);
+      });
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    if (name) {
+      args.push(name);
+    }
+
+    if (scope) {
+      args.push(scope);
+    }
+
+    if (attributes) {
+      for (const [_key, value] of Object.entries(attributes)) {
+        args.push(value);
+      }
+    }
+
+    console.log(
+      'QUERY',
+      `SELECT * FROM ${MastraStorage.TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ${limit} OFFSET ${offset}`,
+      args,
+    );
+
+    const result = await this.db.manyOrNone<{
+      id: string;
+      parentSpanId: string;
+      traceId: string;
+      name: string;
+      scope: string;
+      kind: string;
+      events: any[];
+      links: any[];
+      status: any;
+      attributes: Record<string, any>;
+      startTime: string;
+      endTime: string;
+      other: any;
+      createdAt: string;
+    }>(
+      `SELECT * FROM ${MastraStorage.TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ${limit} OFFSET ${offset}`,
+      args,
+    );
+
+    if (!result) {
+      return [];
+    }
+
+    return result.map(row => ({
+      id: row.id,
+      parentSpanId: row.parentSpanId,
+      traceId: row.traceId,
+      name: row.name,
+      scope: row.scope,
+      kind: row.kind,
+      status: row.status,
+      events: row.events,
+      links: row.links,
+      attributes: row.attributes,
+      startTime: row.startTime,
+      endTime: row.endTime,
+      other: row.other,
+      createdAt: row.createdAt,
+    })) as any;
   }
 
   async createTable({

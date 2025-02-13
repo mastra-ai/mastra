@@ -1,4 +1,4 @@
-import { trace, context, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import { trace, context, SpanStatusCode, SpanKind, propagation } from '@opentelemetry/api';
 
 import { hasActiveTelemetry } from './utility';
 
@@ -33,7 +33,7 @@ export function withSpan(options: { spanName?: string; skipIfNoTelemetry?: boole
 
       // Start the span with optional kind
       const span = tracer.startSpan(spanName, { kind: spanKind });
-      const ctx = trace.setSpan(context.active(), span);
+      let ctx = trace.setSpan(context.active(), span);
 
       // Record input arguments as span attributes
       args.forEach((arg, index) => {
@@ -43,6 +43,20 @@ export function withSpan(options: { spanName?: string; skipIfNoTelemetry?: boole
           span.setAttribute(`${spanName}.argument.${index}`, '[Not Serializable]');
         }
       });
+
+      const currentBaggage = propagation.getBaggage(ctx);
+      // @ts-ignore
+      if (currentBaggage?.componentName) {
+        // @ts-ignore
+        span.setAttribute('componentName', currentBaggage?.componentName);
+        // @ts-ignore
+      } else if (this && this.name) {
+        // @ts-ignore
+        span.setAttribute('componentName', this.name);
+        // @ts-ignore
+        ctx = propagation.setBaggage(ctx, { componentName: this.name });
+        // @ts-ignore
+      }
 
       let result;
       try {

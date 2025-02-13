@@ -62,7 +62,7 @@ function Agents() {
                     <TableCell className="text-mastra-el-5 text-sm">
                       <span
                         onClick={() => {
-                          navigate(`/agents/${key}`);
+                          navigate(`/agents/${key}/chat`);
                         }}
                         className="hover:no-underline"
                       >

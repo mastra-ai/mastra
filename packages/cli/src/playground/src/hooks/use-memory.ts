@@ -12,6 +12,7 @@ export const useMemory = (agentId?: string) => {
     mutate,
   } = useSWR<{ result: boolean }>(`/api/memory/status?agentId=${agentId}`, fetcher, {
     fallbackData: { result: false },
+    isPaused: () => !agentId,
   });
   return { memory, isLoading, mutate };
 };
