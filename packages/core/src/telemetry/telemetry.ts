@@ -288,15 +288,15 @@ export class Telemetry {
           }
 
           span.end();
+
+          return res;
         }
 
         if (result instanceof Promise) {
           return result.then(recordResult).catch(handleError);
         } else {
-          recordResult(result);
+          return recordResult(result);
         }
-
-        return result;
       } catch (error) {
         handleError(error);
       }
