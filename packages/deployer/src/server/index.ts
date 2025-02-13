@@ -34,6 +34,7 @@ import {
   saveMessagesHandler,
   updateThreadHandler,
 } from './handlers/memory.js';
+import { generateSystemPromptHandler } from './handlers/prompt.js';
 import { rootHandler } from './handlers/root.js';
 import { getTelemetryHandler } from './handlers/telemetry.js';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools.js';
@@ -358,6 +359,77 @@ export async function createHonoServer(
       },
     }),
     setAgentInstructionsHandler,
+  );
+
+  app.post(
+    '/api/agents/:agentId/instructions/enhance',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Generate an improved system prompt from instructions',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'ID of the agent whose model will be used for prompt generation',
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                instructions: {
+                  type: 'string',
+                  description: 'Instructions to generate a system prompt from',
+                },
+                comment: {
+                  type: 'string',
+                  description: 'Optional comment for the enhanced prompt',
+                },
+              },
+              required: ['instructions'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generated system prompt and analysis',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  explanation: {
+                    type: 'string',
+                    description: 'Detailed analysis of the instructions',
+                  },
+                  new_prompt: {
+                    type: 'string',
+                    description: 'The enhanced system prompt',
+                  },
+                },
+              },
+            },
+          },
+        },
+        400: {
+          description: 'Missing or invalid request parameters',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+        500: {
+          description: 'Internal server error or model response parsing error',
+        },
+      },
+    }),
+    generateSystemPromptHandler,
   );
 
   app.post(
