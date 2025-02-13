@@ -414,14 +414,36 @@ export class DefaultStorage extends MastraStorage {
     }
   }
 
+  private transformEvalRow(row: Record<string, any>): EvalRow {
+    const resultValue = JSON.parse(row.result as string);
+    const testInfoValue = row.test_info ? JSON.parse(row.test_info as string) : undefined;
+
+    if (!resultValue || typeof resultValue !== 'object' || !('score' in resultValue)) {
+      throw new Error(`Invalid MetricResult format: ${JSON.stringify(resultValue)}`);
+    }
+
+    return {
+      input: row.input as string,
+      output: row.output as string,
+      result: resultValue as MetricResult,
+      agentName: row.agent_name as string,
+      metricName: row.metric_name as string,
+      instructions: row.instructions as string,
+      testInfo: testInfoValue as TestInfo,
+      globalRunId: row.global_run_id as string,
+      runId: row.run_id as string,
+      createdAt: row.created_at as string,
+    };
+  }
+
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     try {
       const baseQuery = `SELECT * FROM ${TABLE_EVALS} WHERE agent_name = ?`;
       const typeCondition =
         type === 'test'
-          ? " AND test_info->>'testPath' IS NOT NULL"
+          ? " AND test_info IS NOT NULL AND test_info->>'testPath' IS NOT NULL"
           : type === 'live'
-            ? " AND (test_info->>'testPath' IS NULL OR test_info IS NULL)"
+            ? " AND (test_info IS NULL OR test_info->>'testPath' IS NULL)"
             : '';
 
       const result = await this.client.execute({
@@ -429,31 +451,7 @@ export class DefaultStorage extends MastraStorage {
         args: [agentName],
       });
 
-      if (!result.rows) {
-        return [];
-      }
-
-      return result.rows.map(row => {
-        const resultValue = JSON.parse(row.result as string);
-        const testInfoValue = row.test_info ? JSON.parse(row.test_info as string) : undefined;
-
-        if (!resultValue || typeof resultValue !== 'object' || !('score' in resultValue)) {
-          throw new Error(`Invalid MetricResult format: ${JSON.stringify(resultValue)}`);
-        }
-
-        return {
-          input: row.input,
-          output: row.output,
-          result: resultValue as MetricResult,
-          agentName: row.agent_name,
-          metricName: row.metric_name,
-          instructions: row.instructions,
-          testInfo: testInfoValue as TestInfo,
-          globalRunId: row.global_run_id,
-          runId: row.run_id,
-          createdAt: row.created_at,
-        };
-      }) as EvalRow[];
+      return result.rows?.map(row => this.transformEvalRow(row)) ?? [];
     } catch (error) {
       // Handle case where table doesn't exist yet
       if (error instanceof Error && error.message.includes('no such table')) {
