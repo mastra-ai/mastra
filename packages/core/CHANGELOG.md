@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 0.2.0-alpha.104
+
+### Patch Changes
+
+- 5fdc87c: Update evals storage in attachListeners
+- b97ca96: Tracing into default storage
+- 72d1990: Updated evals table schema
+- cf6d825: Fixed a bug where 0 values in memory configs were falling back to default val. Removed a noisy log. Removed a deprecated option
+- 10870bc: Added a default vector db (libsql) and embedder (fastembed) so that new Memory() can be initialized with zero config
+
 ## 0.2.0-alpha.103
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "0.1.0-alpha.53",
+  "version": "0.1.0-alpha.54",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
