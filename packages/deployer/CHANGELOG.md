@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 0.1.0-alpha.58
+
+### Patch Changes
+
+- 8fa48b9: Add an API to enhance agent instructions
+- Updated dependencies [66a5392]
+  - @mastra/core@0.2.0-alpha.107
+
 ## 0.1.0-alpha.57
 
 ### Patch Changes
