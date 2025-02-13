@@ -77,32 +77,26 @@ export function AgentEvals({ agentId }: { agentId: string }) {
   return (
     <AgentEvalsContext.Provider value={contextValue}>
       <div className="flex-1 flex flex-col min-h-0">
-        <div className="flex-1 flex flex-col min-h-0">
-          <Tabs
-            value={activeTab}
-            onValueChange={value => setActiveTab(value as 'live' | 'ci')}
-            className="flex flex-col"
-          >
-            <div className="bg-mastra-bg-2 border-b border-mastra-border/10">
-              <TabsList className="bg-transparent border-0 p-0 h-auto mx-4">
-                <TabsTrigger value="live" className={tabIndicatorClass}>
-                  Live
-                </TabsTrigger>
-                <TabsTrigger value="ci" className={tabIndicatorClass}>
-                  CI
-                </TabsTrigger>
-              </TabsList>
-            </div>
-            <div className="flex-1 min-h-0 flex flex-col">
-              <TabsContent value="live" className="flex-1">
-                <EvalTable evals={liveEvals} isLoading={isLiveLoading} isCIMode={false} />
-              </TabsContent>
-              <TabsContent value="ci" className="flex-1">
-                <EvalTable evals={ciEvals} isLoading={isCiLoading} isCIMode={true} />
-              </TabsContent>
-            </div>
-          </Tabs>
-        </div>
+        <Tabs value={activeTab} onValueChange={value => setActiveTab(value as 'live' | 'ci')} className="flex flex-col">
+          <div className="bg-mastra-bg-2 border-b border-mastra-border/10">
+            <TabsList className="bg-transparent border-0 h-auto mx-4 pt-5">
+              <TabsTrigger value="live" className={tabIndicatorClass}>
+                Live
+              </TabsTrigger>
+              <TabsTrigger value="ci" className={tabIndicatorClass}>
+                CI
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          <div className="flex-1 min-h-0 flex flex-col">
+            <TabsContent value="live" className="flex-1">
+              <EvalTable evals={liveEvals} isLoading={isLiveLoading} isCIMode={false} />
+            </TabsContent>
+            <TabsContent value="ci" className="flex-1">
+              <EvalTable evals={ciEvals} isLoading={isCiLoading} isCIMode={true} />
+            </TabsContent>
+          </div>
+        </Tabs>
       </div>
     </AgentEvalsContext.Provider>
   );
@@ -212,7 +206,7 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
         </Button>
       </div>
 
-      <div className="flex-1 min-h-0 max-h-[calc(100vh-11rem)] overflow-auto">
+      <div className="flex-1 min-h-0 max-h-[calc(100vh-11.5rem)] overflow-auto">
         <Table className="w-full">
           <TableHeader className="bg-[#171717] sticky top-0 z-10">
             <TableRow className="border-gray-6 border-b-[0.1px] text-[0.8125rem]">
