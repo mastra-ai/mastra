@@ -1,7 +1,7 @@
 import { format, formatDistanceToNow } from 'date-fns';
 import { AnimatePresence } from 'framer-motion';
 import { ChevronRight, RefreshCcwIcon, Copy, Search, SortAsc, SortDesc } from 'lucide-react';
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -30,26 +30,29 @@ type GroupedEvals = {
   evals: Evals[];
 };
 
-type CopyableCell = {
+interface CopyableCell {
   content: string;
   label: string;
-};
+  multiline?: boolean;
+}
 
-function CopyableContent({ content, label }: CopyableCell) {
+function CopyableContent({ content, label, multiline = false }: CopyableCell) {
   const handleCopy = () => {
     navigator.clipboard.writeText(content);
   };
 
   return (
     <TooltipProvider>
-      <Tooltip>
+      <Tooltip delayDuration={300}>
         <TooltipTrigger asChild>
-          <div className="group relative flex items-center gap-2">
-            <span className="truncate">{content}</span>
+          <div className="group relative flex items-start gap-2">
+            <span className={cn('text-sm text-mastra-el-4', multiline ? 'whitespace-pre-wrap' : 'truncate')}>
+              {content}
+            </span>
             <Button
               variant="ghost"
               size="sm"
-              className="opacity-0 group-hover:opacity-100 transition-opacity"
+              className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 -mt-1"
               onClick={e => {
                 e.stopPropagation();
                 handleCopy();
@@ -60,8 +63,8 @@ function CopyableContent({ content, label }: CopyableCell) {
             </Button>
           </div>
         </TooltipTrigger>
-        <TooltipContent>
-          <p>Click to copy {label}</p>
+        <TooltipContent side="left" className="max-w-[300px]">
+          <p className="text-sm">Click to copy {label}</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -145,10 +148,10 @@ export function AgentEvals({ agentId }: { agentId: string }) {
           </div>
           <ScrollArea className="rounded-lg h-[calc(100vh-180px)]">
             <TabsContent value="live" className="mt-0">
-              <EvalTable showTestName={false} evals={liveEvals} isLoading={isLiveLoading} />
+              <EvalTable evals={liveEvals} isLoading={isLiveLoading} isCIMode={false} />
             </TabsContent>
             <TabsContent value="ci" className="mt-0">
-              <EvalTable showTestName={true} evals={ciEvals} isLoading={isCiLoading} />
+              <EvalTable evals={ciEvals} isLoading={isCiLoading} isCIMode={true} />
             </TabsContent>
           </ScrollArea>
         </Tabs>
@@ -157,22 +160,10 @@ export function AgentEvals({ agentId }: { agentId: string }) {
   );
 }
 
-function EvalTable({
-  showTestName = false,
-  evals,
-  isLoading,
-}: {
-  showTestName: boolean;
-  evals: Evals[];
-  isLoading: boolean;
-}) {
+function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isLoading: boolean; isCIMode?: boolean }) {
   const [expandedMetrics, setExpandedMetrics] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'metricName', direction: 'asc' });
-
-  const handleSearch = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
-  }, []);
 
   const toggleMetric = (metricName: string) => {
     const newExpanded = new Set(expandedMetrics);
@@ -352,12 +343,12 @@ function EvalTable({
                           <Table>
                             <TableHeader>
                               <TableRow className="text-[0.7rem] text-mastra-el-3 hover:bg-transparent">
-                                <TableHead className="pl-12">Timestamp</TableHead>
-                                <TableHead className="min-w-[200px]">Input</TableHead>
-                                <TableHead className="min-w-[200px]">Output</TableHead>
-                                <TableHead className="min-w-[200px]">Instructions</TableHead>
-                                <TableHead className="w-48">Score</TableHead>
-                                {showTestName && <TableHead>Test Name</TableHead>}
+                                <TableHead className="pl-12 w-[200px]">Timestamp</TableHead>
+                                <TableHead className="w-[300px]">Input</TableHead>
+                                <TableHead className="w-[300px]">Output</TableHead>
+                                <TableHead className="w-[300px]">Instructions</TableHead>
+                                <TableHead className="w-[100px]">Score</TableHead>
+                                {isCIMode && <TableHead className="w-[150px]">Test Name</TableHead>}
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -366,23 +357,29 @@ function EvalTable({
                                   key={`${group.metricName}-${index}`}
                                   className="text-[0.8125rem] hover:bg-mastra-bg-2/50"
                                 >
-                                  <TableCell className="pl-12 text-mastra-el-4">
+                                  <TableCell className="pl-12 text-mastra-el-4 align-top py-4">
                                     <FormattedDate date={evaluation.createdAt} />
                                   </TableCell>
-                                  <TableCell className="text-mastra-el-4">
-                                    <CopyableContent content={evaluation.input} label="input" />
+                                  <TableCell className="text-mastra-el-4 align-top py-4 max-w-[300px]">
+                                    <CopyableContent content={evaluation.input} label="input" multiline />
                                   </TableCell>
-                                  <TableCell className="text-mastra-el-4">
-                                    <CopyableContent content={evaluation.output} label="output" />
+                                  <TableCell className="text-mastra-el-4 align-top py-4 max-w-[300px]">
+                                    <CopyableContent content={evaluation.output} label="output" multiline />
                                   </TableCell>
-                                  <TableCell className="text-mastra-el-4">
-                                    <CopyableContent content={evaluation.instructions} label="instructions" />
+                                  <TableCell className="text-mastra-el-4 align-top py-4 max-w-[300px]">
+                                    <CopyableContent content={evaluation.instructions} label="instructions" multiline />
                                   </TableCell>
-                                  <TableCell className="text-mastra-el-4">
+                                  <TableCell className="text-mastra-el-4 align-top py-4">
                                     <ScoreIndicator score={evaluation.result.score} />
                                   </TableCell>
-                                  {showTestName && (
-                                    <TableCell className="text-mastra-el-4">{evaluation.testInfo?.testName}</TableCell>
+                                  {isCIMode && (
+                                    <TableCell className="text-mastra-el-4 align-top py-4">
+                                      {evaluation.testInfo?.testName && (
+                                        <Badge variant="secondary" className="text-xs">
+                                          {evaluation.testInfo.testName}
+                                        </Badge>
+                                      )}
+                                    </TableCell>
                                   )}
                                 </TableRow>
                               ))}
