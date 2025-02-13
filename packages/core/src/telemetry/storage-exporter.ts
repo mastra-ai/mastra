@@ -31,7 +31,6 @@ export class OTLPTraceExporter implements SpanExporter {
     const serializedRequest = this.serializer.serializeRequest(internalRepresentation);
     // @ts-ignore
     const payload = JSON.parse(Buffer.from(serializedRequest.buffer, 'utf8'));
-    console.dir(payload, { depth: 555 });
     const items = payload?.resourceSpans?.[0]?.scopeSpans;
     this.logger.debug('items to be sent: ' + items.length);
 
