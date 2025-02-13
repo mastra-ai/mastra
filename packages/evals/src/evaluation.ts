@@ -53,5 +53,5 @@ export const getCurrentTestInfo = async () => {
     }
   } catch {}
 
-  return null;
+  return undefined;
 };

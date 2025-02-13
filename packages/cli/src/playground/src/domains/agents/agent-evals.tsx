@@ -202,14 +202,14 @@ function EvalTable({
 
   const groupEvals = (evaluations: Evals[]): GroupedEvals[] => {
     let groups = evaluations.reduce((groups: GroupedEvals[], evaluation) => {
-      const existingGroup = groups.find(g => g.metricName === evaluation.meta.metricName);
+      const existingGroup = groups.find(g => g.metricName === evaluation.metricName);
       if (existingGroup) {
         existingGroup.evals.push(evaluation);
         existingGroup.averageScore =
           existingGroup.evals.reduce((sum, e) => sum + e.result.score, 0) / existingGroup.evals.length;
       } else {
         groups.push({
-          metricName: evaluation.meta.metricName,
+          metricName: evaluation.metricName,
           averageScore: evaluation.result.score,
           evals: [evaluation],
         });
@@ -226,7 +226,7 @@ function EvalTable({
             metric =>
               metric.input?.toLowerCase().includes(searchTerm.toLowerCase()) ||
               metric.output?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              metric.meta.instructions?.toLowerCase().includes(searchTerm.toLowerCase()),
+              metric.instructions?.toLowerCase().includes(searchTerm.toLowerCase()),
           ),
       );
     }
@@ -367,7 +367,7 @@ function EvalTable({
                                   className="text-[0.8125rem] hover:bg-mastra-bg-2/50"
                                 >
                                   <TableCell className="pl-12 text-mastra-el-4">
-                                    <FormattedDate date={evaluation.meta.timestamp} />
+                                    <FormattedDate date={evaluation.createdAt} />
                                   </TableCell>
                                   <TableCell className="text-mastra-el-4">
                                     <CopyableContent content={evaluation.input} label="input" />
@@ -376,13 +376,13 @@ function EvalTable({
                                     <CopyableContent content={evaluation.output} label="output" />
                                   </TableCell>
                                   <TableCell className="text-mastra-el-4">
-                                    <CopyableContent content={evaluation.meta.instructions} label="instructions" />
+                                    <CopyableContent content={evaluation.instructions} label="instructions" />
                                   </TableCell>
                                   <TableCell className="text-mastra-el-4">
                                     <ScoreIndicator score={evaluation.result.score} />
                                   </TableCell>
                                   {showTestName && (
-                                    <TableCell className="text-mastra-el-4">{evaluation.meta.testName}</TableCell>
+                                    <TableCell className="text-mastra-el-4">{evaluation.testInfo?.testName}</TableCell>
                                   )}
                                 </TableRow>
                               ))}

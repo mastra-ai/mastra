@@ -11,9 +11,9 @@ import {
 } from 'ai';
 
 import { MastraBase } from '../base';
-import { MastraStorage, DefaultStorage, type StorageGetMessagesArg } from '../storage';
+import { MastraStorage, DefaultStorage, type StorageGetMessagesArg, DefaultVectorDB } from '../storage';
 import { deepMerge } from '../utils';
-import { MastraVector } from '../vector';
+import { defaultEmbedder, MastraVector } from '../vector';
 
 export type AiMessageType = AiMessage;
 
@@ -76,16 +76,17 @@ export abstract class MastraMemory extends MastraBase {
   MAX_CONTEXT_TOKENS?: number;
 
   storage: MastraStorage;
-  vector?: MastraVector;
-  embedder?: EmbeddingModel<string>;
+  vector: MastraVector;
+  embedder: EmbeddingModel<string>;
 
   protected threadConfig: MemoryConfig = {
     lastMessages: 40,
-    semanticRecall: false, // becomes true by default if a vector store is attached
+    semanticRecall: true,
   };
 
   constructor(config: { name: string } & SharedMemoryConfig) {
     super({ component: 'MEMORY', name: config.name });
+
     this.storage =
       config.storage ||
       new DefaultStorage({
@@ -93,13 +94,21 @@ export abstract class MastraMemory extends MastraBase {
           url: 'file:memory.db',
         },
       });
+
     if (config.vector) {
       this.vector = config.vector;
-      this.threadConfig.semanticRecall = true;
+    } else {
+      this.vector = new DefaultVectorDB({
+        connectionUrl: 'file:memory-vector.db', // file name needs to be different than default storage or it wont work properly
+      });
     }
+
     if (config.embedder) {
       this.embedder = config.embedder;
+    } else {
+      this.embedder = defaultEmbedder('bge-small-en-v1.5'); // https://huggingface.co/BAAI/bge-small-en-v1.5#model-list we're using small 1.5 because it's much faster than base 1.5 and only scores slightly worse despite being roughly 100MB smaller - small is ~130MB while base is ~220MB
     }
+
     if (config.options) {
       this.threadConfig = this.getMergedThreadConfig(config.options);
     }
@@ -115,10 +124,6 @@ export abstract class MastraMemory extends MastraBase {
   }
 
   protected async createEmbeddingIndex(): Promise<{ indexName: string }> {
-    if (!this.vector) {
-      throw new Error(`Cannot call MastraMemory.createEmbeddingIndex() without a vector db attached.`);
-    }
-
     const defaultDimensions = 1536;
 
     // AI SDK doesn't expose a way to check how many dimensions a model uses.
@@ -127,28 +132,12 @@ export abstract class MastraMemory extends MastraBase {
       'bge-base-en-v1.5': 768,
     };
 
-    const dimensions = dimensionsByModelId[this.getEmbedder().modelId] || defaultDimensions;
+    const dimensions = dimensionsByModelId[this.embedder.modelId] || defaultDimensions;
     const isDefault = dimensions === defaultDimensions;
     const indexName = isDefault ? 'memory_messages' : `memory_messages_${dimensions}`;
 
     await this.vector.createIndex(indexName, dimensions);
     return { indexName };
-  }
-
-  protected getEmbedder() {
-    if (!this.embedder) {
-      throw new Error(`Cannot use vector features without setting new Memory({ embedder: embedderInstance })
-
-For example:
-
-new Memory({
-  vector,
-  embedder: openai("text-embedding-3-small") // example
-});
-`);
-    }
-
-    return this.embedder;
   }
 
   protected getMergedThreadConfig(config?: MemoryConfig): MemoryConfig {
