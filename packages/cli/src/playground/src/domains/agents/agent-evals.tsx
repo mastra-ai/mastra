@@ -162,7 +162,7 @@ function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boo
             </TableRow>
           </TableHeader>
           <TableBody className="border-b border-gray-6 relative">
-            <AnimatePresence mode="wait">
+            <AnimatePresence mode="wait" presenceAffectsLayout={false}>
               {showLoading ? (
                 Array.from({ length: 3 }).map((_, i) => (
                   <MotionTableRow
@@ -191,12 +191,7 @@ function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boo
                   </MotionTableRow>
                 ))
               ) : groupEvals(evals).length === 0 ? (
-                <MotionTableRow
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                >
+                <TableRow>
                   <TableCell colSpan={5} className="h-32 text-center text-mastra-el-3">
                     <div className="flex flex-col items-center gap-2">
                       <Search className="h-8 w-8" />
@@ -204,15 +199,11 @@ function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boo
                       {searchTerm && <p className="text-sm">Try adjusting your search terms</p>}
                     </div>
                   </TableCell>
-                </MotionTableRow>
+                </TableRow>
               ) : (
                 groupEvals(evals).map(group => (
                   <React.Fragment key={group.metricName}>
-                    <MotionTableRow
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.2 }}
+                    <TableRow
                       className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem] cursor-pointer hover:bg-mastra-bg-3"
                       onClick={() => toggleMetric(group.metricName)}
                     >
@@ -238,7 +229,7 @@ function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boo
                       <TableCell className="w-48 text-mastra-el-5">
                         <Badge variant="secondary">{group.evals.length}</Badge>
                       </TableCell>
-                    </MotionTableRow>
+                    </TableRow>
 
                     {expandedMetrics.has(group.metricName) && (
                       <TableRow>
