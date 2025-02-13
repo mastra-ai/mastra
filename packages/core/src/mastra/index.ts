@@ -3,7 +3,7 @@ import { MastraDeployer } from '../deployer';
 import { LogLevel, Logger, createLogger, noopLogger } from '../logger';
 import { MastraMemory } from '../memory';
 import { DefaultStorage, type MastraStorage } from '../storage';
-import { InstrumentClass, type OtelConfig, Telemetry } from '../telemetry';
+import { InstrumentClass, type OtelConfig, OTLPStorageExporter, Telemetry } from '../telemetry';
 import { MastraTTS } from '../tts';
 import { MastraVector } from '../vector';
 import { Workflow } from '../workflows';
