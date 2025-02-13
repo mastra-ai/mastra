@@ -458,7 +458,10 @@ export class Agent<
                   args,
                 });
                 return tool.execute({
-                  context: args,
+                  context: {
+                    ...args,
+                    runId,
+                  },
                   mastra: this.#mastra,
                 });
               } catch (err) {
@@ -519,7 +522,10 @@ export class Agent<
                   args,
                 });
                 return toolObj.execute!({
-                  context: args,
+                  context: {
+                    ...args,
+                    runId,
+                  },
                 });
               } catch (err) {
                 this.logger.error(`[Agent:${this.name}] - Failed toolset execution`, {

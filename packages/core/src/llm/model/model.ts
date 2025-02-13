@@ -64,7 +64,8 @@ export class MastraLLM extends MastraLLMBase {
     return this.#model.modelId;
   }
 
-  convertTools(tools?: ToolsInput): Record<string, Tool> {
+  convertTools(tools?: ToolsInput, runId?: string): Record<string, Tool> {
+    console.log('hydrating wiith run id ', { runId });
     this.logger.debug('Starting tool conversion for LLM');
     const converted = Object.entries(tools || {}).reduce(
       (memo, value) => {
@@ -82,7 +83,10 @@ export class MastraLLM extends MastraLLMBase {
                   props,
                 });
                 return tool.execute({
-                  context: props,
+                  context: {
+                    ...props,
+                    runId,
+                  },
                   mastra: this.#mastra,
                 });
               } catch (error) {
@@ -124,7 +128,7 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools(tools);
+    const finalTools = convertedTools || this.convertTools(tools, runId);
 
     const argsForExecute = {
       model,
@@ -178,7 +182,7 @@ export class MastraLLM extends MastraLLMBase {
 
     this.logger.debug(`[LLM] - Generating a text object`, { runId });
 
-    const finalTools = convertedTools || this.convertTools(tools);
+    const finalTools = convertedTools || this.convertTools(tools, runId);
 
     const argsForExecute = {
       model,
@@ -251,7 +255,7 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools(tools);
+    const finalTools = convertedTools || this.convertTools(tools, runId);
 
     const argsForExecute = {
       model,
@@ -322,7 +326,7 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools(tools);
+    const finalTools = convertedTools || this.convertTools(tools, runId);
 
     const argsForExecute = {
       model,
