@@ -261,6 +261,8 @@ export class Telemetry {
           }
         }
 
+        console.dir({ traceMethod: span });
+
         // Record input arguments as span attributes
         args.forEach((arg, index) => {
           try {
@@ -309,7 +311,6 @@ class BaggageTracer implements Tracer {
     ctx = ctx ?? otlpContext.active();
     const span = this._tracer.startSpan(name, options, ctx);
     const currentBaggage = propagation.getBaggage(ctx);
-    console.log({ currentBaggage });
     // @ts-ignore
     span.setAttribute('componentName', currentBaggage?.componentName);
 
@@ -333,7 +334,6 @@ class BaggageTracer implements Tracer {
     if (typeof optionsOrFn === 'function') {
       const wrappedFn = (span: Span) => {
         const currentBaggage = propagation.getBaggage(otlpContext.active());
-        console.log({ currentBaggage });
         // @ts-ignore
         span.setAttribute('componentName', currentBaggage?.componentName);
 
@@ -344,7 +344,6 @@ class BaggageTracer implements Tracer {
     if (typeof ctxOrFn === 'function') {
       const wrappedFn = (span: Span) => {
         const currentBaggage = propagation.getBaggage(otlpContext.active());
-        console.log({ currentBaggage });
         // @ts-ignore
         span.setAttribute('componentName', currentBaggage?.componentName);
 
@@ -354,7 +353,6 @@ class BaggageTracer implements Tracer {
     }
     const wrappedFn = (span: Span) => {
       const currentBaggage = propagation.getBaggage(ctxOrFn ?? otlpContext.active());
-      console.log({ currentBaggage });
       // @ts-ignore
       span.setAttribute('componentName', currentBaggage?.componentName);
 
