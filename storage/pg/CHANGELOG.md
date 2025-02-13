@@ -1,5 +1,35 @@
 # @mastra/store-pg
 
+## 0.0.0-alpha.23
+
+### Patch Changes
+
+- Updated dependencies [4534e77]
+  - @mastra/core@0.2.0-alpha.103
+
+## 0.0.0-alpha.22
+
+### Patch Changes
+
+- Updated dependencies [a9345f9]
+  - @mastra/core@0.2.0-alpha.102
+
+## 0.0.0-alpha.21
+
+### Patch Changes
+
+- 4f1d1a1: Enforce types ann cleanup package.json
+- Updated dependencies [66a03ec]
+- Updated dependencies [4f1d1a1]
+  - @mastra/core@0.2.0-alpha.101
+
+## 0.0.0-alpha.20
+
+### Patch Changes
+
+- Updated dependencies [9d1796d]
+  - @mastra/core@0.2.0-alpha.100
+
 ## 0.0.0-alpha.19
 
 ### Patch Changes

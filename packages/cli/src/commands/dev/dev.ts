@@ -8,8 +8,6 @@ import { logger } from '../../utils/logger.js';
 
 import { DevBundler } from './DevBundler';
 
-const __filename = fileURLToPath(import.meta.url);
-
 let currentServerProcess: ChildProcess | undefined;
 let isRestarting = false;
 

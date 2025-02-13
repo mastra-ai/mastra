@@ -1,10 +1,11 @@
-import { createClient, Client, InValue } from '@libsql/client';
-import { join } from 'path';
+import { createClient, type Client, type InValue } from '@libsql/client';
+import { join } from 'node:path';
 
-import { MessageType, StorageThreadType } from '../memory';
+import type { MetricResult, TestInfo } from '../eval';
+import { type MessageType, type StorageThreadType } from '../memory';
 
-import { MastraStorage, TABLE_NAMES } from './base';
-import { StorageColumn, StorageGetMessagesArg, EvalRow } from './types';
+import { MastraStorage, type TABLE_NAMES } from './base';
+import { type StorageColumn, type StorageGetMessagesArg, type EvalRow } from './types';
 
 export * from '../vector/libsql/index';
 
@@ -78,7 +79,6 @@ export class DefaultStorage extends MastraStorage {
                 ${columns.join(',\n')},
                 PRIMARY KEY (workflow_name, run_id)
             )`;
-      this.logger.info(stmnt);
       return stmnt;
     }
 
@@ -408,16 +408,16 @@ export class DefaultStorage extends MastraStorage {
 
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     try {
-      const baseQuery = `SELECT * FROM ${MastraStorage.TABLE_EVALS} WHERE meta->>'$.agentName' = ?`;
+      const baseQuery = `SELECT * FROM ${MastraStorage.TABLE_EVALS} WHERE agent_name = ?`;
       const typeCondition =
         type === 'test'
-          ? " AND meta->>'$.testPath' IS NOT NULL"
+          ? " AND test_info->>'testPath' IS NOT NULL"
           : type === 'live'
-            ? " AND meta->>'$.testPath' IS NULL"
+            ? " AND (test_info->>'testPath' IS NULL OR test_info IS NULL)"
             : '';
 
       const result = await this.client.execute({
-        sql: `${baseQuery}${typeCondition} ORDER BY createdAt DESC`,
+        sql: `${baseQuery}${typeCondition} ORDER BY created_at DESC`,
         args: [agentName],
       });
 
@@ -425,14 +425,27 @@ export class DefaultStorage extends MastraStorage {
         return [];
       }
 
-      return result.rows.map(row => ({
-        ...row,
-        result: typeof row.result === 'string' ? JSON.parse(row.result) : row.result,
-        meta: typeof row.meta === 'string' ? JSON.parse(row.meta) : row.meta,
-        input: row.input,
-        output: row.output,
-        createdAt: row.createdAt,
-      })) as EvalRow[];
+      return result.rows.map(row => {
+        const resultValue = JSON.parse(row.result as string);
+        const testInfoValue = row.test_info ? JSON.parse(row.test_info as string) : undefined;
+
+        if (!resultValue || typeof resultValue !== 'object' || !('score' in resultValue)) {
+          throw new Error(`Invalid MetricResult format: ${JSON.stringify(resultValue)}`);
+        }
+
+        return {
+          input: row.input,
+          output: row.output,
+          result: resultValue as MetricResult,
+          agentName: row.agent_name,
+          metricName: row.metric_name,
+          instructions: row.instructions,
+          testInfo: testInfoValue as TestInfo,
+          globalRunId: row.global_run_id,
+          runId: row.run_id,
+          createdAt: row.created_at,
+        };
+      }) as EvalRow[];
     } catch (error) {
       // Handle case where table doesn't exist yet
       if (error instanceof Error && error.message.includes('no such table')) {

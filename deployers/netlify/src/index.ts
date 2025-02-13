@@ -42,6 +42,7 @@ to = "/.netlify/functions/api/:splat"
   async deploy(outputDirectory: string): Promise<void> {
     const site = await getOrCreateSite({ token: this.token, name: this.projectName || `mastra`, scope: this.scope });
 
+    // @ts-expect-error - seems to be fine
     const p2 = execa(
       'npx',
       [

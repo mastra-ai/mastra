@@ -1,5 +1,35 @@
 # @mastra/speech-murf
 
+## 0.1.0-alpha.28
+
+### Patch Changes
+
+- Updated dependencies [4534e77]
+  - @mastra/core@0.2.0-alpha.103
+
+## 0.1.0-alpha.27
+
+### Patch Changes
+
+- Updated dependencies [a9345f9]
+  - @mastra/core@0.2.0-alpha.102
+
+## 0.1.0-alpha.26
+
+### Patch Changes
+
+- 4f1d1a1: Enforce types ann cleanup package.json
+- Updated dependencies [66a03ec]
+- Updated dependencies [4f1d1a1]
+  - @mastra/core@0.2.0-alpha.101
+
+## 0.1.0-alpha.25
+
+### Patch Changes
+
+- Updated dependencies [9d1796d]
+  - @mastra/core@0.2.0-alpha.100
+
 ## 0.1.0-alpha.24
 
 ### Patch Changes

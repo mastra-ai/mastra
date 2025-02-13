@@ -1,8 +1,8 @@
 import { MastraBase } from '../base';
-import { MessageType, StorageThreadType } from '../memory';
-import { WorkflowRunState } from '../workflows';
+import { type MessageType, type StorageThreadType } from '../memory';
+import { type WorkflowRunState } from '../workflows';
 
-import { StorageColumn, StorageGetMessagesArg } from './types';
+import { type EvalRow, type StorageColumn, type StorageGetMessagesArg } from './types';
 
 export type TABLE_NAMES =
   | typeof MastraStorage.TABLE_WORKFLOW_SNAPSHOT
@@ -166,19 +166,35 @@ export abstract class MastraStorage extends MastraBase {
     await this.createTable({
       tableName: MastraStorage.TABLE_EVALS,
       schema: {
-        meta: {
-          type: 'text',
-        },
-        result: {
-          type: 'text',
-        },
         input: {
           type: 'text',
         },
         output: {
           type: 'text',
         },
-        createdAt: {
+        result: {
+          type: 'jsonb',
+        },
+        agent_name: {
+          type: 'text',
+        },
+        metric_name: {
+          type: 'text',
+        },
+        instructions: {
+          type: 'text',
+        },
+        test_info: {
+          type: 'jsonb',
+          nullable: true,
+        },
+        global_run_id: {
+          type: 'text',
+        },
+        run_id: {
+          type: 'text',
+        },
+        created_at: {
           type: 'timestamp',
         },
       },
@@ -273,5 +289,12 @@ export abstract class MastraStorage extends MastraBase {
     });
 
     return d ? d.snapshot : null;
+  }
+
+  abstract getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]>;
+
+  async __getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
+    await this.init();
+    return this.getEvalsByAgentName(agentName, type);
   }
 }

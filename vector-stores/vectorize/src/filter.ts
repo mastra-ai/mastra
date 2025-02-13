@@ -1,4 +1,4 @@
-import { BaseFilterTranslator, Filter, FieldCondition, OperatorSupport } from '@mastra/core/filter';
+import { BaseFilterTranslator, type Filter, type FieldCondition, type OperatorSupport } from '@mastra/core/filter';
 
 export class VectorizeFilterTranslator extends BaseFilterTranslator {
   protected override getSupportedOperators(): OperatorSupport {

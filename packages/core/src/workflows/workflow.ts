@@ -1,9 +1,9 @@
 import { get } from 'radash';
 import sift from 'sift';
-import { assign, createActor, fromPromise, MachineContext, setup, Snapshot } from 'xstate';
+import { assign, createActor, fromPromise, type MachineContext, setup, type Snapshot } from 'xstate';
 import { z } from 'zod';
 
-import { IAction, MastraPrimitives } from '../action';
+import { type IAction, type MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 
 import { Step } from './step';

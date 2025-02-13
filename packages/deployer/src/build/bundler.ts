@@ -33,7 +33,7 @@ export async function getInputOptions(
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     treeshake: true,
     preserveSymlinks: true,
-    external: Array.from(analyzedBundleInfo.externalDependencies),
+    external: Array.from(analyzedBundleInfo.externalDependencies).concat(['@mastra/core/hooks']),
     plugins: [
       telemetryFix(),
       libSqlFix(),

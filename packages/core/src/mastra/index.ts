@@ -2,8 +2,8 @@ import { Agent } from '../agent';
 import { MastraDeployer } from '../deployer';
 import { LogLevel, Logger, createLogger, noopLogger } from '../logger';
 import { MastraMemory } from '../memory';
-import { MastraStorage, DefaultStorage } from '../storage';
-import { InstrumentClass, OtelConfig, OTLPStorageExporter, Telemetry } from '../telemetry';
+import { DefaultStorage, type MastraStorage } from '../storage';
+import { InstrumentClass, type OtelConfig, Telemetry } from '../telemetry';
 import { MastraTTS } from '../tts';
 import { MastraVector } from '../vector';
 import { Workflow } from '../workflows';
@@ -270,7 +270,7 @@ export class Mastra<
     return this.workflows;
   }
 
-  public setStorage({ storage }: { storage: MastraStorage }) {
+  public setStorage(storage: MastraStorage) {
     this.storage = storage;
   }
 

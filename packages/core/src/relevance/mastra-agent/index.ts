@@ -1,6 +1,7 @@
 import { type LanguageModelV1 } from 'ai';
+
 import { Agent } from '../../agent';
-import { RelevanceScoreProvider, createSimilarityPrompt } from '../relevance-score-provider';
+import { type RelevanceScoreProvider, createSimilarityPrompt } from '../relevance-score-provider';
 
 // Mastra Agent implementation
 export class MastraAgentRelevanceScorer implements RelevanceScoreProvider {

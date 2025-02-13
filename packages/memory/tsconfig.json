@@ -1,11 +1,5 @@
 {
-  "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "moduleResolution": "bundler",
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "esModuleInterop": true
-  },
+  "extends": "../../tsconfig.node.json",
   "include": ["src/**/*"],
   "exclude": ["node_modules", "**/*.test.ts"]
 }

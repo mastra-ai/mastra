@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.2.0-alpha.157",
+  "version": "0.2.0-alpha.161",
   "license": "MIT",
   "description": "cli for mastra",
   "type": "module",
@@ -74,9 +74,10 @@
   },
   "devDependencies": {
     "@ai-sdk/openai": "^1.1.9",
+    "@microsoft/api-extractor": "^7.49.2",
     "@types/express": "^5.0.0",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "^22.10.0",
+    "@types/node": "^22.13.1",
     "@types/prompt": "^1.1.8",
     "@types/tcp-port-used": "^1.0.4",
     "cpy-cli": "^5.0.0",

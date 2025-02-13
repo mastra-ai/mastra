@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "0.1.0-alpha.41",
+  "version": "0.1.0-alpha.45",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -28,7 +28,7 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "pnpm check && tsup src/index.ts src/metrics/llm/index.ts src/metrics/nlp/index.ts --format esm --dts --clean --treeshake",
+    "build": "pnpm check && tsup src/index.ts src/metrics/llm/index.ts src/metrics/nlp/index.ts --format esm --experimental-dts --clean --treeshake",
     "build:watch": "pnpm build --watch",
     "test": "vitest"
   },
@@ -50,7 +50,7 @@
   },
   "devDependencies": {
     "@ai-sdk/openai": "latest",
-    "@tsconfig/recommended": "^1.0.7",
+    "@microsoft/api-extractor": "^7.49.2",
     "@types/difflib": "^0.2.7",
     "@types/fs-extra": "^11.0.4",
     "@types/sentiment": "^5.0.4",

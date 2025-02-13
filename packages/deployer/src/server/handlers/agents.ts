@@ -4,7 +4,6 @@ import type { Context } from 'hono';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 
-import { readFile } from 'fs/promises';
 import { HTTPException } from 'hono/http-exception';
 
 import { handleError } from './error';
@@ -77,12 +76,14 @@ export async function getAgentByIdHandler(c: Context) {
 
 export async function getEvalsByAgentIdHandler(c: Context) {
   try {
-    const mastra = c.get('mastra');
+    const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const agent = mastra.getAgent(agentId);
     const evals: EvalRow[] = (await mastra.storage?.getEvalsByAgentName?.(agent.name, 'test')) || [];
     return c.json({
-      ...agent,
+      id: agentId,
+      name: agent.name,
+      instructions: agent.instructions,
       evals,
     });
   } catch (error) {
@@ -92,13 +93,15 @@ export async function getEvalsByAgentIdHandler(c: Context) {
 
 export async function getLiveEvalsByAgentIdHandler(c: Context) {
   try {
-    const mastra = c.get('mastra');
+    const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const agent = mastra.getAgent(agentId);
     const evals: EvalRow[] = (await mastra.storage?.getEvalsByAgentName?.(agent.name, 'live')) || [];
 
     return c.json({
-      ...agent,
+      id: agentId,
+      name: agent.name,
+      instructions: agent.instructions,
       evals,
     });
   } catch (error) {

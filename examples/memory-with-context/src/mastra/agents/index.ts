@@ -1,12 +1,8 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { DefaultVectorDB } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 
 const memory = new Memory({
-  vector: new DefaultVectorDB({
-    connectionUrl: 'file:example.db',
-  }),
   options: {
     lastMessages: 4,
     semanticRecall: {
@@ -17,7 +13,6 @@ const memory = new Memory({
       enabled: true,
     },
   },
-  embedder: openai.embedding('text-embedding-3-small'),
 });
 
 export const memoryAgent = new Agent({

@@ -1,13 +1,13 @@
-import { InValue } from '@libsql/client';
+import { type InValue } from '@libsql/client';
 
 import {
-  BasicOperator,
-  NumericOperator,
-  ArrayOperator,
-  ElementOperator,
-  LogicalOperator,
-  RegexOperator,
-  Filter,
+  type BasicOperator,
+  type NumericOperator,
+  type ArrayOperator,
+  type ElementOperator,
+  type LogicalOperator,
+  type RegexOperator,
+  type Filter,
 } from '../../filter';
 
 export type OperatorType =

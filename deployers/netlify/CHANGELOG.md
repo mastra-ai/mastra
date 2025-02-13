@@ -1,5 +1,39 @@
 # @mastra/deployer-netlify
 
+## 0.1.0-alpha.56
+
+### Patch Changes
+
+- Updated dependencies [4534e77]
+  - @mastra/core@0.2.0-alpha.103
+  - @mastra/deployer@0.1.0-alpha.53
+
+## 0.1.0-alpha.55
+
+### Patch Changes
+
+- Updated dependencies [a9345f9]
+  - @mastra/core@0.2.0-alpha.102
+  - @mastra/deployer@0.1.0-alpha.52
+
+## 0.1.0-alpha.54
+
+### Patch Changes
+
+- 4f1d1a1: Enforce types ann cleanup package.json
+- Updated dependencies [66a03ec]
+- Updated dependencies [4f1d1a1]
+  - @mastra/core@0.2.0-alpha.101
+  - @mastra/deployer@0.1.0-alpha.51
+
+## 0.1.0-alpha.53
+
+### Patch Changes
+
+- Updated dependencies [9d1796d]
+  - @mastra/deployer@0.1.0-alpha.50
+  - @mastra/core@0.2.0-alpha.100
+
 ## 0.1.0-alpha.52
 
 ### Patch Changes

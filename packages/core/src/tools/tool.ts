@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
-import { MastraPrimitives } from '../action';
+import { type MastraPrimitives } from '../action';
 
-import { ToolAction, ToolExecutionContext } from './types';
+import { type ToolAction, type ToolExecutionContext } from './types';
 
 export class Tool<
   TId extends string,

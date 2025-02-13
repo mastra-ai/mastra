@@ -1,8 +1,8 @@
 import { Document } from 'llamaindex';
 
-import { ChunkOptions } from '../types';
+import { type ChunkOptions } from '../types';
 
-import { Transformer } from './transformer';
+import { type Transformer } from './transformer';
 
 export abstract class TextTransformer implements Transformer {
   protected size: number;

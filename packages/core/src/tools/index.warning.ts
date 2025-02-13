@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { Tool as BaseTool } from './tool';
-import { ToolAction, ToolExecutionContext } from './types';
+import { type ToolAction, type ToolExecutionContext } from './types';
 
 export * from './tool';
 
