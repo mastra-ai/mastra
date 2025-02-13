@@ -70,7 +70,7 @@ export class Mastra<
     Telemetry
     */
     // if storage is a libsql instance, we need to default the telemetry exporter to OTLPStorageExporter
-    if (storage instanceof DefaultStorage) {
+    if (storage instanceof DefaultStorage && config?.telemetry?.export?.type !== 'custom') {
       const newTelemetry = {
         ...(config?.telemetry || {}),
         export: {
