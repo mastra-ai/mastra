@@ -1,5 +1,12 @@
 # mastra
 
+## 0.2.0-alpha.164
+
+### Patch Changes
+
+- Updated dependencies [246f06c]
+  - @mastra/deployer@0.1.0-alpha.56
+
 ## 0.2.0-alpha.163
 
 ### Patch Changes

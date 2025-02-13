@@ -1,5 +1,11 @@
 # @mastra/deployer
 
+## 0.1.0-alpha.56
+
+### Patch Changes
+
+- 246f06c: Fix import \* from telemetry package
+
 ## 0.1.0-alpha.55
 
 ### Patch Changes
