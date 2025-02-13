@@ -2,12 +2,13 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { describeRoute, openAPISpecs } from 'hono-openapi';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
 
 import { readFile } from 'fs/promises';
+import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 
@@ -106,6 +107,11 @@ export async function createHonoServer(
     c.set('playground', options.playground === true);
     await next();
   });
+
+  const bodyLimitOptions = {
+    maxSize: 4.5 * 1024 * 1024, // 4.5 MB,
+    onError: (c: Context) => c.json({ error: 'Request body too large' }, 413),
+  };
 
   // API routes
   app.get(
@@ -208,6 +214,7 @@ export async function createHonoServer(
 
   app.post(
     '/api/agents/:agentId/generate',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Generate a response from an agent',
       tags: ['agents'],
@@ -258,6 +265,7 @@ export async function createHonoServer(
 
   app.post(
     '/api/agents/:agentId/stream',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Stream a response from an agent',
       tags: ['agents'],
@@ -308,6 +316,7 @@ export async function createHonoServer(
 
   app.post(
     '/api/agents/:agentId/instructions',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: "Update an agent's instructions",
       tags: ['agents'],
@@ -353,6 +362,7 @@ export async function createHonoServer(
 
   app.post(
     '/api/agents/:agentId/tools/:toolId/execute',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Execute a tool through an agent',
       tags: ['agents'],
@@ -508,6 +518,7 @@ export async function createHonoServer(
 
   app.post(
     '/api/memory/threads',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Create a new thread',
       tags: ['memory'],
@@ -617,6 +628,7 @@ export async function createHonoServer(
 
   app.post(
     '/api/memory/save-messages',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Save messages',
       tags: ['memory'],
@@ -711,6 +723,7 @@ export async function createHonoServer(
 
   app.post(
     '/api/workflows/:workflowId/execute',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Execute a workflow',
       tags: ['workflows'],
@@ -840,6 +853,7 @@ export async function createHonoServer(
 
   app.post(
     '/api/tools/:toolId/execute',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Execute a tool',
       tags: ['tools'],
@@ -880,6 +894,7 @@ export async function createHonoServer(
   // Vector routes
   app.post(
     '/api/vector/:vectorName/upsert',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Upsert vectors into an index',
       tags: ['vector'],
@@ -931,6 +946,7 @@ export async function createHonoServer(
 
   app.post(
     '/api/vector/:vectorName/create-index',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Create a new vector index',
       tags: ['vector'],
@@ -972,6 +988,7 @@ export async function createHonoServer(
 
   app.post(
     '/api/vector/:vectorName/query',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Query vectors from an index',
       tags: ['vector'],
