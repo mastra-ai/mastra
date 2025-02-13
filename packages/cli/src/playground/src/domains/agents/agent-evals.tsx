@@ -9,7 +9,7 @@ import { FormattedDate } from '@/components/ui/formatted-date';
 import { Input } from '@/components/ui/input';
 import { ScoreIndicator } from '@/components/ui/score-indicator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
+import { Table, TableHeader, TableHead, TableBody, TableCell, TableRow, MotionTableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { cn } from '@/lib/utils';
@@ -84,10 +84,10 @@ export function AgentEvals({ agentId }: { agentId: string }) {
           </TabsList>
         </div>
         <TabsContent value="live" className="min-h-0 h-full grid grid-rows-[auto_1fr]">
-          <EvalTable evals={liveEvals} isLoading={isLiveLoading} isCIMode={false} />
+          <EvalTable evals={liveEvals} isCIMode={false} />
         </TabsContent>
         <TabsContent value="ci" className="min-h-0 h-full grid grid-rows-[auto_1fr]">
-          <EvalTable evals={ciEvals} isLoading={isCiLoading} isCIMode={true} />
+          <EvalTable evals={ciEvals} isCIMode={true} />
         </TabsContent>
       </Tabs>
     </AgentEvalsContext.Provider>
@@ -102,15 +102,15 @@ export function AgentEvals({ agentId }: { agentId: string }) {
   }
 }
 
-function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isLoading: boolean; isCIMode?: boolean }) {
-  const { handleRefresh } = useContext(AgentEvalsContext);
+function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boolean }) {
+  const { handleRefresh, isLoading: isTableLoading } = useContext(AgentEvalsContext);
   const [expandedMetrics, setExpandedMetrics] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'metricName', direction: 'asc' });
   const [showLoading, setShowLoading] = useState(false);
 
   useEffect(() => {
-    if (isLoading) {
+    if (isTableLoading) {
       const timer = setTimeout(() => {
         setShowLoading(true);
       }, 200); // Only show loading state if load takes more than 200ms
@@ -118,7 +118,7 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
     } else {
       setShowLoading(false);
     }
-  }, [isLoading]);
+  }, [isTableLoading]);
 
   return (
     <div className="min-h-0 grid grid-rows-[auto_1fr]">
@@ -160,41 +160,57 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
             </TableRow>
           </TableHeader>
           <TableBody className="border-b border-gray-6 relative">
-            {showLoading ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <TableRow key={i} className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem]">
-                  <TableCell className="w-12">
-                    <Skeleton className="h-8 w-8 rounded-full" />
+            <AnimatePresence mode="wait">
+              {showLoading ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <MotionTableRow
+                    key={i}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem]"
+                  >
+                    <TableCell className="w-12">
+                      <Skeleton className="h-8 w-8 rounded-full" />
+                    </TableCell>
+                    <TableCell className="min-w-[200px]">
+                      <Skeleton className="h-4 w-3/4" />
+                    </TableCell>
+                    <TableCell className="flex-1">
+                      <Skeleton className="h-4 w-full" />
+                    </TableCell>
+                    <TableCell className="w-48">
+                      <Skeleton className="h-4 w-20" />
+                    </TableCell>
+                    <TableCell className="w-48">
+                      <Skeleton className="h-4 w-16" />
+                    </TableCell>
+                  </MotionTableRow>
+                ))
+              ) : groupEvals(evals).length === 0 ? (
+                <MotionTableRow
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <TableCell colSpan={5} className="h-32 text-center text-mastra-el-3">
+                    <div className="flex flex-col items-center gap-2">
+                      <Search className="h-8 w-8" />
+                      <p>No evaluations found</p>
+                      {searchTerm && <p className="text-sm">Try adjusting your search terms</p>}
+                    </div>
                   </TableCell>
-                  <TableCell className="min-w-[200px]">
-                    <Skeleton className="h-4 w-3/4" />
-                  </TableCell>
-                  <TableCell className="flex-1">
-                    <Skeleton className="h-4 w-full" />
-                  </TableCell>
-                  <TableCell className="w-48">
-                    <Skeleton className="h-4 w-20" />
-                  </TableCell>
-                  <TableCell className="w-48">
-                    <Skeleton className="h-4 w-16" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : groupEvals(evals).length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="h-32 text-center text-mastra-el-3">
-                  <div className="flex flex-col items-center gap-2">
-                    <Search className="h-8 w-8" />
-                    <p>No evaluations found</p>
-                    {searchTerm && <p className="text-sm">Try adjusting your search terms</p>}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              <AnimatePresence>
-                {groupEvals(evals).map(group => (
+                </MotionTableRow>
+              ) : (
+                groupEvals(evals).map(group => (
                   <React.Fragment key={group.metricName}>
-                    <TableRow
+                    <MotionTableRow
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2 }}
                       className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem] cursor-pointer hover:bg-mastra-bg-3"
                       onClick={() => toggleMetric(group.metricName)}
                     >
@@ -220,7 +236,7 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
                       <TableCell className="w-48 text-mastra-el-5">
                         <Badge variant="secondary">{group.evals.length}</Badge>
                       </TableCell>
-                    </TableRow>
+                    </MotionTableRow>
 
                     {expandedMetrics.has(group.metricName) && (
                       <TableRow>
@@ -303,9 +319,9 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
                       </TableRow>
                     )}
                   </React.Fragment>
-                ))}
-              </AnimatePresence>
-            )}
+                ))
+              )}
+            </AnimatePresence>
           </TableBody>
         </Table>
       </div>

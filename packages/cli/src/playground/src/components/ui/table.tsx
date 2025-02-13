@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion';
 import * as React from 'react';
 
 import { cn } from '../../lib/utils';
@@ -42,6 +43,9 @@ const TableRow = React.forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTML
 );
 TableRow.displayName = 'TableRow';
 
+const MotionTableRow = motion(TableRow);
+MotionTableRow.displayName = 'MotionTableRow';
+
 const TableHead = React.forwardRef<HTMLTableCellElement, React.ThHTMLAttributes<HTMLTableCellElement>>(
   ({ className, ...props }, ref) => (
     <th
@@ -70,4 +74,4 @@ const TableCaption = React.forwardRef<HTMLTableCaptionElement, React.HTMLAttribu
 );
 TableCaption.displayName = 'TableCaption';
 
-export { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell, TableCaption };
+export { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, MotionTableRow, TableCell, TableCaption };
