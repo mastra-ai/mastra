@@ -1,6 +1,6 @@
 import { AnimatePresence } from 'framer-motion';
 import { ChevronRight, RefreshCcwIcon, Search, SortAsc, SortDesc } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,13 @@ type SortConfig = {
   direction: SortDirection;
 };
 
+type AgentEvalsContextType = {
+  handleRefresh: () => void;
+  isLoading: boolean;
+};
+
+const AgentEvalsContext = createContext<AgentEvalsContextType>({ handleRefresh: () => {}, isLoading: false });
+
 type GroupedEvals = {
   metricName: string;
   averageScore: number;
@@ -39,11 +46,10 @@ const scrollableContentClass = cn(
 );
 
 const tabIndicatorClass = cn(
-  'px-4 py-2 rounded-md text-sm transition-all',
-  'data-[state=active]:bg-mastra-bg-2 data-[state=active]:text-mastra-el-1',
-  'data-[state=active]:shadow-[0_2px_10px] data-[state=active]:shadow-mastra-border/20',
-  'data-[state=inactive]:text-mastra-el-4 hover:data-[state=inactive]:bg-mastra-bg-2/50',
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mastra-border',
+  'px-4 py-2 text-sm transition-all border-b-2 border-transparent',
+  'data-[state=active]:border-white data-[state=active]:text-mastra-el-1',
+  'data-[state=inactive]:text-mastra-el-4 hover:data-[state=inactive]:text-mastra-el-2',
+  'focus-visible:outline-none',
 );
 
 export function AgentEvals({ agentId }: { agentId: string }) {
@@ -63,56 +69,47 @@ export function AgentEvals({ agentId }: { agentId: string }) {
     }
   };
 
+  const contextValue = {
+    handleRefresh,
+    isLoading: activeTab === 'live' ? isLiveLoading : isCiLoading,
+  };
+
   return (
-    <div className="flex-1 flex flex-col h-screen overflow-hidden">
-      <div className="sticky top-0 z-10 bg-mastra-bg-2 p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleRefresh}
-              disabled={activeTab === 'live' ? isLiveLoading : isCiLoading}
-              className="h-9 w-9"
-            >
-              {(activeTab === 'live' ? isLiveLoading : isCiLoading) ? (
-                <RefreshCcwIcon className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCcwIcon className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
+    <AgentEvalsContext.Provider value={contextValue}>
+      <div className="flex-1 flex flex-col h-screen overflow-hidden">
+        <div className="flex-1 overflow-hidden">
+          <Tabs
+            value={activeTab}
+            onValueChange={value => setActiveTab(value as 'live' | 'ci')}
+            className="h-full flex flex-col"
+          >
+            <div className="bg-mastra-bg-1 border-b border-mastra-border/10">
+              <TabsList className="bg-transparent border-0 p-0 h-auto mx-4">
+                <TabsTrigger value="live" className={tabIndicatorClass}>
+                  Live
+                </TabsTrigger>
+                <TabsTrigger value="ci" className={tabIndicatorClass}>
+                  CI
+                </TabsTrigger>
+              </TabsList>
+            </div>
+            <div className={cn('flex-1', scrollableContentClass)}>
+              <TabsContent value="live" className="mt-0">
+                <EvalTable evals={liveEvals} isLoading={isLiveLoading} isCIMode={false} />
+              </TabsContent>
+              <TabsContent value="ci" className="mt-0">
+                <EvalTable evals={ciEvals} isLoading={isCiLoading} isCIMode={true} />
+              </TabsContent>
+            </div>
+          </Tabs>
         </div>
       </div>
-      <div className="flex-1 overflow-hidden">
-        <Tabs
-          value={activeTab}
-          onValueChange={value => setActiveTab(value as 'live' | 'ci')}
-          className="h-full flex flex-col"
-        >
-          <TabsList className="bg-mastra-bg-1 p-1 mx-4">
-            <TabsTrigger value="live" className={tabIndicatorClass}>
-              Live
-            </TabsTrigger>
-            <TabsTrigger value="ci" className={tabIndicatorClass}>
-              CI
-            </TabsTrigger>
-          </TabsList>
-          <div className={cn('flex-1', scrollableContentClass)}>
-            <TabsContent value="live" className="mt-0">
-              <EvalTable evals={liveEvals} isLoading={isLiveLoading} isCIMode={false} />
-            </TabsContent>
-            <TabsContent value="ci" className="mt-0">
-              <EvalTable evals={ciEvals} isLoading={isCiLoading} isCIMode={true} />
-            </TabsContent>
-          </div>
-        </Tabs>
-      </div>
-    </div>
+    </AgentEvalsContext.Provider>
   );
 }
 
 function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isLoading: boolean; isCIMode?: boolean }) {
+  const { handleRefresh } = useContext(AgentEvalsContext);
   const [expandedMetrics, setExpandedMetrics] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'metricName', direction: 'asc' });
@@ -210,6 +207,9 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
         <Badge variant="secondary" className="text-xs">
           {evals.length} Total Evaluations
         </Badge>
+        <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={isLoading} className="h-9 w-9">
+          {isLoading ? <RefreshCcwIcon className="h-4 w-4 animate-spin" /> : <RefreshCcwIcon className="h-4 w-4" />}
+        </Button>
       </div>
 
       <Table>
