@@ -17,7 +17,7 @@
   },
   "scripts": {
     "ci:publish": "pnpm publish -r",
-    "build": "pnpm build:packages && pnpm build:combined-stores && pnpm build:stores && pnpm build:integrations && pnpm build:deployers && pnpm build:vector-stores && pnpm build:speech",
+    "build": "pnpm build:packages && pnpm build:combined-stores && pnpm build:stores && pnpm build:deployers && pnpm build:vector-stores && pnpm build:speech && pnpm build:integrations",
     "build:integrations": "pnpm --filter \"./integrations/*\" build",
     "build:packages": "pnpm --filter \"./packages/*\" build",
     "build:vector-stores": "pnpm --filter \"./vector-stores/*\" build",
