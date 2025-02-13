@@ -61,14 +61,6 @@ export function AgentEvals({ agentId }: { agentId: string }) {
   } = useEvalsByAgentId(agentId, 'live');
   const { evals: ciEvals, isLoading: isCiLoading, refetchEvals: refetchCiEvals } = useEvalsByAgentId(agentId, 'ci');
 
-  const handleRefresh = () => {
-    if (activeTab === 'live') {
-      refetchLiveEvals();
-    } else {
-      refetchCiEvals();
-    }
-  };
-
   const contextValue = {
     handleRefresh,
     isLoading: activeTab === 'live' ? isLiveLoading : isCiLoading,
@@ -100,6 +92,14 @@ export function AgentEvals({ agentId }: { agentId: string }) {
       </div>
     </AgentEvalsContext.Provider>
   );
+
+  function handleRefresh() {
+    if (activeTab === 'live') {
+      refetchLiveEvals();
+    } else {
+      refetchCiEvals();
+    }
+  }
 }
 
 function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isLoading: boolean; isCIMode?: boolean }) {
@@ -107,83 +107,6 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
   const [expandedMetrics, setExpandedMetrics] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'metricName', direction: 'asc' });
-
-  const getHasReasons = (groupEvals: Evals[]) => {
-    return groupEvals.some(eval_ => eval_.result.info?.reason);
-  };
-
-  const toggleMetric = (metricName: string) => {
-    const newExpanded = new Set(expandedMetrics);
-    if (newExpanded.has(metricName)) {
-      newExpanded.delete(metricName);
-    } else {
-      newExpanded.add(metricName);
-    }
-    setExpandedMetrics(newExpanded);
-  };
-
-  const toggleSort = (field: SortConfig['field']) => {
-    setSortConfig(prev => ({
-      field,
-      direction: prev.field === field && prev.direction === 'asc' ? 'desc' : 'asc',
-    }));
-  };
-
-  const getSortIcon = (field: SortConfig['field']) => {
-    if (sortConfig.field !== field) return null;
-    return sortConfig.direction === 'asc' ? (
-      <SortAsc className="h-4 w-4 ml-1" />
-    ) : (
-      <SortDesc className="h-4 w-4 ml-1" />
-    );
-  };
-
-  const groupEvals = (evaluations: Evals[]): GroupedEvals[] => {
-    let groups = evaluations.reduce((groups: GroupedEvals[], evaluation) => {
-      const existingGroup = groups.find(g => g.metricName === evaluation.metricName);
-      if (existingGroup) {
-        existingGroup.evals.push(evaluation);
-        existingGroup.averageScore =
-          existingGroup.evals.reduce((sum, e) => sum + e.result.score, 0) / existingGroup.evals.length;
-      } else {
-        groups.push({
-          metricName: evaluation.metricName,
-          averageScore: evaluation.result.score,
-          evals: [evaluation],
-        });
-      }
-      return groups;
-    }, []);
-
-    // Apply search filter
-    if (searchTerm) {
-      groups = groups.filter(
-        group =>
-          group.metricName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          group.evals.some(
-            metric =>
-              metric.input?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              metric.output?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              metric.instructions?.toLowerCase().includes(searchTerm.toLowerCase()),
-          ),
-      );
-    }
-
-    // Apply sorting
-    groups.sort((a, b) => {
-      const direction = sortConfig.direction === 'asc' ? 1 : -1;
-      switch (sortConfig.field) {
-        case 'metricName':
-          return direction * a.metricName.localeCompare(b.metricName);
-        case 'averageScore':
-          return direction * (a.averageScore - b.averageScore);
-        default:
-          return 0;
-      }
-    });
-
-    return groups;
-  };
 
   return (
     <div className="flex-1 flex flex-col">
@@ -376,4 +299,81 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
       </div>
     </div>
   );
+
+  function getHasReasons(groupEvals: Evals[]) {
+    return groupEvals.some(eval_ => eval_.result.info?.reason);
+  }
+
+  function toggleMetric(metricName: string) {
+    const newExpanded = new Set(expandedMetrics);
+    if (newExpanded.has(metricName)) {
+      newExpanded.delete(metricName);
+    } else {
+      newExpanded.add(metricName);
+    }
+    setExpandedMetrics(newExpanded);
+  }
+
+  function toggleSort(field: SortConfig['field']) {
+    setSortConfig(prev => ({
+      field,
+      direction: prev.field === field && prev.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  }
+
+  function getSortIcon(field: SortConfig['field']) {
+    if (sortConfig.field !== field) return null;
+    return sortConfig.direction === 'asc' ? (
+      <SortAsc className="h-4 w-4 ml-1" />
+    ) : (
+      <SortDesc className="h-4 w-4 ml-1" />
+    );
+  }
+
+  function groupEvals(evaluations: Evals[]): GroupedEvals[] {
+    let groups = evaluations.reduce((groups: GroupedEvals[], evaluation) => {
+      const existingGroup = groups.find(g => g.metricName === evaluation.metricName);
+      if (existingGroup) {
+        existingGroup.evals.push(evaluation);
+        existingGroup.averageScore =
+          existingGroup.evals.reduce((sum, e) => sum + e.result.score, 0) / existingGroup.evals.length;
+      } else {
+        groups.push({
+          metricName: evaluation.metricName,
+          averageScore: evaluation.result.score,
+          evals: [evaluation],
+        });
+      }
+      return groups;
+    }, []);
+
+    // Apply search filter
+    if (searchTerm) {
+      groups = groups.filter(
+        group =>
+          group.metricName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          group.evals.some(
+            metric =>
+              metric.input?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              metric.output?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              metric.instructions?.toLowerCase().includes(searchTerm.toLowerCase()),
+          ),
+      );
+    }
+
+    // Apply sorting
+    groups.sort((a, b) => {
+      const direction = sortConfig.direction === 'asc' ? 1 : -1;
+      switch (sortConfig.field) {
+        case 'metricName':
+          return direction * a.metricName.localeCompare(b.metricName);
+        case 'averageScore':
+          return direction * (a.averageScore - b.averageScore);
+        default:
+          return 0;
+      }
+    });
+
+    return groups;
+  }
 }
