@@ -199,7 +199,7 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
                         </div>
                       </TableCell>
                       <TableCell className="min-w-[200px] max-w-[30%] font-medium text-mastra-el-5">
-                        <CopyableContent content={group.metricName} label="metric name" />
+                        {group.metricName}
                       </TableCell>
                       <TableCell className="flex-1 text-mastra-el-5" />
                       <TableCell className="w-48 text-mastra-el-5">
@@ -222,9 +222,9 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
                                 <TableHeader>
                                   <TableRow className="text-[0.7rem] text-mastra-el-3 hover:bg-transparent">
                                     <TableHead className="pl-12 w-[120px]">Timestamp</TableHead>
+                                    <TableHead className="w-[300px]">Instructions</TableHead>
                                     <TableHead className="w-[300px]">Input</TableHead>
                                     <TableHead className="w-[300px]">Output</TableHead>
-                                    <TableHead className="w-[300px]">Instructions</TableHead>
                                     <TableHead className="w-[80px]">Score</TableHead>
                                     {getHasReasons(group.evals) && <TableHead className="w-[250px]">Reason</TableHead>}
                                     {isCIMode && <TableHead className="w-[120px]">Test Name</TableHead>}
@@ -241,21 +241,21 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
                                       </TableCell>
                                       <TableCell className="text-mastra-el-4 align-top py-4">
                                         <div className={cn('max-w-[300px] max-h-[200px]', scrollableContentClass)}>
+                                          <CopyableContent
+                                            content={evaluation.instructions}
+                                            label="instructions"
+                                            multiline
+                                          />
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-mastra-el-4 align-top py-4">
+                                        <div className={cn('max-w-[300px] max-h-[200px]', scrollableContentClass)}>
                                           <CopyableContent content={evaluation.input} label="input" multiline />
                                         </div>
                                       </TableCell>
                                       <TableCell className="text-mastra-el-4 align-top py-4">
                                         <div className={cn('max-w-[300px] max-h-[200px]', scrollableContentClass)}>
                                           <CopyableContent content={evaluation.output} label="output" multiline />
-                                        </div>
-                                      </TableCell>
-                                      <TableCell className="text-mastra-el-4 align-top py-4">
-                                        <div className={cn('max-w-[300px] max-h-[200px]', scrollableContentClass)}>
-                                          <CopyableContent
-                                            content={evaluation.instructions}
-                                            label="instructions"
-                                            multiline
-                                          />
                                         </div>
                                       </TableCell>
                                       <TableCell className="text-mastra-el-4 align-top py-4">
