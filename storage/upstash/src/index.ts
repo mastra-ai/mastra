@@ -15,9 +15,6 @@ export interface UpstashConfig {
 }
 
 export class UpstashStore extends MastraStorage {
-  getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    throw new Error('Method not implemented.');
-  }
   private redis: Redis;
   getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     throw new Error('Method not implemented.');
