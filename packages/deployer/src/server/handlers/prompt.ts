@@ -39,7 +39,14 @@ export async function generateSystemPromptHandler(c: Context) {
       );
 
       evalSummary = evalsMapped
-        .map(({ input, output, result }) => `Input: ${input}\nOutput: ${output}\nResult: ${JSON.stringify(result)}\n\n`)
+        .map(
+          ({ input, output, result }) => `
+          Input: ${input}\n
+          Output: ${output}\n
+          Result: ${JSON.stringify(result)}
+
+        `,
+        )
         .join('');
     } catch (error) {
       mastra.getLogger().error(`Error fetching evals`, { error });
