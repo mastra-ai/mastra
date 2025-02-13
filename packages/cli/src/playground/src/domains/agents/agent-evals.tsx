@@ -1,17 +1,16 @@
-import { format, formatDistanceToNow } from 'date-fns';
 import { AnimatePresence } from 'framer-motion';
-import { ChevronRight, RefreshCcwIcon, Copy, Search, SortAsc, SortDesc } from 'lucide-react';
-import React, { useState, useMemo } from 'react';
+import { ChevronRight, RefreshCcwIcon, Search, SortAsc, SortDesc } from 'lucide-react';
+import React, { useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { CopyableContent } from '@/components/ui/copyable-content';
+import { FormattedDate } from '@/components/ui/formatted-date';
 import { Input } from '@/components/ui/input';
-import { Progress } from '@/components/ui/progress';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScoreIndicator } from '@/components/ui/score-indicator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { cn } from '@/lib/utils';
 
@@ -30,81 +29,22 @@ type GroupedEvals = {
   evals: Evals[];
 };
 
-interface CopyableCell {
-  content: string;
-  label: string;
-  multiline?: boolean;
-}
+const scrollableContentClass = cn(
+  'relative overflow-y-auto overflow-x-hidden invisible hover:visible focus:visible',
+  '[&::-webkit-scrollbar]:w-1',
+  '[&::-webkit-scrollbar-track]:bg-transparent',
+  '[&::-webkit-scrollbar-thumb]:rounded-full',
+  '[&::-webkit-scrollbar-thumb]:bg-mastra-border/20',
+  '[&>*]:visible',
+);
 
-function CopyableContent({ content, label, multiline = false }: CopyableCell) {
-  const handleCopy = () => {
-    navigator.clipboard.writeText(content);
-  };
-
-  return (
-    <TooltipProvider>
-      <Tooltip delayDuration={300}>
-        <TooltipTrigger asChild>
-          <div className="group relative flex items-start gap-2">
-            <span className={cn('text-sm text-mastra-el-4', multiline ? 'whitespace-pre-wrap' : 'truncate')}>
-              {content}
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 -mt-1"
-              onClick={e => {
-                e.stopPropagation();
-                handleCopy();
-              }}
-              aria-label={`Copy ${label}`}
-            >
-              <Copy className="h-3 w-3" />
-            </Button>
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="left" className="max-w-[300px]">
-          <p className="text-sm">Click to copy {label}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-}
-
-function ScoreIndicator({ score }: { score: number }) {
-  const getScoreColor = (score: number) => {
-    if (score >= 0.8) return 'bg-green-500';
-    if (score >= 0.6) return 'bg-yellow-500';
-    return 'bg-red-500';
-  };
-
-  return (
-    <div className="flex items-center gap-2">
-      <Progress value={score * 100} className={cn('w-20 h-2', getScoreColor(score))} />
-      <span>{(score * 100).toFixed(0)}%</span>
-    </div>
-  );
-}
-
-function FormattedDate({ date }: { date: string }) {
-  const formattedDate = useMemo(() => {
-    const dateObj = new Date(date);
-    const relativeTime = formatDistanceToNow(dateObj, { addSuffix: true });
-    const fullDate = format(dateObj, 'PPpp');
-    return { relativeTime, fullDate };
-  }, [date]);
-
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger className="text-left">{formattedDate.relativeTime}</TooltipTrigger>
-        <TooltipContent>
-          <p>{formattedDate.fullDate}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-}
+const tabIndicatorClass = cn(
+  'px-4 py-2 rounded-md text-sm transition-all',
+  'data-[state=active]:bg-mastra-bg-2 data-[state=active]:text-mastra-el-1',
+  'data-[state=active]:shadow-[0_2px_10px] data-[state=active]:shadow-mastra-border/20',
+  'data-[state=inactive]:text-mastra-el-4 hover:data-[state=inactive]:bg-mastra-bg-2/50',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mastra-border',
+);
 
 export function AgentEvals({ agentId }: { agentId: string }) {
   const [activeTab, setActiveTab] = useState<'live' | 'ci'>('live');
@@ -124,36 +64,48 @@ export function AgentEvals({ agentId }: { agentId: string }) {
   };
 
   return (
-    <div className="flex-1 relative overflow-hidden">
-      <div className="flex justify-between sticky top-0 bg-mastra-bg-2 p-4">
-        <Tabs value={activeTab} onValueChange={value => setActiveTab(value as 'live' | 'ci')} className="w-full">
-          <TabsList>
-            <TabsTrigger value="live" className="mr-4">
-              Live
-            </TabsTrigger>
-            <TabsTrigger value="ci">CI</TabsTrigger>
-          </TabsList>
-          <div className="flex justify-end my-2">
+    <div className="flex-1 flex flex-col h-screen overflow-hidden">
+      <div className="sticky top-0 z-10 bg-mastra-bg-2 p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
             <Button
               variant="outline"
+              size="icon"
               onClick={handleRefresh}
               disabled={activeTab === 'live' ? isLiveLoading : isCiLoading}
+              className="h-9 w-9"
             >
               {(activeTab === 'live' ? isLiveLoading : isCiLoading) ? (
-                <RefreshCcwIcon className="w-4 h-4 animate-spin" />
+                <RefreshCcwIcon className="h-4 w-4 animate-spin" />
               ) : (
-                <RefreshCcwIcon className="w-4 h-4" />
+                <RefreshCcwIcon className="h-4 w-4" />
               )}
             </Button>
           </div>
-          <ScrollArea className="rounded-lg h-[calc(100vh-180px)]">
+        </div>
+      </div>
+      <div className="flex-1 overflow-hidden">
+        <Tabs
+          value={activeTab}
+          onValueChange={value => setActiveTab(value as 'live' | 'ci')}
+          className="h-full flex flex-col"
+        >
+          <TabsList className="bg-mastra-bg-1 p-1 mx-4">
+            <TabsTrigger value="live" className={tabIndicatorClass}>
+              Live
+            </TabsTrigger>
+            <TabsTrigger value="ci" className={tabIndicatorClass}>
+              CI
+            </TabsTrigger>
+          </TabsList>
+          <div className={cn('flex-1', scrollableContentClass)}>
             <TabsContent value="live" className="mt-0">
               <EvalTable evals={liveEvals} isLoading={isLiveLoading} isCIMode={false} />
             </TabsContent>
             <TabsContent value="ci" className="mt-0">
               <EvalTable evals={ciEvals} isLoading={isCiLoading} isCIMode={true} />
             </TabsContent>
-          </ScrollArea>
+          </div>
         </Tabs>
       </div>
     </div>
@@ -164,6 +116,10 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
   const [expandedMetrics, setExpandedMetrics] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'metricName', direction: 'asc' });
+
+  const getHasReasons = (groupEvals: Evals[]) => {
+    return groupEvals.some(eval_ => eval_.result.info?.reason);
+  };
 
   const toggleMetric = (metricName: string) => {
     const newExpanded = new Set(expandedMetrics);
@@ -338,17 +294,21 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
 
                   {expandedMetrics.has(group.metricName) && (
                     <TableRow>
-                      <TableCell colSpan={5} className="p-0">
+                      <TableCell
+                        colSpan={5 + (getHasReasons(group.evals) ? 1 : 0) + (isCIMode ? 1 : 0)}
+                        className="p-0"
+                      >
                         <div className="bg-mastra-bg-3 rounded-lg m-2 overflow-hidden">
                           <Table>
                             <TableHeader>
                               <TableRow className="text-[0.7rem] text-mastra-el-3 hover:bg-transparent">
-                                <TableHead className="pl-12 w-[200px]">Timestamp</TableHead>
+                                <TableHead className="pl-12 w-[120px]">Timestamp</TableHead>
                                 <TableHead className="w-[300px]">Input</TableHead>
                                 <TableHead className="w-[300px]">Output</TableHead>
                                 <TableHead className="w-[300px]">Instructions</TableHead>
-                                <TableHead className="w-[100px]">Score</TableHead>
-                                {isCIMode && <TableHead className="w-[150px]">Test Name</TableHead>}
+                                <TableHead className="w-[80px]">Score</TableHead>
+                                {getHasReasons(group.evals) && <TableHead className="w-[250px]">Reason</TableHead>}
+                                {isCIMode && <TableHead className="w-[120px]">Test Name</TableHead>}
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -360,18 +320,39 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
                                   <TableCell className="pl-12 text-mastra-el-4 align-top py-4">
                                     <FormattedDate date={evaluation.createdAt} />
                                   </TableCell>
-                                  <TableCell className="text-mastra-el-4 align-top py-4 max-w-[300px]">
-                                    <CopyableContent content={evaluation.input} label="input" multiline />
+                                  <TableCell className="text-mastra-el-4 align-top py-4">
+                                    <div className={cn('max-w-[300px] max-h-[200px]', scrollableContentClass)}>
+                                      <CopyableContent content={evaluation.input} label="input" multiline />
+                                    </div>
                                   </TableCell>
-                                  <TableCell className="text-mastra-el-4 align-top py-4 max-w-[300px]">
-                                    <CopyableContent content={evaluation.output} label="output" multiline />
+                                  <TableCell className="text-mastra-el-4 align-top py-4">
+                                    <div className={cn('max-w-[300px] max-h-[200px]', scrollableContentClass)}>
+                                      <CopyableContent content={evaluation.output} label="output" multiline />
+                                    </div>
                                   </TableCell>
-                                  <TableCell className="text-mastra-el-4 align-top py-4 max-w-[300px]">
-                                    <CopyableContent content={evaluation.instructions} label="instructions" multiline />
+                                  <TableCell className="text-mastra-el-4 align-top py-4">
+                                    <div className={cn('max-w-[300px] max-h-[200px]', scrollableContentClass)}>
+                                      <CopyableContent
+                                        content={evaluation.instructions}
+                                        label="instructions"
+                                        multiline
+                                      />
+                                    </div>
                                   </TableCell>
                                   <TableCell className="text-mastra-el-4 align-top py-4">
                                     <ScoreIndicator score={evaluation.result.score} />
                                   </TableCell>
+                                  {getHasReasons(group.evals) && (
+                                    <TableCell className="text-mastra-el-4 align-top py-4">
+                                      <div className={cn('max-w-[300px] max-h-[200px]', scrollableContentClass)}>
+                                        <CopyableContent
+                                          content={evaluation.result.info?.reason || ''}
+                                          label="reason"
+                                          multiline
+                                        />
+                                      </div>
+                                    </TableCell>
+                                  )}
                                   {isCIMode && (
                                     <TableCell className="text-mastra-el-4 align-top py-4">
                                       {evaluation.testInfo?.testName && (
