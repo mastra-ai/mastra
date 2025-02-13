@@ -112,10 +112,19 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
   for (const [dep, exports] of depsToOptimize.entries()) {
     const name = dep.replaceAll('/', '-');
     reverseVirtualReferenceMap.set(name, dep);
-    virtualDependencies.set(dep, {
-      name,
-      virtual: `export { ${exports.join(', ')} } from '${dep}';`,
-    });
+
+    // temporary fix for * import of telemetry, move ast checks???
+    if (dep === '@mastra/core/telemetry' && exports.length === 1 && exports[0] === '*') {
+      virtualDependencies.set(dep, {
+        name,
+        virtual: `export * as telemetry from '${dep}';`,
+      });
+    } else {
+      virtualDependencies.set(dep, {
+        name,
+        virtual: `export { ${exports.join(', ')} } from '${dep}';`,
+      });
+    }
   }
 
   const bundler = await rollup({
