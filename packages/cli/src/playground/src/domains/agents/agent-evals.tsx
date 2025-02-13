@@ -76,12 +76,12 @@ export function AgentEvals({ agentId }: { agentId: string }) {
 
   return (
     <AgentEvalsContext.Provider value={contextValue}>
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        <div className="flex-1 overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col min-h-0">
           <Tabs
             value={activeTab}
             onValueChange={value => setActiveTab(value as 'live' | 'ci')}
-            className="h-full flex flex-col"
+            className="flex flex-col"
           >
             <div className="bg-mastra-bg-2 border-b border-mastra-border/10">
               <TabsList className="bg-transparent border-0 p-0 h-auto mx-4">
@@ -93,11 +93,11 @@ export function AgentEvals({ agentId }: { agentId: string }) {
                 </TabsTrigger>
               </TabsList>
             </div>
-            <div className="flex-1 overflow-y-auto">
-              <TabsContent value="live" className="mt-0">
+            <div className="flex-1 min-h-0 flex flex-col">
+              <TabsContent value="live" className="flex-1">
                 <EvalTable evals={liveEvals} isLoading={isLiveLoading} isCIMode={false} />
               </TabsContent>
-              <TabsContent value="ci" className="mt-0">
+              <TabsContent value="ci" className="flex-1">
                 <EvalTable evals={ciEvals} isLoading={isCiLoading} isCIMode={true} />
               </TabsContent>
             </div>
@@ -192,8 +192,8 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="sticky top-0 z-20 flex items-center gap-4 p-4 bg-mastra-bg-2 rounded-lg">
+    <div className="flex-1 flex flex-col">
+      <div className="flex items-center gap-4 p-4 bg-mastra-bg-2 rounded-lg flex-none">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-mastra-el-3" />
           <Input
@@ -212,8 +212,8 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <Table>
+      <div className="flex-1 min-h-0 max-h-[calc(100vh-11rem)] overflow-auto">
+        <Table className="w-full">
           <TableHeader className="bg-[#171717] sticky top-0 z-10">
             <TableRow className="border-gray-6 border-b-[0.1px] text-[0.8125rem]">
               <TableHead className="w-12"></TableHead>
@@ -230,7 +230,7 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
               <TableHead className="w-48 text-mastra-el-3">Evaluations</TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody className="border-b border-gray-6">
+          <TableBody className="border-b border-gray-6 relative">
             {isLoading ? (
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i} className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem]">
@@ -299,74 +299,76 @@ function EvalTable({ evals, isLoading, isCIMode = false }: { evals: Evals[]; isL
                           colSpan={5 + (getHasReasons(group.evals) ? 1 : 0) + (isCIMode ? 1 : 0)}
                           className="p-0"
                         >
-                          <div className="bg-mastra-bg-3 rounded-lg m-2 overflow-hidden">
-                            <Table>
-                              <TableHeader>
-                                <TableRow className="text-[0.7rem] text-mastra-el-3 hover:bg-transparent">
-                                  <TableHead className="pl-12 w-[120px]">Timestamp</TableHead>
-                                  <TableHead className="w-[300px]">Input</TableHead>
-                                  <TableHead className="w-[300px]">Output</TableHead>
-                                  <TableHead className="w-[300px]">Instructions</TableHead>
-                                  <TableHead className="w-[80px]">Score</TableHead>
-                                  {getHasReasons(group.evals) && <TableHead className="w-[250px]">Reason</TableHead>}
-                                  {isCIMode && <TableHead className="w-[120px]">Test Name</TableHead>}
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {group.evals.map((evaluation, index) => (
-                                  <TableRow
-                                    key={`${group.metricName}-${index}`}
-                                    className="text-[0.8125rem] hover:bg-mastra-bg-2/50"
-                                  >
-                                    <TableCell className="pl-12 text-mastra-el-4 align-top py-4">
-                                      <FormattedDate date={evaluation.createdAt} />
-                                    </TableCell>
-                                    <TableCell className="text-mastra-el-4 align-top py-4">
-                                      <div className={cn('max-w-[300px] max-h-[200px]', scrollableContentClass)}>
-                                        <CopyableContent content={evaluation.input} label="input" multiline />
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="text-mastra-el-4 align-top py-4">
-                                      <div className={cn('max-w-[300px] max-h-[200px]', scrollableContentClass)}>
-                                        <CopyableContent content={evaluation.output} label="output" multiline />
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="text-mastra-el-4 align-top py-4">
-                                      <div className={cn('max-w-[300px] max-h-[200px]', scrollableContentClass)}>
-                                        <CopyableContent
-                                          content={evaluation.instructions}
-                                          label="instructions"
-                                          multiline
-                                        />
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="text-mastra-el-4 align-top py-4">
-                                      <ScoreIndicator score={evaluation.result.score} />
-                                    </TableCell>
-                                    {getHasReasons(group.evals) && (
+                          <div className="bg-mastra-bg-3 rounded-lg m-2">
+                            <div className="w-full">
+                              <Table className="w-full">
+                                <TableHeader>
+                                  <TableRow className="text-[0.7rem] text-mastra-el-3 hover:bg-transparent">
+                                    <TableHead className="pl-12 w-[120px]">Timestamp</TableHead>
+                                    <TableHead className="w-[300px]">Input</TableHead>
+                                    <TableHead className="w-[300px]">Output</TableHead>
+                                    <TableHead className="w-[300px]">Instructions</TableHead>
+                                    <TableHead className="w-[80px]">Score</TableHead>
+                                    {getHasReasons(group.evals) && <TableHead className="w-[250px]">Reason</TableHead>}
+                                    {isCIMode && <TableHead className="w-[120px]">Test Name</TableHead>}
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {group.evals.map((evaluation, index) => (
+                                    <TableRow
+                                      key={`${group.metricName}-${index}`}
+                                      className="text-[0.8125rem] hover:bg-mastra-bg-2/50"
+                                    >
+                                      <TableCell className="pl-12 text-mastra-el-4 align-top py-4">
+                                        <FormattedDate date={evaluation.createdAt} />
+                                      </TableCell>
+                                      <TableCell className="text-mastra-el-4 align-top py-4">
+                                        <div className={cn('max-w-[300px] max-h-[200px]', scrollableContentClass)}>
+                                          <CopyableContent content={evaluation.input} label="input" multiline />
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-mastra-el-4 align-top py-4">
+                                        <div className={cn('max-w-[300px] max-h-[200px]', scrollableContentClass)}>
+                                          <CopyableContent content={evaluation.output} label="output" multiline />
+                                        </div>
+                                      </TableCell>
                                       <TableCell className="text-mastra-el-4 align-top py-4">
                                         <div className={cn('max-w-[300px] max-h-[200px]', scrollableContentClass)}>
                                           <CopyableContent
-                                            content={evaluation.result.info?.reason || ''}
-                                            label="reason"
+                                            content={evaluation.instructions}
+                                            label="instructions"
                                             multiline
                                           />
                                         </div>
                                       </TableCell>
-                                    )}
-                                    {isCIMode && (
                                       <TableCell className="text-mastra-el-4 align-top py-4">
-                                        {evaluation.testInfo?.testName && (
-                                          <Badge variant="secondary" className="text-xs">
-                                            {evaluation.testInfo.testName}
-                                          </Badge>
-                                        )}
+                                        <ScoreIndicator score={evaluation.result.score} />
                                       </TableCell>
-                                    )}
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
+                                      {getHasReasons(group.evals) && (
+                                        <TableCell className="text-mastra-el-4 align-top py-4">
+                                          <div className={cn('max-w-[300px] max-h-[200px]', scrollableContentClass)}>
+                                            <CopyableContent
+                                              content={evaluation.result.info?.reason || ''}
+                                              label="reason"
+                                              multiline
+                                            />
+                                          </div>
+                                        </TableCell>
+                                      )}
+                                      {isCIMode && (
+                                        <TableCell className="text-mastra-el-4 align-top py-4">
+                                          {evaluation.testInfo?.testName && (
+                                            <Badge variant="secondary" className="text-xs">
+                                              {evaluation.testInfo.testName}
+                                            </Badge>
+                                          )}
+                                        </TableCell>
+                                      )}
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
                           </div>
                         </TableCell>
                       </TableRow>

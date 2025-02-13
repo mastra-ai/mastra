@@ -40,9 +40,9 @@ function AgentEvalsPage() {
   ];
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-screen">
       <Header title={<Breadcrumb items={breadcrumbItems} />} />
-      <main className="flex-1">
+      <main className="flex-1 min-h-0">
         <AgentEvals agentId={agentId!} />
       </main>
     </div>
