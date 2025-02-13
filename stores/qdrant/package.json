@@ -1,6 +1,6 @@
 {
   "name": "@mastra/qdrant",
-  "version": "0.1.0-alpha.38",
+  "version": "0.1.0-alpha.40",
   "description": "Qdrant vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",

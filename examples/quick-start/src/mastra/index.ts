@@ -5,6 +5,6 @@ import { logCatWorkflow } from './workflow';
 
 export const mastra = new Mastra({
   agents: { catOne, agentTwo },
-  logger: false,
   workflows: { logCatWorkflow },
+  logger: false,
 });

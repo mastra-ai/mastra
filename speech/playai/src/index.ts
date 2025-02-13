@@ -185,6 +185,8 @@ export class PlayAITTS extends MastraTTS {
 
     if (!response.ok) {
       const error = await response.json();
+
+      // @ts-expect-error - PlayAI API returns an error object but we don't type it
       throw new Error(`PlayAI API Error: ${error.message || response.statusText}`);
     }
 
@@ -194,9 +196,9 @@ export class PlayAITTS extends MastraTTS {
   private async pollJobStatus(jobId: string, maxAttempts = 60, interval = 1000): Promise<ArrayBuffer> {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const response = await this.makeRequest(`/tts/${jobId}`, undefined, 'GET');
-      const jobStatus: PlayAIJobResponse = await response.json();
+      const jobStatus = (await response.json()) as PlayAIJobResponse;
 
-      console.log(jobStatus);
+      // console.log(jobStatus);
 
       if (jobStatus.output.status === 'COMPLETED' && jobStatus.output?.url) {
         // Fetch the actual audio file

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/ragie",
-  "version": "1.1.0-alpha.79",
+  "version": "1.1.0-alpha.81",
   "description": "",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
@@ -18,8 +18,8 @@
   },
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "tsup src/index.ts --format esm --experimental-dts --clean --treeshake",
-    "build:dev": "tsup src/index.ts --format esm --experimental-dts --clean --treeshake --watch",
+    "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
+    "build:dev": "tsup src/index.ts --format esm --dts --clean --treeshake --watch",
     "lint": "dts lint",
     "size": "size-limit",
     "start": "dts watch",

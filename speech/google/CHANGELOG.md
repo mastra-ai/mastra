@@ -1,5 +1,25 @@
 # @mastra/speech-google
 
+## 0.1.0-alpha.30
+
+### Patch Changes
+
+- Updated dependencies [1420ae2]
+- Updated dependencies [99f1847]
+  - @mastra/core@0.2.0-alpha.105
+
+## 0.1.0-alpha.29
+
+### Patch Changes
+
+- b97ca96: Tracing into default storage
+- Updated dependencies [5fdc87c]
+- Updated dependencies [b97ca96]
+- Updated dependencies [72d1990]
+- Updated dependencies [cf6d825]
+- Updated dependencies [10870bc]
+  - @mastra/core@0.2.0-alpha.104
+
 ## 0.1.0-alpha.28
 
 ### Patch Changes

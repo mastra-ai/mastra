@@ -1,5 +1,11 @@
 import { type StorageThreadType, type MessageType } from '@mastra/core/memory';
-import { MastraStorage, type TABLE_NAMES, type StorageColumn, type StorageGetMessagesArg } from '@mastra/core/storage';
+import {
+  MastraStorage,
+  type TABLE_NAMES,
+  type StorageColumn,
+  type StorageGetMessagesArg,
+  type EvalRow,
+} from '@mastra/core/storage';
 import { type WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
 
@@ -9,6 +15,27 @@ export interface UpstashConfig {
 }
 
 export class UpstashStore extends MastraStorage {
+  batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    throw new Error('Method not implemented.');
+  }
+  getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
+    throw new Error('Method not implemented.');
+  }
+  getTraces({
+    name,
+    scope,
+    page,
+    perPage,
+    attributes,
+  }: {
+    name?: string;
+    scope?: string;
+    page: number;
+    perPage: number;
+    attributes?: Record<string, string>;
+  }): Promise<any[]> {
+    throw new Error('Method not implemented.');
+  }
   private redis: Redis;
 
   constructor(config: UpstashConfig) {

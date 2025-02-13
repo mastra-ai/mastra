@@ -1,5 +1,5 @@
 import { createLogger, Logger, type BaseLogMessage, LogLevel, RegisteredLogger } from './logger';
-import { Telemetry } from './telemetry';
+import type { Telemetry } from './telemetry';
 
 export class MastraBase {
   component: RegisteredLogger = RegisteredLogger.LLM;
@@ -65,7 +65,8 @@ export class MastraBase {
   get experimental_telemetry() {
     return this.telemetry
       ? {
-          tracer: this.telemetry.tracer,
+          // tracer: this.telemetry.tracer,
+          tracer: this.telemetry.getBaggageTracer(),
           isEnabled: !!this.telemetry.tracer,
         }
       : undefined;

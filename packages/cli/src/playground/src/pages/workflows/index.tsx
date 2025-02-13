@@ -53,7 +53,7 @@ function Workflows() {
                     <TableCell className="text-mastra-el-5 text-sm">
                       <span
                         onClick={() => {
-                          navigate(`/workflows/${key}`);
+                          navigate(`/workflows/${key}/graph`);
                         }}
                         className="hover:no-underline"
                       >
