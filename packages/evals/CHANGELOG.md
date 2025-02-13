@@ -1,5 +1,14 @@
 # @mastra/evals
 
+## 0.1.0-alpha.48
+
+### Patch Changes
+
+- a8a459a: Updated Evals table UI
+- Updated dependencies [6f2c0f5]
+- Updated dependencies [a8a459a]
+  - @mastra/core@0.2.0-alpha.106
+
 ## 0.1.0-alpha.47
 
 ### Patch Changes

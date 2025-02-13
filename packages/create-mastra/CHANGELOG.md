@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.0-alpha.40
+
+### Patch Changes
+
+- de60682: Fix playground thread navigation
+
 ## 0.1.0-alpha.39
 
 ### Patch Changes

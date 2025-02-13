@@ -1,5 +1,16 @@
 # mastra
 
+## 0.2.0-alpha.165
+
+### Patch Changes
+
+- de60682: Fix playground thread navigation
+- Updated dependencies [6f2c0f5]
+- Updated dependencies [a8a459a]
+- Updated dependencies [4a328af]
+  - @mastra/core@0.2.0-alpha.106
+  - @mastra/deployer@0.1.0-alpha.57
+
 ## 0.2.0-alpha.164
 
 ### Patch Changes
