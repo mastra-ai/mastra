@@ -261,8 +261,6 @@ export class Telemetry {
           }
         }
 
-        console.dir({ traceMethod: span });
-
         // Record input arguments as span attributes
         args.forEach((arg, index) => {
           try {
