@@ -1,5 +1,5 @@
 import { createLogger, Logger, type BaseLogMessage, LogLevel, RegisteredLogger } from './logger';
-import { Telemetry } from './telemetry';
+import type { Telemetry } from './telemetry';
 
 export class MastraBase {
   component: RegisteredLogger = RegisteredLogger.LLM;
