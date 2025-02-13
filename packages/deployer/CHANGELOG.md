@@ -1,5 +1,11 @@
 # @mastra/deployer
 
+## 0.1.0-alpha.61
+
+### Patch Changes
+
+- b9c7047: Move to non deprecated table name for eval insertion
+
 ## 0.1.0-alpha.60
 
 ### Patch Changes

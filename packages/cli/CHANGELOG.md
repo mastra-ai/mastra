@@ -1,5 +1,14 @@
 # mastra
 
+## 0.2.0-alpha.169
+
+### Patch Changes
+
+- 5b5de5e: Instructions playground
+- b9c7047: Move to non deprecated table name for eval insertion
+- Updated dependencies [b9c7047]
+  - @mastra/deployer@0.1.0-alpha.61
+
 ## 0.2.0-alpha.168
 
 ### Patch Changes
