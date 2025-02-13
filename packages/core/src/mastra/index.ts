@@ -314,7 +314,7 @@ export class Mastra<
     }
   }
 
-  public setTelemtry({ telemetry }: { telemetry: OtelConfig }) {
+  public setTelemetry(telemetry: OtelConfig) {
     this.telemetry = Telemetry.init(telemetry);
 
     if (this.agents) {
