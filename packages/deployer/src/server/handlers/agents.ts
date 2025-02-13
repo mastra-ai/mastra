@@ -1,5 +1,4 @@
 import type { Mastra } from '@mastra/core';
-import { type EvalRow } from '@mastra/core/storage';
 import type { Context } from 'hono';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
@@ -87,7 +86,7 @@ export async function getEvalsByAgentIdHandler(c: Context) {
       evals,
     });
   } catch (error) {
-    return handleError(error, 'Error getting evals');
+    return handleError(error, 'Error getting test evals');
   }
 }
 
@@ -105,7 +104,7 @@ export async function getLiveEvalsByAgentIdHandler(c: Context) {
       evals,
     });
   } catch (error) {
-    return handleError(error, 'Error getting evals');
+    return handleError(error, 'Error getting live evals');
   }
 }
 
