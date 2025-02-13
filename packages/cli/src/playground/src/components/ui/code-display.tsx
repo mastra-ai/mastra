@@ -18,27 +18,29 @@ export function CodeDisplay({
   className = '',
 }: CodeDisplayProps) {
   return (
-    <ScrollArea className={`h-[${height}] rounded-md border bg-mastra-bg-2 ${className}`}>
-      <div className="p-2 cursor-pointer hover:bg-mastra-bg-3/50 transition-colors group relative" onClick={onCopy}>
-        <pre className="text-[10px] whitespace-pre-wrap font-mono">{content}</pre>
-        {isDraft && (
-          <div className="mt-1.5">
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-500">
-              Draft - Save changes to apply
+    <div className={`rounded-md border bg-mastra-bg-2 ${className}`} style={{ height }}>
+      <ScrollArea className="h-full">
+        <div className="p-2 cursor-pointer hover:bg-mastra-bg-3/50 transition-colors group relative" onClick={onCopy}>
+          <pre className="text-[10px] whitespace-pre-wrap font-mono">{content}</pre>
+          {isDraft && (
+            <div className="mt-1.5">
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-500">
+                Draft - Save changes to apply
+              </span>
+            </div>
+          )}
+          {isCopied && (
+            <span className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500">
+              Copied!
             </span>
-          </div>
-        )}
-        {isCopied && (
-          <span className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500">
-            Copied!
-          </span>
-        )}
-        {onCopy && (
-          <span className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded-full bg-mastra-bg-3 text-mastra-el-4 opacity-0 group-hover:opacity-100 transition-opacity">
-            Click to copy
-          </span>
-        )}
-      </div>
-    </ScrollArea>
+          )}
+          {onCopy && (
+            <span className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded-full bg-mastra-bg-3 text-mastra-el-4 opacity-0 group-hover:opacity-100 transition-opacity">
+              Click to copy
+            </span>
+          )}
+        </div>
+      </ScrollArea>
+    </div>
   );
 }
