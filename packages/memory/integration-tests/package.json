@@ -1,7 +1,7 @@
 {
   "name": "@mastra/memory-integration-tests",
   "private": true,
-  "version": "0.1.0-alpha.22",
+  "version": "0.1.0-alpha.23",
   "scripts": {
     "test": "pnpm test:pg && pnpm test:upstash && pnpm test:libsql",
     "pretest:pg": "docker compose up -d postgres && (for i in $(seq 1 30); do docker compose exec -T postgres pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",

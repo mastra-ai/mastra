@@ -1,5 +1,13 @@
 # memory-todo-agent
 
+## 0.1.0-alpha.19
+
+### Patch Changes
+
+- Updated dependencies [66a5392]
+  - @mastra/core@0.2.0-alpha.107
+  - @mastra/memory@0.1.0-alpha.89
+
 ## 0.1.0-alpha.18
 
 ### Patch Changes
