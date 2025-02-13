@@ -1,5 +1,11 @@
 import { type MessageType, type StorageThreadType } from '@mastra/core/memory';
-import { MastraStorage, type StorageColumn, type StorageGetMessagesArg, type TABLE_NAMES } from '@mastra/core/storage';
+import {
+  MastraStorage,
+  type EvalRow,
+  type StorageColumn,
+  type StorageGetMessagesArg,
+  type TABLE_NAMES,
+} from '@mastra/core/storage';
 import { type WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 
@@ -33,6 +39,10 @@ export class PostgresStore extends MastraStorage {
             password: config.password,
           },
     );
+  }
+
+  getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
+    throw new Error('Method not implemented.');
   }
 
   async createTable({

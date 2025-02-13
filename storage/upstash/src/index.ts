@@ -1,5 +1,11 @@
 import { type StorageThreadType, type MessageType } from '@mastra/core/memory';
-import { MastraStorage, type TABLE_NAMES, type StorageColumn, type StorageGetMessagesArg } from '@mastra/core/storage';
+import {
+  MastraStorage,
+  type TABLE_NAMES,
+  type StorageColumn,
+  type StorageGetMessagesArg,
+  type EvalRow,
+} from '@mastra/core/storage';
 import { type WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
 
@@ -10,6 +16,9 @@ export interface UpstashConfig {
 
 export class UpstashStore extends MastraStorage {
   private redis: Redis;
+  getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
+    throw new Error('Method not implemented.');
+  }
 
   constructor(config: UpstashConfig) {
     super({ name: 'Upstash' });
