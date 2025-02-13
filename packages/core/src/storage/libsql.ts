@@ -2,9 +2,17 @@ import { createClient, type Client, type InValue } from '@libsql/client';
 import { join } from 'node:path';
 
 import type { MetricResult, TestInfo } from '../eval';
-import { type MessageType, type StorageThreadType } from '../memory';
+import type { MessageType, StorageThreadType } from '../memory/types';
 
-import { MastraStorage, type TABLE_NAMES } from './base';
+import { MastraStorage } from './base';
+import {
+  TABLE_EVALS,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_TRACES,
+  TABLE_WORKFLOW_SNAPSHOT,
+  type TABLE_NAMES,
+} from './constants';
 import { type StorageColumn, type StorageGetMessagesArg, type EvalRow } from './types';
 
 export * from '../vector/libsql/index';
@@ -74,7 +82,7 @@ export class DefaultStorage extends MastraStorage {
     });
 
     // For workflow_snapshot table, create a composite primary key
-    if (tableName === MastraStorage.TABLE_WORKFLOW_SNAPSHOT) {
+    if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
       const stmnt = `CREATE TABLE IF NOT EXISTS ${tableName} (
                 ${columns.join(',\n')},
                 PRIMARY KEY (workflow_name, run_id)
@@ -185,7 +193,7 @@ export class DefaultStorage extends MastraStorage {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     const result = await this.load<StorageThreadType>({
-      tableName: MastraStorage.TABLE_THREADS,
+      tableName: TABLE_THREADS,
       keys: { id: threadId },
     });
 
@@ -201,7 +209,7 @@ export class DefaultStorage extends MastraStorage {
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
     const result = await this.client.execute({
-      sql: `SELECT * FROM ${MastraStorage.TABLE_THREADS} WHERE resourceId = ?`,
+      sql: `SELECT * FROM ${TABLE_THREADS} WHERE resourceId = ?`,
       args: [resourceId],
     });
 
@@ -221,7 +229,7 @@ export class DefaultStorage extends MastraStorage {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     await this.insert({
-      tableName: MastraStorage.TABLE_THREADS,
+      tableName: TABLE_THREADS,
       record: {
         ...thread,
         metadata: JSON.stringify(thread.metadata),
@@ -255,7 +263,7 @@ export class DefaultStorage extends MastraStorage {
     };
 
     await this.client.execute({
-      sql: `UPDATE ${MastraStorage.TABLE_THREADS} SET title = ?, metadata = ? WHERE id = ?`,
+      sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = ? WHERE id = ?`,
       args: [title, JSON.stringify(updatedThread.metadata), id],
     });
 
@@ -264,7 +272,7 @@ export class DefaultStorage extends MastraStorage {
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     await this.client.execute({
-      sql: `DELETE FROM ${MastraStorage.TABLE_THREADS} WHERE id = ?`,
+      sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
       args: [threadId],
     });
     // Messages will be automatically deleted due to CASCADE constraint
@@ -310,7 +318,7 @@ export class DefaultStorage extends MastraStorage {
                 "createdAt",
                 thread_id,
                 ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
-              FROM "${MastraStorage.TABLE_MESSAGES}"
+              FROM "${TABLE_MESSAGES}"
               WHERE thread_id = ?
             ),
             target_positions AS (
@@ -342,7 +350,7 @@ export class DefaultStorage extends MastraStorage {
           type,
           "createdAt", 
           thread_id
-        FROM "${MastraStorage.TABLE_MESSAGES}"
+        FROM "${TABLE_MESSAGES}"
         WHERE thread_id = ?
         ${excludeIds.length ? `AND id NOT IN (${excludeIds.map(() => '?').join(', ')})` : ''}
         ORDER BY "createdAt" DESC
@@ -383,7 +391,7 @@ export class DefaultStorage extends MastraStorage {
       for (const message of messages) {
         const time = message.createdAt || new Date();
         await tx.execute({
-          sql: `INSERT INTO ${MastraStorage.TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt) 
+          sql: `INSERT INTO ${TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt) 
                               VALUES (?, ?, ?, ?, ?, ?)`,
           args: [
             message.id,
@@ -408,7 +416,7 @@ export class DefaultStorage extends MastraStorage {
 
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     try {
-      const baseQuery = `SELECT * FROM ${MastraStorage.TABLE_EVALS} WHERE agent_name = ?`;
+      const baseQuery = `SELECT * FROM ${TABLE_EVALS} WHERE agent_name = ?`;
       const typeCondition =
         type === 'test'
           ? " AND test_info->>'testPath' IS NOT NULL"
@@ -506,12 +514,12 @@ export class DefaultStorage extends MastraStorage {
     args.push(limit, offset);
 
     console.log({
-      sql: `SELECT * FROM ${MastraStorage.TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
+      sql: `SELECT * FROM ${TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
       args,
     });
 
     const result = await this.client.execute({
-      sql: `SELECT * FROM ${MastraStorage.TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
+      sql: `SELECT * FROM ${TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
       args,
     });
 

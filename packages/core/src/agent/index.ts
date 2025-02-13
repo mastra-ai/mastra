@@ -20,7 +20,8 @@ import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
 import { MastraLLM, MastraLLMBase } from '../llm/model';
 import { LogLevel, RegisteredLogger } from '../logger';
-import { MastraMemory, type MemoryConfig, type StorageThreadType } from '../memory';
+import { MastraMemory } from '../memory/memory';
+import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import { type CoreTool, type ToolAction } from '../tools/types';
 

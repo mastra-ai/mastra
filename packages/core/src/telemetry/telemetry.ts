@@ -26,8 +26,6 @@ import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 import { type OtelConfig } from './types';
 import { hasActiveTelemetry } from './utility';
 
-export { OTLPTraceExporter as OTLPStorageExporter } from './storage-exporter';
-
 // Add type declaration for global namespace
 declare global {
   var __OTEL_SDK__: NodeSDK | undefined;

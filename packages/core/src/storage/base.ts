@@ -1,22 +1,28 @@
 import { MastraBase } from '../base';
-import { type MessageType, type StorageThreadType } from '../memory';
-import { type WorkflowRunState } from '../workflows';
+import type { MessageType, StorageThreadType } from '../memory/types';
+import type { WorkflowRunState } from '../workflows';
 
+import {
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_EVALS,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_TRACES,
+  type TABLE_NAMES,
+} from './constants';
 import { type EvalRow, type StorageColumn, type StorageGetMessagesArg } from './types';
 
-export type TABLE_NAMES =
-  | typeof MastraStorage.TABLE_WORKFLOW_SNAPSHOT
-  | typeof MastraStorage.TABLE_EVALS
-  | typeof MastraStorage.TABLE_MESSAGES
-  | typeof MastraStorage.TABLE_THREADS
-  | typeof MastraStorage.TABLE_TRACES;
-
 export abstract class MastraStorage extends MastraBase {
-  static readonly TABLE_WORKFLOW_SNAPSHOT = 'mastra_workflow_snapshot';
-  static readonly TABLE_EVALS = 'mastra_evals';
-  static readonly TABLE_MESSAGES = 'mastra_messages';
-  static readonly TABLE_THREADS = 'mastra_threads';
-  static readonly TABLE_TRACES = 'mastra_traces';
+  /** @deprecated import from { TABLE_WORKFLOW_SNAPSHOT } '@mastra/core/storage' instead */
+  static readonly TABLE_WORKFLOW_SNAPSHOT = TABLE_WORKFLOW_SNAPSHOT;
+  /** @deprecated import from { TABLE_EVALS } '@mastra/core/storage' instead */
+  static readonly TABLE_EVALS = TABLE_EVALS;
+  /** @deprecated import from { TABLE_MESSAGES } '@mastra/core/storage' instead */
+  static readonly TABLE_MESSAGES = TABLE_MESSAGES;
+  /** @deprecated import from { TABLE_THREADS } '@mastra/core/storage' instead */
+  static readonly TABLE_THREADS = TABLE_THREADS;
+  /** @deprecated import { TABLE_TRACES } from '@mastra/core/storage' instead */
+  static readonly TABLE_TRACES = TABLE_TRACES;
 
   hasInit = false;
 
@@ -143,7 +149,7 @@ export abstract class MastraStorage extends MastraBase {
     }
 
     await this.createTable({
-      tableName: MastraStorage.TABLE_WORKFLOW_SNAPSHOT,
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
       schema: {
         workflow_name: {
           type: 'text',
@@ -164,7 +170,7 @@ export abstract class MastraStorage extends MastraBase {
     });
 
     await this.createTable({
-      tableName: MastraStorage.TABLE_EVALS,
+      tableName: TABLE_EVALS,
       schema: {
         input: {
           type: 'text',
@@ -201,7 +207,7 @@ export abstract class MastraStorage extends MastraBase {
     });
 
     await this.createTable({
-      tableName: MastraStorage.TABLE_THREADS,
+      tableName: TABLE_THREADS,
       schema: {
         id: { type: 'text', nullable: false, primaryKey: true },
         resourceId: { type: 'text', nullable: false },
@@ -213,7 +219,7 @@ export abstract class MastraStorage extends MastraBase {
     });
 
     await this.createTable({
-      tableName: MastraStorage.TABLE_MESSAGES,
+      tableName: TABLE_MESSAGES,
       schema: {
         id: { type: 'text', nullable: false, primaryKey: true },
         thread_id: { type: 'text', nullable: false },
@@ -225,7 +231,7 @@ export abstract class MastraStorage extends MastraBase {
     });
 
     await this.createTable({
-      tableName: MastraStorage.TABLE_TRACES,
+      tableName: TABLE_TRACES,
       schema: {
         id: { type: 'text', nullable: false, primaryKey: true },
         parentSpanId: { type: 'text', nullable: true },
@@ -267,7 +273,7 @@ export abstract class MastraStorage extends MastraBase {
     };
     this.logger.debug('Persisting workflow snapshot', { workflowName, runId, data });
     await this.insert({
-      tableName: MastraStorage.TABLE_WORKFLOW_SNAPSHOT,
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
       record: data,
     });
   }
@@ -284,7 +290,7 @@ export abstract class MastraStorage extends MastraBase {
     }
     this.logger.debug('Loading workflow snapshot', { workflowName, runId });
     const d = await this.load<{ snapshot: WorkflowRunState }>({
-      tableName: MastraStorage.TABLE_WORKFLOW_SNAPSHOT,
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
       keys: { workflow_name: workflowName, run_id: runId },
     });
 

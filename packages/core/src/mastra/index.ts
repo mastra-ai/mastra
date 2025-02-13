@@ -1,7 +1,7 @@
 import { Agent } from '../agent';
 import { MastraDeployer } from '../deployer';
 import { LogLevel, Logger, createLogger, noopLogger } from '../logger';
-import { MastraMemory } from '../memory';
+import { MastraMemory } from '../memory/memory';
 import { DefaultStorage, type MastraStorage } from '../storage';
 import { InstrumentClass, type OtelConfig, OTLPStorageExporter, Telemetry } from '../telemetry';
 import { MastraTTS } from '../tts';

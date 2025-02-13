@@ -2,8 +2,9 @@ import { type ExportResult, ExportResultCode } from '@opentelemetry/core';
 import { JsonTraceSerializer } from '@opentelemetry/otlp-transformer';
 import { type ReadableSpan, type SpanExporter } from '@opentelemetry/sdk-trace-base';
 
-import { Logger } from '../logger/index.js';
-import { MastraStorage } from '../storage/index.js';
+import type { Logger } from '../logger';
+import type { MastraStorage } from '../storage/base';
+import { TABLE_TRACES } from '../storage/constants';
 
 export class OTLPTraceExporter implements SpanExporter {
   private storage: MastraStorage;
@@ -91,7 +92,7 @@ export class OTLPTraceExporter implements SpanExporter {
 
     return this.storage
       .batchInsert({
-        tableName: MastraStorage.TABLE_TRACES,
+        tableName: TABLE_TRACES,
         records: allSpans,
       })
       .then(() => {
