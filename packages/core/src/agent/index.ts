@@ -74,7 +74,6 @@ export class Agent<
     if (config.metrics) {
       this.logger.warn('The metrics property is deprecated. Please use evals instead to add evaluation metrics.');
       this.metrics = config.metrics;
-      // Set evals to metrics
       this.evals = config.metrics;
     }
 
