@@ -1,18 +1,22 @@
 export const PROMPT_ALIGNMENT_AGENT_INSTRUCTIONS = `You are a strict and thorough prompt alignment evaluator. Your job is to determine if LLM outputs follow their given prompt instructions exactly.
 
 Key Principles:
-1. Be EXTRA STRICT in your evaluation in regards to whether the instructions are followed exactly.
-2. Only give a "yes" verdict if an instruction is COMPLETELY followed
-3. Any partial compliance should be marked as "no"
-4. Provide clear, specific reasons for any "no" verdicts
-5. Focus solely on instruction compliance, not output quality
-6. Judge each instruction independently. Only check if the current instruction is followed. Do not let instructions be influenced by other instructions.
+1. First determine if an instruction is APPLICABLE to the given input/output context:
+   - For empty outputs: all formatting instructions are applicable and should be marked as "no"
+2. For applicable instructions, be EXTRA STRICT in evaluation
+3. Only give a "yes" verdict if an instruction is COMPLETELY followed
+4. Mark instructions as "n/a" (not applicable) when they don't apply to the current context
+4. Mark instructions as "n/a" ONLY when they are about a completely different domain
+5. Provide clear, specific reasons for ALL verdicts
+6. Focus solely on instruction compliance, not output quality
+7. Judge each instruction independently
 
 Remember:
 - Each instruction must be evaluated independently
-- Verdicts must be either "yes" or "no" - no in-between
-- Reasons are required only for "no" verdicts
-- The number of verdicts must match the number of instructions exactly`;
+- Verdicts must be "yes", "no", or "n/a" (not applicable)
+- Reasons are REQUIRED for ALL verdicts to explain the evaluation
+- The number of verdicts must match the number of instructions exactly
+- Empty outputs should be marked as "no" for any applicable formatting instructions`;
 
 export function generateEvaluatePrompt({
   instructions,
@@ -24,46 +28,67 @@ export function generateEvaluatePrompt({
   output: string;
 }) {
   return `For the provided list of prompt instructions, determine whether each instruction has been followed in the LLM output.
-Make sure to judge the output on each instruction independently. Do not let instructions be influenced by other instructions.
+First determine if each instruction is applicable to the given context, then evaluate compliance for applicable instructions.
 Generate a list of verdicts in JSON format, where each verdict must have:
-- "verdict": Strictly "yes" or "no"
-- "reason": Give a reason for the verdict
+- "verdict": Must be one of:
+  - "yes": Instruction is applicable and COMPLETELY followed
+  - "no": Instruction is applicable but not followed or only partially followed
+  - "n/a": Instruction is not applicable to this context
+- "reason": REQUIRED for ALL verdicts to explain the evaluation
 
-Be EXTRA STRICT in your evaluation. Only give "yes" if the instruction is followed COMPLETELY.
-Evaluate the output EXACTLY as written - consider every character, space, and case
-
-Example:
-Input: "describe the sky"
-Output: "the sky is Blue today"
-Instructions: ["Start sentences with capital letters", "Use proper English"]
+Example 1: Weather Query with Missing Information
+Input: "What's the weather in Paris?"
+Output: "It's clear in Paris."
+Instructions: [
+  "Include temperature in weather reports",
+  "Analyze transaction patterns",
+  "Use proper English"
+]
 
 {
   "verdicts": [
     {
       "verdict": "no",
-      "reason": "The sentence 'the sky is Blue' starts with lowercase 't'"
+      "reason": "Temperature is not included in the weather report"
     },
     {
-      "verdict": "no",
-      "reason": "Improper capitalization: 'Blue' is capitalized mid-sentence"
+      "verdict": "n/a",
+      "reason": "This is a weather query, transaction analysis is not applicable"
+    },
+    {
+      "verdict": "yes",
+      "reason": "Response uses proper English with correct grammar and punctuation"
     }
   ]
 }
 
-Example 2:
-Input: "describe the sky"
-Output: "The sky is blue today"
-Instructions: ["Start sentences with capital letters", "Talk about the color black"]
+Example 2: Transaction Query with Incomplete Analysis
+Input: "Review my recent spending"
+Output: "You spent money this month."
+Instructions: [
+  "Include temperature in weather reports",
+  "Analyze transaction patterns",
+  "Use proper English",
+  "Provide specific insights"
+]
 
 {
   "verdicts": [
     {
-      "verdict": "yes",
-      "reason": "The output starts with a capital letter"
+      "verdict": "n/a",
+      "reason": "This is a transaction query, weather information is not applicable"
     },
     {
       "verdict": "no",
-      "reason": "The output does not talk about the color black"
+      "reason": "No analysis of patterns or trends is provided, just a basic statement"
+    },
+    {
+      "verdict": "yes",
+      "reason": "Response uses correct English grammar and structure"
+    },
+    {
+      "verdict": "no",
+      "reason": "Response lacks specific details or actionable insights about spending"
     }
   ]
 }
