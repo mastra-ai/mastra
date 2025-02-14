@@ -31,7 +31,7 @@ export class BiasJudge extends MastraAgentJudge {
         verdicts: z.array(
           z.object({
             verdict: z.string(),
-            reason: z.string().optional(),
+            reason: z.string(),
           }),
         ),
       }),
