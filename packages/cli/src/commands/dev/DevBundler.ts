@@ -1,20 +1,16 @@
 import { MastraBundler } from '@mastra/core/bundler';
 import { FileService, getWatcher } from '@mastra/deployer';
-import { createWatcher, getWatcherInputOptions } from '@mastra/deployer/build';
+import { createWatcher, getWatcherInputOptions, writeTelemetryConfig } from '@mastra/deployer/build';
+import { Bundler } from '@mastra/deployer/bundler';
+import virtual from '@rollup/plugin-virtual';
 import * as fsExtra from 'fs-extra';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { RollupWatcherEvent } from 'rollup';
 
-export class DevBundler extends MastraBundler {
-  private mastraDir: string;
-  constructor(mastraDir: string) {
-    super({
-      name: 'Dev',
-      component: 'BUNDLER',
-    });
-
-    this.mastraDir = mastraDir;
+export class DevBundler extends Bundler {
+  constructor() {
+    super('Dev');
   }
 
   getEnvFiles(): Promise<string[]> {
@@ -33,32 +29,26 @@ export class DevBundler extends MastraBundler {
   async writePackageJson() {}
 
   async prepare(outputDirectory: string): Promise<void> {
-    await fsExtra.ensureDir(outputDirectory);
-
-    // Clean up the output directory first
-    await fsExtra.emptyDir(outputDirectory);
+    await super.prepare(outputDirectory);
 
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
 
-    const playgroundServePath = join(outputDirectory, 'playground');
+    const playgroundServePath = join(outputDirectory, this.outputDir, 'playground');
     await fsExtra.copy(join(dirname(__dirname), 'src/playground/dist'), playgroundServePath, {
       overwrite: true,
     });
   }
 
-  async watch(outputDirectory: string): ReturnType<typeof getWatcher> {
+  async watch(entryFile: string, outputDirectory: string): ReturnType<typeof getWatcher> {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
 
-    const fileService = new FileService();
-    const entryFile = fileService.getFirstExistingFile([
-      join(this.mastraDir, 'index.ts'),
-      join(this.mastraDir, 'index.js'),
-    ]);
-
     const envFiles = await this.getEnvFiles();
     const inputOptions = await getWatcherInputOptions(entryFile, 'node');
+
+    await writeTelemetryConfig(entryFile, join(outputDirectory, this.outputDir));
+    await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
 
     const watcher = await createWatcher(
       {
@@ -80,7 +70,7 @@ export class DevBundler extends MastraBundler {
         },
       },
       {
-        dir: outputDirectory,
+        dir: join(outputDirectory, this.outputDir),
       },
     );
 

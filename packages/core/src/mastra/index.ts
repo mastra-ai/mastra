@@ -61,7 +61,7 @@ export class Mastra<
     if (!storage) {
       storage = new DefaultStorage({
         config: {
-          url: ':memory:',
+          url: process.env.MASTRA_DEFAULT_STORAGE_URL || `:memory:`,
         },
       });
     }
