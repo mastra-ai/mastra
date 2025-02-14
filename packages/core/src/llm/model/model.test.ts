@@ -70,7 +70,7 @@ describe('MastraLLM', () => {
 
   describe('convertTools', () => {
     it('should convert tools correctly', () => {
-      const converted = aisdkText.convertTools(mockTools);
+      const converted = aisdkText.convertTools({ tools: mockTools });
 
       expect(converted).toHaveProperty('testTool');
 
@@ -83,22 +83,22 @@ describe('MastraLLM', () => {
     });
 
     it('should handle empty tools input', () => {
-      const converted = aisdkText.convertTools();
+      const converted = aisdkText.convertTools({ tools: {} });
       expect(converted).toEqual({});
     });
 
     it('should log debug messages during tool conversion', () => {
-      aisdkText.convertTools();
+      aisdkText.convertTools({ tools: mockTools });
       expect(mockMastra.logger.debug).toHaveBeenCalledWith('Starting tool conversion for LLM');
       expect(mockMastra.logger.debug).toHaveBeenCalledWith('Converted tools for LLM');
     });
 
     it('should execute tool with correct context', async () => {
-      const converted = aisdkText.convertTools(mockTools);
+      const converted = aisdkText.convertTools({ tools: mockTools });
       expect(converted).toBeDefined();
       expect(converted.testTool).toBeDefined();
       if (converted.testTool.execute) {
-        await converted.testTool.execute({ test: 'value' }, {} as any);
+        await converted.testTool.execute({ test: 'value' });
       }
 
       expect(mockToolExecute).toHaveBeenCalledWith({ test: 'value' });
@@ -323,7 +323,7 @@ describe('MastraLLM', () => {
 
     it('should handle pre-converted tools', async () => {
       const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
-      const convertedTools = aisdkText.convertTools(mockTools);
+      const convertedTools = aisdkText.convertTools({ tools: mockTools });
 
       await aisdkText.__text({
         messages,
@@ -435,7 +435,7 @@ describe('MastraLLM', () => {
 
     it('should handle pre-converted tools', async () => {
       const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
-      const convertedTools = aisdkText.convertTools(mockTools);
+      const convertedTools = aisdkText.convertTools({ tools: mockTools });
 
       await aisdkText.__stream({
         messages,
@@ -674,7 +674,7 @@ describe('MastraLLM', () => {
       const schema = z.object({
         content: z.string(),
       });
-      const convertedTools = aisdkObject.convertTools(mockTools);
+      const convertedTools = aisdkObject.convertTools({ tools: mockTools });
 
       await aisdkObject.__streamObject({
         messages,
