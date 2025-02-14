@@ -287,7 +287,7 @@ export class Telemetry {
         });
 
         let result: any;
-        otlpContext.with(ctx, () => {
+        otlpContext.with(trace.setSpan(ctx, span), () => {
           result = method(...args);
         });
 
