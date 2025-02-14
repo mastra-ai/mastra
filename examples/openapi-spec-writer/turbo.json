@@ -1,0 +1,26 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "env": [
+        "DB_URL",
+        "FIRECRAWL_API_KEY",
+        "GITHUB_API_KEY",
+
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+
+        "UPSTASH_API_KEY",
+        "UPSTASH_URL",
+
+        "OTEL_SERVICE_NAME",
+        "OTEL_EXPORTER_OTLP_PROTOCOL",
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "OTEL_EXPORTER_OTLP_HEADERS"
+      ],
+      "outputs": [".next/**", "!.next/cache/**", ".mastra/**"]
+    }
+  },
+  "globalDependencies": ["tsconfig.json", "../../tsconfig.node.json"]
+}

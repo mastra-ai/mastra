@@ -1,5 +1,151 @@
 # @mastra/deployer
 
+## 0.1.0-alpha.61
+
+### Patch Changes
+
+- b9c7047: Move to non deprecated table name for eval insertion
+
+## 0.1.0-alpha.60
+
+### Patch Changes
+
+- Updated dependencies [d5fccfb]
+  - @mastra/core@0.2.0-alpha.109
+
+## 0.1.0-alpha.59
+
+### Patch Changes
+
+- Updated dependencies [5ee67d3]
+- Updated dependencies [95a4697]
+  - @mastra/core@0.2.0-alpha.108
+
+## 0.1.0-alpha.58
+
+### Patch Changes
+
+- 8fa48b9: Add an API to enhance agent instructions
+- Updated dependencies [66a5392]
+  - @mastra/core@0.2.0-alpha.107
+
+## 0.1.0-alpha.57
+
+### Patch Changes
+
+- a8a459a: Updated Evals table UI
+- 4a328af: Set request limit to 4.5MB
+- Updated dependencies [6f2c0f5]
+- Updated dependencies [a8a459a]
+  - @mastra/core@0.2.0-alpha.106
+
+## 0.1.0-alpha.56
+
+### Patch Changes
+
+- 246f06c: Fix import \* from telemetry package
+
+## 0.1.0-alpha.55
+
+### Patch Changes
+
+- Updated dependencies [1420ae2]
+- Updated dependencies [99f1847]
+  - @mastra/core@0.2.0-alpha.105
+
+## 0.1.0-alpha.54
+
+### Patch Changes
+
+- 5fdc87c: Update evals storage in attachListeners
+- b97ca96: Tracing into default storage
+- 6780223: fix workflow runId not unique per execution in dev
+- 72d1990: Updated evals table schema
+- Updated dependencies [5fdc87c]
+- Updated dependencies [b97ca96]
+- Updated dependencies [72d1990]
+- Updated dependencies [cf6d825]
+- Updated dependencies [10870bc]
+  - @mastra/core@0.2.0-alpha.104
+
+## 0.1.0-alpha.53
+
+### Patch Changes
+
+- Updated dependencies [4534e77]
+  - @mastra/core@0.2.0-alpha.103
+
+## 0.1.0-alpha.52
+
+### Patch Changes
+
+- Updated dependencies [a9345f9]
+  - @mastra/core@0.2.0-alpha.102
+
+## 0.1.0-alpha.51
+
+### Patch Changes
+
+- 4f1d1a1: Enforce types ann cleanup package.json
+- Updated dependencies [66a03ec]
+- Updated dependencies [4f1d1a1]
+  - @mastra/core@0.2.0-alpha.101
+
+## 0.1.0-alpha.50
+
+### Patch Changes
+
+- 9d1796d: Fix storage and eval serialization on api
+- Updated dependencies [9d1796d]
+  - @mastra/core@0.2.0-alpha.100
+
+## 0.1.0-alpha.49
+
+### Patch Changes
+
+- 7d83b92: Create default storage and move evals towards it
+- Updated dependencies [7d83b92]
+  - @mastra/core@0.2.0-alpha.99
+
+## 0.1.0-alpha.48
+
+### Patch Changes
+
+- 8aec8b7: Normalize imports to package name and dedupe while writing package.json after mastra build
+
+## 0.1.0-alpha.47
+
+### Patch Changes
+
+- 70dabd9: Fix broken publish
+- Updated dependencies [70dabd9]
+- Updated dependencies [202d404]
+  - @mastra/core@0.2.0-alpha.98
+
+## 0.1.0-alpha.46
+
+### Patch Changes
+
+- 7892533: Updated test evals to use Mastra Storage
+- e6d8055: Added Mastra Storage to add and query live evals
+- a18e96c: Array schemas for dev tool playground
+- 5950de5: Added update instructions API
+- f1e3105: Now that memory can be added to an agent, the playground needs to look up memory on the agent, not on mastra. Now the playground looks up on the agent to properly access memory
+- Updated dependencies [07c069d]
+- Updated dependencies [7892533]
+- Updated dependencies [e6d8055]
+- Updated dependencies [5950de5]
+- Updated dependencies [df843d3]
+- Updated dependencies [a870123]
+  - @mastra/core@0.2.0-alpha.97
+
+## 0.1.0-alpha.45
+
+### Patch Changes
+
+- Updated dependencies [74b3078]
+  - @mastra/core@0.2.0-alpha.96
+
 ## 0.1.0-alpha.44
 
 ### Patch Changes

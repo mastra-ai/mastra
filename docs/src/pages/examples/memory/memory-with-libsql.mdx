@@ -1,24 +1,41 @@
 # Memory with LibSQL
 
-This example demonstrates how to use Mastra's memory system with LibSQL as the storage backend.
+This example demonstrates how to use Mastra's memory system with LibSQL, which is the default storage and vector database backend.
 
-## Setup
+## Quickstart
 
-First, set up the memory system with LibSQL storage and vector capabilities:
+Initializing memory with no settings will use LibSQL as the storage and vector database.
+
+```typescript copy showLineNumbers
+import { Memory } from '@mastra/memory';
+import { Agent } from '@mastra/core/agent';
+
+// Initialize memory with LibSQL defaults
+const memory = new Memory();
+
+const memoryAgent = new Agent({
+  name: "Memory Agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai('gpt-4o-mini'),
+  memory,
+});
+```
+
+## Custom Configuration
+
+If you need more control, you can explicitly configure the storage, vector database, and embedder. If you omit either `storage` or `vector`, LibSQL will be used as the default for the omitted option. This lets you use a different provider for just storage or just vector search if needed.
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { LibSQLStore, DefaultVectorDB } from "@mastra/core/storage";
-import { Memory } from '@mastra/memory';
+import { DefaultStorage, DefaultVectorDB } from "@mastra/core/storage";
 
-// Initialize memory with LibSQL storage and vector search
-const memory = new Memory({
-  storage: new LibSQLStore({
+const customMemory = new Memory({
+  storage: new DefaultStorage({
     url: process.env.DATABASE_URL || "file:local.db",
   }),
   vector: new DefaultVectorDB({
-    url: process.env.DATABASE_URL || "file:local.db",
+    connectionUrl: process.env.DATABASE_URL || "file:local.db",
   }),
   options: {
     lastMessages: 10,
@@ -27,10 +44,8 @@ const memory = new Memory({
       messageRange: 2,
     },
   },
-  embedder: openai.embedding('text-embedding-3-small'),
 });
 
-// Create an agent with memory capabilities
 const memoryAgent = new Agent({
   name: "Memory Agent",
   instructions:

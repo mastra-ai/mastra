@@ -8,8 +8,6 @@ import { logger } from '../../utils/logger.js';
 
 import { DevBundler } from './DevBundler';
 
-const __filename = fileURLToPath(import.meta.url);
-
 let currentServerProcess: ChildProcess | undefined;
 let isRestarting = false;
 
@@ -103,8 +101,6 @@ export async function dev({ port, dir, root }: { dir?: string; root?: string; po
   const env = await bundler.loadEnvVars();
 
   await bundler.prepare(dotMastraPath);
-
-  writeFileSync(join(dotMastraPath, 'evals.json'), ``);
 
   const watcher = await bundler.watch(dotMastraPath);
 

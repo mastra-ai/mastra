@@ -1,4 +1,10 @@
-import { BaseFilterTranslator, FieldCondition, Filter, OperatorSupport, QueryOperator } from '@mastra/core/filter';
+import {
+  BaseFilterTranslator,
+  type FieldCondition,
+  type Filter,
+  type OperatorSupport,
+  type QueryOperator,
+} from '@mastra/core/filter';
 
 export class PineconeFilterTranslator extends BaseFilterTranslator {
   protected override getSupportedOperators(): OperatorSupport {

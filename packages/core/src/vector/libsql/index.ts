@@ -1,6 +1,7 @@
 import { createClient, type Client as TursoClient, type InValue } from '@libsql/client';
+import { join } from 'path';
 
-import { Filter } from '../../filter';
+import { type Filter } from '../../filter';
 import { MastraVector, type IndexStats, type QueryResult } from '../index';
 
 import { LibSQLFilterTranslator } from './filter';
@@ -23,11 +24,37 @@ export class DefaultVectorDB extends MastraVector {
     super();
 
     this.turso = createClient({
-      url: connectionUrl,
+      url: this.rewriteDbUrl(connectionUrl),
       syncUrl: syncUrl,
       authToken,
       syncInterval,
     });
+  }
+
+  protected rewriteDbUrl(url: string): string {
+    // If this is a relative file path (starts with file: but not file:/)
+    if (url.startsWith('file:') && !url.startsWith('file:/')) {
+      const cwd = process.cwd();
+
+      // Get the relative path part after 'file:'
+      const relativePath = url.slice('file:'.length);
+
+      // If we're in a .mastra directory, use the parent directory
+      if (cwd.endsWith('.mastra') || cwd.endsWith('.mastra/')) {
+        const baseDir = join(cwd, `..`);
+
+        // Rewrite to be relative to the base directory
+        const fullPath = join(baseDir, relativePath);
+
+        this.logger.debug(
+          `Initializing LibSQL db with url ${url} with relative file path from inside .mastra directory. Rewriting relative file url to "file:${fullPath}". This ensures it's outside the .mastra directory. If the db is stored inside .mastra it will be deleted when Mastra re-bundles code.`,
+        );
+
+        return `file:${fullPath}`;
+      }
+    }
+
+    return url;
   }
 
   transformFilter(filter?: Filter) {

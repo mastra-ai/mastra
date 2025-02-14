@@ -75,7 +75,7 @@ const AgentTool = () => {
     },
     {
       label: agentId,
-      href: `/agents/${agentId}`,
+      href: `/agents/${agentId}/chat`,
     },
     {
       label: toolId,
@@ -92,13 +92,15 @@ const AgentTool = () => {
           <Text variant="secondary" className="text-mastra-el-3 px-4" size="xs">
             Input
           </Text>
-          <DynamicForm
-            isSubmitLoading={isExecutingTool}
-            schema={zodInputSchema}
-            onSubmit={data => {
-              handleExecuteTool(data);
-            }}
-          />
+          <div className="w-full h-[calc(100vh-126px)] ">
+            <DynamicForm
+              isSubmitLoading={isExecutingTool}
+              schema={zodInputSchema}
+              onSubmit={data => {
+                handleExecuteTool(data);
+              }}
+            />
+          </div>
         </div>
         <div className="flex relative group flex-col gap-4 border-[0.5px] border-mastra-border-1 rounded-[0.25rem] bg-mastra-bg-2 p-4 py-6">
           <Text variant="secondary" className="text-mastra-el-3  px-4" size="xs">

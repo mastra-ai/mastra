@@ -1,5 +1,180 @@
 # mastra
 
+## 0.2.0-alpha.169
+
+### Patch Changes
+
+- 5b5de5e: Instructions playground
+- b9c7047: Move to non deprecated table name for eval insertion
+- Updated dependencies [b9c7047]
+  - @mastra/deployer@0.1.0-alpha.61
+
+## 0.2.0-alpha.168
+
+### Patch Changes
+
+- Updated dependencies [d5fccfb]
+  - @mastra/core@0.2.0-alpha.109
+  - @mastra/deployer@0.1.0-alpha.60
+
+## 0.2.0-alpha.167
+
+### Patch Changes
+
+- Updated dependencies [5ee67d3]
+- Updated dependencies [95a4697]
+  - @mastra/core@0.2.0-alpha.108
+  - @mastra/deployer@0.1.0-alpha.59
+
+## 0.2.0-alpha.166
+
+### Patch Changes
+
+- Updated dependencies [8fa48b9]
+- Updated dependencies [66a5392]
+  - @mastra/deployer@0.1.0-alpha.58
+  - @mastra/core@0.2.0-alpha.107
+
+## 0.2.0-alpha.165
+
+### Patch Changes
+
+- de60682: Fix playground thread navigation
+- Updated dependencies [6f2c0f5]
+- Updated dependencies [a8a459a]
+- Updated dependencies [4a328af]
+  - @mastra/core@0.2.0-alpha.106
+  - @mastra/deployer@0.1.0-alpha.57
+
+## 0.2.0-alpha.164
+
+### Patch Changes
+
+- Updated dependencies [246f06c]
+  - @mastra/deployer@0.1.0-alpha.56
+
+## 0.2.0-alpha.163
+
+### Patch Changes
+
+- fa3c7cb: Fix trace name on table being too long
+- Updated dependencies [1420ae2]
+- Updated dependencies [99f1847]
+  - @mastra/core@0.2.0-alpha.105
+  - @mastra/deployer@0.1.0-alpha.55
+
+## 0.2.0-alpha.162
+
+### Patch Changes
+
+- b97ca96: Tracing into default storage
+- 72d1990: Updated evals table schema
+- Updated dependencies [5fdc87c]
+- Updated dependencies [b97ca96]
+- Updated dependencies [6780223]
+- Updated dependencies [72d1990]
+- Updated dependencies [cf6d825]
+- Updated dependencies [10870bc]
+  - @mastra/core@0.2.0-alpha.104
+  - @mastra/deployer@0.1.0-alpha.54
+
+## 0.2.0-alpha.161
+
+### Patch Changes
+
+- Updated dependencies [4534e77]
+  - @mastra/core@0.2.0-alpha.103
+  - @mastra/deployer@0.1.0-alpha.53
+
+## 0.2.0-alpha.160
+
+### Patch Changes
+
+- Updated dependencies [a9345f9]
+  - @mastra/core@0.2.0-alpha.102
+  - @mastra/deployer@0.1.0-alpha.52
+
+## 0.2.0-alpha.159
+
+### Patch Changes
+
+- 4f1d1a1: Enforce types ann cleanup package.json
+- Updated dependencies [66a03ec]
+- Updated dependencies [4f1d1a1]
+  - @mastra/core@0.2.0-alpha.101
+  - @mastra/deployer@0.1.0-alpha.51
+
+## 0.2.0-alpha.158
+
+### Patch Changes
+
+- 9d1796d: Fix storage and eval serialization on api
+- Updated dependencies [9d1796d]
+  - @mastra/deployer@0.1.0-alpha.50
+  - @mastra/core@0.2.0-alpha.100
+
+## 0.2.0-alpha.157
+
+### Patch Changes
+
+- 7d83b92: Create default storage and move evals towards it
+- Updated dependencies [7d83b92]
+  - @mastra/deployer@0.1.0-alpha.49
+  - @mastra/core@0.2.0-alpha.99
+
+## 0.2.0-alpha.156
+
+### Patch Changes
+
+- Updated dependencies [8aec8b7]
+  - @mastra/deployer@0.1.0-alpha.48
+
+## 0.2.0-alpha.155
+
+### Patch Changes
+
+- 70dabd9: Fix broken publish
+- 202d404: Added instructions when generating evals
+- Updated dependencies [70dabd9]
+- Updated dependencies [202d404]
+  - @mastra/core@0.2.0-alpha.98
+  - @mastra/deployer@0.1.0-alpha.47
+
+## 0.2.0-alpha.154
+
+### Patch Changes
+
+- 7892533: Updated test evals to use Mastra Storage
+- e6d8055: Added Mastra Storage to add and query live evals
+- a18e96c: Array schemas for dev tool playground
+- 85c6935: Fix messages sent not rendering when evals are on
+- f1e3105: Now that memory can be added to an agent, the playground needs to look up memory on the agent, not on mastra. Now the playground looks up on the agent to properly access memory
+- Updated dependencies [07c069d]
+- Updated dependencies [7892533]
+- Updated dependencies [e6d8055]
+- Updated dependencies [a18e96c]
+- Updated dependencies [5950de5]
+- Updated dependencies [df843d3]
+- Updated dependencies [a870123]
+- Updated dependencies [f1e3105]
+  - @mastra/core@0.2.0-alpha.97
+  - @mastra/deployer@0.1.0-alpha.46
+
+## 0.2.0-alpha.153
+
+### Minor Changes
+
+- 74b3078: Reduce verbosity in workflows API
+
+### Patch Changes
+
+- 813c719: Fix watcher in mastra dev, now listens to all files
+- 7db55f6: Install aisdk model provider for in create-mastra init
+- c18a0c0: Fix creation of new threads in dev playground
+- Updated dependencies [74b3078]
+  - @mastra/core@0.2.0-alpha.96
+  - @mastra/deployer@0.1.0-alpha.45
+
 ## 0.2.0-alpha.152
 
 ### Patch Changes

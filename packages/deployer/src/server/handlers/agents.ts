@@ -3,7 +3,6 @@ import type { Context } from 'hono';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 
-import { readFile } from 'fs/promises';
 import { HTTPException } from 'hono/http-exception';
 
 import { handleError } from './error';
@@ -31,6 +30,7 @@ export async function getAgentsHandler(c: Context) {
         instructions: agent.instructions,
         tools: serializedAgentTools,
         provider: agent.llm?.getProvider(),
+        modelId: agent.llm?.getModelId(),
       };
       return acc;
     }, {});
@@ -66,6 +66,7 @@ export async function getAgentByIdHandler(c: Context) {
       instructions: agent.instructions,
       tools: serializedAgentTools,
       provider: agent.llm?.getProvider(),
+      modelId: agent.llm?.getModelId(),
     });
   } catch (error) {
     return handleError(error, 'Error getting agent');
@@ -74,38 +75,37 @@ export async function getAgentByIdHandler(c: Context) {
 
 export async function getEvalsByAgentIdHandler(c: Context) {
   try {
-    const mastra = c.get('mastra');
+    const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const agent = mastra.getAgent(agentId);
-    const evals = await readFile('./evals.json', 'utf-8');
-    const parsedEvals = evals
-      .split('\n')
-      .map(line => line && JSON.parse(line))
-      .filter((line: any) => line?.meta?.agentName === agent.name);
+    const evals = (await mastra.storage?.getEvalsByAgentName?.(agent.name, 'test')) || [];
     return c.json({
-      ...agent,
-      evals: parsedEvals,
+      id: agentId,
+      name: agent.name,
+      instructions: agent.instructions,
+      evals,
     });
   } catch (error) {
-    return handleError(error, 'Error getting evals');
+    return handleError(error, 'Error getting test evals');
   }
 }
 
-export function getLiveEvalsByAgentIdHandler(evalStore: any) {
-  return async (c: Context) => {
-    try {
-      const mastra = c.get('mastra');
-      const agentId = c.req.param('agentId');
-      const agent = mastra.getAgent(agentId);
-      const parsedEvals = evalStore.filter((line: any) => line?.meta?.agentName === agent.name);
-      return c.json({
-        ...agent,
-        evals: parsedEvals,
-      });
-    } catch (error) {
-      return handleError(error, 'Error getting evals');
-    }
-  };
+export async function getLiveEvalsByAgentIdHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+    const agent = mastra.getAgent(agentId);
+    const evals = (await mastra.storage?.getEvalsByAgentName?.(agent.name, 'live')) || [];
+
+    return c.json({
+      id: agentId,
+      name: agent.name,
+      instructions: agent.instructions,
+      evals,
+    });
+  } catch (error) {
+    return handleError(error, 'Error getting live evals');
+  }
 }
 
 export async function generateHandler(c: Context) {
@@ -118,14 +118,17 @@ export async function generateHandler(c: Context) {
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const { messages, threadId, resourceid, output } = await c.req.json();
+    const { messages, threadId, resourceid, resourceId, output } = await c.req.json();
     validateBody({ messages });
 
     if (!Array.isArray(messages)) {
       throw new HTTPException(400, { message: 'Messages should be an array' });
     }
 
-    const result = await agent.generate(messages, { threadId, resourceId: resourceid, output });
+    // Use resourceId if provided, fall back to resourceid (deprecated)
+    const finalResourceId = resourceId ?? resourceid;
+
+    const result = await agent.generate(messages, { threadId, resourceId: finalResourceId, output });
 
     return c.json(result);
   } catch (error) {
@@ -143,7 +146,7 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const { messages, threadId, resourceid, output } = await c.req.json();
+    const { messages, threadId, resourceid, resourceId, output } = await c.req.json();
 
     validateBody({ messages });
 
@@ -151,7 +154,10 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
       throw new HTTPException(400, { message: 'Messages should be an array' });
     }
 
-    const streamResult = await agent.stream(messages, { threadId, resourceId: resourceid, output });
+    // Use resourceId if provided, fall back to resourceid (deprecated)
+    const finalResourceId = resourceId ?? resourceid;
+
+    const streamResult = await agent.stream(messages, { threadId, resourceId: finalResourceId, output });
 
     const streamResponse = output
       ? streamResult.toTextStreamResponse()
@@ -166,5 +172,39 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
     return streamResponse;
   } catch (error) {
     return handleError(error, 'Error streaming from agent');
+  }
+}
+
+export async function setAgentInstructionsHandler(c: Context) {
+  try {
+    // Check if this is a playground request
+    const isPlayground = c.get('playground') === true;
+    if (!isPlayground) {
+      return c.json({ error: 'This API is only available in the playground environment' }, 403);
+    }
+
+    const agentId = c.req.param('agentId');
+    const { instructions } = await c.req.json();
+
+    if (!agentId || !instructions) {
+      return c.json({ error: 'Missing required fields' }, 400);
+    }
+
+    const mastra: Mastra = c.get('mastra');
+    const agent = mastra.getAgent(agentId);
+    if (!agent) {
+      return c.json({ error: 'Agent not found' }, 404);
+    }
+
+    agent.__updateInstructions(instructions);
+
+    return c.json(
+      {
+        instructions,
+      },
+      200,
+    );
+  } catch (error) {
+    return handleError(error, 'Error setting agent instructions');
   }
 }

@@ -10,6 +10,7 @@ const meta = {
   workflows: "Workflows",
   observability: "Observability",
   evals: "Evals",
+  "client-js": "Client SDK - JS",
 };
 
 export default meta;

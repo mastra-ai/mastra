@@ -1,8 +1,9 @@
-import { MemoryConfig } from '../memory';
-import { WorkflowRunState } from '../workflows';
+import type { MetricResult, TestInfo } from '../eval';
+import type { MemoryConfig } from '../memory/types';
+import { type WorkflowRunState } from '../workflows';
 
 export interface StorageColumn {
-  type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer';
+  type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'bigint';
   primaryKey?: boolean;
   nullable?: boolean;
   references?: {
@@ -31,4 +32,17 @@ export type StorageGetMessagesArg = {
     }[];
   };
   threadConfig?: MemoryConfig;
+};
+
+export type EvalRow = {
+  input: string;
+  output: string;
+  result: MetricResult;
+  agentName: string;
+  createdAt: string;
+  metricName: string;
+  instructions: string;
+  runId: string;
+  globalRunId: string;
+  testInfo?: TestInfo;
 };

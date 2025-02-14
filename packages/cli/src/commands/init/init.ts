@@ -1,10 +1,13 @@
 import * as p from '@clack/prompts';
+import child_process from 'node:child_process';
+import util from 'node:util';
 import color from 'picocolors';
 
 import {
   type Components,
   createComponentsDir,
   createMastraDir,
+  getAISDKPackage,
   getAPIKey,
   type LLMProvider,
   writeAPIKey,
@@ -13,6 +16,8 @@ import {
 } from './utils';
 
 const s = p.spinner();
+
+const exec = util.promisify(child_process.exec);
 
 export const init = async ({
   directory,
@@ -52,13 +57,16 @@ export const init = async ({
 
     if (addExample) {
       await Promise.all([
-        components.map(component =>
+        ...components.map(component =>
           writeCodeSample(dirPath, component as Components, llmProvider, components as Components[]),
         ),
       ]);
     }
 
     const key = await getAPIKey(llmProvider || 'openai');
+
+    const aiSdkPackage = getAISDKPackage(llmProvider);
+    await exec(`npm i ${aiSdkPackage}`);
 
     s.stop();
     if (!llmApiKey) {

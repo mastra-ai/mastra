@@ -146,15 +146,20 @@ Some metrics also provide:
 
 The package includes built-in telemetry and logging capabilities:
 
-- Automatic evaluation tracking in `.mastra/evals.json`
+- Automatic evaluation tracking through Mastra Storage
 - Integration with OpenTelemetry for performance monitoring
 - Detailed evaluation traces for debugging
 
 ```typescript
 import { attachListeners } from '@mastra/evals';
 
-// Enable evaluation tracking
+// Enable basic evaluation tracking
 await attachListeners();
+
+// Store evals in Mastra Storage (if storage is enabled)
+await attachListeners(mastra);
+// Note: When using in-memory storage, evaluations are isolated to the test process.
+// When using file storage, evaluations are persisted and can be queried later.
 ```
 
 ## Environment Variables

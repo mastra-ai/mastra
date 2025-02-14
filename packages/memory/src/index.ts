@@ -1,47 +1,20 @@
-import { CoreMessage, deepMerge } from '@mastra/core';
-import { MastraMemory, MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
-import { StorageGetMessagesArg } from '@mastra/core/storage';
-import { embed, Message as AiMessage } from 'ai';
+import { type CoreMessage, deepMerge } from '@mastra/core';
+import {
+  MastraMemory,
+  type MessageType,
+  type MemoryConfig,
+  type SharedMemoryConfig,
+  type StorageThreadType,
+} from '@mastra/core/memory';
+import { type StorageGetMessagesArg } from '@mastra/core/storage';
+import { embed, type Message as AiMessage } from 'ai';
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
  * and message injection.
  */
 export class Memory extends MastraMemory {
-  constructor(
-    config: SharedMemoryConfig & {
-      /* @deprecated use embedder instead */
-      embeddings?: any;
-    },
-  ) {
-    const embedderExample = `
-Example: 
-
-  import { openai } from '@ai-sdk/openai';
-
-  new Memory({ 
-    embedder: openai.embedding(\`text-embedding-3-small\`)
-  })
-
-`;
-
-    // Check for deprecated embeddings object
-    if (config.embeddings) {
-      throw new Error(
-        `The \`embeddings\` option is deprecated. Please use \`embedder\` instead.
-${embedderExample}
-`,
-      );
-    }
-
-    if (config.vector && !config.embedder) {
-      throw new Error(
-        `The \`embedder\` option is required when a vector DB is attached to new Memory({ vector })
-
-${embedderExample}`,
-      );
-    }
-
+  constructor(config: SharedMemoryConfig = {}) {
     super({ name: 'Memory', ...config });
 
     const mergedConfig = this.getMergedThreadConfig({
@@ -82,20 +55,19 @@ ${embedderExample}`,
             messageRange: { before: 2, after: 2 },
           }
         : {
-            topK: config?.semanticRecall?.topK || 2,
-            messageRange: config?.semanticRecall?.messageRange || { before: 2, after: 2 },
+            topK: config?.semanticRecall?.topK ?? 2,
+            messageRange: config?.semanticRecall?.messageRange ?? { before: 2, after: 2 },
           };
 
     if (selectBy?.vectorSearchString && this.vector) {
-      const embedder = this.getEmbedder();
-
       const { embedding } = await embed({
         value: selectBy.vectorSearchString,
-        model: embedder,
+        model: this.embedder,
       });
 
-      await this.vector.createIndex('memory_messages', 1536);
-      vectorResults = await this.vector.query('memory_messages', embedding, vectorConfig.topK, {
+      const { indexName } = await this.createEmbeddingIndex();
+
+      vectorResults = await this.vector.query(indexName, embedding, vectorConfig.topK, {
         thread_id: threadId,
       });
     }
@@ -226,13 +198,13 @@ ${embedderExample}`,
     this.mutateMessagesToHideWorkingMemory(messages);
 
     if (this.vector) {
-      await this.vector.createIndex('memory_messages', 1536);
+      const { indexName } = await this.createEmbeddingIndex();
+
       for (const message of messages) {
         if (typeof message.content !== `string`) continue;
-        const embedder = this.getEmbedder();
-        const { embedding } = await embed({ value: message.content, model: embedder, maxRetries: 3 });
+        const { embedding } = await embed({ value: message.content, model: this.embedder, maxRetries: 3 });
         await this.vector.upsert(
-          'memory_messages',
+          indexName,
           [embedding],
           [
             {

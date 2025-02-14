@@ -122,6 +122,10 @@ The default tool description provides:
 - Instructions for querying the specified vector store
 - Examples of filter syntax when filtering is enabled
 
+## Result Handling
+
+The tool determines the number of results to return based on the user's query, with a default of 10 results. This can be adjusted based on the query requirements.
+
 ## Example with Filters
 
 ```typescript
@@ -133,12 +137,24 @@ const queryTool = createVectorQueryTool({
 });
 ```
 
-The tool processes queries with metadata filtering when enabled:
-- Filter conditions are specified in the user's query
-- Number of results can be customized with in the user query (default: 10)
-- Filters are automatically translated for each vector store's requirements
+With filtering enabled, the tool processes queries to construct metadata filters that combine with semantic search. The process works as follows:
+
+1. A user makes a query with specific filter requirements like "Find content where the 'version' field is greater than 2.0"
+2. The agent analyzes the query and constructs the appropriate filters:
+   ```typescript
+   {
+      "version": { "$gt": 2.0 }
+   }
+   ```
+
+This agent-driven approach:
+- Processes natural language queries into filter specifications
+- Implements vector store-specific filter syntax
+- Translates query terms to filter operators
 
 For detailed filter syntax and store-specific capabilities, see the [Metadata Filters](../rag/metadata-filters) documentation.
+
+For an example of how agent-driven filtering works, see the [Agent-Driven Metadata Filtering](../../../examples/rag/filter-rag) example.
 
 ## Example with Reranking
 

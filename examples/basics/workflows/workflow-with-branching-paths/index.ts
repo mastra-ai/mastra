@@ -13,7 +13,7 @@ const stepOne = new Step({
 const stepTwo = new Step({
   id: 'stepTwo',
   execute: async ({ context }) => {
-    const stepOneResult = context?.getStepResults.stepOne.result;
+    const stepOneResult = context?.steps.stepOne.result;
     const incrementedValue = stepOneResult.doubledValue + 1;
     return { incrementedValue };
   },

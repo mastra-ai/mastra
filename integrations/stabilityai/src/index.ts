@@ -2,7 +2,7 @@ import { Integration } from '@mastra/core';
 import { createHash } from 'crypto';
 
 import { StabilityAIClient } from './client';
-import { StabilityAiConfig } from './types';
+import { type StabilityAiConfig } from './types';
 
 export class StabilityAiIntegration extends Integration<void, StabilityAIClient> {
   config: StabilityAiConfig;

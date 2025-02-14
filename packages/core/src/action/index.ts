@@ -7,7 +7,7 @@ import { MastraStorage } from '../storage';
 import { Telemetry } from '../telemetry';
 import { MastraTTS } from '../tts';
 import { MastraVector } from '../vector';
-import { WorkflowContext } from '../workflows';
+import { type WorkflowContext } from '../workflows';
 
 export type MastraPrimitives = {
   logger?: Logger;
@@ -22,9 +22,7 @@ export interface IExecutionContext<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TContext extends WorkflowContext = WorkflowContext,
 > {
-  context: TSchemaIn extends z.ZodSchema
-    ? z.infer<TSchemaIn> & TContext
-    : TContext;
+  context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> & TContext : TContext;
   runId?: string;
   mastra?: MastraPrimitives;
   suspend: () => Promise<void>;

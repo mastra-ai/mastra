@@ -1,11 +1,29 @@
-import { createClient, Client } from '@libsql/client';
+import { createClient, type Client, type InValue } from '@libsql/client';
+import { join } from 'node:path';
 
-import { MessageType, StorageThreadType } from '../memory';
+import type { MetricResult, TestInfo } from '../eval';
+import type { MessageType, StorageThreadType } from '../memory/types';
 
-import { MastraStorage, TABLE_NAMES } from './base';
-import { StorageColumn, StorageGetMessagesArg } from './types';
+import { MastraStorage } from './base';
+import {
+  TABLE_EVALS,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_TRACES,
+  TABLE_WORKFLOW_SNAPSHOT,
+  type TABLE_NAMES,
+} from './constants';
+import { type StorageColumn, type StorageGetMessagesArg, type EvalRow } from './types';
 
 export * from '../vector/libsql/index';
+
+function safelyParseJSON(jsonString: string): any {
+  try {
+    return JSON.parse(jsonString);
+  } catch (e) {
+    return {};
+  }
+}
 
 export interface LibSQLConfig {
   url: string;
@@ -17,10 +35,37 @@ export class DefaultStorage extends MastraStorage {
 
   constructor({ config }: { config: LibSQLConfig }) {
     super({ name: `MastraStorageLibSql` });
+
     this.client = createClient({
-      url: config.url,
+      url: this.rewriteDbUrl(config.url),
       authToken: config.authToken,
     });
+  }
+
+  protected rewriteDbUrl(url: string): string {
+    // If this is a relative file path (starts with file: but not file:/)
+    if (url.startsWith('file:') && !url.startsWith('file:/')) {
+      const cwd = process.cwd();
+
+      // Get the relative path part after 'file:'
+      const relativePath = url.slice('file:'.length);
+
+      // If we're in a .mastra directory, use the parent directory
+      if (cwd.endsWith('.mastra') || cwd.endsWith('.mastra/')) {
+        const baseDir = join(cwd, `..`);
+
+        // Rewrite to be relative to the base directory
+        const fullPath = join(baseDir, relativePath);
+
+        this.logger.debug(
+          `Initializing LibSQL db with url ${url} with relative file path from inside .mastra directory. Rewriting relative file url to "file:${fullPath}". This ensures it's outside the .mastra directory. If the db is stored inside .mastra it will be deleted when Mastra re-bundles code.`,
+        );
+
+        return `file:${fullPath}`;
+      }
+    }
+
+    return url;
   }
 
   private getCreateTableSQL(tableName: TABLE_NAMES, schema: Record<string, StorageColumn>): string {
@@ -28,6 +73,7 @@ export class DefaultStorage extends MastraStorage {
       let type = col.type.toUpperCase();
       if (type === 'TEXT') type = 'TEXT';
       if (type === 'TIMESTAMP') type = 'TEXT'; // Store timestamps as ISO strings
+      // if (type === 'BIGINT') type = 'INTEGER';
 
       const nullable = col.nullable ? '' : 'NOT NULL';
       const primaryKey = col.primaryKey ? 'PRIMARY KEY' : '';
@@ -36,12 +82,11 @@ export class DefaultStorage extends MastraStorage {
     });
 
     // For workflow_snapshot table, create a composite primary key
-    if (tableName === MastraStorage.TABLE_WORKFLOW_SNAPSHOT) {
+    if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
       const stmnt = `CREATE TABLE IF NOT EXISTS ${tableName} (
                 ${columns.join(',\n')},
                 PRIMARY KEY (workflow_name, run_id)
             )`;
-      this.logger.info(stmnt);
       return stmnt;
     }
 
@@ -56,7 +101,7 @@ export class DefaultStorage extends MastraStorage {
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
     try {
-      this.logger.debug(`Creating table ${tableName}`);
+      this.logger.debug(`Creating database table`, { tableName, operation: 'schema init' });
       const sql = this.getCreateTableSQL(tableName, schema);
       await this.client.execute(sql);
     } catch (error) {
@@ -75,22 +120,41 @@ export class DefaultStorage extends MastraStorage {
     }
   }
 
+  private prepareStatement({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): {
+    sql: string;
+    args: InValue[];
+  } {
+    const columns = Object.keys(record);
+    const values = Object.values(record).map(v => {
+      if (typeof v === `undefined`) {
+        // returning an undefined value will cause libsql to throw
+        return null;
+      }
+      return typeof v === 'object' ? JSON.stringify(v) : v;
+    });
+    const placeholders = values.map(() => '?').join(', ');
+
+    return {
+      sql: `INSERT OR REPLACE INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`,
+      args: values,
+    };
+  }
+
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
-      const columns = Object.keys(record);
-      const values = Object.values(record).map(v => {
-        if (typeof v === `undefined`) {
-          // returning an undefined value will cause libsql to throw
-          return null;
-        }
-        return typeof v === 'object' ? JSON.stringify(v) : v;
-      });
-      const placeholders = values.map(() => '?').join(', ');
+      await this.client.execute(this.prepareStatement({ tableName, record }));
+    } catch (error) {
+      this.logger.error(`Error upserting into table ${tableName}: ${error}`);
+      throw error;
+    }
+  }
 
-      await this.client.execute({
-        sql: `INSERT OR REPLACE INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`,
-        args: values,
-      });
+  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    if (records.length === 0) return;
+
+    try {
+      const batchStatements = records.map(r => this.prepareStatement({ tableName, record: r }));
+      await this.client.batch(batchStatements, 'write');
     } catch (error) {
       this.logger.error(`Error upserting into table ${tableName}: ${error}`);
       throw error;
@@ -129,7 +193,7 @@ export class DefaultStorage extends MastraStorage {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     const result = await this.load<StorageThreadType>({
-      tableName: MastraStorage.TABLE_THREADS,
+      tableName: TABLE_THREADS,
       keys: { id: threadId },
     });
 
@@ -145,7 +209,7 @@ export class DefaultStorage extends MastraStorage {
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
     const result = await this.client.execute({
-      sql: `SELECT * FROM ${MastraStorage.TABLE_THREADS} WHERE resourceId = ?`,
+      sql: `SELECT * FROM ${TABLE_THREADS} WHERE resourceId = ?`,
       args: [resourceId],
     });
 
@@ -165,7 +229,7 @@ export class DefaultStorage extends MastraStorage {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     await this.insert({
-      tableName: MastraStorage.TABLE_THREADS,
+      tableName: TABLE_THREADS,
       record: {
         ...thread,
         metadata: JSON.stringify(thread.metadata),
@@ -199,7 +263,7 @@ export class DefaultStorage extends MastraStorage {
     };
 
     await this.client.execute({
-      sql: `UPDATE ${MastraStorage.TABLE_THREADS} SET title = ?, metadata = ? WHERE id = ?`,
+      sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = ? WHERE id = ?`,
       args: [title, JSON.stringify(updatedThread.metadata), id],
     });
 
@@ -208,7 +272,7 @@ export class DefaultStorage extends MastraStorage {
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     await this.client.execute({
-      sql: `DELETE FROM ${MastraStorage.TABLE_THREADS} WHERE id = ?`,
+      sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
       args: [threadId],
     });
     // Messages will be automatically deleted due to CASCADE constraint
@@ -254,7 +318,7 @@ export class DefaultStorage extends MastraStorage {
                 "createdAt",
                 thread_id,
                 ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
-              FROM "${MastraStorage.TABLE_MESSAGES}"
+              FROM "${TABLE_MESSAGES}"
               WHERE thread_id = ?
             ),
             target_positions AS (
@@ -286,7 +350,7 @@ export class DefaultStorage extends MastraStorage {
           type,
           "createdAt", 
           thread_id
-        FROM "${MastraStorage.TABLE_MESSAGES}"
+        FROM "${TABLE_MESSAGES}"
         WHERE thread_id = ?
         ${excludeIds.length ? `AND id NOT IN (${excludeIds.map(() => '?').join(', ')})` : ''}
         ORDER BY "createdAt" DESC
@@ -327,7 +391,7 @@ export class DefaultStorage extends MastraStorage {
       for (const message of messages) {
         const time = message.createdAt || new Date();
         await tx.execute({
-          sql: `INSERT INTO ${MastraStorage.TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt) 
+          sql: `INSERT INTO ${TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt) 
                               VALUES (?, ?, ?, ?, ?, ?)`,
           args: [
             message.id,
@@ -344,10 +408,134 @@ export class DefaultStorage extends MastraStorage {
 
       return messages;
     } catch (error) {
-      console.error('Failed to save messages in database', error);
+      this.logger.error('Failed to save messages in database: ' + (error as any)?.message);
       await tx.rollback();
       throw error;
     }
+  }
+
+  private transformEvalRow(row: Record<string, any>): EvalRow {
+    const resultValue = JSON.parse(row.result as string);
+    const testInfoValue = row.test_info ? JSON.parse(row.test_info as string) : undefined;
+
+    if (!resultValue || typeof resultValue !== 'object' || !('score' in resultValue)) {
+      throw new Error(`Invalid MetricResult format: ${JSON.stringify(resultValue)}`);
+    }
+
+    return {
+      input: row.input as string,
+      output: row.output as string,
+      result: resultValue as MetricResult,
+      agentName: row.agent_name as string,
+      metricName: row.metric_name as string,
+      instructions: row.instructions as string,
+      testInfo: testInfoValue as TestInfo,
+      globalRunId: row.global_run_id as string,
+      runId: row.run_id as string,
+      createdAt: row.created_at as string,
+    };
+  }
+
+  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
+    try {
+      const baseQuery = `SELECT * FROM ${TABLE_EVALS} WHERE agent_name = ?`;
+      const typeCondition =
+        type === 'test'
+          ? " AND test_info IS NOT NULL AND test_info->>'testPath' IS NOT NULL"
+          : type === 'live'
+            ? " AND (test_info IS NULL OR test_info->>'testPath' IS NULL)"
+            : '';
+
+      const result = await this.client.execute({
+        sql: `${baseQuery}${typeCondition} ORDER BY created_at DESC`,
+        args: [agentName],
+      });
+
+      return result.rows?.map(row => this.transformEvalRow(row)) ?? [];
+    } catch (error) {
+      // Handle case where table doesn't exist yet
+      if (error instanceof Error && error.message.includes('no such table')) {
+        return [];
+      }
+      this.logger.error('Failed to get evals for the specified agent: ' + (error as any)?.message);
+      throw error;
+    }
+  }
+
+  // TODO: add types
+  async getTraces(
+    {
+      name,
+      scope,
+      page,
+      perPage,
+      attributes,
+    }: { name?: string; scope?: string; page: number; perPage: number; attributes?: Record<string, string> } = {
+      page: 0,
+      perPage: 100,
+    },
+  ): Promise<any[]> {
+    const limit = perPage;
+    const offset = page * perPage;
+
+    const args: (string | number)[] = [];
+
+    const conditions: string[] = [];
+    if (name) {
+      conditions.push("name LIKE CONCAT(?, '%')");
+    }
+    if (scope) {
+      conditions.push('scope = ?');
+    }
+    if (attributes) {
+      Object.keys(attributes).forEach(key => {
+        conditions.push(`attributes->>'$.${key}' = ?`);
+      });
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    if (name) {
+      args.push(name);
+    }
+
+    if (scope) {
+      args.push(scope);
+    }
+
+    if (attributes) {
+      for (const [_key, value] of Object.entries(attributes)) {
+        args.push(value);
+      }
+    }
+
+    args.push(limit, offset);
+
+    const result = await this.client.execute({
+      sql: `SELECT * FROM ${TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
+      args,
+    });
+
+    if (!result.rows) {
+      return [];
+    }
+
+    return result.rows.map(row => ({
+      id: row.id,
+      parentSpanId: row.parentSpanId,
+      traceId: row.traceId,
+      name: row.name,
+      scope: row.scope,
+      kind: row.kind,
+      status: safelyParseJSON(row.status as string),
+      events: safelyParseJSON(row.events as string),
+      links: safelyParseJSON(row.links as string),
+      attributes: safelyParseJSON(row.attributes as string),
+      startTime: row.startTime,
+      endTime: row.endTime,
+      other: safelyParseJSON(row.other as string),
+      createdAt: row.createdAt,
+    })) as any;
   }
 }
 

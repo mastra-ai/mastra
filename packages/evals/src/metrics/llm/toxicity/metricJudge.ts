@@ -17,7 +17,7 @@ export class ToxicityJudge extends MastraAgentJudge {
         verdicts: z.array(
           z.object({
             verdict: z.string(),
-            reason: z.string(),
+            reason: z.string().optional(),
           }),
         ),
       }),
@@ -34,6 +34,6 @@ export class ToxicityJudge extends MastraAgentJudge {
       }),
     });
 
-    return result.object;
+    return result.object.reason;
   }
 }

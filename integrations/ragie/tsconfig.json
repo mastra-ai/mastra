@@ -1,23 +1,5 @@
 {
-  "extends": "@tsconfig/recommended/tsconfig.json",
-  "include": ["src", "types"],
-  "compilerOptions": {
-    "lib": ["dom", "esnext"],
-    "types": ["@types/jest", "node"],
-    "target": "ES6",
-    "module": "ES2022",
-    "allowImportingTsExtensions": false,
-    "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "noUnusedLocals": true,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "disableSizeLimit": true,
-    "moduleResolution": "Node"
-  }
+  "extends": "../../tsconfig.node.json",
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "**/*.test.ts"]
 }

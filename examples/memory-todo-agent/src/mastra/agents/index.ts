@@ -1,18 +1,8 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { DefaultStorage, DefaultVectorDB } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 
 const memory = new Memory({
-  storage: new DefaultStorage({
-    config: {
-      url: 'file:example.db',
-    },
-  }),
-  vector: new DefaultVectorDB({
-    connectionUrl: 'file:vector.db',
-  }),
-  embedder: openai.embedding('text-embedding-3-small'),
   options: {
     lastMessages: 1,
     semanticRecall: false,

@@ -42,7 +42,7 @@ console.log(result.info.reason); // Explanation of the score
   content={[
     {
       name: "model",
-      type: "ModelConfig",
+      type: "LanguageModel",
       description:
         "Configuration for the model used to evaluate instruction alignment",
       isOptional: false,
@@ -137,10 +137,10 @@ The metric evaluates instruction alignment through:
 
 The scoring process:
 
-1. Evaluates each instruction independently
-2. Assigns binary scores (1 for compliant, 0 for non-compliant)
-3. Calculates percentage of followed instructions
-4. Scales to configured range (default 0-1)
+1. Evaluate each instruction independently
+2. Assign binary scores (1 for compliant, 0 for non-compliant)
+3. Calculate the percentage of followed instructions
+4. Scale to configured range (default 0-1)
 
 Score interpretation:
 
@@ -153,6 +153,12 @@ Score interpretation:
 ## Example with Analysis
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+import { PromptAlignmentMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
 const metric = new PromptAlignmentMetric(model, {
   instructions: [
     "Use bullet points for each item",
@@ -199,5 +205,4 @@ const result2 = await metric.measure(
 ## Related
 
 - [Answer Relevancy Metric](./answer-relevancy)
-- [Completeness Metric](./completeness)
-- [Context Precision Metric](./context-precision)
+- [Keyword Coverage Metric](./keyword-coverage)

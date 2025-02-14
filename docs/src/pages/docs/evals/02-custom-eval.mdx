@@ -1,0 +1,204 @@
+---
+title: "Create your own Eval"
+description: "Mastra allows so create your own evals, here is how."
+---
+
+# Create your own Eval
+
+Creating your own eval is as easy as creating a new function. You simply create a class that extends the `Metric` class and implement the `measure` method. 
+
+
+## Basic example 
+
+Here is a very basic example of a custom eval that checks if the output contains a certain keyword. This is a simplified version of our own [keyword coverage eval](/docs/reference/evals/keyword-coverage).
+
+
+```typescript copy showLineNumbers filename="src/mastra/evals/keyword-coverage.ts"
+import { Metric, type MetricResult } from '@mastra/core/eval';
+import keyword_extractor from 'keyword-extractor';
+
+interface KeywordCoverageResult extends MetricResult {
+  info: {
+    totalKeywords: number;
+    matchedKeywords: number;
+  };
+}
+
+export class KeywordCoverageMetric extends Metric {
+  private referenceKeywords: Set<string>;
+
+  constructor(keywords: string[]) {
+    super();
+    this.referenceKeywords = new Set(this.keywords);
+  }
+
+  async measure(input: string, output: string): Promise<KeywordCoverageResult> {
+    // Handle empty strings case
+    if (!input && !output) {
+      return {
+        score: 1,
+        info: {
+          totalKeywords: 0,
+          matchedKeywords: 0,
+        },
+      };
+    }
+
+    const matchedKeywords = [...this.referenceKeywords].filter(k => output.includes(k));
+    const totalKeywords = this.referenceKeywords.size;
+    const coverage = totalKeywords > 0 ? matchedKeywords.length / totalKeywords : 0;
+
+    return {
+      score: coverage,
+      info: {
+        totalKeywords: referenceKeywords.size,
+        matchedKeywords: matchedKeywords.length,
+      },
+    };
+  }
+}
+```
+
+## Creating a custom LLM-Judge
+
+A custom LLM judge can provide more targeted and meaningful evaluations for your use case. For example, if you're building a medical Q&A system, you might want to evaluate not just answer relevancy but also medical accuracy and safety considerations.
+
+Let's create an example to make sure our [Chef Michel](/docs/guides/01-chef-michel) is not breaking any dietary preferences of the user.
+
+We'll start with creating the judge agent. You can put it all in one file but we prefer splitting it into a separate file to keep things readable.
+
+```typescript copy showLineNumbers filename="src/mastra/evals/dietary-preferences-judge.ts"
+import { Agent } from '@mastra/core/agent';
+import { type LanguageModel } from '@mastra/core/llm';
+import { z } from 'zod';
+
+import { MastraAgentJudge } from '../../judge';
+
+import {
+  generateClaimExtractionPrompt,
+  generateEvaluatePrompt,
+  FAITHFULNESS_AGENT_INSTRUCTIONS,
+  generateReasonPrompt,
+} from './prompts';
+
+export class DietaryPreferencesJudge {
+  private agent: Agent;
+
+  constructor(model: LanguageModel) {
+    this.agent = new Agent({
+      name: `Mastra Eval Dietary Preferences Judge`,
+    instructions: `You are a Master Chef that acts as a food judge. If any dietary preferences are mentioned in the user's input, you need to check if the recipe contains any ingredients that are forbidden or preferred by the user.`,
+      model,
+    });
+  }
+
+  async evaluate(input: string, output: string): Promise<{ claim: string; verdict: string; reason: string }[]> {
+    const validateDietaryPreferencesPrompt = `Based on the user's input, check if the recipe contains any ingredients that are forbidden or preferred by the user.
+
+Here are some things you need to consider:
+- The user might not mention any dietary preferences, in that case you should return an empty array.
+- The user might mention specific ingredients that are forbidden or preferred, in that case you should return an array with the ingredient and the verdict.
+
+Examples:
+- User input: "I am a vegetarian, so I cannot eat any meat."
+- Recipe: "1lb of beef"
+- Verdict: "Forbidden"
+
+- User input: "I am a vegan, so I cannot eat any meat or dairy products."
+- Recipe: "1 cup of milk"
+- Verdict: "Forbidden"
+
+user input: ${input}
+
+recipe: ${output}
+`
+    const result = await this.agent.generate(validateDietaryPreferencesPrompt, {
+      output: z.object({
+        ingredients: z.array(z.string()),
+        verdict: z.string(),
+      }),
+    });
+
+    return result.object;
+  }
+
+  async getReason(args: {
+    input: string;
+    output: string;
+    score: number;
+    scale: number;
+    verdict: { verdict: string; ingredients: string[] }[];
+  }): Promise<string> {
+    const prompt = `Explain why the recipe with the ingredients ${args.verdict.ingredients.join(', ')} is ${args.verdict.verdict} according to the user's input: ${args.input}
+    
+Here is the recipe: ${args.output}`;
+    const result = await this.agent.generate(prompt, {
+      output: z.object({
+        reason: z.string(),
+      }),
+    });
+    return result.object.reason;
+  }
+}
+```
+
+```typescript copy showLineNumbers filename="src/mastra/evals/dietary-preferences.ts"
+import { Metric } from '@mastra/core/eval';
+import { DietaryPreferencesJudge } from './dietary-preferences-judge';
+import { type LanguageModel } from '@mastra/core/llm';
+
+export interface DietaryPreferencesMetricOptions {
+  scale?: number;
+}
+
+export class DietaryPreferencesMetric extends Metric {
+  private judge: Agent;
+  private scale: number;
+  constructor(model: LanguageModel, { scale = 1 }: DietaryPreferencesMetricOptions) {
+    super();
+
+    this.judge = new DietaryPreferencesJudge(model);
+    this.scale = scale;
+  }
+
+  async measure(input: string, output: string): Promise<MetricResultWithReason> {
+    const verdict = await this.judge.evaluate(input, output);
+    const score = this.calculateScore(verdicts);
+    const reason = await this.judge.getReason({
+      input,
+      output,
+      score,
+      scale: this.scale,
+      verdict,
+    });
+
+    return {
+      score,
+      info: {
+        ingredients: verdict.ingredients,
+        reason,
+      },
+    };
+  }
+
+  private calculateScore(verdict: { verdict: string; }): number {
+    return verdict.verdict.toLowerCase() === 'forbidden' ? 0 : 1;
+  }
+}
+```
+
+You can now use the `DietaryPreferencesMetric` in your project. [See the full example here](/docs/guides/01-chef-michel).
+
+```typescript copy showLineNumbers filename="src/mastra/agents/chefAgent.ts"
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { DietaryPreferencesMetric } from "../evals/dietary-preferences";
+export const chefAgent = new Agent({
+  name: "chef-agent",
+  instructions:
+    "You are Michel, a practical and experienced home chef" +
+    "You helps people cook with whatever ingredients they have available.",
+  model: openai("gpt-4o-mini"),
+  metrics: [new DietaryPreferencesMetric(openai("gpt-4o-mini"))],
+});
+```

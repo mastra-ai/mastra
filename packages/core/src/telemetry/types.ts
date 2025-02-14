@@ -1,4 +1,4 @@
-import { SpanExporter } from '@opentelemetry/sdk-trace-base';
+import { type SpanExporter } from '@opentelemetry/sdk-trace-base';
 
 /** Sampling strategy configuration for OpenTelemetry */
 export type SamplingStrategy =
@@ -34,6 +34,9 @@ export type OtelConfig = {
   /** Whether telemetry is enabled. Defaults to true */
   enabled?: boolean;
 
+  /** Name of the tracer to use. Defaults to 'mastra-tracer' */
+  tracerName?: string;
+
   /** Sampling configuration to control trace data volume */
   sampling?: SamplingStrategy;
 
@@ -53,6 +56,7 @@ export type OtelConfig = {
       }
     | {
         type: 'custom';
+        tracerName?: string;
         exporter: SpanExporter;
       };
 };

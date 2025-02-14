@@ -57,16 +57,26 @@ export class DevBundler extends MastraBundler {
       join(this.mastraDir, 'index.js'),
     ]);
 
+    const envFiles = await this.getEnvFiles();
     const inputOptions = await getWatcherInputOptions(entryFile, 'node');
 
     const watcher = await createWatcher(
       {
         ...inputOptions,
+        plugins: [
+          // @ts-ignore - types are good
+          ...inputOptions.plugins,
+          {
+            name: 'env-watcher',
+            buildStart() {
+              for (const envFile of envFiles) {
+                this.addWatchFile(envFile);
+              }
+            },
+          },
+        ],
         input: {
           index: join(__dirname, 'templates', 'dev.entry.js'),
-        },
-        watch: {
-          include: await this.getEnvFiles(),
         },
       },
       {

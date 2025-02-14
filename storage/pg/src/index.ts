@@ -1,7 +1,21 @@
 import { type MessageType, type StorageThreadType } from '@mastra/core/memory';
-import { MastraStorage, type StorageColumn, type StorageGetMessagesArg, type TABLE_NAMES } from '@mastra/core/storage';
+import {
+  MastraStorage,
+  type EvalRow,
+  type StorageColumn,
+  type StorageGetMessagesArg,
+  type TABLE_NAMES,
+} from '@mastra/core/storage';
 import { type WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
+
+function safelyParseJSON(jsonString: string): any {
+  try {
+    return JSON.parse(jsonString);
+  } catch (e) {
+    return {};
+  }
+}
 
 export type PostgresConfig =
   | {
@@ -15,9 +29,10 @@ export type PostgresConfig =
       connectionString: string;
     };
 
-
-
 export class PostgresStore extends MastraStorage {
+  getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
+    throw new Error('Method not implemented.');
+  }
   private db: pgPromise.IDatabase<{}>;
   private pgp: pgPromise.IMain;
 
@@ -35,6 +50,108 @@ export class PostgresStore extends MastraStorage {
             password: config.password,
           },
     );
+  }
+
+  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    try {
+      await this.db.query('BEGIN');
+      for (const record of records) {
+        await this.insert({ tableName, record });
+      }
+      await this.db.query('COMMIT');
+    } catch (error) {
+      console.error(`Error inserting into ${tableName}:`, error);
+      await this.db.query('ROLLBACK');
+      throw error;
+    }
+  }
+
+  async getTraces({
+    name,
+    scope,
+    page,
+    perPage,
+    attributes,
+  }: {
+    name?: string;
+    scope?: string;
+    page: number;
+    perPage: number;
+    attributes?: Record<string, string>;
+  }): Promise<any[]> {
+    const limit = perPage;
+    const offset = page * perPage;
+
+    const args: (string | number)[] = [];
+
+    const conditions: string[] = [];
+    if (name) {
+      conditions.push("name LIKE CONCAT(?, '%')");
+    }
+    if (scope) {
+      conditions.push('scope = ?');
+    }
+    if (attributes) {
+      Object.keys(attributes).forEach(key => {
+        conditions.push(`attributes->>'$.${key}' = ?`);
+      });
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    if (name) {
+      args.push(name);
+    }
+
+    if (scope) {
+      args.push(scope);
+    }
+
+    if (attributes) {
+      for (const [_key, value] of Object.entries(attributes)) {
+        args.push(value);
+      }
+    }
+
+    args.push(limit, offset);
+
+    const result = await this.db.manyOrNone<{
+      id: string;
+      parentSpanId: string;
+      traceId: string;
+      name: string;
+      scope: string;
+      kind: string;
+      events: string;
+      links: string;
+      status: string;
+      attributes: string;
+      startTime: string;
+      endTime: string;
+      other: string;
+      createdAt: string;
+    }>(`SELECT * FROM ${MastraStorage.TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`, args);
+
+    if (!result) {
+      return [];
+    }
+
+    return result.map(row => ({
+      id: row.id,
+      parentSpanId: row.parentSpanId,
+      traceId: row.traceId,
+      name: row.name,
+      scope: row.scope,
+      kind: row.kind,
+      status: safelyParseJSON(row.status as string),
+      events: safelyParseJSON(row.events as string),
+      links: safelyParseJSON(row.links as string),
+      attributes: safelyParseJSON(row.attributes as string),
+      startTime: row.startTime,
+      endTime: row.endTime,
+      other: safelyParseJSON(row.other as string),
+      createdAt: row.createdAt,
+    })) as any;
   }
 
   async createTable({
@@ -480,6 +597,5 @@ export class PostgresStore extends MastraStorage {
 
 // Throw deprecation error
 throw new Error(
-  '@mastra/store-pg is deprecated. Please use @mastra/pg instead:\n' +
-  'import { PostgresStore } from \'@mastra/pg\';'
+  '@mastra/store-pg is deprecated. Please use @mastra/pg instead:\n' + "import { PostgresStore } from '@mastra/pg';",
 );

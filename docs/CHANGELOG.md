@@ -1,5 +1,23 @@
 # docs
 
+## 0.1.0-alpha.5
+
+### Patch Changes
+
+- 5fdc87c: Update evals storage in attachListeners
+
+## 0.1.0-alpha.4
+
+### Patch Changes
+
+- 7892533: Updated test evals to use Mastra Storage
+
+## 0.1.0-alpha.3
+
+### Minor Changes
+
+- 74b3078: Reduce verbosity in workflows API
+
 ## 0.1.0-alpha.2
 
 ### Minor Changes

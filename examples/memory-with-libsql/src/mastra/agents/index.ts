@@ -1,6 +1,5 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { DefaultStorage, DefaultVectorDB } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 
 const memory = new Memory({
@@ -11,16 +10,6 @@ const memory = new Memory({
       messageRange: 2,
     },
   },
-
-  storage: new DefaultStorage({
-    config: {
-      url: 'file:example.db',
-    },
-  }),
-  vector: new DefaultVectorDB({
-    connectionUrl: 'file:example.db',
-  }),
-  embedder: openai.embedding('text-embedding-3-small'),
 });
 
 export const chefAgent = new Agent({

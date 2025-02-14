@@ -1,5 +1,5 @@
-import { createLogger, Logger, BaseLogMessage, LogLevel, RegisteredLogger } from './logger';
-import { Telemetry } from './telemetry';
+import { createLogger, Logger, type BaseLogMessage, LogLevel, RegisteredLogger } from './logger';
+import type { Telemetry } from './telemetry';
 
 export class MastraBase {
   component: RegisteredLogger = RegisteredLogger.LLM;
@@ -19,7 +19,7 @@ export class MastraBase {
    */
   __setLogger(logger: Logger) {
     this.logger = logger;
-    this.logger.debug(`Logger updated for ${this.component}:${this.name}`);
+    this.logger.debug(`Logger updated [component=${this.component}] [name=${this.name}]`);
   }
 
   /**
@@ -48,7 +48,7 @@ export class MastraBase {
    */
   __setTelemetry(telemetry: Telemetry) {
     this.telemetry = telemetry;
-    this.logger.debug(`Telemetry updated for ${this.component} ${this.telemetry.tracer}`);
+    this.logger.debug(`Telemetry updated [component=${this.component}] [tracer=${this.telemetry.tracer}]`);
   }
 
   /**
@@ -65,7 +65,8 @@ export class MastraBase {
   get experimental_telemetry() {
     return this.telemetry
       ? {
-          tracer: this.telemetry.tracer,
+          // tracer: this.telemetry.tracer,
+          tracer: this.telemetry.getBaggageTracer(),
           isEnabled: !!this.telemetry.tracer,
         }
       : undefined;

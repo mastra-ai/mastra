@@ -151,7 +151,7 @@ export function schemaToFormFieldRenderer<T extends ZodSchema>({
     : (schemaOptions?.options as { label: string; value: string }[]) || fieldConfig.options;
 
   return (
-    <div key={schemaField} className="flex flex-col gap-1 mt-3">
+    <div key={schemaField} className="flex flex-col gap-1 mt-3 w-full">
       {renderLabel ? (
         renderLabel({ isOptional: Boolean(fieldConfig.isOptional), schemaField })
       ) : (

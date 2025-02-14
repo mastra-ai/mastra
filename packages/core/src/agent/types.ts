@@ -1,13 +1,15 @@
-import { LanguageModelV1 } from 'ai';
+import { type LanguageModelV1 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
 import type { MastraPrimitives } from '../action';
 import type { Metric } from '../eval';
 import type { CoreMessage, OutputType } from '../llm';
-import type { MastraMemory } from '../memory';
-import { MemoryConfig } from '../memory';
+import type { MastraMemory } from '../memory/memory';
+import type { MemoryConfig } from '../memory/types';
 import type { ToolAction } from '../tools';
+
+export type { Message as AiMessageType } from 'ai';
 
 export type ToolsetsInput = Record<string, Record<string, ToolAction<any, any, any, any>>>;
 

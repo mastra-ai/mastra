@@ -6,7 +6,7 @@ import * as integrationClient from './client/sdk.gen';
 // @ts-ignore
 // import FirecrawlLogo from './assets/firecrawl.png';
 import { FirecrawlToolset } from './toolset';
-import { FirecrawlConfig } from './types';
+import { type FirecrawlConfig } from './types';
 
 export class FirecrawlIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'FIRECRAWL';

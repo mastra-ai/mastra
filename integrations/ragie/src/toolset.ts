@@ -1,11 +1,11 @@
-import { OpenAPIToolset, ToolAction } from '@mastra/core';
+import { OpenAPIToolset, type ToolAction } from '@mastra/core';
 
 // @ts-ignore
 import RagieLogo from './assets/ragie.png';
 import { comments } from './client/service-comments';
 import * as integrationClient from './client/services.gen';
 import * as zodSchema from './client/zodSchema';
-import { RagieConfig } from './types';
+import { type RagieConfig } from './types';
 
 export class RagieToolset extends OpenAPIToolset {
   readonly name = 'RAGIE';

@@ -1,9 +1,14 @@
-import { trace, context, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import { trace, context, SpanStatusCode, SpanKind, propagation } from '@opentelemetry/api';
 
 import { hasActiveTelemetry } from './utility';
 
 // Decorator factory that takes optional spanName
-export function withSpan(options: { spanName?: string; skipIfNoTelemetry?: boolean; spanKind?: SpanKind }): any {
+export function withSpan(options: {
+  spanName?: string;
+  skipIfNoTelemetry?: boolean;
+  spanKind?: SpanKind;
+  tracerName?: string;
+}): any {
   return function (_target: any, propertyKey: string | symbol, descriptor?: PropertyDescriptor | number) {
     if (!descriptor || typeof descriptor === 'number') return;
 
@@ -12,11 +17,11 @@ export function withSpan(options: { spanName?: string; skipIfNoTelemetry?: boole
 
     descriptor.value = function (...args: any[]) {
       // Skip if no telemetry is available and skipIfNoTelemetry is true
-      if (options?.skipIfNoTelemetry && !hasActiveTelemetry()) {
+      if (options?.skipIfNoTelemetry && !hasActiveTelemetry(options?.tracerName)) {
         return originalMethod.apply(this, args);
       }
 
-      const tracer = trace.getTracer('default-tracer');
+      const tracer = trace.getTracer(options?.tracerName ?? 'default-tracer');
 
       // Determine span name and kind
       let spanName: string;
@@ -33,7 +38,7 @@ export function withSpan(options: { spanName?: string; skipIfNoTelemetry?: boole
 
       // Start the span with optional kind
       const span = tracer.startSpan(spanName, { kind: spanKind });
-      const ctx = trace.setSpan(context.active(), span);
+      let ctx = trace.setSpan(context.active(), span);
 
       // Record input arguments as span attributes
       args.forEach((arg, index) => {
@@ -43,6 +48,20 @@ export function withSpan(options: { spanName?: string; skipIfNoTelemetry?: boole
           span.setAttribute(`${spanName}.argument.${index}`, '[Not Serializable]');
         }
       });
+
+      const currentBaggage = propagation.getBaggage(ctx);
+      // @ts-ignore
+      if (currentBaggage?.componentName) {
+        // @ts-ignore
+        span.setAttribute('componentName', currentBaggage?.componentName);
+        // @ts-ignore
+      } else if (this && this.name) {
+        // @ts-ignore
+        span.setAttribute('componentName', this.name);
+        // @ts-ignore
+        ctx = propagation.setBaggage(ctx, { componentName: this.name });
+        // @ts-ignore
+      }
 
       let result;
       try {
@@ -99,6 +118,7 @@ export function InstrumentClass(options?: {
   spanKind?: SpanKind;
   excludeMethods?: string[];
   methodFilter?: (methodName: string) => boolean;
+  tracerName?: string;
 }) {
   return function (target: any) {
     const methods = Object.getOwnPropertyNames(target.prototype);
@@ -118,6 +138,7 @@ export function InstrumentClass(options?: {
             spanName: options?.prefix ? `${options.prefix}.${method}` : method,
             skipIfNoTelemetry: true,
             spanKind: options?.spanKind || SpanKind.INTERNAL,
+            tracerName: options?.tracerName,
           })(target, method, descriptor),
         );
       }

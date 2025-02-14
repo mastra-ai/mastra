@@ -33,13 +33,14 @@ export abstract class Bundler extends MastraBundler {
     await ensureDir(outputDirectory);
     const pkgPath = join(outputDirectory, 'package.json');
 
-    const dependenciesObject: Record<string, string> = {};
+    const dependenciesMap = new Map();
     for (const [key, value] of dependencies.entries()) {
-      if (key.startsWith('@') && key.split('/').length > 2) {
+      if (key.startsWith('@')) {
+        const pkgChunks = key.split('/');
+        dependenciesMap.set(`${pkgChunks[0]}/${pkgChunks[1]}`, value);
         continue;
       }
-
-      dependenciesObject[key] = value;
+      dependenciesMap.set(key, value);
     }
 
     await writeFile(
@@ -56,7 +57,7 @@ export abstract class Bundler extends MastraBundler {
           },
           author: 'Mastra',
           license: 'ISC',
-          dependencies: dependenciesObject,
+          dependencies: Object.fromEntries(dependenciesMap.entries()),
         },
         null,
         2,

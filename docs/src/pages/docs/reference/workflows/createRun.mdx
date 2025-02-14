@@ -12,47 +12,10 @@ One reason to use `.createRun()` vs `.execute()` is to get a unique run ID for t
 ## Usage
 
 ```typescript
-const { runId, start } = workflow.createRun({ 
-  triggerData: { inputValue: 42 },
-  metadata: {
-    requestId: "abc-123" 
-  }
-});
+const { runId, start } = workflow.createRun();
 
 const result = await start();
 ```
-
-## Parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "config",
-      type: "object",
-      description: "Configuration options for the workflow run",
-      isOptional: true
-    }
-  ]}
-/>
-
-### config
-
-<PropertiesTable
-  content={[
-    {
-      name: "triggerData",
-      type: "Record<string, any>",
-      description: "Initial data passed to trigger the workflow execution",
-      isOptional: true
-    },
-    {
-      name: "metadata", 
-      type: "Record<string, any>",
-      description: "Additional metadata to associate with this run",
-      isOptional: true
-    }
-  ]}
-/>
 
 ## Returns
 
@@ -61,13 +24,13 @@ const result = await start();
     {
       name: "runId",
       type: "string",
-      description: "Unique identifier for tracking this workflow run"
+      description: "Unique identifier for tracking this workflow run",
     },
     {
       name: "start",
       type: "() => Promise<WorkflowResult>",
-      description: "Function that begins workflow execution when called"
-    }
+      description: "Function that begins workflow execution when called",
+    },
   ]}
 />
 
@@ -83,7 +46,7 @@ try {
   if (error instanceof ValidationError) {
     // Handle validation errors
     console.log(error.type); // 'circular_dependency' | 'no_terminal_path' | 'unreachable_step'
-    console.log(error.details); 
+    console.log(error.details);
   }
 }
 ```
@@ -93,4 +56,7 @@ try {
 - [Workflow Class Reference](./workflow.mdx)
 - [Step Class Reference](./step-class.mdx)
 - See the [Creating a Workflow](../../../examples/workflows/creating-a-workflow.mdx) example for complete usage
+
+```
+
 ```

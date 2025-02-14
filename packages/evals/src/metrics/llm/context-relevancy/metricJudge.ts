@@ -25,7 +25,7 @@ export class ContextRelevancyJudge extends MastraAgentJudge {
         verdicts: z.array(
           z.object({
             verdict: z.string(),
-            reason: z.string(),
+            reason: z.string().optional(),
           }),
         ),
       }),

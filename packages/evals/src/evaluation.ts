@@ -1,4 +1,5 @@
-import { type Agent, type Metric, evaluate as coreEvaluate } from '@mastra/core';
+import { type Metric, evaluate as coreEvaluate } from '@mastra/core';
+import { type Agent } from '@mastra/core/agent';
 
 import { GLOBAL_RUN_ID_ENV_KEY } from './constants';
 
@@ -23,6 +24,7 @@ export async function evaluate<T extends Agent>(agent: T, input: Parameters<T['g
     globalRunId,
     runId,
     testInfo,
+    instructions: agent.instructions,
   });
 
   return metricResult;
@@ -51,5 +53,5 @@ export const getCurrentTestInfo = async () => {
     }
   } catch {}
 
-  return null;
+  return undefined;
 };

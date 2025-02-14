@@ -16,6 +16,7 @@ const withNextra = nextra({
 
 export default withNextra({
   assetPrefix: process.env.NODE_ENV === 'production' ? '/docs' : '',
+
   async rewrites() {
     return {
       beforeFiles: [
@@ -26,5 +27,12 @@ export default withNextra({
       ],
     };
   },
+  redirects: () => [
+    {
+      source: '/docs/08-running-evals',
+      destination: '/docs/evals/00-overview',
+      permanent: true,
+    },
+  ],
   trailingSlash: false,
 });

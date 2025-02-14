@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { useDeleteThread, useThreads } from '@/hooks/use-memory';
 
 export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId: string }) {
-  const { threads, isLoading } = useThreads({ resourceid: agentId });
+  const { threads, isLoading } = useThreads({ resourceid: agentId, agentId });
   const { deleteThread } = useDeleteThread();
   const navigate = useNavigate();
 
@@ -21,10 +21,10 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const handleDelete = async () => {
-    await deleteThread({ threadId: deleteId!, resourceid: agentId });
+    await deleteThread({ threadId: deleteId!, resourceid: agentId, agentId });
     setShowDeleteDialog(false);
     if (deleteId === threadId) {
-      navigate(`/agents/${agentId}`);
+      navigate(`/agents/${agentId}/chat/${crypto.randomUUID()}`);
     }
   };
 
@@ -48,7 +48,11 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
       <div className="p-4 w-full space-y-2 h-full">
         <div className="flex justify-between items-center">
           <div className="text-sm text-mastra-el-5">Chat history</div>
-          <Button variant="primary" size="icon" onClick={() => navigate(`/agents/${agentId}`)}>
+          <Button
+            variant="primary"
+            size="icon"
+            onClick={() => navigate(`/agents/${agentId}/chat/${crypto.randomUUID()}`)}
+          >
             <Plus />
           </Button>
         </div>
@@ -62,7 +66,11 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
       <div className="space-y-2">
         <div className="flex justify-between items-center pl-2 sticky top-0 bg-mastra-bg-2 pt-4">
           <div className="text-sm text-mastra-el-5">Chat history</div>
-          <Button variant="primary" size="icon" onClick={() => navigate(`/agents/${agentId}`)}>
+          <Button
+            variant="primary"
+            size="icon"
+            onClick={() => navigate(`/agents/${agentId}/chat/${crypto.randomUUID()}`)}
+          >
             <Plus />
           </Button>
         </div>
@@ -76,7 +84,7 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
               )}
               key={thread.id}
             >
-              <Link to={`/agents/${agentId}/${thread.id}`} className="flex-1">
+              <Link to={`/agents/${agentId}/chat/${thread.id}`} className="flex-1">
                 <p
                   className={cn(
                     'py-[0.38rem] text-mastra-el-6/60 group-hover:text-mastra-el-6 transition-all  capitalize ',

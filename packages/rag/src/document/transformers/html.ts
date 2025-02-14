@@ -42,6 +42,7 @@ export class HTMLHeaderTransformer {
           }
 
           // If we found our header and hit another header, stop
+          // @ts-expect-error - node.tagName is not defined on type Node
           if (foundHeader && node.tagName && headerFilter.includes(node.tagName.toLowerCase())) {
             break;
           }
@@ -263,6 +264,7 @@ export class HTMLSectionTransformer {
       const xpath = this.getXPath(headerElement);
       let content = '';
 
+      // @ts-expect-error - nextElementSibling is not defined on type Element
       let currentElement = headerElement.nextElementSibling;
       const nextHeader = headerElements[index + 1];
 

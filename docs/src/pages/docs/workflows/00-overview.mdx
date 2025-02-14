@@ -39,24 +39,24 @@ const myWorkflow = new Workflow({
 const stepOne = new Step({
   id: "stepOne",
   execute: async ({ context }) => ({
-    doubledValue: context.triggerData.inputValue * 2
-  })
+    doubledValue: context.triggerData.inputValue * 2,
+  }),
 });
 
 const stepTwo = new Step({
   id: "stepTwo",
   execute: async ({ context }) => ({
-    incrementedValue: context.steps.stepOne.output.doubledValue + 1
-  })
+    incrementedValue: context.steps.stepOne.output.doubledValue + 1,
+  }),
 });
 
 // 3. Link and commit steps
 myWorkflow.step(stepOne).then(stepTwo).commit();
 
 // 4. Run the workflow
-const { runId, start } = myWorkflow.createRun({ triggerData: { inputValue: 3 } });
+const { runId, start } = myWorkflow.createRun();
 
-const result = await start();
+const result = await start({ triggerData: { inputValue: 3 } });
 console.log("Workflow result:", result.results);
 ```
 
@@ -92,4 +92,3 @@ You can:
 - [Branching Paths workflow example](../../examples/workflows/branching-paths.mdx)
 - [Cyclical Dependencies workflow example](../../examples/workflows/cyclical-dependencies.mdx)
 - [Suspend and Resume workflow example](../../examples/workflows/suspend-and-resume.mdx)
-

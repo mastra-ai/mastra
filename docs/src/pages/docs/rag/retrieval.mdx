@@ -3,6 +3,8 @@ title: "Retrieval, Semantic Search, Reranking | RAG | Mastra Docs"
 description: Guide on retrieval processes in Mastra's RAG systems, including semantic search, filtering, and re-ranking.
 ---
 
+import { Tabs } from "nextra/components";
+
 ## Retrieval in RAG Systems
 
 After storing embeddings, you need to retrieve relevant chunks to answer user queries. 
@@ -56,18 +58,221 @@ Results include both the text content and a similarity score:
 ]
 ```
 
+For an example of how to use the basic retrieval method, see the [Retrieve Results](../../examples/rag/retrieve-results.mdx) example.
+
 ## Advanced Retrieval options
 
 ### Metadata Filtering
 
-Filter results based on metadata fields to narrow down the search space. This is useful when you have documents from different sources or time periods:
+Filter results based on metadata fields to narrow down the search space. This is useful when you have documents from different sources, time periods, or with specific attributes. Mastra provides a unified MongoDB-style query syntax that works across all supported vector stores.
+
+For detailed information about available operators and syntax, see the [Metadata Filters Reference](/docs/reference/rag/metadata-filters).
+
+Basic filtering examples:
 
 ```ts showLineNumbers copy
+// Simple equality filter
 const results = await pgVector.query("embeddings", embedding, 10, {
-  source: "article1.txt",
-  date: { $gt: "2023-01-01" }
+  source: "article1.txt"
+});
+
+// Numeric comparison
+const results = await pgVector.query("embeddings", embedding, 10, {
+  price: { $gt: 100 }
+});
+
+// Multiple conditions
+const results = await pgVector.query("embeddings", embedding, 10, {
+  category: "electronics",
+  price: { $lt: 1000 },
+  inStock: true
+});
+
+// Array operations
+const results = await pgVector.query("embeddings", embedding, 10, {
+  tags: { $in: ["sale", "new"] }
+});
+
+// Logical operators
+const results = await pgVector.query("embeddings", embedding, 10, {
+  $or: [
+    { category: "electronics" },
+    { category: "accessories" }
+  ],
+  $and: [
+    { price: { $gt: 50 } },
+    { price: { $lt: 200 } }
+  ]
 });
 ``` 
+
+Common use cases for metadata filtering:
+- Filter by document source or type
+- Filter by date ranges
+- Filter by specific categories or tags
+- Filter by numerical ranges (e.g., price, rating)
+- Combine multiple conditions for precise querying
+- Filter by document attributes (e.g., language, author)
+
+For an example of how to use metadata filtering, see the [Hybrid Vector Search](../../examples/rag/hybrid-vector-search.mdx) example.
+
+### Vector Query Tool
+
+Sometimes you want to give your agent the ability to query a vector database directly. The Vector Query Tool allows your agent to be in charge of retrieval decisions, combining semantic search with optional filtering and reranking based on the agent's understanding of the user's needs.
+
+```ts showLineNumbers copy
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  model: openai.embedding('text-embedding-3-small'),
+});
+```
+
+When creating the tool, pay special attention to the tool's name and description - these help the agent understand when and how to use the retrieval capabilities. For example, you might name it "SearchKnowledgeBase" and describe it as "Search through our documentation to find relevant information about X topic."
+
+This is particularly useful when:
+- Your agent needs to dynamically decide what information to retrieve
+- The retrieval process requires complex decision-making
+- You want the agent to combine multiple retrieval strategies based on context
+
+For detailed configuration options and advanced usage, see the [Vector Query Tool Reference](/docs/reference/tools/vector-query-tool).
+
+### Vector Store Prompts
+
+Vector store prompts define query patterns and filtering capabilities for each vector database implementation. 
+When implementing filtering, these prompts are required in the agent's instructions to specify valid operators and syntax for each vector store implementation.
+
+<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare']}>
+  <Tabs.Tab>
+  ```ts showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { PGVECTOR_PROMPT } from "@mastra/rag";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${PGVECTOR_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { PINECONE_PROMPT } from "@mastra/rag";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${PINECONE_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { QDRANT_PROMPT } from "@mastra/rag";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${QDRANT_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { CHROMA_PROMPT } from "@mastra/rag";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${CHROMA_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { ASTRA_PROMPT } from "@mastra/rag";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${ASTRA_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { LIBSQL_PROMPT } from "@mastra/rag";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${LIBSQL_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { UPSTASH_PROMPT } from "@mastra/rag";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${UPSTASH_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { VECTORIZE_PROMPT } from "@mastra/rag";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${VECTORIZE_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+</Tabs.Tab>
+</Tabs>
 
 ### Re-ranking
 
@@ -90,6 +295,10 @@ const vectorQueryTool = createVectorQueryTool({
 });
 ```
 
+For more details about re-ranking, see the [rerank()](/docs/reference/rag/rerank) method.
+
+For an example of how to use the re-ranking method, see the [Re-ranking Results](../../examples/rag/rerank-rag.mdx) example.
+
 ### Graph-based Retrieval
 
 For documents with complex relationships, graph-based retrieval can follow connections between chunks. This helps when:
@@ -111,11 +320,6 @@ const graphQueryTool = createGraphQueryTool({
 });
 ```
 
-## Example implementations
+For more details about graph-based retrieval, see the [GraphRAG](/docs/reference/rag/graph-rag) class and the [createGraphQueryTool()](/docs/reference/tools/graph-rag-tool) function.
 
-For complete examples of these retrieval methods in action, see:
-
-- [Basic Retrieval](../../examples/rag/retrieve-results.mdx)
-- [Metadata Filtering](../../examples/rag/filter-rag.mdx)
-- [Re-ranking Results](../../examples/rag/rerank-rag.mdx)
-- [Graph-based Retrieval](../../examples/rag/graph-rag.mdx)
+For an example of how to use the graph-based retrieval method, see the [Graph-based Retrieval](../../examples/rag/graph-rag.mdx) example.

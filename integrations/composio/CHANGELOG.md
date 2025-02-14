@@ -1,5 +1,120 @@
 # @mastra/composio
 
+## 0.1.0-alpha.75
+
+### Patch Changes
+
+- Updated dependencies [d5fccfb]
+  - @mastra/core@0.2.0-alpha.109
+
+## 0.1.0-alpha.74
+
+### Patch Changes
+
+- Updated dependencies [5ee67d3]
+- Updated dependencies [95a4697]
+  - @mastra/core@0.2.0-alpha.108
+
+## 0.1.0-alpha.73
+
+### Patch Changes
+
+- Updated dependencies [66a5392]
+  - @mastra/core@0.2.0-alpha.107
+
+## 0.1.0-alpha.72
+
+### Patch Changes
+
+- Updated dependencies [6f2c0f5]
+- Updated dependencies [a8a459a]
+  - @mastra/core@0.2.0-alpha.106
+
+## 0.1.0-alpha.71
+
+### Patch Changes
+
+- Updated dependencies [1420ae2]
+- Updated dependencies [99f1847]
+  - @mastra/core@0.2.0-alpha.105
+
+## 0.1.0-alpha.70
+
+### Patch Changes
+
+- b97ca96: Tracing into default storage
+- Updated dependencies [5fdc87c]
+- Updated dependencies [b97ca96]
+- Updated dependencies [72d1990]
+- Updated dependencies [cf6d825]
+- Updated dependencies [10870bc]
+  - @mastra/core@0.2.0-alpha.104
+
+## 0.1.0-alpha.69
+
+### Patch Changes
+
+- Updated dependencies [4534e77]
+  - @mastra/core@0.2.0-alpha.103
+
+## 0.1.0-alpha.68
+
+### Patch Changes
+
+- Updated dependencies [a9345f9]
+  - @mastra/core@0.2.0-alpha.102
+
+## 0.1.0-alpha.67
+
+### Patch Changes
+
+- 4f1d1a1: Enforce types ann cleanup package.json
+- Updated dependencies [66a03ec]
+- Updated dependencies [4f1d1a1]
+  - @mastra/core@0.2.0-alpha.101
+
+## 0.1.0-alpha.66
+
+### Patch Changes
+
+- Updated dependencies [9d1796d]
+  - @mastra/core@0.2.0-alpha.100
+
+## 0.1.0-alpha.65
+
+### Patch Changes
+
+- Updated dependencies [7d83b92]
+  - @mastra/core@0.2.0-alpha.99
+
+## 0.1.0-alpha.64
+
+### Patch Changes
+
+- 70dabd9: Fix broken publish
+- Updated dependencies [70dabd9]
+- Updated dependencies [202d404]
+  - @mastra/core@0.2.0-alpha.98
+
+## 0.1.0-alpha.63
+
+### Patch Changes
+
+- Updated dependencies [07c069d]
+- Updated dependencies [7892533]
+- Updated dependencies [e6d8055]
+- Updated dependencies [5950de5]
+- Updated dependencies [df843d3]
+- Updated dependencies [a870123]
+  - @mastra/core@0.2.0-alpha.97
+
+## 0.1.0-alpha.62
+
+### Patch Changes
+
+- Updated dependencies [74b3078]
+  - @mastra/core@0.2.0-alpha.96
+
 ## 0.1.0-alpha.61
 
 ### Patch Changes

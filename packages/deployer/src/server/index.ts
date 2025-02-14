@@ -2,12 +2,13 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { describeRoute, openAPISpecs } from 'hono-openapi';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
 
 import { readFile } from 'fs/promises';
+import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 
@@ -17,6 +18,7 @@ import {
   getAgentsHandler,
   getEvalsByAgentIdHandler,
   getLiveEvalsByAgentIdHandler,
+  setAgentInstructionsHandler,
   streamGenerateHandler,
 } from './handlers/agents.js';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client.js';
@@ -32,7 +34,9 @@ import {
   saveMessagesHandler,
   updateThreadHandler,
 } from './handlers/memory.js';
+import { generateSystemPromptHandler } from './handlers/prompt.js';
 import { rootHandler } from './handlers/root.js';
+import { getTelemetryHandler } from './handlers/telemetry.js';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools.js';
 import {
   upsertVectors,
@@ -51,11 +55,12 @@ type Variables = {
   mastra: Mastra;
   clients: Set<{ controller: ReadableStreamDefaultController }>;
   tools: Record<string, any>;
+  playground: boolean;
 };
 
 export async function createHonoServer(
   mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; evalStore?: any; apiReqLogs?: boolean } = {},
+  options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean } = {},
 ) {
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -100,8 +105,14 @@ export async function createHonoServer(
   app.use('*', async (c, next) => {
     c.set('mastra', mastra);
     c.set('tools', tools);
+    c.set('playground', options.playground === true);
     await next();
   });
+
+  const bodyLimitOptions = {
+    maxSize: 4.5 * 1024 * 1024, // 4.5 MB,
+    onError: (c: Context) => c.json({ error: 'Request body too large' }, 413),
+  };
 
   // API routes
   app.get(
@@ -199,11 +210,12 @@ export async function createHonoServer(
         },
       },
     }),
-    getLiveEvalsByAgentIdHandler(options.evalStore),
+    getLiveEvalsByAgentIdHandler,
   );
 
   app.post(
     '/api/agents/:agentId/generate',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Generate a response from an agent',
       tags: ['agents'],
@@ -227,7 +239,12 @@ export async function createHonoServer(
                   items: { type: 'object' },
                 },
                 threadId: { type: 'string' },
-                resourceid: { type: 'string' },
+                resourceId: { type: 'string', description: 'The resource ID for the conversation' },
+                resourceid: {
+                  type: 'string',
+                  description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
+                  deprecated: true,
+                },
                 output: { type: 'object' },
               },
               required: ['messages'],
@@ -249,6 +266,7 @@ export async function createHonoServer(
 
   app.post(
     '/api/agents/:agentId/stream',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Stream a response from an agent',
       tags: ['agents'],
@@ -272,7 +290,12 @@ export async function createHonoServer(
                   items: { type: 'object' },
                 },
                 threadId: { type: 'string' },
-                resourceid: { type: 'string' },
+                resourceId: { type: 'string', description: 'The resource ID for the conversation' },
+                resourceid: {
+                  type: 'string',
+                  description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
+                  deprecated: true,
+                },
                 output: { type: 'object' },
               },
               required: ['messages'],
@@ -293,7 +316,125 @@ export async function createHonoServer(
   );
 
   app.post(
+    '/api/agents/:agentId/instructions',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: "Update an agent's instructions",
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                instructions: {
+                  type: 'string',
+                  description: 'New instructions for the agent',
+                },
+              },
+              required: ['instructions'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Instructions updated successfully',
+        },
+        403: {
+          description: 'Not allowed in non-playground environment',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    setAgentInstructionsHandler,
+  );
+
+  app.post(
+    '/api/agents/:agentId/instructions/enhance',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Generate an improved system prompt from instructions',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'ID of the agent whose model will be used for prompt generation',
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                instructions: {
+                  type: 'string',
+                  description: 'Instructions to generate a system prompt from',
+                },
+                comment: {
+                  type: 'string',
+                  description: 'Optional comment for the enhanced prompt',
+                },
+              },
+              required: ['instructions'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generated system prompt and analysis',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  explanation: {
+                    type: 'string',
+                    description: 'Detailed analysis of the instructions',
+                  },
+                  new_prompt: {
+                    type: 'string',
+                    description: 'The enhanced system prompt',
+                  },
+                },
+              },
+            },
+          },
+        },
+        400: {
+          description: 'Missing or invalid request parameters',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+        500: {
+          description: 'Internal server error or model response parsing error',
+        },
+      },
+    }),
+    generateSystemPromptHandler,
+  );
+
+  app.post(
     '/api/agents/:agentId/tools/:toolId/execute',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Execute a tool through an agent',
       tags: ['agents'],
@@ -318,11 +459,9 @@ export async function createHonoServer(
             schema: {
               type: 'object',
               properties: {
-                args: { type: 'object' },
-                threadId: { type: 'string' },
-                resourceid: { type: 'string' },
+                data: { type: 'object' },
               },
-              required: ['args'],
+              required: ['data'],
             },
           },
         },
@@ -345,6 +484,14 @@ export async function createHonoServer(
     describeRoute({
       description: 'Get memory status',
       tags: ['memory'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
       responses: {
         200: {
           description: 'Memory status',
@@ -362,6 +509,12 @@ export async function createHonoServer(
       parameters: [
         {
           name: 'resourceid',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'agentId',
           in: 'query',
           required: true,
           schema: { type: 'string' },
@@ -385,6 +538,12 @@ export async function createHonoServer(
         {
           name: 'threadId',
           in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'agentId',
+          in: 'query',
           required: true,
           schema: { type: 'string' },
         },
@@ -413,6 +572,12 @@ export async function createHonoServer(
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
       ],
       responses: {
         200: {
@@ -425,9 +590,18 @@ export async function createHonoServer(
 
   app.post(
     '/api/memory/threads',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Create a new thread',
       tags: ['memory'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
       requestBody: {
         required: true,
         content: {
@@ -466,6 +640,12 @@ export async function createHonoServer(
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
       ],
       requestBody: {
         required: true,
@@ -499,6 +679,12 @@ export async function createHonoServer(
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
       ],
       responses: {
         200: {
@@ -514,9 +700,18 @@ export async function createHonoServer(
 
   app.post(
     '/api/memory/save-messages',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Save messages',
       tags: ['memory'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
       requestBody: {
         required: true,
         content: {
@@ -541,6 +736,21 @@ export async function createHonoServer(
       },
     }),
     saveMessagesHandler,
+  );
+
+  // Telemetry routes
+  app.get(
+    '/api/telemetry',
+    describeRoute({
+      description: 'Get all traces',
+      tags: ['telemetry'],
+      responses: {
+        200: {
+          description: 'List of all traces (paged)',
+        },
+      },
+    }),
+    getTelemetryHandler,
   );
 
   // Workflow routes
@@ -585,6 +795,7 @@ export async function createHonoServer(
 
   app.post(
     '/api/workflows/:workflowId/execute',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Execute a workflow',
       tags: ['workflows'],
@@ -714,6 +925,7 @@ export async function createHonoServer(
 
   app.post(
     '/api/tools/:toolId/execute',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Execute a tool',
       tags: ['tools'],
@@ -732,11 +944,9 @@ export async function createHonoServer(
             schema: {
               type: 'object',
               properties: {
-                args: { type: 'object' },
-                threadId: { type: 'string' },
-                resourceid: { type: 'string' },
+                data: { type: 'object' },
               },
-              required: ['args'],
+              required: ['data'],
             },
           },
         },
@@ -756,6 +966,7 @@ export async function createHonoServer(
   // Vector routes
   app.post(
     '/api/vector/:vectorName/upsert',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Upsert vectors into an index',
       tags: ['vector'],
@@ -807,6 +1018,7 @@ export async function createHonoServer(
 
   app.post(
     '/api/vector/:vectorName/create-index',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Create a new vector index',
       tags: ['vector'],
@@ -848,6 +1060,7 @@ export async function createHonoServer(
 
   app.post(
     '/api/vector/:vectorName/query',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Query vectors from an index',
       tags: ['vector'],
@@ -1042,7 +1255,7 @@ export async function createHonoServer(
 
 export async function createNodeServer(
   mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; evalStore?: any; apiReqLogs?: boolean } = {},
+  options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean } = {},
 ) {
   const app = await createHonoServer(mastra, options);
   return serve(

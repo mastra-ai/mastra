@@ -1,4 +1,4 @@
-import { Query } from 'sift';
+import { type Query } from 'sift';
 import { z } from 'zod';
 
 import type { IAction, IExecutionContext, MastraPrimitives } from '../action';

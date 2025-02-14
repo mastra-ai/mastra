@@ -1,25 +1,25 @@
 import {
-  CoreMessage,
-  DeepPartial,
-  GenerateObjectResult,
-  GenerateTextResult,
-  LanguageModel,
-  StreamObjectResult,
-  StreamTextResult,
+  type CoreMessage,
+  type DeepPartial,
+  type GenerateObjectResult,
+  type GenerateTextResult,
+  type LanguageModel,
+  type StreamObjectResult,
+  type StreamTextResult,
 } from 'ai';
-import { JSONSchema7 } from 'json-schema';
+import { type JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
 
 import {
-  GenerateReturn,
-  LLMInnerStreamOptions,
-  LLMStreamObjectOptions,
-  LLMStreamOptions,
-  LLMTextObjectOptions,
-  LLMTextOptions,
-  StreamReturn,
+  type GenerateReturn,
+  type LLMInnerStreamOptions,
+  type LLMStreamObjectOptions,
+  type LLMStreamOptions,
+  type LLMTextObjectOptions,
+  type LLMTextOptions,
+  type StreamReturn,
 } from '../';
-import { MastraPrimitives } from '../../action';
+import { type MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { RegisteredLogger } from '../../logger';
 
@@ -39,6 +39,14 @@ export class MastraLLMBase extends MastraBase {
 
   getProvider() {
     return this.#model.provider;
+  }
+
+  getModelId() {
+    return this.#model.modelId;
+  }
+
+  getModel() {
+    return this.#model;
   }
 
   convertToMessages(messages: string | string[] | CoreMessage[]): CoreMessage[] {

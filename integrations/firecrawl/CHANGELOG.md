@@ -1,5 +1,138 @@
 # @mastra/firecrawl
 
+## 1.1.0-alpha.104
+
+### Patch Changes
+
+- Updated dependencies [d5fccfb]
+  - @mastra/core@0.2.0-alpha.109
+  - @mastra/rag@0.1.0-alpha.102
+
+## 1.1.0-alpha.103
+
+### Patch Changes
+
+- Updated dependencies [5ee67d3]
+- Updated dependencies [95a4697]
+  - @mastra/core@0.2.0-alpha.108
+  - @mastra/rag@0.1.0-alpha.101
+
+## 1.1.0-alpha.102
+
+### Patch Changes
+
+- Updated dependencies [66a5392]
+  - @mastra/core@0.2.0-alpha.107
+  - @mastra/rag@0.1.0-alpha.100
+
+## 1.1.0-alpha.101
+
+### Patch Changes
+
+- Updated dependencies [6f2c0f5]
+- Updated dependencies [a8a459a]
+  - @mastra/core@0.2.0-alpha.106
+  - @mastra/rag@0.1.0-alpha.99
+
+## 1.1.0-alpha.100
+
+### Patch Changes
+
+- Updated dependencies [1420ae2]
+- Updated dependencies [99f1847]
+  - @mastra/core@0.2.0-alpha.105
+  - @mastra/rag@0.1.0-alpha.98
+
+## 1.1.0-alpha.99
+
+### Patch Changes
+
+- b97ca96: Tracing into default storage
+- Updated dependencies [5fdc87c]
+- Updated dependencies [b97ca96]
+- Updated dependencies [72d1990]
+- Updated dependencies [cf6d825]
+- Updated dependencies [10870bc]
+  - @mastra/core@0.2.0-alpha.104
+  - @mastra/rag@0.1.0-alpha.97
+
+## 1.1.0-alpha.98
+
+### Patch Changes
+
+- Updated dependencies [4534e77]
+  - @mastra/core@0.2.0-alpha.103
+  - @mastra/rag@0.1.0-alpha.96
+
+## 1.1.0-alpha.97
+
+### Patch Changes
+
+- Updated dependencies [a9345f9]
+  - @mastra/core@0.2.0-alpha.102
+  - @mastra/rag@0.1.0-alpha.95
+
+## 1.1.0-alpha.96
+
+### Patch Changes
+
+- 4f1d1a1: Enforce types ann cleanup package.json
+- Updated dependencies [66a03ec]
+- Updated dependencies [4f1d1a1]
+  - @mastra/core@0.2.0-alpha.101
+  - @mastra/rag@0.1.0-alpha.94
+
+## 1.1.0-alpha.95
+
+### Patch Changes
+
+- Updated dependencies [9d1796d]
+  - @mastra/core@0.2.0-alpha.100
+  - @mastra/rag@0.1.0-alpha.93
+
+## 1.1.0-alpha.94
+
+### Patch Changes
+
+- Updated dependencies [7d83b92]
+  - @mastra/core@0.2.0-alpha.99
+  - @mastra/rag@0.1.0-alpha.92
+
+## 1.1.0-alpha.93
+
+### Patch Changes
+
+- 70dabd9: Fix broken publish
+- Updated dependencies [70dabd9]
+- Updated dependencies [202d404]
+  - @mastra/core@0.2.0-alpha.98
+  - @mastra/rag@0.1.0-alpha.91
+
+## 1.1.0-alpha.92
+
+### Patch Changes
+
+- Updated dependencies [07c069d]
+- Updated dependencies [7892533]
+- Updated dependencies [e6d8055]
+- Updated dependencies [5950de5]
+- Updated dependencies [df843d3]
+- Updated dependencies [a870123]
+  - @mastra/core@0.2.0-alpha.97
+  - @mastra/rag@0.1.0-alpha.90
+
+## 1.1.0-alpha.91
+
+### Minor Changes
+
+- 74b3078: Reduce verbosity in workflows API
+
+### Patch Changes
+
+- Updated dependencies [74b3078]
+  - @mastra/core@0.2.0-alpha.96
+  - @mastra/rag@0.1.0-alpha.89
+
 ## 1.1.0-alpha.90
 
 ### Patch Changes

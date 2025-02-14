@@ -41,7 +41,7 @@ The Memory API uses two main mechanisms to maintain context in conversations, re
 
 ### Recent Message History
 
-The `lastMessages` setting maintains a sliding window of the most recent messages. This ensures your agent always has access to the immediate conversation context:
+By default, Memory keeps track of the 40 most recent messages in a conversation. You can customize this with the `lastMessages` setting:
 
 ```typescript copy showLineNumbers
 const memory = new Memory({
@@ -60,7 +60,9 @@ await agent.stream("Can you summarize the search feature requirements?", {
 
 ### Semantic Search
 
-When vector search is enabled, Memory can find relevant past messages using semantic similarity. This allows your agent to recall information from earlier in the conversation:
+Semantic search is enabled by default in Mastra. While FastEmbed (bge-small-en-v1.5) and LibSQL are included by default, you can use any embedder (like OpenAI or Cohere) and vector database (like PostgreSQL, Pinecone, or Chroma) that fits your needs.
+
+This allows your agent to find and recall relevant information from earlier in the conversation:
 
 ```typescript copy showLineNumbers
 const memory = new Memory({
@@ -82,23 +84,53 @@ await agent.stream("What did we decide about the search feature last week?", {
     },
   },
 });
-// The vector search will:
-// 1. Find message_3 as relevant (topK: 10)
-// 2. Include messages [1,2] before and [4,5] after
-// 3. Include all of this context in the agent's response
+```
+
+When semantic search is used:
+1. The message is converted to a vector embedding
+2. Similar messages are found using vector similarity search
+3. Surrounding context is included based on `messageRange`
+4. All relevant context is provided to the agent
+
+You can also customize the vector database and embedder:
+
+```typescript copy showLineNumbers
+import { openai } from '@ai-sdk/openai';
+import { PgVector } from '@mastra/pg';
+
+const memory = new Memory({
+  // Use a different vector database (libsql is default)
+  vector: new PgVector({
+    connectionString: "postgresql://user:pass@localhost:5432/db",
+  }),
+  // Or a different embedder (fastembed is default)
+  embedder: openai.embedding('text-embedding-3-small'),
+});
 ```
 
 ## Memory Configuration
 
-The Mastra memory system is highly configurable and supports multiple storage backends. Here's a basic configuration example:
+The Mastra memory system is highly configurable and supports multiple storage backends. By default, it uses LibSQL for storage and vector search, and FastEmbed for embeddings.
+
+### Basic Configuration
+
+For most use cases, you can use the default configuration:
 
 ```typescript copy showLineNumbers
-import { openai } from "@ai-sdk/openai";
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory();
+```
+
+### Custom Configuration
+
+For more control, you can customize the storage backend, vector database, and memory options:
+
+```typescript copy showLineNumbers
 import { Memory } from "@mastra/memory";
 import { PostgresStore, PgVector } from "@mastra/pg";
 
 const memory = new Memory({
-  // Required: Storage backend for messages
   storage: new PostgresStore({
     host: "localhost",
     port: 5432,
@@ -106,11 +138,9 @@ const memory = new Memory({
     database: "postgres",
     password: "postgres",
   }),
-
-  // Optional: Vector store for semantic search
-  vector: new PgVector(connectionString),
-
-  // Optional: Memory configuration options
+  vector: new PgVector({
+    connectionString: "postgresql://user:pass@localhost:5432/db",
+  }),
   options: {
     // Number of recent messages to include (false to disable)
     lastMessages: 10,
@@ -120,9 +150,6 @@ const memory = new Memory({
       messageRange: 2, // Messages before and after each result
     },
   },
-
-  // Required if using vector search
-  embedder: openai.embedding("text-embedding-3-small"),
 });
 ```
 

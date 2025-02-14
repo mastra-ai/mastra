@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { ToolAction } from '../tools';
+import { type ToolAction } from '../tools';
 import { createTool } from '../tools';
 
 export abstract class OpenAPIToolset {

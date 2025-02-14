@@ -35,7 +35,7 @@ console.log(result.info.reason); // Explanation of the toxicity assessment
   content={[
     {
       name: "model",
-      type: "ModelConfig",
+      type: "LanguageModel",
       description: "Configuration for the model used to evaluate toxicity",
       isOptional: false,
     },
@@ -113,7 +113,7 @@ console.log(result.info.reason); // Explanation of the toxicity assessment
 
 ## Scoring Details
 
-The metric evaluates toxicity through multiple aspects and calculates a score based on:
+The metric evaluates toxicity through multiple aspects and calculates a score based on the following:
 
 - Personal attacks
 - Mockery or sarcasm
@@ -131,6 +131,10 @@ The final score is normalized to the configured scale (default 0-1) where:
 ## Example with Custom Configuration
 
 ```typescript
+import { openai } from "@ai-sdk/openai";
+
+const model = openai("gpt-4o-mini");
+
 const metric = new ToxicityMetric(model, {
   scale: 10, // Use 0-10 scale instead of 0-1
 });

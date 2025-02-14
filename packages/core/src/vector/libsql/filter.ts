@@ -1,4 +1,4 @@
-import { BaseFilterTranslator, FieldCondition, Filter, OperatorSupport } from '../../filter';
+import { BaseFilterTranslator, type FieldCondition, type Filter, type OperatorSupport } from '../../filter';
 
 /**
  * Translates MongoDB-style filters to LibSQL compatible filters.

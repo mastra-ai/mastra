@@ -18,18 +18,30 @@ const exec = util.promisify(child_process.exec);
 export type LLMProvider = 'openai' | 'anthropic' | 'groq';
 export type Components = 'agents' | 'workflows' | 'tools';
 
+export const getAISDKPackage = (llmProvider: LLMProvider) => {
+  switch (llmProvider) {
+    case 'openai':
+      return '@ai-sdk/openai';
+    case 'anthropic':
+      return '@ai-sdk/anthropic';
+    case 'groq':
+      return '@ai-sdk/groq';
+    default:
+      return '@ai-sdk/openai';
+  }
+};
 export async function writeAgentSample(llmProvider: LLMProvider, destPath: string, addExampleTool: boolean) {
   let providerImport = '';
   let modelItem = '';
 
   if (llmProvider === 'openai') {
-    providerImport = `import { openai } from '@ai-sdk/openai';`;
+    providerImport = `import { openai } from '${getAISDKPackage(llmProvider)}';`;
     modelItem = `openai('gpt-4o')`;
   } else if (llmProvider === 'anthropic') {
-    providerImport = `import { anthropic } from '@ai-sdk/anthropic';`;
+    providerImport = `import { anthropic } from '${getAISDKPackage(llmProvider)}';`;
     modelItem = `anthropic('claude-3-5-sonnet-20241022')`;
   } else if (llmProvider === 'groq') {
-    providerImport = `import { groq } from '@ai-sdk/groq';`;
+    providerImport = `import { groq } from '${getAISDKPackage(llmProvider)}';`;
     modelItem = `groq('llama3-groq-70b-8192-tool-use-preview')`;
   }
 
@@ -79,11 +91,11 @@ export async function writeCodeSampleForComponents(
   llmprovider: LLMProvider,
   component: Components,
   destPath: string,
-  components: Components[],
+  importComponents: Components[],
 ) {
   switch (component) {
     case 'agents':
-      return writeAgentSample(llmprovider, destPath, components.includes('tools'));
+      return writeAgentSample(llmprovider, destPath, importComponents.includes('tools'));
     case 'tools':
       return writeToolSample(destPath);
     case 'workflows':
@@ -244,12 +256,12 @@ export const writeCodeSample = async (
   dirPath: string,
   component: Components,
   llmProvider: LLMProvider,
-  components: Components[],
+  importComponents: Components[],
 ) => {
   const destPath = dirPath + `/${component}/index.ts`;
 
   try {
-    await writeCodeSampleForComponents(llmProvider, component, destPath, components);
+    await writeCodeSampleForComponents(llmProvider, component, destPath, importComponents);
   } catch (err) {
     throw err;
   }
@@ -345,6 +357,6 @@ export const checkPkgJson = async () => {
     return;
   }
 
-  logger.debug('no package.json found, create one or run "mastra create" to create a new project');
+  logger.debug('package.json not found, create one or run "mastra create" to create a new project');
   process.exit(0);
 };

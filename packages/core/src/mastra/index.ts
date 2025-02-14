@@ -1,9 +1,9 @@
 import { Agent } from '../agent';
 import { MastraDeployer } from '../deployer';
 import { LogLevel, Logger, createLogger, noopLogger } from '../logger';
-import { MastraMemory } from '../memory';
-import { MastraStorage } from '../storage';
-import { InstrumentClass, OtelConfig, Telemetry } from '../telemetry';
+import { MastraMemory } from '../memory/memory';
+import { DefaultStorage, type MastraStorage } from '../storage';
+import { InstrumentClass, type OtelConfig, OTLPStorageExporter, Telemetry } from '../telemetry';
 import { MastraTTS } from '../tts';
 import { MastraVector } from '../vector';
 import { Workflow } from '../workflows';
@@ -57,11 +57,33 @@ export class Mastra<
     }
     this.logger = logger;
 
+    let storage = config?.storage;
+    if (!storage) {
+      storage = new DefaultStorage({
+        config: {
+          url: ':memory:',
+        },
+      });
+    }
+
     /*
     Telemetry
     */
-    if (config?.telemetry) {
-      this.telemetry = Telemetry.init(config.telemetry);
+    // if storage is a libsql instance, we need to default the telemetry exporter to OTLPStorageExporter
+    if (storage instanceof DefaultStorage && config?.telemetry?.export?.type !== 'custom') {
+      const newTelemetry = {
+        ...(config?.telemetry || {}),
+        export: {
+          type: 'custom',
+          exporter: new OTLPStorageExporter({
+            logger: this.getLogger(),
+            storage,
+          }),
+        },
+      };
+      this.telemetry = Telemetry.init(newTelemetry as OtelConfig);
+    } else if (config?.telemetry) {
+      this.telemetry = Telemetry.init(config?.telemetry);
     }
 
     /**
@@ -80,15 +102,13 @@ export class Mastra<
     /*
       Storage
     */
-    if (config?.storage) {
-      if (this.telemetry) {
-        this.storage = this.telemetry.traceClass(config.storage, {
-          excludeMethods: ['__setTelemetry', '__getTelemetry'],
-        });
-        this.storage.__setTelemetry(this.telemetry);
-      } else {
-        this.storage = config?.storage;
-      }
+    if (this.telemetry) {
+      this.storage = this.telemetry.traceClass(storage, {
+        excludeMethods: ['__setTelemetry', '__getTelemetry'],
+      });
+      this.storage.__setTelemetry(this.telemetry);
+    } else {
+      this.storage = storage;
     }
 
     /*
@@ -245,7 +265,7 @@ export class Mastra<
     return this.workflows;
   }
 
-  public setStorage({ storage }: { storage: MastraStorage }) {
+  public setStorage(storage: MastraStorage) {
     this.storage = storage;
   }
 
@@ -286,6 +306,73 @@ export class Mastra<
       Object.keys(this.vectors).forEach(key => {
         this.vectors?.[key]?.__setLogger(this.logger);
       });
+    }
+  }
+
+  public setTelemetry(telemetry: OtelConfig) {
+    this.telemetry = Telemetry.init(telemetry);
+
+    if (this.agents) {
+      Object.keys(this.agents).forEach(key => {
+        if (this.telemetry) {
+          this.agents?.[key]?.__setTelemetry(this.telemetry);
+        }
+      });
+    }
+
+    if (this.workflows) {
+      Object.keys(this.workflows).forEach(key => {
+        if (this.telemetry) {
+          this.workflows?.[key]?.__setTelemetry(this.telemetry);
+        }
+      });
+    }
+
+    if (this.memory) {
+      this.memory = this.telemetry.traceClass(this.memory, {
+        excludeMethods: ['__setTelemetry', '__getTelemetry'],
+      });
+      this.memory.__setTelemetry(this.telemetry);
+    }
+
+    if (this.deployer) {
+      this.deployer = this.telemetry.traceClass(this.deployer, {
+        excludeMethods: ['__setTelemetry', '__getTelemetry'],
+      });
+      this.deployer.__setTelemetry(this.telemetry);
+    }
+
+    if (this.tts) {
+      let tts = {} as Record<string, MastraTTS>;
+      Object.entries(this.tts).forEach(([key, ttsCl]) => {
+        if (this.telemetry) {
+          tts[key] = this.telemetry.traceClass(ttsCl, {
+            excludeMethods: ['__setTelemetry', '__getTelemetry'],
+          });
+          tts[key].__setTelemetry(this.telemetry);
+        }
+      });
+      this.tts = tts as TTTS;
+    }
+
+    if (this.storage) {
+      this.storage = this.telemetry.traceClass(this.storage, {
+        excludeMethods: ['__setTelemetry', '__getTelemetry'],
+      });
+      this.storage.__setTelemetry(this.telemetry);
+    }
+
+    if (this.vectors) {
+      let vectors = {} as Record<string, MastraVector>;
+      Object.entries(this.vectors).forEach(([key, vector]) => {
+        if (this.telemetry) {
+          vectors[key] = this.telemetry.traceClass(vector, {
+            excludeMethods: ['__setTelemetry', '__getTelemetry'],
+          });
+          vectors[key].__setTelemetry(this.telemetry);
+        }
+      });
+      this.vectors = vectors as TVectors;
     }
   }
 
