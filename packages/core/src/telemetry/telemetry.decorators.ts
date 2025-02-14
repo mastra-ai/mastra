@@ -61,7 +61,7 @@ export function withSpan(options: {
         // @ts-ignore
         span.setAttribute('componentName', this.name);
         // @ts-ignore
-        span.setAttribute('componentName', this.runId);
+        span.setAttribute('runId', this.runId);
         // @ts-ignore
         ctx = propagation.setBaggage(ctx, { componentName: this.name, runId: this.runId });
       }
