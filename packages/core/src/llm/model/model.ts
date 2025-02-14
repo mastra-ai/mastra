@@ -68,7 +68,7 @@ export class MastraLLM extends MastraLLMBase {
     return this.#model;
   }
 
-  convertTools(tools?: ToolsInput, runId?: string): Record<string, Tool> {
+  convertTools({ tools, runId }: { tools?: ToolsInput; runId?: string }): Record<string, Tool> {
     this.logger.debug('Starting tool conversion for LLM');
     const converted = Object.entries(tools || {}).reduce(
       (memo, value) => {
@@ -129,7 +129,7 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools(tools, runId);
+    const finalTools = convertedTools || this.convertTools({ tools, runId });
 
     const argsForExecute = {
       model,
@@ -183,7 +183,7 @@ export class MastraLLM extends MastraLLMBase {
 
     this.logger.debug(`[LLM] - Generating a text object`, { runId });
 
-    const finalTools = convertedTools || this.convertTools(tools, runId);
+    const finalTools = convertedTools || this.convertTools({ tools, runId });
 
     const argsForExecute = {
       model,
@@ -256,7 +256,7 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools(tools, runId);
+    const finalTools = convertedTools || this.convertTools({ tools, runId });
 
     const argsForExecute = {
       model,
@@ -327,7 +327,7 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools(tools, runId);
+    const finalTools = convertedTools || this.convertTools({ tools, runId });
 
     const argsForExecute = {
       model,
@@ -444,8 +444,6 @@ export class MastraLLM extends MastraLLMBase {
     }: LLMStreamOptions<Z> = {},
   ) {
     const msgs = this.convertToMessages(messages);
-
-    console.log('Inside stream', { runId });
 
     if (output === 'text') {
       return (await this.__stream({
