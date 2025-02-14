@@ -1,0 +1,90 @@
+name: Create Stable Release
+
+permissions:
+  contents: write
+  pull-requests: write
+
+on:
+  workflow_dispatch:
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  release:
+    name: Changesets Release
+    runs-on: ubuntu-latest
+    # Permissions necessary for Changesets to push a new branch and open PRs
+    # (for automated Version Packages PRs), and request the JWT for provenance.
+    # More info: https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect#adding-permissions-settings
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          # Fetch entire git history so  Changesets can generate changelogs
+          # with the correct commits
+          fetch-depth: 0
+
+      - name: Check for pre.json file existence
+        id: check_files
+        uses: andstor/file-existence-action@v3.0.0
+        with:
+          files: '.changeset/pre.json'
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Setup npm auth
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+
+      - name: Exit prerelease mode
+        # If .changeset/pre.json does not exist and we did not recently exit
+        # prerelease mode, enter prerelease mode with tag alpha
+        if: steps.check_files.outputs.files_exists == 'true'
+        run: |
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          npx changeset exit
+          git add -A
+          git commit -m 'chore: version - exit prerelease mode'
+          git push
+          pnpm install
+
+      - name: Run build
+        run: pnpm build
+
+      - name: Publish packages
+        run: pnpm publish -r --dry-run
+
+      - name: Check for pre.json file existence
+        id: check_files_second
+        if: always()
+        uses: andstor/file-existence-action@v3.0.0
+        with:
+          files: '.changeset/pre.json'
+
+      - name: Enter prerelease mode
+        if: always() && check_files_second.outputs.files_exists == 'false'
+        run: |
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          npx changeset enter prerelease
+          git add -A
+          git commit -m 'chore: version - enter prerelease mode'
+          git push
+          pnpm install

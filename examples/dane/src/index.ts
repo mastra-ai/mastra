@@ -32,7 +32,11 @@ program
 
 program.addCommand(configCommand);
 
-program.command('publish').description('Publish packages to the registry').action(publishPackages);
+program
+  .command('publish')
+  .option('--prerelease', 'Is it a prerelease?')
+  .description('Publish packages to the registry')
+  .action(publishPackages);
 
 program.command('telephone-game').description('Play a classic game of telephone').action(telephone);
 
