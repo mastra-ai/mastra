@@ -20,14 +20,25 @@ export function generateEvaluatePrompt({
   output: string;
   context: string[];
 }) {
-  return `Based on the input and context, please generate a JSON object to indicate whether each statement found in the context is relevant to the provided input. The JSON will be a list of 'verdicts', with 2 mandatory fields: 'verdict' and 'statement', and 1 optional field: 'reason'.
-You should first extract statements found in the context, which are high level information found in the context, before deciding on a verdict and optionally a reason for each statement.
-The 'verdict' key should STRICTLY be either 'yes' or 'no', and states whether the statement is relevant to the input.
-Provide a 'reason' ONLY IF verdict is no. You MUST quote the irrelevant parts of the statement to back up your reason.
+  return `Based on the input and context, please generate a JSON object to indicate whether each statement found in the context is relevant to the provided input. First extract high-level statements from the context, then evaluate each for relevance.
+You should first extract statements found in the context, which are high level information found in the context, before deciding on a verdict and a reason for each statement.
+
+Each verdict in the JSON must have:
+1. 'statement': The high-level information extracted from context
+2. 'verdict': STRICTLY either 'yes' or 'no'
+3. 'reason': REQUIRED for ALL verdicts to explain the evaluation
+
+For 'yes' verdicts:
+- Explain how the statement helps answer or address the input
+- Highlight specific relevant details or connections
+
+For 'no' verdicts:
+- Quote the irrelevant parts of the statement
+- Explain why they don't help address the input
 
 **
 IMPORTANT: Please make sure to only return in JSON format.
-Example Context: "Einstein won the Nobel Prize for his discovery of the photoelectric effect. He won the Nobel Prize in 1968. There was a cat."
+Example Context: "Einstein won the Nobel Prize for his discovery of the photoelectric effect in 1921. He published his theory of relativity in 1905. There was a cat in his office."
 Example Input: "What were some of Einstein's achievements?"
 
 Example:
@@ -35,12 +46,18 @@ Example:
     "verdicts": [
         {{
             "verdict": "yes",
-            "statement": "Einstein won the Nobel Prize for his discovery of the photoelectric effect in 1968",
+            "statement": "Einstein won the Nobel Prize for his discovery of the photoelectric effect",
+            "reason": "This directly addresses Einstein's achievements by highlighting a major scientific contribution that was recognized with a Nobel Prize"
+        }},
+        {{
+            "verdict": "yes",
+            "statement": "Einstein published his theory of relativity in 1905",
+            "reason": "This is highly relevant as it describes one of Einstein's most significant scientific achievements and when it occurred"
         }},
         {{
             "verdict": "no",
-            "statement": "There was a cat.",
-            "reason": "The retrieval context contained the information 'There was a cat' when it has nothing to do with Einstein's achievements."
+            "statement": "There was a cat in his office",
+            "reason": "The statement 'There was a cat in his office' is unrelated to Einstein's achievements. While it's a detail about his workspace, it doesn't describe any scientific or professional accomplishments"
         }}
     ]
 }}
