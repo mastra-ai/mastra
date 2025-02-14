@@ -60,6 +60,7 @@ export class Workflow<
   #stepGraph: StepGraph = { initial: [] };
   #stepSubscriberGraph: Record<string, StepGraph> = {};
   #steps: Record<string, IAction<any, any, any, any>> = {};
+  #onStepTransition: Array<(state: WorkflowRunState) => void | Promise<void>> = [];
 
   /**
    * Creates a new Workflow instance
@@ -326,6 +327,17 @@ export class Workflow<
 
       const suspendedPaths: Set<string> = new Set();
       this.#actor.subscribe(async state => {
+        if (this.#onStepTransition) {
+          this.#onStepTransition.forEach(onTransition => {
+            onTransition({
+              runId: this.#runId,
+              value: state.value as Record<string, string>,
+              context: state.context as WorkflowContext,
+              activePaths: this.#getActivePathsAndStatus(state.value as Record<string, string>),
+              timestamp: Date.now(),
+            });
+          });
+        }
         this.#getSuspendedPaths({
           value: state.value as Record<string, string>,
           path: '',
@@ -1075,8 +1087,7 @@ export class Workflow<
       const [stepId, ...pathParts] = key.split('.');
       const path = pathParts.join('.');
 
-      const sourceData =
-        stepId === 'trigger' ? context.triggerData : getStepResult(context.steps[stepId as string]);
+      const sourceData = stepId === 'trigger' ? context.triggerData : getStepResult(context.steps[stepId as string]);
 
       this.logger.debug(`Got condition data from ${stepId}`, {
         sourceData,
@@ -1293,128 +1304,13 @@ export class Workflow<
     return null;
   }
 
-  #hasStateChanged(previous: WorkflowRunState | null, current: WorkflowRunState): boolean {
-    if (!previous) return true;
+  watch(onTransition: (state: WorkflowRunState) => void): () => void {
+    this.#onStepTransition.push(onTransition);
 
-    // Compare active paths
-    const previousPaths = previous.activePaths;
-    const currentPaths = current.activePaths;
-
-    // Check if number of active paths changed
-    if (previousPaths.length !== currentPaths.length) return true;
-
-    // Compare each path
-    for (let i = 0; i < currentPaths.length; i++) {
-      const prevPath = previousPaths[i];
-      const currPath = currentPaths[i];
-
-      // Check if path structure changed
-      if (JSON.stringify(prevPath?.stepPath) !== JSON.stringify(currPath?.stepPath)) return true;
-
-      // Check if status changed
-      if (prevPath?.status !== currPath?.status) return true;
-    }
-
-    // Check if step results changed
-    if (JSON.stringify(previous.context.steps) !== JSON.stringify(current.context.steps)) return true;
-
-    return false;
-  }
-
-  #getDeepestState(value: Record<string, any>): { stepId: string; status: string } {
-    type StateInfo = {
-      stepId: string;
-      status: string;
-      depth: number;
+    return () => {
+      const idx = this.#onStepTransition.findIndex(t => t === onTransition);
+      this.#onStepTransition.splice(idx, 1);
     };
-
-    // Helper to get depth of a state branch
-    const getStateDepth = (obj: any): number => {
-      if (typeof obj !== 'object' || obj === null) return 0;
-      return 1 + Math.max(...Object.values(obj).map(getStateDepth));
-    };
-
-    // Find the deepest active branch
-    let deepestBranch: StateInfo | null = null;
-
-    const traverse = (obj: Record<string, any>, path: string[] = []) => {
-      for (const [key, value] of Object.entries(obj)) {
-        if (typeof value === 'string') {
-          // If it's a leaf state, check its depth
-          const depth = path.length;
-          if (!deepestBranch || depth > deepestBranch.depth) {
-            deepestBranch = { stepId: key, status: value, depth };
-          }
-        } else if (typeof value === 'object' && value !== null) {
-          // Keep traversing
-          traverse(value, [...path, key]);
-        }
-      }
-    };
-
-    traverse(value);
-
-    if (!deepestBranch) {
-      // Provide a default or throw an error
-      throw new Error('No valid state found');
-    }
-
-    return {
-      stepId: (deepestBranch as StateInfo)?.stepId,
-      status: (deepestBranch as StateInfo)?.status,
-    };
-  }
-
-  async watch(
-    runId: string,
-    options: {
-      onTransition?: (state: WorkflowRunState) => void | Promise<void>;
-      pollInterval?: number;
-    } = {},
-  ): Promise<WorkflowRunState> {
-    const { onTransition, pollInterval = 1000 } = options;
-
-    return new Promise((resolve, reject) => {
-      let timeoutId: NodeJS.Timeout;
-      let previousState: WorkflowRunState | null = null;
-
-      const poll = async () => {
-        try {
-          const currentState = await this.getState(runId);
-
-          if (!currentState) {
-            reject(new Error(`No workflow found for runId: ${runId}`));
-            return;
-          }
-
-          // Only call onTransition if state has changed
-          if (onTransition && this.#hasStateChanged(previousState, currentState)) {
-            await onTransition(currentState);
-          }
-
-          previousState = currentState;
-
-          const deepState = this.#getDeepestState(currentState.value);
-
-          if (this.#isFinalState(deepState.status)) {
-            resolve(currentState);
-            return;
-          }
-
-          timeoutId = setTimeout(poll, pollInterval);
-        } catch (error) {
-          reject(error);
-        }
-      };
-
-      poll();
-
-      return () => {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-      };
-    });
   }
 
   async resume({
