@@ -1206,20 +1206,18 @@ export class Workflow<
     stepId: TStepId,
   ): StepDef<TStepId, TSteps, any, any>[TStepId] {
     const executeStep = (
-      handler: (context: any) => Promise<(context: any) => void>,
+      handler: (data: any) => Promise<(data: any) => void>,
       spanName: string,
       attributes?: Record<string, string>,
     ) => {
-      return async (context: any) => {
-        if (this.#executionSpan) {
-          await otlpContext.with(trace.setSpan(otlpContext.active(), this.#executionSpan), async () => {
-            // @ts-ignore
-            return this.#mastra.telemetry.traceMethod(handler, {
-              spanName,
-              attributes,
-            })(context);
-          });
-        }
+      return async (data: any) => {
+        return await otlpContext.with(trace.setSpan(otlpContext.active(), this.#executionSpan as Span), async () => {
+          // @ts-ignore
+          return this.#mastra.telemetry.traceMethod(handler, {
+            spanName,
+            attributes,
+          })(data);
+        });
       };
     };
 
