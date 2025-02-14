@@ -42,7 +42,9 @@ export class Agent<
   #mastra?: MastraPrimitives;
   #memory?: MastraMemory;
   tools: TTools;
+  /** @deprecated This property is deprecated. Use evals instead. */
   metrics: TMetrics;
+  evals: TMetrics;
 
   constructor(config: AgentConfig<TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
@@ -59,6 +61,7 @@ export class Agent<
     this.tools = {} as TTools;
 
     this.metrics = {} as TMetrics;
+    this.evals = {} as TMetrics;
 
     if (config.tools) {
       this.tools = config.tools;
@@ -69,7 +72,14 @@ export class Agent<
     }
 
     if (config.metrics) {
+      this.logger.warn('The metrics property is deprecated. Please use evals instead to add evaluation metrics.');
       this.metrics = config.metrics;
+      // Set evals to metrics
+      this.evals = config.metrics;
+    }
+
+    if (config.evals) {
+      this.evals = config.evals;
     }
 
     if (config.memory) {
@@ -701,10 +711,10 @@ export class Agent<
           }
         }
 
-        if (Object.keys(this.metrics || {}).length > 0) {
+        if (Object.keys(this.evals || {}).length > 0) {
           const input = messages.map(message => message.content).join('\n');
           const runIdToUse = runId || crypto.randomUUID();
-          for (const metric of Object.values(this.metrics || {})) {
+          for (const metric of Object.values(this.evals || {})) {
             executeHook(AvailableHooks.ON_GENERATION, {
               input,
               output: outputText,
