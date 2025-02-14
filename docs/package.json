@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "tsx src/scripts/build-cursor-context.ts && next build",
+    "build:llms-full": "tsx src/scripts/build-llms-full-txt.ts",
     "start": "next start",
     "lint": "next lint",
     "postbuild": "next-sitemap --config next-sitemap.config.mjs"
