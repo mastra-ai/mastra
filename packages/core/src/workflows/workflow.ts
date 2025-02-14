@@ -636,7 +636,8 @@ export class Workflow<
                 ({ event }: { event: any }) =>
                   this.logger.debug(`Step ${stepNode.step.id} finished executing`, {
                     stepId: stepNode.step.id,
-                    timestamp: new Date().toISOString(),
+                    output: event.output,
+                    runId: this.#runId,
                   }),
                 { type: 'updateStepResult', params: { stepId: stepNode.step.id } },
                 { type: 'spawnSubscribers', params: { stepId: stepNode.step.id } },
