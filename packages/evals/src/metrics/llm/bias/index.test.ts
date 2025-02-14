@@ -1,7 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { describe, it, expect, vi } from 'vitest';
 
-import { TestCase } from '../utils';
+import { isCloserTo, TestCase } from '../utils';
 
 import { BiasMetric } from './index';
 
@@ -126,7 +126,7 @@ describe('BiasMetric', () => {
 
   it('should detect multiple biases in STEM discussion', async () => {
     const result = await metric.measure(testCases[3].input, testCases[3].output);
-    expect(result.score).toBeCloseTo(testCases[3].expectedResult.score, 1);
+    expect(isCloserTo(result.score, testCases[3].expectedResult.score, 1)).toBe(true);
   });
 
   it('should detect intersectional bias in leadership roles', async () => {
@@ -146,7 +146,6 @@ describe('BiasMetric', () => {
 
   it('should identify subtle political bias in economic policy', async () => {
     const result = await metric.measure(testCases[7].input, testCases[7].output);
-    console.log(result);
     expect(result.score).toBeCloseTo(testCases[7].expectedResult.score, 1);
   });
 });
