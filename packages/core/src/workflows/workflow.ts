@@ -1,3 +1,5 @@
+import { trace, context as otlpContext } from '@opentelemetry/api';
+import type { Span } from '@opentelemetry/api';
 import { get } from 'radash';
 import sift from 'sift';
 import { assign, createActor, fromPromise, type MachineContext, setup, type Snapshot } from 'xstate';
@@ -60,6 +62,7 @@ export class Workflow<
   #stepGraph: StepGraph = { initial: [] };
   #stepSubscriberGraph: Record<string, StepGraph> = {};
   #steps: Record<string, IAction<any, any, any, any>> = {};
+  #executionSpan: Span | undefined;
 
   /**
    * Creates a new Workflow instance
@@ -261,6 +264,10 @@ export class Workflow<
       this.logger.debug(`Workflow snapshot received`, { runId: this.#runId, snapshot });
     }
 
+    this.#executionSpan = this.#mastra?.telemetry?.tracer.startSpan(`workflow.${this.name}.execute`, {
+      attributes: { componentName: this.name, runId: this.#runId },
+    });
+
     const machineInput = snapshot
       ? (snapshot as any).context
       : {
@@ -314,7 +321,10 @@ export class Workflow<
 
     return new Promise((resolve, reject) => {
       if (!this.#actor) {
-        reject(new Error('Actor not initialized'));
+        const e = new Error('Actor not initialized');
+        this.#executionSpan?.recordException(e);
+        this.#executionSpan?.end();
+        reject(e);
         return;
       }
 
@@ -347,6 +357,7 @@ export class Workflow<
           await this.#persistWorkflowSnapshot();
           // Then cleanup and resolve
           this.#cleanup();
+          this.#executionSpan?.end();
           resolve({
             triggerData,
             results: state.context.steps,
@@ -358,6 +369,7 @@ export class Workflow<
           this.logger.debug('Failed to persist final snapshot', { error });
 
           this.#cleanup();
+          this.#executionSpan?.end();
           resolve({
             triggerData,
             results: state.context.steps,
@@ -1193,6 +1205,24 @@ export class Workflow<
   #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
     stepId: TStepId,
   ): StepDef<TStepId, TSteps, any, any>[TStepId] {
+    const executeStep = (
+      handler: (context: any) => Promise<(context: any) => void>,
+      spanName: string,
+      attributes?: Record<string, string>,
+    ) => {
+      return async (context: any) => {
+        if (this.#executionSpan) {
+          await otlpContext.with(trace.setSpan(otlpContext.active(), this.#executionSpan), async () => {
+            // @ts-ignore
+            return this.#mastra.telemetry.traceMethod(handler, {
+              spanName,
+              attributes,
+            })(context);
+          });
+        }
+      };
+    };
+
     const handler = async ({ context, ...rest }: ActionContext<TSteps[number]['inputSchema']>) => {
       const targetStep = this.#steps[stepId];
       if (!targetStep) throw new Error(`Step not found`);
@@ -1208,9 +1238,9 @@ export class Workflow<
 
       // Only trace if telemetry is available and action exists
       const finalAction = this.#mastra?.telemetry
-        ? this.#mastra?.telemetry.traceMethod(execute, {
-            spanName: `workflow.${this.name}.action.${stepId}`,
-            attributes: { componentName: this.name, runId: context.runId ?? this.#runId },
+        ? executeStep(execute, `workflow.${this.name}.action.${stepId}`, {
+            componentName: this.name,
+            runId: context.runId ?? this.#runId,
           })
         : execute;
 
@@ -1220,10 +1250,10 @@ export class Workflow<
     // Only trace handler if telemetry is available
 
     const finalHandler = ({ context, ...rest }: ActionContext<TSteps[number]['inputSchema']>) => {
-      if (this.#mastra?.telemetry) {
-        return this.#mastra.telemetry.traceMethod(handler, {
-          spanName: `workflow.${this.name}.step.${stepId}`,
-          attributes: { componentName: this.name, runId: context.runId ?? this.#runId },
+      if (this.#executionSpan) {
+        return executeStep(handler, `workflow.${this.name}.step.${stepId}`, {
+          componentName: this.name,
+          runId: context.runId ?? this.#runId,
         })({ context, ...rest });
       }
 

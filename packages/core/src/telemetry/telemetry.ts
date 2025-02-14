@@ -221,8 +221,10 @@ export class Telemetry {
       spanName: string;
       attributes?: Record<string, string>;
       skipIfNoTelemetry?: boolean;
+      parentSpan?: Span;
     },
   ): TMethod {
+    let ctx = otlpContext.active();
     const { skipIfNoTelemetry = true } = context;
 
     // Skip if no telemetry is active and skipIfNoTelemetry is true
@@ -248,7 +250,6 @@ export class Telemetry {
           span.setAttributes(context.attributes);
         }
 
-        let ctx = otlpContext.active();
         if (context.attributes?.componentName) {
           // @ts-ignore
           ctx = propagation.setBaggage(ctx, {
