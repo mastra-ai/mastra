@@ -357,6 +357,6 @@ export const checkPkgJson = async () => {
     return;
   }
 
-  logger.debug('no package.json found, create one or run "mastra create" to create a new project');
+  logger.debug('package.json not found, create one or run "mastra create" to create a new project');
   process.exit(0);
 };

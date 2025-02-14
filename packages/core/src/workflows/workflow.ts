@@ -258,10 +258,7 @@ export class Workflow<
     if (runId) {
       this.#runId = runId;
       // First, let's log the incoming snapshot for debugging
-      this.logger.debug('Incoming snapshot', {
-        snapshot: snapshot,
-        runId: this.#runId,
-      });
+      this.logger.debug(`Workflow snapshot received`, { runId: this.#runId, snapshot });
     }
 
     const machineInput = snapshot
@@ -279,10 +276,7 @@ export class Workflow<
           ),
         };
 
-    this.logger.debug('Machine input prepared', {
-      machineInput,
-      runId: this.#runId,
-    });
+    this.logger.debug(`Machine input prepared`, { runId: this.#runId, machineInput });
 
     const actorSnapshot = snapshot
       ? {
@@ -291,7 +285,7 @@ export class Workflow<
         }
       : undefined;
 
-    this.logger.debug('Creating actor with configuration', {
+    this.logger.debug(`Creating actor with configuration`, {
       machineInput,
       actorSnapshot,
       machineStates: this.#machine.config.states,
@@ -445,10 +439,16 @@ export class Workflow<
       states: {
         pending: {
           entry: () => {
-            this.logger.debug(`Step ${stepNode.step.id} pending`);
+            this.logger.debug(`Step ${stepNode.step.id} pending`, {
+              stepId: stepNode.step.id,
+              runId: this.#runId,
+            });
           },
           exit: () => {
-            this.logger.debug(`Step ${stepNode.step.id} finished pending`);
+            this.logger.debug(`Step ${stepNode.step.id} finished pending`, {
+              stepId: stepNode.step.id,
+              runId: this.#runId,
+            });
           },
           invoke: {
             src: 'conditionCheck',
@@ -519,7 +519,7 @@ export class Workflow<
                   steps: ({ context, event }) => {
                     if (event.output.type !== 'CONDITION_FAILED') return context.steps;
 
-                    this.logger.debug(`workflow condition check failed`, {
+                    this.logger.debug(`Workflow condition check failed`, {
                       error: event.output.error,
                       stepId: stepNode.step.id,
                     });
@@ -539,10 +539,18 @@ export class Workflow<
         },
         waiting: {
           entry: () => {
-            this.logger.debug(`Step ${stepNode.step.id} waiting ${new Date().toISOString()}`);
+            this.logger.debug(`Step ${stepNode.step.id} waiting`, {
+              stepId: stepNode.step.id,
+              timestamp: new Date().toISOString(),
+              runId: this.#runId,
+            });
           },
           exit: () => {
-            this.logger.debug(`Step ${stepNode.step.id} finished waiting ${new Date().toISOString()}`);
+            this.logger.debug(`Step ${stepNode.step.id} finished waiting`, {
+              stepId: stepNode.step.id,
+              timestamp: new Date().toISOString(),
+              runId: this.#runId,
+            });
           },
           after: {
             [stepNode.step.id]: {
@@ -554,7 +562,10 @@ export class Workflow<
           type: 'final',
           entry: [
             () => {
-              this.logger.debug(`Step ${stepNode.step.id} suspended`);
+              this.logger.debug(`Step ${stepNode.step.id} suspended`, {
+                stepId: stepNode.step.id,
+                runId: this.#runId,
+              });
             },
             assign({
               steps: ({ context }: { context: WorkflowContext }) => ({
@@ -593,7 +604,10 @@ export class Workflow<
         },
         executing: {
           entry: () => {
-            this.logger.debug(`Step ${stepNode.step.id} executing`);
+            this.logger.debug(`Step ${stepNode.step.id} executing`, {
+              stepId: stepNode.step.id,
+              runId: this.#runId,
+            });
           },
           on: {
             SUSPENDED: {
@@ -620,7 +634,11 @@ export class Workflow<
               target: 'runningSubscribers',
               actions: [
                 ({ event }: { event: any }) =>
-                  this.logger.debug(`Step ${stepNode.step.id} finished executing`, { output: event.output }),
+                  this.logger.debug(`Step ${stepNode.step.id} finished executing`, {
+                    stepId: stepNode.step.id,
+                    output: event.output,
+                    runId: this.#runId,
+                  }),
                 { type: 'updateStepResult', params: { stepId: stepNode.step.id } },
                 { type: 'spawnSubscribers', params: { stepId: stepNode.step.id } },
               ],
@@ -633,10 +651,16 @@ export class Workflow<
         },
         runningSubscribers: {
           entry: () => {
-            this.logger.debug(`Step ${stepNode.step.id} running subscribers`);
+            this.logger.debug(`Step ${stepNode.step.id} running subscribers`, {
+              stepId: stepNode.step.id,
+              runId: this.#runId,
+            });
           },
           exit: () => {
-            this.logger.debug(`Step ${stepNode.step.id} finished running subscribers`);
+            this.logger.debug(`Step ${stepNode.step.id} finished running subscribers`, {
+              stepId: stepNode.step.id,
+              runId: this.#runId,
+            });
           },
           invoke: {
             src: 'spawnSubscriberFunction',
@@ -820,6 +844,7 @@ export class Workflow<
         });
 
         this.logger.debug(`Step ${stepNode.step.id} result`, {
+          stepId: stepNode.step.id,
           result,
           runId: this.#runId,
         });
@@ -834,12 +859,12 @@ export class Workflow<
         const stepConfig = stepNode.config;
         const attemptCount = context.attempts[stepNode.step.id];
 
-        this.logger.debug(`Checking conditions for ${stepNode.step.id}`, {
+        this.logger.debug(`Checking conditions for step ${stepNode.step.id}`, {
           stepId: stepNode.step.id,
           runId: this.#runId,
         });
 
-        this.logger.debug(`Attempt count for ${stepNode.step.id}`, {
+        this.logger.debug(`Attempt count for step ${stepNode.step.id}`, {
           attemptCount,
           attempts: context.attempts,
           runId: this.#runId,
@@ -859,12 +884,18 @@ export class Workflow<
           return { type: 'CONDITIONS_MET' as const };
         }
 
-        this.logger.debug(`Checking conditions for ${stepNode.step.id}`);
+        this.logger.debug(`Checking conditions for step ${stepNode.step.id}`, {
+          stepId: stepNode.step.id,
+          runId: this.#runId,
+        });
 
         if (typeof stepConfig?.when === 'function') {
           const conditionMet = await stepConfig.when({ context });
           if (conditionMet) {
-            this.logger.debug(`Condition met for ${stepNode.step.id}`);
+            this.logger.debug(`Condition met for step ${stepNode.step.id}`, {
+              stepId: stepNode.step.id,
+              runId: this.#runId,
+            });
             return { type: 'CONDITIONS_MET' as const };
           }
           if (!attemptCount || attemptCount < 0) {
@@ -1006,7 +1037,8 @@ export class Workflow<
     context: WorkflowContext;
     stepId: TStepId;
   }): Record<string, any> {
-    this.logger.debug(`Resolving variables for ${stepId}`, {
+    this.logger.debug(`Resolving variables for step ${stepId}`, {
+      stepId,
       runId: this.#runId,
     });
 
@@ -1077,7 +1109,8 @@ export class Workflow<
 
       const sourceData = stepId === 'trigger' ? context.triggerData : getStepResult(context.steps[stepId as string]);
 
-      this.logger.debug(`Got condition data from ${stepId}`, {
+      this.logger.debug(`Got condition data from step ${stepId}`, {
+        stepId,
         sourceData,
         runId: this.#runId,
       });
