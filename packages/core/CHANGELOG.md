@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.2.0-alpha.109
+
+### Patch Changes
+
+- d5fccfb: expose model function
+
 ## 0.2.0-alpha.108
 
 ### Patch Changes

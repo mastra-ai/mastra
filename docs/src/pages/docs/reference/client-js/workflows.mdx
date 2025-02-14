@@ -1,0 +1,42 @@
+# Workflows API
+
+The Workflows API provides methods to interact with and execute automated workflows in Mastra.
+
+## Getting All Workflows
+
+Retrieve a list of all available workflows:
+
+```typescript
+const workflows = await client.getWorkflows();
+```
+
+## Working with a Specific Workflow
+
+Get an instance of a specific workflow:
+
+```typescript
+const workflow = client.getWorkflow("workflow-id");
+```
+
+## Workflow Methods
+
+### Get Workflow Details
+
+Retrieve detailed information about a workflow:
+
+```typescript
+const details = await workflow.details();
+```
+
+### Execute Workflow
+
+Execute a workflow with input parameters:
+
+```typescript
+const result = await workflow.execute({
+  input: {
+    param1: "value1",
+    param2: "value2",
+  },
+});
+```

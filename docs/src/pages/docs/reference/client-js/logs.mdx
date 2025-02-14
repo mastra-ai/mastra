@@ -1,0 +1,24 @@
+# Logs API
+
+The Logs API provides methods to access and query system logs and debugging information in Mastra.
+
+## Getting Logs
+
+Retrieve system logs with optional filtering:
+
+```typescript
+const logs = await client.getLogs({
+  transportId: "transport-1",
+});
+```
+
+## Getting Logs for a Specific Run
+
+Retrieve logs for a specific execution run:
+
+```typescript
+const runLogs = await client.getLog({
+  runId: "run-1",
+  transportId: "transport-1",
+});
+```

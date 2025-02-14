@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-netlify",
-  "version": "0.1.0-alpha.62",
+  "version": "0.1.0-alpha.64",
   "description": "",
   "type": "module",
   "main": "dist/index.js",

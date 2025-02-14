@@ -38811,7 +38811,7 @@ snapshots:
   ollama-ai-provider@1.2.0(zod@3.24.1):
     dependencies:
       '@ai-sdk/provider': 1.0.7
-      '@ai-sdk/provider-utils': 2.1.6(zod@3.24.1)
+      '@ai-sdk/provider-utils': 2.1.8(zod@3.24.1)
       partial-json: 0.1.7
     optionalDependencies:
       zod: 3.24.1
@@ -43260,7 +43260,7 @@ snapshots:
   voyage-ai-provider@1.0.1(zod@3.24.1):
     dependencies:
       '@ai-sdk/provider': 1.0.7
-      '@ai-sdk/provider-utils': 2.1.6(zod@3.24.1)
+      '@ai-sdk/provider-utils': 2.1.8(zod@3.24.1)
     optionalDependencies:
       zod: 3.24.1
 
