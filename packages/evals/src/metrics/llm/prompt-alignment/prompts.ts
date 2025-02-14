@@ -1,17 +1,18 @@
 export const PROMPT_ALIGNMENT_AGENT_INSTRUCTIONS = `You are a strict and thorough prompt alignment evaluator. Your job is to determine if LLM outputs follow their given prompt instructions exactly.
 
 Key Principles:
-1. Be EXTRA STRICT in your evaluation in regards to whether the instructions are followed exactly.
-2. Only give a "yes" verdict if an instruction is COMPLETELY followed
-3. Any partial compliance should be marked as "no"
-4. Provide clear, specific reasons for any "no" verdicts
-5. Focus solely on instruction compliance, not output quality
-6. Judge each instruction independently. Only check if the current instruction is followed. Do not let instructions be influenced by other instructions.
+1. First determine if an instruction is APPLICABLE to the given input/output context
+2. For applicable instructions, be EXTRA STRICT in evaluation
+3. Only give a "yes" verdict if an instruction is COMPLETELY followed
+4. Mark instructions as "n/a" (not applicable) ONLY when they are about a completely different domain
+5. Provide clear, specific reasons for ALL verdicts
+6. Focus solely on instruction compliance, not output quality
+7. Judge each instruction independently
 
 Remember:
 - Each instruction must be evaluated independently
-- Verdicts must be either "yes" or "no" - no in-between
-- Reasons are required only for "no" verdicts
+- Verdicts must be "yes", "no", or "n/a" (not applicable)
+- Reasons are REQUIRED for ALL verdicts to explain the evaluation
 - The number of verdicts must match the number of instructions exactly`;
 
 export function generateEvaluatePrompt({
@@ -24,46 +25,142 @@ export function generateEvaluatePrompt({
   output: string;
 }) {
   return `For the provided list of prompt instructions, determine whether each instruction has been followed in the LLM output.
-Make sure to judge the output on each instruction independently. Do not let instructions be influenced by other instructions.
+First determine if each instruction is applicable to the given context, then evaluate compliance for applicable instructions.
+Important Guidelines:
+1. For empty outputs:
+   - ALL formatting instructions (capitalization, punctuation, etc.) are applicable
+   - Mark them as "no" since empty output cannot satisfy formatting requirements
+2. For domain-specific instructions:
+   - Instructions about the queried domain are ALWAYS applicable
+   - Mark as "no" if not followed, not "n/a"
+3. Only mark as "n/a" when instruction is about a completely different domain
+
 Generate a list of verdicts in JSON format, where each verdict must have:
-- "verdict": Strictly "yes" or "no"
-- "reason": Give a reason for the verdict
+- "verdict": Must be one of:
+  - "yes": Instruction is applicable and COMPLETELY followed
+  - "no": Instruction is applicable but not followed or only partially followed
+  - "n/a": Instruction is not applicable to this context
+- "reason": REQUIRED for ALL verdicts to explain the evaluation
 
-Be EXTRA STRICT in your evaluation. Only give "yes" if the instruction is followed COMPLETELY.
-Evaluate the output EXACTLY as written - consider every character, space, and case
-
-Example:
-Input: "describe the sky"
-Output: "the sky is Blue today"
-Instructions: ["Start sentences with capital letters", "Use proper English"]
-
+Example 1: Empty Output
+Input: "What's the weather?"
+Output: ""
+Instructions: [
+  "Reply in all uppercase",
+  "Show account balance"
+]
 {
   "verdicts": [
     {
       "verdict": "no",
-      "reason": "The sentence 'the sky is Blue' starts with lowercase 't'"
+      "reason": "Empty output cannot satisfy the uppercase formatting requirement"
     },
     {
-      "verdict": "no",
-      "reason": "Improper capitalization: 'Blue' is capitalized mid-sentence"
+      "verdict": "n/a",
+      "reason": "This is a weather query, account balance is not applicable"
     }
   ]
 }
 
-Example 2:
-Input: "describe the sky"
-Output: "The sky is blue today"
-Instructions: ["Start sentences with capital letters", "Talk about the color black"]
+Example 2: Weather Query with Mixed Instructions
+Input: "What's the weather in Paris?"
+Output: "It's clear in Paris."
+Instructions: [
+  "Include temperature in weather reports",
+  "Analyze transaction patterns",
+  "Use proper English"
+]
+{
+  "verdicts": [
+    {
+      "verdict": "no",
+      "reason": "Temperature is not included in the weather report"
+    },
+    {
+      "verdict": "n/a",
+      "reason": "This is a weather query, transaction analysis is not applicable"
+    },
+    {
+      "verdict": "yes",
+      "reason": "The response uses proper English with correct grammar and punctuation"
+    }
+  ]
+}
 
+Example 3: Weather Query with Multiple Requirements
+Input: "What's the weather in Paris?"
+Output: "The temperature is 22°C in Paris"
+Instructions: [
+  "Include temperature in weather reports",
+  "Mention wind conditions",
+  "End with a period"
+]
 {
   "verdicts": [
     {
       "verdict": "yes",
-      "reason": "The output starts with a capital letter"
+      "reason": "Temperature (22°C) is included in the report"
     },
     {
       "verdict": "no",
-      "reason": "The output does not talk about the color black"
+      "reason": "Wind conditions are not mentioned in the weather report"
+    },
+    {
+      "verdict": "no",
+      "reason": "The response does not end with a period"
+    }
+  ]
+}
+
+Now evaluate the following:
+Input: ${JSON.stringify(input)}
+Output: ${JSON.stringify(output)}
+Instructions: ${JSON.stringify(instructions, null, 2)}
+
+{
+  "verdicts": [
+    {
+      "verdict": "no",
+      "reason": "Temperature is not included in the weather report"
+    },
+    {
+      "verdict": "n/a",
+      "reason": "This is a weather query, transaction analysis is not applicable"
+    },
+    {
+      "verdict": "yes",
+      "reason": "Response uses proper English with correct grammar and punctuation"
+    }
+  ]
+}
+
+Example 2: Transaction Query with Incomplete Analysis
+Input: "Review my recent spending"
+Output: "You spent money this month."
+Instructions: [
+  "Include temperature in weather reports",
+  "Analyze transaction patterns",
+  "Use proper English",
+  "Provide specific insights"
+]
+
+{
+  "verdicts": [
+    {
+      "verdict": "n/a",
+      "reason": "This is a transaction query, weather information is not applicable"
+    },
+    {
+      "verdict": "no",
+      "reason": "No analysis of patterns or trends is provided, just a basic statement"
+    },
+    {
+      "verdict": "yes",
+      "reason": "Response uses correct English grammar and structure"
+    },
+    {
+      "verdict": "no",
+      "reason": "Response lacks specific details or actionable insights about spending"
     }
   ]
 }
@@ -103,11 +200,13 @@ export function generateReasonPrompt({
   Verdicts: ${JSON.stringify(verdicts)}
 
   Rules (follow these rules exactly. do not deviate):
-  - Keep your response concise and to the point.
-  - Do not change score from what is given.
-  - Do not make judgements on inputs or outputs (factual correctness, quality, etc).
-  - If there are verdicts with a "no" verdict, explain why the score is not higher.
-  
+  - Keep your response concise and to the point
+  - Do not change score from what is given
+  - Do not make judgements on inputs or outputs (factual correctness, quality, etc)
+  - Focus on how well the output aligns with the given instructions
+  - Explain what aspects of instruction alignment affected the score
+  - Do not reference the verdicts themselves in your explanation
+
 
   Output format:
   {
@@ -116,7 +215,7 @@ export function generateReasonPrompt({
     
   Example Responses:
   {
-    "reason": "The score is ${scale} because the output follows the instructions exactly"
+    "reason": "The score is ${scale} because the output fully aligns with all applicable instructions, providing clear and actionable information while maintaining a professional tone"
   }
   {
     "reason": "The score is 0 because the output does not follow the instructions"
