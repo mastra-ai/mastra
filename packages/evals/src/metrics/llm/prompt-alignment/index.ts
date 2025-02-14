@@ -45,7 +45,6 @@ export class PromptAlignmentMetric extends Metric {
 
   async measure(input: string, output: string): Promise<PromptAlignmentMetricResult> {
     const verdicts = await this.judge.evaluate(input, output, this.instructions);
-    console.log(verdicts);
     const scoreDetails = this.calculateScore(verdicts);
     const reason = await this.judge.getReason({
       input,

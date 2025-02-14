@@ -171,13 +171,13 @@ const testCases: PromptAlignmentTestCase[] = [
     input: 'What is the weather in Paris?',
     output: 'The temperature is 22°C in Paris.',
     expectedResult: {
-      score: 0.5,
+      score: 0.75,
       reason:
-        'Two out of four applicable instructions followed (temperature and English correct, but missing wind conditions and period)',
+        'Three out of four applicable instructions followed (temperature, English, and period correct, but missing wind conditions)',
       scoreDetails: {
         totalInstructions: 6,
         applicableInstructions: 4,
-        followedInstructions: 2,
+        followedInstructions: 3,
         naInstructions: 2,
       },
     },
@@ -281,14 +281,13 @@ describe(
       expect(result.info.scoreDetails).toEqual(testCase.expectedResult.scoreDetails);
     });
 
-    it.only('should calculate correct score with mix of yes, no, and n/a verdicts', async () => {
+    it('should calculate correct score with mix of yes, no, and n/a verdicts', async () => {
       const testCase = testCases[8]!;
       const metric = new PromptAlignmentMetric(model, {
         instructions: testCase.instructions,
       });
 
       const result = await metric.measure(testCase.input, testCase.output);
-      console.log(result);
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
       expect(result.info.scoreDetails).toEqual(testCase.expectedResult.scoreDetails);
     });
