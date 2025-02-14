@@ -182,6 +182,32 @@ const testCases: PromptAlignmentTestCase[] = [
       },
     },
   },
+  {
+    instructions: [
+      'Be concise and direct in your responses while maintaining a professional and friendly tone.',
+      'When providing weather information, include temperature, conditions, and any relevant weather alerts.',
+      'For transaction analysis, focus on patterns, unusual spending, and actionable insights.',
+      'Always prioritize user privacy and security - never share sensitive information.',
+      'Use natural, conversational language while maintaining professionalism.',
+      'Provide specific, actionable recommendations when appropriate.',
+      'Acknowledge uncertainty when present and avoid making assumptions.',
+      'Break down complex information into digestible parts.',
+      'Ask clarifying questions when user intent is unclear.',
+      'Maintain consistent formatting in responses for better readability.',
+    ],
+    input: 'Get me some financial info',
+    output: `I'm here to help with weather information. If you need weather details for a specific location, please let me know the location, and I'll provide the current weather conditions for you.`,
+    expectedResult: {
+      score: 0.83,
+      reason: 'No instruction alignment possible - all instructions are not applicable for a weather query',
+      scoreDetails: {
+        totalInstructions: 10,
+        applicableInstructions: 6,
+        followedInstructions: 5,
+        naInstructions: 4,
+      },
+    },
+  },
 ];
 
 const SECONDS = 10000;
@@ -283,6 +309,17 @@ describe(
 
     it('should calculate correct score with mix of yes, no, and n/a verdicts', async () => {
       const testCase = testCases[8]!;
+      const metric = new PromptAlignmentMetric(model, {
+        instructions: testCase.instructions,
+      });
+
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
+      expect(result.info.scoreDetails).toEqual(testCase.expectedResult.scoreDetails);
+    });
+
+    it('should calculate correct score with complex formatting instructions', async () => {
+      const testCase = testCases[9]!;
       const metric = new PromptAlignmentMetric(model, {
         instructions: testCase.instructions,
       });

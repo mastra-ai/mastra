@@ -200,11 +200,13 @@ export function generateReasonPrompt({
   Verdicts: ${JSON.stringify(verdicts)}
 
   Rules (follow these rules exactly. do not deviate):
-  - Keep your response concise and to the point.
-  - Do not change score from what is given.
-  - Do not make judgements on inputs or outputs (factual correctness, quality, etc).
-  - If there are verdicts with a "no" verdict, explain why the score is not higher.
-  
+  - Keep your response concise and to the point
+  - Do not change score from what is given
+  - Do not make judgements on inputs or outputs (factual correctness, quality, etc)
+  - Focus on how well the output aligns with the given instructions
+  - Explain what aspects of instruction alignment affected the score
+  - Do not reference the verdicts themselves in your explanation
+
 
   Output format:
   {
@@ -213,7 +215,7 @@ export function generateReasonPrompt({
     
   Example Responses:
   {
-    "reason": "The score is ${scale} because the output follows the instructions exactly"
+    "reason": "The score is ${scale} because the output fully aligns with all applicable instructions, providing clear and actionable information while maintaining a professional tone"
   }
   {
     "reason": "The score is 0 because the output does not follow the instructions"
