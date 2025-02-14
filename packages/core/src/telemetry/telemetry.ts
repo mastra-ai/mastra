@@ -251,7 +251,11 @@ export class Telemetry {
         let ctx = otlpContext.active();
         if (context.attributes?.componentName) {
           // @ts-ignore
-          ctx = propagation.setBaggage(ctx, { componentName: this.name });
+          ctx = propagation.setBaggage(ctx, {
+            // @ts-ignore
+            componentName: context.attributes.componentName,
+            runId: context.attributes.runId,
+          });
         } else {
           // @ts-ignore
           const currentBaggage = propagation.getBaggage(ctx);
@@ -260,12 +264,15 @@ export class Telemetry {
             // @ts-ignore
             span.setAttribute('componentName', currentBaggage?.componentName);
             // @ts-ignore
+            span.setAttribute('runId', currentBaggage?.runId);
+            // @ts-ignore
           } else if (this && this.name) {
             // @ts-ignore
             span.setAttribute('componentName', this.name);
             // @ts-ignore
-            ctx = propagation.setBaggage(ctx, { componentName: this.name });
+            span.setAttribute('componentName', this.runId);
             // @ts-ignore
+            ctx = propagation.setBaggage(ctx, { componentName: this.name, runId: this.runId });
           }
         }
 
@@ -321,6 +328,8 @@ class BaggageTracer implements Tracer {
     const currentBaggage = propagation.getBaggage(ctx);
     // @ts-ignore
     span.setAttribute('componentName', currentBaggage?.componentName);
+    // @ts-ignore
+    span.setAttribute('runId', currentBaggage?.runId);
 
     return span;
   }

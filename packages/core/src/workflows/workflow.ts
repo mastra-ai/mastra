@@ -1210,7 +1210,7 @@ export class Workflow<
       const finalAction = this.#mastra?.telemetry
         ? this.#mastra?.telemetry.traceMethod(execute, {
             spanName: `workflow.${this.name}.action.${stepId}`,
-            attributes: { componentName: this.name },
+            attributes: { componentName: this.name, runId: context.runId ?? this.#runId },
           })
         : execute;
 
@@ -1223,7 +1223,7 @@ export class Workflow<
       if (this.#mastra?.telemetry) {
         return this.#mastra.telemetry.traceMethod(handler, {
           spanName: `workflow.${this.name}.step.${stepId}`,
-          attributes: { componentName: this.name },
+          attributes: { componentName: this.name, runId: context.runId ?? this.#runId },
         })({ context, ...rest });
       }
 
