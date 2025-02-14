@@ -2,9 +2,10 @@
 
 > Mastra is an AI-powered development environment that revolutionizes how developers interact with their codebase. This documentation covers everything from getting started to advanced features, APIs, and best practices for working with Mastra's agent-based architecture.
 
-The documentation is organized into two key sections:
+The documentation is organized into key sections:
 - **docs**: Core documentation covering concepts, features, and implementation details
 - **examples**: Practical examples and use cases demonstrating Mastra's capabilities
+- **showcase**: A showcase of applications built using Mastra
 
 Each section contains detailed markdown files that provide comprehensive information about Mastra's features and how to use them effectively.
 

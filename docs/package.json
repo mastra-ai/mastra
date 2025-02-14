@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "tsx src/scripts/build-cursor-context.ts && next build",
-    "build:llms-full": "tsx src/scripts/build-llms-full-txt.ts",
+    "build": "pnpm build:llms-txt && next build",
+    "build:llms-txt": "tsx src/scripts/build-llms-text-files.ts",
     "start": "next start",
     "lint": "next lint",
     "postbuild": "next-sitemap --config next-sitemap.config.mjs"

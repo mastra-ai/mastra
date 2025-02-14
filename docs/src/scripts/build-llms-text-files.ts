@@ -187,7 +187,7 @@ async function concatenateMDXDocs(sourceDir: string) {
         "This documentation covers everything from getting started to advanced features, APIs, and best practices for working with Mastra's agent-based architecture.\n\n" +
         "The documentation is organized into key sections:\n" +
         "- **docs**: Core documentation covering concepts, features, and implementation details\n" +
-        "- **examples**: Practical examples and use cases demonstrating Mastra's capabilities\n\n" +
+        "- **examples**: Practical examples and use cases demonstrating Mastra's capabilities\n" +
         "- **showcase**: A showcase of applications built using Mastra\n\n" +
         "Each section contains detailed markdown files that provide comprehensive information about Mastra's features and how to use them effectively.\n",
     ];
