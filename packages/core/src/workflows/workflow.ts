@@ -286,10 +286,10 @@ export class Workflow<
       : undefined;
 
     this.logger.debug(`Creating actor with configuration`, {
-      runId: this.#runId,
       machineInput,
       actorSnapshot,
       machineStates: this.#machine.config.states,
+      runId: this.#runId,
     });
 
     this.#actor = createActor(this.#machine, {
