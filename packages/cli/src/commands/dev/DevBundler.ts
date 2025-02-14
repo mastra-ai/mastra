@@ -2,7 +2,6 @@ import { MastraBundler } from '@mastra/core/bundler';
 import { FileService, getWatcher } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions, writeTelemetryConfig } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
-import virtual from '@rollup/plugin-virtual';
 import * as fsExtra from 'fs-extra';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
