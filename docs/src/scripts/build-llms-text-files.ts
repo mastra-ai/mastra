@@ -37,9 +37,9 @@ async function concatenateMDXDocs(sourceDir: string) {
     if (!stats.isDirectory()) {
       throw new Error(`Source path ${sourceDir} is not a directory`);
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error(
-      `Error accessing source directory: ${error?.message || error}`,
+      `Error accessing source directory: ${error instanceof Error ? error?.message : error}`,
     );
     process.exit(1);
   }
@@ -48,9 +48,9 @@ async function concatenateMDXDocs(sourceDir: string) {
   // Ensure output directory exists
   try {
     await fs.mkdir(outputDir, { recursive: true });
-  } catch (error: any) {
+  } catch (error) {
     console.error(
-      `Error creating output directory: ${error?.message || error}`,
+      `Error creating output directory: ${error instanceof Error ? error?.message : error}`,
     );
     process.exit(1);
   }
@@ -88,16 +88,16 @@ async function concatenateMDXDocs(sourceDir: string) {
             title: frontMatter.title || path.basename(relativePath, ".mdx"),
             description: frontMatter.description,
           });
-        } catch (error: any) {
+        } catch (error) {
           console.error(
-            `Error processing file ${fullPath}: ${error?.message || error}`,
+            `Error processing file ${fullPath}: ${error instanceof Error ? error?.message : error}`,
           );
           // Continue processing other files
         }
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error(
-        `Error reading directory ${dirPath}: ${error?.message || error}`,
+        `Error reading directory ${dirPath}: ${error instanceof Error ? error?.message : error}`,
       );
       throw error;
     }
@@ -209,14 +209,16 @@ async function concatenateMDXDocs(sourceDir: string) {
         "utf-8",
       );
       console.log("Generated llms.txt");
-    } catch (error: any) {
-      console.error(`Error writing index file: ${error?.message || error}`);
+    } catch (error) {
+      console.error(
+        `Error writing index file: ${error instanceof Error ? error?.message : error}`,
+      );
       throw error;
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error(
       "Fatal error during documentation generation:",
-      error?.message || error,
+      error instanceof Error ? error?.message : error,
     );
     process.exit(1);
   }
@@ -224,7 +226,10 @@ async function concatenateMDXDocs(sourceDir: string) {
 
 const docsDir = process.argv[2] || ".";
 
-concatenateMDXDocs(docsDir).catch((error: any) => {
-  console.error("Unhandled error:", error?.message || error);
+concatenateMDXDocs(docsDir).catch((error) => {
+  console.error(
+    "Unhandled error:",
+    error instanceof Error ? error?.message : error,
+  );
   process.exit(1);
 });
