@@ -458,11 +458,9 @@ export class Agent<
                   args,
                 });
                 return tool.execute({
-                  context: {
-                    ...args,
-                    runId,
-                  },
+                  context: args,
                   mastra: this.#mastra,
+                  runId,
                 });
               } catch (err) {
                 this.logger.error(`[Agent:${this.name}] - Failed execution`, {
@@ -522,10 +520,8 @@ export class Agent<
                   args,
                 });
                 return toolObj.execute!({
-                  context: {
-                    ...args,
-                    runId,
-                  },
+                  context: args,
+                  runId,
                 });
               } catch (err) {
                 this.logger.error(`[Agent:${this.name}] - Failed toolset execution`, {
@@ -890,7 +886,7 @@ export class Agent<
           onFinish?.(result);
         },
         maxSteps,
-        runId,
+        runId: runIdToUse,
         toolChoice,
       }) as unknown as StreamReturn<Z>;
     }
@@ -919,7 +915,7 @@ export class Agent<
         onFinish?.(result);
       },
       maxSteps,
-      runId,
+      runId: runIdToUse,
       toolChoice,
     }) as unknown as StreamReturn<Z>;
   }

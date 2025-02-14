@@ -65,7 +65,6 @@ export class MastraLLM extends MastraLLMBase {
   }
 
   convertTools(tools?: ToolsInput, runId?: string): Record<string, Tool> {
-    console.log('hydrating wiith run id ', { runId });
     this.logger.debug('Starting tool conversion for LLM');
     const converted = Object.entries(tools || {}).reduce(
       (memo, value) => {
@@ -83,11 +82,9 @@ export class MastraLLM extends MastraLLMBase {
                   props,
                 });
                 return tool.execute({
-                  context: {
-                    ...props,
-                    runId,
-                  },
+                  context: props,
                   mastra: this.#mastra,
+                  runId,
                 });
               } catch (error) {
                 this.logger.error('Error executing tool', {
@@ -443,6 +440,8 @@ export class MastraLLM extends MastraLLMBase {
     }: LLMStreamOptions<Z> = {},
   ) {
     const msgs = this.convertToMessages(messages);
+
+    console.log('Inside stream', { runId });
 
     if (output === 'text') {
       return (await this.__stream({
