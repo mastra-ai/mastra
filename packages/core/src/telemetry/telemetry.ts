@@ -286,7 +286,10 @@ export class Telemetry {
           }
         });
 
-        const result = method(...args);
+        let result: any;
+        otlpContext.with(ctx, () => {
+          result = method(...args);
+        });
 
         function recordResult(res: any) {
           try {
