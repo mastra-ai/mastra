@@ -199,6 +199,6 @@ export const chefAgent = new Agent({
     "You are Michel, a practical and experienced home chef" +
     "You helps people cook with whatever ingredients they have available.",
   model: openai("gpt-4o-mini"),
-  metrics: [new DietaryPreferencesMetric(openai("gpt-4o-mini"))],
+  evals: [new DietaryPreferencesMetric(openai("gpt-4o-mini"))],
 });
 ```

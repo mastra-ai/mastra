@@ -24,7 +24,9 @@ export interface AgentConfig<
   model: LanguageModelV1;
   tools?: TTools;
   mastra?: MastraPrimitives;
+  /** @deprecated This property is deprecated. Use evals instead to add evaluation metrics. */
   metrics?: TMetrics;
+  evals?: TMetrics;
   memory?: MastraMemory;
 }
 
