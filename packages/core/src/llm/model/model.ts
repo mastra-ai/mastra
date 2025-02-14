@@ -23,6 +23,7 @@ import {
 } from '../';
 import { type MastraPrimitives } from '../../action';
 import { type ToolsInput } from '../../agent/types';
+import type { CoreTool } from '../../tools';
 import { delay } from '../../utils';
 
 import { MastraLLMBase } from './base';
@@ -68,7 +69,7 @@ export class MastraLLM extends MastraLLMBase {
     return this.#model;
   }
 
-  convertTools(tools?: ToolsInput): Record<string, Tool> {
+  convertTools({ tools, runId }: { tools?: ToolsInput; runId?: string } = {}): Record<string, CoreTool> {
     this.logger.debug('Starting tool conversion for LLM');
     const converted = Object.entries(tools || {}).reduce(
       (memo, value) => {
@@ -88,6 +89,7 @@ export class MastraLLM extends MastraLLMBase {
                 return tool.execute({
                   context: props,
                   mastra: this.#mastra,
+                  runId,
                 });
               } catch (error) {
                 this.logger.error('Error executing tool', {
@@ -103,9 +105,11 @@ export class MastraLLM extends MastraLLMBase {
 
         return memo;
       },
-      {} as Record<string, Tool>,
+      {} as Record<string, CoreTool>,
     );
+
     this.logger.debug(`Converted tools for LLM`);
+
     return converted;
   }
 
@@ -128,7 +132,7 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools(tools);
+    const finalTools = convertedTools || this.convertTools({ tools, runId });
 
     const argsForExecute = {
       model,
@@ -182,7 +186,7 @@ export class MastraLLM extends MastraLLMBase {
 
     this.logger.debug(`[LLM] - Generating a text object`, { runId });
 
-    const finalTools = convertedTools || this.convertTools(tools);
+    const finalTools = convertedTools || this.convertTools({ tools, runId });
 
     const argsForExecute = {
       model,
@@ -255,7 +259,7 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools(tools);
+    const finalTools = convertedTools || this.convertTools({ tools, runId });
 
     const argsForExecute = {
       model,
@@ -326,7 +330,7 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools(tools);
+    const finalTools = convertedTools || this.convertTools({ tools, runId });
 
     const argsForExecute = {
       model,
