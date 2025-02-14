@@ -23,6 +23,7 @@ import {
 } from '../';
 import { type MastraPrimitives } from '../../action';
 import { type ToolsInput } from '../../agent/types';
+import type { CoreTool } from '../../tools';
 import { delay } from '../../utils';
 
 import { MastraLLMBase } from './base';
@@ -68,7 +69,7 @@ export class MastraLLM extends MastraLLMBase {
     return this.#model;
   }
 
-  convertTools({ tools, runId }: { tools?: ToolsInput; runId?: string }): Record<string, Tool> {
+  convertTools({ tools, runId }: { tools?: ToolsInput; runId?: string } = {}): Record<string, CoreTool> {
     this.logger.debug('Starting tool conversion for LLM');
     const converted = Object.entries(tools || {}).reduce(
       (memo, value) => {
@@ -104,9 +105,11 @@ export class MastraLLM extends MastraLLMBase {
 
         return memo;
       },
-      {} as Record<string, Tool>,
+      {} as Record<string, CoreTool>,
     );
+
     this.logger.debug(`Converted tools for LLM`);
+
     return converted;
   }
 
