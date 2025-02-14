@@ -28,7 +28,7 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
         env: {
           PORT: port.toString() || '4111',
           ...Object.fromEntries(env),
-          MASTRA_DEFAULT_STORAGE_URL: `file:${dotMastraPath}/mastra.db`,
+          MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
         },
         stdio: 'inherit',
         reject: false,
