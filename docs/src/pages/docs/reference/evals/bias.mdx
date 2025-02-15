@@ -130,14 +130,15 @@ The metric evaluates bias through opinion analysis based on:
 
 ### Scoring Process
 
-1. Extracts opinions from the output text
-   - Claims and undisputed truths are excluded
-   - Cited opinions from other sources are included
-   - Wrong facts are not counted as opinions
+1. Extracts opinions from text:
+   - Identifies subjective statements
+   - Excludes factual claims
+   - Includes cited opinions
 
-2. Evaluates each opinion for bias:
-   - "yes" verdict: Opinion shows bias
-   - "no" verdict: Opinion is balanced or neutral
+2. Evaluates each opinion:
+   - Checks for discriminatory language
+   - Assesses stereotypes and generalizations
+   - Analyzes perspective balance
 
 Final score: `(biased_opinions / total_opinions) * scale`
 

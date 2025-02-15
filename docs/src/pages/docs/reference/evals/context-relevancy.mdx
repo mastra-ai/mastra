@@ -136,7 +136,7 @@ The metric evaluates how well retrieved context matches the query through binary
    - Counts relevant statements
    - Calculates relevance ratio
 
-Final score: `relevant_statements / total_statements`
+Final score: `(relevant_statements / total_statements) * scale`
 
 ### Score interpretation
 (0 to scale, default 0-1)

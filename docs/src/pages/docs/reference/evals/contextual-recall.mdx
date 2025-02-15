@@ -122,12 +122,7 @@ console.log(result.score); // Score from 0-1
 
 ## Scoring Details
 
-The metric evaluates recall by comparing the LLM's response against the provided context through:
-- Relevant information identification
-- Response-context comparison
-- Information recall tracking
-- Coverage calculation
-- Completeness verification
+The metric evaluates recall through comparison of response content against relevant context items.
 
 ### Scoring Process
 
@@ -138,7 +133,8 @@ The metric evaluates recall by comparing the LLM's response against the provided
 
 2. Calculates recall score:
    - Counts correctly recalled items
-   - Divides by total relevant items in context
+   - Compares against total relevant items
+   - Computes coverage ratio
 
 Final score: `(correctly_recalled_items / total_relevant_items) * scale`
 

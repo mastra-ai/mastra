@@ -131,25 +131,14 @@ console.log(result.info.reason); // Explanation of the score
 
 ## Scoring Details
 
-The metric evaluates hallucination by identifying contradictions between the output and context:
-
-1. Statement Analysis:
-   - Extracts key factual statements from context
-   - Evaluates output against each statement
-   - Identifies direct conflicts and contradictions
-
-2. Numerical Precision:
-   - Scale of numbers involved
-   - Use of approximation terms ("about", "around", "approximately")
-   - Context-appropriate precision levels
-   - Explicit precision markers ("exactly", "precisely")
+The metric evaluates hallucination through contradiction detection and numerical precision analysis.
 
 ### Scoring Process
 
-1. Evaluates context statements:
-   - Extracts factual claims from context
-   - Identifies key numerical values
-   - Maps relationships between statements
+1. Analyzes factual content:
+   - Extracts statements from context
+   - Identifies numerical values
+   - Maps statement relationships
 
 2. Analyzes output for contradictions:
    - Compares against context statements

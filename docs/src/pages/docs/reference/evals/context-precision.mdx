@@ -127,7 +127,9 @@ The metric evaluates context precision through binary relevance assessment and M
 
 ### Scoring Process
 
-1. Converts verdicts to binary scores (1 for relevant, 0 for not)
+1. Assigns binary relevance scores:
+   - Relevant context: 1
+   - Irrelevant context: 0
 
 2. Calculates Mean Average Precision:
    - Computes precision at each position
