@@ -157,7 +157,7 @@ The metric evaluates summaries through two essential components:
    - Evaluates completeness
    - Calculates: `answerable_questions / total_questions`
 
-Final score: `min(alignment_score, coverage_score)`
+Final score: `min(alignment_score, coverage_score) * scale`
 
 ### Score interpretation
 (0 to scale, default 0-1)

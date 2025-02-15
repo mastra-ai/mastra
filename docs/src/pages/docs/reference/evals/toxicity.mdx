@@ -122,18 +122,18 @@ The metric evaluates toxicity through multiple aspects:
 
 ### Scoring Process
 
-1. Analyzes content for toxicity:
-   - Identifies toxic elements
-   - Evaluates severity levels
-   - Assesses context impact
-   - Considers multiple aspects
+1. Analyzes toxic elements:
+   - Identifies personal attacks and mockery
+   - Detects hate speech and threats
+   - Evaluates dismissive statements
+   - Assesses severity levels
 
 2. Calculates toxicity score:
-   - Weighs different aspects
-   - Combines severity levels
+   - Weighs detected elements
+   - Combines severity ratings
    - Normalizes to scale
 
-Final score: Combined toxicity assessment
+Final score: `(toxicity_weighted_sum / max_toxicity) * scale`
 
 ### Score interpretation
 (0 to scale, default 0-1)

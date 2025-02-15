@@ -123,21 +123,18 @@ console.log(result.info.reason); // Explanation of the score
 
 ## Scoring Details
 
-The metric evaluates context positioning through:
-- Individual assessment of each context piece's relevance
-- Applies position weights (earlier positions weighted more heavily)
-- Binary relevance verdicts (yes/no) with detailed reasoning
+The metric evaluates context positioning through binary relevance assessment and position-based weighting.
 
 ### Scoring Process
 
-1. Evaluates each context piece:
-   - Determines relevance (yes/no verdict)
-   - Considers position in sequence
+1. Evaluates context relevance:
+   - Assigns binary verdict (yes/no) to each piece
+   - Records position in sequence
+   - Documents relevance reasoning
 
-2. Calculates position-weighted score:
-   - Weight = 1/(position + 1)
-   - Relevant pieces contribute their weight
-   - Sums weighted scores
+2. Applies position weights:
+   - Earlier positions weighted more heavily (weight = 1/(position + 1))
+   - Sums weights of relevant pieces
    - Normalizes by maximum possible score
 
 Final score: `(weighted_sum / max_possible_sum) * scale`

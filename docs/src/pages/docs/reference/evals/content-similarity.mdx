@@ -109,33 +109,23 @@ console.log(result.info); // Detailed similarity metrics
   ]}
 />
 
-## Text Processing Details
-
-The metric processes text in the following ways when configured:
-- Case normalization: Converts all text to lowercase if `ignoreCase` is true
-- Whitespace normalization: Replaces multiple spaces with single space and trims if `ignoreWhitespace` is true
-
 ## Scoring Details
 
-The metric evaluates textual similarity based on:
-- Character-level matching
-- Word boundary alignment
-- Text normalization options
-- Sequential pattern matching
-- Overall string composition
+The metric evaluates textual similarity through character-level matching and configurable text normalization.
 
 ### Scoring Process
 
-1. Normalizes input and output text:
-   - Converts to lowercase if ignoreCase is true
-   - Normalizes whitespace if ignoreWhitespace is true
+1. Normalizes text:
+   - Case normalization (if ignoreCase: true)
+   - Whitespace normalization (if ignoreWhitespace: true)
 
 2. Compares processed strings using string-similarity algorithm:
    - Analyzes character sequences
+   - Aligns word boundaries
    - Considers relative positions
    - Accounts for length differences
 
-Final score: Normalized similarity value between input and output strings
+Final score: `similarity_value * scale`
 
 ### Score interpretation
 (0 to scale, default 0-1)

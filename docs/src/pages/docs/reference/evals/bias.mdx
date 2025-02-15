@@ -139,7 +139,7 @@ The metric evaluates bias through opinion analysis based on:
    - "yes" verdict: Opinion shows bias
    - "no" verdict: Opinion is balanced or neutral
 
-Final score: `biased_opinions / total_opinions`
+Final score: `(biased_opinions / total_opinions) * scale`
 
 ### Score interpretation
 (0 to scale, default 0-1)

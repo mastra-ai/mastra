@@ -123,11 +123,7 @@ console.log(result.info.reason); // Explanation of the score
 
 ## Scoring Details
 
-The metric evaluates context precision through:
-- Individual assessment of each context piece's relevance
-- Position-weighted scoring using MAP (earlier positions weighted more heavily)
-- Binary relevance verdicts (yes/no) with detailed reasoning
-- Consideration of context ordering
+The metric evaluates context precision through binary relevance assessment and Mean Average Precision (MAP) scoring.
 
 ### Scoring Process
 
@@ -138,7 +134,7 @@ The metric evaluates context precision through:
    - Weights earlier positions more heavily
    - Normalizes to configured scale
 
-Final score: Mean Average Precision normalized to scale
+Final score: `Mean Average Precision * scale`
 
 ### Score interpretation
 (0 to scale, default 0-1)

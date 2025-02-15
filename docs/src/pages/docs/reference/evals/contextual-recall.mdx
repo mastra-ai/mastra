@@ -140,7 +140,7 @@ The metric evaluates recall by comparing the LLM's response against the provided
    - Counts correctly recalled items
    - Divides by total relevant items in context
 
-Final score: `correctly_recalled_items / total_relevant_items`
+Final score: `(correctly_recalled_items / total_relevant_items) * scale`
 
 ### Score interpretation
 (0 to scale, default 0-1)

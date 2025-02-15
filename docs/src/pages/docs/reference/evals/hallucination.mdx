@@ -162,7 +162,7 @@ The metric evaluates hallucination by identifying contradictions between the out
    - Divides by total statements
    - Scales to configured range
 
-Final score: `contradicted_statements / total_statements`
+Final score: `(contradicted_statements / total_statements) * scale`
 
 ### Important Considerations
 

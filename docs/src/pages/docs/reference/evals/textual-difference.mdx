@@ -110,17 +110,17 @@ The metric calculates several measures:
 
 ### Scoring Process
 
-1. Analyzes textual differences:
-   - Performs sequence matching between input and output
-   - Counts the number of change operations required
+1. Analyzes text sequences:
+   - Performs sequence matching
+   - Counts required change operations
    - Measures length differences
 
-2. Calculates final metrics:
+2. Calculates metrics:
    - Computes similarity ratio
    - Determines confidence score
-   - Generates detailed analysis
+   - Combines into weighted score
 
-Final score: Weighted combination of similarity and confidence
+Final score: `(similarity_ratio * confidence) * scale`
 
 ### Score interpretation
 (0 to scale, default 0-1)
