@@ -124,26 +124,31 @@ console.log(result.info.reason); // Explanation of the score
 ## Scoring Details
 
 The metric evaluates context precision through:
-
 - Individual assessment of each context piece's relevance
-- Position-weighted scoring (earlier positions weighted more heavily)
-- Binary relevance verdicts (yes/no) with detailed reasoning
+- Position-weighted scoring using MAP
+- Binary relevance verdicts (yes/no)
 - Consideration of context ordering
 
-The final score is calculated using Mean Average Precision (MAP):
+### Scoring Process
 
-1. Converts verdicts to binary scores (1 for relevant, 0 for not)
-2. Calculates precision at each position
-3. Weight earlier positions more heavily
-4. Normalizes to the configured scale (default 0-1)
+1. Converts verdicts to binary scores:
+   - Relevant context: 1
+   - Irrelevant context: 0
 
-Score interpretation:
+2. Calculates Mean Average Precision:
+   - Computes precision at each position
+   - Weights earlier positions more heavily
+   - Normalizes to configured scale
 
+Final score: Mean Average Precision normalized to scale
+
+### Score interpretation
+(0 to scale, default 0-1)
 - 1.0: All relevant context in optimal order
 - 0.7-0.9: Mostly relevant context with good ordering
 - 0.4-0.6: Mixed relevance or suboptimal ordering
 - 0.1-0.3: Limited relevance or poor ordering
-- 0: No relevant context
+- 0.0: No relevant context
 
 ## Example with Analysis
 

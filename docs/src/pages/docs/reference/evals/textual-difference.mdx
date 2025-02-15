@@ -114,6 +114,13 @@ The scoring process:
 3. Calculates length-based confidence
 4. Returns detailed metrics for analysis
 
+Score interpretation (0 to scale, default 0-1):
+- 1.0: Perfect summary - completely factual and covers all key information
+- 0.7-0.9: Strong summary with minor omissions or slight inaccuracies
+- 0.4-0.6: Moderate quality with significant gaps or inaccuracies
+- 0.1-0.3: Poor summary with major omissions or factual errors
+- 0: Invalid summary - either completely inaccurate or missing critical information
+
 ## Example with Analysis
 
 ```typescript

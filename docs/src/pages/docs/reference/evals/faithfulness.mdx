@@ -139,8 +139,15 @@ Claims can receive one of three verdicts:
 
 The final score is calculated as: `(number of supported claims / total number of claims) * scale`
 
-Score interpretation:
+The scoring process:
 
+1. Evaluates the relevance of each context piece
+2. Applies position weights (earlier positions weighted more heavily)
+3. Sums weighted relevance scores
+4. Normalizes against the maximum possible score
+5. Scales to configured range (default 0-1)
+
+Score interpretation (0 to scale, default 0-1):
 - 1.0: All claims are supported by the context
 - 0.67: Two-thirds of claims are supported
 - 0.5: Half of the claims are supported

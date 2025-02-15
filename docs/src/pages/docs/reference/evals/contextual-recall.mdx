@@ -124,7 +124,15 @@ console.log(result.score); // Score from 0-1
 
 The metric calculates recall by comparing the LLM's response against the provided context documents:
 
-Score interpretation:
+The scoring process:
+
+1. Evaluates the relevance of each context piece
+2. Applies position weights (earlier positions weighted more heavily)
+3. Sums weighted relevance scores
+4. Normalizes against the maximum possible score
+5. Scales to configured range (default 0-1)
+
+Score interpretation (0 to scale, default 0-1):
 - 1.0: Perfect recall - all relevant information was included
 - 0.7-0.9: High recall - most relevant information was included
 - 0.4-0.6: Moderate recall - some relevant information was missed

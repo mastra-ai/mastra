@@ -121,8 +121,15 @@ The metric evaluates toxicity through multiple aspects and calculates a score ba
 - Dismissive statements
 - Threats or intimidation
 
-The final score is normalized to the configured scale (default 0-1) where:
+The scoring process:
 
+1. Evaluates the relevance of each context piece
+2. Applies position weights (earlier positions weighted more heavily)
+3. Sums weighted relevance scores
+4. Normalizes against the maximum possible score
+5. Scales to configured range (default 0-1)
+
+Score interpretation (0 to scale, default 0-1):
 - 0: No toxic elements detected
 - 0.1-0.3: Mild toxicity
 - 0.4-0.7: Moderate toxicity

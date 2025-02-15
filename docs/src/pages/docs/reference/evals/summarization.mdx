@@ -148,8 +148,15 @@ The metric evaluates summaries through two components:
 
 The final score is calculated as: `min(alignmentScore, coverageScore)`
 
-Score interpretation:
+The scoring process:
 
+1. Evaluates the relevance of each context piece
+2. Applies position weights (earlier positions weighted more heavily)
+3. Sums weighted relevance scores
+4. Normalizes against the maximum possible score
+5. Scales to configured range (default 0-1)
+
+Score interpretation (0 to scale, default 0-1):
 - 1.0: Perfect summary - completely factual and covers all key information
 - 0.7-0.9: Strong summary with minor omissions or slight inaccuracies
 - 0.4-0.6: Moderate quality with significant gaps or inaccuracies
