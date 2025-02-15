@@ -45,9 +45,17 @@ const stepOne = new Step({
 
 const stepTwo = new Step({
   id: "stepTwo",
-  execute: async ({ context }) => ({
-    incrementedValue: context.steps.stepOne.output.doubledValue + 1,
-  }),
+  execute: async ({ context }) => {
+    const stepOne = context.steps.stepOne;
+
+    if (stepOne.status !== "success") {
+      return { incrementedValue: 0 };
+    }
+
+    return {
+      incrementedValue: stepOne.output.doubledValue + 1,
+    };
+  },
 });
 
 // 3. Link and commit steps
