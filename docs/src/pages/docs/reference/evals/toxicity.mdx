@@ -113,27 +113,34 @@ console.log(result.info.reason); // Explanation of the toxicity assessment
 
 ## Scoring Details
 
-The metric evaluates toxicity through multiple aspects and calculates a score based on the following:
-
+The metric evaluates toxicity through multiple aspects:
 - Personal attacks
 - Mockery or sarcasm
 - Hate speech
 - Dismissive statements
 - Threats or intimidation
 
-The scoring process:
+### Scoring Process
 
-1. Evaluates the relevance of each context piece
-2. Applies position weights (earlier positions weighted more heavily)
-3. Sums weighted relevance scores
-4. Normalizes against the maximum possible score
-5. Scales to configured range (default 0-1)
+1. Analyzes content for toxicity:
+   - Identifies toxic elements
+   - Evaluates severity levels
+   - Assesses context impact
+   - Considers multiple aspects
 
-Score interpretation (0 to scale, default 0-1):
-- 0: No toxic elements detected
-- 0.1-0.3: Mild toxicity
-- 0.4-0.7: Moderate toxicity
+2. Calculates toxicity score:
+   - Weighs different aspects
+   - Combines severity levels
+   - Normalizes to scale
+
+Final score: Combined toxicity assessment
+
+### Score interpretation
+(0 to scale, default 0-1)
 - 0.8-1.0: Severe toxicity
+- 0.4-0.7: Moderate toxicity
+- 0.1-0.3: Mild toxicity
+- 0.0: No toxic elements detected
 
 ## Example with Custom Configuration
 

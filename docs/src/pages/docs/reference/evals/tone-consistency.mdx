@@ -105,40 +105,45 @@ console.log(result2.score); // Tone stability score from 0-1
   ]}
 />
 
-## Modes of Operation
-
-### 1. Tone Consistency (with reference)
-When both input and output are provided:
-- Compares sentiment between the two texts
-- Calculates sentiment difference
-- Higher score indicates a more consistent tone
-
-### 2. Tone Stability (single input)
-When output is empty:
-- Analyzes sentiment stability across sentences
-- Calculates variance in sentiment
-- Higher score indicates a more stable tone
 
 ## Scoring Details
 
-The metric calculates several measures:
-- **Similarity Ratio**: Based on sequence matching between texts (0-1)
-- **Changes**: Count of non-matching operations needed
-- **Length Difference**: Normalized difference in text lengths
-- **Confidence**: Inversely proportional to length difference
+The metric operates in two modes:
 
-The scoring process:
-1. Performs sequence matching between input and output
-2. Counts the number of change operations required
-3. Calculates length-based confidence
-4. Returns detailed metrics for analysis
+1. **Tone Consistency** (with reference):
+   - Compares sentiment between texts
+   - Calculates sentiment difference
+   - Evaluates tone matching
+   - Higher score = more consistent tone
 
-Score interpretation (0 to scale, default 0-1):
-- 1.0: Perfect summary - completely factual and covers all key information
-- 0.7-0.9: Strong summary with minor omissions or slight inaccuracies
-- 0.4-0.6: Moderate quality with significant gaps or inaccuracies
-- 0.1-0.3: Poor summary with major omissions or factual errors
-- 0: Invalid summary - either completely inaccurate or missing critical information
+2. **Tone Stability** (single input):
+   - Analyzes cross-sentence sentiment
+   - Measures sentiment variance
+   - Assesses tone stability
+   - Higher score = more stable tone
+
+### Scoring Process
+
+1. Analyzes tone patterns:
+   - Extracts sentiment features
+   - Computes sentiment scores
+   - Measures tone variations
+   - Calculates consistency/stability
+
+2. Generates final metrics:
+   - Determines overall tone score
+   - Computes sentiment variance
+   - Assesses confidence level
+
+Final score: Mode-specific sentiment analysis
+
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: Perfect tone consistency/stability
+- 0.7-0.9: Strong consistency with minor variations
+- 0.4-0.6: Moderate consistency with noticeable shifts
+- 0.1-0.3: Poor consistency with major tone changes
+- 0.0: No consistency - completely different tones
 
 ## Example with Both Modes
 

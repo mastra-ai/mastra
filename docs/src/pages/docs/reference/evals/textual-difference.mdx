@@ -108,18 +108,27 @@ The metric calculates several measures:
 - **Length Difference**: Normalized difference in text lengths
 - **Confidence**: Inversely proportional to length difference
 
-The scoring process:
-1. Performs sequence matching between input and output
-2. Counts the number of change operations required
-3. Calculates length-based confidence
-4. Returns detailed metrics for analysis
+### Scoring Process
 
-Score interpretation (0 to scale, default 0-1):
-- 1.0: Perfect summary - completely factual and covers all key information
-- 0.7-0.9: Strong summary with minor omissions or slight inaccuracies
-- 0.4-0.6: Moderate quality with significant gaps or inaccuracies
-- 0.1-0.3: Poor summary with major omissions or factual errors
-- 0: Invalid summary - either completely inaccurate or missing critical information
+1. Analyzes textual differences:
+   - Performs sequence matching
+   - Counts change operations
+   - Measures length differences
+
+2. Calculates final metrics:
+   - Computes similarity ratio
+   - Determines confidence score
+   - Generates detailed analysis
+
+Final score: Weighted combination of similarity and confidence
+
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: Identical texts - no differences
+- 0.7-0.9: Minor differences - few changes needed
+- 0.4-0.6: Moderate differences - significant changes
+- 0.1-0.3: Major differences - extensive changes
+- 0.0: Completely different texts
 
 ## Example with Analysis
 
