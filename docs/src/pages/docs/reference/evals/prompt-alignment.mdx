@@ -129,25 +129,31 @@ console.log(result.info.reason); // Explanation of the score
 ## Scoring Details
 
 The metric evaluates instruction alignment through:
-
 - Individual assessment of each instruction's compliance
 - Strict binary verdicts (yes/no) for each instruction
 - Detailed reasoning for any non-compliance
 - Equal weighting of all instructions
+### Scoring Process
 
-The scoring process:
+1. Evaluates instruction compliance:
+   - Assesses each instruction independently
+   - Assigns binary scores (1: compliant, 0: non-compliant)
+   - Documents reasons for non-compliance
 
-1. Evaluate each instruction independently
-2. Assign binary scores (1 for compliant, 0 for non-compliant)
-3. Calculate the percentage of followed instructions
-4. Scale to configured range (default 0-1)
+2. Calculates overall alignment:
+   - Sums compliant instructions
+   - Computes compliance percentage
+   - Scales to configured range
 
-Score interpretation (0 to scale, default 0-1):
+Final score: `compliant_instructions / total_instructions`
+
+### Score interpretation
+(0 to scale, default 0-1)
 - 1.0: All instructions followed perfectly
 - 0.7-0.9: Most instructions followed with minor deviations
 - 0.4-0.6: Mixed compliance with instructions
 - 0.1-0.3: Limited compliance with instructions
-- 0: No instructions followed correctly
+- 0.0: No instructions followed correctly
 
 ## Example with Analysis
 
