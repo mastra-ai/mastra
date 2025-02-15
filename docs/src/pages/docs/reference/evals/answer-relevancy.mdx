@@ -128,8 +128,19 @@ The metric evaluates relevancy through multiple verdicts and calculates a score 
 - Accuracy of information
 - Appropriate level of detail
 
-Score interpretation:
+### Scoring Process
 
+1. Breaks down the output into meaningful statements while preserving context
+
+2. Evaluates relevance of each statement:
+   - Direct matches ("yes" verdict): Full weight
+   - Partial matches ("unsure" verdict): Weighted by configurable uncertainty factor (default: 0.3)
+   - No matches ("no" verdict): Zero weight
+
+Final score: `(direct + uncertainty * partial) / total_statements`
+
+### Score interpretation
+(0 to scale, default 0-1)
 - 1.0: Perfect relevance
 - 0.7-0.9: High relevance with minor issues
 - 0.4-0.6: Moderate relevance with significant gaps
