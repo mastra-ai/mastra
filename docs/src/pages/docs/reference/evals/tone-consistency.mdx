@@ -111,16 +111,15 @@ console.log(result2.score); // Tone stability score from 0-1
 The metric operates in two modes:
 
 1. **Tone Consistency** (with reference):
+When both input and output are provided:
    - Compares sentiment between texts
    - Calculates sentiment difference
-   - Evaluates tone matching
-   - Higher score = more consistent tone
+   - Evaluates tone matching: a higher score indicates more consistent tone
 
 2. **Tone Stability** (single input):
-   - Analyzes cross-sentence sentiment
-   - Measures sentiment variance
-   - Assesses tone stability
-   - Higher score = more stable tone
+  - Analyzes sentiment stability across sentences
+   - Calculates variance in sentiment
+   - Assesses tone stability: a higher score indicates more stable tone
 
 ### Scoring Process
 

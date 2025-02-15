@@ -133,18 +133,15 @@ console.log(result.info); // Object containing detailed metrics about the summar
 ## Scoring Details
 
 The metric evaluates summaries through two essential components:
-
 1. **Alignment Score**: Measures factual correctness
-   - Extracts and verifies claims
-   - Validates against source text
-   - Uses yes/no/unsure verdicts
-   - Ensures factual accuracy
+   - Extracts claims from the summary
+   - Verifies each claim against the original text
+   - Assigns "yes", "no", or "unsure" verdicts
 
 2. **Coverage Score**: Measures inclusion of key information
    - Generates key questions from the original text
    - Check if the summary answers these questions
-   - Checks information inclusion
-   - Assesses comprehensiveness
+   - Checks information inclusion and assesses comprehensiveness
 
 ### Scoring Process
 
