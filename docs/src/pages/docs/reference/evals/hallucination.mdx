@@ -131,38 +131,58 @@ console.log(result.info.reason); // Explanation of the score
 
 ## Scoring Details
 
-The metric evaluates hallucination through:
+The metric evaluates hallucination by identifying contradictions between the output and context:
 
-1. Extracting key factual statements from each context piece
-2. Checking if the output contradicts any of these statements
-3. Calculating the ratio of contradicted statements to total statements
+1. Statement Analysis:
+   - Extracts key factual statements from context
+   - Evaluates output against each statement
+   - Identifies direct conflicts and contradictions
 
-The scoring process:
+2. Numerical Precision:
+   - Scale of numbers involved
+   - Use of approximation terms ("about", "around", "approximately")
+   - Context-appropriate precision levels
+   - Explicit precision markers ("exactly", "precisely")
 
-1. Each statement from the context is evaluated against the output
-2. A contradiction is marked when the output directly conflicts with a statement
-3. Score = (number of contradicted statements) / (total number of statements)
-4. Result is scaled to the configured range (default 0-1)
+### Scoring Process
 
-Important considerations:
+1. Evaluates context statements:
+   - Extracts factual claims from context
+   - Identifies key numerical values
+   - Maps relationships between statements
 
-- Numerical approximations are evaluated based on:
-  - Scale of the numbers involved
-  - Use of approximation terms ("about", "around", "approximately")
-  - Context-appropriate precision
-  - Explicit precision markers ("exactly", "precisely")
-- Speculative language (might, possibly, believe) does not constitute contradictions
-- Additional information beyond context scope is not counted as contradictions unless it directly conflicts
+2. Analyzes output for contradictions:
+   - Compares against context statements
+   - Marks direct conflicts as contradictions
+   - Evaluates numerical accuracy
+   - Considers approximation context
+
+3. Calculates hallucination score:
+   - Counts contradicted statements
+   - Divides by total statements
+   - Scales to configured range
+
+Final score: `contradicted_statements / total_statements`
+
+### Important Considerations
+
+- Speculative language ("might", "possibly", "believe") does not constitute contradictions
+- Additional information beyond context scope is allowed unless it directly conflicts
 - Empty outputs result in zero contradictions
+- Numerical evaluation considers:
+  - Scale-appropriate precision
+  - Contextual approximations
+  - Explicit precision indicators
 
-Score interpretation (0 to scale, default 0-1):
-- 0.0: No hallucination - output doesn't contradict any context statements
+### Score interpretation
+(0 to scale, default 0-1)
+- 0.0: No hallucination - output aligns with all context statements
 - 0.25: Low hallucination - contradicts 25% of context statements
 - 0.5: Moderate hallucination - contradicts half of context statements
 - 0.75: High hallucination - contradicts 75% of context statements
 - 1.0: Complete hallucination - contradicts all context statements
 
-**Note:** The score represents the degree of hallucination, so a lower score indicates better factual alignment with the provided context.
+**Note:** The score represents the degree of hallucination - lower scores indicate better factual alignment with the provided context
 
 ## Example with Analysis
 

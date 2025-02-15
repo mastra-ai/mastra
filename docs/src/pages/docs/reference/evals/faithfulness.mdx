@@ -125,30 +125,36 @@ console.log(result.info.reason); // "All claims are supported by the context."
 
 ## Scoring Details
 
-The FaithfulnessMetric evaluates the output by:
+The metric evaluates faithfulness through:
+- Claim extraction and verification
+- Context-based validation
+- Verdict assignment
+- Support ratio calculation
 
-1. Extracting all claims from the output (both factual and speculative)
-2. Verifying each claim against the provided context
-3. Calculating a score based on the proportion of supported claims
+### Scoring Process
 
-Claims can receive one of three verdicts:
+1. Analyzes claims and context:
+   - Extracts all claims (factual and speculative)
+   - Verifies each claim against context
+   - Assigns one of three verdicts:
+     - "yes" - claim supported by context
+     - "no" - claim contradicts context
+     - "unsure" - claim unverifiable
 
-- "yes" - The claim is supported by the context
-- "no" - The claim contradicts the context
-- "unsure" - The claim cannot be verified using the context (e.g., future predictions or claims outside the context scope)
+2. Calculates faithfulness score:
+   - Counts supported claims
+   - Divides by total claims
+   - Scales to configured range
 
-The final score is calculated as: `(number of supported claims / total number of claims) * scale`
+Final score: `supported_claims / total_claims * scale`
 
-The scoring process:
-
-1. Evaluates the relevance of each context piece
-2. Applies position weights (earlier positions weighted more heavily)
-3. Sums weighted relevance scores
-4. Normalizes against the maximum possible score
-5. Scales to configured range (default 0-1)
-
-Score interpretation (0 to scale, default 0-1):
-- 1.0: All claims are supported by the context
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: All claims supported by context
+- 0.7-0.9: Most claims supported, few unverifiable
+- 0.4-0.6: Mixed support with some contradictions
+- 0.1-0.3: Limited support, many contradictions
+- 0.0: No supported claims
 - 0.67: Two-thirds of claims are supported
 - 0.5: Half of the claims are supported
 - 0.33: One-third of claims are supported
