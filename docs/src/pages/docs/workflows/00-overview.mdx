@@ -46,14 +46,12 @@ const stepOne = new Step({
 const stepTwo = new Step({
   id: "stepTwo",
   execute: async ({ context }) => {
-    const stepOne = context.steps.stepOne;
-
-    if (stepOne.status !== "success") {
+    if (context.steps.stepOne.status !== "success") {
       return { incrementedValue: 0 };
     }
 
     return {
-      incrementedValue: stepOne.output.doubledValue + 1,
+      incrementedValue: context.steps.stepOne.output.doubledValue + 1,
     };
   },
 });
