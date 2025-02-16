@@ -61,6 +61,18 @@ export abstract class MastraMemory extends MastraBase {
     }
   }
 
+  public setStorage(storage: MastraStorage) {
+    this.storage = storage;
+  }
+
+  public setVector(vector: MastraVector) {
+    this.vector = vector;
+  }
+
+  public setEmbedder(embedder: EmbeddingModel<string>) {
+    this.embedder = embedder;
+  }
+
   /**
    * Get a system message to inject into the conversation.
    * This will be called before each conversation turn.
