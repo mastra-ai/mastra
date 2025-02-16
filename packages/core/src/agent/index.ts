@@ -586,7 +586,7 @@ export class Agent<
     let coreMessages: CoreMessage[] = [];
     let threadIdToUse = threadId;
 
-    this.log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, { runId });
+    this.log(LogLevel.DEBUG, `Saving user messages in memory for agent ${this.name}`, { runId });
     const saveMessageResponse = await this.saveMemory({
       threadId,
       resourceId,

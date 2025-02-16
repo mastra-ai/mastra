@@ -40,7 +40,7 @@ export class Memory extends MastraMemory {
           vector?: number[];
         }[] = null;
 
-    this.logger.info(`Memory query() with:`, {
+    this.logger.debug(`Memory query() with:`, {
       threadId,
       selectBy,
       threadConfig,
@@ -130,7 +130,7 @@ export class Memory extends MastraMemory {
       threadConfig: config,
     });
 
-    this.logger.info(`Remembered message history includes ${messages.messages.length} messages.`);
+    this.logger.debug(`Remembered message history includes ${messages.messages.length} messages.`);
     return messages;
   }
 
