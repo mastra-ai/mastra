@@ -422,7 +422,25 @@ export class Agent<
       };
     });
 
-    return messagesBySanitizedContent.filter(message => message.content.length > 0) as CoreMessage[];
+    return messagesBySanitizedContent.filter(message => {
+      if (typeof message.content === `string`) {
+        return message.content !== '';
+      }
+
+      if (Array.isArray(message.content)) {
+        return (
+          message.content.length &&
+          message.content.every(c => {
+            if (c.type === `text`) {
+              return c.text && c.text !== '';
+            }
+            return true;
+          })
+        );
+      }
+
+      return true;
+    }) as Array<CoreMessage>;
   }
 
   convertTools({
