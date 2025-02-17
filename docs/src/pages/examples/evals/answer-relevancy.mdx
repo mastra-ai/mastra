@@ -70,16 +70,16 @@ console.log('Metric Result:', {
 });
 ```
 
-### Low Relevancy Example
+### Partial Relevancy Example
 
-Evaluate an irrelevant response:
+Evaluate a partially relevant response:
 
 ```typescript copy showLineNumbers{26} filename="src/index.ts"
-const query2 = 'What are the benefits of meditation?';
+const query2 = 'What should a healthy breakfast include?';
 const response2 =
-  'The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.';
+  'A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.';
 
-console.log('\nExample 2 - Low Relevancy:');
+console.log('\nExample 2 - Partial Relevancy:');
 console.log('Query:', query2);
 console.log('Response:', response2);
 
@@ -90,16 +90,16 @@ console.log('Metric Result:', {
 });
 ```
 
-### Partial Relevancy Example
+### Low Relevancy Example
 
-Evaluate a partially relevant response:
+Evaluate an irrelevant response:
 
 ```typescript copy showLineNumbers{41} filename="src/index.ts"
-const query3 = 'What should a healthy breakfast include?';
+const query3 = 'What are the benefits of meditation?';
 const response3 =
-  'A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.';
+  'The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.';
 
-console.log('\nExample 3 - Partial Relevancy:');
+console.log('\nExample 3 - Low Relevancy:');
 console.log('Query:', query3);
 console.log('Response:', response3);
 

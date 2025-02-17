@@ -22,12 +22,12 @@ console.log('Metric Result:', {
   reason: result1.info.reason,
 });
 
-// Example 2: Low relevancy
-const query2 = 'What are the benefits of meditation?';
+// Example 2: Partial relevancy
+const query2 = 'What should a healthy breakfast include?';
 const response2 =
-  'The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.';
+  'A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.';
 
-console.log('\nExample 2 - Low Relevancy:');
+console.log('\nExample 2 - Partial Relevancy:');
 console.log('Query:', query2);
 console.log('Response:', response2);
 
@@ -37,12 +37,12 @@ console.log('Metric Result:', {
   reason: result2.info.reason,
 });
 
-// Example 3: Partial relevancy
-const query3 = 'What should a healthy breakfast include?';
+// Example 3: Low relevancy
+const query3 = 'What are the benefits of meditation?';
 const response3 =
-  'A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.';
+  'The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.';
 
-console.log('\nExample 3 - Partial Relevancy:');
+console.log('\nExample 3 - Low Relevancy:');
 console.log('Query:', query3);
 console.log('Response:', response3);
 

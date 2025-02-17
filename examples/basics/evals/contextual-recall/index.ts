@@ -1,68 +1,76 @@
 import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
 import { ContextualRecallMetric } from '@mastra/evals/llm';
 
-// Create an agent that will generate responses
-const agent = new Agent({
-  name: 'Example Agent',
-  instructions: 'You are a helpful assistant that provides informative answers.',
-  model: openai('gpt-4o-mini'),
+// Example 1: High recall (response includes all context)
+const context1 = ['Product features include cloud sync.', 'Offline mode is available.', 'Supports multiple devices.'];
+
+const metric1 = new ContextualRecallMetric(openai('gpt-4o-mini'), {
+  context: context1,
 });
 
-async function main() {
-  // Example 1: High recall context
-  const context1 = [
-    'The Great Wall of China was built over 2,000 years.',
-    'The wall spans approximately 13,171 miles.',
-    'Construction began during the 7th century BCE.',
-    'Multiple dynasties contributed to its construction.',
-  ];
+const query1 = 'What are the key features of the product?';
+const response1 =
+  'The product features cloud synchronization, offline mode support, and the ability to work across multiple devices.';
 
-  const metric1 = new ContextualRecallMetric(openai('gpt-4o-mini'), {
-    scale: 1,
-    context: context1,
-  });
+console.log('\nExample 1 - High Recall:');
+console.log('Context:', context1);
+console.log('Query:', query1);
+console.log('Response:', response1);
 
-  const query1 = 'Tell me about the Great Wall of China.';
-  const response1 = await agent.generate(query1, { context: context1.join(' ') });
+const result1 = await metric1.measure(query1, response1);
+console.log('Metric Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+});
 
-  console.log('\nExample 1 - High Recall:');
-  console.log('Context:', context1);
-  console.log('Query:', query1);
-  console.log('Response:', response1.text);
+// Example 2: Mixed recall (response includes some context)
+const context2 = [
+  'Python is a high-level programming language.',
+  'Python emphasizes code readability.',
+  'Python supports multiple programming paradigms.',
+  'Python is widely used in data science.',
+];
 
-  const result1 = await metric1.measure(query1, response1.text);
-  console.log('Metric Result:', {
-    score: result1.score,
-    reason: result1.info.reason,
-  });
+const metric2 = new ContextualRecallMetric(openai('gpt-4o-mini'), {
+  context: context2,
+});
 
-  // Example 2: Partial recall context
-  const context2 = [
-    'DNA (deoxyribonucleic acid) is a molecule that carries genetic information.',
-    'DNA has a double helix structure.',
-    'It contains four nucleotide bases: A, T, C, and G.',
-    'DNA replication is essential for cell division.',
-  ];
+const query2 = "What are Python's key characteristics?";
+const response2 = 'Python is a high-level programming language that emphasizes code readability.';
 
-  const metric2 = new ContextualRecallMetric(openai('gpt-4o-mini'), {
-    scale: 1,
-    context: context2,
-  });
+console.log('\nExample 2 - Mixed Recall:');
+console.log('Context:', context2);
+console.log('Query:', query2);
+console.log('Response:', response2);
 
-  const query2 = 'What is DNA and what does it do?';
-  const response2 = await agent.generate(query2, { context: context2.join(' ') });
+const result2 = await metric2.measure(query2, response2);
+console.log('Metric Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+});
 
-  console.log('\nExample 2 - Partial Recall:');
-  console.log('Context:', context2);
-  console.log('Query:', query2);
-  console.log('Response:', response2.text);
+// Example 3: Low recall (response misses most context)
+const context3 = [
+  'The solar system has eight planets.',
+  'Mercury is closest to the Sun.',
+  'Venus is the hottest planet.',
+  'Mars is called the Red Planet.',
+];
 
-  const result2 = await metric2.measure(query2, response2.text);
-  console.log('Metric Result:', {
-    score: result2.score,
-    reason: result2.info.reason,
-  });
-}
+const metric3 = new ContextualRecallMetric(openai('gpt-4o-mini'), {
+  context: context3,
+});
 
-main().catch(console.error);
+const query3 = 'Tell me about the solar system.';
+const response3 = 'The solar system has eight planets and Mercury is closest to the Sun.';
+
+console.log('\nExample 3 - Low Recall:');
+console.log('Context:', context3);
+console.log('Query:', query3);
+console.log('Response:', response3);
+
+const result3 = await metric3.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
+});

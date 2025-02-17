@@ -1,22 +1,22 @@
 ---
 title: "Example: Contextual Recall | Evals | Mastra Docs"
-description: Example of using the Contextual Recall metric to evaluate how well responses recall provided context.
+description: Example of using the Contextual Recall metric to evaluate how well responses incorporate context information.
 ---
 
 import { GithubLink } from "../../../components/github-link";
 
 # Contextual Recall
 
-This example demonstrates how to use Mastra's Contextual Recall metric to evaluate how well responses remember and use provided context information.
+This example demonstrates how to use Mastra's Contextual Recall metric to evaluate how effectively responses incorporate information from provided context.
 
 ## Overview
 
 The example shows how to:
 
-1. Set up a Mastra agent for generating responses
-2. Configure the Contextual Recall metric
-3. Evaluate context recall effectiveness
-4. Analyze recall scores
+1. Configure the Contextual Recall metric
+2. Evaluate context incorporation
+3. Analyze recall scores
+4. Handle different recall levels
 
 ## Setup
 
@@ -34,74 +34,85 @@ Import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
 import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
 import { ContextualRecallMetric } from '@mastra/evals/llm';
-```
-
-## Agent Creation
-
-Create a Mastra agent for generating responses:
-
-```typescript copy showLineNumbers{7} filename="src/index.ts"
-const agent = new Agent({
-  name: 'Example Agent',
-  instructions: 'You are a helpful assistant that provides informative answers.',
-  model: openai('gpt-4o-mini'),
-});
-```
-
-## Metric Configuration
-
-Set up the Contextual Recall metric with context:
-
-```typescript copy showLineNumbers{7} filename="src/index.ts"
-const metric = new ContextualRecallMetric(openai('gpt-4o-mini'), {
-  scale: 1,
-  context: [
-    'The Great Wall of China was built over 2,000 years.',
-    'The wall spans approximately 13,171 miles.',
-    'Construction began during the 7th century BCE.',
-    'Multiple dynasties contributed to its construction.',
-  ],
-});
 ```
 
 ## Example Usage
 
 ### High Recall Example
 
-Evaluate comprehensive historical information recall:
+Evaluate a response that includes all context information:
 
-```typescript copy showLineNumbers filename="src/index.ts"
-const query1 = 'Tell me about the Great Wall of China.';
-const response1 = await agent.generate(query1, { context: context1.join(' ') });
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const context1 = [
+  'Product features include cloud sync.',
+  'Offline mode is available.',
+  'Supports multiple devices.',
+];
 
-const result1 = await metric1.measure(query1, response1.text);
-console.log('High Recall Result:', {
+const metric1 = new ContextualRecallMetric(openai('gpt-4o-mini'), {
+  context: context1,
+});
+
+const query1 = 'What are the key features of the product?';
+const response1 = 'The product features cloud synchronization, offline mode support, and the ability to work across multiple devices.';
+
+const result1 = await metric1.measure(query1, response1);
+console.log('Metric Result:', {
   score: result1.score,
   reason: result1.info.reason,
 });
 ```
 
-### Partial Recall Example
+### Mixed Recall Example
 
-Evaluate technical information recall:
+Evaluate a response that includes some context information:
 
-```typescript copy showLineNumbers filename="src/index.ts"
+```typescript copy showLineNumbers{30} filename="src/index.ts"
 const context2 = [
-  'DNA (deoxyribonucleic acid) is a molecule that carries genetic information.',
-  'DNA has a double helix structure.',
-  'It contains four nucleotide bases: A, T, C, and G.',
-  'DNA replication is essential for cell division.',
+  'Python is a high-level programming language.',
+  'Python emphasizes code readability.',
+  'Python supports multiple programming paradigms.',
+  'Python is widely used in data science.',
 ];
 
-const query2 = 'What is DNA and what does it do?';
-const response2 = await agent.generate(query2, { context: context2.join(' ') });
+const metric2 = new ContextualRecallMetric(openai('gpt-4o-mini'), {
+  context: context2,
+});
 
-const result2 = await metric2.measure(query2, response2.text);
-console.log('Partial Recall Result:', {
+const query2 = 'What are Python\'s key characteristics?';
+const response2 = 'Python is a high-level programming language that emphasizes code readability.';
+
+const result2 = await metric2.measure(query2, response2);
+console.log('Metric Result:', {
   score: result2.score,
   reason: result2.info.reason,
+});
+```
+
+### Low Recall Example
+
+Evaluate a response that misses most context information:
+
+```typescript copy showLineNumbers{55} filename="src/index.ts"
+const context3 = [
+  'The solar system has eight planets.',
+  'Mercury is closest to the Sun.',
+  'Venus is the hottest planet.',
+  'Mars is called the Red Planet.',
+];
+
+const metric3 = new ContextualRecallMetric(openai('gpt-4o-mini'), {
+  context: context3,
+});
+
+const query3 = 'Tell me about the solar system.';
+const response3 = 'The solar system has eight planets and Mercury is closest to the Sun.';
+
+const result3 = await metric3.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
 });
 ```
 
@@ -110,16 +121,17 @@ console.log('Partial Recall Result:', {
 The metric provides:
 
 1. A recall score between 0 and 1:
-   - 1.0: Perfect recall
-   - 0.7-0.9: High recall
-   - 0.4-0.6: Moderate recall
-   - 0.1-0.3: Low recall
-   - 0.0: No recall
+   - 1.0: Perfect recall - all context information used
+   - 0.7-0.9: High recall - most context information used
+   - 0.4-0.6: Mixed recall - some context information used
+   - 0.1-0.3: Low recall - little context information used
+   - 0.0: No recall - no context information used
 
 2. Detailed analysis of:
-   - What information was recalled
-   - How accurately it was used
-   - Missing or incomplete information
+   - Information incorporation
+   - Missing context
+   - Response completeness
+   - Overall recall quality
 
 <br />
 <br />
