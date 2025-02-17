@@ -1,22 +1,22 @@
 ---
 title: "Example: Faithfulness | Evals | Mastra Docs"
-description: Example of using the Faithfulness metric to evaluate how accurately responses adhere to provided context.
+description: Example of using the Faithfulness metric to evaluate how factually accurate responses are compared to context.
 ---
 
 import { GithubLink } from "../../../components/github-link";
 
 # Faithfulness
 
-This example demonstrates how to use Mastra's Faithfulness metric to evaluate how accurately responses adhere to provided context without introducing unsupported information.
+This example demonstrates how to use Mastra's Faithfulness metric to evaluate how factually accurate responses are compared to the provided context.
 
 ## Overview
 
 The example shows how to:
 
-1. Set up a Mastra agent for generating responses
-2. Configure the Faithfulness metric
-3. Evaluate context adherence
-4. Analyze faithfulness scores
+1. Configure the Faithfulness metric
+2. Evaluate factual accuracy
+3. Analyze faithfulness scores
+4. Handle different accuracy levels
 
 ## Setup
 
@@ -34,50 +34,31 @@ Import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
 import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
 import { FaithfulnessMetric } from '@mastra/evals/llm';
-```
-
-## Agent Creation
-
-Create a Mastra agent for generating responses:
-
-```typescript copy showLineNumbers{7} filename="src/index.ts"
-const agent = new Agent({
-  name: 'Example Agent',
-  instructions: 'You are a helpful assistant that provides informative answers.',
-  model: openai('gpt-4o-mini'),
-});
-```
-
-## Metric Configuration
-
-Set up the Faithfulness metric with context:
-
-```typescript copy showLineNumbers{7} filename="src/index.ts"
-const metric = new FaithfulnessMetric(openai('gpt-4o-mini'), {
-  scale: 1,
-  context: [
-    'The water cycle consists of evaporation, condensation, and precipitation.',
-    'Evaporation occurs when water is heated by the sun.',
-    'Condensation forms clouds in the atmosphere.',
-    'Precipitation returns water to Earth's surface.',
-  ],
-});
 ```
 
 ## Example Usage
 
 ### High Faithfulness Example
 
-Evaluate accurate context adherence:
+Evaluate a response where all claims are supported by context:
 
-```typescript copy showLineNumbers filename="src/index.ts"
-const query1 = 'Explain the water cycle.';
-const response1 = await agent.generate(query1, { context: context1.join(' ') });
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const context1 = [
+  'The Tesla Model 3 was launched in 2017.',
+  'It has a range of up to 358 miles.',
+  'The base model accelerates 0-60 mph in 5.8 seconds.',
+];
 
-const result1 = await metric1.measure(query1, response1.text);
-console.log('High Faithfulness Result:', {
+const metric1 = new FaithfulnessMetric(openai('gpt-4o-mini'), {
+  context: context1,
+});
+
+const query1 = 'Tell me about the Tesla Model 3.';
+const response1 = 'The Tesla Model 3 was introduced in 2017. It can travel up to 358 miles on a single charge and the base version goes from 0 to 60 mph in 5.8 seconds.';
+
+const result1 = await metric1.measure(query1, response1);
+console.log('Metric Result:', {
   score: result1.score,
   reason: result1.info.reason,
 });
@@ -85,23 +66,51 @@ console.log('High Faithfulness Result:', {
 
 ### Mixed Faithfulness Example
 
-Evaluate complex process explanation:
+Evaluate a response with some unsupported claims:
 
-```typescript copy showLineNumbers filename="src/index.ts"
+```typescript copy showLineNumbers{30} filename="src/index.ts"
 const context2 = [
-  'The human digestive system breaks down food into nutrients.',
-  'Digestion begins in the mouth with mechanical and chemical breakdown.',
-  'The stomach produces acid to help break down food.',
-  'Nutrients are absorbed in the small intestine.',
+  'Python was created by Guido van Rossum.',
+  'The first version was released in 1991.',
+  'Python emphasizes code readability.',
 ];
 
-const query2 = 'How does human digestion work?';
-const response2 = await agent.generate(query2, { context: context2.join(' ') });
+const metric2 = new FaithfulnessMetric(openai('gpt-4o-mini'), {
+  context: context2,
+});
 
-const result2 = await metric2.measure(query2, response2.text);
-console.log('Mixed Faithfulness Result:', {
+const query2 = 'What can you tell me about Python?';
+const response2 = 'Python was created by Guido van Rossum and released in 1991. It is the most popular programming language today and is used by millions of developers worldwide.';
+
+const result2 = await metric2.measure(query2, response2);
+console.log('Metric Result:', {
   score: result2.score,
   reason: result2.info.reason,
+});
+```
+
+### Low Faithfulness Example
+
+Evaluate a response that contradicts context:
+
+```typescript copy showLineNumbers{55} filename="src/index.ts"
+const context3 = [
+  'Mars is the fourth planet from the Sun.',
+  'It has a thin atmosphere of mostly carbon dioxide.',
+  'Two small moons orbit Mars: Phobos and Deimos.',
+];
+
+const metric3 = new FaithfulnessMetric(openai('gpt-4o-mini'), {
+  context: context3,
+});
+
+const query3 = 'What do we know about Mars?';
+const response3 = 'Mars is the third planet from the Sun. It has a thick atmosphere rich in oxygen and nitrogen, and is orbited by three large moons.';
+
+const result3 = await metric3.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
 });
 ```
 
@@ -110,17 +119,17 @@ console.log('Mixed Faithfulness Result:', {
 The metric provides:
 
 1. A faithfulness score between 0 and 1:
-   - 1.0: Perfect faithfulness
-   - 0.7-0.9: High faithfulness
-   - 0.4-0.6: Moderate faithfulness
-   - 0.1-0.3: Low faithfulness
-   - 0.0: No faithfulness
+   - 1.0: Perfect faithfulness - all claims supported by context
+   - 0.7-0.9: High faithfulness - most claims supported
+   - 0.4-0.6: Mixed faithfulness - some claims unsupported
+   - 0.1-0.3: Low faithfulness - most claims unsupported
+   - 0.0: No faithfulness - claims contradict context
 
 2. Detailed analysis of:
-   - Supported claims
-   - Unsupported additions
-   - Context adherence quality
-   - Improvement suggestions
+   - Claim verification
+   - Factual accuracy
+   - Contradictions
+   - Overall faithfulness
 
 <br />
 <br />

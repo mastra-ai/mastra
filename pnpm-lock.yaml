@@ -408,9 +408,6 @@ importers:
 
   examples/basics/evals/completeness:
     dependencies:
-      '@ai-sdk/openai':
-        specifier: latest
-        version: 1.1.12(zod@3.24.1)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -421,9 +418,6 @@ importers:
 
   examples/basics/evals/content-similarity:
     dependencies:
-      '@ai-sdk/openai':
-        specifier: latest
-        version: 1.1.12(zod@3.24.1)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
