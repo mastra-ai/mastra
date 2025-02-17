@@ -8,5 +8,6 @@ const meta = {
   "context-relevancy": "Context Relevancy",
   "contextual-recall": "Contextual Recall",
   faithfulness: "Faithfulness",
+  hallucination: "Hallucination",
 };
 export default meta;

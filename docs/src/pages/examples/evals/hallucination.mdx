@@ -1,0 +1,131 @@
+---
+title: "Example: Hallucination | Evals | Mastra Docs"
+description: Example of using the Hallucination metric to evaluate unsupported claims in responses.
+---
+
+# Hallucination
+
+This example demonstrates how to use Mastra's Hallucination metric to evaluate whether responses contain information not supported by the provided context.
+
+## Overview
+
+The example shows how to:
+
+1. Set up a Mastra agent for generating responses
+2. Configure the Hallucination metric
+3. Evaluate factual accuracy
+4. Analyze hallucination scores
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { HallucinationMetric } from '@mastra/evals/llm';
+```
+
+## Agent Creation
+
+Create a Mastra agent for generating responses:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const agent = new Agent({
+  name: 'Example Agent',
+  instructions: 'You are a helpful assistant that provides informative answers.',
+  model: openai('gpt-4o-mini'),
+});
+```
+
+## Metric Configuration
+
+Set up the Hallucination metric with context:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const metric = new HallucinationMetric(openai('gpt-4o-mini'), {
+  scale: 1,
+  context: [
+    'The Eiffel Tower is 324 meters tall.',
+    'It was completed in 1889.',
+    'The tower was built for the World Fair in Paris.',
+    'Gustave Eiffel designed the tower.',
+  ],
+});
+```
+
+## Example Usage
+
+### Low Hallucination Example
+
+Evaluate well-defined historical facts:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+const query1 = 'Tell me about the Eiffel Tower.';
+const response1 = await agent.generate(query1, { context: context1.join(' ') });
+
+const result1 = await metric1.measure(query1, response1.text);
+console.log('Low Hallucination Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+});
+```
+
+### High Hallucination Risk Example
+
+Evaluate complex technical topics:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+const context2 = [
+  'Quantum computers use qubits instead of classical bits.',
+  'Quantum entanglement is a key quantum phenomenon.',
+  'Quantum superposition allows multiple states simultaneously.',
+];
+
+const query2 = 'Explain how quantum computers work.';
+const response2 = await agent.generate(query2, { context: context2.join(' ') });
+
+const result2 = await metric2.measure(query2, response2.text);
+console.log('High Hallucination Risk Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+});
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A hallucination score between 0 and 1:
+   - 0.0: No hallucination - all claims supported
+   - 0.1-0.3: Low hallucination - minor unsupported details
+   - 0.4-0.6: Moderate hallucination - some unsupported claims
+   - 0.7-0.9: High hallucination - many unsupported claims
+   - 1.0: Complete hallucination - no supported claims
+
+2. Detailed analysis of:
+   - Factual accuracy
+   - Unsupported claims
+   - Context adherence
+   - Improvement suggestions
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/hallucination"
+  }
+/>
