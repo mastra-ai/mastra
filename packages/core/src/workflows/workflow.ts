@@ -238,6 +238,10 @@ export class Workflow<
     const runId = crypto.randomUUID();
     this.#runId = runId;
 
+    if (!this.#mastra) {
+      throw new Error('Mastra not initialized, please register the workflow with a Mastra instance.');
+    }
+
     return {
       runId,
       start: async ({ triggerData } = {}) => this.execute({ triggerData }),
