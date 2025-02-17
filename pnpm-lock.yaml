@@ -478,6 +478,19 @@ importers:
         specifier: ^16.4.7
         version: 16.4.7
 
+  examples/basics/evals/custom-eval:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../../../packages/core
+      '@mastra/evals':
+        specifier: workspace:^
+        version: link:../../../../packages/evals
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
   examples/basics/evals/faithfulness:
     dependencies:
       '@ai-sdk/openai':

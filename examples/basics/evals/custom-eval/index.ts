@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai';
 import { Metric, type MetricResult } from '@mastra/core/eval';
 
 // Example 1: Simple Keyword Metric
