@@ -1,0 +1,131 @@
+---
+title: "Example: Context Relevancy | Evals | Mastra Docs"
+description: Example of using the Context Relevancy metric to evaluate how well responses use relevant context.
+---
+
+# Context Relevancy
+
+This example demonstrates how to use Mastra's Context Relevancy metric to evaluate how well responses utilize relevant context information.
+
+## Overview
+
+The example shows how to:
+
+1. Set up a Mastra agent for generating responses
+2. Configure the Context Relevancy metric
+3. Evaluate context usage relevancy
+4. Analyze relevancy scores
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { ContextRelevancyMetric } from '@mastra/evals/llm';
+```
+
+## Agent Creation
+
+Create a Mastra agent for generating responses:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const agent = new Agent({
+  name: 'Example Agent',
+  instructions: 'You are a helpful assistant that provides informative answers.',
+  model: openai('gpt-4o-mini'),
+});
+```
+
+## Metric Configuration
+
+Set up the Context Relevancy metric with context:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const metric = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
+  scale: 1,
+  context: [
+    'Photosynthesis is a process used by plants to convert light energy into chemical energy.',
+    'During photosynthesis, plants absorb carbon dioxide and water.',
+    'The process releases oxygen as a byproduct.',
+    'Chlorophyll is essential for photosynthesis.',
+  ],
+});
+```
+
+## Example Usage
+
+### High Relevancy Example
+
+Evaluate highly relevant context usage:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+const query1 = 'How do plants produce oxygen?';
+const response1 = await agent.generate(query1, { context: context1.join(' ') });
+
+const result1 = await metric1.measure(query1, response1.text);
+console.log('High Relevancy Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+});
+```
+
+### Mixed Relevancy Example
+
+Evaluate context with varying relevance:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+const context2 = [
+  'The human brain processes visual information through the visual cortex.',
+  'The brain contains approximately 86 billion neurons.',
+  'Regular exercise improves cognitive function.',
+  'The brain requires about 20% of the body's oxygen supply.',
+];
+
+const query2 = 'How does the brain process visual information?';
+const response2 = await agent.generate(query2, { context: context2.join(' ') });
+
+const result2 = await metric2.measure(query2, response2.text);
+console.log('Mixed Relevancy Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+});
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A relevancy score between 0 and 1:
+   - 1.0: Perfect relevancy
+   - 0.7-0.9: High relevancy
+   - 0.4-0.6: Moderate relevancy
+   - 0.1-0.3: Low relevancy
+   - 0.0: No relevancy
+
+2. Detailed analysis of:
+   - Which context pieces were relevant
+   - How well they were used
+   - Suggestions for improvement
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-relevancy"
+  }
+/>

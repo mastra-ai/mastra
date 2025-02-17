@@ -1,0 +1,132 @@
+---
+title: "Example: Faithfulness | Evals | Mastra Docs"
+description: Example of using the Faithfulness metric to evaluate how accurately responses adhere to provided context.
+---
+
+# Faithfulness
+
+This example demonstrates how to use Mastra's Faithfulness metric to evaluate how accurately responses adhere to provided context without introducing unsupported information.
+
+## Overview
+
+The example shows how to:
+
+1. Set up a Mastra agent for generating responses
+2. Configure the Faithfulness metric
+3. Evaluate context adherence
+4. Analyze faithfulness scores
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { FaithfulnessMetric } from '@mastra/evals/llm';
+```
+
+## Agent Creation
+
+Create a Mastra agent for generating responses:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const agent = new Agent({
+  name: 'Example Agent',
+  instructions: 'You are a helpful assistant that provides informative answers.',
+  model: openai('gpt-4o-mini'),
+});
+```
+
+## Metric Configuration
+
+Set up the Faithfulness metric with context:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const metric = new FaithfulnessMetric(openai('gpt-4o-mini'), {
+  scale: 1,
+  context: [
+    'The water cycle consists of evaporation, condensation, and precipitation.',
+    'Evaporation occurs when water is heated by the sun.',
+    'Condensation forms clouds in the atmosphere.',
+    'Precipitation returns water to Earth's surface.',
+  ],
+});
+```
+
+## Example Usage
+
+### High Faithfulness Example
+
+Evaluate accurate context adherence:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+const query1 = 'Explain the water cycle.';
+const response1 = await agent.generate(query1, { context: context1.join(' ') });
+
+const result1 = await metric1.measure(query1, response1.text);
+console.log('High Faithfulness Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+});
+```
+
+### Mixed Faithfulness Example
+
+Evaluate complex process explanation:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+const context2 = [
+  'The human digestive system breaks down food into nutrients.',
+  'Digestion begins in the mouth with mechanical and chemical breakdown.',
+  'The stomach produces acid to help break down food.',
+  'Nutrients are absorbed in the small intestine.',
+];
+
+const query2 = 'How does human digestion work?';
+const response2 = await agent.generate(query2, { context: context2.join(' ') });
+
+const result2 = await metric2.measure(query2, response2.text);
+console.log('Mixed Faithfulness Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+});
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A faithfulness score between 0 and 1:
+   - 1.0: Perfect faithfulness
+   - 0.7-0.9: High faithfulness
+   - 0.4-0.6: Moderate faithfulness
+   - 0.1-0.3: Low faithfulness
+   - 0.0: No faithfulness
+
+2. Detailed analysis of:
+   - Supported claims
+   - Unsupported additions
+   - Context adherence quality
+   - Improvement suggestions
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/faithfulness"
+  }
+/>

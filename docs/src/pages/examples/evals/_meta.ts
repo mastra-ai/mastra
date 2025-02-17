@@ -5,5 +5,8 @@ const meta = {
   "content-similarity": "Content Similarity",
   "context-position": "Context Position",
   "context-precision": "Context Precision",
+  "context-relevancy": "Context Relevancy",
+  "contextual-recall": "Contextual Recall",
+  faithfulness: "Faithfulness",
 };
 export default meta;
