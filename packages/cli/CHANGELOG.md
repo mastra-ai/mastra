@@ -1,5 +1,23 @@
 # mastra
 
+## 0.2.0-alpha.170
+
+### Patch Changes
+
+- 382f4dc: move telemetry init to instrumentation.mjs file in build directory
+- d68b532: Updated debug logs
+- Updated dependencies [016493a]
+- Updated dependencies [382f4dc]
+- Updated dependencies [176bc42]
+- Updated dependencies [d68b532]
+- Updated dependencies [fe3dcb0]
+- Updated dependencies [e448a26]
+- Updated dependencies [fd75f3c]
+- Updated dependencies [ccf115c]
+- Updated dependencies [a221426]
+  - @mastra/core@0.2.0-alpha.110
+  - @mastra/deployer@0.1.0-alpha.62
+
 ## 0.2.0-alpha.169
 
 ### Patch Changes
