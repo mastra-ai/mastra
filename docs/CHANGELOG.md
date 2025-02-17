@@ -1,5 +1,21 @@
 # docs
 
+## 0.1.0
+
+### Minor Changes
+
+- 74b3078: Reduce verbosity in workflows API
+- 8b416d9: Breaking changes
+
+### Patch Changes
+
+- 016493a: Deprecate metrics in favor of evals
+- 5fdc87c: Update evals storage in attachListeners
+- 7892533: Updated test evals to use Mastra Storage
+- 9c10484: update all packages
+- ab04ad9: Update imports in docs
+- a10b7a3: Implemented new filtering for vectorQueryTool and updated docs
+
 ## 0.1.0-alpha.6
 
 ### Patch Changes
