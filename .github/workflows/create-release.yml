@@ -66,7 +66,7 @@ jobs:
           pnpm changeset version
           git add -A
           git commit -m 'chore: version - exit prerelease mode' --no-verify
-          echo "push"
+          git push
           pnpm install
 
       - name: Publish packages
@@ -80,4 +80,4 @@ jobs:
           pnpm changeset pre enter alpha
           git add -A
           git commit -m 'chore: version - enter prerelease mode'
-          echo "push"
+          git push
