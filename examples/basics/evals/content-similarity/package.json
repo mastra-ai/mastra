@@ -1,0 +1,15 @@
+{
+  "name": "examples-content-similarity",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "pnpx tsx index.ts"
+  },
+  "dependencies": {
+    "@mastra/evals": "workspace:^"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.7"
+  }
+}
