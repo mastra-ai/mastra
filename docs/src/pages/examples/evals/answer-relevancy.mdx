@@ -42,7 +42,7 @@ import { AnswerRelevancyMetric } from '@mastra/evals/llm';
 
 Create a Mastra agent for generating responses:
 
-```typescript copy showLineNumbers{7} filename="src/index.ts"
+```typescript copy showLineNumbers{6} filename="src/index.ts"
 const agent = new Agent({
   name: 'Example Agent',
   instructions: 'You are a helpful assistant that provides concise and relevant answers.',
@@ -54,7 +54,7 @@ const agent = new Agent({
 
 Set up the Answer Relevancy metric with custom parameters:
 
-```typescript copy showLineNumbers{7} filename="src/index.ts"
+```typescript copy showLineNumbers{13} filename="src/index.ts"
 const metric = new AnswerRelevancyMetric(openai('gpt-4o-mini'), {
   uncertaintyWeight: 0.3, // Weight for 'unsure' verdicts
   scale: 1, // Scale for the final score
