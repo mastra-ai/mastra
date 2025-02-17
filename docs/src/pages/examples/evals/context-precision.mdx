@@ -1,22 +1,22 @@
 ---
 title: "Example: Context Precision | Evals | Mastra Docs"
-description: Example of using the Context Precision metric to evaluate accuracy of context usage.
+description: Example of using the Context Precision metric to evaluate how precisely context information is used.
 ---
 
 import { GithubLink } from "../../../components/github-link";
 
 # Context Precision
 
-This example demonstrates how to use Mastra's Context Precision metric to evaluate how accurately responses use provided context information.
+This example demonstrates how to use Mastra's Context Precision metric to evaluate how precisely responses use provided context information.
 
 ## Overview
 
 The example shows how to:
 
-1. Set up a Mastra agent for generating responses
-2. Configure the Context Precision metric
-3. Evaluate context usage accuracy
-4. Analyze precision scores
+1. Configure the Context Precision metric
+2. Evaluate context precision
+3. Analyze precision scores
+4. Handle different precision levels
 
 ## Setup
 
@@ -34,57 +34,32 @@ Import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
 import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
 import { ContextPrecisionMetric } from '@mastra/evals/llm';
-```
-
-## Agent Creation
-
-Create a Mastra agent for generating responses:
-
-```typescript copy showLineNumbers{7} filename="src/index.ts"
-const agent = new Agent({
-  name: 'Example Agent',
-  instructions: 'You are a helpful assistant that provides informative answers.',
-  model: openai('gpt-4o-mini'),
-});
-```
-
-## Metric Configuration
-
-Set up the Context Precision metric with context:
-
-```typescript copy showLineNumbers{7} filename="src/index.ts"
-const metric = new ContextPrecisionMetric(openai('gpt-4o-mini'), {
-  scale: 1,
-  context: [
-    "The Earth's core temperature is approximately 6,000°C.",
-    "The core is primarily composed of iron and nickel.",
-    "The core creates Earth's magnetic field.",
-    "The core is divided into inner and outer regions.",
-  ],
-});
 ```
 
 ## Example Usage
 
 ### High Precision Example
 
-Evaluate precise scientific information usage:
+Evaluate a response where all context is relevant:
 
-```typescript copy showLineNumbers filename="src/index.ts"
+```typescript copy showLineNumbers{5} filename="src/index.ts"
 const context1 = [
-  "The Earth's core temperature is approximately 6,000°C.",
-  "The core is primarily composed of iron and nickel.",
-  "The core creates Earth's magnetic field.",
-  "The core is divided into inner and outer regions.",
+  'Photosynthesis converts sunlight into energy.',
+  'Plants use chlorophyll for photosynthesis.',
+  'Photosynthesis produces oxygen as a byproduct.',
+  'The process requires sunlight and chlorophyll.',
 ];
 
-const query1 = "What is Earth's core like?";
-const response1 = await agent.generate(query1, { context: context1.join(' ') });
+const metric1 = new ContextPrecisionMetric(openai('gpt-4o-mini'), {
+  context: context1,
+});
 
-const result1 = await metric1.measure(query1, response1.text);
-console.log('High Precision Result:', {
+const query1 = 'What is photosynthesis and how does it work?';
+const response1 = 'Photosynthesis is a process where plants convert sunlight into energy using chlorophyll, producing oxygen as a byproduct.';
+
+const result1 = await metric1.measure(query1, response1);
+console.log('Metric Result:', {
   score: result1.score,
   reason: result1.info.reason,
 });
@@ -92,23 +67,53 @@ console.log('High Precision Result:', {
 
 ### Mixed Precision Example
 
-Evaluate broader topic information usage:
+Evaluate a response where some context is irrelevant:
 
-```typescript copy showLineNumbers filename="src/index.ts"
+```typescript copy showLineNumbers{31} filename="src/index.ts"
 const context2 = [
-  "Renewable energy includes solar, wind, and hydroelectric power.",
-  "Global energy consumption continues to rise.",
-  "Fossil fuels remain a significant energy source.",
-  "Energy efficiency measures can reduce consumption.",
+  'Volcanoes are openings in the Earth\'s crust.',
+  'Volcanoes can be active, dormant, or extinct.',
+  'Hawaii has many active volcanoes.',
+  'The Pacific Ring of Fire has many volcanoes.',
 ];
 
-const query2 = 'What are the main renewable energy sources?';
-const response2 = await agent.generate(query2, { context: context2.join(' ') });
+const metric2 = new ContextPrecisionMetric(openai('gpt-4o-mini'), {
+  context: context2,
+});
 
-const result2 = await metric2.measure(query2, response2.text);
-console.log('Mixed Precision Result:', {
+const query2 = 'What are the different types of volcanoes?';
+const response2 = 'Volcanoes can be classified as active, dormant, or extinct based on their activity status.';
+
+const result2 = await metric2.measure(query2, response2);
+console.log('Metric Result:', {
   score: result2.score,
   reason: result2.info.reason,
+});
+```
+
+### Low Precision Example
+
+Evaluate a response where most context is irrelevant:
+
+```typescript copy showLineNumbers{57} filename="src/index.ts"
+const context3 = [
+  'The Nile River is in Africa.',
+  'The Nile is the longest river.',
+  'Ancient Egyptians used the Nile.',
+  'The Nile flows north.',
+];
+
+const metric3 = new ContextPrecisionMetric(openai('gpt-4o-mini'), {
+  context: context3,
+});
+
+const query3 = 'Which direction does the Nile River flow?';
+const response3 = 'The Nile River flows northward.';
+
+const result3 = await metric3.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
 });
 ```
 
@@ -117,17 +122,17 @@ console.log('Mixed Precision Result:', {
 The metric provides:
 
 1. A precision score between 0 and 1:
-   - 1.0: Perfect precision - all context used accurately
-   - 0.7-0.9: High precision - most context used accurately
-   - 0.4-0.6: Moderate precision - mixed accuracy in context usage
-   - 0.1-0.3: Low precision - inaccurate context usage
-   - 0.0: No precision - context misused or ignored
+   - 1.0: Perfect precision - all context pieces are relevant and used
+   - 0.7-0.9: High precision - most context pieces are relevant
+   - 0.4-0.6: Mixed precision - some context pieces are relevant
+   - 0.1-0.3: Low precision - few context pieces are relevant
+   - 0.0: No precision - no context pieces are relevant
 
-2. Detailed reasoning about:
-   - Accuracy of context usage
-   - Relevance to the query
-   - Information fidelity
-   - Context integration quality
+2. Detailed analysis of:
+   - Relevance of each context piece
+   - Usage in the response
+   - Contribution to answering the query
+   - Overall context usefulness
 
 <br />
 <br />
