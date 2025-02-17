@@ -14,6 +14,9 @@ const meta = {
   memory: {
     title: "Memory",
   },
+  evals: {
+    title: "Evals",
+  },
 };
 
 export default meta;
