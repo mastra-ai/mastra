@@ -1,0 +1,138 @@
+---
+title: "Example: Completeness Evaluation | Evals | Mastra Docs"
+description: Example of using the Completeness metric to evaluate how thoroughly LLM responses cover input elements.
+---
+
+# Completeness Evaluation
+
+This example demonstrates how to use Mastra's Completeness metric to evaluate how thoroughly LLM-generated responses cover key elements from the input.
+
+## Overview
+
+The example shows how to:
+
+1. Set up a Mastra agent for generating responses
+2. Configure the Completeness metric
+3. Evaluate responses for element coverage
+4. Analyze missing elements and coverage scores
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { CompletenessMetric } from '@mastra/evals/nlp';
+```
+
+## Agent Creation
+
+Create a Mastra agent for generating responses:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const agent = new Agent({
+  name: 'Example Agent',
+  instructions: 'You are a helpful assistant that provides comprehensive answers.',
+  model: openai('gpt-4o-mini'),
+});
+```
+
+## Metric Configuration
+
+Set up the Completeness metric:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const metric = new CompletenessMetric();
+```
+
+## Example Usage
+
+### Complete Coverage Example
+
+Evaluate a response that should cover all elements:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+const context1 = `
+  The solar system consists of:
+  - The Sun at the center
+  - Eight planets (Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune)
+  - Various moons orbiting the planets
+  - Asteroids and comets
+`;
+const query1 = 'List all the planets in our solar system.';
+const response1 = await agent.generate(query1, { context: context1 });
+
+const result1 = await metric.measure(context1, response1.text);
+console.log('Complete Coverage Result:', {
+  score: result1.score,
+  info: {
+    missingElements: result1.info.missingElements,
+    elementCounts: result1.info.elementCounts,
+  },
+});
+```
+
+### Partial Coverage Example
+
+Evaluate a response that might miss some elements:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+const context2 = `
+  A balanced breakfast should include:
+  1. Protein (eggs, yogurt, or lean meat)
+  2. Complex carbohydrates (whole grain bread or oatmeal)
+  3. Fruits or vegetables
+  4. Healthy fats (avocado or nuts)
+  5. Hydration (water or unsweetened beverages)
+`;
+const query2 = 'What should I eat for breakfast?';
+const response2 = await agent.generate(query2, { context: context2 });
+
+const result2 = await metric.measure(context2, response2.text);
+console.log('Partial Coverage Result:', {
+  score: result2.score,
+  info: {
+    missingElements: result2.info.missingElements,
+    elementCounts: result2.info.elementCounts,
+  },
+});
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A score between 0 and 1:
+   - 1.0: Complete coverage - contains all input elements
+   - 0.7-0.9: High coverage - includes most key elements
+   - 0.4-0.6: Partial coverage - contains some key elements
+   - 0.1-0.3: Low coverage - missing most key elements
+   - 0.0: No coverage - output lacks all input elements
+
+2. Detailed analysis including:
+   - List of input elements found
+   - List of output elements matched
+   - Missing elements from input
+   - Element count comparison
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/completeness"
+  }
+/>
