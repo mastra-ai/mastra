@@ -2,11 +2,11 @@
   "name": "examples-content-similarity",
   "private": true,
   "version": "0.0.0",
+  "type": "module",
   "scripts": {
     "start": "pnpx tsx index.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai": "latest",
     "@mastra/evals": "workspace:^"
   },
   "devDependencies": {
