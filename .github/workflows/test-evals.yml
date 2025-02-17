@@ -33,8 +33,11 @@ jobs:
       - name: Build evals
         run: pnpm build:evals
 
-      - name: Run Evals tests
-        run: pnpm test:evals
+      - name: Run Evals NLP tests
+        run: pnpm test:evals:nlp
+
+      - name: Run Evals LLM tests
+        run: pnpm test:evals:llm
         env:
           NODE_OPTIONS: "--max_old_space_size=8096"
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
