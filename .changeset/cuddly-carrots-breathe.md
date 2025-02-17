@@ -1,5 +1,0 @@
----
-'mastra': patch
----
-
-Fix serve

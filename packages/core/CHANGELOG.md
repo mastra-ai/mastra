@@ -1,5 +1,166 @@
 # @mastra/core
 
+## 0.2.0
+
+### Minor Changes
+
+- 4d4f6b6: Update deployer
+- 30322ce: Added new Memory API for managed agent memory via MastraStorage and MastraVector classes
+- d7d465a: Breaking change for Memory: embeddings: {} has been replaced with embedder: new OpenAIEmbedder() (or whichever embedder you want - check the docs)
+- 5285356: Renamed MastraLibSQLStorage and MastraLibSQLVector to DefaultStorage and DefaultVectorDB. I left the old export names so that it wont break anyones projects but all docs now show the new names
+- 74b3078: Reduce verbosity in workflows API
+- 8b416d9: Breaking changes
+- 16e5b04: Moved @mastra/vector-libsql into @mastra/core/vector/libsql
+- 8769a62: Split core into seperate entry fils
+
+### Patch Changes
+
+- f537e33: feat: add default logger
+- 6f2c0f5: Prevent telemetry proxy from converting sync methods to async
+- e4d4ede: Better setLogger()
+- 0be7181: Fix forward version
+- dd6d87f: Update Agent and LLM config to accept temperature setting
+- 9029796: add more logs to agent for debugging
+- 6fa4bd2: New LLM primitive, OpenAI, AmazonBedrock
+- f031a1f: expose embed from rag, and refactor embed
+- 8151f44: Added \_\_registerPrimitives to model.ts
+- d7d465a: Embedding api
+- 73d112c: Core and deployer fixes
+- 592e3cf: Add custom rag tools, add vector retrieval, and update docs
+- 9d1796d: Fix storage and eval serialization on api
+- e897f1c: Eval change
+- 4a54c82: Fix dane labelling functionality
+- 3967e69: Added GraphRAG implementation and updated docs
+- 8ae2bbc: Dane publishing
+- e9d1b47: Rename Memory options historySearch to semanticRecall, rename embeddingOptions to embedding
+- 016493a: Deprecate metrics in favor of evals
+- bc40916: Pass mastra instance directly into actions allowing access to all registered primitives
+- 93a3719: Mastra prompt template engine
+- 7d83b92: Create default storage and move evals towards it
+- 9fb3039: Storage
+- d5e12de: optional mastra config object
+- e1dd94a: update the api for embeddings
+- 07c069d: Add dotenv as dependency
+- 5cdfb88: add getWorkflows method to core, add runId to workflow logs, update workflow starter file, add workflows page with table and workflow page with info, endpoints and logs
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- 685108a: Remove syncs and excess rag
+- c8ff2f5: Fixed passing CoreMessages to stream/generate where the role is not user. Previously all messages would be rewritten to have role: "user"
+- 5fdc87c: Update evals storage in attachListeners
+- ae7bf94: Fix loggers messing up deploys
+- 8e7814f: Add payload getter on machine context
+- 66a03ec: Removed an extra llm call that was needed for the old Memory API but is no longer needed
+- 7d87a15: generate command in agent, and support array of message strings
+- b97ca96: Tracing into default storage
+- 23dcb23: Redeploy core
+- 033eda6: More fixes for refactor
+- 8105fae: Split embed into embed and embedMany to handle different return types
+- e097800: TTS in core
+- 1944807: Unified logger and major step in better logs
+- 1874f40: Added re ranking tool to RAG
+- 685108a: Removing mastra syncs
+- f7d1131: Improved types when missing inputSchema
+- 79acad0: Better type safety on trigger step
+- 7a19083: Updates to the LLM class
+- 382f4dc: move telemetry init to instrumentation.mjs file in build directory
+- 1ebd071: Add more embedding models
+- 0b74006: Workflow updates
+- 2f17a5f: Added filter translator and tests for Qdrant
+- f368477: Added evals package and added evals in core
+- 7892533: Updated test evals to use Mastra Storage
+- 9c10484: update all packages
+- b726bf5: Fix agent memory int.
+- 70dabd9: Fix broken publish
+- 21fe536: add keyword tags for packages and update readmes
+- 176bc42: Added runId and proper parent spans to workflow tracing
+- 401a4d9: Add simple conditions test
+- 2e099d2: Allow trigger passed in to `then` step
+- 0b826f6: Allow agents to use ZodSchemas in structuredOutput
+- d68b532: Updated debug logs
+- 75bf3f0: remove context bug in agent tool execution, update style for mastra dev rendered pages
+- e6d8055: Added Mastra Storage to add and query live evals
+- e2e76de: Anthropic model added to new primitive structure
+- ccbc581: Updated operator validation and handling for all vector stores
+- 5950de5: Added update instructions API
+- fe3dcb0: Add fastembed import error handling
+- 78eec7c: Started implementation on Unified Filter API for several vector stores.
+- a8a459a: Updated Evals table UI
+- 0be7181: Add perplexity models
+- 7b87567: Propagate setLogger calls to more places
+- b524c22: Package upgrades
+- df843d3: Fixed libsql db relative file paths so they're always outside the .mastra directory. If they're inside .mastra they will be deleted when code is re-bundled
+- 4534e77: Fix fastembed imports in mastra cloud for default embedder
+- d6d8159: Workflow graph diagram
+- 0bd142c: Fixes learned from docs
+- 9625602: Use mastra core splitted bundles in other packages
+- 72d1990: Updated evals table schema
+- f6ba259: simplify generate api
+- 2712098: add getAgents method to core and route to cli dev, add homepage interface to cli
+- eedb829: Better types, and correct payload resolution
+- cb290ee: Reworked the Memory public API to have more intuitive and simple property names
+- b4d7416: Added the ability to pass a configured Memory class instance directly to new Agent instances instead of passing memory to Mastra
+- e608d8c: Export CoreMessage Types from ai sdk
+- 06b2c0a: Update summarization prompt and fix eval input
+- 002d6d8: add memory to playground agent
+- e448a26: Correctly pass down runId to called tools
+- fd494a3: TTS module
+- dc90663: Fix issues in packages
+- c872875: update createMultiLogger to combineLogger
+- 3c4488b: Fix context not passed in agent tool execution
+- a7b016d: Added export for MockMastraEngine from @mastra/core
+- fd75f3c: Added storage, vector, embedder setters to the base MastraMemory class
+- 7f24c29: Add Chroma Filter translator and updated vector store tests
+- 2017553: Added fallback title when calling createThread() with no title - this is needed as storage db schemas mark title as non-null
+- a10b7a3: Implemented new filtering for vectorQueryTool and updated docs
+- cf6d825: Fixed a bug where 0 values in memory configs were falling back to default val. Removed a noisy log. Removed a deprecated option
+- 963c15a: Add new toolset primitive and implementation for composio
+- 7365b6c: More models
+- 5ee67d3: make trace name configurable for telemetry exporter
+- d38f7a6: clean up old methods in agent
+- 38b7f66: Update deployer logic
+- 2fa7f53: add more logs to workflow, only log failed workflow if all steps fail, animate workflow diagram edges
+- 1420ae2: Fix storage logger
+- f6da688: update agents/:agentId page in dev to show agent details and endpoints, add getTools to agent
+- 3700be1: Added helpful error when using vector with Memory class - error now contains embedding option example
+- 9ade36e: Changed measure for evals, added endpoints, attached metrics to agent, added ui for evals in playground, and updated docs
+- 10870bc: Added a default vector db (libsql) and embedder (fastembed) so that new Memory() can be initialized with zero config
+- 2b01511: Update CONSOLE logger to store logs and return logs, add logs to dev agent page
+- a870123: Added local embedder class that uses fastembed-js, a Typescript/NodeJS implementation of @Qdrant/fastembed
+- ccf115c: Fixed incomplete tool call errors when including memory message history in context
+- 04434b6: Create separate logger file
+- 5811de6: Updates spec-writer example to use new workflows constructs. Small improvements to workflow internals. Switch transformer tokenizer for js compatible one.
+- 9f3ab05: pass custom telemetry exporter
+- 66a5392: batchInsert needs init. Use private version for internal calls
+- 4b1ce2c: Update Google model support in documentation and type definitions to include new Gemini versions
+- 14064f2: Deployer abstract class
+- f5dfa20: only add logger if there is a logger
+- 327ece7: Updates for ts versions
+- da2e8d3: Export EmbedManyResult and EmbedResult from ai sdk and update docs
+- 95a4697: Fixed trace method for telemetry
+- d5fccfb: expose model function
+- 3427b95: Updated docs to include intermediate rag examples (metadata filtering, query filters, etc)
+- 538a136: Added Simple Condition for workflows, updated /api/workflows/{workflowId}/execute endpoint and docs
+- e66643a: Add o1 models
+- b5393f1: New example: Dane and many fixes to make it work
+- d2cd535: configure dotenv in core
+- c2dd6b5: This set of changes introduces a new .step API for subscribing to step executions for running other step chains. It also improves step types, and enables the ability to create a cyclic step chain.
+- 67637ba: Fixed storage bugs related to the new Memory API
+- 836f4e3: Fixed some issues with memory, added Upstash as a memory provider. Silenced dev logs in core
+- 5ee2e78: Update core for Alpha3 release
+- cd02c56: Implement a new and improved API for workflows.
+- 01502b0: fix thread title containing unnecessary text and removed unnecessary logs in memory
+- d9c8dd0: Logger changes for default transports
+- 9fb59d6: changeset
+- a9345f9: Fixed tsc build for core types
+- 99f1847: Clean up logs
+- 04f3171: More providers
+- d5ec619: Remove promptTemplate from core
+- 27275c9: Added new short term "working" memory for agents. Also added a "maskStreamTags" helper to assist in hiding working memory xml blocks in streamed responses
+- ae7bf94: Changeset
+- 4f1d1a1: Enforce types ann cleanup package.json
+- ee4de15: Dane fixes
+- 202d404: Added instructions when generating evals
+- a221426: Simplify workflows watch API
+
 ## 0.2.0-alpha.110
 
 ### Patch Changes

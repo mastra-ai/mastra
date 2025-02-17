@@ -1,0 +1,862 @@
+## packages/core
+Here's the changelog for Mastra AI Core v0.2.0 (February 17, 2024):
+
+### New Features
+- Added new Memory API for managed agent memory via MastraStorage and MastraVector classes (#30322ce)
+- Introduced default storage and vector DB implementations for zero-config memory setup (#10870bc)
+- Added GraphRAG implementation for advanced retrieval (#3967e69)
+- Added local embedder using fastembed-js for TypeScript/Node.js (#a870123)
+- Added workflow state change monitoring with new watch API (#c2dd6b5)
+- Added short-term "working" memory for agents with XML block masking (#27275c9)
+
+### Improvements
+- Renamed MastraLibSQLStorage and MastraLibSQLVector to DefaultStorage and DefaultVectorDB for clarity (#5285356)
+- Improved Memory API with more intuitive property names (#cb290ee)
+- Enhanced logging system with unified logger and better tracing (#1944807)
+- Added re-ranking tool to RAG for better result quality (#1874f40)
+- Added support for multiple embedding models (#1ebd071)
+- Improved filter translator with support for Qdrant and Chroma (#2f17a5f, #7f24c29)
+
+### Notable Bug Fixes
+- Fixed incomplete tool call errors when including memory message history (#ccf115c)
+- Fixed libsql db relative file paths to prevent deletion during re-bundling (#df843d3)
+- Fixed storage bugs related to the new Memory API (#67637ba)
+- Fixed context not being passed in agent tool execution (#3c4488b)
+- Fixed thread title containing unnecessary text (#01502b0)
+
+### Build & Deployment
+- Split core into separate entry files for better modularity (#8769a62)
+- Moved @mastra/vector-libsql into @mastra/core/vector/libsql (#16e5b04)
+- Added dotenv as dependency for configuration management (#07c069d)
+- Improved telemetry initialization and tracing (#382f4dc)
+
+### Performance Optimizations
+- Reduced verbosity in workflows API (#74b3078)
+- Optimized memory handling with better default configurations (#10870bc)
+- Improved batch operations for storage operations (#66a5392)
+
+This release represents a significant evolution of the Mastra AI Core, with major improvements to memory management, storage systems, and workflow capabilities. The new Memory API and default implementations make it easier to get started, while advanced features like GraphRAG and re-ranking provide more sophisticated options for power users.
+
+## packages/cli
+Here's the structured changelog for the CLI package updates:
+
+## 0.2.0 (2025-02-17)
+
+### New Features
+- Added agent evaluation metrics and analytics dashboard with filtering and sorting capabilities (#9ade36e)
+- Added agent instructions management with version history and enhancement suggestions (#b5393f1)
+- Added traces visualization for agents and workflows with detailed span analysis (#b97ca96)
+- Added interactive API key configuration during setup (#cefd906)
+- Added support for multiple tool directories in dev playground (#f4ae8dd)
+
+### Improvements
+- Enhanced dev playground UI with:
+  - Better navigation and breadcrumbs (#505d385)
+  - Improved thread management (#de60682)
+  - Clearer memory usage indicators (#9db58b8)
+  - Better error handling for tools (#7344dd7)
+- Improved workflow visualization with animated diagram edges (#2fa7f53)
+- Enhanced logging system with unified logger and better trace visibility (#1944807)
+- Updated CLI commands to show options instead of ASCII art (#8e62269)
+- Improved dev environment with automatic file watching and server restart (#b6f9860)
+
+### Notable Bug Fixes
+- Fixed workflow conditions not showing on graph and dev watcher issues (#c8a8eab)
+- Fixed storage and eval serialization in API (#9d1796d)
+- Fixed playground agent chat losing messages during redirect (#cc5bd40)
+- Fixed agent generate/stream with structured output (#17608e9)
+- Fixed memory call 500 errors and threads sidebar in playground (#884793d)
+
+### Build/Deployment Improvements
+- Updated deployer configuration and logic (#4d4f6b6)
+- Improved CloudFlare deployment configuration (#0e2b588)
+- Added prepare script to include node_modules in published package (#a828155)
+- Updated dependency management from fixed to caret versions (#5916f9d)
+- Added proper telemetry configuration and instrumentation (#382f4dc)
+
+### Performance Optimizations
+- Reduced verbosity in workflows API (#74b3078)
+- Improved file watching efficiency in dev mode (#813c719)
+- Enhanced memory management for eval storage (#7d83b92)
+
+This release significantly improves the developer experience with new monitoring and debugging capabilities, while also enhancing the stability and performance of the CLI tooling.
+
+## packages/create-mastra
+Here's the changelog for create-mastra v0.1.0 (February 17, 2025):
+
+## New Features
+- Added interactive CLI API key configuration for improved setup experience (#cefd906)
+- Introduced new `create-mastra` command for quickly bootstrapping Mastra applications (#32cd966)
+
+## Improvements
+- Improved package size optimization (#3e9f0ca)
+- Enhanced dependency management by updating fixed versions to use caret ranges (#5916f9d)
+- Added AISDK model provider installation during initialization (#7db55f6)
+- Added keyword tags and improved package documentation (#21fe536)
+
+## Notable Bug Fixes
+- Fixed CLI create command not properly parsing components flag (#188ffa8)
+- Fixed incorrect starter files copying during project creation (#215a1c2)
+- Fixed thread navigation issues in development playground (#de60682)
+- Fixed creation of new threads in dev playground (#c18a0c0)
+
+## Build/Deployment Improvements
+- Implemented correct bundle creation for create-mastra (#255fc56)
+- Improved logging system with dedicated logger file (#04434b6)
+- Enhanced build process with better type enforcement (#4f1d1a1)
+- Fixed various publishing-related issues (#70dabd9, #2667e66)
+
+This release marks a significant milestone with the transition from alpha to stable version, introducing several key features and improvements for a more robust project initialization experience.
+
+## packages/deployer
+Here's the structured changelog for the deployer package (v0.1.0) for the week of February 10-17, 2025:
+
+### New Features
+- Added API endpoint to enhance agent instructions with AI-generated improvements (#8fa48b9)
+- Added telemetry endpoints for trace querying and management (#858430b)
+- Added support for agent-specific memory access in memory endpoints (#cd2b2c5)
+- Added instrumentation file template for better telemetry configuration (#1d1d9a5)
+
+### Improvements
+- Updated request handling to support both `resourceId` and legacy `resourceid` parameters (#ab01c53)
+- Improved tool execution API with simplified data structure (#166d700)
+- Enhanced workflow execution with better run management (#03fd582)
+- Standardized error handling across API endpoints (#ca96b97)
+- Added support for agent-specific memory queries (#00c19621)
+
+### Notable Bug Fixes
+- Fixed workflow trigger schema validation in development environment (#2ab57d6)
+- Fixed storage and evaluation serialization issues in API (#9d1796d)
+- Fixed logger initialization issues affecting deployments (#ae7bf94)
+- Fixed import handling for telemetry package (#246f06c)
+
+### Build/Deployment Improvements
+- Added 4.5MB request size limit with proper error handling (#4a328af)
+- Improved bundling configuration with experimental DTS support (#52a27b9)
+- Added public directory support for template files (#435fca0)
+- Updated dependency versioning from fixed to caret ranges (#5916f9d)
+
+### Performance Optimizations
+- Improved memory management with agent-specific contexts (#cd2b2c5)
+- Enhanced trace collection and storage efficiency (#858430b)
+- Optimized workflow execution with better run management (#03fd582)
+
+This release includes significant improvements to the API structure, telemetry capabilities, and overall system reliability. The addition of AI-powered instruction enhancement and better memory management provides more powerful tools for developers.
+
+## packages/evals
+Here's the structured changelog for the evals package covering 2025-02-10 to 2025-02-17:
+
+## @mastra/evals 0.1.0
+
+### New Features
+- Added new evaluation metrics:
+  - Bias detection for measuring content bias (#633e198)
+  - Contextual relevancy for assessing response alignment (#94504ec)
+  - Toxicity detection for identifying harmful content (#240c3aa)
+- Added faithfulness metric to evaluate response accuracy (#c056555)
+- Added hallucination detection capability (#ceb8086)
+
+### Improvements
+- Enhanced prompt alignment metric:
+  - Added detailed scoring breakdowns
+  - Improved handling of non-applicable instructions
+  - Better support for domain-specific evaluations
+- Improved evaluation storage:
+  - Switched to Mastra Storage for evaluation data persistence (#5fdc87c)
+  - Added support for storing evaluation instructions (#202d404)
+  - Updated evaluation table schema (#72d1990)
+- Enhanced metrics documentation and testing:
+  - Added comprehensive test cases for bias detection
+  - Improved toxicity detection test coverage
+  - Updated context relevancy evaluation logic
+
+### Notable Bug Fixes
+- Fixed exports configuration for @mastra/evals package (#d641d91)
+- Corrected evaluation table name for data insertion (#b9c7047)
+- Fixed broken publish issues (#70dabd9)
+
+### Build/Deployment
+- Updated build configuration to use tsup (#cb2e997)
+- Reorganized evals into separate NLP and LLM modules (#1bbec77)
+- Updated package dependencies from fixed to caret versions (#5916f9d)
+
+### Documentation
+- Added comprehensive documentation for new metrics
+- Updated storage integration guidelines
+- Added instructions for generating evaluations
+- Improved API reference documentation
+
+This release represents a major enhancement to the evaluation capabilities with new metrics for bias, toxicity, and contextual relevancy, along with significant improvements to existing metrics and storage mechanisms.
+
+## packages/rag
+Here's the changelog for the RAG package covering February 10-17, 2025:
+
+## @mastra/rag v0.1.0
+
+### New Features
+- Added support for multiple vector databases:
+  - Cloudflare Vectorize integration (#ab1dc59)
+  - Upstash Vector support (#779702b)
+  - AstraDB support (#036ee5e)
+  - ChromaDB integration (#1c3232a)
+  - Turso/LibSQL support (#4769753)
+- Introduced GraphRAG implementation for improved retrieval (#3967e69)
+- Added re-ranking capabilities with new rerank function (#1874f40, #9c0d010)
+- Added custom RAG tools and vector retrieval (#592e3cf)
+
+### Improvements
+- Enhanced PG Vector filtering functionality (#ee856f3, #eb45d76)
+- Split embed functionality into `embed` and `embedMany` for better type handling (#8105fae)
+- Added validation for indexName in pgVector and dimension checks for all vector DBs (#a621c34)
+- Improved transaction handling in pgvector (#1616f70)
+- Updated vector query filtering to work with more stores (#7de6d71)
+- Unified logging system for better observability (#1944807)
+
+### Breaking Changes
+- Deprecated Reranker class in favor of rerank function (#9c0d010)
+- Renamed MastraDocument to MDocument (#45fd5b8)
+- Updated document semantics (#24fe87e)
+- Major revamp of tools, workflows, and syncs (#837a288)
+
+### Build & Development
+- Bundled package with tsup (#a944f1a)
+- Updated dependencies from fixed to caret versions (#5916f9d)
+- Switched from jsdom to node-html-parser for better compatibility (#b27bdb8)
+- Added comprehensive test suite (#c3047a7)
+
+This release represents a major milestone with significant improvements to vector database support, retrieval capabilities, and overall system architecture. The new GraphRAG and re-ranking features provide more sophisticated retrieval options, while the expanded vector database support offers greater flexibility in deployment choices.
+
+## packages/memory
+Here's the structured changelog for the Memory module covering February 10-17, 2025:
+
+## Memory 0.1.0 (2025-02-17)
+
+### New Features
+- Added new short-term "working" memory for agents with XML block masking support (#27275c9)
+- Introduced default vector DB (libsql) and embedder (fastembed) for zero-config initialization (#10870bc)
+- Added local embedder class using fastembed-js for TypeScript/NodeJS embedding (#a870123)
+- Added Upstash as a memory provider (#836f4e3)
+
+### Improvements
+- Reworked the Memory public API for more intuitive property names (#cb290ee)
+- Renamed `historySearch` to `semanticRecall` and `embeddingOptions` to `embedding` for clarity (#e9d1b47)
+- Simplified Memory initialization by making configuration optional with sensible defaults
+- Improved error handling and logging verbosity (#cf6d825)
+
+### Notable Bug Fixes
+- Fixed incomplete tool call errors when including memory message history in context (#ccf115c)
+- Fixed context window calculation in memory (#b898fad)
+- Fixed storage bugs related to the new Memory API (#67637ba)
+- Fixed thread title containing unnecessary text (#01502b0)
+
+### Breaking Changes
+- Replaced `embeddings: {}` configuration with `embedder: new OpenAIEmbedder()` (#d7d465a)
+- Updated dependency versions from fixed to caret ranges (#5916f9d)
+
+### Build & Development
+- Added TypeScript strict type enforcement (#4f1d1a1)
+- Improved package bundling with tsup (#7f5b1b2)
+- Added integration tests for various storage providers
+
+This release marks a significant evolution of the Memory module with improved defaults, better developer experience, and more robust functionality. The addition of working memory and local embedding capabilities provides more flexibility for different use cases.
+
+## packages/mcp
+Here's the structured changelog for Mastra MCP (0.1.0) covering February 10-17, 2025:
+
+## New Features
+- Added MCP client implementation for improved service management (#e18cb18)
+- Integrated vector store modules for enhanced data handling (#0d5a03d)
+- Implemented tracing functionality into default storage system (#b97ca96)
+
+## Improvements
+- Updated dependency versioning strategy from fixed to caret ranges for better flexibility (#5916f9d)
+- Enhanced type enforcement and cleaned up package configurations (#4f1d1a1)
+- Integrated Mastra core split bundles for better modularity (#9625602)
+
+## Build/Deployment Improvements
+- Implemented tsup bundling for @mastra/mcp (#8468b7f)
+- Fixed publishing pipeline issues (#70dabd9)
+- Updated build configuration:
+  - Switched to experimental DTS generation
+  - Improved watch mode configuration
+  - Streamlined development dependencies
+
+## Breaking Changes
+- Introduced significant breaking changes - please review documentation for migration steps (#8b416d9)
+
+This release marks the transition from alpha to stable version 0.1.0, introducing several core features and improvements to the MCP module while establishing a more robust build and deployment pipeline.
+
+## deployers/cloudflare
+Here's the structured changelog for the Cloudflare deployer module covering February 10-17, 2025:
+
+## Cloudflare Deployer 0.1.0
+
+### New Features
+- Added optional dispatcher namespace configuration for Cloudflare deployments (#026ca5d)
+- Implemented optional Cloudflare worker tagging support (#c7abf8e)
+- Added vector store modules integration (#0d5a03d)
+
+### Improvements
+- Enhanced deployer logic with updated implementation (#38b7f66)
+- Integrated tracing into default storage system (#b97ca96)
+- Unified logging system with improved log clarity (#1944807)
+
+### Notable Bug Fixes
+- Fixed Cloudflare deployer build issues (#32d15ec)
+- Resolved various deployer-specific issues (#9066f95)
+- Fixed directory handling in deployer (#e27fe69)
+
+### Build/Deployment Improvements
+- Updated build system to use tsup bundling (#2b75edf)
+- Migrated dependencies from fixed versions to semver ranges (#5916f9d)
+- Improved package structure with cleaner type definitions (#4f1d1a1)
+- Integrated Mastra core split bundles for better modularity (#9625602)
+
+### Breaking Changes
+- Major updates to deployer implementation that may require configuration updates (#8b416d9)
+- Significant architecture changes requiring deployment adjustments (#4d4f6b6)
+
+This release marks a significant milestone with improved deployment capabilities, better logging, and enhanced build system integration. Users should note the breaking changes when upgrading.
+
+## deployers/netlify
+Here's the changelog for the Netlify deployer module for the week of February 10-17, 2025:
+
+## Netlify Deployer 0.1.0
+
+### Major Changes
+- Released first stable version of the Netlify deployer (#8b416d9)
+- Updated dependency versioning from fixed to caret ranges for better compatibility (#5916f9d)
+
+### Improvements
+- Enhanced deployer logic with improved error handling (#38b7f66)
+- Added directory support to deployer configuration (#e27fe69)
+- Implemented tracing with default storage integration (#b97ca96)
+- Added type safety improvements to Netlify API responses (#a401746)
+
+### Build System
+- Migrated to tsup bundling for improved build process (#2b75edf)
+- Updated build configuration to use experimental DTS generation (#c954274)
+- Streamlined package dependencies by removing unused packages (#654d20a)
+
+### Bug Fixes
+- Fixed broken publish workflow (#70dabd9)
+- Resolved various deployer-specific issues (#88600bc)
+
+This release marks the first stable version of the Netlify deployer, featuring improved type safety, better error handling, and a more robust build system. The module now has better integration with Mastra's tracing system and supports more flexible deployment configurations.
+
+## deployers/vercel
+Here's the structured changelog for the Vercel deployer module covering February 10-17, 2025:
+
+## Vercel Deployer 0.1.0
+
+This release marks the first stable version of the Vercel deployer module, introducing several important improvements and changes.
+
+### Breaking Changes
+- Implemented major updates to core deployer functionality (#8b416d9)
+- Updated dependency version constraints from fixed to caret ranges (#5916f9d)
+
+### Improvements
+- Enhanced deployer logic and implementation (#38b7f66)
+- Added tracing capabilities to default storage system (#b97ca96)
+- Improved type definitions and package.json cleanup (#4f1d1a1)
+
+### Build System
+- Migrated to TSUP bundling for improved build performance (#2b75edf)
+- Updated build configuration:
+  - Switched to experimental DTS generation
+  - Added clean and treeshake options
+  - Improved watch mode configuration
+
+### Dependencies
+- Updated TypeScript to version 5.7.3
+- Upgraded Node.js type definitions
+- Added Microsoft API Extractor for improved API documentation
+- Removed unused Babel dependencies
+
+This release focuses on stability improvements and build system optimization while setting up the foundation for future feature development.
+
+## speech/azure
+Here's the changelog for Mastra AI's speech/azure module for the week of February 10-17, 2025:
+
+# Speech Azure Provider 0.1.0
+
+We're excited to announce the first stable release of the Azure Speech provider for Mastra AI.
+
+## Breaking Changes
+- Migrated from fixed to caret (^) version dependencies for better compatibility (#5916f9d)
+- Implemented significant architectural changes (#8b416d9)
+
+## New Features
+- Added speech modules for TTS providers (#6caa4b3)
+- Integrated tracing capabilities into default storage system (#b97ca96)
+
+## Improvements
+- Deprecated `@mastra/tts` in favor of new Mastra speech providers (#cfb966f)
+- Implemented split bundle architecture from Mastra core (#9625602)
+- Enhanced type definitions and package.json cleanup (#4f1d1a1)
+
+## Build System
+- Updated build configuration to use experimental DTS generation
+- Streamlined build process with improved watch mode
+- Modernized TypeScript configuration for better module resolution
+
+## Dependencies
+- Removed legacy Babel dependencies
+- Updated Node.js type definitions
+- Added Microsoft API Extractor for improved API documentation
+
+This release marks a significant milestone in stabilizing the Azure Speech integration for Mastra AI, with improved architecture and better development experience.
+
+## speech/deepgram
+Here's the changelog for the Mastra AI speech/deepgram module for the week of February 10-17, 2025:
+
+# Mastra Speech Deepgram v0.1.0
+
+This release marks the first stable version of the Deepgram speech integration module.
+
+## Breaking Changes
+- Migrated from fixed to caret (^) version dependencies (#5916f9d)
+- Introduced significant breaking changes to the API structure (#8b416d9)
+
+## Improvements
+- Integrated tracing functionality into default storage system (#b97ca96)
+- Deprecated @mastra/tts in favor of new Mastra speech providers (#cfb966f)
+- Implemented new speech modules for TTS providers (#6caa4b3)
+- Enhanced type definitions and cleaned up package configurations (#4f1d1a1)
+
+## Build System
+- Updated build configuration to use experimental DTS generation
+- Switched to more efficient build watch system
+- Streamlined TypeScript configuration by extending node-specific base config
+- Removed unnecessary Babel dependencies
+
+## Dependencies
+- Updated all package dependencies to latest versions (#9c10484)
+- Integrated with split bundles from Mastra core
+- Fixed publishing pipeline issues (#70dabd9)
+
+This release focuses on stabilizing the Deepgram integration while improving the overall architecture and build system. The migration to the new speech provider system represents a significant step forward in our speech processing capabilities.
+
+[Full Changelog](link-to-changelog)
+
+## speech/elevenlabs
+Here's the changelog for the Mastra AI speech/elevenlabs module for the week of February 10-17, 2025:
+
+# Speech/ElevenLabs Module v0.1.0
+
+## Major Changes
+- Released first stable version of the ElevenLabs speech integration module (#8b416d9)
+- Deprecated `@mastra/tts` in favor of new Mastra speech providers (#cfb966f)
+
+## New Features
+- Added speech modules for TTS providers (#6caa4b3)
+- Integrated tracing capabilities with default storage system (#b97ca96)
+
+## Improvements
+- Updated dependency management from fixed versions to semver ranges (#5916f9d)
+- Enhanced type definitions and package.json cleanup (#4f1d1a1)
+- Integrated with split bundles from Mastra core for better modularity (#9625602)
+
+## Build System
+- Migrated to improved build configuration using tsup
+  - Added experimental DTS generation
+  - Simplified build watch commands
+  - Streamlined TypeScript configuration
+- Updated Node.js type definitions and development dependencies
+
+## Bug Fixes
+- Resolved publishing issues affecting package distribution (#70dabd9)
+
+This release marks a significant milestone with the first stable version of the ElevenLabs speech integration module, featuring improved architecture, better type safety, and enhanced build tooling.
+
+## speech/google
+Here's the changelog for the Mastra AI Google Speech module for the week of February 10-17, 2025:
+
+# @mastra/speech-google v0.1.0 (2025-02-17)
+
+This release marks the first stable version of the Google Speech integration module for Mastra AI.
+
+## Breaking Changes
+- Updated dependency versioning from fixed to caret ranges for better compatibility (#5916f9d)
+- Deprecated `@mastra/tts` in favor of new Mastra speech providers (#cfb966f)
+
+## New Features
+- Added dedicated speech modules for TTS providers (#6caa4b3)
+- Integrated tracing capabilities with default storage system (#b97ca96)
+
+## Build & Development Improvements
+- Migrated build system to use experimental DTS generation
+- Enhanced TypeScript configuration and type enforcement (#4f1d1a1)
+- Updated core dependencies to align with Mastra Core v0.2.0
+- Streamlined package.json structure and development dependencies
+
+## Bug Fixes
+- Resolved publishing pipeline issues (#70dabd9)
+
+This release introduces a more robust and maintainable architecture for Google Speech integration while improving overall type safety and build processes. Users should migrate from `@mastra/tts` to this new provider-specific module for Google Speech services.
+
+## speech/ibm
+Here's the structured changelog for the IBM Speech module covering February 10-17, 2025:
+
+# IBM Speech Provider v0.1.0
+
+This release marks the first stable version of the IBM Speech provider for Mastra AI.
+
+## Breaking Changes
+- Updated dependency versioning from fixed to caret ranges for better compatibility (#5916f9d)
+- Major structural changes to align with new architecture (#8b416d9)
+
+## Improvements
+- Integrated tracing functionality with default storage system (#b97ca96)
+- Deprecated `@mastra/tts` in favor of new speech provider modules (#cfb966f)
+- Implemented core bundle splitting for improved modularity (#9625602)
+- Added new speech modules for TTS providers (#6caa4b3)
+
+## Build System
+- Enhanced TypeScript configuration and type enforcement (#4f1d1a1)
+- Upgraded build system:
+  - Switched to experimental DTS generation
+  - Improved build watch functionality
+  - Streamlined dependency management
+
+## Dependencies
+- Updated to @mastra/core v0.2.0 with numerous improvements
+- Removed unnecessary Babel dependencies
+- Updated Node.js type definitions
+
+This release focuses on stabilizing the IBM Speech provider while improving its integration with the Mastra core system. The changes reflect our commitment to better modularity and type safety.
+
+## speech/murf
+Here's the changelog for the Murf Speech module covering February 10-17, 2025:
+
+# Murf Speech Module v0.1.0
+
+This release marks the first stable version of the Murf Speech integration for Mastra AI.
+
+### New Features
+- Added speech module support for Murf TTS provider (#6caa4b3)
+- Implemented tracing capabilities with default storage integration (#b97ca96)
+
+### Improvements
+- Deprecated `@mastra/tts` in favor of new Mastra speech providers (#cfb966f)
+- Updated dependency management from fixed versions to semver ranges (#5916f9d)
+- Integrated with split bundles from Mastra core for better modularity (#9625602)
+
+### Build System
+- Modernized build configuration:
+  - Switched to experimental DTS generation
+  - Added clean builds with tree shaking
+  - Improved watch mode functionality
+- Enhanced TypeScript configuration and type enforcement (#4f1d1a1)
+
+### Breaking Changes
+- Introduced significant API changes - please review documentation (#8b416d9)
+- Migration required from `@mastra/tts` to new speech provider system
+
+This release establishes a more robust foundation for Murf TTS integration while improving build tooling and type safety. Users should note the breaking changes and plan migrations accordingly.
+
+## speech/openai
+Here's the changelog for Mastra AI's speech/openai module for the week of February 10-17, 2025:
+
+# Speech OpenAI Module v0.1.0
+
+## Major Changes
+- Introduced new speech modules for TTS providers (#6caa4b3)
+- Deprecated `@mastra/tts` in favor of new Mastra speech providers (#cfb966f)
+
+## Improvements
+- Added tracing capabilities to default storage system (#b97ca96)
+- Updated dependency management from fixed versions to semver ranges (#5916f9d)
+- Integrated with split bundles from Mastra core for better modularity (#9625602)
+
+## Build System & Development
+- Enhanced TypeScript configuration and type enforcement (#4f1d1a1)
+- Modernized build pipeline:
+  - Switched to experimental DTS generation
+  - Improved build watch functionality
+  - Streamlined build tooling configuration
+- Fixed publishing pipeline issues (#70dabd9)
+
+## Dependencies
+- Updated all package dependencies to latest versions (#9c10484)
+- Migrated to TypeScript 5.7.3
+- Removed unnecessary Babel dependencies
+- Added Microsoft API Extractor for improved API documentation
+
+This release marks a significant milestone with the introduction of dedicated speech provider modules and improved build system architecture. The deprecation of `@mastra/tts` represents our move toward more specialized provider-specific implementations.
+
+## speech/playai
+Here's the changelog for Mastra AI's speech/playai module for the week of February 10-17, 2025:
+
+# Speech PlayAI Provider 0.1.0
+
+## Major Changes
+- Released first stable version of the PlayAI speech provider (#8b416d9)
+
+## Improvements
+- Integrated tracing functionality with default storage system (#b97ca96)
+- Deprecated `@mastra/tts` in favor of new Mastra speech providers (#cfb966f)
+- Enhanced type safety and improved error handling for PlayAI API responses (#4f1d1a1)
+
+## Build System
+- Updated build configuration to use experimental DTS generation
+- Migrated to more flexible dependency versioning using caret ranges (#5916f9d)
+- Streamlined package.json configuration and cleaned up unnecessary dependencies
+- Added support for split bundles from Mastra core (#9625602)
+
+## Bug Fixes
+- Resolved publishing workflow issues (#70dabd9)
+- Fixed type assertions in PlayAI job response handling
+
+This release marks the first stable version of the PlayAI speech provider, bringing improved type safety, better error handling, and more robust build tooling. The module now uses the new Mastra speech provider architecture, replacing the deprecated `@mastra/tts` package.
+
+## speech/replicate
+Here's the structured changelog for the Mastra AI speech/replicate module for the week of February 10-17, 2025:
+
+# Mastra Speech Replicate v0.1.0
+
+This release marks the first stable version of the Mastra Speech Replicate provider, introducing several important changes and improvements.
+
+### Breaking Changes
+- Migrated from fixed to caret (^) version dependencies for better compatibility (#5916f9d)
+- Introduced breaking changes to align with new speech provider architecture (#8b416d9)
+
+### New Features
+- Added speech modules support for TTS providers (#6caa4b3)
+- Integrated tracing capabilities into default storage system (#b97ca96)
+
+### Improvements
+- Deprecated `@mastra/tts` in favor of new Mastra speech providers (#cfb966f)
+- Implemented split bundle architecture from Mastra core (#9625602)
+- Enhanced type definitions and package.json cleanup (#4f1d1a1)
+
+### Build System
+- Updated build configuration to use experimental DTS generation
+- Streamlined build process with improved watch mode support
+- Modernized TypeScript configuration for better module resolution
+
+### Dependencies
+- Updated all package dependencies to latest versions (#9c10484)
+- Fixed publishing configuration issues (#70dabd9)
+
+This release represents a significant step forward in the Mastra speech capabilities, with improved architecture and better integration with the core platform.
+
+## speech/speechify
+Here's the changelog for Mastra AI's speechify module covering February 10-17, 2025:
+
+# Speechify Module v0.1.0
+
+## New Features
+- Added speech modules support for TTS providers (#6caa4b3)
+- Integrated tracing capabilities into default storage (#b97ca96)
+
+## Improvements
+- Deprecated `@mastra/tts` in favor of new Mastra speech providers (#cfb966f)
+- Updated dependency management from fixed versions to semver ranges (#5916f9d)
+- Integrated with split bundles from Mastra core for better modularity (#9625602)
+
+## Build/Deployment
+- Enhanced build system:
+  - Switched to experimental DTS generation
+  - Added dedicated watch mode for development
+  - Streamlined build configuration (#4f1d1a1)
+- Fixed publishing pipeline issues (#70dabd9)
+- Updated package dependencies to latest versions (#9c10484)
+
+## Breaking Changes
+- Introduced significant breaking changes - please review documentation for migration steps (#8b416d9)
+
+---
+This release marks a significant milestone with the introduction of new speech provider integrations and improved build tooling. Users should note the breaking changes and plan their upgrades accordingly.
+
+## stores/pg
+Here's the changelog for the @mastra/pg package for the week of February 10-17, 2025:
+
+## @mastra/pg v0.1.0
+
+### Major Changes
+- Combined PostgreSQL packages into a single unified `@mastra/pg` package (#c87eb4e)
+  - Consolidated vector and database storage capabilities
+  - Reorganized source files into `src/vector` and `src/store` directories
+  - Added deprecation notices to legacy packages
+  - Updated documentation and examples
+
+### New Features
+- Added batch insert capabilities for improved data ingestion performance (#b97ca96)
+- Implemented trace querying functionality with filtering support (#b97ca96)
+  - Support for name and scope-based filtering
+  - Pagination capabilities
+  - Custom attribute filtering
+
+### Improvements
+- Enhanced error handling for database operations with transaction support
+- Added safe JSON parsing utilities for improved data reliability
+- Strengthened type definitions across the codebase (#4f1d1a1)
+
+### Build/Deployment
+- Updated build configuration to use experimental DTS generation
+- Improved build script with cleaner output (#07c069d)
+- Fixed package publishing issues (#70dabd9)
+
+This release represents a significant milestone in consolidating our PostgreSQL-related functionality while maintaining backward compatibility. The new unified package structure should make it easier for developers to work with both vector and traditional storage capabilities.
+
+## stores/astra
+Here's the changelog for Mastra AI's Astra module covering February 10-17, 2025:
+
+# Mastra AI Changelog - Astra Module
+**February 17, 2025**
+
+## Major Changes
+- Relocated package from `@mastra/vector-astra` to `@mastra/astra` with improved organization (#c87eb4e)
+  - Source files now in `src/vector` directory
+  - Added deprecation notice to old package
+  - Updated documentation and examples
+  - Maintained backward compatibility
+
+## Improvements
+- Added tracing capabilities to default storage implementation (#b97ca96)
+- Enhanced type safety with stricter type annotations (#4f1d1a1)
+
+## Build System
+- Updated build configuration to use experimental DTS generation (#07c069d)
+- Fixed package publishing pipeline (#70dabd9)
+- Modernized package.json structure and dependencies
+  - Added API Extractor for better type definitions
+  - Updated TypeScript and Node.js type definitions
+
+## Developer Experience
+- Improved build workflow with watch mode support
+- Streamlined TypeScript configuration by extending from base config
+
+Note: This release includes numerous dependency updates from the core package (@mastra/core@0.2.0) that improve overall stability and functionality.
+
+## stores/chroma
+Here's the changelog for Mastra AI's Chroma module covering February 10-17, 2025:
+
+# Chroma Store v0.1.0 (2025-02-17)
+
+## Major Changes
+- Relocated package from `@mastra/vector-chroma` to `@mastra/chroma` with improved organization and structure (#684d5d1)
+
+## Improvements
+- Enhanced type safety with strict type annotations across the codebase (#4f1d1a1)
+- Added tracing capabilities to default storage implementation (#b97ca96)
+
+## Build & Development
+- Modernized build pipeline:
+  - Updated to experimental DTS generation
+  - Improved watch mode functionality
+  - Streamlined build script configuration (#07c069d)
+- Fixed package publishing workflow (#70dabd9)
+
+## Dependencies
+- Updated core dependencies to v0.2.0
+- Upgraded development dependencies:
+  - TypeScript to v5.7.3
+  - Node types to v22.13.1
+  - Added Microsoft API Extractor v7.49.2
+
+Note: The package maintains full backward compatibility despite the relocation. All existing functionality continues to work as expected.
+
+## stores/pinecone
+Here's the changelog for the Pinecone module covering February 10-17, 2025:
+
+## Pinecone Store Updates (v0.1.0)
+
+### Major Changes
+- Relocated package from `@mastra/vector-pinecone` to `@mastra/pinecone` with reorganized source structure (#c87eb4e)
+
+### Improvements
+- Added type enforcement throughout the codebase for better type safety (#4f1d1a1)
+- Implemented tracing capabilities in default storage (#b97ca96)
+
+### Build System
+- Updated build configuration to use experimental DTS generation
+- Modernized build script with improved treeshaking support (#07c069d)
+- Added API Extractor for better type definitions management
+
+### Dependencies
+- Updated Node.js types to v22.13.1
+- Added dotenv v16.4.7 for environment management
+- Upgraded TypeScript to v5.7.3
+
+Note: The package maintains full backward compatibility despite the relocation. All existing functionality continues to work as expected.
+
+## stores/qdrant
+Here's the changelog for the Qdrant module covering February 10-17, 2025:
+
+# Qdrant Store 0.1.0 (2025-02-17)
+
+## Major Changes
+- Relocated package from `@mastra/vector-qdrant` to `@mastra/qdrant` with improved organization (c87eb4e)
+  - Moved to `stores/qdrant` directory
+  - Restructured source files under `src/vector`
+  - Added deprecation notice for old package
+  - Updated documentation and examples
+
+## Improvements
+- Added tracing capabilities to default storage implementation (b97ca96)
+- Enhanced type safety with strict type annotations across the codebase (4f1d1a1)
+
+## Build System
+- Updated build configuration to use experimental DTS generation
+- Modernized build scripts with improved watch mode support (07c069d)
+- Fixed publishing configuration issues (70dabd9)
+
+## Dependencies
+- Updated Node.js type definitions to v22.13.1
+- Added Microsoft API Extractor v7.49.2
+- Upgraded TypeScript to v5.7.3
+
+Note: This release maintains backward compatibility while introducing structural improvements and better type safety.
+
+## stores/upstash
+Here's the changelog for the Upstash module covering February 10-17, 2025:
+
+# @mastra/upstash v0.1.0
+
+## Major Changes
+- Combined all Upstash-related packages into a single `@mastra/upstash` package for better organization and maintenance (c87eb4e)
+- Restructured source code into dedicated `vector` and `store` directories for clearer separation of concerns (c87eb4e)
+
+## New Features
+- Added support for batch operations in storage layer
+- Implemented evaluation tracking capabilities with new agent name filtering
+- Added trace collection functionality with filtering by name, scope, and attributes
+
+## Improvements
+- Added type enforcement and cleaned up package.json configurations (4f1d1a1)
+- Integrated tracing capabilities into default storage implementation (b97ca96)
+
+## Build System
+- Updated build configuration to use experimental DTS generation
+- Switched to more efficient build watch mode using pnpm
+- Modernized TypeScript configuration with latest type definitions
+- Added Microsoft API Extractor for improved type documentation (07c069d)
+
+## Bug Fixes
+- Resolved publishing configuration issues (70dabd9)
+
+Note: This release includes significant architectural changes but maintains backward compatibility with existing implementations. Users should update their imports to use the new unified package structure.
+
+## stores/vectorize
+Here's the changelog for Mastra AI's vectorize module covering February 10-17, 2025:
+
+# Vectorize Module v0.1.0
+
+## Breaking Changes
+- Renamed package from `@mastra/vector-vectorize` to `@mastra/vectorize` - update your imports accordingly (#91c81f5)
+
+## Improvements
+- Added tracing capabilities to default storage implementation (#b97ca96)
+- Enhanced type safety with stricter type annotations across the module (#4f1d1a1)
+
+## Build/Deployment
+- Updated build configuration to use experimental DTS generation (#07c069d)
+- Fixed package publishing workflow (#70dabd9)
+- Modernized package dependencies and build tooling:
+  - Upgraded to TypeScript 5.7.3
+  - Added API Extractor for improved type definitions
+  - Streamlined build scripts for better development experience
+
+Note: This release includes a significant number of dependency updates from the core package (@mastra/core) which provide underlying improvements to the vectorize module's functionality.

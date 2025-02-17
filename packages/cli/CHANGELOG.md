@@ -1,5 +1,355 @@
 # mastra
 
+## 0.2.0
+
+### Minor Changes
+
+- 4d4f6b6: Update deployer
+- 5916f9d: Update deps from fixed to ^
+- 74b3078: Reduce verbosity in workflows API
+- 8b416d9: Breaking changes
+
+### Patch Changes
+
+- 2ab57d6: Fix: Workflows require a trigger schema otherwise it fails to run in dev
+- fd15221: cli publishing fix
+- c8a8eab: fix some workflow conditions not showing on graph and dev watcher not working
+- cc9172a: Clarify functionality of logs tab in dev environment
+- f1cb298: rename serve command to dev
+- e38b412: Fixes
+- 0f08180: Update docs for mastra dev
+- a828155: Add prepare script to include node_modules in published package
+- 0e2b588: Update cloudflare deployment config
+- ba821de: publish cli homepage
+- 95e15a9: render agent chat errors
+- abdd42d: polish mastra create, fix create-mastra publishing
+- f187221: bring back cli post install
+- 9d1796d: Fix storage and eval serialization on api
+- 3af5866: publish cli post install script
+- b9f7d2f: Expose memory APIs in mastra serve
+- 9df6d6e: Fix serve
+- e27fe69: Add dir to deployer
+- 8ae2bbc: Dane publishing
+- c4cd3ff: Catch npx mastra dev dependency issue
+- 82a6d53: better create-mastra tsconfig, better error for mastra server agent stream
+- f79a9ff: Fix example tool execution not workin in dev, add example tool to example agent, add example workflow to main Mastra export
+- 7d83b92: Create default storage and move evals towards it
+- cc5bd40: Fix playground agent chat losing some chat during redirect
+- 813c719: Fix watcher in mastra dev, now listens to all files
+- 0209290: Add env to starter gitignore file
+- 5cdfb88: add getWorkflows method to core, add runId to workflow logs, update workflow starter file, add workflows page with table and workflow page with info, endpoints and logs
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- 97fb0d5: Move playground dependencies out of cli
+- dde845f: Fix cli stater files build
+- 7344dd7: Fix tool executor ui bugs
+- 989833c: Handle rendering workflows without triggerschema on dev playground
+- 17608e9: Fix agent generate/stream with structured output
+- b97ca96: Tracing into default storage
+- ad2cd74: Deploy fix
+- 033eda6: More fixes for refactor
+- 7babd5c: CLI build and other
+- 9066f95: CF deployer fixes
+- 884793d: Fix 500 error in memory call, fix threads sidebar in playground agent chat
+- 1944807: Unified logger and major step in better logs
+- 0091799: Add dev and deploy mastra commands to CLI references in documentation, update build successful message in dev command
+- a61be33: update readme
+- 43667fa: postinstall mastra package deps
+- 019d771: throw proper errors in serve
+- b6f9860: watch for changes in user mastra directory and restart server in cli dev
+- 1d68b0c: update dane publishing
+- 255fc56: create mastra bundle correctly
+- 8e62269: show cli options rather than ascii art
+- de279d5: update apiKey
+- 382f4dc: move telemetry init to instrumentation.mjs file in build directory
+- ad38e98: Fix example code
+- 689b529: fix mastra dev for windows
+- edd70b5: changeset
+- cefd906: cli interactive api key configuration
+- 0b74006: Workflow updates
+- 7892533: Updated test evals to use Mastra Storage
+- 79a464e: Update cli, dane, stabilityai builds.
+- 5b5de5e: Instructions playground
+- 9c10484: update all packages
+- 59f592a: mastra dev open api spec, mastra server templates as code
+- 70dabd9: Fix broken publish
+- 21fe536: add keyword tags for packages and update readmes
+- 31ca9fe: fix bugs with init
+- 391d5ea: Add @opentelemetry/instrumentation to pkg json of build artifcat
+- ba2437d: one central cli dev playground app
+- 1b321d5: Get all tools
+- d68b532: Updated debug logs
+- 75bf3f0: remove context bug in agent tool execution, update style for mastra dev rendered pages
+- e6d8055: Added Mastra Storage to add and query live evals
+- aacfff6: publish new mastra, create-mastra
+- a18e96c: Array schemas for dev tool playground
+- 1d88043: Fix tools bundling
+- b425845: Logger and execa logs
+- 85c6935: Fix messages sent not rendering when evals are on
+- b135410: fix- mastra post install
+- 4123324: Fix cli server build
+- d6d8159: Workflow graph diagram
+- 606bbbe: Adds -f option to engine commands to specify custom docker config. Updates Engine docs.
+- 7db55f6: Install aisdk model provider for in create-mastra init
+- c156b63: Add missing mastra deploy server deps
+- 188ffa8: Fix cli create not parsing components flag
+- 0bd142c: Fixes learned from docs
+- 9625602: Use mastra core splitted bundles in other packages
+- 72d1990: Updated evals table schema
+- f6ba259: simplify generate api
+- 2712098: add getAgents method to core and route to cli dev, add homepage interface to cli
+- 5d2f4b0: cli shared ui
+- e604ddb: Change bundling architecture
+- 678ffb4: Add layout with sidebar, update dev endpoints to have /api prefix
+- fa3c7cb: Fix trace name on table being too long
+- 8890cac: group mastra dev playground tools
+- e5e2bb4: Configure vercel deployment project name
+- f2c5dfa: update endpoint path
+- 002d6d8: add memory to playground agent
+- 2b4d224: Publishing
+- 6b518fc: Add js banner to mastra dev bundle to fix dynamic import errors
+- dc90663: Fix issues in packages
+- 6e18618: Generate tsconfig on mastra create
+- 505d385: playground breadcrumb navigation
+- de60682: Fix playground thread navigation
+- 2f2f65e: Fix multipart location tool error with init example
+- b80ea8d: Fix bundling of server
+- 323e09e: Use 4o-mini in starter example
+- 1dbbb49: update netlify and cloudflare server templates
+- b748d2a: fix error when installing zod in starter
+- 56f2163: add proper titles and handle empty list
+- 9db58b8: Update UI to clarify memory usage in agent chat interface
+- 43ac982: serve agent chat ui on mastra serve
+- 42a2e69: Fix playground error parsing
+- 245e3f7: dev playground rebuild/refresh on file changes
+- ffa0b63: Fix scrolling issue in mastra dev tools playground UI
+- 28dceab: Catch apiKey error in dev
+- 3c2d317: add textObject and streamObject to serve api
+- c18a0c0: Fix creation of new threads in dev playground
+- d863bb3: Fixing mastra engine generate
+- 38b7f66: Update deployer logic
+- 32cd966: new mastra create command, publish create-mastra a way to quickly spin up mastra apps
+- 2fa7f53: add more logs to workflow, only log failed workflow if all steps fail, animate workflow diagram edges
+- b9c7047: Move to non deprecated table name for eval insertion
+- f6da688: update agents/:agentId page in dev to show agent details and endpoints, add getTools to agent
+- 9ade36e: Changed measure for evals, added endpoints, attached metrics to agent, added ui for evals in playground, and updated docs
+- c16b6a1: Fix loading env files in dev
+- 2b01511: Update CONSOLE logger to store logs and return logs, add logs to dev agent page
+- f4ae8dd: dev playground, support multiple tool dirs
+- 6cc479d: change cat example
+- 04434b6: Create separate logger file
+- ec3ea2f: configurable CF worker name
+- 732a971: create api for sync
+- 327ece7: Updates for ts versions
+- b39ea1d: ability to skip wrangler cli installation
+- 538a136: Added Simple Condition for workflows, updated /api/workflows/{workflowId}/execute endpoint and docs
+- b5393f1: New example: Dane and many fixes to make it work
+- 3296399: Bump version
+- 46e9b7a: bundle mastra dev deps with publish
+- 215a1c2: Fix bad cli create starter files copying
+- d1e3623: Refactor CLI and improve engine commands
+- 9fb59d6: changeset
+- 2667e66: fix create mastra publishing
+- f1e3105: Now that memory can be added to an agent, the playground needs to look up memory on the agent, not on mastra. Now the playground looks up on the agent to properly access memory
+- 5fd3569: Update CLOUDFLARE and NETLIFY servers
+- 4f1d1a1: Enforce types ann cleanup package.json
+- ee4de15: Dane fixes
+- 86c9e6b: Added posthog telemetry
+- 202d404: Added instructions when generating evals
+- Updated dependencies [2ab57d6]
+- Updated dependencies [a1774e7]
+- Updated dependencies [f537e33]
+- Updated dependencies [291fe57]
+- Updated dependencies [6f2c0f5]
+- Updated dependencies [e4d4ede]
+- Updated dependencies [0be7181]
+- Updated dependencies [dd6d87f]
+- Updated dependencies [9029796]
+- Updated dependencies [6fa4bd2]
+- Updated dependencies [f031a1f]
+- Updated dependencies [8151f44]
+- Updated dependencies [d7d465a]
+- Updated dependencies [4d4f6b6]
+- Updated dependencies [73d112c]
+- Updated dependencies [592e3cf]
+- Updated dependencies [9d1796d]
+- Updated dependencies [e897f1c]
+- Updated dependencies [4a54c82]
+- Updated dependencies [e27fe69]
+- Updated dependencies [3967e69]
+- Updated dependencies [8ae2bbc]
+- Updated dependencies [246f06c]
+- Updated dependencies [ac8c61a]
+- Updated dependencies [82a6d53]
+- Updated dependencies [e9d1b47]
+- Updated dependencies [bdaf834]
+- Updated dependencies [016493a]
+- Updated dependencies [bc40916]
+- Updated dependencies [93a3719]
+- Updated dependencies [7d83b92]
+- Updated dependencies [9fb3039]
+- Updated dependencies [8fa48b9]
+- Updated dependencies [d5e12de]
+- Updated dependencies [e1dd94a]
+- Updated dependencies [07c069d]
+- Updated dependencies [5cdfb88]
+- Updated dependencies [837a288]
+- Updated dependencies [685108a]
+- Updated dependencies [c8ff2f5]
+- Updated dependencies [5fdc87c]
+- Updated dependencies [ae7bf94]
+- Updated dependencies [8e7814f]
+- Updated dependencies [66a03ec]
+- Updated dependencies [5916f9d]
+- Updated dependencies [7d87a15]
+- Updated dependencies [b97ca96]
+- Updated dependencies [ad2cd74]
+- Updated dependencies [23dcb23]
+- Updated dependencies [033eda6]
+- Updated dependencies [7babd5c]
+- Updated dependencies [a9b5ddf]
+- Updated dependencies [9066f95]
+- Updated dependencies [4139b43]
+- Updated dependencies [8105fae]
+- Updated dependencies [e097800]
+- Updated dependencies [ab01c53]
+- Updated dependencies [1944807]
+- Updated dependencies [30322ce]
+- Updated dependencies [8aec8b7]
+- Updated dependencies [1874f40]
+- Updated dependencies [685108a]
+- Updated dependencies [f7d1131]
+- Updated dependencies [79acad0]
+- Updated dependencies [7a19083]
+- Updated dependencies [382f4dc]
+- Updated dependencies [1ebd071]
+- Updated dependencies [0b74006]
+- Updated dependencies [2f17a5f]
+- Updated dependencies [f368477]
+- Updated dependencies [7892533]
+- Updated dependencies [9c10484]
+- Updated dependencies [b726bf5]
+- Updated dependencies [88f18d7]
+- Updated dependencies [70dabd9]
+- Updated dependencies [21fe536]
+- Updated dependencies [1a41fbf]
+- Updated dependencies [176bc42]
+- Updated dependencies [391d5ea]
+- Updated dependencies [401a4d9]
+- Updated dependencies [2e099d2]
+- Updated dependencies [0b826f6]
+- Updated dependencies [8329f1a]
+- Updated dependencies [d68b532]
+- Updated dependencies [75bf3f0]
+- Updated dependencies [e6d8055]
+- Updated dependencies [e2e76de]
+- Updated dependencies [a18e96c]
+- Updated dependencies [ccbc581]
+- Updated dependencies [5950de5]
+- Updated dependencies [b425845]
+- Updated dependencies [fe3dcb0]
+- Updated dependencies [0696eeb]
+- Updated dependencies [6780223]
+- Updated dependencies [78eec7c]
+- Updated dependencies [a8a459a]
+- Updated dependencies [0b96376]
+- Updated dependencies [0be7181]
+- Updated dependencies [7b87567]
+- Updated dependencies [b524c22]
+- Updated dependencies [d7d465a]
+- Updated dependencies [df843d3]
+- Updated dependencies [cfb966f]
+- Updated dependencies [4534e77]
+- Updated dependencies [d6d8159]
+- Updated dependencies [0bd142c]
+- Updated dependencies [9625602]
+- Updated dependencies [72d1990]
+- Updated dependencies [f6ba259]
+- Updated dependencies [2712098]
+- Updated dependencies [a291824]
+- Updated dependencies [eedb829]
+- Updated dependencies [8ea426a]
+- Updated dependencies [c5f2d50]
+- Updated dependencies [5285356]
+- Updated dependencies [74b3078]
+- Updated dependencies [cb290ee]
+- Updated dependencies [b4d7416]
+- Updated dependencies [e608d8c]
+- Updated dependencies [7064554]
+- Updated dependencies [06b2c0a]
+- Updated dependencies [002d6d8]
+- Updated dependencies [e448a26]
+- Updated dependencies [8b416d9]
+- Updated dependencies [fd494a3]
+- Updated dependencies [dc90663]
+- Updated dependencies [c872875]
+- Updated dependencies [3c4488b]
+- Updated dependencies [72c280b]
+- Updated dependencies [a7b016d]
+- Updated dependencies [fd75f3c]
+- Updated dependencies [7f24c29]
+- Updated dependencies [2017553]
+- Updated dependencies [b80ea8d]
+- Updated dependencies [a10b7a3]
+- Updated dependencies [42a2e69]
+- Updated dependencies [cf6d825]
+- Updated dependencies [963c15a]
+- Updated dependencies [28dceab]
+- Updated dependencies [7365b6c]
+- Updated dependencies [5ee67d3]
+- Updated dependencies [a5604c4]
+- Updated dependencies [d38f7a6]
+- Updated dependencies [38b7f66]
+- Updated dependencies [2fa7f53]
+- Updated dependencies [1420ae2]
+- Updated dependencies [b9c7047]
+- Updated dependencies [4a328af]
+- Updated dependencies [f6da688]
+- Updated dependencies [3700be1]
+- Updated dependencies [9ade36e]
+- Updated dependencies [10870bc]
+- Updated dependencies [2b01511]
+- Updated dependencies [a870123]
+- Updated dependencies [ccf115c]
+- Updated dependencies [04434b6]
+- Updated dependencies [5811de6]
+- Updated dependencies [9f3ab05]
+- Updated dependencies [66a5392]
+- Updated dependencies [4b1ce2c]
+- Updated dependencies [14064f2]
+- Updated dependencies [f5dfa20]
+- Updated dependencies [327ece7]
+- Updated dependencies [da2e8d3]
+- Updated dependencies [95a4697]
+- Updated dependencies [d5fccfb]
+- Updated dependencies [3427b95]
+- Updated dependencies [538a136]
+- Updated dependencies [e66643a]
+- Updated dependencies [b5393f1]
+- Updated dependencies [d2cd535]
+- Updated dependencies [c2dd6b5]
+- Updated dependencies [67637ba]
+- Updated dependencies [836f4e3]
+- Updated dependencies [5ee2e78]
+- Updated dependencies [cd02c56]
+- Updated dependencies [01502b0]
+- Updated dependencies [16e5b04]
+- Updated dependencies [d9c8dd0]
+- Updated dependencies [9fb59d6]
+- Updated dependencies [a9345f9]
+- Updated dependencies [f1e3105]
+- Updated dependencies [99f1847]
+- Updated dependencies [04f3171]
+- Updated dependencies [8769a62]
+- Updated dependencies [d5ec619]
+- Updated dependencies [27275c9]
+- Updated dependencies [ae7bf94]
+- Updated dependencies [4f1d1a1]
+- Updated dependencies [ee4de15]
+- Updated dependencies [202d404]
+- Updated dependencies [a221426]
+  - @mastra/deployer@0.1.0
+  - @mastra/core@0.2.0
+
 ## 0.2.0-alpha.171
 
 ### Patch Changes
