@@ -918,4 +918,134 @@ describe('Workflow', () => {
       expect(toolAction).toHaveBeenCalled();
     }, 10000);
   });
+
+  describe('Watch', () => {
+    it('should watch workflow state changes and call onTransition', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+
+      const step1 = new Step({ id: 'step1', execute: step1Action });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
+
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow.step(step1).then(step2).commit();
+
+      const onTransition = vi.fn();
+
+      const run = workflow.createRun();
+
+      // Start watching the workflow
+      workflow.watch(onTransition);
+
+      const executionResult = await run.start();
+
+      expect(onTransition).toHaveBeenCalledTimes(6);
+      expect(onTransition).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runId: expect.any(String),
+          value: { step1: 'runningSubscribers' },
+          context: expect.objectContaining({
+            steps: { step1: expect.any(Object) },
+            triggerData: {},
+            attempts: { step1: 3, step2: 3 },
+          }),
+          activePaths: [
+            {
+              stepPath: expect.any(Array),
+              stepId: 'step1',
+              status: 'runningSubscribers',
+            },
+          ],
+          timestamp: expect.any(Number),
+        }),
+      );
+
+      // Verify execution completed successfully
+      expect(executionResult.results.step1).toEqual({
+        status: 'success',
+        output: { result: 'success1' },
+      });
+      expect(executionResult.results.step2).toEqual({
+        status: 'success',
+        output: { result: 'success2' },
+      });
+    });
+
+    it('should unsubscribe from transitions when unwatch is called', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+
+      const step1 = new Step({ id: 'step1', execute: step1Action });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
+
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow.step(step1).then(step2).commit();
+
+      const onTransition = vi.fn();
+      const onTransition2 = vi.fn();
+
+      const run = workflow.createRun();
+
+      const unwatch = workflow.watch(onTransition);
+      const unwatch2 = workflow.watch(onTransition2);
+
+      await run.start();
+
+      expect(onTransition).toHaveBeenCalledTimes(6);
+      expect(onTransition2).toHaveBeenCalledTimes(6);
+
+      unwatch();
+
+      const run2 = workflow.createRun();
+      await run2.start();
+
+      expect(onTransition).toHaveBeenCalledTimes(6);
+      expect(onTransition2).toHaveBeenCalledTimes(12);
+
+      unwatch2();
+
+      const run3 = workflow.createRun();
+      await run3.start();
+
+      expect(onTransition).toHaveBeenCalledTimes(6);
+      expect(onTransition2).toHaveBeenCalledTimes(12);
+    });
+
+    it('should handle parallel transitions', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+
+      const step1 = new Step({ id: 'step1', execute: step1Action });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
+
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow.step(step1).step(step2).commit();
+
+      const onTransition = vi.fn();
+
+      const run = workflow.createRun();
+
+      workflow.watch(onTransition);
+
+      await run.start();
+
+      expect(onTransition).toHaveBeenCalledTimes(6);
+      expect(onTransition).toHaveBeenCalledWith(
+        expect.objectContaining({
+          activePaths: [
+            {
+              stepPath: expect.any(Array),
+              stepId: 'step1',
+              status: 'runningSubscribers',
+            },
+            {
+              stepPath: expect.any(Array),
+              stepId: 'step2',
+              status: 'runningSubscribers',
+            },
+          ],
+        }),
+      );
+    });
+  });
 });
