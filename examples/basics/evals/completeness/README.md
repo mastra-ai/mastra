@@ -6,7 +6,6 @@ This example demonstrates how to use Mastra's Completeness metric to evaluate ho
 
 - Node.js v20.0+
 - pnpm (recommended) or npm
-- OpenAI API key
 
 ## Getting Started
 
@@ -17,25 +16,13 @@ This example demonstrates how to use Mastra's Completeness metric to evaluate ho
    cd examples/basics/evals/completeness
    ```
 
-2. Copy the environment variables file and add your OpenAI API key:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-   Then edit `.env` and add your OpenAI API key:
-
-   ```env
-   OPENAI_API_KEY=sk-your-api-key-here
-   ```
-
-3. Install dependencies:
+2. Install dependencies:
 
    ```bash
    pnpm install
    ```
 
-4. Run the example:
+3. Run the example:
 
    ```bash
    pnpm start
