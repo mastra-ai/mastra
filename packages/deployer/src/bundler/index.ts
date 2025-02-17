@@ -52,6 +52,8 @@ export abstract class Bundler extends MastraBundler {
       dependenciesMap.set(key, value);
     }
 
+    dependenciesMap.set('@opentelemetry/instrumentation', 'latest');
+
     await writeFile(
       pkgPath,
       JSON.stringify(
