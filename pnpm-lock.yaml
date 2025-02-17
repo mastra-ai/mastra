@@ -385,6 +385,144 @@ importers:
       '@ai-sdk/openai':
         specifier: latest
         version: 1.1.12(zod@3.24.1)
+      '@mastra/evals':
+        specifier: workspace:^
+        version: link:../../../../packages/evals
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/evals/bias:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: latest
+        version: 1.1.12(zod@3.24.1)
+      '@mastra/evals':
+        specifier: workspace:*
+        version: link:../../../../packages/evals
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/evals/completeness:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: latest
+        version: 1.1.12(zod@3.24.1)
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      '@mastra/evals':
+        specifier: workspace:*
+        version: link:../../../../packages/evals
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/evals/content-similarity:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: latest
+        version: 1.1.12(zod@3.24.1)
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      '@mastra/evals':
+        specifier: workspace:*
+        version: link:../../../../packages/evals
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/evals/context-position:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: latest
+        version: 1.1.12(zod@3.24.1)
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      '@mastra/evals':
+        specifier: workspace:*
+        version: link:../../../../packages/evals
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/evals/context-precision:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: latest
+        version: 1.1.12(zod@3.24.1)
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      '@mastra/evals':
+        specifier: workspace:*
+        version: link:../../../../packages/evals
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/evals/context-relevancy:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: latest
+        version: 1.1.12(zod@3.24.1)
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      '@mastra/evals':
+        specifier: workspace:*
+        version: link:../../../../packages/evals
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/evals/contextual-recall:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: latest
+        version: 1.1.12(zod@3.24.1)
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      '@mastra/evals':
+        specifier: workspace:*
+        version: link:../../../../packages/evals
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/evals/faithfulness:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: latest
+        version: 1.1.12(zod@3.24.1)
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      '@mastra/evals':
+        specifier: workspace:*
+        version: link:../../../../packages/evals
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/evals/hallucination:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: latest
+        version: 1.1.12(zod@3.24.1)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
