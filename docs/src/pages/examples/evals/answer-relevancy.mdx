@@ -54,7 +54,7 @@ const metric = new AnswerRelevancyMetric(openai('gpt-4o-mini'), {
 
 Evaluate a highly relevant response:
 
-```typescript copy showLineNumbers{12} filename="src/index.ts"
+```typescript copy showLineNumbers{11} filename="src/index.ts"
 const query1 = 'What are the health benefits of regular exercise?';
 const response1 =
   'Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins.';
@@ -74,7 +74,7 @@ console.log('Metric Result:', {
 
 Evaluate an irrelevant response:
 
-```typescript copy showLineNumbers{27} filename="src/index.ts"
+```typescript copy showLineNumbers{26} filename="src/index.ts"
 const query2 = 'What are the benefits of meditation?';
 const response2 =
   'The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.';
@@ -94,7 +94,7 @@ console.log('Metric Result:', {
 
 Evaluate a partially relevant response:
 
-```typescript copy showLineNumbers{42} filename="src/index.ts"
+```typescript copy showLineNumbers{41} filename="src/index.ts"
 const query3 = 'What should a healthy breakfast include?';
 const response3 =
   'A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.';
