@@ -1,4 +1,4 @@
-name: DANE_Publish_Packages
+name: Prerelease
 
 permissions:
   contents: write
@@ -12,46 +12,33 @@ jobs:
     if: contains(github.head_ref || github.ref_name, 'changeset-release') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout repo
         uses: actions/checkout@v4
         with:
+          # Fetch entire git history so  Changesets can generate changelogs
+          # with the correct commits
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 9.7.0
 
-      - name: Setup Node.js
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "pnpm"
-          registry-url: "https://registry.npmjs.org"
+          node-version: 20.x
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install
-
-      - name: Build core
-        run: pnpm build:core && pnpm build:deployer
-
-      - name: Prepare CLI package for publishing
-        run: cd packages/cli && rm -rf node_modules && pnpm install --shamefully-hoist --ignore-scripts && cd ../..
 
       - name: Setup npm auth
         run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
 
-      - name: Install dane cli
-        run: pnpm install -g @mastra/dane@alpha
-
-      - name: Set Anthropic Key
-        run: dane config --set ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
+      - name: Run build
+        run: pnpm build
 
       - name: Publish packages
-        run: dane publish
-        env:
-          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: pnpm publish -r --dry-run --tag alpha
