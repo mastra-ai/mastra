@@ -62,7 +62,7 @@ export class Workflow<
   #stepGraph: StepGraph = { initial: [] };
   #stepSubscriberGraph: Record<string, StepGraph> = {};
   #steps: Record<string, IAction<any, any, any, any>> = {};
-  #onStepTransition: Array<(state: WorkflowRunState) => void | Promise<void>> = [];
+  #onStepTransition: Set<(state: WorkflowRunState) => void | Promise<void>> = new Set();
   #executionSpan: Span | undefined;
 
   /**
@@ -1371,11 +1371,10 @@ export class Workflow<
   }
 
   watch(onTransition: (state: WorkflowRunState) => void): () => void {
-    this.#onStepTransition.push(onTransition);
+    this.#onStepTransition.add(onTransition);
 
     return () => {
-      const idx = this.#onStepTransition.findIndex(t => t === onTransition);
-      this.#onStepTransition.splice(idx, 1);
+      this.#onStepTransition.delete(onTransition);
     };
   }
 
