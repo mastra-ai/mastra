@@ -43,7 +43,7 @@
     "test:memory": "pnpm --filter ./packages/memory test",
     "test:evals": "pnpm --filter ./packages/evals test",
     "test:evals:nlp": "pnpm --filter ./packages/evals test src/metrics/nlp",
-    "test:evals:llm": "pnpm --filter ./packages/evals test src/metrics/llm/answer-relevancy src/metrics/llm/bias src/metrics/llm/prompt-alignment",
+    "test:evals:llm": "pnpm --filter ./packages/evals test src/metrics/llm",
     "lint-staged": "lint-staged",
     "preinstall": "npx only-allow pnpm",
     "prepare": "husky",
