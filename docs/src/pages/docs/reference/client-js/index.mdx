@@ -61,7 +61,7 @@ const client = new MastraClient({
 });
 ```
 
-## Full Configuration Options
+## Configuration Options
 
 Here's a complete example showing all available configuration options:
 
@@ -76,7 +76,6 @@ const client = new MastraClient({
   maxBackoffMs: 5000, // Maximum backoff time in ms (default: 5000)
   headers: {
     // Custom headers to include in all requests
-    Authorization: "Bearer your-api-key",
     "Custom-Header": "value",
   },
 });
@@ -92,33 +91,6 @@ const client = new MastraClient({
 | `maxBackoffMs` | `number`                 | `5000`  | Maximum backoff time in milliseconds                |
 | `headers`      | `Record<string, string>` | `{}`    | Custom headers to include in all requests           |
 
-## Authentication
-
-To authenticate your requests, include an authorization header in your configuration:
-
-```typescript
-const client = new MastraClient({
-  baseUrl: "http://localhost:4111",
-  headers: {
-    Authorization: "Bearer your-api-key",
-  },
-});
-```
-
-### Environment-Based Configuration
-
-For different environments (development, staging, production), you might want to configure the client differently:
-
-```typescript
-const client = new MastraClient({
-  baseUrl: process.env.MASTRA_API_URL || "http://localhost:4111",
-  headers: {
-    Authorization: `Bearer ${process.env.MASTRA_API_KEY}`,
-  },
-  retries: process.env.NODE_ENV === "production" ? 5 : 3,
-});
-```
-
 ## Available Resources
 
 The client provides access to the following resources:
@@ -128,7 +100,6 @@ The client provides access to the following resources:
 - **Tools**: Access and execute tools available to agents
 - **Workflows**: Create and manage automated workflows
 - **Vectors**: Handle vector operations for semantic search and similarity matching
-- **Logs**: Access system logs and debugging information
 
 Each resource is documented in detail in its respective section.
 
@@ -139,9 +110,6 @@ Here's a simple example of using the client with an agent:
 ```typescript
 const client = new MastraClient({
   baseUrl: "http://localhost:4111",
-  headers: {
-    Authorization: "Bearer your-api-key",
-  },
 });
 
 // Get an agent instance
