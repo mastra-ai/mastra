@@ -1,5 +1,11 @@
 # mastra
 
+## 0.2.0-alpha.172
+
+### Patch Changes
+
+- 7344dd7: Fix tool executor ui bugs
+
 ## 0.2.0-alpha.171
 
 ### Patch Changes
