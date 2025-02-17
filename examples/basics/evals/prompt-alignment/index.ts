@@ -1,82 +1,74 @@
 import { openai } from '@ai-sdk/openai';
 import { PromptAlignmentMetric } from '@mastra/evals/llm';
 
-async function main() {
-  // Example 1: High Alignment - Weather Report
-  console.log('Example 1: High Alignment - Weather Report');
-  console.log('----------------------------------------');
+// Example 1: Perfect alignment (all instructions followed)
+const instructions1 = [
+  'Use complete sentences',
+  'Include temperature in Celsius',
+  'Mention wind conditions',
+  'State precipitation chance',
+];
 
-  const weatherInstructions = ['Use complete sentences', 'Include temperature in Celsius', 'Mention wind conditions'];
+const metric1 = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: instructions1,
+});
 
-  const weatherMetric = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
-    instructions: weatherInstructions,
-  });
+const query1 = 'What is the weather like?';
+const response1 =
+  'The temperature is 22 degrees Celsius with moderate winds from the northwest. There is a 30% chance of rain.';
 
-  const weatherQuery = 'What is the weather like?';
-  const weatherResponse = 'The temperature is 22 degrees Celsius today. A gentle breeze is blowing from the north.';
+console.log('Example 1 - Perfect Alignment:');
+console.log('Instructions:', instructions1);
+console.log('Query:', query1);
+console.log('Response:', response1);
 
-  console.log('Instructions:', weatherInstructions);
-  console.log('Query:', weatherQuery);
-  console.log('Response:', weatherResponse);
+const result1 = await metric1.measure(query1, response1);
+console.log('Metric Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+  details: result1.info.scoreDetails,
+});
 
-  const weatherResult = await weatherMetric.measure(weatherQuery, weatherResponse);
-  console.log('Result:', {
-    score: weatherResult.score,
-    reason: weatherResult.info.reason,
-    details: weatherResult.info.scoreDetails,
-  });
+// Example 2: Mixed alignment (some instructions missed)
+const instructions2 = ['Use bullet points', 'Include prices in USD', 'Show stock status', 'Add product descriptions'];
 
-  // Example 2: Mixed Alignment - Product Listing
-  console.log('Example 2: Mixed Alignment - Product Listing');
-  console.log('-------------------------------------------');
+const metric2 = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: instructions2,
+});
 
-  const productInstructions = [
-    'Use bullet points for each item',
-    'Include prices in USD format ($X.XX)',
-    'Show availability status for each item',
-  ];
+const query2 = 'List the available products';
+const response2 = '• Coffee - $4.99 (In Stock)\n• Tea - $3.99\n• Water - $1.99 (Out of Stock)';
 
-  const productMetric = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
-    instructions: productInstructions,
-  });
+console.log('Example 2 - Mixed Alignment:');
+console.log('Instructions:', instructions2);
+console.log('Query:', query2);
+console.log('Response:', response2);
 
-  const productQuery = 'List the available products';
-  const productResponse = '• Coffee - $4.99 (In Stock)\n• Tea - $3.99\n• Water - $1.99 (In Stock)';
+const result2 = await metric2.measure(query2, response2);
+console.log('Metric Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+  details: result2.info.scoreDetails,
+});
 
-  console.log('Instructions:', productInstructions);
-  console.log('Query:', productQuery);
-  console.log('Response:', productResponse);
+// Example 3: N/A instructions (all instructions not applicable)
+const instructions3 = ['Show account balance', 'List recent transactions', 'Display payment history'];
 
-  const productResult = await productMetric.measure(productQuery, productResponse);
-  console.log('Result:', {
-    score: productResult.score,
-    reason: productResult.info.reason,
-    details: productResult.info.scoreDetails,
-  });
+const metric3 = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: instructions3,
+});
 
-  // Example 3: N/A Instructions - Weather with Banking Instructions
-  console.log('Example 3: N/A Instructions - Weather with Banking Instructions');
-  console.log('--------------------------------------------------------');
+const query3 = 'What is the weather like?';
+const response3 = 'It is sunny and warm outside.';
 
-  const bankingInstructions = ['Show account balance', 'List recent transactions', 'Use proper English'];
+console.log('Example 3 - N/A Instructions:');
+console.log('Instructions:', instructions3);
+console.log('Query:', query3);
+console.log('Response:', response3);
 
-  const bankingMetric = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
-    instructions: bankingInstructions,
-  });
-
-  const weatherQuery2 = 'What is the weather like?';
-  const weatherResponse2 = 'It is sunny and warm outside.';
-
-  console.log('Instructions:', bankingInstructions);
-  console.log('Query:', weatherQuery2);
-  console.log('Response:', weatherResponse2);
-
-  const bankingResult = await bankingMetric.measure(weatherQuery2, weatherResponse2);
-  console.log('Result:', {
-    score: bankingResult.score,
-    reason: bankingResult.info.reason,
-    details: bankingResult.info.scoreDetails,
-  });
-}
-
-main().catch(console.error);
+const result3 = await metric3.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
+  details: result3.info.scoreDetails,
+});

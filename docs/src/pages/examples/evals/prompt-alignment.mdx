@@ -39,98 +39,117 @@ import { PromptAlignmentMetric } from '@mastra/evals/llm';
 
 ## Example Usage
 
-### High Alignment Example
+### Perfect Alignment Example
 
 Evaluate a response that follows all instructions:
 
 ```typescript copy showLineNumbers{5} filename="src/index.ts"
-const weatherInstructions = [
+const instructions1 = [
   'Use complete sentences',
   'Include temperature in Celsius',
-  'Mention wind conditions'
+  'Mention wind conditions',
+  'State precipitation chance',
 ];
 
-const weatherMetric = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
-  instructions: weatherInstructions
+const metric1 = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: instructions1,
 });
 
-const weatherQuery = 'What is the weather like?';
-const weatherResponse = 'The temperature is 22 degrees Celsius today. A gentle breeze is blowing from the north.';
+const query1 = 'What is the weather like?';
+const response1 =
+  'The temperature is 22 degrees Celsius with moderate winds from the northwest. There is a 30% chance of rain.';
 
-const weatherResult = await weatherMetric.measure(weatherQuery, weatherResponse);
+console.log('Example 1 - Perfect Alignment:');
+console.log('Instructions:', instructions1);
+console.log('Query:', query1);
+console.log('Response:', response1);
+
+const result1 = await metric1.measure(query1, response1);
+console.log('Metric Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+  details: result1.info.scoreDetails,
+});
 ```
 
 ### Mixed Alignment Example
 
-Evaluate a response with partial instruction adherence:
+Evaluate a response that misses some instructions:
 
-```typescript copy showLineNumbers{5} filename="src/index.ts"
-const productInstructions = [
-  'Use bullet points for each item',
-  'Include prices in USD format ($X.XX)',
-  'Show availability status for each item'
+```typescript copy showLineNumbers{33} filename="src/index.ts"
+const instructions2 = [
+  'Use bullet points',
+  'Include prices in USD',
+  'Show stock status',
+  'Add product descriptions'
 ];
 
-const productMetric = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
-  instructions: productInstructions
+const metric2 = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: instructions2,
 });
 
-const productQuery = 'List the available products';
-const productResponse = '• Coffee - $4.99 (In Stock)\n• Tea - $3.99\n• Water - $1.99 (In Stock)';
+const query2 = 'List the available products';
+const response2 = '• Coffee - $4.99 (In Stock)\n• Tea - $3.99\n• Water - $1.99 (Out of Stock)';
 
-const productResult = await productMetric.measure(productQuery, productResponse);
+console.log('Example 2 - Mixed Alignment:');
+console.log('Instructions:', instructions2);
+console.log('Query:', query2);
+console.log('Response:', response2);
+
+const result2 = await metric2.measure(query2, response2);
+console.log('Metric Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+  details: result2.info.scoreDetails,
+});
 ```
 
-### N/A Instructions Example
+### Non-Applicable Instructions Example
 
-Handle instructions that don't apply to the context:
+Evaluate a response where instructions don't apply:
 
-```typescript copy showLineNumbers{5} filename="src/index.ts"
-const bankingInstructions = [
+```typescript copy showLineNumbers{55} filename="src/index.ts"
+const instructions3 = [
   'Show account balance',
   'List recent transactions',
-  'Use proper English'
+  'Display payment history'
 ];
 
-const bankingMetric = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
-  instructions: bankingInstructions
+const metric3 = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: instructions3,
 });
 
-const weatherQuery2 = 'What is the weather like?';
-const weatherResponse2 = 'It is sunny and warm outside.';
+const query3 = 'What is the weather like?';
+const response3 = 'It is sunny and warm outside.';
 
-const bankingResult = await bankingMetric.measure(weatherQuery2, weatherResponse2);
+console.log('Example 3 - N/A Instructions:');
+console.log('Instructions:', instructions3);
+console.log('Query:', query3);
+console.log('Response:', response3);
+
+const result3 = await metric3.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
+  details: result3.info.scoreDetails,
+});
 ```
-
-## Running the Examples
-
-1. Navigate to the example directory:
-   ```bash
-   cd examples/basics/evals/prompt-alignment
-   ```
-
-2. Install dependencies:
-   ```bash
-   pnpm install
-   ```
-
-3. Create a `.env` file with your OpenAI API key
-
-4. Run the example:
-   ```bash
-   pnpm start
-   ```
 
 ## Understanding the Results
 
 The metric provides:
-- A score between 0 and 1 indicating instruction adherence
-- Count of applicable vs followed instructions
-- Detailed reasoning for each instruction
-- Handling of non-applicable instructions
+- A score between 0 and 1 for normal cases
+- A special score of -1 when no instructions are applicable
+- Detailed breakdown of followed, missed, and N/A instructions
+- Clear reasoning for the score calculation
 
-The score is calculated as: `followedInstructions / applicableInstructions`
-
-When no instructions are applicable to the context, the metric indicates this in the reasoning rather than providing a potentially misleading score.
-
-<GithubLink path="examples/basics/evals/prompt-alignment" />
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/prompt-alignment"
+  }
+/>

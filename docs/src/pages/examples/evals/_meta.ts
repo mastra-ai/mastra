@@ -9,5 +9,7 @@ const meta = {
   "contextual-recall": "Contextual Recall",
   faithfulness: "Faithfulness",
   hallucination: "Hallucination",
+  "prompt-alignment": "Prompt Alignment",
+  "custom-eval": "Custom Eval",
 };
 export default meta;

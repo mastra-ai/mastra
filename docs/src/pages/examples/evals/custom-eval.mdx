@@ -1,0 +1,143 @@
+---
+title: "Example: Custom Eval | Evals | Mastra Docs"
+description: Example of creating custom evaluation metrics in Mastra.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Custom Eval
+
+This example demonstrates how to create custom evaluation metrics in Mastra, from simple string matching to LLM-based evaluation.
+
+## Overview
+
+The example shows how to:
+
+1. Create custom metric classes
+2. Implement measure() method
+3. Handle different evaluation types
+4. Return standardized results
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { Metric, type MetricResult } from '@mastra/core/eval';
+```
+
+## Example Usage
+
+### Simple Keyword Metric
+
+Create a basic string matching metric:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+interface KeywordMatchResult extends MetricResult {
+  info: {
+    totalKeywords: number;
+    matchedKeywords: number;
+    matches: string[];
+  };
+}
+
+class KeywordMatchMetric extends Metric {
+  private keywords: Set<string>;
+
+  constructor(keywords: string[]) {
+    super();
+    this.keywords = new Set(keywords.map(k => k.toLowerCase()));
+  }
+
+  async measure(input: string, output: string): Promise<KeywordMatchResult> {
+    const outputLower = output.toLowerCase();
+    const matches = [...this.keywords].filter(k => outputLower.includes(k));
+
+    return {
+      score: this.keywords.size > 0 ? matches.length / this.keywords.size : 1,
+      info: {
+        totalKeywords: this.keywords.size,
+        matchedKeywords: matches.length,
+        matches,
+      },
+    };
+  }
+}
+```
+
+### LLM-Based Metric
+
+Create a more complex metric using LLM:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+interface DietaryResult extends MetricResult {
+  info: {
+    preferences: string[];
+    violations: string[];
+    reason: string;
+  };
+}
+
+class DietaryPreferencesMetric extends Metric {
+  private model;
+
+  constructor(model: any) {
+    super();
+    this.model = model;
+  }
+
+  async measure(input: string, output: string): Promise<DietaryResult> {
+    // Analyze dietary preferences and recipe content
+    const preferences = input.toLowerCase();
+    const recipe = output.toLowerCase();
+
+    const violations = [];
+    if (preferences.includes('vegetarian') && recipe.includes('meat')) {
+      violations.push('contains meat');
+    }
+    // Add more dietary checks...
+
+    return {
+      score: violations.length === 0 ? 1 : 0,
+      info: {
+        preferences: preferences.split(' '),
+        violations,
+        reason: violations.length > 0 
+          ? `Recipe violates preferences: ${violations.join(', ')}`
+          : 'Recipe follows all preferences',
+      },
+    };
+  }
+}
+```
+
+## Understanding the Results
+
+The metrics provide:
+- A score between 0 and 1
+- Custom info object with metric-specific details
+- Detailed reasoning for the score
+- Additional analysis data
+
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/custom-eval"
+  }
+/>
