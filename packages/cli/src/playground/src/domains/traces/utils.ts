@@ -63,19 +63,24 @@ export function cleanString(string: string) {
 }
 
 export const refineTraces = (traces: Span[]): RefinedTrace[] => {
+  const listOfSpanIds = new Set<string>();
   const groupedTraces = traces.reduce<Record<string, Span[]>>((acc, curr) => {
     const newCurr = { ...curr, duration: curr.endTime - curr.startTime };
+
+    listOfSpanIds.add(curr.id);
 
     return { ...acc, [curr.traceId]: [...(acc[curr.traceId] || []), newCurr] };
   }, {});
 
   const tracesData = Object.entries(groupedTraces).map(([key, value]) => {
-    const parentSpan = value.find(span => !span.parentSpanId);
+    const parentSpan = value.find(span => !span.parentSpanId || !listOfSpanIds.has(span.parentSpanId));
 
     const enrichedSpans = value.map(span => ({
       ...span,
+      parentSpanId: parentSpan?.id === span.id ? null : span?.parentSpanId,
       relativePercentage: parentSpan ? span.duration / parentSpan.duration : 0,
     }));
+
     const failedStatus = value.find(span => span.status.code !== 0)?.status;
     return {
       traceId: key,

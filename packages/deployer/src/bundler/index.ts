@@ -1,9 +1,10 @@
 import { MastraBundler } from '@mastra/core/bundler';
 import virtual from '@rollup/plugin-virtual';
-import { ensureDir } from 'fs-extra';
+import { copy, ensureDir } from 'fs-extra';
 import { existsSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { InputOptions, OutputOptions } from 'rollup';
 
 import fsExtra from 'fs-extra/esm';
@@ -11,6 +12,7 @@ import fsExtra from 'fs-extra/esm';
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
 import { Deps } from '../build/deps';
+import { writeTelemetryConfig } from '../build/telemetry';
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
@@ -26,6 +28,13 @@ export abstract class Bundler extends MastraBundler {
 
     await ensureDir(join(outputDirectory, this.analyzeOutputDir));
     await ensureDir(join(outputDirectory, this.outputDir));
+  }
+
+  async writeInstrumentationFile(outputDirectory: string) {
+    const instrumentationFile = join(outputDirectory, 'instrumentation.mjs');
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+
+    await copy(join(__dirname, 'templates', 'instrumentation-template.js'), instrumentationFile);
   }
 
   async writePackageJson(outputDirectory: string, dependencies: Map<string, string>) {
@@ -97,13 +106,15 @@ export abstract class Bundler extends MastraBundler {
       this.logger,
     );
 
-    await this.writePackageJson(
-      join(outputDirectory, this.outputDir),
-      Array.from(analyzedBundleInfo.externalDependencies).reduce((acc, dep) => {
-        acc.set(dep, 'latest');
-        return acc;
-      }, new Map<string, string>()),
-    );
+    await writeTelemetryConfig(mastraEntryFile, join(outputDirectory, this.outputDir));
+
+    const dependenciesToInstall = Array.from(analyzedBundleInfo.externalDependencies).reduce((acc, dep) => {
+      acc.set(dep, 'latest');
+      return acc;
+    }, new Map<string, string>());
+
+    await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
+    await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
 
     this.logger.info('Bundling Mastra application');
     const inputOptions: InputOptions = await getInputOptions(mastraEntryFile, analyzedBundleInfo, 'node');

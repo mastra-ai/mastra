@@ -4,3 +4,4 @@ export { createWatcher, getInputOptions as getWatcherInputOptions } from './watc
 export { analyzeBundle } from './analyze';
 export { FileService } from './fs';
 export { Deps } from './deps';
+export { writeTelemetryConfig } from './telemetry';

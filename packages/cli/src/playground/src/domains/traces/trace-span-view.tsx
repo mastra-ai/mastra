@@ -21,7 +21,8 @@ function buildTree(items: Span[], parentSpanId: string | null = null): SpanNode[
 }
 
 export default function SpanView({ trace }: { trace: Span[] }) {
-  const tree = buildTree(trace!);
+  // SQL query sorts by startTime in descending order, so we need to reverse and copy the array for spans to show in correct order
+  const tree = buildTree(trace.concat([])!.reverse());
 
   return (
     <div>

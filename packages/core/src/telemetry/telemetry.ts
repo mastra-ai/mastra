@@ -9,122 +9,29 @@ import {
   context,
   type Span,
 } from '@opentelemetry/api';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { OTLPTraceExporter as OTLPHttpExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { Resource } from '@opentelemetry/resources';
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import {
-  ConsoleSpanExporter,
-  ParentBasedSampler,
-  TraceIdRatioBasedSampler,
-  AlwaysOnSampler,
-  AlwaysOffSampler,
-  type Sampler,
-} from '@opentelemetry/sdk-trace-base';
-import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 
 import { type OtelConfig } from './types';
 import { hasActiveTelemetry } from './utility';
 
 // Add type declaration for global namespace
 declare global {
-  var __OTEL_SDK__: NodeSDK | undefined;
   var __TELEMETRY__: Telemetry | undefined;
 }
 
-// Store SDK instance outside the class to persist across HMR
-let sdkInstance: NodeSDK | null = null;
-
 export class Telemetry {
-  private sdk: NodeSDK | null = null;
   public tracer: Tracer = trace.getTracer('default');
   name: string = 'default-service';
-  private static isInitialized = false;
-
-  private getSampler(config: OtelConfig): Sampler {
-    if (!config.sampling) {
-      return new AlwaysOnSampler();
-    }
-
-    if (!config.enabled) {
-      return new AlwaysOffSampler();
-    }
-
-    switch (config.sampling.type) {
-      case 'ratio':
-        return new TraceIdRatioBasedSampler(config.sampling.probability);
-      case 'always_on':
-        return new AlwaysOnSampler();
-      case 'always_off':
-        return new AlwaysOffSampler();
-      case 'parent_based':
-        const rootSampler = new TraceIdRatioBasedSampler(config.sampling.root?.probability || 1.0);
-        return new ParentBasedSampler({ root: rootSampler });
-      default:
-        return new AlwaysOnSampler();
-    }
-  }
 
   private constructor(config: OtelConfig) {
     this.name = config.serviceName ?? 'default-service';
 
-    // Only initialize in server environment
-    // @ts-ignore window is not defined in node
-    if (typeof window === 'undefined') {
-      // In development, always create a new instance
-      // In production, use existing instance if available
-      if (process.env.NODE_ENV === 'development' || !sdkInstance) {
-        // Shutdown existing instance if it exists
-        if (sdkInstance) {
-          this.shutdown();
-        }
-
-        const exporter =
-          config.export?.type === 'otlp'
-            ? new OTLPHttpExporter({
-                url: config.export.endpoint,
-                headers: config.export.headers,
-              })
-            : config.export?.type === 'custom'
-              ? config.export.exporter
-              : new ConsoleSpanExporter();
-
-        const sampler = this.getSampler(config);
-
-        sdkInstance = new NodeSDK({
-          resource: new Resource({
-            [ATTR_SERVICE_NAME]: this.name,
-          }),
-          traceExporter: exporter,
-          sampler,
-          instrumentations: [getNodeAutoInstrumentations()],
-        });
-
-        try {
-          sdkInstance.start();
-          this.sdk = sdkInstance;
-          Telemetry.isInitialized = true;
-        } catch (error) {
-          console.warn('Failed to initialize OpenTelemetry:', error);
-        }
-      }
-    }
-
     this.tracer = trace.getTracer(this.name);
   }
 
-  public async shutdown() {
-    if (this.sdk && Telemetry.isInitialized) {
-      try {
-        await this.sdk.shutdown();
-        Telemetry.isInitialized = false;
-        global.__OTEL_SDK__ = undefined;
-        global.__TELEMETRY__ = undefined;
-      } catch (error) {
-        console.warn('Error shutting down OpenTelemetry:', error);
-      }
-    }
-  }
+  /**
+   * @deprecated This method does not do anything
+   */
+  public async shutdown() {}
 
   /**
    * Initialize telemetry with the given configuration
@@ -136,6 +43,7 @@ export class Telemetry {
       if (!global.__TELEMETRY__) {
         global.__TELEMETRY__ = new Telemetry(config);
       }
+
       return global.__TELEMETRY__;
     } catch (error) {
       console.error('Failed to initialize telemetry:', error);

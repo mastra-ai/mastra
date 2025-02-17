@@ -1,8 +1,7 @@
+import { FileService } from '@mastra/deployer';
 import { ChildProcess } from 'child_process';
 import { execa } from 'execa';
-import { writeFileSync } from 'fs';
 import { join } from 'path';
-import { fileURLToPath } from 'url';
 
 import { logger } from '../../utils/logger.js';
 
@@ -16,15 +15,20 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
     // Restart server
     logger.info('[Mastra Dev] - Starting server...');
 
-    currentServerProcess = execa('node', ['index.mjs'], {
-      cwd: dotMastraPath,
-      env: {
-        PORT: port.toString() || '4111',
-        ...Object.fromEntries(env),
+    currentServerProcess = execa(
+      'node',
+      ['--import', './instrumentation.mjs', '--import=@opentelemetry/instrumentation/hook.mjs', 'index.mjs'],
+      {
+        cwd: dotMastraPath,
+        env: {
+          PORT: port.toString() || '4111',
+          ...Object.fromEntries(env),
+          MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
+        },
+        stdio: 'inherit',
+        reject: false,
       },
-      stdio: 'inherit',
-      reject: false,
-    }) as any as ChildProcess;
+    ) as any as ChildProcess;
 
     if (currentServerProcess?.exitCode && currentServerProcess?.exitCode !== 0) {
       if (!currentServerProcess) {
@@ -96,15 +100,18 @@ export async function dev({ port, dir, root }: { dir?: string; root?: string; po
   const mastraDir = join(rootDir, dir || 'src/mastra');
   const dotMastraPath = join(rootDir, '.mastra');
 
-  const bundler = new DevBundler(mastraDir);
+  const fileService = new FileService();
+  const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
+
+  const bundler = new DevBundler();
 
   const env = await bundler.loadEnvVars();
 
   await bundler.prepare(dotMastraPath);
 
-  const watcher = await bundler.watch(dotMastraPath);
+  const watcher = await bundler.watch(entryFile, dotMastraPath);
 
-  await startServer(dotMastraPath, port, env);
+  await startServer(join(dotMastraPath, 'output'), port, env);
 
   watcher.on('event', event => {
     if (event.code === 'BUNDLE_END') {
