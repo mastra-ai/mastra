@@ -399,7 +399,7 @@ importers:
         specifier: latest
         version: 1.1.12(zod@3.24.1)
       '@mastra/evals':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../../../packages/evals
     devDependencies:
       dotenv:
@@ -411,11 +411,8 @@ importers:
       '@ai-sdk/openai':
         specifier: latest
         version: 1.1.12(zod@3.24.1)
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
       '@mastra/evals':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../../../packages/evals
     devDependencies:
       dotenv:
@@ -427,11 +424,8 @@ importers:
       '@ai-sdk/openai':
         specifier: latest
         version: 1.1.12(zod@3.24.1)
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
       '@mastra/evals':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../../../packages/evals
     devDependencies:
       dotenv:
@@ -443,11 +437,8 @@ importers:
       '@ai-sdk/openai':
         specifier: latest
         version: 1.1.12(zod@3.24.1)
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
       '@mastra/evals':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../../../packages/evals
     devDependencies:
       dotenv:
@@ -459,11 +450,8 @@ importers:
       '@ai-sdk/openai':
         specifier: latest
         version: 1.1.12(zod@3.24.1)
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
       '@mastra/evals':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../../../packages/evals
     devDependencies:
       dotenv:
@@ -475,11 +463,8 @@ importers:
       '@ai-sdk/openai':
         specifier: latest
         version: 1.1.12(zod@3.24.1)
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
       '@mastra/evals':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../../../packages/evals
     devDependencies:
       dotenv:
@@ -491,11 +476,8 @@ importers:
       '@ai-sdk/openai':
         specifier: latest
         version: 1.1.12(zod@3.24.1)
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
       '@mastra/evals':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../../../packages/evals
     devDependencies:
       dotenv:
@@ -507,11 +489,8 @@ importers:
       '@ai-sdk/openai':
         specifier: latest
         version: 1.1.12(zod@3.24.1)
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
       '@mastra/evals':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../../../packages/evals
     devDependencies:
       dotenv:
@@ -523,11 +502,8 @@ importers:
       '@ai-sdk/openai':
         specifier: latest
         version: 1.1.12(zod@3.24.1)
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../../packages/core
       '@mastra/evals':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../../../packages/evals
     devDependencies:
       dotenv:

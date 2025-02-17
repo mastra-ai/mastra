@@ -39,9 +39,9 @@ async function main() {
   });
 
   // Example 3: Partial relevancy
-  const query3 = 'What are some healthy breakfast options?';
+  const query3 = 'What should a healthy breakfast include?';
   const response3 =
-    'While breakfast is important, getting enough sleep is crucial for overall health. Adults need 7-9 hours of sleep per night.';
+    'A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.';
 
   console.log('\nExample 3 - Partial Relevancy:');
   console.log('Query:', query3);
