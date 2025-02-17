@@ -29,6 +29,10 @@ const stepTwo = new Step({
     incrementedValue: z.number(),
   }),
   execute: async ({ context, suspend }) => {
+    if (context.steps.stepOne.status !== "success") {
+      return { incrementedValue: 0 };
+    }
+
     const currentValue = context.steps.stepOne.output.doubledValue;
 
     if (currentValue < 100) {

@@ -10,7 +10,7 @@ import { GithubLink } from '../../../components/github-link';
 This example demonstrates how to create and integrate a custom tool as a workflow step, showing how to define input/output schemas and implement the tool's execution logic.
 
 ```ts showLineNumbers copy
-import { createTool, Workflow } from '@mastra/core';
+import { createTool, Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 const crawlWebpage = createTool({
@@ -22,8 +22,10 @@ const crawlWebpage = createTool({
   outputSchema: z.object({
     rawText: z.string(),
   }),
-  execute: async ({ context: { url } }) => {
-    return { rawText: 'This is the text content of the webpage' };
+  execute: async ({ context }) => {
+    const response = await fetch(context.triggerData.url);
+    const text = await response.text();
+    return { rawText: 'This is the text content of the webpage: ' + text };
   },
 });
 
@@ -31,9 +33,9 @@ const contentWorkflow = new Workflow({ name: 'content-review' });
 
 contentWorkflow.step(crawlWebpage).commit();
 
-const { runId, start } = contentWorkflow.createRun();
+const { start } = contentWorkflow.createRun();
 
-const res = await start();
+const res = await start({ triggerData: { url: 'https://example.com'} });
 
 console.log(res.results);
 ```

@@ -42,11 +42,15 @@ myWorkflow
       outputSchema: z.object({
         incrementedValue: z.number(),
       }),
-      execute: async ({ context }) => ({
-        incrementedValue: context.steps.stepOne.output.doubledValue + 1,
-      }),
+      execute: async ({ context }) => {
+        if (context.steps.stepOne.status !== "success") {
+          return { incrementedValue: 0 };
+        }
+
+        return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 };
+      },
     }),
-  );
+  ).commit();
 ```
 
 ## Creating Steps Separately
@@ -73,9 +77,12 @@ const stepTwo = new Step({
   outputSchema: z.object({
     incrementedValue: z.number(),
   }),
-  execute: async ({ context }) => ({
-    incrementedValue: context.steps.stepOne.output.doubledValue + 1,
-  }),
+  execute: async ({ context }) => {
+    if (context.steps.stepOne.status !== "success") {
+      return { incrementedValue: 0 };
+    }
+    return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 };
+  },
 });
 
 // Build the workflow

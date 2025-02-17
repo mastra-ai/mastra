@@ -56,10 +56,10 @@ The Mastra class is the core entry point for your application. It manages agents
     },
     {
       name: "workflows",
-      type: "Workflow[]",
-      description: "Array of Workflow instances to register",
+      type: "Record<string, Workflow>",
+      description: "Workflows to register. Structured as a key-value pair, with keys being the workflow name and values being the workflow instance.",
       isOptional: true,
-      defaultValue: "[]",
+      defaultValue: "{}",
     },
   ]}
 />

@@ -38,18 +38,24 @@ const stepOne = new Step({
 
 const stepTwo = new Step({
   id: "stepTwo",
-  execute: async ({ context }) => ({
-    incrementedValue:
-      context.steps.stepOne.output.doubledValue + 1,
-  }),
+  execute: async ({ context }) => {
+    if (context.steps.stepOne.status !== "success") {
+      return { incrementedValue: 0 }
+    }
+
+    return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 }
+  },
 });
 
 const stepThree = new Step({
   id: "stepThree",
-  execute: async ({ context }) => ({
-    tripledValue:
-      context.steps.stepTwo.output.incrementedValue * 3,
-  }),
+  execute: async ({ context }) => {
+    if (context.steps.stepTwo.status !== "success") {
+      return { tripledValue: 0 }
+    }
+
+    return { tripledValue: context.steps.stepTwo.output.incrementedValue * 3 }
+  },
 });
 
 // Build the workflow
@@ -71,7 +77,7 @@ myWorkflow.step(stepOne).then(stepTwo).then(stepThree);
 
 myWorkflow.commit();
 
-const { runId, start } = myWorkflow.createRun();
+const { start } = myWorkflow.createRun();
 
 const res = await start({ triggerData: { inputValue: 90 } });
 ```

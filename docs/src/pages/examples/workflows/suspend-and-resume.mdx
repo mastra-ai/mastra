@@ -10,7 +10,8 @@ import { GithubLink } from '../../../components/github-link';
 Workflow steps can be suspended and resumed at any point in the workflow execution. This example demonstrates how to suspend a workflow step and resume it later.
 
 ```ts showLineNumbers copy
-import { Step, Workflow } from '@mastra/core';
+import { DefaultStorage } from '@mastra/core/storage';
+import { Step, Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 const stepOne = new Step({
@@ -30,9 +31,15 @@ const stepTwo = new Step({
     incrementedValue: z.number(),
   }),
   execute: async ({ context, suspend }) => {
-    const stepValue = context.steps.stepTwo.output.secondValue || 0;
+    let stepValue = 0;
+    if (context.steps?.stepTwo?.status === 'success') {
+      stepValue = context.steps.stepTwo?.output.secondValue
+    }
 
-    const incrementedValue = context.steps.stepOne.output.doubledValue + stepValue;
+    let incrementedValue = 0;
+    if (context.steps?.stepOne?.status === 'success') {
+      incrementedValue = context.steps.stepOne.output.doubledValue + stepValue
+    }
 
     if (incrementedValue < 100) {
       await suspend();
@@ -42,12 +49,21 @@ const stepTwo = new Step({
   },
 });
 
+const storage = new DefaultStorage({
+  config: {
+    url: ':memory:',
+  },
+});
+
 // Build the workflow
 const myWorkflow = new Workflow({
   name: 'my-workflow',
   triggerSchema: z.object({
     inputValue: z.number(),
   }),
+  mastra: {
+    storage,
+  },
 });
 
 // run workflows in parallel
@@ -58,20 +74,22 @@ myWorkflow
 
 const { runId, start } = myWorkflow.createRun();
 
-const res = await start({ triggerData: { inputValue: 90 } });
+const res = await start({ triggerData: { inputValue: 45 } });
 
-await myWorkflow.watch(runId, async ({ activePaths }) => {
-    for (const path of activePaths) {
-        const stepTwoStatus = context.steps?.stepTwo?.status;
-        if (stepTwoStatus === 'suspended') {
-            await myWorkflow.resume({
-                runId,
-                stepId: 'stepTwo',
-                context: { secondValue: 100 },
-            });
-        }
+await myWorkflow.watch(runId, {
+  onTransition: async ({ context, activePaths }) => {
+    for (const _path of activePaths) {
+      const stepTwoStatus = context.steps?.stepTwo?.status;
+      if (stepTwoStatus === 'suspended') {
+        await myWorkflow.resume({
+          runId,
+          stepId: 'stepTwo',
+          context: { secondValue: 100 },
+        });
+      }
     }
-})
+  }
+})`
 ```
 
 <br />
