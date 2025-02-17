@@ -57,6 +57,11 @@ const metric1 = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
 const query1 = 'What were some of Einstein\'s achievements?';
 const response1 = 'Einstein won the Nobel Prize for discovering the photoelectric effect and published his groundbreaking theory of relativity.';
 
+console.log('\nExample 1 - High Relevancy:');
+console.log('Context:', context1);
+console.log('Query:', query1);
+console.log('Response:', response1);
+
 const result1 = await metric1.measure(query1, response1);
 console.log('Metric Result:', {
   score: result1.score,
@@ -68,7 +73,7 @@ console.log('Metric Result:', {
 
 Evaluate a response where some context is irrelevant:
 
-```typescript copy showLineNumbers{30} filename="src/index.ts"
+```typescript copy showLineNumbers{31} filename="src/index.ts"
 const context2 = [
   'Solar eclipses occur when the Moon blocks the Sun.',
   'The Moon moves between the Earth and Sun during eclipses.',
@@ -83,6 +88,11 @@ const metric2 = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
 const query2 = 'What causes solar eclipses?';
 const response2 = 'Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.';
 
+console.log('\nExample 2 - Mixed Relevancy:');
+console.log('Context:', context2);
+console.log('Query:', query2);
+console.log('Response:', response2);
+
 const result2 = await metric2.measure(query2, response2);
 console.log('Metric Result:', {
   score: result2.score,
@@ -94,7 +104,7 @@ console.log('Metric Result:', {
 
 Evaluate a response where most context is irrelevant:
 
-```typescript copy showLineNumbers{56} filename="src/index.ts"
+```typescript copy showLineNumbers{57} filename="src/index.ts"
 const context3 = [
   'The Great Barrier Reef is in Australia.',
   'Coral reefs need warm water to survive.',
@@ -108,6 +118,11 @@ const metric3 = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
 
 const query3 = 'What is the capital of Australia?';
 const response3 = 'The capital of Australia is Canberra.';
+
+console.log('\nExample 3 - Low Relevancy:');
+console.log('Context:', context3);
+console.log('Query:', query3);
+console.log('Response:', response3);
 
 const result3 = await metric3.measure(query3, response3);
 console.log('Metric Result:', {

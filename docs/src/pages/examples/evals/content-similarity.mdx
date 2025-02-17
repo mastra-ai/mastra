@@ -46,6 +46,10 @@ Compare nearly identical texts:
 const text1 = 'The quick brown fox jumps over the lazy dog.';
 const reference1 = 'A quick brown fox jumped over a lazy dog.';
 
+console.log('\nExample 1 - High Similarity:');
+console.log('Text:', text1);
+console.log('Reference:', reference1);
+
 const result1 = await metric.measure(reference1, text1);
 console.log('Metric Result:', {
   score: result1.score,
@@ -63,6 +67,10 @@ Compare texts with similar meaning but different wording:
 const text2 = 'A brown fox quickly leaps across a sleeping dog.';
 const reference2 = 'The quick brown fox jumps over the lazy dog.';
 
+console.log('\nExample 2 - Moderate Similarity:');
+console.log('Text:', text2);
+console.log('Reference:', reference2);
+
 const result2 = await metric.measure(reference2, text2);
 console.log('Metric Result:', {
   score: result2.score,
@@ -79,6 +87,10 @@ Compare distinctly different texts:
 ```typescript copy showLineNumbers{39} filename="src/index.ts"
 const text3 = 'The cat sleeps on the windowsill.';
 const reference3 = 'The quick brown fox jumps over the lazy dog.';
+
+console.log('\nExample 3 - Low Similarity:');
+console.log('Text:', text3);
+console.log('Reference:', reference3);
 
 const result3 = await metric.measure(reference3, text3);
 console.log('Metric Result:', {
