@@ -1,56 +1,53 @@
 import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
 import { AnswerRelevancyMetric } from '@mastra/evals/llm';
 
-// Create an agent that will generate responses
-const agent = new Agent({
-  name: 'Example Agent',
-  instructions: 'You are a helpful assistant that provides concise and relevant answers.',
-  model: openai('gpt-4o-mini'),
-});
-
-// Create the answer relevancy metric
+// Configure the metric
 const metric = new AnswerRelevancyMetric(openai('gpt-4o-mini'), {
   uncertaintyWeight: 0.3, // Weight for 'unsure' verdicts
   scale: 1, // Scale for the final score
 });
 
 // Example 1: High relevancy
-const context1 = `
-  The Great Wall of China is over 13,000 miles long.
-  Construction began more than 2,000 years ago during the Warring States period.
-  It was built to protect Chinese states from nomadic invasions.
-`;
-const query1 = 'What was the purpose of building the Great Wall of China?';
-const response1 = await agent.generate(query1);
+const query1 = 'What are the health benefits of regular exercise?';
+const response1 =
+  'Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins.';
 
 console.log('\nExample 1 - High Relevancy:');
-console.log('Context:', context1);
 console.log('Query:', query1);
-console.log('Response:', response1.text);
+console.log('Response:', response1);
 
-const result1 = await metric.measure(context1, response1.text);
+const result1 = await metric.measure(query1, response1);
 console.log('Metric Result:', {
   score: result1.score,
   reason: result1.info.reason,
 });
 
 // Example 2: Low relevancy
-const context2 = `
-  The pyramids of Egypt were built during the Old Kingdom period.
-  They served as tombs for pharaohs and their consorts.
-  The largest pyramid is the Great Pyramid of Giza.
-`;
-const query2 = 'What materials were used to build the Great Wall of China?';
-const response2 = await agent.generate(query2);
+const query2 = 'What are the benefits of meditation?';
+const response2 =
+  'The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.';
 
 console.log('\nExample 2 - Low Relevancy:');
-console.log('Context:', context2);
 console.log('Query:', query2);
-console.log('Response:', response2.text);
+console.log('Response:', response2);
 
-const result2 = await metric.measure(context2, response2.text);
+const result2 = await metric.measure(query2, response2);
 console.log('Metric Result:', {
   score: result2.score,
   reason: result2.info.reason,
+});
+
+// Example 3: Partial relevancy
+const query3 = 'What are some healthy breakfast options?';
+const response3 =
+  'While breakfast is important, getting enough sleep is crucial for overall health. Adults need 7-9 hours of sleep per night.';
+
+console.log('\nExample 3 - Partial Relevancy:');
+console.log('Query:', query3);
+console.log('Response:', response3);
+
+const result3 = await metric.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
 });

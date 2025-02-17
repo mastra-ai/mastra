@@ -7,7 +7,6 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@mastra/core": "workspace:*",
     "@mastra/evals": "workspace:*"
   },
   "devDependencies": {
