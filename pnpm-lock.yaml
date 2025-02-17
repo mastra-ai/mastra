@@ -380,6 +380,22 @@ importers:
         specifier: ^3.24.1
         version: 3.24.1
 
+  examples/basics/evals/answer-relevancy:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: latest
+        version: 1.1.12(zod@3.24.1)
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      '@mastra/evals':
+        specifier: workspace:*
+        version: link:../../../../packages/evals
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
   examples/basics/rag/adjust-chunk-delimiters:
     dependencies:
       '@mastra/rag':
@@ -2642,7 +2658,7 @@ importers:
         version: 5.7.3
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
       zod-to-json-schema:
         specifier: ^3.24.1
         version: 3.24.1(zod@3.24.1)
@@ -2956,7 +2972,7 @@ importers:
         version: 5.7.3
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
 
   speech/elevenlabs:
     dependencies:
@@ -2984,7 +3000,7 @@ importers:
         version: 5.7.3
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
 
   speech/google:
     dependencies:
@@ -3012,7 +3028,7 @@ importers:
         version: 5.7.3
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
 
   speech/ibm:
     dependencies:
@@ -3040,7 +3056,7 @@ importers:
         version: 5.7.3
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
 
   speech/murf:
     dependencies:
@@ -3068,7 +3084,7 @@ importers:
         version: 5.7.3
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
 
   speech/openai:
     dependencies:
@@ -3096,7 +3112,7 @@ importers:
         version: 5.7.3
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
 
   speech/playai:
     dependencies:
@@ -3121,7 +3137,7 @@ importers:
         version: 5.7.3
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
 
   speech/replicate:
     dependencies:
@@ -3149,7 +3165,7 @@ importers:
         version: 5.7.3
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
 
   speech/speechify:
     dependencies:
@@ -3177,7 +3193,7 @@ importers:
         version: 5.7.3
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
 
   storage/pg:
     dependencies:
@@ -3208,7 +3224,7 @@ importers:
         version: 5.7.3
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
 
   storage/upstash:
     dependencies:
@@ -3233,7 +3249,7 @@ importers:
         version: 5.7.3
       vitest:
         specifier: ^2.1.8
-        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0)
+        version: 2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0)
 
   stores/astra:
     dependencies:
@@ -3679,6 +3695,12 @@ packages:
 
   '@ai-sdk/openai@1.1.11':
     resolution: {integrity: sha512-gyqjoRvycmN3OGeK2SJXwhROv2ZZuP+SXbiAOoJf0ehWkqwkQSVaHigmg6OYLznmXusVHAvYD7SRgysXoJmuog==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.0.0
+
+  '@ai-sdk/openai@1.1.12':
+    resolution: {integrity: sha512-lh3zN4J/XEqkjpZAOBajSttF1Nl2qV/7WxRbORn+4jZmQkmzWQbsEUpgQ6ME+heyRvnsRCNq3fkMGehWWxWuXg==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -21049,6 +21071,12 @@ snapshots:
       '@ai-sdk/provider-utils': 2.1.8(zod@3.24.1)
       zod: 3.24.1
 
+  '@ai-sdk/openai@1.1.12(zod@3.24.1)':
+    dependencies:
+      '@ai-sdk/provider': 1.0.7
+      '@ai-sdk/provider-utils': 2.1.8(zod@3.24.1)
+      zod: 3.24.1
+
   '@ai-sdk/openai@1.1.9(zod@3.24.1)':
     dependencies:
       '@ai-sdk/provider': 1.0.7
@@ -24827,10 +24855,10 @@ snapshots:
       - ws
       - zod
 
-  '@llamaindex/cloud@2.0.21(@llamaindex/core@0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2))(@llamaindex/env@0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2))':
+  '@llamaindex/cloud@2.0.21(@llamaindex/core@0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@2.0.2))(@llamaindex/env@0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@2.0.2))':
     dependencies:
-      '@llamaindex/core': 0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)
-      '@llamaindex/env': 0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)
+      '@llamaindex/core': 0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@2.0.2)
+      '@llamaindex/env': 0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@2.0.2)
 
   '@llamaindex/core@0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)':
     dependencies:
@@ -24929,10 +24957,10 @@ snapshots:
       - ws
       - zod
 
-  '@llamaindex/node-parser@0.0.21(@llamaindex/core@0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2))(@llamaindex/env@0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2))(tree-sitter@0.22.4)(web-tree-sitter@0.24.7)':
+  '@llamaindex/node-parser@0.0.21(@llamaindex/core@0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@2.0.2))(@llamaindex/env@0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@2.0.2))(tree-sitter@0.22.4)(web-tree-sitter@0.24.7)':
     dependencies:
-      '@llamaindex/core': 0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)
-      '@llamaindex/env': 0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)
+      '@llamaindex/core': 0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@2.0.2)
+      '@llamaindex/env': 0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@2.0.2)
       html-to-text: 9.0.5
       tree-sitter: 0.22.4
       web-tree-sitter: 0.24.7
@@ -24981,13 +25009,13 @@ snapshots:
       - pathe
       - tiktoken
 
-  '@llamaindex/readers@1.0.22(@aws-sdk/credential-providers@3.734.0)(@llamaindex/core@0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2))(@llamaindex/env@0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2))(bufferutil@4.0.9)(encoding@0.1.13)(socks@2.8.3)(utf-8-validate@6.0.5)':
+  '@llamaindex/readers@1.0.22(@aws-sdk/credential-providers@3.734.0)(@llamaindex/core@0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@2.0.2))(@llamaindex/env@0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@2.0.2))(bufferutil@4.0.9)(encoding@0.1.13)(socks@2.8.3)(utf-8-validate@6.0.5)':
     dependencies:
       '@azure/cosmos': 4.2.0
       '@discordjs/rest': 2.4.2
       '@discoveryjs/json-ext': 0.6.3
-      '@llamaindex/core': 0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)
-      '@llamaindex/env': 0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)
+      '@llamaindex/core': 0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@2.0.2)
+      '@llamaindex/env': 0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@2.0.2)
       assemblyai: 4.8.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       csv-parse: 5.6.0
       discord-api-types: 0.37.118
@@ -25127,7 +25155,7 @@ snapshots:
       '@ai-sdk/google-vertex': 2.1.9(encoding@0.1.13)(zod@3.24.1)
       '@ai-sdk/groq': 1.1.9(zod@3.24.1)
       '@ai-sdk/mistral': 1.1.6(zod@3.24.1)
-      '@ai-sdk/openai': 1.1.11(zod@3.24.1)
+      '@ai-sdk/openai': 1.1.12(zod@3.24.1)
       '@ai-sdk/perplexity': 0.0.7(zod@3.24.1)
       '@ai-sdk/togetherai': 0.1.9(zod@3.24.1)
       '@ai-sdk/xai': 1.1.8(zod@3.24.1)
@@ -33762,7 +33790,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.12.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.7.0(eslint-plugin-import@2.31.0)(eslint@8.57.1))(eslint@8.57.1):
+  eslint-module-utils@2.12.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.7.0)(eslint@8.57.1):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
@@ -33773,7 +33801,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.12.0(@typescript-eslint/parser@8.22.0(eslint@8.57.1)(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.7.0(eslint-plugin-import@2.31.0)(eslint@8.57.1))(eslint@8.57.1):
+  eslint-module-utils@2.12.0(@typescript-eslint/parser@8.22.0(eslint@8.57.1)(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.7.0)(eslint@8.57.1):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
@@ -33832,7 +33860,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
-      eslint-module-utils: 2.12.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.7.0(eslint-plugin-import@2.31.0)(eslint@8.57.1))(eslint@8.57.1)
+      eslint-module-utils: 2.12.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.7.0)(eslint@8.57.1)
       hasown: 2.0.2
       is-core-module: 2.16.1
       is-glob: 4.0.3
@@ -33861,7 +33889,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
-      eslint-module-utils: 2.12.0(@typescript-eslint/parser@8.22.0(eslint@8.57.1)(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.7.0(eslint-plugin-import@2.31.0)(eslint@8.57.1))(eslint@8.57.1)
+      eslint-module-utils: 2.12.0(@typescript-eslint/parser@8.22.0(eslint@8.57.1)(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.7.0)(eslint@8.57.1)
       hasown: 2.0.2
       is-core-module: 2.16.1
       is-glob: 4.0.3
@@ -37034,17 +37062,17 @@ snapshots:
       '@grpc/grpc-js': 1.12.5
       '@llamaindex/anthropic': 0.0.29(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(encoding@0.1.13)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)
       '@llamaindex/clip': 0.0.29(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(encoding@0.1.13)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.1)
-      '@llamaindex/cloud': 2.0.21(@llamaindex/core@0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2))(@llamaindex/env@0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2))
+      '@llamaindex/cloud': 2.0.21(@llamaindex/core@0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@2.0.2))(@llamaindex/env@0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@2.0.2))
       '@llamaindex/core': 0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)
       '@llamaindex/deepinfra': 0.0.29(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(encoding@0.1.13)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.1)
       '@llamaindex/env': 0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)
       '@llamaindex/groq': 0.0.44(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(encoding@0.1.13)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.1)
       '@llamaindex/huggingface': 0.0.29(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(encoding@0.1.13)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.1)
-      '@llamaindex/node-parser': 0.0.21(@llamaindex/core@0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2))(@llamaindex/env@0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2))(tree-sitter@0.22.4)(web-tree-sitter@0.24.7)
+      '@llamaindex/node-parser': 0.0.21(@llamaindex/core@0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@2.0.2))(@llamaindex/env@0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@2.0.2))(tree-sitter@0.22.4)(web-tree-sitter@0.24.7)
       '@llamaindex/ollama': 0.0.36(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)
       '@llamaindex/openai': 0.1.45(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(encoding@0.1.13)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.1)
       '@llamaindex/portkey-ai': 0.0.29(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)
-      '@llamaindex/readers': 1.0.22(@aws-sdk/credential-providers@3.734.0)(@llamaindex/core@0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2))(@llamaindex/env@0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2))(bufferutil@4.0.9)(encoding@0.1.13)(socks@2.8.3)(utf-8-validate@6.0.5)
+      '@llamaindex/readers': 1.0.22(@aws-sdk/credential-providers@3.734.0)(@llamaindex/core@0.4.20(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@2.0.2))(@llamaindex/env@0.1.25(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@2.0.2))(bufferutil@4.0.9)(encoding@0.1.13)(socks@2.8.3)(utf-8-validate@6.0.5)
       '@llamaindex/replicate': 0.0.29(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)
       '@llamaindex/vllm': 0.0.15(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.2)(encoding@0.1.13)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.16)(pathe@1.1.2)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.1)
       '@mistralai/mistralai': 1.5.0(zod@3.24.1)
@@ -43250,6 +43278,43 @@ snapshots:
       - supports-color
       - terser
 
+  vitest@2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.37.0):
+    dependencies:
+      '@vitest/expect': 2.1.8
+      '@vitest/mocker': 2.1.8(vite@5.4.14(@types/node@22.13.1)(terser@5.37.0))
+      '@vitest/pretty-format': 2.1.8
+      '@vitest/runner': 2.1.8
+      '@vitest/snapshot': 2.1.8
+      '@vitest/spy': 2.1.8
+      '@vitest/utils': 2.1.8
+      chai: 5.1.2
+      debug: 4.4.0(supports-color@8.1.1)
+      expect-type: 1.1.0
+      magic-string: 0.30.17
+      pathe: 1.1.2
+      std-env: 3.8.0
+      tinybench: 2.9.0
+      tinyexec: 0.3.2
+      tinypool: 1.0.2
+      tinyrainbow: 1.2.0
+      vite: 5.4.14(@types/node@22.13.1)(terser@5.37.0)
+      vite-node: 2.1.8(@types/node@22.13.1)(terser@5.37.0)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@edge-runtime/vm': 3.2.0
+      '@types/node': 22.13.1
+      jsdom: 25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5)
+    transitivePeerDependencies:
+      - less
+      - lightningcss
+      - msw
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+
   vitest@2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@5.0.10))(terser@5.37.0):
     dependencies:
       '@vitest/expect': 2.1.8
@@ -43276,43 +43341,6 @@ snapshots:
       '@edge-runtime/vm': 3.2.0
       '@types/node': 22.13.1
       jsdom: 25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@5.0.10)
-    transitivePeerDependencies:
-      - less
-      - lightningcss
-      - msw
-      - sass
-      - sass-embedded
-      - stylus
-      - sugarss
-      - supports-color
-      - terser
-
-  vitest@2.1.8(@edge-runtime/vm@3.2.0)(@types/node@22.13.1)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.37.0):
-    dependencies:
-      '@vitest/expect': 2.1.8
-      '@vitest/mocker': 2.1.8(vite@5.4.14(@types/node@22.13.1)(terser@5.37.0))
-      '@vitest/pretty-format': 2.1.8
-      '@vitest/runner': 2.1.8
-      '@vitest/snapshot': 2.1.8
-      '@vitest/spy': 2.1.8
-      '@vitest/utils': 2.1.8
-      chai: 5.1.2
-      debug: 4.4.0(supports-color@8.1.1)
-      expect-type: 1.1.0
-      magic-string: 0.30.17
-      pathe: 1.1.2
-      std-env: 3.8.0
-      tinybench: 2.9.0
-      tinyexec: 0.3.2
-      tinypool: 1.0.2
-      tinyrainbow: 1.2.0
-      vite: 5.4.14(@types/node@22.13.1)(terser@5.37.0)
-      vite-node: 2.1.8(@types/node@22.13.1)(terser@5.37.0)
-      why-is-node-running: 2.3.0
-    optionalDependencies:
-      '@edge-runtime/vm': 3.2.0
-      '@types/node': 22.13.1
-      jsdom: 25.0.1(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5)
     transitivePeerDependencies:
       - less
       - lightningcss
