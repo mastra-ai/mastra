@@ -36,7 +36,7 @@ const metric2 = new ContextualRecallMetric(openai('gpt-4o-mini'), {
 });
 
 const query2 = "What are Python's key characteristics?";
-const response2 = 'Python is a high-level programming language that emphasizes code readability.';
+const response2 = 'Python is a high-level programming language. It is also a type of snake.';
 
 console.log('\nExample 2 - Mixed Recall:');
 console.log('Context:', context2);
@@ -62,7 +62,7 @@ const metric3 = new ContextualRecallMetric(openai('gpt-4o-mini'), {
 });
 
 const query3 = 'Tell me about the solar system.';
-const response3 = 'The solar system has eight planets and Mercury is closest to the Sun.';
+const response3 = 'Jupiter is the largest planet in the solar system.';
 
 console.log('\nExample 3 - Low Recall:');
 console.log('Context:', context3);
