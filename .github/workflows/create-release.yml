@@ -70,7 +70,7 @@ jobs:
           pnpm install
 
       - name: Publish packages
-        run: pnpm publish -r --dry-run
+        run: pnpm changeset publish
 
       - name: Enter prerelease mode
         if: always()
@@ -81,3 +81,4 @@ jobs:
           git add -A
           git commit -m 'chore: version - enter prerelease mode'
           git push
+          git push --follow-tags
