@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "0.1.0-alpha.52",
+  "version": "0.1.0-alpha.53",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -58,6 +58,7 @@
     "ai": "^4.0.34",
     "dotenv": "^16.4.7",
     "tsup": "^8.0.1",
+    "typescript": "^5.7.3",
     "vitest": "^3.0.4"
   }
 }

@@ -236,4 +236,43 @@ describe('agent', () => {
 
     expect(message).toBe('Executed successfully');
   }, 500000);
+
+  it('should properly sanitize incomplete tool calls from memory messages', () => {
+    const agent = new Agent({
+      name: 'Test agent',
+      instructions: 'Test agent',
+      model: openai('gpt-4o'),
+    });
+
+    const toolResultOne = {
+      role: 'tool' as const,
+      content: [{ type: 'tool-result' as const, toolName: '', toolCallId: 'tool-1', text: 'result', result: '' }],
+    };
+    const toolCallTwo = {
+      role: 'assistant' as const,
+      content: [{ type: 'tool-call' as const, toolName: '', args: '', toolCallId: 'tool-2', text: 'call' }],
+    };
+    const toolResultTwo = {
+      role: 'tool' as const,
+      content: [{ type: 'tool-result' as const, toolName: '', toolCallId: 'tool-2', text: 'result', result: '' }],
+    };
+    const toolCallThree = {
+      role: 'assistant' as const,
+      content: [{ type: 'tool-call' as const, toolName: '', args: '', toolCallId: 'tool-3', text: 'call' }],
+    };
+    const memoryMessages = [toolResultOne, toolCallTwo, toolResultTwo, toolCallThree];
+
+    const sanitizedMessages = agent.sanitizeResponseMessages(memoryMessages);
+
+    // The tool result for tool-1 should be removed since there's no matching tool call
+    expect(sanitizedMessages).not.toContainEqual(toolResultOne);
+
+    // The tool call and result for tool-2 should remain since they form a complete pair
+    expect(sanitizedMessages).toContainEqual(toolCallTwo);
+    expect(sanitizedMessages).toContainEqual(toolResultTwo);
+
+    // The tool call for tool-3 should be removed since there's no matching result
+    expect(sanitizedMessages).not.toContainEqual(toolCallThree);
+    expect(sanitizedMessages).toHaveLength(2);
+  });
 });

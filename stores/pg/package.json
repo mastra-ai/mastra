@@ -1,6 +1,6 @@
 {
   "name": "@mastra/pg",
-  "version": "0.1.0-alpha.19",
+  "version": "0.1.0-alpha.20",
   "description": "Postgres provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -34,6 +34,7 @@
     "@types/node": "^22.13.1",
     "@types/pg": "^8.11.10",
     "tsup": "^8.0.1",
+    "typescript": "^5.7.3",
     "vitest": "^3.0.4"
   }
 }

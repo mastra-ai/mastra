@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "0.1.0-alpha.91",
+  "version": "0.1.0-alpha.92",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -50,6 +50,7 @@
     "@types/node": "^22.13.1",
     "@types/pg": "^8.11.10",
     "tsup": "^8.0.1",
+    "typescript": "^5.7.3",
     "vitest": "^3.0.4"
   }
 }

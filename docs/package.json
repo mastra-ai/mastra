@@ -1,10 +1,11 @@
 {
   "name": "docs",
-  "version": "0.1.0-alpha.5",
+  "version": "0.1.0-alpha.6",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "tsx src/scripts/build-cursor-context.ts && next build",
+    "build": "pnpm build:llms-txt && next build",
+    "build:llms-txt": "tsx src/scripts/build-llms-text-files.ts",
     "start": "next start",
     "lint": "next lint",
     "postbuild": "next-sitemap --config next-sitemap.config.mjs"

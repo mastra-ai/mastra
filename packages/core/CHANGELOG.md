@@ -1,5 +1,19 @@
 # @mastra/core
 
+## 0.2.0-alpha.110
+
+### Patch Changes
+
+- 016493a: Deprecate metrics in favor of evals
+- 382f4dc: move telemetry init to instrumentation.mjs file in build directory
+- 176bc42: Added runId and proper parent spans to workflow tracing
+- d68b532: Updated debug logs
+- fe3dcb0: Add fastembed import error handling
+- e448a26: Correctly pass down runId to called tools
+- fd75f3c: Added storage, vector, embedder setters to the base MastraMemory class
+- ccf115c: Fixed incomplete tool call errors when including memory message history in context
+- a221426: Simplify workflows watch API
+
 ## 0.2.0-alpha.109
 
 ### Patch Changes

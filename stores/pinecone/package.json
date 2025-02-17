@@ -1,6 +1,6 @@
 {
   "name": "@mastra/pinecone",
-  "version": "0.1.0-alpha.45",
+  "version": "0.1.0-alpha.46",
   "description": "Pinecone vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -28,6 +28,7 @@
     "@types/node": "^22.13.1",
     "dotenv": "^16.4.7",
     "tsup": "^8.0.1",
+    "typescript": "^5.7.3",
     "vitest": "^3.0.4"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/ragie",
-  "version": "1.1.0-alpha.85",
+  "version": "1.1.0-alpha.86",
   "description": "",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
@@ -59,7 +59,7 @@
     "size-limit": "^11.1.4",
     "ts-jest": "^29.2.4",
     "tsup": "^8.0.1",
-    "typescript": "^5.5.4"
+    "typescript": "^5.7.3"
   },
   "keywords": [],
   "author": "",

@@ -512,7 +512,7 @@ export class DefaultStorage extends MastraStorage {
     args.push(limit, offset);
 
     const result = await this.client.execute({
-      sql: `SELECT * FROM ${TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
+      sql: `SELECT * FROM ${TABLE_TRACES} ${whereClause} ORDER BY "startTime" DESC LIMIT ? OFFSET ?`,
       args,
     });
 

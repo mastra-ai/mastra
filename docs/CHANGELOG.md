@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.0-alpha.6
+
+### Patch Changes
+
+- 016493a: Deprecate metrics in favor of evals
+
 ## 0.1.0-alpha.5
 
 ### Patch Changes
