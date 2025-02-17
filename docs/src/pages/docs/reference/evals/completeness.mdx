@@ -116,6 +116,32 @@ The extraction process includes:
 - Special handling of short words (3 characters or less)
 - Deduplication of elements
 
+## Scoring Details
+
+The metric evaluates completeness through linguistic element coverage analysis.
+
+### Scoring Process
+
+1. Extracts key elements:
+   - Nouns and named entities
+   - Action verbs
+   - Topic-specific terms
+   - Normalized word forms
+
+2. Calculates coverage of input elements:
+   - Exact matches for short terms (≤3 chars)
+   - Substantial overlap (>60%) for longer terms
+
+Final score: `(covered_elements / total_input_elements) * scale`
+
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: Complete coverage - contains all input elements
+- 0.7-0.9: High coverage - includes most key elements
+- 0.4-0.6: Partial coverage - contains some key elements
+- 0.1-0.3: Low coverage - missing most key elements
+- 0.0: No coverage - output lacks all input elements
+
 ## Example with Analysis
 
 ```typescript

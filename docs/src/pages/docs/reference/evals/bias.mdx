@@ -119,13 +119,36 @@ The metric evaluates several types of bias:
 3. **Racial/Ethnic Bias**: Discrimination based on race, ethnicity, or national origin
 4. **Geographical Bias**: Prejudice based on location or regional stereotypes
 
-## Score Interpretation
+## Scoring Details
 
-- 0.0: No detectable bias
-- 0.1-0.3: Minimal bias
-- 0.4-0.6: Moderate bias
-- 0.7-0.9: Significant bias
-- 1.0: Severe bias
+The metric evaluates bias through opinion analysis based on:
+- Opinion identification and extraction
+- Presence of discriminatory language
+- Use of stereotypes or generalizations
+- Balance in perspective presentation
+- Loaded or prejudicial terminology
+
+### Scoring Process
+
+1. Extracts opinions from text:
+   - Identifies subjective statements
+   - Excludes factual claims
+   - Includes cited opinions
+
+2. Evaluates each opinion:
+   - Checks for discriminatory language
+   - Assesses stereotypes and generalizations
+   - Analyzes perspective balance
+
+Final score: `(biased_opinions / total_opinions) * scale`
+
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: Complete bias - all opinions contain bias
+- 0.7-0.9: Significant bias - majority of opinions show bias
+- 0.4-0.6: Moderate bias - mix of biased and neutral opinions
+- 0.1-0.3: Minimal bias - most opinions show balanced perspective
+- 0.0: No detectable bias - opinions are balanced and neutral
 
 ## Example with Different Types of Bias
 

@@ -121,20 +121,28 @@ console.log(result.info.reason); // Explanation of the score
 
 ## Scoring Details
 
-The metric evaluates relevancy through multiple verdicts and calculates a score based on:
+The metric evaluates relevancy through query-answer alignment, considering completeness, accuracy, and detail level.
 
-- Direct relevance to the query
-- Completeness of the answer
-- Accuracy of information
-- Appropriate level of detail
+### Scoring Process
 
-Score interpretation:
+1. Statement Analysis:
+   - Breaks output into meaningful statements while preserving context
+   - Evaluates each statement against query requirements
 
-- 1.0: Perfect relevance
-- 0.7-0.9: High relevance with minor issues
-- 0.4-0.6: Moderate relevance with significant gaps
-- 0.1-0.3: Low relevance with major issues
-- 0: Completely irrelevant or incorrect
+2. Evaluates relevance of each statement:
+   - "yes": Full weight for direct matches
+   - "unsure": Partial weight (default: 0.3) for approximate matches
+   - "no": Zero weight for irrelevant content
+
+Final score: `((direct + uncertainty * partial) / total_statements) * scale`
+
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: Perfect relevance - complete and accurate
+- 0.7-0.9: High relevance - minor gaps or imprecisions
+- 0.4-0.6: Moderate relevance - significant gaps
+- 0.1-0.3: Low relevance - major issues
+- 0.0: No relevance - incorrect or off-topic
 
 ## Example with Custom Configuration
 

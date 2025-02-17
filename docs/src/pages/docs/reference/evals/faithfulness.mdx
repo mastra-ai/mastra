@@ -125,27 +125,32 @@ console.log(result.info.reason); // "All claims are supported by the context."
 
 ## Scoring Details
 
-The FaithfulnessMetric evaluates the output by:
+The metric evaluates faithfulness through claim verification against provided context.
 
-1. Extracting all claims from the output (both factual and speculative)
-2. Verifying each claim against the provided context
-3. Calculating a score based on the proportion of supported claims
+### Scoring Process
 
-Claims can receive one of three verdicts:
+1. Analyzes claims and context:
+   - Extracts all claims (factual and speculative)
+   - Verifies each claim against context
+   - Assigns one of three verdicts:
+     - "yes" - claim supported by context
+     - "no" - claim contradicts context
+     - "unsure" - claim unverifiable
 
-- "yes" - The claim is supported by the context
-- "no" - The claim contradicts the context
-- "unsure" - The claim cannot be verified using the context (e.g., future predictions or claims outside the context scope)
+2. Calculates faithfulness score:
+   - Counts supported claims
+   - Divides by total claims
+   - Scales to configured range
 
-The final score is calculated as: `(number of supported claims / total number of claims) * scale`
+Final score: `(supported_claims / total_claims) * scale`
 
-Score interpretation:
-
-- 1.0: All claims are supported by the context
-- 0.67: Two-thirds of claims are supported
-- 0.5: Half of the claims are supported
-- 0.33: One-third of claims are supported
-- 0: No claims are supported or the output is empty
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: All claims supported by context
+- 0.7-0.9: Most claims supported, few unverifiable
+- 0.4-0.6: Mixed support with some contradictions
+- 0.1-0.3: Limited support, many contradictions
+- 0.0: No supported claims
 
 ## Advanced Example
 

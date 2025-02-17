@@ -122,19 +122,29 @@ console.log(result.score); // Score from 0-1
 
 ## Scoring Details
 
-The metric calculates recall by comparing the LLM's response against the provided context documents:
+The metric evaluates recall through comparison of response content against relevant context items.
 
-Score interpretation:
-- 1.0: Perfect recall - all relevant information was included
-- 0.7-0.9: High recall - most relevant information was included
-- 0.4-0.6: Moderate recall - some relevant information was missed
-- 0.1-0.3: Low recall - significant information was missed
-- 0: No recall - failed to include any relevant information
+### Scoring Process
 
-The score is calculated as follows:
-```
-score = (number of correctly recalled items) / (total number of relevant items in context)
-```
+1. Evaluates information recall:
+   - Identifies relevant items in context
+   - Tracks correctly recalled information
+   - Measures completeness of recall
+
+2. Calculates recall score:
+   - Counts correctly recalled items
+   - Compares against total relevant items
+   - Computes coverage ratio
+
+Final score: `(correctly_recalled_items / total_relevant_items) * scale`
+
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: Perfect recall - all relevant information included
+- 0.7-0.9: High recall - most relevant information included
+- 0.4-0.6: Moderate recall - some relevant information missed
+- 0.1-0.3: Low recall - significant information missed
+- 0.0: No recall - no relevant information included
 
 ## Example with Custom Configuration
 
