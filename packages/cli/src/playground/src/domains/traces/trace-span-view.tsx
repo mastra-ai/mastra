@@ -12,6 +12,10 @@ export function TreeView({ tree }: { tree: SpanNode[] }) {
 }
 
 function buildTree(items: Span[], parentSpanId: string | null = null): SpanNode[] {
+  console.log(
+    'items',
+    items.filter(item => item.parentSpanId === parentSpanId),
+  );
   return items
     .filter(item => item.parentSpanId === parentSpanId)
     .map(item => ({
