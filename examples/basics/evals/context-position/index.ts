@@ -1,21 +1,20 @@
 import { openai } from '@ai-sdk/openai';
 import { ContextPositionMetric } from '@mastra/evals/llm';
 
-// Example 1: High position adherence
+// Example 1: High position adherence (relevant info first)
 const context1 = [
-  'First, preheat the oven to 350°F.',
-  'Next, mix the dry ingredients in a bowl.',
-  'Then, add the wet ingredients and stir well.',
-  'Finally, bake for 25 minutes until golden brown.',
+  'The capital of France is Paris.',
+  'Paris has been the capital since 508 CE.',
+  "Paris serves as France's political center.",
+  'The capital city hosts the French government.',
 ];
 
 const metric1 = new ContextPositionMetric(openai('gpt-4o-mini'), {
   context: context1,
 });
 
-const query1 = 'How do I bake this recipe?';
-const response1 =
-  'To make this recipe, start by preheating your oven to 350°F. After that, combine all dry ingredients in a mixing bowl. Next, add your wet ingredients and mix thoroughly. The last step is to bake everything for 25 minutes until you get a nice golden brown color.';
+const query1 = 'What is the capital of France?';
+const response1 = 'The capital of France is Paris.';
 
 console.log('\nExample 1 - High Position Adherence:');
 console.log('Context:', context1);
@@ -28,21 +27,20 @@ console.log('Metric Result:', {
   reason: result1.info.reason,
 });
 
-// Example 2: Mixed position adherence
+// Example 2: Mixed position adherence (relevant info scattered)
 const context2 = [
-  'Rome was founded in 753 BCE.',
-  'The Roman Republic began in 509 BCE.',
-  'Julius Caesar became dictator in 49 BCE.',
-  'Augustus established the Empire in 27 BCE.',
+  'Elephants are herbivores.',
+  'Adult elephants can weigh up to 13,000 pounds.',
+  'Elephants are the largest land animals.',
+  'Elephants eat plants and grass.',
 ];
 
 const metric2 = new ContextPositionMetric(openai('gpt-4o-mini'), {
   context: context2,
 });
 
-const query2 = 'Describe the history of Rome.';
-const response2 =
-  "The Roman Empire was established by Augustus in 27 BCE, following Julius Caesar's dictatorship in 49 BCE. This was all possible because of Rome's founding in 753 BCE and the subsequent Republic in 509 BCE.";
+const query2 = 'How much do elephants weigh?';
+const response2 = 'Adult elephants can weigh up to 13,000 pounds, making them the largest land animals.';
 
 console.log('\nExample 2 - Mixed Position Adherence:');
 console.log('Context:', context2);
@@ -55,21 +53,20 @@ console.log('Metric Result:', {
   reason: result2.info.reason,
 });
 
-// Example 3: Low position adherence
+// Example 3: Low position adherence (relevant info last)
 const context3 = [
-  'Step 1: Open the application.',
-  'Step 2: Click on Settings.',
-  'Step 3: Select Network options.',
-  'Step 4: Enable Wi-Fi.',
+  'Rainbows appear in the sky.',
+  'Rainbows have different colors.',
+  'Rainbows are curved in shape.',
+  'Rainbows form when sunlight hits water droplets.',
 ];
 
 const metric3 = new ContextPositionMetric(openai('gpt-4o-mini'), {
   context: context3,
 });
 
-const query3 = 'How do I connect to Wi-Fi?';
-const response3 =
-  "To connect to Wi-Fi, enable it in Network options. Before that, you'll need to go to Settings after launching the application.";
+const query3 = 'How do rainbows form?';
+const response3 = 'Rainbows are created when sunlight interacts with water droplets in the air.';
 
 console.log('\nExample 3 - Low Position Adherence:');
 console.log('Context:', context3);
