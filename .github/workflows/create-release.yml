@@ -48,6 +48,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Build packages
+        run: pnpm build
+
       - name: Setup npm auth
         run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
@@ -59,32 +62,22 @@ jobs:
         run: |
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          npx changeset exit
+          pnpm changeset pre exit
+          pnpm changeset version
           git add -A
-          git commit -m 'chore: version - exit prerelease mode'
-          git push
+          git commit -m 'chore: version - exit prerelease mode' --no-verify
+          echo "push"
           pnpm install
-
-      - name: Run build
-        run: pnpm build
 
       - name: Publish packages
         run: pnpm publish -r --dry-run
 
-      - name: Check for pre.json file existence
-        id: check_files_second
-        if: always()
-        uses: andstor/file-existence-action@v3.0.0
-        with:
-          files: '.changeset/pre.json'
-
       - name: Enter prerelease mode
-        if: always() && check_files_second.outputs.files_exists == 'false'
+        if: always()
         run: |
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          npx changeset enter prerelease
+          pnpm changeset pre enter alpha
           git add -A
           git commit -m 'chore: version - enter prerelease mode'
-          git push
-          pnpm install
+          echo "push"
