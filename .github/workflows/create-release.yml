@@ -6,6 +6,12 @@ permissions:
 
 on:
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (no actual publish)'
+        required: false
+        type: boolean
+        default: false
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -21,12 +27,29 @@ jobs:
       pull-requests: write
 
     steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          # required
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+      - name: Get GitHub App User ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - run: |
+          git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'<
+
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
           # Fetch entire git history so  Changesets can generate changelogs
           # with the correct commits
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Check for pre.json file existence
         id: check_files
@@ -60,8 +83,6 @@ jobs:
         # prerelease mode, enter prerelease mode with tag alpha
         if: steps.check_files.outputs.files_exists == 'true'
         run: |
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
           pnpm changeset pre exit
           pnpm changeset version
           git add -A
@@ -69,16 +90,32 @@ jobs:
           git push
           pnpm install
 
+      - name: Push version changes
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git push
+          pnpm install
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+
       - name: Publish packages
+        if: ${{ !inputs.dry_run }}
         run: pnpm changeset publish
+
+      - name: Publish packages - dry run
+        if: ${{ inputs.dry_run }}
+        run: pnpm changeset publish --dry-run
 
       - name: Enter prerelease mode
         if: always()
         run: |
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
           pnpm changeset pre enter alpha
           git add -A
           git commit -m 'chore: version - enter prerelease mode'
-          git push
+
+      - name: Push prerelease changes
+        if: ${{ !inputs.dry_run }}
+        run: |
           git push --follow-tags
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
