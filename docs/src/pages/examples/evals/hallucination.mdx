@@ -57,7 +57,7 @@ const metric1 = new HallucinationMetric(openai('gpt-4o-mini'), {
 const query1 = 'When was the first iPhone released?';
 const response1 = 'The iPhone was first released in 2007, when Steve Jobs unveiled it at Macworld. The original iPhone featured a 3.5-inch screen.';
 
-console.log('\nExample 1 - No Hallucination:');
+console.log('Example 1 - No Hallucination:');
 console.log('Context:', context1);
 console.log('Query:', query1);
 console.log('Response:', response1);
@@ -88,7 +88,7 @@ const metric2 = new HallucinationMetric(openai('gpt-4o-mini'), {
 const query2 = 'Tell me about the first Star Wars movie.';
 const response2 = 'The first Star Wars movie came out in 1977 and was directed by George Lucas. It made over $1 billion at the box office and was filmed entirely in California.';
 
-console.log('\nExample 2 - Mixed Hallucination:');
+console.log('Example 2 - Mixed Hallucination:');
 console.log('Context:', context2);
 console.log('Query:', query2);
 console.log('Response:', response2);
@@ -118,7 +118,7 @@ const metric3 = new HallucinationMetric(openai('gpt-4o-mini'), {
 const query3 = 'When did the Wright brothers first fly?';
 const response3 = 'The Wright brothers achieved their historic first flight in 1908. The flight lasted about 2 minutes and covered nearly a mile.';
 
-console.log('\nExample 3 - Complete Hallucination:');
+console.log('Example 3 - Complete Hallucination:');
 console.log('Context:', context3);
 console.log('Query:', query3);
 console.log('Response:', response3);

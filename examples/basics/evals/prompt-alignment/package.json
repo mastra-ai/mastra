@@ -1,0 +1,16 @@
+{
+  "name": "examples-prompt-alignment",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "pnpx tsx --env-file .env index.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@mastra/evals": "workspace:^"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.7"
+  }
+}

@@ -7,7 +7,7 @@ const metric = new CompletenessMetric();
 const text1 = 'The primary colors are red, blue, and yellow.';
 const reference1 = 'The primary colors are red, blue, and yellow.';
 
-console.log('\nExample 1 - Complete Coverage:');
+console.log('Example 1 - Complete Coverage:');
 console.log('Text:', text1);
 console.log('Reference:', reference1);
 
@@ -24,7 +24,7 @@ console.log('Metric Result:', {
 const text2 = 'The primary colors are red and blue.';
 const reference2 = 'The primary colors are red, blue, and yellow.';
 
-console.log('\nExample 2 - Partial Coverage:');
+console.log('Example 2 - Partial Coverage:');
 console.log('Text:', text2);
 console.log('Reference:', reference2);
 
@@ -41,8 +41,8 @@ console.log('Metric Result:', {
 const text3 = 'The seasons include summer.';
 const reference3 = 'The four seasons are spring, summer, fall, and winter.';
 
-console.log('\nExample 3 - Minimal Coverage:');
-console.log('Text:', text3);
+console.log('Example 3 - Minimal Coverage:');
+console.log('xt:', text3);
 console.log('Reference:', reference3);
 
 const result3 = await metric.measure(reference3, text3);

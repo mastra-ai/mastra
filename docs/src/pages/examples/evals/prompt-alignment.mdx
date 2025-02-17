@@ -1,0 +1,136 @@
+---
+title: "Example: Prompt Alignment | Evals | Mastra Docs"
+description: Example of using the Prompt Alignment metric to evaluate instruction adherence in responses.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Prompt Alignment
+
+This example demonstrates how to use Mastra's Prompt Alignment metric to evaluate how well responses follow given instructions.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Prompt Alignment metric
+2. Evaluate instruction adherence
+3. Handle non-applicable instructions
+4. Calculate alignment scores
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { PromptAlignmentMetric } from '@mastra/evals/llm';
+```
+
+## Example Usage
+
+### High Alignment Example
+
+Evaluate a response that follows all instructions:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const weatherInstructions = [
+  'Use complete sentences',
+  'Include temperature in Celsius',
+  'Mention wind conditions'
+];
+
+const weatherMetric = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: weatherInstructions
+});
+
+const weatherQuery = 'What is the weather like?';
+const weatherResponse = 'The temperature is 22 degrees Celsius today. A gentle breeze is blowing from the north.';
+
+const weatherResult = await weatherMetric.measure(weatherQuery, weatherResponse);
+```
+
+### Mixed Alignment Example
+
+Evaluate a response with partial instruction adherence:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const productInstructions = [
+  'Use bullet points for each item',
+  'Include prices in USD format ($X.XX)',
+  'Show availability status for each item'
+];
+
+const productMetric = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: productInstructions
+});
+
+const productQuery = 'List the available products';
+const productResponse = '• Coffee - $4.99 (In Stock)\n• Tea - $3.99\n• Water - $1.99 (In Stock)';
+
+const productResult = await productMetric.measure(productQuery, productResponse);
+```
+
+### N/A Instructions Example
+
+Handle instructions that don't apply to the context:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const bankingInstructions = [
+  'Show account balance',
+  'List recent transactions',
+  'Use proper English'
+];
+
+const bankingMetric = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: bankingInstructions
+});
+
+const weatherQuery2 = 'What is the weather like?';
+const weatherResponse2 = 'It is sunny and warm outside.';
+
+const bankingResult = await bankingMetric.measure(weatherQuery2, weatherResponse2);
+```
+
+## Running the Examples
+
+1. Navigate to the example directory:
+   ```bash
+   cd examples/basics/evals/prompt-alignment
+   ```
+
+2. Install dependencies:
+   ```bash
+   pnpm install
+   ```
+
+3. Create a `.env` file with your OpenAI API key
+
+4. Run the example:
+   ```bash
+   pnpm start
+   ```
+
+## Understanding the Results
+
+The metric provides:
+- A score between 0 and 1 indicating instruction adherence
+- Count of applicable vs followed instructions
+- Detailed reasoning for each instruction
+- Handling of non-applicable instructions
+
+The score is calculated as: `followedInstructions / applicableInstructions`
+
+When no instructions are applicable to the context, the metric indicates this in the reasoning rather than providing a potentially misleading score.
+
+<GithubLink path="examples/basics/evals/prompt-alignment" />

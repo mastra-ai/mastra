@@ -16,7 +16,7 @@ const query1 = "What were some of Einstein's achievements?";
 const response1 =
   'Einstein won the Nobel Prize for discovering the photoelectric effect and published his groundbreaking theory of relativity.';
 
-console.log('\nExample 1 - High Relevancy:');
+console.log('Example 1 - High Relevancy:');
 console.log('Context:', context1);
 console.log('Query:', query1);
 console.log('Response:', response1);
@@ -42,7 +42,7 @@ const metric2 = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
 const query2 = 'What causes solar eclipses?';
 const response2 = 'Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.';
 
-console.log('\nExample 2 - Mixed Relevancy:');
+console.log('Example 2 - Mixed Relevancy:');
 console.log('Context:', context2);
 console.log('Query:', query2);
 console.log('Response:', response2);
@@ -68,7 +68,7 @@ const metric3 = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
 const query3 = 'What is the capital of Australia?';
 const response3 = 'The capital of Australia is Canberra.';
 
-console.log('\nExample 3 - Low Relevancy:');
+console.log('Example 3 - Low Relevancy:');
 console.log('Context:', context3);
 console.log('Query:', query3);
 console.log('Response:', response3);
