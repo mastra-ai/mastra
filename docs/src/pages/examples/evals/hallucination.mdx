@@ -1,22 +1,22 @@
 ---
 title: "Example: Hallucination | Evals | Mastra Docs"
-description: Example of using the Hallucination metric to evaluate unsupported claims in responses.
+description: Example of using the Hallucination metric to evaluate factual contradictions in responses.
 ---
 
 import { GithubLink } from "../../../components/github-link";
 
 # Hallucination
 
-This example demonstrates how to use Mastra's Hallucination metric to evaluate whether responses contain information not supported by the provided context.
+This example demonstrates how to use Mastra's Hallucination metric to evaluate whether responses contradict information provided in the context.
 
 ## Overview
 
 The example shows how to:
 
-1. Set up a Mastra agent for generating responses
-2. Configure the Hallucination metric
-3. Evaluate factual accuracy
-4. Analyze hallucination scores
+1. Configure the Hallucination metric
+2. Evaluate factual contradictions
+3. Analyze hallucination scores
+4. Handle different accuracy levels
 
 ## Setup
 
@@ -34,73 +34,84 @@ Import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
 import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
 import { HallucinationMetric } from '@mastra/evals/llm';
-```
-
-## Agent Creation
-
-Create a Mastra agent for generating responses:
-
-```typescript copy showLineNumbers{7} filename="src/index.ts"
-const agent = new Agent({
-  name: 'Example Agent',
-  instructions: 'You are a helpful assistant that provides informative answers.',
-  model: openai('gpt-4o-mini'),
-});
-```
-
-## Metric Configuration
-
-Set up the Hallucination metric with context:
-
-```typescript copy showLineNumbers{7} filename="src/index.ts"
-const metric = new HallucinationMetric(openai('gpt-4o-mini'), {
-  scale: 1,
-  context: [
-    'The Eiffel Tower is 324 meters tall.',
-    'It was completed in 1889.',
-    'The tower was built for the World Fair in Paris.',
-    'Gustave Eiffel designed the tower.',
-  ],
-});
 ```
 
 ## Example Usage
 
-### Low Hallucination Example
+### No Hallucination Example
 
-Evaluate well-defined historical facts:
+Evaluate a response that matches context exactly:
 
-```typescript copy showLineNumbers filename="src/index.ts"
-const query1 = 'Tell me about the Eiffel Tower.';
-const response1 = await agent.generate(query1, { context: context1.join(' ') });
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const context1 = [
+  'The iPhone was first released in 2007.',
+  'Steve Jobs unveiled it at Macworld.',
+  'The original model had a 3.5-inch screen.',
+];
 
-const result1 = await metric1.measure(query1, response1.text);
-console.log('Low Hallucination Result:', {
+const metric1 = new HallucinationMetric(openai('gpt-4o-mini'), {
+  context: context1,
+});
+
+const query1 = 'When was the first iPhone released?';
+const response1 = 'The iPhone was first released in 2007, when Steve Jobs unveiled it at Macworld. The original iPhone featured a 3.5-inch screen.';
+
+const result1 = await metric1.measure(query1, response1);
+console.log('Metric Result:', {
   score: result1.score,
   reason: result1.info.reason,
 });
 ```
 
-### High Hallucination Risk Example
+### Mixed Hallucination Example
 
-Evaluate complex technical topics:
+Evaluate a response that contradicts some facts:
 
-```typescript copy showLineNumbers filename="src/index.ts"
+```typescript copy showLineNumbers{31} filename="src/index.ts"
 const context2 = [
-  'Quantum computers use qubits instead of classical bits.',
-  'Quantum entanglement is a key quantum phenomenon.',
-  'Quantum superposition allows multiple states simultaneously.',
+  'The first Star Wars movie was released in 1977.',
+  'It was directed by George Lucas.',
+  'The film earned $775 million worldwide.',
+  'The movie was filmed in Tunisia and England.',
 ];
 
-const query2 = 'Explain how quantum computers work.';
-const response2 = await agent.generate(query2, { context: context2.join(' ') });
+const metric2 = new HallucinationMetric(openai('gpt-4o-mini'), {
+  context: context2,
+});
 
-const result2 = await metric2.measure(query2, response2.text);
-console.log('High Hallucination Risk Result:', {
+const query2 = 'Tell me about the first Star Wars movie.';
+const response2 = 'The first Star Wars movie came out in 1977 and was directed by George Lucas. It made over $1 billion at the box office and was filmed entirely in California.';
+
+const result2 = await metric2.measure(query2, response2);
+console.log('Metric Result:', {
   score: result2.score,
   reason: result2.info.reason,
+});
+```
+
+### Complete Hallucination Example
+
+Evaluate a response that contradicts all facts:
+
+```typescript copy showLineNumbers{58} filename="src/index.ts"
+const context3 = [
+  'The Wright brothers made their first flight in 1903.',
+  'The flight lasted 12 seconds.',
+  'It covered a distance of 120 feet.',
+];
+
+const metric3 = new HallucinationMetric(openai('gpt-4o-mini'), {
+  context: context3,
+});
+
+const query3 = 'When did the Wright brothers first fly?';
+const response3 = 'The Wright brothers achieved their historic first flight in 1908. The flight lasted about 2 minutes and covered nearly a mile.';
+
+const result3 = await metric3.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
 });
 ```
 
@@ -109,17 +120,17 @@ console.log('High Hallucination Risk Result:', {
 The metric provides:
 
 1. A hallucination score between 0 and 1:
-   - 0.0: No hallucination - all claims supported
-   - 0.1-0.3: Low hallucination - minor unsupported details
-   - 0.4-0.6: Moderate hallucination - some unsupported claims
-   - 0.7-0.9: High hallucination - many unsupported claims
-   - 1.0: Complete hallucination - no supported claims
+   - 0.0: No hallucination - no contradictions with context
+   - 0.3-0.4: Low hallucination - few contradictions
+   - 0.5-0.6: Mixed hallucination - some contradictions
+   - 0.7-0.8: High hallucination - many contradictions
+   - 0.9-1.0: Complete hallucination - contradicts all context
 
 2. Detailed analysis of:
+   - Statement verification
+   - Contradictions found
    - Factual accuracy
-   - Unsupported claims
-   - Context adherence
-   - Improvement suggestions
+   - Overall hallucination level
 
 <br />
 <br />
