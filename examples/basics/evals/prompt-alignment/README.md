@@ -52,8 +52,3 @@ The metric provides:
 - Count of applicable vs followed instructions
 - Detailed reasoning for each instruction
 - Handling of N/A instructions
-
-## Additional Resources
-
-- [Prompt Alignment Documentation](https://mastra.ai/docs/reference/evals/prompt-alignment)
-- [Example Code](https://github.com/mastra-ai/mastra/tree/main/examples/basics/evals/prompt-alignment)

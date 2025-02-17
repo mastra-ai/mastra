@@ -1,55 +1,82 @@
-# Contextual Recall Example
+# Contextual Recall Metric Example
 
-This example demonstrates how to use the Contextual Recall metric to evaluate how well a response recalls and uses provided context information.
+This example demonstrates how to use Mastra's Contextual Recall metric to evaluate how well responses recall and use provided context information.
 
 ## Prerequisites
 
-1. OpenAI API key
-2. Node.js and pnpm installed
+- Node.js v20.0+
+- pnpm (recommended) or npm
+- OpenAI API key
 
 ## Getting Started
 
-1. Copy `.env.example` to `.env` and add your OpenAI API key:
+1. Clone the repository and navigate to the project directory:
+
+   ```bash
+   git clone https://github.com/mastra-ai/mastra
+   cd examples/basics/evals/contextual-recall
+   ```
+
+2. Copy the environment variables file and add your OpenAI API key:
 
    ```bash
    cp .env.example .env
    ```
 
-2. Install dependencies:
+   Then edit `.env` and add your OpenAI API key:
+
+   ```env
+   OPENAI_API_KEY=sk-your-api-key-here
+   ```
+
+3. Install dependencies:
 
    ```bash
    pnpm install
    ```
 
-3. Run the example:
+4. Run the example:
+
    ```bash
    pnpm start
    ```
 
-## What to Expect
+## Overview
 
-The example demonstrates two scenarios:
+The Contextual Recall metric evaluates how well responses recall and use provided context information. It evaluates:
 
-1. High Recall: Using context about the Great Wall of China
+- Completeness of context recall
+- Accuracy of recalled information
+- Integration of context elements
+- Information preservation
 
-   - Shows how well the model recalls comprehensive historical information
-   - Demonstrates proper integration of multiple context points
+## Example Structure
 
-2. Partial Recall: Using context about DNA structure and function
-   - Shows how the model handles complex scientific information
-   - Demonstrates recall of technical details and concepts
+The example includes three scenarios:
 
-## Understanding the Results
+1. High Recall: Testing product features (all context recalled)
+2. Mixed Recall: Testing Python characteristics (partial context recall)
+3. Low Recall: Testing weather patterns (minimal context recall)
 
-The metric provides:
+Each scenario demonstrates:
 
-- A score between 0 and 1 indicating recall effectiveness
-- Detailed reasoning about what information was recalled
-- Analysis of how completely the context was used
+- Setting up the metric with context
+- Generating responses to evaluate
+- Measuring recall completeness
+- Interpreting the results with detailed reasoning
 
-## Additional Resources
+## Expected Output
 
-For more information, check out:
+The example will output:
 
-- [Contextual Recall Documentation](https://mastra.ai/docs/examples/evals/contextual-recall)
-- [Mastra Evals Documentation](https://mastra.ai/docs/examples/evals)
+- The context and query for each scenario
+- The generated response
+- The metric score (0-1)
+- Detailed reasoning for the score
+
+## Key Components
+
+- `ContextualRecallMetric`: The main metric class for evaluating recall
+- Configuration options:
+  - `context`: Array of context strings
+  - `scale`: Scale factor for the final score (default: 1)

@@ -31,27 +31,27 @@ This example demonstrates how to use Mastra's Content Similarity metric to evalu
 
 ## Overview
 
-The Content Similarity metric evaluates:
+The Content Similarity metric evaluates textual similarity between content. It evaluates:
 
-- Text similarity between two pieces of content
+- Lexical similarity (exact text matching)
+- Semantic similarity (meaning matching)
+- Structural similarity (format matching)
 - Paraphrase detection
-- Semantic overlap
-- String-based similarity measures
 
 ## Example Structure
 
 The example includes three scenarios:
 
-1. High Similarity: Testing similar but slightly different texts
-2. Low Similarity: Testing distinctly different texts
-3. Paraphrase Detection: Testing LLM-generated paraphrases
+1. High Similarity: Testing minor text variations ('quick brown fox' example)
+2. Mixed Similarity: Testing rephrased content ('brown fox leaps' variation)
+3. Low Similarity: Testing completely different content (fox vs cat example)
 
 Each scenario demonstrates:
 
 - Setting up the metric with custom parameters
-- Comparing different text variations
-- Analyzing similarity scores
-- Understanding the results
+- Comparing text variations
+- Measuring similarity levels
+- Interpreting the results with detailed reasoning
 
 ## Expected Output
 

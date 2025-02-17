@@ -53,10 +53,11 @@ The Bias metric evaluates responses for various forms of bias, including:
 
 ## Example Structure
 
-The example includes two scenarios:
+The example includes three scenarios:
 
-1. Potential Bias: Testing a response about leadership styles
-2. Balanced Response: Testing a response about hiring practices
+1. High Bias: Testing a response about leadership styles
+2. Mixed Bias: Testing a response about age groups at work
+3. Low Bias: Testing a response about hiring practices
 
 Each scenario demonstrates:
 
