@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.2.0-alpha.170",
+  "version": "0.2.0-alpha.171",
   "license": "MIT",
   "description": "cli for mastra",
   "type": "module",

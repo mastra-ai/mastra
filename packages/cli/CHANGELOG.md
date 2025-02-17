@@ -1,5 +1,13 @@
 # mastra
 
+## 0.2.0-alpha.171
+
+### Patch Changes
+
+- 391d5ea: Add @opentelemetry/instrumentation to pkg json of build artifcat
+- Updated dependencies [391d5ea]
+  - @mastra/deployer@0.1.0-alpha.63
+
 ## 0.2.0-alpha.170
 
 ### Patch Changes
