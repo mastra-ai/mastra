@@ -1,6 +1,6 @@
 {
   "name": "docs",
-  "version": "0.1.0-alpha.6",
+  "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",

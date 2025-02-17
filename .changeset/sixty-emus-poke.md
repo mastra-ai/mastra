@@ -1,5 +1,0 @@
----
-'create-mastra': patch
----
-
-Republish

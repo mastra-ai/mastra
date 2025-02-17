@@ -1,4 +1,0 @@
----
----
-
-Added more connection options
