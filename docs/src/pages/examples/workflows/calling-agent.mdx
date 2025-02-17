@@ -35,9 +35,9 @@ const replyAsSkipper = new Step({
     reply: z.string(),
   }),
   execute: async ({ context, mastra }) => {
-    const kowalski = mastra?.agents?.penguin;
+    const skipper = mastra?.agents?.penguin;
 
-    const res = await kowalski?.generate(
+    const res = await skipper?.generate(
       context?.triggerData?.message,
     );
     return { reply: res?.text || "" };

@@ -18,7 +18,3 @@ export type TestCase = {
 export type TestCaseWithContext = TestCase & {
   context: string[];
 };
-
-export type TestCaseWithInstructions = TestCase & {
-  instructions: string[];
-};

@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "mastra dev"
+    "dev": "mastra dev",
+    "start:workflow": "npx tsx src/index.ts"
   },
   "keywords": [],
   "author": "",

@@ -55,12 +55,15 @@ export function withSpan(options: {
         // @ts-ignore
         span.setAttribute('componentName', currentBaggage?.componentName);
         // @ts-ignore
+        span.setAttribute('runId', currentBaggage?.runId);
+        // @ts-ignore
       } else if (this && this.name) {
         // @ts-ignore
         span.setAttribute('componentName', this.name);
         // @ts-ignore
-        ctx = propagation.setBaggage(ctx, { componentName: this.name });
+        span.setAttribute('runId', this.runId);
         // @ts-ignore
+        ctx = propagation.setBaggage(ctx, { componentName: this.name, runId: this.runId });
       }
 
       let result;

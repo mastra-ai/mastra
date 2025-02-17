@@ -221,8 +221,10 @@ export class Telemetry {
       spanName: string;
       attributes?: Record<string, string>;
       skipIfNoTelemetry?: boolean;
+      parentSpan?: Span;
     },
   ): TMethod {
+    let ctx = otlpContext.active();
     const { skipIfNoTelemetry = true } = context;
 
     // Skip if no telemetry is active and skipIfNoTelemetry is true
@@ -248,10 +250,13 @@ export class Telemetry {
           span.setAttributes(context.attributes);
         }
 
-        let ctx = otlpContext.active();
         if (context.attributes?.componentName) {
           // @ts-ignore
-          ctx = propagation.setBaggage(ctx, { componentName: this.name });
+          ctx = propagation.setBaggage(ctx, {
+            // @ts-ignore
+            componentName: context.attributes.componentName,
+            runId: context.attributes.runId,
+          });
         } else {
           // @ts-ignore
           const currentBaggage = propagation.getBaggage(ctx);
@@ -260,12 +265,15 @@ export class Telemetry {
             // @ts-ignore
             span.setAttribute('componentName', currentBaggage?.componentName);
             // @ts-ignore
+            span.setAttribute('runId', currentBaggage?.runId);
+            // @ts-ignore
           } else if (this && this.name) {
             // @ts-ignore
             span.setAttribute('componentName', this.name);
             // @ts-ignore
-            ctx = propagation.setBaggage(ctx, { componentName: this.name });
+            span.setAttribute('runId', this.runId);
             // @ts-ignore
+            ctx = propagation.setBaggage(ctx, { componentName: this.name, runId: this.runId });
           }
         }
 
@@ -278,7 +286,10 @@ export class Telemetry {
           }
         });
 
-        const result = method(...args);
+        let result: any;
+        otlpContext.with(trace.setSpan(ctx, span), () => {
+          result = method(...args);
+        });
 
         function recordResult(res: any) {
           try {
@@ -321,6 +332,8 @@ class BaggageTracer implements Tracer {
     const currentBaggage = propagation.getBaggage(ctx);
     // @ts-ignore
     span.setAttribute('componentName', currentBaggage?.componentName);
+    // @ts-ignore
+    span.setAttribute('runId', currentBaggage?.runId);
 
     return span;
   }

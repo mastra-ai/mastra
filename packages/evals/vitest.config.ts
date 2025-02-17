@@ -7,5 +7,6 @@ export default defineConfig({
     exclude: ['**/node_modules/**', '**/dist/**'],
     maxConcurrency: 1,
     fileParallelism: false,
+    setupFiles: ['dotenv/config'],
   },
 });
