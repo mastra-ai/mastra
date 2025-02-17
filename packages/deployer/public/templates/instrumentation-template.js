@@ -76,3 +76,10 @@ const sdk = new NodeSDK({
 });
 
 sdk.start();
+
+// gracefully shut down the SDK on process exit
+process.on('SIGTERM', () => {
+  sdk.shutdown().catch(() => {
+    // do nothing
+  })
+});
