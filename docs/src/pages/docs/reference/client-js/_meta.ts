@@ -6,5 +6,6 @@ export default {
   workflows: "Workflows API",
   vectors: "Vectors API",
   logs: "Logs API",
+  telemetry: "Telemetry API",
   "error-handling": "Error Handling",
 };

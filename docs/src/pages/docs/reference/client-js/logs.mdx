@@ -17,7 +17,7 @@ const logs = await client.getLogs({
 Retrieve logs for a specific execution run:
 
 ```typescript
-const runLogs = await client.getLog({
+const runLogs = await client.getLogForRun({
   runId: "run-1",
   transportId: "transport-1",
 });
