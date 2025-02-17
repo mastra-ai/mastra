@@ -123,28 +123,29 @@ console.log(result.info.reason); // Explanation of the score
 
 ## Scoring Details
 
-The metric evaluates context positioning through:
+The metric evaluates context positioning through binary relevance assessment and position-based weighting.
 
-- Individual assessment of each context piece's relevance
-- Position-based weighting (1/position)
-- Binary relevance verdicts (yes/no) with detailed reasoning
-- Normalization against optimal ordering
+### Scoring Process
 
-The scoring process:
+1. Evaluates context relevance:
+   - Assigns binary verdict (yes/no) to each piece
+   - Records position in sequence
+   - Documents relevance reasoning
 
-1. Evaluates the relevance of each context piece
-2. Applies position weights (earlier positions weighted more heavily)
-3. Sums weighted relevance scores
-4. Normalizes against the maximum possible score
-5. Scales to configured range (default 0-1)
+2. Applies position weights:
+   - Earlier positions weighted more heavily (weight = 1/(position + 1))
+   - Sums weights of relevant pieces
+   - Normalizes by maximum possible score
 
-Score interpretation:
+Final score: `(weighted_sum / max_possible_sum) * scale`
 
-- 1.0: Most relevant context at the beginning, optimal ordering
-- 0.7-0.9: Relevant context mainly at the beginning
-- 0.4-0.6: Mixed ordering of relevant context
-- 0.1-0.3: Relevant context mainly at the end
-- 0: No relevant context or worst possible ordering
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: Optimal - most relevant context first
+- 0.7-0.9: Good - relevant context mostly early
+- 0.4-0.6: Mixed - relevant context scattered
+- 0.1-0.3: Suboptimal - relevant context mostly later
+- 0.0: Poor ordering - relevant context at end or missing
 
 ## Example with Analysis
 

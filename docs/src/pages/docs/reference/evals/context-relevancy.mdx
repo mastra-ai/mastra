@@ -123,21 +123,28 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
 
 ## Scoring Details
 
-The metric calculates relevancy through a two-step process:
-1. Extract individual statements from the retrieval context
-2. Evaluate each statement's relevance to the input query
+The metric evaluates how well retrieved context matches the query through binary relevance classification.
 
-The score is calculated using the formula:
-```
-Context Relevancy = (Number of Relevant Statements) / (Total Number of Statements)
-```
+### Scoring Process
 
-Score interpretation:
+1. Extracts statements from context:
+   - Breaks down context into meaningful units
+   - Preserves semantic relationships
+
+2. Evaluates statement relevance:
+   - Assesses each statement against query
+   - Counts relevant statements
+   - Calculates relevance ratio
+
+Final score: `(relevant_statements / total_statements) * scale`
+
+### Score interpretation
+(0 to scale, default 0-1)
 - 1.0: Perfect relevancy - all retrieved context is relevant
 - 0.7-0.9: High relevancy - most context is relevant with few irrelevant pieces
 - 0.4-0.6: Moderate relevancy - a mix of relevant and irrelevant context
 - 0.1-0.3: Low relevancy - mostly irrelevant context
-- 0: No relevancy - completely irrelevant context
+- 0.0: No relevancy - completely irrelevant context
 
 ## Example with Custom Configuration
 

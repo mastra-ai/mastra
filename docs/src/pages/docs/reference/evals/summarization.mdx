@@ -132,29 +132,39 @@ console.log(result.info); // Object containing detailed metrics about the summar
 
 ## Scoring Details
 
-The metric evaluates summaries through two components:
-
+The metric evaluates summaries through two essential components:
 1. **Alignment Score**: Measures factual correctness
-
    - Extracts claims from the summary
    - Verifies each claim against the original text
    - Assigns "yes", "no", or "unsure" verdicts
-   - Score = (number of supported claims) / (total claims)
 
 2. **Coverage Score**: Measures inclusion of key information
    - Generates key questions from the original text
    - Check if the summary answers these questions
-   - Score = (number of answerable questions) / (total questions)
+   - Checks information inclusion and assesses comprehensiveness
 
-The final score is calculated as: `min(alignmentScore, coverageScore)`
+### Scoring Process
 
-Score interpretation:
+1. Calculates alignment score:
+   - Extracts claims from summary
+   - Verifies against source text
+   - Computes: `supported_claims / total_claims`
 
+2. Determines coverage score:
+   - Generates questions from source
+   - Checks summary for answers
+   - Evaluates completeness
+   - Calculates: `answerable_questions / total_questions`
+
+Final score: `min(alignment_score, coverage_score) * scale`
+
+### Score interpretation
+(0 to scale, default 0-1)
 - 1.0: Perfect summary - completely factual and covers all key information
 - 0.7-0.9: Strong summary with minor omissions or slight inaccuracies
 - 0.4-0.6: Moderate quality with significant gaps or inaccuracies
 - 0.1-0.3: Poor summary with major omissions or factual errors
-- 0: Invalid summary - either completely inaccurate or missing critical information
+- 0.0: Invalid summary - either completely inaccurate or missing critical information
 
 ## Example with Analysis
 

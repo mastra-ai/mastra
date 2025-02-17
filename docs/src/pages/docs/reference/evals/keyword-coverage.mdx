@@ -81,16 +81,30 @@ console.log(result.info); // Object containing detailed metrics about keyword co
   ]}
 />
 
-## Keyword Processing Details
+## Scoring Details
 
-The metric processes keywords with the following features:
-- Ignores common words and stop words (e.g., "the", "a", "and")
+The metric evaluates keyword coverage by matching keywords with the following features:
+- Common word and stop word filtering (e.g., "the", "a", "and")
 - Case-insensitive matching
-- Handles variations in word forms
-- Ignores numbers by default
+- Word form variation handling
 - Special handling of technical terms and compound words
 
-Score interpretation:
+### Scoring Process
+
+1. Processes keywords from input and output:
+   - Filters out common words and stop words
+   - Normalizes case and word forms
+   - Handles special terms and compounds
+
+2. Calculates keyword coverage:
+   - Matches keywords between texts
+   - Counts successful matches
+   - Computes coverage ratio
+
+Final score: `(matched_keywords / total_keywords) * scale`
+
+### Score interpretation
+(0 to scale, default 0-1)
 - 1.0: Perfect keyword coverage
 - 0.7-0.9: Good coverage with most keywords present
 - 0.4-0.6: Moderate coverage with some keywords missing
