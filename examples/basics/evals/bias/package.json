@@ -2,8 +2,9 @@
   "name": "examples-bias",
   "private": true,
   "version": "0.0.0",
+  "type": "module",
   "scripts": {
-    "start": "pnpx tsx index.ts"
+    "start": "pnpx tsx --env-file .env index.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
