@@ -1,0 +1,140 @@
+---
+title: "Example: Content Similarity | Evals | Mastra Docs"
+description: Example of using the Content Similarity metric to evaluate text similarity between content.
+---
+
+# Content Similarity
+
+This example demonstrates how to use Mastra's Content Similarity metric to evaluate the textual similarity between two pieces of content.
+
+## Overview
+
+The example shows how to:
+
+1. Set up a Mastra agent for generating responses
+2. Configure the Content Similarity metric
+3. Compare different text variations
+4. Analyze similarity scores
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { ContentSimilarityMetric } from '@mastra/evals/nlp';
+```
+
+## Agent Creation
+
+Create a Mastra agent for generating responses:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const agent = new Agent({
+  name: 'Example Agent',
+  instructions: 'You are a helpful assistant that provides informative answers.',
+  model: openai('gpt-4o-mini'),
+});
+```
+
+## Metric Configuration
+
+Set up the Content Similarity metric with custom parameters:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const metric = new ContentSimilarityMetric({
+  ignoreCase: true,
+  ignoreWhitespace: true,
+});
+```
+
+## Example Usage
+
+### High Similarity Example
+
+Compare similar texts with slight variations:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+const text1 = "The quick brown fox jumps over the lazy dog.";
+const variation1 = "A quick brown fox jumped over a lazy dog";
+
+const result1 = await metric.measure(text1, variation1);
+console.log('High Similarity Result:', {
+  score: result1.score,
+  similarity: result1.info.similarity,
+});
+```
+
+### Low Similarity Example
+
+Compare distinctly different texts:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+const text2 = `
+  Machine learning is a branch of artificial intelligence (AI) that enables computers 
+  to learn and improve from experience without being explicitly programmed.
+`;
+const variation2 = `
+  Data science combines statistics, mathematics, and computer science 
+  to extract insights from structured and unstructured data.
+`;
+
+const result2 = await metric.measure(text2, variation2);
+console.log('Low Similarity Result:', {
+  score: result2.score,
+  similarity: result2.info.similarity,
+});
+```
+
+### Paraphrase Detection Example
+
+Evaluate LLM-generated paraphrases:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+const text3 = "Regular exercise improves cardiovascular health and boosts energy levels.";
+const query3 = "What are the benefits of exercise?";
+const response3 = await agent.generate(query3);
+
+const result3 = await metric.measure(text3, response3.text);
+console.log('Paraphrase Detection Result:', {
+  score: result3.score,
+  similarity: result3.info.similarity,
+});
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A similarity score between 0 and 1:
+   - 1.0: Perfect match
+   - 0.7-0.9: High similarity
+   - 0.4-0.6: Moderate similarity
+   - 0.1-0.3: Low similarity
+   - 0.0: No similarity
+
+2. Configuration options:
+   - `ignoreCase`: Whether to ignore letter casing
+   - `ignoreWhitespace`: Whether to normalize whitespace
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/content-similarity"
+  }
+/>

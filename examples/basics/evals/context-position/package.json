@@ -1,0 +1,16 @@
+{
+  "name": "examples-context-position",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "start": "pnpx tsx index.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@mastra/core": "workspace:*",
+    "@mastra/evals": "workspace:*"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.7"
+  }
+}

@@ -1,0 +1,139 @@
+---
+title: "Example: Context Position | Evals | Mastra Docs"
+description: Example of using the Context Position metric to evaluate sequential ordering of context usage.
+---
+
+# Context Position
+
+This example demonstrates how to use Mastra's Context Position metric to evaluate how well responses maintain the sequential order of context information.
+
+## Overview
+
+The example shows how to:
+
+1. Set up a Mastra agent for generating responses
+2. Configure the Context Position metric
+3. Evaluate sequential context usage
+4. Analyze position adherence
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { ContextPositionMetric } from '@mastra/evals/llm';
+```
+
+## Agent Creation
+
+Create a Mastra agent for generating responses:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const agent = new Agent({
+  name: 'Example Agent',
+  instructions: 'You are a helpful assistant that provides informative answers.',
+  model: openai('gpt-4o-mini'),
+});
+```
+
+## Metric Configuration
+
+Set up the Context Position metric with context:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const metric = new ContextPositionMetric(openai('gpt-4o-mini'), {
+  scale: 1,
+  context: [
+    "Ancient Rome was founded in 753 BCE.",
+    "The Roman Republic was established in 509 BCE.",
+    "Julius Caesar became dictator in 49 BCE.",
+    "The Roman Empire began with Augustus in 27 BCE.",
+  ],
+});
+```
+
+## Example Usage
+
+### Sequential Context Example
+
+Evaluate chronological historical events:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+const context1 = [
+  "Ancient Rome was founded in 753 BCE.",
+  "The Roman Republic was established in 509 BCE.",
+  "Julius Caesar became dictator in 49 BCE.",
+  "The Roman Empire began with Augustus in 27 BCE.",
+];
+
+const query1 = 'Describe the chronological development of Rome.';
+const response1 = await agent.generate(query1, { context: context1.join(' ') });
+
+const result1 = await metric1.measure(query1, response1.text);
+console.log('Sequential Context Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+});
+```
+
+### Non-sequential Context Example
+
+Evaluate topic-based information:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+const context2 = [
+  "Python is known for its readability.",
+  "JavaScript is widely used in web development.",
+  "Java is popular in enterprise applications.",
+  "Ruby emphasizes programmer happiness.",
+];
+
+const query2 = 'Compare different programming languages.';
+const response2 = await agent.generate(query2, { context: context2.join(' ') });
+
+const result2 = await metric2.measure(query2, response2.text);
+console.log('Non-sequential Context Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+});
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A position score between 0 and 1:
+   - 1.0: Perfect sequential ordering
+   - 0.7-0.9: Strong sequential flow
+   - 0.4-0.6: Moderate sequential flow
+   - 0.1-0.3: Weak sequential flow
+   - 0.0: No sequential ordering
+
+2. Detailed reasoning about:
+   - Sequential ordering adherence
+   - Information flow consistency
+   - Position-based relationships
+   - Context integration quality
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-position"
+  }
+/>
