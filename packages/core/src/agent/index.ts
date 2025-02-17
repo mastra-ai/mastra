@@ -273,7 +273,7 @@ export class Agent<
              For the end date, return the date 1 day after the end of the time period.
              Today's date is ${new Date().toISOString()} and the time is ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })} ${memorySystemMessage ? `\n\n${memorySystemMessage}` : ''}`,
             } as any,
-            ...memoryMessages,
+            ...this.sanitizeResponseMessages(memoryMessages),
             ...newMessages,
           ],
         };
@@ -384,10 +384,9 @@ export class Agent<
     }
   }
 
-  sanitizeResponseMessages(
-    messages: Array<CoreToolMessage | CoreAssistantMessage>,
-  ): Array<CoreToolMessage | CoreAssistantMessage> {
+  sanitizeResponseMessages(messages: Array<CoreMessage>): Array<CoreMessage> {
     let toolResultIds: Array<string> = [];
+    let toolCallIds: Array<string> = [];
 
     for (const message of messages) {
       if (message.role === 'tool') {
@@ -397,20 +396,34 @@ export class Agent<
           }
         }
       }
+      if (message.role === 'assistant' || message.role === 'user') {
+        for (const content of message.content) {
+          if (typeof content !== `string`) {
+            if (content.type === `tool-call`) {
+              toolCallIds.push(content.toolCallId);
+            }
+          }
+        }
+      }
     }
 
     const messagesBySanitizedContent = messages.map(message => {
-      if (message.role !== 'assistant') return message;
+      if (message.role !== 'assistant' && message.role !== `tool` && message.role !== `user`) return message;
 
       if (typeof message.content === 'string') return message;
 
-      const sanitizedContent = message.content.filter(content =>
-        content.type === 'tool-call'
-          ? toolResultIds.includes(content.toolCallId)
-          : content.type === 'text'
-            ? content.text.length > 0
-            : true,
-      );
+      const sanitizedContent = message.content.filter(content => {
+        if (content.type === `tool-call`) {
+          return toolResultIds.includes(content.toolCallId);
+        }
+        if (content.type === `text`) {
+          return content.text.trim() !== ``;
+        }
+        if (content.type === `tool-result`) {
+          return toolCallIds.includes(content.toolCallId);
+        }
+        return true;
+      });
 
       return {
         ...message,
@@ -418,7 +431,25 @@ export class Agent<
       };
     });
 
-    return messagesBySanitizedContent.filter(message => message.content.length > 0);
+    return messagesBySanitizedContent.filter(message => {
+      if (typeof message.content === `string`) {
+        return message.content !== '';
+      }
+
+      if (Array.isArray(message.content)) {
+        return (
+          message.content.length &&
+          message.content.every(c => {
+            if (c.type === `text`) {
+              return c.text && c.text !== '';
+            }
+            return true;
+          })
+        );
+      }
+
+      return true;
+    }) as Array<CoreMessage>;
   }
 
   convertTools({
@@ -564,7 +595,7 @@ export class Agent<
     let coreMessages: CoreMessage[] = [];
     let threadIdToUse = threadId;
 
-    this.log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, { runId });
+    this.log(LogLevel.DEBUG, `Saving user messages in memory for agent ${this.name}`, { runId });
     const saveMessageResponse = await this.saveMemory({
       threadId,
       resourceId,
