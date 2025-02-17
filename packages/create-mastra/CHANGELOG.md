@@ -1,5 +1,43 @@
 # create-mastra
 
+## 0.1.0
+
+### Minor Changes
+
+- 5916f9d: Update deps from fixed to ^
+- 8b416d9: Breaking changes
+- 3e9f0ca: Improve package size
+
+### Patch Changes
+
+- abdd42d: polish mastra create, fix create-mastra publishing
+- 7344dd7: Fix tool executor ui bugs
+- b97ca96: Tracing into default storage
+- 9c10484: new create-mastra version
+- 1d68b0c: update dane publishing
+- 255fc56: create mastra bundle correctly
+- edd70b5: changeset
+- cefd906: cli interactive api key configuration
+- 0b74006: Workflow updates
+- 9c10484: update all packages
+- 70dabd9: Fix broken publish
+- 21fe536: add keyword tags for packages and update readmes
+- aacfff6: publish new mastra, create-mastra
+- a18e96c: Array schemas for dev tool playground
+- b425845: Logger and execa logs
+- 7db55f6: Install aisdk model provider for in create-mastra init
+- 188ffa8: Fix cli create not parsing components flag
+- 932d86c: Fix build
+- de60682: Fix playground thread navigation
+- fee6d63: Republish
+- c18a0c0: Fix creation of new threads in dev playground
+- 32cd966: new mastra create command, publish create-mastra a way to quickly spin up mastra apps
+- 04434b6: Create separate logger file
+- 215a1c2: Fix bad cli create starter files copying
+- 9fb59d6: changeset
+- 2667e66: fix create mastra publishing
+- 4f1d1a1: Enforce types ann cleanup package.json
+
 ## 0.1.0-alpha.40
 
 ### Patch Changes
