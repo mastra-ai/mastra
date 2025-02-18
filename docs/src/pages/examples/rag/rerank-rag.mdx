@@ -1,25 +1,24 @@
 ---
-title: "Example: Re-ranking Results | Retrieval | RAG | Mastra Docs"
+title: "Example: Re-ranking Results with Tools | Retrieval | RAG | Mastra Docs"
 description: Example of implementing a RAG system with re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 
 import { GithubLink } from "../../../components/github-link";
 
-# Re-ranking Results
+# Re-ranking Results with Tools
 
-This example demonstrates how to implement a Retrieval-Augmented Generation (RAG) system with re-ranking using Mastra, OpenAI embeddings, and PGVector for vector storage.
+This example demonstrates how to use Mastra's vector query tool in order to implement a Retrieval-Augmented Generation (RAG) system with re-ranking using OpenAI embeddings, and PGVector for vector storage.
 
 ## Overview
 
-The system implements RAG with re-ranking using Mastra and OpenAI. Here's what it does:
+The system implements RAG with re-ranking using Mastra's vector query tool and OpenAI. Here's what it does:
 
 1. Sets up a Mastra agent with gpt-4o-mini for response generation
 2. Creates a vector query tool with re-ranking capabilities
-3. Chunks text documents into smaller segments
-4. Creates embeddings for these chunks
-5. Stores them in a PostgreSQL vector database
-6. Retrieves and re-ranks relevant chunks based on queries
-7. Generates context-aware responses using the Mastra agent
+3. Chunks text documents into smaller segments and creates embeddings from them
+4. Stores them in a PostgreSQL vector database
+5. Retrieves and re-ranks relevant chunks based on queries
+6. Generates context-aware responses using the Mastra agent
 
 ## Setup
 
@@ -28,6 +27,7 @@ The system implements RAG with re-ranking using Mastra and OpenAI. Here's what i
 Make sure to set up your environment variables:
 
 ```bash filename=".env"
+OPENAI_API_KEY=your_openai_api_key_here
 POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
@@ -189,3 +189,13 @@ const queries = [
 
 await answerQueries(queries);
 ```
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank-rag"
+  }
+/> 

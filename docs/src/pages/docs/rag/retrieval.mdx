@@ -282,22 +282,24 @@ Initial vector similarity search can sometimes miss nuanced relevance. Re-rankin
 - Applying more sophisticated relevance scoring
 - Using a method called cross-attention between query and documents
 
-Here's how to set up re-ranking:
+Here's how to use re-ranking:
 
 ```ts showLineNumbers copy
-const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'embeddings',
-  model: openai.embedding('text-embedding-3-small'),
-  reranker: {
-    model: openai('gpt-4o-mini'),
-  }
-});
+import { openai } from "@ai-sdk/openai";
+import { rerank } from "@mastra/rag";
+
+// Get initial results from vector search
+const initialResults = await pgVector.query("embeddings", queryEmbedding, 10);
+
+// Re-rank the results
+const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'));
 ```
+
+The re-ranked results combine vector similarity with semantic understanding to improve retrieval quality.
 
 For more details about re-ranking, see the [rerank()](/docs/reference/rag/rerank) method.
 
-For an example of how to use the re-ranking method, see the [Re-ranking Results](../../examples/rag/rerank-rag.mdx) example.
+For an example of how to use the re-ranking method, see the [Re-ranking Results](../../examples/rag/rerank.mdx) example.
 
 ### Graph-based Retrieval
 

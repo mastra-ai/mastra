@@ -1,6 +1,6 @@
-# Re-ranking Results with Tools
+# Re-ranking Results
 
-A practical example demonstrating how to use Mastra's vector query tool to re-rank results. This example shows how to use the tool with OpenAI embeddings and PGVector for vector storage and semantic search.
+A simple example showing how to do result re-ranking with RAG using Mastra, OpenAI, and PGVector.
 
 ## Prerequisites
 
@@ -15,7 +15,7 @@ A practical example demonstrating how to use Mastra's vector query tool to re-ra
 
 ```bash
 git clone https://github.com/mastra-ai/mastra
-cd examples/basics/rag/rerank-rag
+cd examples/basics/rag/rerank
 ```
 
 2. Copy the environment variables file and add your OpenAI API key:
