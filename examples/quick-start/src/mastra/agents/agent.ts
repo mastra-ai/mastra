@@ -1,6 +1,6 @@
-import { Agent } from '@mastra/core';
-import { openai } from '@ai-sdk/openai';
 import { groq } from '@ai-sdk/groq';
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core';
 
 export const catOne = new Agent({
   name: 'cat-one',
