@@ -9,6 +9,7 @@ const meta = {
   "contextual-recall": "Contextual Recall",
   faithfulness: "Faithfulness",
   hallucination: "Hallucination",
+  "keyword-coverage": "Keyword Coverage",
   "prompt-alignment": "Prompt Alignment",
   "custom-eval": "Custom Eval",
   toxicity: "Toxicity",
