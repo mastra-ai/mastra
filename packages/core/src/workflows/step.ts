@@ -1,8 +1,8 @@
-import { z } from 'zod';
+import type { z } from 'zod';
 
-import { type MastraPrimitives } from '../action';
+import type { MastraPrimitives } from '../action';
 
-import { type StepAction, type RetryConfig, type StepExecutionContext } from './types';
+import type { StepAction, RetryConfig, StepExecutionContext } from './types';
 
 export class Step<
   TStepId extends string = any,

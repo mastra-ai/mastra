@@ -1,4 +1,4 @@
-import { type LanguageModelV1 } from 'ai';
+import type { LanguageModelV1 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
@@ -51,8 +51,8 @@ export interface AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefine
   threadId?: string;
   memoryOptions?: MemoryConfig;
   runId?: string;
-  onFinish?: (result: string) => Promise<void> | void;
-  onStepFinish?: (step: string) => void;
+  onFinish?: (result: string) => unknown;
+  onStepFinish?: (step: string) => unknown;
   maxSteps?: number;
   output?: OutputType | Z;
   temperature?: number;

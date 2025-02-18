@@ -1,6 +1,6 @@
 import type { MetricResult, TestInfo } from '../eval';
 import type { MemoryConfig } from '../memory/types';
-import { type WorkflowRunState } from '../workflows';
+import type { WorkflowRunState } from '../workflows';
 
 export interface StorageColumn {
   type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'bigint';

@@ -1,25 +1,25 @@
-import {
-  type CoreMessage,
-  type DeepPartial,
-  type GenerateObjectResult,
-  type GenerateTextResult,
-  type LanguageModel,
-  type StreamObjectResult,
-  type StreamTextResult,
+import type {
+  CoreMessage,
+  DeepPartial,
+  GenerateObjectResult,
+  GenerateTextResult,
+  LanguageModel,
+  StreamObjectResult,
+  StreamTextResult,
 } from 'ai';
-import { type JSONSchema7 } from 'json-schema';
-import { ZodSchema } from 'zod';
+import type { JSONSchema7 } from 'json-schema';
+import type { ZodSchema } from 'zod';
 
-import {
-  type GenerateReturn,
-  type LLMInnerStreamOptions,
-  type LLMStreamObjectOptions,
-  type LLMStreamOptions,
-  type LLMTextObjectOptions,
-  type LLMTextOptions,
-  type StreamReturn,
+import type {
+  GenerateReturn,
+  LLMInnerStreamOptions,
+  LLMStreamObjectOptions,
+  LLMStreamOptions,
+  LLMTextObjectOptions,
+  LLMTextOptions,
+  StreamReturn,
 } from '../';
-import { type MastraPrimitives } from '../../action';
+import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { RegisteredLogger } from '../../logger';
 

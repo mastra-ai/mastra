@@ -1,16 +1,7 @@
-import {
-  context as otlpContext,
-  SpanStatusCode,
-  trace,
-  type Tracer,
-  propagation,
-  type SpanOptions,
-  type Context,
-  context,
-  type Span,
-} from '@opentelemetry/api';
+import { context as otlpContext, SpanStatusCode, trace, propagation, context } from '@opentelemetry/api';
+import type { Tracer, SpanOptions, Context, Span } from '@opentelemetry/api';
 
-import { type OtelConfig } from './types';
+import type { OtelConfig } from './types';
 import { hasActiveTelemetry } from './utility';
 
 // Add type declaration for global namespace

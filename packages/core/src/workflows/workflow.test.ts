@@ -5,7 +5,7 @@ import { createLogger } from '../logger';
 import { createTool } from '../tools';
 
 import { Step } from './step';
-import { WorkflowContext } from './types';
+import type { WorkflowContext } from './types';
 import { Workflow } from './workflow';
 
 describe('Workflow', () => {
