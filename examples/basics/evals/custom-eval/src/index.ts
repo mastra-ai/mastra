@@ -22,7 +22,7 @@ console.log('Metric Result:', {
 // Example 2: Recipe partially matches preferences
 const input2 = 'I am lactose intolerant but I love protein-rich meals.';
 
-console.log('\nExample 2 - Lactose Intolerant Meal:');
+console.log('Example 2 - Lactose Intolerant Meal:');
 console.log('Input:', input2);
 
 const response2 = await chefAgent.generate(input2);
@@ -37,7 +37,7 @@ console.log('Metric Result:', {
 // Example 3: Recipe conflicts with preferences
 const input3 = 'I am vegan, what can I cook for dinner?';
 
-console.log('\nExample 3 - Vegan Meal:');
+console.log('Example 3 - Vegan Meal:');
 console.log('Input:', input3);
 
 const response3 = await chefAgent.generate(input3);

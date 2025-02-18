@@ -17,7 +17,8 @@ export class DietaryPreferencesJudge extends MastraAgentJudge {
     verdict: string;
   }> {
     const dietaryPreferencesPrompt = generateDietaryPreferencesPrompt({ input, output });
-    const result = await this.agent.generate<{ ingredients: string[]; verdict: string }>(dietaryPreferencesPrompt, {
+    // @ts-ignore
+    const result = await this.agent.generate(dietaryPreferencesPrompt, {
       output: z.object({
         ingredients: z.array(z.string()),
         verdict: z.string(),
@@ -36,6 +37,7 @@ export class DietaryPreferencesJudge extends MastraAgentJudge {
     verdict: string;
   }): Promise<string> {
     const prompt = generateReasonPrompt(args);
+    // @ts-ignore
     const result = await this.agent.generate(prompt, {
       output: z.object({
         reason: z.string(),
