@@ -2585,7 +2585,7 @@ importers:
       '@ai-sdk/openai':
         specifier: latest
         version: 1.1.12(zod@3.24.1)
-      '@mastra/lint':
+      '@internal/lint':
         specifier: workspace:*
         version: link:../_config
       '@microsoft/api-extractor':

@@ -1,6 +1,6 @@
 {
-  "name": "@mastra/lint",
-  "version": "1.0.0",
+  "name": "@internal/lint",
+  "version": "0.0.0",
   "description": "",
   "type": "module",
   "main": "src/index.js",

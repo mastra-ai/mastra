@@ -90,7 +90,7 @@
   },
   "devDependencies": {
     "@ai-sdk/openai": "latest",
-    "@mastra/lint": "workspace:*",
+    "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.49.2",
     "@size-limit/preset-small-lib": "^11.1.4",
     "@types/json-schema": "^7.0.15",

@@ -1,4 +1,4 @@
-import { createConfig } from '@mastra/lint/eslint';
+import { createConfig } from '@internal/lint/eslint';
 
 const config = await createConfig();
 
