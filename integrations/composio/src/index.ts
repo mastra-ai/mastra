@@ -43,15 +43,19 @@ export class ComposioIntegration extends Integration<ComposioToolsetParams> {
 
   private generateTool(schema: Record<string, any>) {
     const parameters = jsonSchemaToModel(schema.parameters);
+
+    // use name as ID - if we use description as id, long descriptions will cause API errors - the id can't be longer than 63 chars
+    const id = schema.name;
+
     return createTool({
-      id: schema.description,
+      id,
       description: schema.description,
       inputSchema: parameters,
       execute: async ({ context }) => {
         try {
           const d = await this.client
             .getEntity(this.config.entityId!)
-            .execute(schema.name, context || {}, undefined, this.config.connectedAccountId!);
+            .execute(id, context || {}, undefined, this.config.connectedAccountId!);
           return d;
         } catch (e) {
           console.error(e);
