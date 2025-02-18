@@ -69,20 +69,21 @@ const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'
   topK: 3,
 });
 
-console.log('Query:', query);
 console.log('Initial Results:');
 initialResults.forEach((result, index) => {
-  console.log(`Result ${index + 1}:`);
-  console.log(`Text: ${JSON.stringify(result.metadata.text)}`);
-  console.log(`Score: ${result.score}`);
+  console.log(`Result ${index + 1}:`, {
+    text: result.metadata.text,
+    score: result.score,
+  });
 });
-console.log('===============================================');
+
 console.log('Re-ranked Results:');
 rerankedResults.forEach(({ result, score, details }, index) => {
-  console.log(`Result ${index + 1}:`);
-  console.log(`Text: ${JSON.stringify(result.metadata.text)}`);
-  console.log(`Score: ${score}`);
-  console.log(`Semantic Score: ${details.semantic}`);
-  console.log(`Vector Score: ${details.vector}`);
-  console.log(`Position Score: ${details.position}`);
+  console.log(`Result ${index + 1}:`, {
+    text: result.metadata.text,
+    score: score,
+    semantic: details.semantic,
+    vector: details.vector,
+    position: details.position,
+  });
 });
