@@ -1,4 +1,4 @@
-import { type IDeployer } from '@mastra/core/deployer';
+import type { IDeployer } from '@mastra/core/deployer';
 
 import { Deps } from '../build/deps.js';
 import { FileService } from '../build/fs';
