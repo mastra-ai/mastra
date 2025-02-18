@@ -9,7 +9,8 @@
   "dependencies": {
     "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:^",
-    "@mastra/evals": "workspace:^"
+    "@mastra/evals": "workspace:^",
+    "zod": "latest"
   },
   "devDependencies": {
     "dotenv": "^16.4.7"

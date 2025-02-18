@@ -15,7 +15,6 @@ Here is a very basic example of a custom eval that checks if the output contains
 
 ```typescript copy showLineNumbers filename="src/mastra/evals/keyword-coverage.ts"
 import { Metric, type MetricResult } from '@mastra/core/eval';
-import keyword_extractor from 'keyword-extractor';
 
 interface KeywordCoverageResult extends MetricResult {
   info: {
@@ -29,7 +28,7 @@ export class KeywordCoverageMetric extends Metric {
 
   constructor(keywords: string[]) {
     super();
-    this.referenceKeywords = new Set(this.keywords);
+    this.referenceKeywords = new Set(keywords);
   }
 
   async measure(input: string, output: string): Promise<KeywordCoverageResult> {
@@ -51,7 +50,7 @@ export class KeywordCoverageMetric extends Metric {
     return {
       score: coverage,
       info: {
-        totalKeywords: referenceKeywords.size,
+        totalKeywords: this.referenceKeywords.size,
         matchedKeywords: matchedKeywords.length,
       },
     };
