@@ -1,4 +1,4 @@
-import { type LanguageModel } from '@mastra/core/llm';
+import type { LanguageModel } from '@mastra/core/llm';
 import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';

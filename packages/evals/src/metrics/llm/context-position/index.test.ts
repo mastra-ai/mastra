@@ -1,7 +1,8 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
 
-import { isCloserTo, TestCaseWithContext } from '../utils';
+import type { TestCaseWithContext } from '../utils';
+import { isCloserTo } from '../utils';
 
 import { ContextPositionMetric } from './index';
 

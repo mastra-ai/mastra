@@ -1,7 +1,7 @@
 import { Metric } from '@mastra/core/eval';
-import { type LanguageModel } from '@mastra/core/llm';
+import type { LanguageModel } from '@mastra/core/llm';
 
-import { type MetricResultWithReason } from '../types';
+import type { MetricResultWithReason } from '../types';
 import { roundToTwoDecimals } from '../utils';
 
 import { SummarizationJudge } from './metricJudge';
