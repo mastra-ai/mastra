@@ -4,16 +4,15 @@ import util from 'node:util';
 import color from 'picocolors';
 
 import {
-  type Components,
   createComponentsDir,
   createMastraDir,
   getAISDKPackage,
   getAPIKey,
-  type LLMProvider,
   writeAPIKey,
   writeCodeSample,
   writeIndexFile,
 } from './utils';
+import type { Components, LLMProvider } from './utils';
 
 const s = p.spinner();
 

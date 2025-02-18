@@ -1,5 +1,5 @@
 import { FileService } from '@mastra/deployer';
-import { ChildProcess } from 'child_process';
+import type { ChildProcess } from 'child_process';
 import { execa } from 'execa';
 import { join } from 'path';
 
@@ -116,6 +116,7 @@ export async function dev({ port, dir, root }: { dir?: string; root?: string; po
   watcher.on('event', event => {
     if (event.code === 'BUNDLE_END') {
       logger.info('[Mastra Dev] - Bundling finished, restarting server...');
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
       rebundleAndRestart(dotMastraPath, port, bundler);
     }
   });
@@ -125,6 +126,8 @@ export async function dev({ port, dir, root }: { dir?: string; root?: string; po
     if (currentServerProcess) {
       currentServerProcess.kill();
     }
+
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
     watcher.close();
     process.exit(0);
   });

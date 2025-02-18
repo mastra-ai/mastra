@@ -2,7 +2,8 @@ import * as p from '@clack/prompts';
 import color from 'picocolors';
 
 import { init } from '../init/init';
-import { interactivePrompt, type LLMProvider } from '../init/utils';
+import { interactivePrompt } from '../init/utils';
+import type { LLMProvider } from '../init/utils';
 
 import { createMastraProject } from './utils';
 

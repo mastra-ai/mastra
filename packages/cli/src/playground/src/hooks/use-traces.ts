@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 
 import usePolling from '@/lib/polls';
 
-import { RefinedTrace } from '@/domains/traces/types';
+import type { RefinedTrace } from '@/domains/traces/types';
 import { refineTraces } from '@/domains/traces/utils';
 
 export const useTraces = (componentName: string) => {

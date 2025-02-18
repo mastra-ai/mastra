@@ -1,6 +1,6 @@
 import { createContext, useState } from 'react';
 
-import { Span, RefinedTrace } from '../types';
+import type { Span, RefinedTrace } from '../types';
 
 type TraceContextType = {
   isOpen: boolean;

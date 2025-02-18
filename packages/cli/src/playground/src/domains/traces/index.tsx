@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/lib/utils';
 
 import { TraceContext } from './context/trace-context';
-import { RefinedTrace, Span, SpanStatus } from './types';
+import type { RefinedTrace, Span, SpanStatus } from './types';
 import { formatDuration, formatOtelTimestamp } from './utils';
 
 export function Traces({ traces }: { traces: RefinedTrace[] }) {

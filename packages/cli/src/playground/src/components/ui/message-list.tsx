@@ -1,4 +1,5 @@
-import { ChatMessage, type ChatMessageProps, type Message } from '../../components/ui/chat-message';
+import { ChatMessage } from '../../components/ui/chat-message';
+import type { ChatMessageProps, Message } from '../../components/ui/chat-message';
 import { TypingIndicator } from '../../components/ui/typing-indicator';
 
 type AdditionalMessageOptions = Omit<ChatMessageProps, keyof Message>;

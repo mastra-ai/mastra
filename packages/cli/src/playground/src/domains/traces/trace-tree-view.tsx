@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 import { TraceContext } from './context/trace-context';
-import { SpanNode } from './types';
+import type { SpanNode } from './types';
 import { formatDuration } from './utils';
 
 export function TreeNode({ node, depth = 0 }: { node: SpanNode; depth?: number }) {

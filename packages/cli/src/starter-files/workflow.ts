@@ -121,11 +121,11 @@ const planActivities = new Step({
   execute: async ({ context, mastra }) => {
     const forecast = context?.getStepPayload<z.infer<typeof forecastSchema>>('fetch-weather');
 
-    if (!forecast) {
+    if (!forecast || forecast.length === 0) {
       throw new Error('Forecast data not found');
     }
 
-    const prompt = `Based on the following weather forecast for ${forecast[0].location}, suggest appropriate activities:
+    const prompt = `Based on the following weather forecast for ${forecast[0]?.location}, suggest appropriate activities:
       ${JSON.stringify(forecast, null, 2)}
       `;
 

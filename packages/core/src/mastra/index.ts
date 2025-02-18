@@ -11,6 +11,24 @@ import type { MastraTTS } from '../tts';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 
+export interface Config<
+  TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
+  TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
+  TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
+  TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
+  TLogger extends Logger = Logger,
+> {
+  memory?: MastraMemory;
+  agents?: TAgents;
+  storage?: MastraStorage;
+  vectors?: TVectors;
+  logger?: TLogger | false;
+  workflows?: TWorkflows;
+  tts?: TTTS;
+  telemetry?: OtelConfig;
+  deployer?: MastraDeployer;
+}
+
 @InstrumentClass({
   prefix: 'mastra',
   excludeMethods: ['getLogger', 'getTelemetry'],
@@ -32,17 +50,7 @@ export class Mastra<
   storage?: MastraStorage;
   memory?: MastraMemory;
 
-  constructor(config?: {
-    memory?: MastraMemory;
-    agents?: TAgents;
-    storage?: MastraStorage;
-    vectors?: TVectors;
-    logger?: TLogger | false;
-    workflows?: TWorkflows;
-    tts?: TTTS;
-    telemetry?: OtelConfig;
-    deployer?: MastraDeployer;
-  }) {
+  constructor(config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger>) {
     /*
       Logger
     */
