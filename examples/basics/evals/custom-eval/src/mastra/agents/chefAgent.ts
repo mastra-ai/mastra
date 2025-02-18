@@ -3,14 +3,13 @@ import { Agent } from '@mastra/core/agent';
 
 import { RecipeCompletenessMetric } from '../evals';
 
-const model = openai('gpt-4o-mini');
 export const chefAgent = new Agent({
   name: 'chef-agent',
   instructions:
     'You are Michel, a practical and experienced home chef' +
     'You help people cook with whatever ingredients they have available.',
-  model,
+  model: openai('gpt-4o-mini'),
   evals: {
-    recipeCompleteness: new RecipeCompletenessMetric(model),
+    recipeCompleteness: new RecipeCompletenessMetric(openai('gpt-4o-mini')),
   },
 });
