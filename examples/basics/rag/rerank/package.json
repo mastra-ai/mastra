@@ -1,0 +1,17 @@
+{
+  "name": "examples-rerank",
+  "type": "module",
+  "scripts": {
+    "start": "pnpx tsx --env-file .env index.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@mastra/rag": "workspace:*",
+    "@mastra/pg": "workspace:*",
+    "ai": "latest"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.7"
+  },
+  "version": "0.0.1-alpha.3"
+}

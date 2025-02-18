@@ -22,7 +22,7 @@ const meta = {
   "basic-rag": "Basic RAG",
   "cleanup-rag": "Optimizing Information Density",
   "filter-rag": "Metadata Filtering",
-  "rerank-rag": "Re-ranking Results",
+  "rerank-rag": "Re-ranking Results with Tools",
   "cot-rag": "Chain of Thought Prompting",
   "cot-workflow-rag": "Chain of Thought Prompting w/Workflow",
   "graph-rag": "Graph RAG",

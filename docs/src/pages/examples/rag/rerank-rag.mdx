@@ -1,13 +1,13 @@
 ---
-title: "Example: Re-ranking Results | Retrieval | RAG | Mastra Docs"
+title: "Example: Re-ranking Results with Tools | Retrieval | RAG | Mastra Docs"
 description: Example of implementing a RAG system with re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 
 import { GithubLink } from "../../../components/github-link";
 
-# Re-ranking Results
+# Re-ranking Results with Tools
 
-This example demonstrates how to implement a Retrieval-Augmented Generation (RAG) system with re-ranking using Mastra, OpenAI embeddings, and PGVector for vector storage.
+This example demonstrates how to use Mastra's vector query tool in order to implement a Retrieval-Augmented Generation (RAG) system with re-ranking using Mastra, OpenAI embeddings, and PGVector for vector storage.
 
 ## Overview
 
@@ -189,3 +189,13 @@ const queries = [
 
 await answerQueries(queries);
 ```
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank-rag"
+  }
+/> 
