@@ -1,6 +1,11 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"],
+      "env": ["RAPID_API_KEY", "ANTHROPIC_API_KEY"]
+    },
     "lint": {
       "dependsOn": ["^lint"]
     },
