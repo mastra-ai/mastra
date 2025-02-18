@@ -1,2 +1,2 @@
 export * from './keyword-custom';
-export * from './dietary-preferences';
+export * from './recipe-completeness';

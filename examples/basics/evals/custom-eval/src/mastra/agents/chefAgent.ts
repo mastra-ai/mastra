@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 
-import { DietaryPreferencesMetric } from '../evals';
+import { RecipeCompletenessMetric } from '../evals';
 
 const model = openai('gpt-4o-mini');
 export const chefAgent = new Agent({
@@ -11,6 +11,6 @@ export const chefAgent = new Agent({
     'You help people cook with whatever ingredients they have available.',
   model,
   evals: {
-    dietaryPreferences: new DietaryPreferencesMetric(model),
+    recipeCompleteness: new RecipeCompletenessMetric(model),
   },
 });

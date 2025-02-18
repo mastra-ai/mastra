@@ -2,25 +2,24 @@ import { type LanguageModel } from '@mastra/core/llm';
 import { MastraAgentJudge } from '@mastra/evals/judge';
 import { z } from 'zod';
 
-import { DIETARY_AGENT_INSTRUCTIONS, generateDietaryPreferencesPrompt, generateReasonPrompt } from './prompts';
+import { RECIPE_COMPLETENESS_INSTRUCTIONS, generateCompletenessPrompt, generateReasonPrompt } from './prompts';
 
-export class DietaryPreferencesJudge extends MastraAgentJudge {
+export class RecipeCompletenessJudge extends MastraAgentJudge {
   constructor(model: LanguageModel) {
-    super('Dietary Preferences', DIETARY_AGENT_INSTRUCTIONS, model);
+    super('Recipe Completeness', RECIPE_COMPLETENESS_INSTRUCTIONS, model);
   }
 
   async evaluate(
     input: string,
     output: string,
   ): Promise<{
-    ingredients: string[];
+    missing: string[];
     verdict: string;
   }> {
-    const dietaryPreferencesPrompt = generateDietaryPreferencesPrompt({ input, output });
-    // @ts-ignore
-    const result = await this.agent.generate(dietaryPreferencesPrompt, {
+    const completenessPrompt = generateCompletenessPrompt({ input, output });
+    const result = await this.agent.generate(completenessPrompt, {
       output: z.object({
-        ingredients: z.array(z.string()),
+        missing: z.array(z.string()),
         verdict: z.string(),
       }),
     });
@@ -33,11 +32,10 @@ export class DietaryPreferencesJudge extends MastraAgentJudge {
     output: string;
     score: number;
     scale: number;
-    ingredients: string[];
+    missing: string[];
     verdict: string;
   }): Promise<string> {
     const prompt = generateReasonPrompt(args);
-    // @ts-ignore
     const result = await this.agent.generate(prompt, {
       output: z.object({
         reason: z.string(),
