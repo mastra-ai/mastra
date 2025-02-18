@@ -1,8 +1,8 @@
 import type { Metric } from '../eval';
 import type { ToolAction } from '../tools';
 
-import type { AgentConfig } from './types';
 import { Agent as BaseAgent } from './index';
+import type { AgentConfig } from './types';
 
 export class Agent<
   TTools extends Record<string, ToolAction<any, any, any, any>> = Record<string, ToolAction<any, any, any, any>>,

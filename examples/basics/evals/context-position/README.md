@@ -43,26 +43,27 @@ This example demonstrates how to use Mastra's Context Position metric to evaluat
 
 ## Overview
 
-The Context Position metric evaluates:
+The Context Position metric evaluates how well responses maintain the sequential order of context information. It evaluates:
 
-- Sequential ordering of information
-- Temporal consistency
-- Logical flow of context usage
-- Position-aware context integration
+- Position of information in context
+- Order of information in response
+- Relevance to query position
+- Information flow and structure
 
 ## Example Structure
 
-The example includes two scenarios:
+The example includes three scenarios:
 
-1. Sequential Context: Testing chronological historical events
-2. Non-sequential Context: Testing topic-based information
+1. High Position: Testing capital of France (using first context item)
+2. Mixed Position: Testing elephant facts (using scattered context)
+3. Low Position: Testing historical events (using reversed context)
 
 Each scenario demonstrates:
 
-- Setting up the metric with context arrays
-- Generating responses with ordered information
+- Setting up the metric with ordered context
+- Generating responses to evaluate
 - Measuring position adherence
-- Analyzing the results
+- Interpreting the results with detailed reasoning
 
 ## Expected Output
 

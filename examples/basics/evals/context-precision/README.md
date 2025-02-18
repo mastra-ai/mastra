@@ -43,26 +43,27 @@ This example demonstrates how to use Mastra's Context Precision metric to evalua
 
 ## Overview
 
-The Context Precision metric evaluates:
+The Context Precision metric evaluates how accurately responses use provided context information. It evaluates:
 
-- Accuracy of context usage
-- Relevance to the query
-- Information fidelity
-- Context integration quality
+- Relevance of context to query
+- Accuracy of information usage
+- Context selection precision
+- Response conciseness
 
 ## Example Structure
 
-The example includes two scenarios:
+The example includes three scenarios:
 
-1. High Precision: Testing specific scientific information
-2. Mixed Precision: Testing broader topic information
+1. High Precision: Testing photosynthesis explanation (all context relevant)
+2. Mixed Precision: Testing volcano types (some irrelevant context)
+3. Low Precision: Testing weather patterns (mostly irrelevant context)
 
 Each scenario demonstrates:
 
-- Setting up the metric with context arrays
-- Generating responses with context
-- Measuring precision of usage
-- Analyzing the results
+- Setting up the metric with varied context
+- Generating responses to evaluate
+- Measuring context precision
+- Interpreting the results with detailed reasoning
 
 ## Expected Output
 

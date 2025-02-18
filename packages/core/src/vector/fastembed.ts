@@ -1,7 +1,7 @@
-import path from 'path';
 import { experimental_customProvider } from 'ai';
 // @ts-ignore no types for this package
 import node_modulesPath from 'node_modules-path';
+import path from 'path';
 
 let cachedPath: false | string = false;
 function getModelCachePath() {

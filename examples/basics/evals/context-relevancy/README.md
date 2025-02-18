@@ -1,55 +1,82 @@
-# Context Relevancy Example
+# Context Relevancy Metric Example
 
-This example demonstrates how to use the Context Relevancy metric to evaluate how well a response uses relevant context information.
+This example demonstrates how to use Mastra's Context Relevancy metric to evaluate how well responses use relevant context information.
 
 ## Prerequisites
 
-1. OpenAI API key
-2. Node.js and pnpm installed
+- Node.js v20.0+
+- pnpm (recommended) or npm
+- OpenAI API key
 
 ## Getting Started
 
-1. Copy `.env.example` to `.env` and add your OpenAI API key:
+1. Clone the repository and navigate to the project directory:
+
+   ```bash
+   git clone https://github.com/mastra-ai/mastra
+   cd examples/basics/evals/context-relevancy
+   ```
+
+2. Copy the environment variables file and add your OpenAI API key:
 
    ```bash
    cp .env.example .env
    ```
 
-2. Install dependencies:
+   Then edit `.env` and add your OpenAI API key:
+
+   ```env
+   OPENAI_API_KEY=sk-your-api-key-here
+   ```
+
+3. Install dependencies:
 
    ```bash
    pnpm install
    ```
 
-3. Run the example:
+4. Run the example:
+
    ```bash
    pnpm start
    ```
 
-## What to Expect
+## Overview
 
-The example demonstrates two scenarios:
+The Context Relevancy metric evaluates how well responses use relevant context information. It evaluates:
 
-1. High Relevancy: Using context about photosynthesis to answer a question about oxygen production
+- Relevance of context to query
+- Context selection and usage
+- Information accuracy
+- Response completeness
 
-   - Shows how well the model uses highly relevant context
-   - Demonstrates proper context selection for the query
+## Example Structure
 
-2. Mixed Relevancy: Using context about brain function to answer a specific question about visual processing
-   - Shows how the model handles mixed relevancy context
-   - Demonstrates context filtering and selection
+The example includes three scenarios:
 
-## Understanding the Results
+1. High Relevancy: Testing Einstein's achievements (all context relevant)
+2. Mixed Relevancy: Testing solar eclipses (some irrelevant context)
+3. Low Relevancy: Testing weather patterns (mostly irrelevant context)
 
-The metric provides:
+Each scenario demonstrates:
 
-- A score between 0 and 1 indicating context relevancy
-- Detailed reasoning about which context was relevant and why
-- Analysis of how well the response used the relevant context
+- Setting up the metric with varied context
+- Generating responses to evaluate
+- Measuring context relevancy
+- Interpreting the results with detailed reasoning
 
-## Additional Resources
+## Expected Output
 
-For more information, check out:
+The example will output:
 
-- [Context Relevancy Documentation](https://mastra.ai/docs/examples/evals/context-relevancy)
-- [Mastra Evals Documentation](https://mastra.ai/docs/examples/evals)
+- The context and query for each scenario
+- The generated response
+- The metric score (0-1)
+- Detailed reasoning for the score
+
+## Key Components
+
+- `ContextRelevancyMetric`: The main metric class for evaluating context relevancy
+- Configuration options:
+  - `context`: Array of context strings
+  - `scale`: Scale factor for the final score (default: 1)

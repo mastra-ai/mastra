@@ -16,7 +16,7 @@ const query1 = 'Tell me about the Tesla Model 3.';
 const response1 =
   'The Tesla Model 3 was introduced in 2017. It can travel up to 358 miles on a single charge and the base version goes from 0 to 60 mph in 5.8 seconds.';
 
-console.log('\nExample 1 - High Faithfulness:');
+console.log('Example 1 - High Faithfulness:');
 console.log('Context:', context1);
 console.log('Query:', query1);
 console.log('Response:', response1);
@@ -42,7 +42,7 @@ const query2 = 'What can you tell me about Python?';
 const response2 =
   'Python was created by Guido van Rossum and released in 1991. It is the most popular programming language today and is used by millions of developers worldwide.';
 
-console.log('\nExample 2 - Mixed Faithfulness:');
+console.log('Example 2 - Mixed Faithfulness:');
 console.log('Context:', context2);
 console.log('Query:', query2);
 console.log('Response:', response2);
@@ -68,7 +68,7 @@ const query3 = 'What do we know about Mars?';
 const response3 =
   'Mars is the third planet from the Sun. It has a thick atmosphere rich in oxygen and nitrogen, and is orbited by three large moons.';
 
-console.log('\nExample 3 - Low Faithfulness:');
+console.log('Example 3 - Low Faithfulness:');
 console.log('Context:', context3);
 console.log('Query:', query3);
 console.log('Response:', response3);

@@ -1,6 +1,6 @@
-import { Transform } from 'stream';
 import pino from 'pino';
 import pretty from 'pino-pretty';
+import { Transform } from 'stream';
 
 import type { Run } from '../run/types';
 

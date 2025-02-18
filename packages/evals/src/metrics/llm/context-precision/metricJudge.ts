@@ -34,17 +34,17 @@ export class ContextPrecisionJudge extends MastraAgentJudge {
     return result.object.verdicts;
   }
 
-  async getReason(
-    input: string,
-    actualOutput: string,
-    score: number,
-    scale: number,
+  async getReason(args: {
+    input: string;
+    output: string;
+    score: number;
+    scale: number;
     verdicts: {
       verdict: string;
       reason: string;
-    }[],
-  ): Promise<string> {
-    const prompt = generateReasonPrompt({ input, output: actualOutput, verdicts, score, scale });
+    }[];
+  }): Promise<string> {
+    const prompt = generateReasonPrompt(args);
     const result = await this.agent.generate(prompt, {
       output: z.object({
         reason: z.string(),

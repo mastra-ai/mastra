@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import type {
   AssistantContent,
   CoreAssistantMessage,
@@ -10,6 +9,7 @@ import type {
   UserContent,
   LanguageModelV1,
 } from 'ai';
+import { randomUUID } from 'crypto';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema } from 'zod';

@@ -30,26 +30,27 @@ This example demonstrates how to use Mastra's Completeness metric to evaluate ho
 
 ## Overview
 
-The Completeness metric evaluates how well a response covers key elements from the input by:
+The Completeness metric evaluates how thoroughly responses cover key elements from the input. It evaluates:
 
-- Extracting important elements (nouns, verbs, entities)
-- Comparing input and output elements
-- Calculating coverage scores
-- Identifying missing elements
+- Coverage of important elements (nouns, verbs, entities)
+- Presence of required information
+- Missing or incomplete elements
+- Element count and distribution
 
 ## Example Structure
 
-The example includes two scenarios:
+The example includes three scenarios:
 
-1. Complete Coverage: Testing a response about planets in the solar system
-2. Partial Coverage: Testing a response about breakfast components
+1. High Completeness: Testing primary colors enumeration
+2. Mixed Completeness: Testing partial color listing
+3. Low Completeness: Testing seasons enumeration
 
 Each scenario demonstrates:
 
-- Setting up the metric
-- Providing context and generating a response
-- Measuring completeness
-- Analyzing missing elements
+- Setting up the metric with input elements
+- Generating responses to evaluate
+- Measuring element coverage
+- Interpreting the results with detailed reasoning
 
 ## Expected Output
 

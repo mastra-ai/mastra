@@ -58,7 +58,7 @@ const metric1 = new ContextPrecisionMetric(openai('gpt-4o-mini'), {
 const query1 = 'What is photosynthesis and how does it work?';
 const response1 = 'Photosynthesis is a process where plants convert sunlight into energy using chlorophyll, producing oxygen as a byproduct.';
 
-console.log('\nExample 1 - High Precision:');
+console.log('Example 1 - High Precision:');
 console.log('Context:', context1);
 console.log('Query:', query1);
 console.log('Response:', response1);
@@ -68,6 +68,8 @@ console.log('Metric Result:', {
   score: result1.score,
   reason: result1.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 1, reason: 'The context uses all relevant information and does not include any irrelevant information.' }
 ```
 
 ### Mixed Precision Example
@@ -89,7 +91,7 @@ const metric2 = new ContextPrecisionMetric(openai('gpt-4o-mini'), {
 const query2 = 'What are the different types of volcanoes?';
 const response2 = 'Volcanoes can be classified as active, dormant, or extinct based on their activity status.';
 
-console.log('\nExample 2 - Mixed Precision:');
+console.log('Example 2 - Mixed Precision:');
 console.log('Context:', context2);
 console.log('Query:', query2);
 console.log('Response:', response2);
@@ -99,6 +101,8 @@ console.log('Metric Result:', {
   score: result2.score,
   reason: result2.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 0.5, reason: 'The context uses some relevant information and includes some irrelevant information.' }
 ```
 
 ### Low Precision Example
@@ -120,7 +124,7 @@ const metric3 = new ContextPrecisionMetric(openai('gpt-4o-mini'), {
 const query3 = 'Which direction does the Nile River flow?';
 const response3 = 'The Nile River flows northward.';
 
-console.log('\nExample 3 - Low Precision:');
+console.log('Example 3 - Low Precision:');
 console.log('Context:', context3);
 console.log('Query:', query3);
 console.log('Response:', response3);
@@ -130,6 +134,8 @@ console.log('Metric Result:', {
   score: result3.score,
   reason: result3.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 0.2, reason: 'The context only has one relevant piece, which is at the end.' }
 ```
 
 ## Understanding the Results
@@ -143,7 +149,7 @@ The metric provides:
    - 0.1-0.3: Low precision - few context pieces are relevant
    - 0.0: No precision - no context pieces are relevant
 
-2. Detailed analysis of:
+2. Detailed reason for the score, including analysis of:
    - Relevance of each context piece
    - Usage in the response
    - Contribution to answering the query

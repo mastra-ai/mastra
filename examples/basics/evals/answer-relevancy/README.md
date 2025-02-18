@@ -54,7 +54,8 @@ The Answer Relevancy metric measures how well an LLM's response aligns with and 
 The example includes two scenarios:
 
 1. High Relevancy: Where the response closely matches the context
-2. Low Relevancy: Where the response and context are mismatched
+2. Partially Relevancy: Where the response partially matches the context
+3. Low Relevancy: Where the response and context are mismatched
 
 Each scenario demonstrates:
 

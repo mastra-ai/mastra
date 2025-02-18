@@ -1,55 +1,81 @@
-# Hallucination Example
+# Hallucination Metric Example
 
-This example demonstrates how to use the Hallucination metric to evaluate whether responses contain information not supported by the provided context.
+This example demonstrates how to use Mastra's Hallucination metric to evaluate whether responses contain information not supported by the provided context.
 
 ## Prerequisites
 
-1. OpenAI API key
-2. Node.js and pnpm installed
+- Node.js v20.0+
+- pnpm (recommended) or npm
+- OpenAI API key
 
 ## Getting Started
 
-1. Copy `.env.example` to `.env` and add your OpenAI API key:
+1. Clone the repository and navigate to the project directory:
+
+   ```bash
+   git clone https://github.com/mastra-ai/mastra
+   cd examples/basics/evals/hallucination
+   ```
+
+2. Copy the environment variables file and add your OpenAI API key:
 
    ```bash
    cp .env.example .env
    ```
 
-2. Install dependencies:
+   Then edit `.env` and add your OpenAI API key:
+
+   ```env
+   OPENAI_API_KEY=sk-your-api-key-here
+   ```
+
+3. Install dependencies:
 
    ```bash
    pnpm install
    ```
 
-3. Run the example:
+4. Run the example:
+
    ```bash
    pnpm start
    ```
 
-## What to Expect
+## Overview
 
-The example demonstrates two scenarios:
+The Hallucination metric evaluates whether responses contain information not supported by the provided context. It evaluates:
 
-1. Low Hallucination: Using well-defined historical facts about the Eiffel Tower
+- Whether the response adds unsupported information
+- How accurately the context information is used
+- The degree of factual deviation from the context
 
-   - Shows how the model stays within provided context
-   - Demonstrates accurate fact adherence
+## Example Structure
 
-2. High Hallucination Risk: Using complex quantum computing concepts
-   - Shows how the model handles technical topics
-   - Demonstrates hallucination detection in complex scenarios
+The example includes three scenarios:
 
-## Understanding the Results
+1. No Hallucination: Testing iPhone release details
+2. Mixed Hallucination: Testing Star Wars movie facts
+3. High Hallucination: Testing scientific concepts
 
-The metric provides:
+Each scenario demonstrates:
 
-- A score between 0 and 1 indicating hallucination level
-- Detailed reasoning about unsupported claims
-- Analysis of factual accuracy
+- Setting up the metric with context
+- Generating a response to evaluate
+- Measuring hallucination levels
+- Interpreting the results with detailed reasoning
 
-## Additional Resources
+## Expected Output
 
-For more information, check out:
+The example will output:
 
-- [Hallucination Documentation](https://mastra.ai/docs/examples/evals/hallucination)
-- [Mastra Evals Documentation](https://mastra.ai/docs/examples/evals)
+- The context and query for each scenario
+- The generated response
+- The metric score (0-1)
+- Detailed reasoning for the score
+
+## Key Components
+
+- `HallucinationMetric`: The main metric class for evaluating hallucination
+- Configuration options:
+  - `context`: Array of context strings
+  - `scale`: Scale factor for the final score (default: 1)

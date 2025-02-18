@@ -57,7 +57,7 @@ const metric1 = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
 const query1 = 'What were some of Einstein\'s achievements?';
 const response1 = 'Einstein won the Nobel Prize for discovering the photoelectric effect and published his groundbreaking theory of relativity.';
 
-console.log('\nExample 1 - High Relevancy:');
+console.log('Example 1 - High Relevancy:');
 console.log('Context:', context1);
 console.log('Query:', query1);
 console.log('Response:', response1);
@@ -67,6 +67,8 @@ console.log('Metric Result:', {
   score: result1.score,
   reason: result1.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 1, reason: 'The context uses all relevant information and does not include any irrelevant information.' }
 ```
 
 ### Mixed Relevancy Example
@@ -88,7 +90,7 @@ const metric2 = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
 const query2 = 'What causes solar eclipses?';
 const response2 = 'Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.';
 
-console.log('\nExample 2 - Mixed Relevancy:');
+console.log('Example 2 - Mixed Relevancy:');
 console.log('Context:', context2);
 console.log('Query:', query2);
 console.log('Response:', response2);
@@ -98,6 +100,8 @@ console.log('Metric Result:', {
   score: result2.score,
   reason: result2.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 0.5, reason: 'The context uses some relevant information and includes some irrelevant information.' }
 ```
 
 ### Low Relevancy Example
@@ -119,7 +123,7 @@ const metric3 = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
 const query3 = 'What is the capital of Australia?';
 const response3 = 'The capital of Australia is Canberra.';
 
-console.log('\nExample 3 - Low Relevancy:');
+console.log('Example 3 - Low Relevancy:');
 console.log('Context:', context3);
 console.log('Query:', query3);
 console.log('Response:', response3);
@@ -129,6 +133,8 @@ console.log('Metric Result:', {
   score: result3.score,
   reason: result3.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 0.12, reason: 'The context only has one relevant piece, while most of the context is irrelevant.' }
 ```
 
 ## Understanding the Results
@@ -142,7 +148,7 @@ The metric provides:
    - 0.1-0.3: Low relevancy - little context relevant to query
    - 0.0: No relevancy - no context relevant to query
 
-2. Detailed analysis of:
+2. Detailed reason for the score, including analysis of:
    - Relevance to input query
    - Statement extraction from context
    - Usefulness for response

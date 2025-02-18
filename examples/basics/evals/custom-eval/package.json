@@ -1,0 +1,19 @@
+{
+  "name": "examples-custom-eval",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "pnpx tsx --env-file .env index.ts",
+    "start:agent": "pnpx tsx --env-file .env src/index.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@mastra/core": "workspace:^",
+    "@mastra/evals": "workspace:^",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.7"
+  }
+}

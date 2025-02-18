@@ -46,7 +46,7 @@ Evaluate a response that covers all elements:
 const text1 = 'The primary colors are red, blue, and yellow.';
 const reference1 = 'The primary colors are red, blue, and yellow.';
 
-console.log('\nExample 1 - Complete Coverage:');
+console.log('Example 1 - Complete Coverage:');
 console.log('Text:', text1);
 console.log('Reference:', reference1);
 
@@ -58,6 +58,8 @@ console.log('Metric Result:', {
     elementCounts: result1.info.elementCounts,
   },
 });
+// Example Output:
+// Metric Result: { score: 1, info: { missingElements: [], elementCounts: { input: 8, output: 8 } } }
 ```
 
 ### Partial Coverage Example
@@ -68,7 +70,7 @@ Evaluate a response that covers some elements:
 const text2 = 'The primary colors are red and blue.';
 const reference2 = 'The primary colors are red, blue, and yellow.';
 
-console.log('\nExample 2 - Partial Coverage:');
+console.log('Example 2 - Partial Coverage:');
 console.log('Text:', text2);
 console.log('Reference:', reference2);
 
@@ -80,6 +82,8 @@ console.log('Metric Result:', {
     elementCounts: result2.info.elementCounts,
   },
 });
+// Example Output:
+// Metric Result: { score: 0.875, info: { missingElements: ['yellow'], elementCounts: { input: 8, output: 7 } } }
 ```
 
 ### Minimal Coverage Example
@@ -90,7 +94,7 @@ Evaluate a response that covers very few elements:
 const text3 = 'The seasons include summer.';
 const reference3 = 'The four seasons are spring, summer, fall, and winter.';
 
-console.log('\nExample 3 - Minimal Coverage:');
+console.log('Example 3 - Minimal Coverage:');
 console.log('Text:', text3);
 console.log('Reference:', reference3);
 
@@ -102,6 +106,14 @@ console.log('Metric Result:', {
     elementCounts: result3.info.elementCounts,
   },
 });
+// Example Output:
+// Metric Result: {
+//   score: 0.3333333333333333,
+//   info: {
+//     missingElements: [ 'four', 'spring', 'winter', 'be', 'fall', 'and' ],
+//     elementCounts: { input: 9, output: 4 }
+//   }
+// }
 ```
 
 ## Understanding the Results
@@ -115,7 +127,7 @@ The metric provides:
    - 0.1-0.3: Low coverage - missing most key elements
    - 0.0: No coverage - output lacks all input elements
 
-2. Detailed analysis including:
+2. Detailed analysis of:
    - List of input elements found
    - List of output elements matched
    - Missing elements from input

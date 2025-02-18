@@ -7,7 +7,14 @@ const meta = {
   "context-precision": "Context Precision",
   "context-relevancy": "Context Relevancy",
   "contextual-recall": "Contextual Recall",
+  "custom-eval": "Custom Eval",
   faithfulness: "Faithfulness",
   hallucination: "Hallucination",
+  "keyword-coverage": "Keyword Coverage",
+  "prompt-alignment": "Prompt Alignment",
+  summarization: "Summarization",
+  "textual-difference": "Textual Difference",
+  "tone-consistency": "Tone Consistency",
+  toxicity: "Toxicity",
 };
 export default meta;
