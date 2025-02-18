@@ -97,53 +97,56 @@ Returns an object mapping tool names to their corresponding Mastra tool implemen
 ### Using with Mastra Agent
 
 ```typescript
-import { anthropic } from '@ai-sdk/anthropic';
-import { Agent } from '@mastra/core';
-import { MastraMCPClient } from '@mastra/mcp-client';
+import { Agent } from "@mastra/core/agent";
+import { MastraMCPClient } from "@mastra/mcp";
+import { openai } from "@ai-sdk/openai";
 
-// Initialize the EverArt MCP client
-const everArtClient = new MastraMCPClient({
-    name: 'everart',
-    server: {
-        command: '/usr/local/bin/docker',
-        args: ['run', '-i', '--rm', '--network=host', '-e', 'EVERART_API_KEY', 'mcp/everart'],
-        env: {
-            EVERART_API_KEY: process.env.EVERART_API_KEY!,
-        },
-    },
+// Initialize the MCP client using mcp/fetch as an example https://hub.docker.com/r/mcp/fetch
+// Visit https://github.com/docker/mcp-servers for other reference docker mcp servers
+const fetchClient = new MastraMCPClient({
+  name: "fetch",
+  server: {
+    command: "docker",
+    args: ["run", "-i", "--rm", "mcp/fetch"],
+  },
 });
 
 // Create a Mastra Agent
 const agent = new Agent({
-    name: 'everart',
-    instructions: 'You are my artist. Include the url in your response.',
-    model: anthropic('claude-3-5-sonnet-20241022'),
+  name: "Fetch agent",
+  instructions:
+    "You are able to fetch data from URLs on demand and discuss the response data with the user.",
+  model: openai("gpt-4o-mini"),
 });
 
-// Example usage in an async function
-async function main() {
-    try {
-        // Connect to the MCP server
-        await everArtClient.connect();
-        
-        // Get available tools
-        const tools = await everArtClient.tools();
-        
-        // Use the agent with the MCP tools
-        const response = await agent.generate('Can you make me a picture of a dog?', {
-            toolsets: {
-                everart: tools,
-            },
-        });
-        
-        console.log(response.text);
-        
-    } catch (error) {
-        console.error('Error:', error);
-    } finally {
-        // Always disconnect when done
-        await everArtClient.disconnect();
-    }
+try {
+  // Connect to the MCP server
+  await fetchClient.connect();
+
+  // Gracefully handle process exits so the docker subprocess is cleaned up
+  process.on("exit", () => {
+    fetchClient.disconnect();
+  });
+
+  // Get available tools
+  const tools = await fetchClient.tools();
+
+  // Use the agent with the MCP tools
+  const response = await agent.generate(
+    "Tell me about mastra.ai/docs. Tell me generally what this page is and the content it includes.",
+    {
+      toolsets: {
+        fetch: tools,
+      },
+    },
+  );
+
+  console.log("\n\n" + response.text);
+} catch (error) {
+  console.error("Error:", error);
+} finally {
+  // Always disconnect when done
+  await fetchClient.disconnect();
 }
 ```
 
