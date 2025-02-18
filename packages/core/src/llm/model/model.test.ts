@@ -1,5 +1,5 @@
-import { CoreMessage } from 'ai';
-import { JSONSchema7 } from 'json-schema';
+import type { CoreMessage } from 'ai';
+import type { JSONSchema7 } from 'json-schema';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 

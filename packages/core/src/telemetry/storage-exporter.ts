@@ -1,6 +1,7 @@
-import { type ExportResult, ExportResultCode } from '@opentelemetry/core';
+import { ExportResultCode } from '@opentelemetry/core';
+import type { ExportResult } from '@opentelemetry/core';
 import { JsonTraceSerializer } from '@opentelemetry/otlp-transformer';
-import { type ReadableSpan, type SpanExporter } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
 
 import type { Logger } from '../logger';
 import type { MastraStorage } from '../storage/base';

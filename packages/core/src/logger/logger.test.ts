@@ -1,15 +1,8 @@
 import { Transform } from 'stream';
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import {
-  Logger,
-  LogLevel,
-  RegisteredLogger,
-  createLogger,
-  combineLoggers,
-  type BaseLogMessage,
-  LoggerTransport,
-} from './index.js';
+import { Logger, LogLevel, RegisteredLogger, createLogger, combineLoggers, LoggerTransport } from './index.js';
+import type { BaseLogMessage } from './index.js';
 
 // Helper to create a memory stream that captures log output
 class MemoryStream extends LoggerTransport {

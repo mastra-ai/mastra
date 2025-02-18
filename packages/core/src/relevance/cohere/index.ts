@@ -1,6 +1,6 @@
 import { CohereClient } from 'cohere-ai';
 
-import { type RelevanceScoreProvider } from '../relevance-score-provider';
+import type { RelevanceScoreProvider } from '../relevance-score-provider';
 
 // Cohere implementation
 export class CohereRelevanceScorer implements RelevanceScoreProvider {

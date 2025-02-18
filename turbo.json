@@ -6,11 +6,8 @@
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"],
       "env": ["RAPID_API_KEY", "ANTHROPIC_API_KEY"]
     },
-    "transit": {
-      "dependsOn": ["^transit"]
-    },
     "lint": {
-      "dependsOn": ["transit"]
+      "dependsOn": ["^lint"]
     },
     "clean": {
       "cache": false

@@ -1,4 +1,5 @@
-import { MastraStorageLibSql as BaseMastraStorageLibSql, type LibSQLConfig } from './libsql';
+import { MastraStorageLibSql as BaseMastraStorageLibSql } from './libsql';
+import type { LibSQLConfig } from './libsql';
 
 export * from './libsql';
 

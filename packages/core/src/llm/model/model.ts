@@ -1,28 +1,20 @@
-import {
-  generateText,
-  type LanguageModel,
-  type Tool,
-  generateObject,
-  jsonSchema,
-  type Schema,
-  type CoreMessage,
-  streamText,
-  streamObject,
-} from 'ai';
-import { type JSONSchema7 } from 'json-schema';
-import { z, ZodSchema } from 'zod';
+import { generateText, generateObject, jsonSchema, streamText, streamObject } from 'ai';
+import type { LanguageModel, Tool, Schema, CoreMessage } from 'ai';
+import type { JSONSchema7 } from 'json-schema';
+import { z } from 'zod';
+import type { ZodSchema } from 'zod';
 
-import {
-  type GenerateReturn,
-  type LLMTextOptions,
-  type LLMInnerStreamOptions,
-  type LLMStreamObjectOptions,
-  type LLMStreamOptions,
-  type LLMTextObjectOptions,
-  type StreamReturn,
+import type {
+  GenerateReturn,
+  LLMTextOptions,
+  LLMInnerStreamOptions,
+  LLMStreamObjectOptions,
+  LLMStreamOptions,
+  LLMTextObjectOptions,
+  StreamReturn,
 } from '../';
-import { type MastraPrimitives } from '../../action';
-import { type ToolsInput } from '../../agent/types';
+import type { MastraPrimitives } from '../../action';
+import type { ToolsInput } from '../../agent/types';
 import type { CoreTool } from '../../tools';
 import { delay } from '../../utils';
 

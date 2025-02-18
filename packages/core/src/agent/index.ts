@@ -1,29 +1,31 @@
-import {
-  type AssistantContent,
-  type CoreAssistantMessage,
-  type CoreMessage,
-  type CoreToolMessage,
-  type CoreUserMessage,
-  type TextPart,
-  type ToolCallPart,
-  type UserContent,
-} from 'ai';
-import { type LanguageModelV1 } from 'ai';
 import { randomUUID } from 'crypto';
-import { type JSONSchema7 } from 'json-schema';
-import { z, ZodSchema } from 'zod';
+import type {
+  AssistantContent,
+  CoreAssistantMessage,
+  CoreMessage,
+  CoreToolMessage,
+  CoreUserMessage,
+  TextPart,
+  ToolCallPart,
+  UserContent,
+  LanguageModelV1,
+} from 'ai';
+import type { JSONSchema7 } from 'json-schema';
+import { z } from 'zod';
+import type { ZodSchema } from 'zod';
 
-import { type MastraPrimitives } from '../action';
+import type { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
-import { Metric } from '../eval';
+import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
-import { MastraLLM, MastraLLMBase } from '../llm/model';
+import { MastraLLM } from '../llm/model';
+import type { MastraLLMBase } from '../llm/model';
 import { LogLevel, RegisteredLogger } from '../logger';
-import { MastraMemory } from '../memory/memory';
+import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
-import { type CoreTool, type ToolAction } from '../tools/types';
+import type { CoreTool, ToolAction } from '../tools/types';
 
 import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
 

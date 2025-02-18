@@ -2,13 +2,14 @@ import { trace, context as otlpContext } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import { get } from 'radash';
 import sift from 'sift';
-import { assign, createActor, fromPromise, type MachineContext, setup, type Snapshot } from 'xstate';
-import { z } from 'zod';
+import { assign, createActor, fromPromise, setup } from 'xstate';
+import type { MachineContext, Snapshot } from 'xstate';
+import type { z } from 'zod';
 
-import { type IAction, type MastraPrimitives } from '../action';
+import type { IAction, MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 
-import { Step } from './step';
+import type { Step } from './step';
 import type {
   ActionContext,
   DependencyCheckOutput,
@@ -339,6 +340,8 @@ export class Workflow<
               context: state.context as WorkflowContext,
               activePaths: this.#getActivePathsAndStatus(state.value as Record<string, string>),
               timestamp: Date.now(),
+            })?.catch(() => {
+              // ignore
             });
           });
         }

@@ -1,12 +1,15 @@
-import { Agent } from '../agent';
-import { MastraDeployer } from '../deployer';
-import { LogLevel, Logger, createLogger, noopLogger } from '../logger';
-import { MastraMemory } from '../memory/memory';
-import { DefaultStorage, type MastraStorage } from '../storage';
-import { InstrumentClass, type OtelConfig, OTLPStorageExporter, Telemetry } from '../telemetry';
-import { MastraTTS } from '../tts';
-import { MastraVector } from '../vector';
-import { Workflow } from '../workflows';
+import type { Agent } from '../agent';
+import type { MastraDeployer } from '../deployer';
+import { LogLevel, createLogger, noopLogger } from '../logger';
+import type { Logger } from '../logger';
+import type { MastraMemory } from '../memory/memory';
+import { DefaultStorage } from '../storage';
+import type { MastraStorage } from '../storage';
+import { InstrumentClass, OTLPStorageExporter, Telemetry } from '../telemetry';
+import type { OtelConfig } from '../telemetry';
+import type { MastraTTS } from '../tts';
+import type { MastraVector } from '../vector';
+import type { Workflow } from '../workflows';
 
 @InstrumentClass({
   prefix: 'mastra',
