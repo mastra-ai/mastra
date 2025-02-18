@@ -21,60 +21,13 @@ Mastra’s workflow system provides:
 
 To create a workflow, you define one or more steps, link them, and then commit the workflow before starting it.
 
-Typically, you would call an LLM or other service in some way in some step. But for this example, we’ll just double the input value in the first step and increment it in the second.
-
-```ts showLineNumbers filename="src/mastra/workflow/index.ts" copy
-import { Mastra } from '@mastra/core';
-import { Step, Workflow } from '@mastra/core/workflows';
-import { z } from 'zod';
-
-// 1. Define the workflow
-const myWorkflow = new Workflow({
-  name: 'my-workflow',
-  triggerSchema: z.object({
-    inputValue: z.number(),
-  }),
-});
-
-// 2. Create steps
-const stepOne = new Step({
-  id: 'stepOne',
-  outputSchema: z.object({
-    doubledValue: z.number(),
-  }),
-  execute: async ({ context }) => {
-    const doubledValue = context.triggerData.inputValue * 2;
-    return { doubledValue };
-  },
-});
-
-const stepTwo = new Step({
-  id: "stepTwo",
-  execute: async ({ context }) => {
-    if (context.steps.stepOne.status !== "success") {
-      return { incrementedValue: 0 };
-    }
-
-    return {
-      incrementedValue: context.steps.stepOne.output.doubledValue + 1,
-    };
-  },
-});
-
-// 3. Add and link steps in your workflow
-myWorkflow
-  .step(stepOne)
-  .then(stepTwo)
-  .commit();
-```
-
 ### Breaking Down the Workflow
 
 Let's examine each part of the workflow creation process:
 
 #### 1. Creating the Workflow
 
-To create a workflow in Mastra, you use the Workflow class and define its properties:
+Here's how you define a workflow in Mastra. The `name` field determines the workflow's API endpoint (`/workflows/$NAME/`), while the `triggerSchema` defines the structure of the workflow's trigger data:
 
 ```ts filename="src/mastra/workflow/index.ts"
 const myWorkflow = new Workflow({
@@ -87,7 +40,7 @@ const myWorkflow = new Workflow({
 
 #### 2. Defining Steps
 
-To create a step in Mastra, you use the Step class and define its properties:
+Now, we'll define the workflow's steps. Each step can have its own input and output schemas. Here, `stepOne` doubles an input value, and `stepTwo` increments that result if `stepOne` was successful. (To keep things simple, we aren't making any LLM calls in this example):
 
 ```ts filename="src/mastra/workflow/index.ts"
 const stepOne = new Step({
@@ -116,7 +69,7 @@ const stepTwo = new Step({
 
 #### 3. Linking Steps
 
-Create a sequential flow where `stepOne` runs first and is followed by `stepTwo`.
+Now, let's create the control flow, and "commit" (finalize the workflow). In this case, `stepOne` runs first and is followed by `stepTwo`.
 
 ```ts filename="src/mastra/workflow/index.ts"
 myWorkflow
