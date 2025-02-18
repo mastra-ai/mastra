@@ -1,4 +1,4 @@
-import { FieldErrors } from 'react-hook-form';
+import type { FieldErrors } from 'react-hook-form';
 import { z } from 'zod';
 
 export const transformToNestObject = (error: z.ZodError): FieldErrors => {

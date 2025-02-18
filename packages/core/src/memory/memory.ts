@@ -9,9 +9,11 @@ import type {
 } from 'ai';
 
 import { MastraBase } from '../base';
-import { MastraStorage, DefaultStorage, type StorageGetMessagesArg, DefaultVectorDB } from '../storage';
+import { DefaultStorage, DefaultVectorDB } from '../storage';
+import type { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { deepMerge } from '../utils';
-import { defaultEmbedder, MastraVector } from '../vector';
+import { defaultEmbedder } from '../vector';
+import type { MastraVector } from '../vector';
 
 import type { MessageType, SharedMemoryConfig, StorageThreadType, MemoryConfig, AiMessageType } from './types';
 

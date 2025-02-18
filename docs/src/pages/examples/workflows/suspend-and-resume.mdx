@@ -10,7 +10,7 @@ import { GithubLink } from '../../../components/github-link';
 Workflow steps can be suspended and resumed at any point in the workflow execution. This example demonstrates how to suspend a workflow step and resume it later.
 
 ```ts showLineNumbers copy
-import { DefaultStorage } from '@mastra/core/storage';
+import { Mastra } from '@mastra/core';
 import { Step, Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
@@ -49,21 +49,12 @@ const stepTwo = new Step({
   },
 });
 
-const storage = new DefaultStorage({
-  config: {
-    url: ':memory:',
-  },
-});
-
 // Build the workflow
 const myWorkflow = new Workflow({
   name: 'my-workflow',
   triggerSchema: z.object({
     inputValue: z.number(),
   }),
-  mastra: {
-    storage,
-  },
 });
 
 // run workflows in parallel
@@ -72,24 +63,34 @@ myWorkflow
   .then(stepTwo)
   .commit();
 
-const { runId, start } = myWorkflow.createRun();
+// Register the workflow
+export const mastra = new Mastra({
+  workflows: { registeredWorkflow: myWorkflow },
+})
 
-const res = await start({ triggerData: { inputValue: 45 } });
+// Get registered workflow from Mastra
+const registeredWorkflow = mastra.getWorkflow('registeredWorkflow');
+const { runId, start } = registeredWorkflow.createRun();
+ 
+// Start watching the workflow before executing it
+myWorkflow.watch(async ({ context, activePaths }) => {
+  for (const _path of activePaths) {
+    const stepTwoStatus = context.steps?.stepTwo?.status;
+    if (stepTwoStatus === 'suspended') {
+      console.log("Workflow suspended, resuming with new value");
 
-await myWorkflow.watch(runId, {
-  onTransition: async ({ context, activePaths }) => {
-    for (const _path of activePaths) {
-      const stepTwoStatus = context.steps?.stepTwo?.status;
-      if (stepTwoStatus === 'suspended') {
-        await myWorkflow.resume({
-          runId,
-          stepId: 'stepTwo',
-          context: { secondValue: 100 },
-        });
-      }
+      // Resume the workflow with new context
+      await myWorkflow.resume({
+        runId,
+        stepId: 'stepTwo',
+        context: { secondValue: 100 },
+      });
     }
   }
-})`
+})
+
+// Start the workflow execution
+await start({ triggerData: { inputValue: 45 } });
 ```
 
 <br />

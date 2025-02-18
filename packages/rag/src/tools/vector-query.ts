@@ -1,8 +1,9 @@
 import { createTool } from '@mastra/core/tools';
-import { type EmbeddingModel } from 'ai';
+import type { EmbeddingModel } from 'ai';
 import { z } from 'zod';
 
-import { rerank, type RerankConfig } from '../rerank';
+import { rerank } from '../rerank';
+import type { RerankConfig } from '../rerank';
 import { vectorQuerySearch, defaultVectorQueryDescription } from '../utils';
 
 export const createVectorQueryTool = ({

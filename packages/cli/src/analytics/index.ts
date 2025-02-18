@@ -79,7 +79,7 @@ export class PosthogAnalytics {
     this.captureSessionStart();
 
     process.on('exit', () => {
-      this.client?.flush();
+      this.client?.flush().catch(() => {});
     });
   }
 

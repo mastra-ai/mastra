@@ -1,13 +1,13 @@
-import { z } from 'zod';
+import type { z } from 'zod';
 
-import { Agent } from '../agent';
-import { Logger } from '../logger';
-import { MastraMemory } from '../memory';
-import { MastraStorage } from '../storage';
-import { Telemetry } from '../telemetry';
-import { MastraTTS } from '../tts';
-import { MastraVector } from '../vector';
-import { type WorkflowContext } from '../workflows';
+import type { Agent } from '../agent';
+import type { Logger } from '../logger';
+import type { MastraMemory } from '../memory';
+import type { MastraStorage } from '../storage';
+import type { Telemetry } from '../telemetry';
+import type { MastraTTS } from '../tts';
+import type { MastraVector } from '../vector';
+import type { WorkflowContext } from '../workflows';
 
 export type MastraPrimitives = {
   logger?: Logger;

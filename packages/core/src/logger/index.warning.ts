@@ -1,4 +1,5 @@
-import { createLogger as _createLogger, type LogLevel, type TransportMap } from './index';
+import { createLogger as _createLogger } from './index';
+import type { LogLevel, TransportMap } from './index';
 
 export * from './index';
 

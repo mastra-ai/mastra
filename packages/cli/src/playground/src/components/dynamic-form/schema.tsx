@@ -1,6 +1,7 @@
 import * as React from 'react';
-import { Control } from 'react-hook-form';
-import { z, ZodArray, ZodBoolean, ZodDate, ZodEnum, ZodLiteral, ZodNumber, ZodSchema } from 'zod';
+import type { Control } from 'react-hook-form';
+import type { ZodSchema } from 'zod';
+import { z, ZodArray, ZodBoolean, ZodDate, ZodEnum, ZodLiteral, ZodNumber } from 'zod';
 
 import { flattenObject, getPath } from '../../lib/object';
 import { toTitleCase } from '../../lib/string';

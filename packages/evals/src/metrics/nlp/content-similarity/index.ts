@@ -1,4 +1,5 @@
-import { Metric, type MetricResult } from '@mastra/core/eval';
+import { Metric } from '@mastra/core/eval';
+import type { MetricResult } from '@mastra/core/eval';
 import stringSimilarity from 'string-similarity';
 
 interface ContentSimilarityResult extends MetricResult {

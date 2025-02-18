@@ -1,6 +1,6 @@
 // @ts-ignore
-import { mastra } from '#mastra';
 // @ts-ignore
+import { mastra } from '#mastra';
 import { createNodeServer } from '#server';
 import { evaluate } from '@mastra/core/eval';
 import { AvailableHooks, registerHook } from '@mastra/core/hooks';

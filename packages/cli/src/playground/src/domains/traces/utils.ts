@@ -1,4 +1,4 @@
-import { RefinedTrace, Span } from './types';
+import type { RefinedTrace, Span } from './types';
 
 /**
  *

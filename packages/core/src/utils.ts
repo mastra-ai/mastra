@@ -1,4 +1,5 @@
-import { z, ZodObject } from 'zod';
+import { z } from 'zod';
+import type { ZodObject } from 'zod';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 

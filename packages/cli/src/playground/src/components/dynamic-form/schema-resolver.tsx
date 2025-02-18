@@ -1,4 +1,4 @@
-import { Control, FieldErrors } from 'react-hook-form';
+import type { Control, FieldErrors } from 'react-hook-form';
 import { z } from 'zod';
 
 import { getDefaultFieldMap } from './default-field-map';

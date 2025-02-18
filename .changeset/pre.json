@@ -77,7 +77,6 @@
     "@mastra/loggers": "0.1.0",
     "@mastra/mcp": "0.1.0",
     "@mastra/memory": "0.1.0",
-    "@mastra/memory-integration-tests": "0.1.0",
     "@mastra/rag": "0.1.0",
     "@mastra/speech-azure": "0.1.0",
     "@mastra/speech-deepgram": "0.1.0",

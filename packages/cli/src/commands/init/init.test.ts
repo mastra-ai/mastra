@@ -1,5 +1,5 @@
-import { describe, beforeEach, expect, vi, test } from 'vitest';
 import { fs, vol } from 'memfs';
+import { describe, beforeEach, expect, vi, test } from 'vitest';
 import { DepsService } from '../../services/service.deps';
 
 beforeEach(() => {

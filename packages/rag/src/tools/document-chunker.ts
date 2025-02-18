@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { type ChunkParams, MDocument } from '../document';
+import type { MDocument, ChunkParams } from '../document';
 
 export const createDocumentChunkerTool = ({
   doc,

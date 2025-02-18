@@ -1,4 +1,5 @@
-import { MastraTTS as BaseMastraTTS, type TTSConfig } from './index';
+import { MastraTTS as BaseMastraTTS } from './index';
+import type { TTSConfig } from './index';
 
 export * from './index';
 

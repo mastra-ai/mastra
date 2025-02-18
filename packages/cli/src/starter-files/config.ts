@@ -1,7 +1,4 @@
-// @ts-ignore
-import { Config } from '@mastra/core';
-
-export const config: Config = {
+export const config = {
   name: 'PROJECT_NAME',
   integrations: [],
   db: {
@@ -25,4 +22,4 @@ export const config: Config = {
   },
   systemHostURL: process.env.APP_URL!,
   routeRegistrationPath: '/api/mastra',
-};
+} as const;

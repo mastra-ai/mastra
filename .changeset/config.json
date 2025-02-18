@@ -14,6 +14,7 @@
     "@mastra/playground",
     "examples-*",
     "*-with-*",
-    "@mastra/dane"
+    "@mastra/dane",
+    "@mastra/memory-integration-tests"
   ]
 }

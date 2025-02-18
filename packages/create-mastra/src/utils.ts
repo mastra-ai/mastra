@@ -1,6 +1,5 @@
 import fsExtra from 'fs-extra';
-import { dirname } from 'path';
-import path from 'path';
+import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 export async function getPackageVersion() {

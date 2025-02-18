@@ -1,26 +1,21 @@
-import { createClient, type Client, type InValue } from '@libsql/client';
+import { createClient } from '@libsql/client';
+import type { Client, InValue } from '@libsql/client';
 import { join } from 'node:path';
 
 import type { MetricResult, TestInfo } from '../eval';
 import type { MessageType, StorageThreadType } from '../memory/types';
 
 import { MastraStorage } from './base';
-import {
-  TABLE_EVALS,
-  TABLE_MESSAGES,
-  TABLE_THREADS,
-  TABLE_TRACES,
-  TABLE_WORKFLOW_SNAPSHOT,
-  type TABLE_NAMES,
-} from './constants';
-import { type StorageColumn, type StorageGetMessagesArg, type EvalRow } from './types';
+import { TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_TRACES, TABLE_WORKFLOW_SNAPSHOT } from './constants';
+import type { TABLE_NAMES } from './constants';
+import type { StorageColumn, StorageGetMessagesArg, EvalRow } from './types';
 
 export * from '../vector/libsql/index';
 
 function safelyParseJSON(jsonString: string): any {
   try {
     return JSON.parse(jsonString);
-  } catch (e) {
+  } catch {
     return {};
   }
 }

@@ -12,7 +12,8 @@ import {
   ObjectField,
   UnionField,
 } from './fields';
-import { FormConfigType, type FieldProps, getFormConfigTypesFromSchemaDef } from './schema';
+import { FormConfigType, getFormConfigTypesFromSchemaDef } from './schema';
+import type { FieldProps } from './schema';
 import { resolveSchema } from './schema-resolver';
 
 export function getDefaultFieldMap() {

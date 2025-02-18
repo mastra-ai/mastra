@@ -1,8 +1,10 @@
-import { createClient, type Client as TursoClient, type InValue } from '@libsql/client';
+import { createClient } from '@libsql/client';
+import type { Client as TursoClient, InValue } from '@libsql/client';
 import { join } from 'path';
 
-import { type Filter } from '../../filter';
-import { MastraVector, type IndexStats, type QueryResult } from '../index';
+import type { Filter } from '../../filter';
+import { MastraVector } from '../index';
+import type { IndexStats, QueryResult } from '../index';
 
 import { LibSQLFilterTranslator } from './filter';
 import { buildFilterQuery } from './sql-builder';

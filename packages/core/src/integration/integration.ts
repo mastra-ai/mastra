@@ -1,5 +1,5 @@
-import { type ToolAction } from '../tools';
-import { Workflow } from '../workflows';
+import type { ToolAction } from '../tools';
+import type { Workflow } from '../workflows';
 
 export class Integration<ToolsParams = void, ApiClient = void> {
   name: string = 'Integration';

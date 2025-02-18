@@ -1,12 +1,33 @@
-import { Agent } from '../agent';
-import { MastraDeployer } from '../deployer';
-import { LogLevel, Logger, createLogger, noopLogger } from '../logger';
-import { MastraMemory } from '../memory/memory';
-import { DefaultStorage, type MastraStorage } from '../storage';
-import { InstrumentClass, type OtelConfig, OTLPStorageExporter, Telemetry } from '../telemetry';
-import { MastraTTS } from '../tts';
-import { MastraVector } from '../vector';
-import { Workflow } from '../workflows';
+import type { Agent } from '../agent';
+import type { MastraDeployer } from '../deployer';
+import { LogLevel, createLogger, noopLogger } from '../logger';
+import type { Logger } from '../logger';
+import type { MastraMemory } from '../memory/memory';
+import { DefaultStorage } from '../storage';
+import type { MastraStorage } from '../storage';
+import { InstrumentClass, OTLPStorageExporter, Telemetry } from '../telemetry';
+import type { OtelConfig } from '../telemetry';
+import type { MastraTTS } from '../tts';
+import type { MastraVector } from '../vector';
+import type { Workflow } from '../workflows';
+
+export interface Config<
+  TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
+  TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
+  TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
+  TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
+  TLogger extends Logger = Logger,
+> {
+  memory?: MastraMemory;
+  agents?: TAgents;
+  storage?: MastraStorage;
+  vectors?: TVectors;
+  logger?: TLogger | false;
+  workflows?: TWorkflows;
+  tts?: TTTS;
+  telemetry?: OtelConfig;
+  deployer?: MastraDeployer;
+}
 
 @InstrumentClass({
   prefix: 'mastra',
@@ -29,17 +50,7 @@ export class Mastra<
   storage?: MastraStorage;
   memory?: MastraMemory;
 
-  constructor(config?: {
-    memory?: MastraMemory;
-    agents?: TAgents;
-    storage?: MastraStorage;
-    vectors?: TVectors;
-    logger?: TLogger | false;
-    workflows?: TWorkflows;
-    tts?: TTTS;
-    telemetry?: OtelConfig;
-    deployer?: MastraDeployer;
-  }) {
+  constructor(config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger>) {
     /*
       Logger
     */

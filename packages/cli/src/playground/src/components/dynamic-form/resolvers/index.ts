@@ -1,4 +1,4 @@
-import { Resolver } from 'react-hook-form';
+import type { Resolver } from 'react-hook-form';
 import { z } from 'zod';
 
 import { transformToNestObject } from '../utils';

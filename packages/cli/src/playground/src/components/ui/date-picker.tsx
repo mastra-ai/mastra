@@ -3,7 +3,7 @@
 import { format, isValid } from 'date-fns';
 import { CalendarIcon } from 'lucide-react';
 import * as React from 'react';
-import { type PropsSingle } from 'react-day-picker';
+import type { PropsSingle } from 'react-day-picker';
 import { useDebouncedCallback } from 'use-debounce';
 
 import { cn } from '../../lib/utils';

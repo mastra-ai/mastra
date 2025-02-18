@@ -1,4 +1,5 @@
-import { type IBundler, MastraBundler } from '../bundler';
+import { MastraBundler } from '../bundler';
+import type { IBundler } from '../bundler';
 
 export interface IDeployer extends IBundler {
   deploy(outputDirectory: string): Promise<void>;

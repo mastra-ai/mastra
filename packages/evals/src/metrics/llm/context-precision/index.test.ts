@@ -1,7 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
 
-import { TestCaseWithContext } from '../utils';
+import type { TestCaseWithContext } from '../utils';
 
 import { ContextPrecisionMetric } from './index';
 

@@ -13,7 +13,7 @@ import { RecursiveJsonTransformer } from './transformers/json';
 import { LatexTransformer } from './transformers/latex';
 import { MarkdownHeaderTransformer, MarkdownTransformer } from './transformers/markdown';
 import { TokenTransformer } from './transformers/token';
-import { type ChunkOptions, type ChunkParams, type ChunkStrategy, type ExtractParams } from './types';
+import type { ChunkOptions, ChunkParams, ChunkStrategy, ExtractParams } from './types';
 
 export class MDocument {
   private chunks: Chunk[];

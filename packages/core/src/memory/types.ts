@@ -1,5 +1,4 @@
-import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent } from 'ai';
-import type { UserContent } from 'ai';
+import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserContent } from 'ai';
 
 import type { MastraStorage } from '../storage';
 import type { MastraVector } from '../vector';

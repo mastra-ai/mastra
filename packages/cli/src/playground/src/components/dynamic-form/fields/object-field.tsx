@@ -1,7 +1,8 @@
 import { XIcon } from 'lucide-react';
 import * as React from 'react';
 import { useFieldArray } from 'react-hook-form';
-import { ZodArray, ZodSchema } from 'zod';
+import type { ZodSchema } from 'zod';
+import { ZodArray } from 'zod';
 
 import { toTitleCase } from '../../../lib/string';
 import { Button } from '../../ui/button';

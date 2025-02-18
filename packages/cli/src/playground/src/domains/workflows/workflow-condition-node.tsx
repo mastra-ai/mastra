@@ -1,11 +1,12 @@
-import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
+import { Handle, Position } from '@xyflow/react';
+import type { NodeProps, Node } from '@xyflow/react';
 import { Fragment } from 'react';
 
 import { Text } from '@/components/ui/text';
 
 import { cn } from '@/lib/utils';
 
-import { Condition } from './utils';
+import type { Condition } from './utils';
 
 export type ConditionNode = Node<
   {

@@ -1,11 +1,11 @@
-import { type TiktokenEncoding, type TiktokenModel } from 'js-tiktoken';
-import {
-  type LLM,
-  type TitleCombinePrompt,
-  type TitleExtractorPrompt,
-  type SummaryPrompt,
-  type QuestionExtractPrompt,
-  type KeywordExtractPrompt,
+import type { TiktokenEncoding, TiktokenModel } from 'js-tiktoken';
+import type {
+  LLM,
+  TitleCombinePrompt,
+  TitleExtractorPrompt,
+  SummaryPrompt,
+  QuestionExtractPrompt,
+  KeywordExtractPrompt,
 } from 'llamaindex';
 
 export enum Language {

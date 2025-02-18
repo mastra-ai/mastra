@@ -1,23 +1,23 @@
-import {
-  type CoreAssistantMessage as AiCoreAssistantMessage,
-  type CoreMessage as AiCoreMessage,
-  type CoreSystemMessage as AiCoreSystemMessage,
-  type CoreToolMessage as AiCoreToolMessage,
-  type CoreUserMessage as AiCoreUserMessage,
-  type EmbedManyResult as AiEmbedManyResult,
-  type EmbedResult as AiEmbedResult,
-  type GenerateObjectResult,
-  type GenerateTextResult,
-  type LanguageModelV1,
-  type StreamObjectResult,
-  type StreamTextResult,
+import type {
+  CoreAssistantMessage as AiCoreAssistantMessage,
+  CoreMessage as AiCoreMessage,
+  CoreSystemMessage as AiCoreSystemMessage,
+  CoreToolMessage as AiCoreToolMessage,
+  CoreUserMessage as AiCoreUserMessage,
+  EmbedManyResult as AiEmbedManyResult,
+  EmbedResult as AiEmbedResult,
+  GenerateObjectResult,
+  GenerateTextResult,
+  LanguageModelV1,
+  StreamObjectResult,
+  StreamTextResult,
 } from 'ai';
-import { type JSONSchema7 } from 'json-schema';
-import { z, ZodSchema } from 'zod';
+import type { JSONSchema7 } from 'json-schema';
+import type { z, ZodSchema } from 'zod';
 
-import { type ToolsInput } from '../agent/types';
-import { type Run } from '../run/types';
-import { type CoreTool } from '../tools/types';
+import type { ToolsInput } from '../agent/types';
+import type { Run } from '../run/types';
+import type { CoreTool } from '../tools/types';
 
 export type LanguageModel = LanguageModelV1;
 
@@ -102,8 +102,8 @@ export type LLMInnerStreamOptions = {
   tools?: ToolsInput;
   convertedTools?: Record<string, CoreTool>;
   messages: CoreMessage[];
-  onStepFinish?: (step: string) => void;
-  onFinish?: (result: string) => Promise<void> | void;
+  onStepFinish?: (step: string) => unknown;
+  onFinish?: (result: string) => unknown;
   maxSteps?: number;
   temperature?: number;
   toolChoice?: 'auto' | 'required';

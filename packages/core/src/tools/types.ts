@@ -1,7 +1,7 @@
-import { ZodSchema, z } from 'zod';
+import type { ZodSchema, z } from 'zod';
 
-import { type IAction, type IExecutionContext } from '../action';
-import { type WorkflowContext } from '../workflows';
+import type { IAction, IExecutionContext } from '../action';
+import type { WorkflowContext } from '../workflows';
 
 export type CoreTool = {
   description?: string;

@@ -1,4 +1,5 @@
-import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
+import { Handle, Position } from '@xyflow/react';
+import type { NodeProps, Node } from '@xyflow/react';
 import { Footprints } from 'lucide-react';
 
 import { Text } from '@/components/ui/text';
