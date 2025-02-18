@@ -285,6 +285,7 @@ Initial vector similarity search can sometimes miss nuanced relevance. Re-rankin
 Here's how to use re-ranking:
 
 ```ts showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
 import { rerank } from "@mastra/rag";
 
 // Get initial results from vector search
