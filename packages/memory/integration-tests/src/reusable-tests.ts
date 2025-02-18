@@ -1,5 +1,5 @@
-import { Memory } from '@mastra/memory';
-import { TextPart, ImagePart, FilePart, ToolCallPart } from 'ai';
+import type { Memory } from '@mastra/memory';
+import type { TextPart, ImagePart, FilePart, ToolCallPart } from 'ai';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
