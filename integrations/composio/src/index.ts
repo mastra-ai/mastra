@@ -74,7 +74,8 @@ export class ComposioIntegration extends Integration<ComposioToolsetParams> {
       ...(useCase && { useCase: useCase }),
       ...(actions && { actions: actions?.join(',') }),
       ...(usecaseLimit && { usecaseLimit: usecaseLimit }),
-      filterByAvailableApps: true,
+      // only filter by available if apps: [] is not included. Composio does not allow both args at the same time
+      filterByAvailableApps: !apps?.length,
     });
 
     const tools: Record<string, ToolAction<any, any, any, any>> = {};
