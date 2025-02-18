@@ -1,22 +1,23 @@
 ---
 title: "Example: Custom Eval | Evals | Mastra Docs"
-description: Example of creating custom evaluation metrics in Mastra.
+description: Example of creating custom LLM-based evaluation metrics in Mastra.
 ---
 
 import { GithubLink } from "../../../components/github-link";
 
-# Custom Eval
+# Custom Eval with LLM
 
-This example demonstrates how to create custom evaluation metrics in Mastra, from simple string matching to LLM-based evaluation.
+This example demonstrates how to create a custom LLM-based evaluation metric in Mastra to assess recipe completeness using an AI chef agent.
 
 ## Overview
 
 The example shows how to:
 
-1. Create custom metric classes
-2. Implement measure() method
-3. Handle different evaluation types
-4. Return standardized results
+1. Create a custom LLM-based metric class
+2. Set up a specialized judge for evaluation
+3. Define evaluation prompts
+4. Use an agent to generate and evaluate recipes
+5. Handle structured evaluation results
 
 ## Setup
 
@@ -32,104 +33,235 @@ OPENAI_API_KEY=your_api_key_here
 
 Import the necessary dependencies:
 
-```typescript copy showLineNumbers filename="src/index.ts"
-import { openai } from '@ai-sdk/openai';
-import { Metric, type MetricResult } from '@mastra/core/eval';
+```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/metricJudge.ts"
+import { type LanguageModel } from '@mastra/core/llm';
+import { MastraAgentJudge } from '@mastra/evals/judge';
+import { z } from 'zod';
 ```
 
-## Example Usage
+## Defining Prompts
 
-### Simple Keyword Metric
+The evaluation system uses three different prompts, each serving a specific purpose:
 
-Create a basic string matching metric:
+#### 1. Instructions Prompt
 
-```typescript copy showLineNumbers{5} filename="src/index.ts"
-interface KeywordMatchResult extends MetricResult {
-  info: {
-    totalKeywords: number;
-    matchedKeywords: number;
-    matches: string[];
-  };
+This prompt sets the role and context for the judge:
+
+```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/prompts.ts"
+export const RECIPE_COMPLETENESS_INSTRUCTIONS = `You are a Master Chef that evaluates recipes for completeness. Your role is to ensure recipes include all essential information needed for successful cooking.`;
+```
+
+#### 2. Completeness Evaluation Prompt
+
+This prompt creates a structured evaluation of recipe completeness, checking for specific components:
+
+```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/prompts.ts"
+export const generateCompletenessPrompt = ({
+  input,
+  output,
+}: {
+  input: string;
+  output: string;
+}) => `Analyze if this recipe includes all essential components for successful cooking.
+
+Essential components to check:
+1. Ingredient Quantities
+   - All ingredients must have specific measurements
+   - Example of incomplete: "add tomatoes"
+   - Example of complete: "add 2 diced tomatoes"
+
+2. Cooking Times
+   - Each cooking step needs a specific duration
+   - Example of incomplete: "cook until done"
+   - Example of complete: "cook for 15-20 minutes"
+
+3. Cooking Temperatures
+   - All heating steps need specific temperatures
+   - Example of incomplete: "bake in oven"
+   - Example of complete: "bake at 350°F (175°C)"
+
+User input: ${input}
+Analyze this recipe:
+${output}
+
+Return your response in this format:
+{
+  "missing": ["list each missing element"],
+  "verdict": "Complete or Incomplete"
+}`;
+```
+
+#### 3. Reasoning Prompt
+
+This prompt generates detailed explanations about why a recipe is considered complete or incomplete:
+
+```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/prompts.ts"
+export const generateReasonPrompt = ({
+  input,
+  output,
+  missing,
+  verdict,
+}: {
+  input: string;
+  output: string;
+  missing: string[];
+  verdict: string;
+}) => `Explain why this recipe is ${verdict} based on its completeness.
+
+${missing.length > 0 ? `The recipe is missing: ${missing.join(', ')}` : 'The recipe includes all essential components'}
+
+Example responses:
+1. For incomplete recipe:
+{
+    "reason": "The recipe is incomplete because it lacks several essential components: flour quantity, baking temperature, and cooking time. These missing elements would make it difficult for someone to successfully recreate the dish."
 }
 
-class KeywordMatchMetric extends Metric {
-  private keywords: Set<string>;
+2. For complete recipe:
+{
+    "reason": "The recipe is complete as it provides all necessary measurements, cooking times, and temperatures needed to successfully prepare the dish."
+}
 
-  constructor(keywords: string[]) {
-    super();
-    this.keywords = new Set(keywords.map(k => k.toLowerCase()));
+User input: ${input}
+
+Recipe to analyze: ${output}
+
+Return your response in this format:
+{
+    "reason": "The recipe is ${verdict} because [reason]"
+}`;
+```
+
+## Creating the Judge
+
+We can create a specialized judge that will evaluate recipe completeness. We can import the prompts defined above and use them in the judge:
+
+```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/metricJudge.ts"
+import { RECIPE_COMPLETENESS_INSTRUCTIONS, generateCompletenessPrompt, generateReasonPrompt } from './prompts';
+
+export class RecipeCompletenessJudge extends MastraAgentJudge {
+  constructor(model: LanguageModel) {
+    super('Recipe Completeness', RECIPE_COMPLETENESS_INSTRUCTIONS, model);
   }
 
-  async measure(input: string, output: string): Promise<KeywordMatchResult> {
-    const outputLower = output.toLowerCase();
-    const matches = [...this.keywords].filter(k => outputLower.includes(k));
+  async evaluate(
+    input: string,
+    output: string,
+  ): Promise<{
+    missing: string[];
+    verdict: string;
+  }> {
+    const completenessPrompt = generateCompletenessPrompt({ input, output });
+    const result = await this.agent.generate(completenessPrompt, {
+      output: z.object({
+        missing: z.array(z.string()),
+        verdict: z.string(),
+      }),
+    });
 
-    return {
-      score: this.keywords.size > 0 ? matches.length / this.keywords.size : 1,
-      info: {
-        totalKeywords: this.keywords.size,
-        matchedKeywords: matches.length,
-        matches,
-      },
-    };
+    return result.object;
   }
 }
 ```
 
-### LLM-Based Metric
+## Creating the Metric
 
-Create a more complex metric using LLM:
+Create the metric class that uses the judge:
 
-```typescript copy showLineNumbers{5} filename="src/index.ts"
-interface DietaryResult extends MetricResult {
+```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/index.ts"
+export interface MetricResultWithInfo extends MetricResult {
   info: {
-    preferences: string[];
-    violations: string[];
     reason: string;
+    missing: string[];
   };
 }
 
-class DietaryPreferencesMetric extends Metric {
-  private model;
+export class RecipeCompletenessMetric extends Metric {
+  private judge: RecipeCompletenessJudge;
+  private scale: number;
 
-  constructor(model: any) {
+  constructor(model: LanguageModel, { scale = 1 }: RecipeCompletenessMetricOptions = {}) {
     super();
-    this.model = model;
+    this.judge = new RecipeCompletenessJudge(model);
+    this.scale = scale;
   }
 
-  async measure(input: string, output: string): Promise<DietaryResult> {
-    // Analyze dietary preferences and recipe content
-    const preferences = input.toLowerCase();
-    const recipe = output.toLowerCase();
-
-    const violations = [];
-    if (preferences.includes('vegetarian') && recipe.includes('meat')) {
-      violations.push('contains meat');
-    }
-    // Add more dietary checks...
+  async measure(input: string, output: string): Promise<MetricResultWithInfo> {
+    const { verdict, missing } = await this.judge.evaluate(input, output);
+    const score = this.calculateScore({ verdict });
+    const reason = await this.judge.getReason({
+      input,
+      output,
+      score,
+      scale: this.scale,
+      verdict,
+      missing,
+    });
 
     return {
-      score: violations.length === 0 ? 1 : 0,
+      score,
       info: {
-        preferences: preferences.split(' '),
-        violations,
-        reason: violations.length > 0 
-          ? `Recipe violates preferences: ${violations.join(', ')}`
-          : 'Recipe follows all preferences',
+        missing,
+        reason,
       },
     };
   }
 }
+```
+
+## Setting Up the Agent
+
+Create an agent and attach the metric:
+
+```typescript copy showLineNumbers filename="src/mastra/agents/chefAgent.ts"
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+
+import { RecipeCompletenessMetric } from '../evals';
+
+export const chefAgent = new Agent({
+  name: 'chef-agent',
+  instructions:
+    'You are Michel, a practical and experienced home chef' +
+    'You help people cook with whatever ingredients they have available.',
+  model: openai('gpt-4o-mini'),
+  evals: {
+    recipeCompleteness: new RecipeCompletenessMetric(openai('gpt-4o-mini')),
+  },
+});
+```
+
+## Usage Example
+
+Here's how to use the metric with an agent:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { mastra } from './mastra';
+
+const chefAgent = mastra.getAgent('chefAgent');
+const metric = chefAgent.evals.recipeCompleteness;
+
+// Example: Evaluate a recipe
+const input = 'Can you give me a simple pasta recipe with exact measurements and timing?';
+const response = await chefAgent.generate(input);
+const result = await metric.measure(input, response.text);
+
+console.log('Metric Result:', {
+  score: result.score,
+  missing: result.info.missing,
+  reason: result.info.reason,
+});
 ```
 
 ## Understanding the Results
 
-The metrics provide:
-- A score between 0 and 1
-- Custom info object with metric-specific details
-- Detailed reasoning for the score
-- Additional analysis data
-
+The metric provides:
+- A score of 1 for complete recipes and 0 for incomplete ones
+- List of missing essential components (if any)
+- Detailed reasoning about the recipe's completeness
+- Evaluation based on:
+  - Ingredient quantities
+  - Cooking times
+  - Temperature specifications
 
 <br />
 <br />
