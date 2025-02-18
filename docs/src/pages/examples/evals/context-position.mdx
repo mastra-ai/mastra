@@ -68,6 +68,8 @@ console.log('Metric Result:', {
   score: result1.score,
   reason: result1.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 1, reason: 'The context is in the correct sequential order.' }
 ```
 
 ### Mixed Position Adherence Example
@@ -99,6 +101,8 @@ console.log('Metric Result:', {
   score: result2.score,
   reason: result2.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 0.4, reason: 'The context includes relevant information and irrelevant information and is not in the correct sequential order.' }
 ```
 
 ### Low Position Adherence Example
@@ -130,6 +134,8 @@ console.log('Metric Result:', {
   score: result3.score,
   reason: result3.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 0.12, reason: 'The context includes some relevant information, but most of the relevant information is at the end.' }
 ```
 
 ## Understanding the Results

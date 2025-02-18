@@ -70,6 +70,8 @@ console.log('Metric Result:', {
   reason: result1.info.reason,
   details: result1.info.scoreDetails,
 });
+// Example Output:
+// Metric Result: { score: 1, reason: 'The response follows all instructions.' }
 ```
 
 ### Mixed Alignment Example
@@ -102,6 +104,8 @@ console.log('Metric Result:', {
   reason: result2.info.reason,
   details: result2.info.scoreDetails,
 });
+// Example Output:
+// Metric Result: { score: 0.5, reason: 'The response misses some instructions.' }
 ```
 
 ### Non-Applicable Instructions Example
@@ -133,6 +137,8 @@ console.log('Metric Result:', {
   reason: result3.info.reason,
   details: result3.info.scoreDetails,
 });
+// Example Output:
+// Metric Result: { score: 0, reason: 'No instructions are followed or are applicable to the query.' }
 ```
 
 ## Understanding the Results

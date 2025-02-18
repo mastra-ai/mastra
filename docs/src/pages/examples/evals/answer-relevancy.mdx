@@ -68,6 +68,8 @@ console.log('Metric Result:', {
   score: result1.score,
   reason: result1.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 1, reason: 'The response is highly relevant to the query. It provides a comprehensive overview of the health benefits of regular exercise.' }
 ```
 
 ### Partial Relevancy Example
@@ -88,6 +90,8 @@ console.log('Metric Result:', {
   score: result2.score,
   reason: result2.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 0.7, reason: 'The response is partially relevant to the query. It provides some information about healthy breakfast choices but misses the timing aspect.' }
 ```
 
 ### Low Relevancy Example
@@ -108,6 +112,8 @@ console.log('Metric Result:', {
   score: result3.score,
   reason: result3.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 0.1, reason: 'The response is not relevant to the query. It provides information about the Great Wall of China but does not mention meditation.' }
 ```
 
 ## Understanding the Results

@@ -67,6 +67,8 @@ console.log('Metric Result:', {
   score: result1.score,
   reason: result1.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 1, reason: 'All elements of the output are supported by the context.' }
 ```
 
 ### Mixed Recall Example
@@ -98,6 +100,8 @@ console.log('Metric Result:', {
   score: result2.score,
   reason: result2.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 0.5, reason: 'Only half of the output is supported by the context.' }
 ```
 
 ### Low Recall Example
@@ -129,6 +133,8 @@ console.log('Metric Result:', {
   score: result3.score,
   reason: result3.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 0, reason: 'None of the output is supported by the context.' }
 ```
 
 ## Understanding the Results

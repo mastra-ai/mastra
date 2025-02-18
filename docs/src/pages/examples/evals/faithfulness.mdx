@@ -67,6 +67,8 @@ console.log('Metric Result:', {
   score: result1.score,
   reason: result1.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 1, reason: 'All claims are supported by the context.' }
 ```
 
 ### Mixed Faithfulness Example
@@ -97,6 +99,8 @@ console.log('Metric Result:', {
   score: result2.score,
   reason: result2.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 0.5, reason: 'Only half of the claims are supported by the context.' }
 ```
 
 ### Low Faithfulness Example
@@ -127,6 +131,8 @@ console.log('Metric Result:', {
   score: result3.score,
   reason: result3.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 0, reason: 'The response contradicts the context.' }
 ```
 
 ## Understanding the Results

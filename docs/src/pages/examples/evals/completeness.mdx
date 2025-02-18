@@ -58,6 +58,8 @@ console.log('Metric Result:', {
     elementCounts: result1.info.elementCounts,
   },
 });
+// Example Output:
+// Metric Result: { score: 1, info: { missingElements: [], elementCounts: { input: 8, output: 8 } } }
 ```
 
 ### Partial Coverage Example
@@ -80,6 +82,8 @@ console.log('Metric Result:', {
     elementCounts: result2.info.elementCounts,
   },
 });
+// Example Output:
+// Metric Result: { score: 0.875, info: { missingElements: ['yellow'], elementCounts: { input: 8, output: 7 } } }
 ```
 
 ### Minimal Coverage Example
@@ -102,6 +106,14 @@ console.log('Metric Result:', {
     elementCounts: result3.info.elementCounts,
   },
 });
+// Example Output:
+// Metric Result: {
+//   score: 0.3333333333333333,
+//   info: {
+//     missingElements: [ 'four', 'spring', 'winter', 'be', 'fall', 'and' ],
+//     elementCounts: { input: 9, output: 4 }
+//   }
+// }
 ```
 
 ## Understanding the Results

@@ -67,6 +67,8 @@ console.log('Metric Result:', {
   score: result1.score,
   reason: result1.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 1, reason: 'The context uses all relevant information and does not include any irrelevant information.' }
 ```
 
 ### Mixed Relevancy Example
@@ -98,6 +100,8 @@ console.log('Metric Result:', {
   score: result2.score,
   reason: result2.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 0.5, reason: 'The context uses some relevant information and includes some irrelevant information.' }
 ```
 
 ### Low Relevancy Example
@@ -129,6 +133,8 @@ console.log('Metric Result:', {
   score: result3.score,
   reason: result3.info.reason,
 });
+// Example Output:
+// Metric Result: { score: 0.12, reason: 'The context only has one relevant piece, while most of the context is irrelevant.' }
 ```
 
 ## Understanding the Results
