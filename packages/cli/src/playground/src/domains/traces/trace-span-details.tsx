@@ -5,7 +5,7 @@ import { SyntaxHighlighter } from '@/components/syntax-highlighter';
 import { cn } from '@/lib/utils';
 
 import { TraceContext } from './context/trace-context';
-import { Span } from './types';
+import type { Span } from './types';
 import { cleanString, formatDuration, formatOtelTimestamp, formatOtelTimestamp2, transformKey } from './utils';
 
 export function SpanDetail() {

@@ -94,7 +94,7 @@ program
         }
 
         if (args?.default) {
-          init({
+          await init({
             directory: 'src/',
             components: ['agents', 'tools', 'workflows'],
             llmProvider: 'openai',
@@ -104,7 +104,7 @@ program
         }
 
         const componentsArr = args.components ? args.components.split(',') : [];
-        init({
+        await init({
           directory: args.dir,
           components: componentsArr,
           llmProvider: args.llm,
@@ -132,6 +132,8 @@ program
       port: args?.port ? parseInt(args.port) : 4111,
       dir: args?.dir,
       root: args?.root,
+    }).catch(err => {
+      logger.error(err.message);
     });
   });
 

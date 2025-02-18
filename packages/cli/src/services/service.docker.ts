@@ -29,10 +29,12 @@ export class DockerService {
   }
 
   async isPortOpen(port: number): Promise<boolean> {
-    return new Promise(resolve => {
-      check(port).then((inUse: boolean) => {
-        resolve(!inUse);
-      });
+    return new Promise((resolve, reject) => {
+      check(port)
+        .then((inUse: boolean) => {
+          resolve(!inUse);
+        })
+        .catch(reject);
     });
   }
 

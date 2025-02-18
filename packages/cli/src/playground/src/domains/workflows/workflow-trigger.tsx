@@ -12,8 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
-import { useExecuteWorkflow } from '@/hooks/use-workflows';
-import { useWorkflow } from '@/hooks/use-workflows';
+import { useExecuteWorkflow, useWorkflow } from '@/hooks/use-workflows';
 
 export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; setRunId: (runId: string) => void }) {
   const { isLoading, workflow } = useWorkflow(workflowId);

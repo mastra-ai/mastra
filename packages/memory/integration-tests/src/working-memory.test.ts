@@ -1,7 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { MessageType } from '@mastra/core';
+import type { MessageType } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { DefaultStorage, DefaultVectorDB } from '@mastra/core/storage';
+import { DefaultStorage } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 import dotenv from 'dotenv';
 import { randomUUID } from 'node:crypto';

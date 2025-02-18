@@ -1,13 +1,13 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
+import fsExtra from 'fs-extra/esm';
 import { defineConfig } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
 import nodeExternals from 'rollup-plugin-node-externals';
 import pkgJson from './package.json' with { type: 'json' };
-import fsExtra from 'fs-extra/esm';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
 const external = ['commander', 'fs-extra', 'execa', 'prettier', 'posthog-node', 'pino', 'pino-pretty'];
 external.forEach(pkg => {

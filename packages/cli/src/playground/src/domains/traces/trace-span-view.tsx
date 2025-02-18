@@ -1,5 +1,5 @@
 import { TreeNode } from './trace-tree-view';
-import { Span, SpanNode } from './types';
+import type { Span, SpanNode } from './types';
 
 export function TreeView({ tree }: { tree: SpanNode[] }) {
   return (

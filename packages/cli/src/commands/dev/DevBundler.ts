@@ -1,5 +1,6 @@
 import { MastraBundler } from '@mastra/core/bundler';
-import { FileService, getWatcher } from '@mastra/deployer';
+import type { getWatcher } from '@mastra/deployer';
+import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions, writeTelemetryConfig } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
@@ -54,6 +55,7 @@ export class DevBundler extends Bundler {
         ...inputOptions,
         plugins: [
           // @ts-ignore - types are good
+          // eslint-disable-next-line @typescript-eslint/no-misused-promises
           ...inputOptions.plugins,
           {
             name: 'env-watcher',

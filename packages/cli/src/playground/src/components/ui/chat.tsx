@@ -1,8 +1,9 @@
 import { ArrowDown, ThumbsDown, ThumbsUp } from 'lucide-react';
-import { forwardRef, useCallback, useState, type ReactElement } from 'react';
+import { forwardRef, useCallback, useState } from 'react';
+import type { ReactElement } from 'react';
 
 import { Button } from '../../components/ui/button';
-import { type Message } from '../../components/ui/chat-message';
+import type { Message } from '../../components/ui/chat-message';
 import { CopyButton } from '../../components/ui/copy-button';
 import { MessageInput } from '../../components/ui/message-input';
 import { MessageList } from '../../components/ui/message-list';

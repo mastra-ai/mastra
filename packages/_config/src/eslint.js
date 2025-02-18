@@ -1,5 +1,4 @@
 // File mostly copied from https://github.com/epicweb-dev/config/blob/main/eslint.js
-
 import globals from 'globals';
 
 const ERROR = 'error';
@@ -254,7 +253,7 @@ export const createConfig = async () =>
       : null,
 
     {
-      files: testFiles,
+      files: [...testFiles, 'vitest.config.ts'],
       ignores: [...playwrightFiles],
       ...(await import('typescript-eslint')).configs.disableTypeChecked,
     },

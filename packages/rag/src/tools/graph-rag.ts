@@ -1,5 +1,5 @@
 import { createTool } from '@mastra/core/tools';
-import { type EmbeddingModel } from 'ai';
+import type { EmbeddingModel } from 'ai';
 import { z } from 'zod';
 
 import { GraphRAG } from '../graph-rag';

@@ -14,7 +14,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { cn } from '@/lib/utils';
 
-import { Evals, useEvalsByAgentId } from '@/hooks/use-evals';
+import type { Evals } from '@/hooks/use-evals';
+import { useEvalsByAgentId } from '@/hooks/use-evals';
 
 type SortDirection = 'asc' | 'desc';
 

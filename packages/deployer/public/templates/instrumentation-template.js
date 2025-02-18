@@ -1,13 +1,14 @@
+import { createLogger } from '@mastra/core/logger'
+import { MastraStorageLibSql } from '@mastra/core/storage'
+import { OTLPStorageExporter } from '@mastra/core/telemetry'
 import {
   NodeSDK, getNodeAutoInstrumentations, ATTR_SERVICE_NAME, Resource,
   ParentBasedSampler,
   TraceIdRatioBasedSampler,
   AlwaysOnSampler,
   AlwaysOffSampler,
+  OTLPHttpExporter,
 } from '@mastra/core/telemetry/otel-vendor';
-import { OTLPStorageExporter } from '@mastra/core/telemetry'
-import { MastraStorageLibSql } from '@mastra/core/storage'
-import { createLogger } from '@mastra/core/logger'
 import { telemetry } from './telemetry-config.mjs'
 
 

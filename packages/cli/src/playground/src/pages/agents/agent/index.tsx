@@ -12,7 +12,7 @@ import { AgentInformation } from '@/domains/agents/agent-information';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { useAgent } from '@/hooks/use-agents';
 import { useMemory, useMessages } from '@/hooks/use-memory';
-import { Message } from '@/types';
+import type { Message } from '@/types';
 
 function Agent() {
   const { agentId, threadId } = useParams();

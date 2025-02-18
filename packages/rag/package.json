@@ -17,7 +17,8 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --experimental-dts --clean --treeshake",
     "buld:watch": "pnpm build --watch",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint ."
   },
   "author": "",
   "license": "ISC",
@@ -44,7 +45,9 @@
     "dotenv": "^16.4.7",
     "tsup": "^8.0.1",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.4"
+    "vitest": "^3.0.4",
+    "@internal/lint": "workspace:*",
+    "eslint": "^9.20.1"
   },
   "keywords": [
     "rag",

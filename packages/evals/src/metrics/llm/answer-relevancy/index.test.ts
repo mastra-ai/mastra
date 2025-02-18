@@ -1,7 +1,8 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
 
-import { isCloserTo, TestCase } from '../utils';
+import type { TestCase } from '../utils';
+import { isCloserTo } from '../utils';
 
 import { AnswerRelevancyMetric } from './index';
 
