@@ -47,6 +47,7 @@ Response: {
   "verdict": "Complete"
 }
 
+User input: ${input}
 Analyze this recipe:
 ${output}
 
@@ -80,6 +81,8 @@ Example responses:
 {
     "reason": "The recipe is complete as it provides all necessary measurements, cooking times, and temperatures needed to successfully prepare the dish."
 }
+
+User input: ${input}
 
 Recipe to analyze: ${output}
 
