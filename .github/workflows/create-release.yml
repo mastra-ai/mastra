@@ -1,9 +1,5 @@
 name: Create Stable Release
 
-permissions:
-  contents: write
-  pull-requests: write
-
 on:
   workflow_dispatch:
     inputs:
@@ -19,12 +15,6 @@ jobs:
   release:
     name: Changesets Release
     runs-on: ubuntu-latest
-    # Permissions necessary for Changesets to push a new branch and open PRs
-    # (for automated Version Packages PRs), and request the JWT for provenance.
-    # More info: https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect#adding-permissions-settings
-    permissions:
-      contents: write
-      pull-requests: write
 
     steps:
       - uses: actions/create-github-app-token@v1
