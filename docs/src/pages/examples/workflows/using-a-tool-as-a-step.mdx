@@ -10,7 +10,8 @@ import { GithubLink } from '../../../components/github-link';
 This example demonstrates how to create and integrate a custom tool as a workflow step, showing how to define input/output schemas and implement the tool's execution logic.
 
 ```ts showLineNumbers copy
-import { createTool, Workflow } from '@mastra/core/workflows';
+import { createTool } from '@mastra/core/tools';
+import { Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 const crawlWebpage = createTool({

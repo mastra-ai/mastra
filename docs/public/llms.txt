@@ -47,6 +47,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Mastra Client SDK](https://mastra.ai/docs/reference/client-js): A simple and type-safe interface to interact with Mastra REST APIs from TypeScript and JavaScript applications.
 - [logs](https://mastra.ai/docs/reference/client-js/logs)
 - [memory](https://mastra.ai/docs/reference/client-js/memory)
+- [telemetry](https://mastra.ai/docs/reference/client-js/telemetry)
 - [tools](https://mastra.ai/docs/reference/client-js/tools)
 - [vectors](https://mastra.ai/docs/reference/client-js/vectors)
 - [workflows](https://mastra.ai/docs/reference/client-js/workflows)

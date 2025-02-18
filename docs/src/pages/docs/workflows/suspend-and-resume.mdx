@@ -49,32 +49,31 @@ const stepTwo = new Step({
 To handle suspended workflows, use the `watch` method to monitor workflow status and `resume` to continue execution:
 
 ```typescript
-// Create and start the workflow
+import { mastra } from "./index";
+
+// Get the workflow
+const myWorkflow = mastra.getWorkflow('myWorkflow');
 const { runId, start } = myWorkflow.createRun();
 
 // Start watching the workflow before executing it
-myWorkflow.watch(runId, async ({ context }) => {
-  // Check each step's status
-  const stepStatus = context.steps?.stepTwo?.status;
+myWorkflow.watch(async ({ context, activePaths }) => {
+  for (const _path of activePaths) {
+    const stepTwoStatus = context.steps?.stepTwo?.status;
+    if (stepTwoStatus === 'suspended') {
+      console.log("Workflow suspended, resuming with new value");
 
-  if (stepStatus === "suspended") {
-    console.log("Workflow suspended, resuming with new value");
-
-    // Resume the workflow with new context
-    await myWorkflow.resume({
-      runId,
-      stepId: "stepTwo",
-      context: {
-        secondValue: 60, // This value will be added to the original value
-      },
-    });
+      // Resume the workflow with new context
+      await myWorkflow.resume({
+        runId,
+        stepId: 'stepTwo',
+        context: { secondValue: 100 },
+      });
+    }
   }
-});
+})
 
 // Start the workflow execution
-const result = await start({
-  triggerData: { inputValue: 45 },
-});
+await start({ triggerData: { inputValue: 45 } });
 ```
 
 ## Related Resources
