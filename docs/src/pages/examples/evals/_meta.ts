@@ -11,5 +11,6 @@ const meta = {
   hallucination: "Hallucination",
   "prompt-alignment": "Prompt Alignment",
   "custom-eval": "Custom Eval",
+  toxicity: "Toxicity",
 };
 export default meta;

@@ -536,6 +536,19 @@ importers:
         specifier: ^16.4.7
         version: 16.4.7
 
+  examples/basics/evals/toxicity:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: latest
+        version: 1.1.12(zod@3.24.2)
+      '@mastra/evals':
+        specifier: workspace:^
+        version: link:../../../../packages/evals
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
   examples/basics/rag/adjust-chunk-delimiters:
     dependencies:
       '@mastra/rag':
