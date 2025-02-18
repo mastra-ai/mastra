@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 
-import { GraphChunk, GraphEdge, GraphEmbedding, GraphNode, GraphRAG } from './';
+import type { GraphChunk, GraphEdge, GraphEmbedding, GraphNode } from './';
+import { GraphRAG } from './';
 
 describe('GraphRAG', () => {
   beforeEach(() => {
