@@ -42,7 +42,7 @@ const text3 = 'The seasons include summer.';
 const reference3 = 'The four seasons are spring, summer, fall, and winter.';
 
 console.log('Example 3 - Minimal Coverage:');
-console.log('xt:', text3);
+console.log('Text:', text3);
 console.log('Reference:', reference3);
 
 const result3 = await metric.measure(reference3, text3);
