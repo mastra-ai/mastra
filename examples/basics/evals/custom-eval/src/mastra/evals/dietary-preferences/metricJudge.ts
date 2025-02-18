@@ -9,9 +9,15 @@ export class DietaryPreferencesJudge extends MastraAgentJudge {
     super('Dietary Preferences', DIETARY_AGENT_INSTRUCTIONS, model);
   }
 
-  async evaluate(input: string, output: string): Promise<{ verdict: string; ingredients: string[] }> {
+  async evaluate(
+    input: string,
+    output: string,
+  ): Promise<{
+    ingredients: string[];
+    verdict: string;
+  }> {
     const dietaryPreferencesPrompt = generateDietaryPreferencesPrompt({ input, output });
-    const result = await this.agent.generate(dietaryPreferencesPrompt, {
+    const result = await this.agent.generate<{ ingredients: string[]; verdict: string }>(dietaryPreferencesPrompt, {
       output: z.object({
         ingredients: z.array(z.string()),
         verdict: z.string(),
@@ -26,8 +32,8 @@ export class DietaryPreferencesJudge extends MastraAgentJudge {
     output: string;
     score: number;
     scale: number;
-    verdict: string;
     ingredients: string[];
+    verdict: string;
   }): Promise<string> {
     const prompt = generateReasonPrompt(args);
     const result = await this.agent.generate(prompt, {
@@ -35,6 +41,7 @@ export class DietaryPreferencesJudge extends MastraAgentJudge {
         reason: z.string(),
       }),
     });
+
     return result.object.reason;
   }
 }
