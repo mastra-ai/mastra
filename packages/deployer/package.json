@@ -34,7 +34,8 @@
     "build": "tsup src/index.ts src/build/index.ts src/server/index.ts src/build/bundler.ts src/build/analyze.ts src/bundler/index.ts --format esm --clean --experimental-dts --treeshake --publicDir",
     "build:watch": "pnpm build --watch",
     "pull:openapispec": "node src/server/openapi.script.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint ."
   },
   "keywords": [],
   "author": "",
@@ -76,6 +77,8 @@
     "type-fest": "^4.30.0",
     "typescript": "^5.7.3",
     "vitest": "^2.1.8",
-    "zod-to-json-schema": "^3.24.1"
+    "zod-to-json-schema": "^3.24.1",
+    "@internal/lint": "workspace:*",
+    "eslint": "^9.20.1"
   }
 }

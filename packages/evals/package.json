@@ -30,7 +30,8 @@
     "check": "tsc --noEmit",
     "build": "pnpm check && tsup src/index.ts src/metrics/llm/index.ts src/metrics/nlp/index.ts --format esm --experimental-dts --clean --treeshake",
     "build:watch": "pnpm build --watch",
-    "test": "vitest"
+    "test": "vitest",
+    "lint": "eslint ."
   },
   "keywords": [],
   "author": "",
@@ -59,6 +60,8 @@
     "dotenv": "^16.4.7",
     "tsup": "^8.0.1",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.4"
+    "vitest": "^3.0.4",
+    "@internal/lint": "workspace:*",
+    "eslint": "^9.20.1"
   }
 }
