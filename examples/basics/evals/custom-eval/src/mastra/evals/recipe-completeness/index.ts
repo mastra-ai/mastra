@@ -30,8 +30,6 @@ export class RecipeCompletenessMetric extends Metric {
     const reason = await this.judge.getReason({
       input,
       output,
-      score,
-      scale: this.scale,
       verdict,
       missing,
     });

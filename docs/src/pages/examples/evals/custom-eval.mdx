@@ -160,8 +160,24 @@ export class RecipeCompletenessJudge extends MastraAgentJudge {
 
     return result.object;
   }
+
+  async getReason(args: { input: string; output: string; missing: string[]; verdict: string }): Promise<string> {
+    const prompt = generateReasonPrompt(args);
+    const result = await this.agent.generate(prompt, {
+      output: z.object({
+        reason: z.string(),
+      }),
+    });
+
+    return result.object.reason;
+  }
 }
 ```
+
+The judge class handles the core evaluation logic through two main methods:
+
+- `evaluate()`: Analyzes recipe completeness and returns missing elements with verdict
+- `getReason()`: Provides human-readable explanation for the evaluation results
 
 ## Creating the Metric
 
@@ -191,8 +207,6 @@ export class RecipeCompletenessMetric extends Metric {
     const reason = await this.judge.getReason({
       input,
       output,
-      score,
-      scale: this.scale,
       verdict,
       missing,
     });
@@ -205,8 +219,17 @@ export class RecipeCompletenessMetric extends Metric {
       },
     };
   }
+
+  private calculateScore(verdict: { verdict: string }): number {
+    return verdict.verdict.toLowerCase() === 'incomplete' ? 0 : 1;
+  }
 }
 ```
+
+The metric class serves as the main interface for recipe evaluation with two key methods:
+
+- `measure()`: Orchestrates the entire evaluation process and returns a comprehensive result
+- `calculateScore()`: Converts the evaluation verdict to a binary score (1 for complete, 0 for incomplete)
 
 ## Setting Up the Agent
 

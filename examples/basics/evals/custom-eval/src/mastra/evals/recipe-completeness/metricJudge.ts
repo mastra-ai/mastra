@@ -27,14 +27,7 @@ export class RecipeCompletenessJudge extends MastraAgentJudge {
     return result.object;
   }
 
-  async getReason(args: {
-    input: string;
-    output: string;
-    score: number;
-    scale: number;
-    missing: string[];
-    verdict: string;
-  }): Promise<string> {
+  async getReason(args: { input: string; output: string; missing: string[]; verdict: string }): Promise<string> {
     const prompt = generateReasonPrompt(args);
     const result = await this.agent.generate(prompt, {
       output: z.object({
