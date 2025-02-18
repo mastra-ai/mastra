@@ -11,17 +11,13 @@ This example demonstrates how to implement a Retrieval-Augmented Generation (RAG
 
 ## Overview
 
-The system implements a two-stage retrieval process:
+The system implements RAG with re-ranking using Mastra and OpenAI. Here's what it does:
 
-1. Initial Vector Search:
-   - Uses OpenAI embeddings to find semantically similar chunks
-   - Retrieves an initial set of potentially relevant documents
-   - Stores vectors in PostgreSQL for efficient similarity search
-
-2. Semantic Re-ranking:
-   - Takes initial vector search results
-   - Uses GPT-4 to re-rank chunks based on semantic relevance
-   - Combines vector similarity, semantic relevance, and position scores
+1. Chunks text documents into smaller segments and creates embeddings from them
+2. Stores vectors in a PostgreSQL database
+3. Performs initial vector similarity search
+4. Re-ranks results using Mastra's rerank function, combining vector similarity, semantic relevance, and position scores
+5. Compares initial and re-ranked results to show improvements
 
 ## Setup
 
@@ -104,13 +100,18 @@ const initialResults = await pgVector.query('embeddings', queryEmbedding, 3);
 // Re-rank results
 const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'), {
   weights: {
-    semantic: 0.5,
-    vector: 0.3,
-    position: 0.2,
+    semantic: 0.5,  // How well the content matches the query semantically
+    vector: 0.3,    // Original vector similarity score
+    position: 0.2   // Preserves original result ordering
   },
   topK: 3,
 });
 ```
+
+The weights control how different factors influence the final ranking:
+- `semantic`: Higher values prioritize semantic understanding and relevance to the query
+- `vector`: Higher values favor the original vector similarity scores
+- `position`: Higher values help maintain the original ordering of results
 
 ## Comparing Results
 

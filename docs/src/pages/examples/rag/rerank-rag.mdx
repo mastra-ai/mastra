@@ -15,11 +15,10 @@ The system implements RAG with re-ranking using Mastra's vector query tool and O
 
 1. Sets up a Mastra agent with gpt-4o-mini for response generation
 2. Creates a vector query tool with re-ranking capabilities
-3. Chunks text documents into smaller segments
-4. Creates embeddings for these chunks
-5. Stores them in a PostgreSQL vector database
-6. Retrieves and re-ranks relevant chunks based on queries
-7. Generates context-aware responses using the Mastra agent
+3. Chunks text documents into smaller segments and creates embeddings from them
+4. Stores them in a PostgreSQL vector database
+5. Retrieves and re-ranks relevant chunks based on queries
+6. Generates context-aware responses using the Mastra agent
 
 ## Setup
 
