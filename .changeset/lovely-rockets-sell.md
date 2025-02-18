@@ -1,5 +1,4 @@
 ---
-'@mastra/memory-integration-tests': patch
 '@mastra/deployer': patch
 '@mastra/loggers': patch
 '@mastra/memory': patch
