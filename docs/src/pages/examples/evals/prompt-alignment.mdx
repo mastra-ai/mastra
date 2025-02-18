@@ -138,10 +138,24 @@ console.log('Metric Result:', {
 ## Understanding the Results
 
 The metric provides:
-- A score between 0 and 1 for normal cases
-- A special score of -1 when no instructions are applicable
-- Detailed breakdown of followed, missed, and N/A instructions
-- Clear reasoning for the score calculation
+
+1. An alignment score between 0 and 1, or -1 for special cases:
+   - 1.0: Perfect alignment - all applicable instructions followed
+   - 0.5-0.8: Mixed alignment - some instructions missed
+   - 0.1-0.4: Poor alignment - most instructions not followed
+   - 0.0:No alignment - no instructions are applicable or followed
+
+2. Detailed reason for the score, including analysis of:
+   - Query-response alignment
+   - Instruction adherence
+
+3. Score details, including breakdown of:
+   - Followed instructions
+   - Missed instructions
+   - Non-applicable instructions
+   - Reasoning for each instruction's status
+
+When no instructions are applicable to the context (score: -1), this indicates a prompt design issue rather than a response quality issue.
 
 <br />
 <br />
