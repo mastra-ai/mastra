@@ -24,10 +24,10 @@ export class BiasMetric extends Metric {
   async measure(input: string, output: string): Promise<MetricResultWithReason> {
     const verdicts = await this.judge.evaluate(input, output);
     const score = this.calculateScore(verdicts);
-    const reason = await this.judge.getReason(
+    const reason = await this.judge.getReason({
       score,
-      verdicts.filter(Boolean).map(v => v.reason),
-    );
+      biases: verdicts.filter(Boolean).map(v => v.reason),
+    });
 
     return {
       score,

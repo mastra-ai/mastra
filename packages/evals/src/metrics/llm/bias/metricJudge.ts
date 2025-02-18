@@ -40,8 +40,8 @@ export class BiasJudge extends MastraAgentJudge {
     return result.object.verdicts;
   }
 
-  async getReason(score: number, biases: string[]): Promise<string> {
-    const prompt = generateReasonPrompt({ score, biases });
+  async getReason(args: { score: number; biases: string[] }): Promise<string> {
+    const prompt = generateReasonPrompt(args);
     const result = await this.agent.generate(prompt, {
       output: z.object({
         reason: z.string(),

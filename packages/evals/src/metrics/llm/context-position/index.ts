@@ -27,7 +27,7 @@ export class ContextPositionMetric extends Metric {
   async measure(input: string, output: string): Promise<MetricResultWithReason> {
     const verdicts = await this.judge.evaluate(input, output, this.context);
     const score = this.calculateScore(verdicts);
-    const reason = await this.judge.getReason(input, output, score, this.scale, verdicts);
+    const reason = await this.judge.getReason({ input, output, score, scale: this.scale, verdicts });
 
     return {
       score,
