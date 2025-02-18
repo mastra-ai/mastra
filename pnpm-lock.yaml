@@ -546,6 +546,26 @@ importers:
         specifier: ^16.4.7
         version: 16.4.7
 
+  examples/basics/evals/textual-difference:
+    dependencies:
+      '@mastra/evals':
+        specifier: workspace:^
+        version: link:../../../../packages/evals
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/evals/tone-consistency:
+    dependencies:
+      '@mastra/evals':
+        specifier: workspace:^
+        version: link:../../../../packages/evals
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
   examples/basics/evals/toxicity:
     dependencies:
       '@ai-sdk/openai':

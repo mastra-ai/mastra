@@ -12,6 +12,8 @@ const meta = {
   "keyword-coverage": "Keyword Coverage",
   "prompt-alignment": "Prompt Alignment",
   "custom-eval": "Custom Eval",
+  "textual-difference": "Textual Difference",
+  "tone-consistency": "Tone Consistency",
   toxicity: "Toxicity",
 };
 export default meta;
