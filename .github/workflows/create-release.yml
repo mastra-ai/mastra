@@ -15,6 +15,8 @@ jobs:
   release:
     name: Changesets Release
     runs-on: ubuntu-latest
+    outputs:
+      exited_prerelease: ${{ steps.exit_prerelease.outputs.executed }}
 
     steps:
       - uses: actions/create-github-app-token@v1
@@ -107,8 +109,56 @@ jobs:
         if: ${{ inputs.dry_run }}
         run: pnpm changeset publish --dry-run
 
+  enter_prerelease:
+    needs: release
+    if: needs.release.outputs.exited_prerelease == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Get GitHub App User ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - run: |
+          cat <<- EOF > $HOME/.netrc
+            machine github.com
+            login ${{ steps.app-token.outputs.app-slug }}
+            password ${{ steps.app-token.outputs.token }}
+            machine api.github.com
+            login ${{ steps.app-token.outputs.app-slug }}
+            password ${{ steps.app-token.outputs.token }}
+          EOF
+          git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
       - name: Enter prerelease mode
-        if: always() && ${{ steps.exit-prerelease-mode.outputs.executed == 'true' }}
         run: |
           pnpm changeset pre enter alpha
           git add -A
