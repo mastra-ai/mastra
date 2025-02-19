@@ -30,6 +30,7 @@
   "devDependencies": {
     "@babel/preset-env": "^7.26.0",
     "@babel/preset-typescript": "^7.26.0",
+    "@internal/lint": "workspace:*",
     "@tsconfig/recommended": "^1.0.7",
     "@types/json-schema": "^7.0.15",
     "@types/node": "^22.9.0",
