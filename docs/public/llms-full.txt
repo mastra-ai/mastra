@@ -1248,7 +1248,7 @@ description: "Mastra provides several default evals for assessing Agent outputs.
 # Supported evals in Mastra
 Source: https://mastra.ai/docs/evals/01-supported-evals
 
-Mastra provides several eval metrics for assessing Agent outputs. Mastra is not limited to these metrics, and you can also [define your own evals](/docs/reference/evals/02-custom-eval).
+Mastra provides several eval metrics for assessing Agent outputs. Mastra is not limited to these metrics, and you can also [define your own evals](/docs/evals/02-custom-eval).
 
 ### Accuracy and Reliability
 - [`hallucination`](/docs/reference/evals/hallucination): Detects fabricated or unsupported information
@@ -1292,7 +1292,6 @@ Here is a very basic example of a custom eval that checks if the output contains
 
 ```typescript copy showLineNumbers filename="src/mastra/evals/keyword-coverage.ts"
 import { Metric, type MetricResult } from '@mastra/core/eval';
-import keyword_extractor from 'keyword-extractor';
 
 interface KeywordCoverageResult extends MetricResult {
   info: {
@@ -1306,7 +1305,7 @@ export class KeywordCoverageMetric extends Metric {
 
   constructor(keywords: string[]) {
     super();
-    this.referenceKeywords = new Set(this.keywords);
+    this.referenceKeywords = new Set(keywords);
   }
 
   async measure(input: string, output: string): Promise<KeywordCoverageResult> {
@@ -1328,7 +1327,7 @@ export class KeywordCoverageMetric extends Metric {
     return {
       score: coverage,
       info: {
-        totalKeywords: referenceKeywords.size,
+        totalKeywords: this.referenceKeywords.size,
         matchedKeywords: matchedKeywords.length,
       },
     };
@@ -1340,58 +1339,33 @@ export class KeywordCoverageMetric extends Metric {
 
 A custom LLM judge can provide more targeted and meaningful evaluations for your use case. For example, if you're building a medical Q&A system, you might want to evaluate not just answer relevancy but also medical accuracy and safety considerations.
 
-Let's create an example to make sure our [Chef Michel](/docs/guides/01-chef-michel) is not breaking any dietary preferences of the user.
+Let's create an example to make sure our [Chef Michel](/docs/guides/01-chef-michel) is giving complete recipe information to the user.
 
 We'll start with creating the judge agent. You can put it all in one file but we prefer splitting it into a separate file to keep things readable.
 
-```typescript copy showLineNumbers filename="src/mastra/evals/dietary-preferences-judge.ts"
-import { Agent } from '@mastra/core/agent';
+```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/metricJudge.ts"
 import { type LanguageModel } from '@mastra/core/llm';
+import { MastraAgentJudge } from '@mastra/evals/judge';
 import { z } from 'zod';
 
-import { MastraAgentJudge } from '../../judge';
+import { RECIPE_COMPLETENESS_INSTRUCTIONS, generateCompletenessPrompt, generateReasonPrompt } from './prompts';
 
-import {
-  generateClaimExtractionPrompt,
-  generateEvaluatePrompt,
-  FAITHFULNESS_AGENT_INSTRUCTIONS,
-  generateReasonPrompt,
-} from './prompts';
-
-export class DietaryPreferencesJudge {
-  private agent: Agent;
-
+export class RecipeCompletenessJudge extends MastraAgentJudge {
   constructor(model: LanguageModel) {
-    this.agent = new Agent({
-      name: `Mastra Eval Dietary Preferences Judge`,
-    instructions: `You are a Master Chef that acts as a food judge. If any dietary preferences are mentioned in the user's input, you need to check if the recipe contains any ingredients that are forbidden or preferred by the user.`,
-      model,
-    });
+    super('Recipe Completeness', RECIPE_COMPLETENESS_INSTRUCTIONS, model);
   }
 
-  async evaluate(input: string, output: string): Promise<{ claim: string; verdict: string; reason: string }[]> {
-    const validateDietaryPreferencesPrompt = `Based on the user's input, check if the recipe contains any ingredients that are forbidden or preferred by the user.
-
-Here are some things you need to consider:
-- The user might not mention any dietary preferences, in that case you should return an empty array.
-- The user might mention specific ingredients that are forbidden or preferred, in that case you should return an array with the ingredient and the verdict.
-
-Examples:
-- User input: "I am a vegetarian, so I cannot eat any meat."
-- Recipe: "1lb of beef"
-- Verdict: "Forbidden"
-
-- User input: "I am a vegan, so I cannot eat any meat or dairy products."
-- Recipe: "1 cup of milk"
-- Verdict: "Forbidden"
-
-user input: ${input}
-
-recipe: ${output}
-`
-    const result = await this.agent.generate(validateDietaryPreferencesPrompt, {
+  async evaluate(
+    input: string,
+    output: string,
+  ): Promise<{
+    missing: string[];
+    verdict: string;
+  }> {
+    const completenessPrompt = generateCompletenessPrompt({ input, output });
+    const result = await this.agent.generate(completenessPrompt, {
       output: z.object({
-        ingredients: z.array(z.string()),
+        missing: z.array(z.string()),
         verdict: z.string(),
       }),
     });
@@ -1402,83 +1376,92 @@ recipe: ${output}
   async getReason(args: {
     input: string;
     output: string;
-    score: number;
-    scale: number;
-    verdict: { verdict: string; ingredients: string[] }[];
+    missing: string[];
+    verdict: string;
   }): Promise<string> {
-    const prompt = `Explain why the recipe with the ingredients ${args.verdict.ingredients.join(', ')} is ${args.verdict.verdict} according to the user's input: ${args.input}
-    
-Here is the recipe: ${args.output}`;
+    const prompt = generateReasonPrompt(args);
     const result = await this.agent.generate(prompt, {
       output: z.object({
         reason: z.string(),
       }),
     });
+
     return result.object.reason;
   }
 }
 ```
-
-```typescript copy showLineNumbers filename="src/mastra/evals/dietary-preferences.ts"
-import { Metric } from '@mastra/core/eval';
-import { DietaryPreferencesJudge } from './dietary-preferences-judge';
+```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/index.ts"
+import { Metric, type MetricResult } from '@mastra/core/eval';
 import { type LanguageModel } from '@mastra/core/llm';
 
-export interface DietaryPreferencesMetricOptions {
+import { RecipeCompletenessJudge } from './metricJudge';
+
+export interface RecipeCompletenessMetricOptions {
   scale?: number;
 }
 
-export class DietaryPreferencesMetric extends Metric {
-  private judge: Agent;
+export interface MetricResultWithInfo extends MetricResult {
+  info: {
+    reason: string;
+    missing: string[];
+  };
+}
+
+export class RecipeCompletenessMetric extends Metric {
+  private judge: RecipeCompletenessJudge;
   private scale: number;
-  constructor(model: LanguageModel, { scale = 1 }: DietaryPreferencesMetricOptions) {
+  constructor(model: LanguageModel, { scale = 1 }: RecipeCompletenessMetricOptions = {}) {
     super();
 
-    this.judge = new DietaryPreferencesJudge(model);
+    this.judge = new RecipeCompletenessJudge(model);
     this.scale = scale;
   }
 
-  async measure(input: string, output: string): Promise<MetricResultWithReason> {
-    const verdict = await this.judge.evaluate(input, output);
-    const score = this.calculateScore(verdicts);
+  async measure(input: string, output: string): Promise<MetricResultWithInfo> {
+    const { verdict, missing } = await this.judge.evaluate(input, output);
+    const score = this.calculateScore({ verdict });
     const reason = await this.judge.getReason({
       input,
       output,
-      score,
-      scale: this.scale,
       verdict,
+      missing,
     });
 
     return {
       score,
       info: {
-        ingredients: verdict.ingredients,
+        missing,
         reason,
       },
     };
   }
 
-  private calculateScore(verdict: { verdict: string; }): number {
-    return verdict.verdict.toLowerCase() === 'forbidden' ? 0 : 1;
+  private calculateScore(verdict: { verdict: string }): number {
+    return verdict.verdict.toLowerCase() === 'incomplete' ? 0 : 1;
   }
 }
 ```
 
-You can now use the `DietaryPreferencesMetric` in your project. [See the full example here](/docs/guides/01-chef-michel).
-
 ```typescript copy showLineNumbers filename="src/mastra/agents/chefAgent.ts"
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
-import { DietaryPreferencesMetric } from "../evals/dietary-preferences";
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+
+import { RecipeCompletenessMetric } from '../evals';
+
 export const chefAgent = new Agent({
-  name: "chef-agent",
+  name: 'chef-agent',
   instructions:
-    "You are Michel, a practical and experienced home chef" +
-    "You helps people cook with whatever ingredients they have available.",
-  model: openai("gpt-4o-mini"),
-  evals: [new DietaryPreferencesMetric(openai("gpt-4o-mini"))],
+    'You are Michel, a practical and experienced home chef' +
+    'You help people cook with whatever ingredients they have available.',
+  model: openai('gpt-4o-mini'),
+  evals: {
+    recipeCompleteness: new RecipeCompletenessMetric(openai('gpt-4o-mini')),
+  },
 });
 ```
+
+You can now use the `RecipeCompletenessMetric` in your project. [See the full example here](/examples/evals/custom-eval).
+
 
 
 ---
@@ -1760,7 +1743,7 @@ This registers your agent with Mastra so that `mastra dev` can discover and serv
 
 <Callout type="info">
   To add Mastra to an existing project, see our Local dev docs on [mastra
-  init](/docs/local-dev/mastra-init).
+  init](/docs/local-dev/creating-projects).
 </Callout>
 
 ## Start the Mastra Server
@@ -1966,7 +1949,7 @@ export const chefAgent = new Agent({
   name: "chef-agent",
   instructions:
     "You are Michel, a practical and experienced home chef" +
-    "You helps people cook with whatever ingredients they have available.",
+    "You help people cook with whatever ingredients they have available.",
   model: openai("gpt-4o-mini"),
 });
 ```
@@ -3342,22 +3325,24 @@ Initial vector similarity search can sometimes miss nuanced relevance. Re-rankin
 - Applying more sophisticated relevance scoring
 - Using a method called cross-attention between query and documents
 
-Here's how to set up re-ranking:
+Here's how to use re-ranking:
 
 ```ts showLineNumbers copy
-const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'embeddings',
-  model: openai.embedding('text-embedding-3-small'),
-  reranker: {
-    model: openai('gpt-4o-mini'),
-  }
-});
+import { openai } from "@ai-sdk/openai";
+import { rerank } from "@mastra/rag";
+
+// Get initial results from vector search
+const initialResults = await pgVector.query("embeddings", queryEmbedding, 10);
+
+// Re-rank the results
+const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'));
 ```
+
+The re-ranked results combine vector similarity with semantic understanding to improve retrieval quality.
 
 For more details about re-ranking, see the [rerank()](/docs/reference/rag/rerank) method.
 
-For an example of how to use the re-ranking method, see the [Re-ranking Results](../../examples/rag/rerank-rag.mdx) example.
+For an example of how to use the re-ranking method, see the [Re-ranking Results](../../examples/rag/rerank.mdx) example.
 
 ### Graph-based Retrieval
 
@@ -5233,20 +5218,28 @@ console.log(result.info.reason); // Explanation of the score
 
 ## Scoring Details
 
-The metric evaluates relevancy through multiple verdicts and calculates a score based on:
+The metric evaluates relevancy through query-answer alignment, considering completeness, accuracy, and detail level.
 
-- Direct relevance to the query
-- Completeness of the answer
-- Accuracy of information
-- Appropriate level of detail
+### Scoring Process
 
-Score interpretation:
+1. Statement Analysis:
+   - Breaks output into meaningful statements while preserving context
+   - Evaluates each statement against query requirements
 
-- 1.0: Perfect relevance
-- 0.7-0.9: High relevance with minor issues
-- 0.4-0.6: Moderate relevance with significant gaps
-- 0.1-0.3: Low relevance with major issues
-- 0: Completely irrelevant or incorrect
+2. Evaluates relevance of each statement:
+   - "yes": Full weight for direct matches
+   - "unsure": Partial weight (default: 0.3) for approximate matches
+   - "no": Zero weight for irrelevant content
+
+Final score: `((direct + uncertainty * partial) / total_statements) * scale`
+
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: Perfect relevance - complete and accurate
+- 0.7-0.9: High relevance - minor gaps or imprecisions
+- 0.4-0.6: Moderate relevance - significant gaps
+- 0.1-0.3: Low relevance - major issues
+- 0.0: No relevance - incorrect or off-topic
 
 ## Example with Custom Configuration
 
@@ -5411,13 +5404,36 @@ The metric evaluates several types of bias:
 3. **Racial/Ethnic Bias**: Discrimination based on race, ethnicity, or national origin
 4. **Geographical Bias**: Prejudice based on location or regional stereotypes
 
-## Score Interpretation
+## Scoring Details
 
-- 0.0: No detectable bias
-- 0.1-0.3: Minimal bias
-- 0.4-0.6: Moderate bias
-- 0.7-0.9: Significant bias
-- 1.0: Severe bias
+The metric evaluates bias through opinion analysis based on:
+- Opinion identification and extraction
+- Presence of discriminatory language
+- Use of stereotypes or generalizations
+- Balance in perspective presentation
+- Loaded or prejudicial terminology
+
+### Scoring Process
+
+1. Extracts opinions from text:
+   - Identifies subjective statements
+   - Excludes factual claims
+   - Includes cited opinions
+
+2. Evaluates each opinion:
+   - Checks for discriminatory language
+   - Assesses stereotypes and generalizations
+   - Analyzes perspective balance
+
+Final score: `(biased_opinions / total_opinions) * scale`
+
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: Complete bias - all opinions contain bias
+- 0.7-0.9: Significant bias - majority of opinions show bias
+- 0.4-0.6: Moderate bias - mix of biased and neutral opinions
+- 0.1-0.3: Minimal bias - most opinions show balanced perspective
+- 0.0: No detectable bias - opinions are balanced and neutral
 
 ## Example with Different Types of Bias
 
@@ -5573,6 +5589,32 @@ The extraction process includes:
 - Special handling of short words (3 characters or less)
 - Deduplication of elements
 
+## Scoring Details
+
+The metric evaluates completeness through linguistic element coverage analysis.
+
+### Scoring Process
+
+1. Extracts key elements:
+   - Nouns and named entities
+   - Action verbs
+   - Topic-specific terms
+   - Normalized word forms
+
+2. Calculates coverage of input elements:
+   - Exact matches for short terms (≤3 chars)
+   - Substantial overlap (>60%) for longer terms
+
+Final score: `(covered_elements / total_input_elements) * scale`
+
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: Complete coverage - contains all input elements
+- 0.7-0.9: High coverage - includes most key elements
+- 0.4-0.6: Partial coverage - contains some key elements
+- 0.1-0.3: Low coverage - missing most key elements
+- 0.0: No coverage - output lacks all input elements
+
 ## Example with Analysis
 
 ```typescript
@@ -5716,11 +5758,31 @@ console.log(result.info); // Detailed similarity metrics
   ]}
 />
 
-## Text Processing Details
+## Scoring Details
 
-The metric processes text in the following ways when configured:
-- Case normalization: Converts all text to lowercase if `ignoreCase` is true
-- Whitespace normalization: Replaces multiple spaces with single space and trims if `ignoreWhitespace` is true
+The metric evaluates textual similarity through character-level matching and configurable text normalization.
+
+### Scoring Process
+
+1. Normalizes text:
+   - Case normalization (if ignoreCase: true)
+   - Whitespace normalization (if ignoreWhitespace: true)
+
+2. Compares processed strings using string-similarity algorithm:
+   - Analyzes character sequences
+   - Aligns word boundaries
+   - Considers relative positions
+   - Accounts for length differences
+
+Final score: `similarity_value * scale`
+
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: Perfect match - identical texts
+- 0.7-0.9: High similarity - mostly matching content
+- 0.4-0.6: Moderate similarity - partial matches
+- 0.1-0.3: Low similarity - few matching patterns
+- 0.0: No similarity - completely different texts
 
 ## Example with Different Options
 
@@ -5895,28 +5957,29 @@ console.log(result.info.reason); // Explanation of the score
 
 ## Scoring Details
 
-The metric evaluates context positioning through:
+The metric evaluates context positioning through binary relevance assessment and position-based weighting.
 
-- Individual assessment of each context piece's relevance
-- Position-based weighting (1/position)
-- Binary relevance verdicts (yes/no) with detailed reasoning
-- Normalization against optimal ordering
+### Scoring Process
 
-The scoring process:
+1. Evaluates context relevance:
+   - Assigns binary verdict (yes/no) to each piece
+   - Records position in sequence
+   - Documents relevance reasoning
 
-1. Evaluates the relevance of each context piece
-2. Applies position weights (earlier positions weighted more heavily)
-3. Sums weighted relevance scores
-4. Normalizes against the maximum possible score
-5. Scales to configured range (default 0-1)
+2. Applies position weights:
+   - Earlier positions weighted more heavily (weight = 1/(position + 1))
+   - Sums weights of relevant pieces
+   - Normalizes by maximum possible score
 
-Score interpretation:
+Final score: `(weighted_sum / max_possible_sum) * scale`
 
-- 1.0: Most relevant context at the beginning, optimal ordering
-- 0.7-0.9: Relevant context mainly at the beginning
-- 0.4-0.6: Mixed ordering of relevant context
-- 0.1-0.3: Relevant context mainly at the end
-- 0: No relevant context or worst possible ordering
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: Optimal - most relevant context first
+- 0.7-0.9: Good - relevant context mostly early
+- 0.4-0.6: Mixed - relevant context scattered
+- 0.1-0.3: Suboptimal - relevant context mostly later
+- 0.0: Poor ordering - relevant context at end or missing
 
 ## Example with Analysis
 
@@ -6086,27 +6149,28 @@ console.log(result.info.reason); // Explanation of the score
 
 ## Scoring Details
 
-The metric evaluates context precision through:
+The metric evaluates context precision through binary relevance assessment and Mean Average Precision (MAP) scoring.
 
-- Individual assessment of each context piece's relevance
-- Position-weighted scoring (earlier positions weighted more heavily)
-- Binary relevance verdicts (yes/no) with detailed reasoning
-- Consideration of context ordering
+### Scoring Process
 
-The final score is calculated using Mean Average Precision (MAP):
+1. Assigns binary relevance scores:
+   - Relevant context: 1
+   - Irrelevant context: 0
 
-1. Converts verdicts to binary scores (1 for relevant, 0 for not)
-2. Calculates precision at each position
-3. Weight earlier positions more heavily
-4. Normalizes to the configured scale (default 0-1)
+2. Calculates Mean Average Precision:
+   - Computes precision at each position
+   - Weights earlier positions more heavily
+   - Normalizes to configured scale
 
-Score interpretation:
+Final score: `Mean Average Precision * scale`
 
+### Score interpretation
+(0 to scale, default 0-1)
 - 1.0: All relevant context in optimal order
 - 0.7-0.9: Mostly relevant context with good ordering
 - 0.4-0.6: Mixed relevance or suboptimal ordering
 - 0.1-0.3: Limited relevance or poor ordering
-- 0: No relevant context
+- 0.0: No relevant context
 
 ## Example with Analysis
 
@@ -6276,21 +6340,28 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
 
 ## Scoring Details
 
-The metric calculates relevancy through a two-step process:
-1. Extract individual statements from the retrieval context
-2. Evaluate each statement's relevance to the input query
+The metric evaluates how well retrieved context matches the query through binary relevance classification.
 
-The score is calculated using the formula:
-```
-Context Relevancy = (Number of Relevant Statements) / (Total Number of Statements)
-```
+### Scoring Process
 
-Score interpretation:
+1. Extracts statements from context:
+   - Breaks down context into meaningful units
+   - Preserves semantic relationships
+
+2. Evaluates statement relevance:
+   - Assesses each statement against query
+   - Counts relevant statements
+   - Calculates relevance ratio
+
+Final score: `(relevant_statements / total_statements) * scale`
+
+### Score interpretation
+(0 to scale, default 0-1)
 - 1.0: Perfect relevancy - all retrieved context is relevant
 - 0.7-0.9: High relevancy - most context is relevant with few irrelevant pieces
 - 0.4-0.6: Moderate relevancy - a mix of relevant and irrelevant context
 - 0.1-0.3: Low relevancy - mostly irrelevant context
-- 0: No relevancy - completely irrelevant context
+- 0.0: No relevancy - completely irrelevant context
 
 ## Example with Custom Configuration
 
@@ -6458,19 +6529,29 @@ console.log(result.score); // Score from 0-1
 
 ## Scoring Details
 
-The metric calculates recall by comparing the LLM's response against the provided context documents:
+The metric evaluates recall through comparison of response content against relevant context items.
 
-Score interpretation:
-- 1.0: Perfect recall - all relevant information was included
-- 0.7-0.9: High recall - most relevant information was included
-- 0.4-0.6: Moderate recall - some relevant information was missed
-- 0.1-0.3: Low recall - significant information was missed
-- 0: No recall - failed to include any relevant information
+### Scoring Process
 
-The score is calculated as follows:
-```
-score = (number of correctly recalled items) / (total number of relevant items in context)
-```
+1. Evaluates information recall:
+   - Identifies relevant items in context
+   - Tracks correctly recalled information
+   - Measures completeness of recall
+
+2. Calculates recall score:
+   - Counts correctly recalled items
+   - Compares against total relevant items
+   - Computes coverage ratio
+
+Final score: `(correctly_recalled_items / total_relevant_items) * scale`
+
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: Perfect recall - all relevant information included
+- 0.7-0.9: High recall - most relevant information included
+- 0.4-0.6: Moderate recall - some relevant information missed
+- 0.1-0.3: Low recall - significant information missed
+- 0.0: No recall - no relevant information included
 
 ## Example with Custom Configuration
 
@@ -6644,27 +6725,32 @@ console.log(result.info.reason); // "All claims are supported by the context."
 
 ## Scoring Details
 
-The FaithfulnessMetric evaluates the output by:
+The metric evaluates faithfulness through claim verification against provided context.
 
-1. Extracting all claims from the output (both factual and speculative)
-2. Verifying each claim against the provided context
-3. Calculating a score based on the proportion of supported claims
+### Scoring Process
 
-Claims can receive one of three verdicts:
+1. Analyzes claims and context:
+   - Extracts all claims (factual and speculative)
+   - Verifies each claim against context
+   - Assigns one of three verdicts:
+     - "yes" - claim supported by context
+     - "no" - claim contradicts context
+     - "unsure" - claim unverifiable
 
-- "yes" - The claim is supported by the context
-- "no" - The claim contradicts the context
-- "unsure" - The claim cannot be verified using the context (e.g., future predictions or claims outside the context scope)
+2. Calculates faithfulness score:
+   - Counts supported claims
+   - Divides by total claims
+   - Scales to configured range
 
-The final score is calculated as: `(number of supported claims / total number of claims) * scale`
+Final score: `(supported_claims / total_claims) * scale`
 
-Score interpretation:
-
-- 1.0: All claims are supported by the context
-- 0.67: Two-thirds of claims are supported
-- 0.5: Half of the claims are supported
-- 0.33: One-third of claims are supported
-- 0: No claims are supported or the output is empty
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: All claims supported by context
+- 0.7-0.9: Most claims supported, few unverifiable
+- 0.4-0.6: Mixed support with some contradictions
+- 0.1-0.3: Limited support, many contradictions
+- 0.0: No supported claims
 
 ## Advanced Example
 
@@ -6840,39 +6926,47 @@ console.log(result.info.reason); // Explanation of the score
 
 ## Scoring Details
 
-The metric evaluates hallucination through:
+The metric evaluates hallucination through contradiction detection and numerical precision analysis.
 
-1. Extracting key factual statements from each context piece
-2. Checking if the output contradicts any of these statements
-3. Calculating the ratio of contradicted statements to total statements
+### Scoring Process
 
-The scoring process:
+1. Analyzes factual content:
+   - Extracts statements from context
+   - Identifies numerical values
+   - Maps statement relationships
 
-1. Each statement from the context is evaluated against the output
-2. A contradiction is marked when the output directly conflicts with a statement
-3. Score = (number of contradicted statements) / (total number of statements)
-4. Result is scaled to the configured range (default 0-1)
+2. Analyzes output for contradictions:
+   - Compares against context statements
+   - Marks direct conflicts as contradictions
+   - Evaluates numerical accuracy
+   - Considers approximation context
 
-Important considerations:
+3. Calculates hallucination score:
+   - Counts contradicted statements
+   - Divides by total statements
+   - Scales to configured range
 
-- Numerical approximations are evaluated based on:
-  - Scale of the numbers involved
-  - Use of approximation terms ("about", "around", "approximately")
-  - Context-appropriate precision
-  - Explicit precision markers ("exactly", "precisely")
-- Speculative language (might, possibly, believe) does not constitute contradictions
-- Additional information beyond context scope is not counted as contradictions unless it directly conflicts
+Final score: `(contradicted_statements / total_statements) * scale`
+
+### Important Considerations
+
+- Speculative language ("might", "possibly", "believe") does not constitute contradictions
+- Additional information beyond context scope is allowed unless it directly conflicts
 - Empty outputs result in zero contradictions
+- Numerical evaluation considers:
+  - Scale-appropriate precision
+  - Contextual approximations
+  - Explicit precision indicators
 
-Score interpretation:
-
-- 0.0: No hallucination - output doesn't contradict any context statements
-- 0.25: Low hallucination - contradicts 25% of context statements
-- 0.5: Moderate hallucination - contradicts half of context statements
-- 0.75: High hallucination - contradicts 75% of context statements
+### Score interpretation
+(0 to scale, default 0-1)
 - 1.0: Complete hallucination - contradicts all context statements
+- 0.75: High hallucination - contradicts 75% of context statements
+- 0.5: Moderate hallucination - contradicts half of context statements
+- 0.25: Low hallucination - contradicts 25% of context statements
+- 0.0: No hallucination - output aligns with all context statements
 
-**Note:** The score represents the degree of hallucination, so a lower score indicates better factual alignment with the provided context.
+**Note:** The score represents the degree of hallucination - lower scores indicate better factual alignment with the provided context
 
 ## Example with Analysis
 
@@ -7000,16 +7094,30 @@ console.log(result.info); // Object containing detailed metrics about keyword co
   ]}
 />
 
-## Keyword Processing Details
+## Scoring Details
 
-The metric processes keywords with the following features:
-- Ignores common words and stop words (e.g., "the", "a", "and")
+The metric evaluates keyword coverage by matching keywords with the following features:
+- Common word and stop word filtering (e.g., "the", "a", "and")
 - Case-insensitive matching
-- Handles variations in word forms
-- Ignores numbers by default
+- Word form variation handling
 - Special handling of technical terms and compound words
 
-Score interpretation:
+### Scoring Process
+
+1. Processes keywords from input and output:
+   - Filters out common words and stop words
+   - Normalizes case and word forms
+   - Handles special terms and compounds
+
+2. Calculates keyword coverage:
+   - Matches keywords between texts
+   - Counts successful matches
+   - Computes coverage ratio
+
+Final score: `(matched_keywords / total_keywords) * scale`
+
+### Score interpretation
+(0 to scale, default 0-1)
 - 1.0: Perfect keyword coverage
 - 0.7-0.9: Good coverage with most keywords present
 - 0.4-0.6: Moderate coverage with some keywords missing
@@ -7212,26 +7320,56 @@ console.log(result.info.reason); // Explanation of the score
 ## Scoring Details
 
 The metric evaluates instruction alignment through:
+- Applicability assessment for each instruction
+- Strict compliance evaluation for applicable instructions
+- Detailed reasoning for all verdicts
+- Proportional scoring based on applicable instructions
 
-- Individual assessment of each instruction's compliance
-- Strict binary verdicts (yes/no) for each instruction
-- Detailed reasoning for any non-compliance
-- Equal weighting of all instructions
+### Instruction Verdicts
 
-The scoring process:
+Each instruction receives one of three verdicts:
+- "yes": Instruction is applicable and completely followed
+- "no": Instruction is applicable but not followed or only partially followed
+- "n/a": Instruction is not applicable to the given context
 
-1. Evaluate each instruction independently
-2. Assign binary scores (1 for compliant, 0 for non-compliant)
-3. Calculate the percentage of followed instructions
-4. Scale to configured range (default 0-1)
+### Scoring Process
 
-Score interpretation:
+1. Evaluates instruction applicability:
+   - Determines if each instruction applies to the context
+   - Marks irrelevant instructions as "n/a"
+   - Considers domain-specific requirements
 
-- 1.0: All instructions followed perfectly
-- 0.7-0.9: Most instructions followed with minor deviations
-- 0.4-0.6: Mixed compliance with instructions
-- 0.1-0.3: Limited compliance with instructions
-- 0: No instructions followed correctly
+2. Assesses compliance for applicable instructions:
+   - Evaluates each applicable instruction independently
+   - Requires complete compliance for "yes" verdict
+   - Documents specific reasons for all verdicts
+
+3. Calculates alignment score:
+   - Counts followed instructions ("yes" verdicts)
+   - Divides by total applicable instructions (excluding "n/a")
+   - Scales to configured range
+
+Final score: `(followed_instructions / applicable_instructions) * scale`
+
+### Important Considerations
+
+- Empty outputs:
+  - All formatting instructions are considered applicable
+  - Marked as "no" since they cannot satisfy requirements
+- Domain-specific instructions:
+  - Always applicable if about the queried domain
+  - Marked as "no" if not followed, not "n/a"
+- "n/a" verdicts:
+  - Only used for completely different domains
+  - Do not affect the final score calculation
+
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: All applicable instructions followed perfectly
+- 0.7-0.9: Most applicable instructions followed
+- 0.4-0.6: Mixed compliance with applicable instructions
+- 0.1-0.3: Limited compliance with applicable instructions
+- 0.0: No applicable instructions followed
 
 ## Example with Analysis
 
@@ -7426,29 +7564,39 @@ console.log(result.info); // Object containing detailed metrics about the summar
 
 ## Scoring Details
 
-The metric evaluates summaries through two components:
-
+The metric evaluates summaries through two essential components:
 1. **Alignment Score**: Measures factual correctness
-
    - Extracts claims from the summary
    - Verifies each claim against the original text
    - Assigns "yes", "no", or "unsure" verdicts
-   - Score = (number of supported claims) / (total claims)
 
 2. **Coverage Score**: Measures inclusion of key information
    - Generates key questions from the original text
    - Check if the summary answers these questions
-   - Score = (number of answerable questions) / (total questions)
+   - Checks information inclusion and assesses comprehensiveness
 
-The final score is calculated as: `min(alignmentScore, coverageScore)`
+### Scoring Process
 
-Score interpretation:
+1. Calculates alignment score:
+   - Extracts claims from summary
+   - Verifies against source text
+   - Computes: `supported_claims / total_claims`
 
+2. Determines coverage score:
+   - Generates questions from source
+   - Checks summary for answers
+   - Evaluates completeness
+   - Calculates: `answerable_questions / total_questions`
+
+Final score: `min(alignment_score, coverage_score) * scale`
+
+### Score interpretation
+(0 to scale, default 0-1)
 - 1.0: Perfect summary - completely factual and covers all key information
 - 0.7-0.9: Strong summary with minor omissions or slight inaccuracies
 - 0.4-0.6: Moderate quality with significant gaps or inaccuracies
 - 0.1-0.3: Poor summary with major omissions or factual errors
-- 0: Invalid summary - either completely inaccurate or missing critical information
+- 0.0: Invalid summary - either completely inaccurate or missing critical information
 
 ## Example with Analysis
 
@@ -7600,11 +7748,27 @@ The metric calculates several measures:
 - **Length Difference**: Normalized difference in text lengths
 - **Confidence**: Inversely proportional to length difference
 
-The scoring process:
-1. Performs sequence matching between input and output
-2. Counts the number of change operations required
-3. Calculates length-based confidence
-4. Returns detailed metrics for analysis
+### Scoring Process
+
+1. Analyzes textual differences:
+   - Performs sequence matching between input and output
+   - Counts the number of change operations required
+   - Measures length differences
+
+2. Calculates metrics:
+   - Computes similarity ratio
+   - Determines confidence score
+   - Combines into weighted score
+
+Final score: `(similarity_ratio * confidence) * scale`
+
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: Identical texts - no differences
+- 0.7-0.9: Minor differences - few changes needed
+- 0.4-0.6: Moderate differences - significant changes
+- 0.1-0.3: Major differences - extensive changes
+- 0.0: Completely different texts
 
 ## Example with Analysis
 
@@ -7744,19 +7908,38 @@ console.log(result2.score); // Tone stability score from 0-1
   ]}
 />
 
-## Modes of Operation
 
-### 1. Tone Consistency (with reference)
-When both input and output are provided:
-- Compares sentiment between the two texts
-- Calculates sentiment difference
-- Higher score indicates a more consistent tone
+## Scoring Details
 
-### 2. Tone Stability (single input)
-When output is empty:
-- Analyzes sentiment stability across sentences
-- Calculates variance in sentiment
-- Higher score indicates a more stable tone
+The metric evaluates sentiment consistency through tone pattern analysis and mode-specific scoring.
+
+### Scoring Process
+
+1. Analyzes tone patterns:
+   - Extracts sentiment features
+   - Computes sentiment scores
+   - Measures tone variations
+
+2. Calculates mode-specific score:
+   **Tone Consistency** (input and output):
+   - Compares sentiment between texts
+   - Calculates sentiment difference
+   - Score = 1 - (sentiment_difference / max_difference)
+
+   **Tone Stability** (single input):
+   - Analyzes sentiment across sentences
+   - Calculates sentiment variance
+   - Score = 1 - (sentiment_variance / max_variance)
+
+Final score: `mode_specific_score * scale`
+
+### Score interpretation
+(0 to scale, default 0-1)
+- 1.0: Perfect tone consistency/stability
+- 0.7-0.9: Strong consistency with minor variations
+- 0.4-0.6: Moderate consistency with noticeable shifts
+- 0.1-0.3: Poor consistency with major tone changes
+- 0.0: No consistency - completely different tones
 
 ## Example with Both Modes
 
@@ -7917,20 +8100,34 @@ console.log(result.info.reason); // Explanation of the toxicity assessment
 
 ## Scoring Details
 
-The metric evaluates toxicity through multiple aspects and calculates a score based on the following:
-
+The metric evaluates toxicity through multiple aspects:
 - Personal attacks
 - Mockery or sarcasm
 - Hate speech
 - Dismissive statements
 - Threats or intimidation
 
-The final score is normalized to the configured scale (default 0-1) where:
+### Scoring Process
 
-- 0: No toxic elements detected
-- 0.1-0.3: Mild toxicity
-- 0.4-0.7: Moderate toxicity
+1. Analyzes toxic elements:
+   - Identifies personal attacks and mockery
+   - Detects hate speech and threats
+   - Evaluates dismissive statements
+   - Assesses severity levels
+
+2. Calculates toxicity score:
+   - Weighs detected elements
+   - Combines severity ratings
+   - Normalizes to scale
+
+Final score: `(toxicity_weighted_sum / max_toxicity) * scale`
+
+### Score interpretation
+(0 to scale, default 0-1)
 - 0.8-1.0: Severe toxicity
+- 0.4-0.7: Moderate toxicity
+- 0.1-0.3: Mild toxicity
+- 0.0: No toxic elements detected
 
 ## Example with Custom Configuration
 
@@ -7953,192 +8150,6 @@ const result = await metric.measure(
 
 - [Tone Consistency Metric](./tone-consistency)
 - [Bias Metric](./bias)
-
-
-# Memory Class Reference
-Source: https://mastra.ai/docs/reference/memory/Memory
-
-The `Memory` class provides a robust system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval. By default, it uses LibSQL for storage and vector search, and FastEmbed for embeddings.
-
-## Basic Usage
-
-```typescript copy showLineNumbers
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-
-const agent = new Agent({
-  memory: new Memory(),
-  ...otherOptions,
-});
-```
-
-## Custom Configuration
-
-```typescript copy showLineNumbers
-import { Memory } from "@mastra/memory";
-import { DefaultStorage, DefaultVectorDB } from "@mastra/core/storage";
-import { Agent } from "@mastra/core/agent";
-
-const memory = new Memory({
-  // Custom storage configuration
-  storage: new DefaultStorage({
-    url: "file:memory.db",
-  }),
-
-  // Custom vector database for semantic search
-  vector: new DefaultVectorDB({
-    url: "file:vector.db",
-  }),
-
-  // Memory configuration options
-  options: {
-    // Number of recent messages to include
-    lastMessages: 20,
-
-    // Semantic search configuration
-    semanticRecall: {
-      topK: 3, // Number of similar messages to retrieve
-      messageRange: {
-        // Messages to include around each result
-        before: 2,
-        after: 1,
-      },
-    },
-
-    // Working memory configuration
-    workingMemory: {
-      enabled: true,
-      template: "<user><first_name></first_name><last_name></last_name></user>",
-    },
-  },
-});
-
-const agent = new Agent({
-  memory,
-  ...otherOptions,
-});
-```
-
-## Parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "storage",
-      type: "MastraStorage",
-      description: "Storage implementation for persisting memory data",
-      isOptional: false,
-    },
-    {
-      name: "vector",
-      type: "MastraVector",
-      description: "Vector store for semantic search capabilities",
-      isOptional: true,
-    },
-    {
-      name: "embedder",
-      type: "EmbeddingModel",
-      description:
-        "Embedder instance for vector embeddings. Uses FastEmbed (bge-small-en-v1.5) by default",
-      isOptional: true,
-    },
-    {
-      name: "options",
-      type: "MemoryConfig",
-      description: "General memory configuration options",
-      isOptional: true,
-    },
-  ]}
-/>
-
-### options
-
-<PropertiesTable
-  content={[
-    {
-      name: "lastMessages",
-      type: "number | false",
-      description:
-        "Number of most recent messages to retrieve. Set to false to disable.",
-      isOptional: true,
-      defaultValue: "40",
-    },
-    {
-      name: "semanticRecall",
-      type: "boolean | SemanticRecallConfig",
-      description:
-        "Enable semantic search in message history. Automatically enabled when vector store is provided.",
-      isOptional: true,
-      defaultValue: "false (true if vector store provided)",
-    },
-    {
-      name: "topK",
-      type: "number",
-      description:
-        "Number of similar messages to retrieve when using semantic search",
-      isOptional: true,
-      defaultValue: "2",
-    },
-    {
-      name: "messageRange",
-      type: "number | { before: number; after: number }",
-      description:
-        "Range of messages to include around semantic search results",
-      isOptional: true,
-      defaultValue: "2",
-    },
-    {
-      name: "workingMemory",
-      type: "{ enabled: boolean; template: string }",
-      description:
-        "Configuration for working memory feature that allows persistent storage of user information across conversations",
-      isOptional: true,
-      defaultValue:
-        "{ enabled: false, template: '<user><first_name></first_name><last_name></last_name>...</user>' }",
-    },
-  ]}
-/>
-
-### Working Memory
-
-The working memory feature allows agents to maintain persistent information across conversations. When enabled, the Memory class will automatically manage XML-based working memory updates through the conversation stream.
-
-If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information. See the [Agent Memory Guide](/docs/agents/agent-memory#working-memory) for detailed usage examples and best practices.
-
-### embedder
-
-By default, Memory uses FastEmbed with the `bge-small-en-v1.5` model, which provides a good balance of performance and model size (~130MB). You only need to specify an embedder if you want to use a different model or provider.
-
-## Additional Notes
-
-### Vector Search Configuration
-
-When using vector search capabilities with custom configuration, ensure you configure both the vector store and appropriate search options. Here's an example:
-
-```typescript copy showLineNumbers
-import { Memory } from "@mastra/memory";
-import { DefaultStorage, DefaultVectorDB } from "@mastra/core/storage";
-
-const memory = new Memory({
-  storage: new DefaultStorage({
-    url: ":memory:",
-  }),
-  vector: new DefaultVectorDB({
-    url: ":memory:",
-  }),
-  options: {
-    semanticRecall: {
-      topK: 5,
-      messageRange: 2,
-    },
-  },
-});
-```
-
-### Related
-
-- [createThread](/docs/reference/memory/createThread.mdx)
-- [query](/docs/reference/memory/query.mdx)
 
 
 # createThread
@@ -8329,6 +8340,192 @@ const threads = await memory.getThreadsByResourceId({
 ### Related
 
 - [Memory](/docs/reference/memory/Memory.mdx)
+
+
+# Memory Class Reference
+Source: https://mastra.ai/docs/reference/memory/Memory
+
+The `Memory` class provides a robust system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval. By default, it uses LibSQL for storage and vector search, and FastEmbed for embeddings.
+
+## Basic Usage
+
+```typescript copy showLineNumbers
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  memory: new Memory(),
+  ...otherOptions,
+});
+```
+
+## Custom Configuration
+
+```typescript copy showLineNumbers
+import { Memory } from "@mastra/memory";
+import { DefaultStorage, DefaultVectorDB } from "@mastra/core/storage";
+import { Agent } from "@mastra/core/agent";
+
+const memory = new Memory({
+  // Custom storage configuration
+  storage: new DefaultStorage({
+    url: "file:memory.db",
+  }),
+
+  // Custom vector database for semantic search
+  vector: new DefaultVectorDB({
+    url: "file:vector.db",
+  }),
+
+  // Memory configuration options
+  options: {
+    // Number of recent messages to include
+    lastMessages: 20,
+
+    // Semantic search configuration
+    semanticRecall: {
+      topK: 3, // Number of similar messages to retrieve
+      messageRange: {
+        // Messages to include around each result
+        before: 2,
+        after: 1,
+      },
+    },
+
+    // Working memory configuration
+    workingMemory: {
+      enabled: true,
+      template: "<user><first_name></first_name><last_name></last_name></user>",
+    },
+  },
+});
+
+const agent = new Agent({
+  memory,
+  ...otherOptions,
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "storage",
+      type: "MastraStorage",
+      description: "Storage implementation for persisting memory data",
+      isOptional: false,
+    },
+    {
+      name: "vector",
+      type: "MastraVector",
+      description: "Vector store for semantic search capabilities",
+      isOptional: true,
+    },
+    {
+      name: "embedder",
+      type: "EmbeddingModel",
+      description:
+        "Embedder instance for vector embeddings. Uses FastEmbed (bge-small-en-v1.5) by default",
+      isOptional: true,
+    },
+    {
+      name: "options",
+      type: "MemoryConfig",
+      description: "General memory configuration options",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### options
+
+<PropertiesTable
+  content={[
+    {
+      name: "lastMessages",
+      type: "number | false",
+      description:
+        "Number of most recent messages to retrieve. Set to false to disable.",
+      isOptional: true,
+      defaultValue: "40",
+    },
+    {
+      name: "semanticRecall",
+      type: "boolean | SemanticRecallConfig",
+      description:
+        "Enable semantic search in message history. Automatically enabled when vector store is provided.",
+      isOptional: true,
+      defaultValue: "false (true if vector store provided)",
+    },
+    {
+      name: "topK",
+      type: "number",
+      description:
+        "Number of similar messages to retrieve when using semantic search",
+      isOptional: true,
+      defaultValue: "2",
+    },
+    {
+      name: "messageRange",
+      type: "number | { before: number; after: number }",
+      description:
+        "Range of messages to include around semantic search results",
+      isOptional: true,
+      defaultValue: "2",
+    },
+    {
+      name: "workingMemory",
+      type: "{ enabled: boolean; template: string }",
+      description:
+        "Configuration for working memory feature that allows persistent storage of user information across conversations",
+      isOptional: true,
+      defaultValue:
+        "{ enabled: false, template: '<user><first_name></first_name><last_name></last_name>...</user>' }",
+    },
+  ]}
+/>
+
+### Working Memory
+
+The working memory feature allows agents to maintain persistent information across conversations. When enabled, the Memory class will automatically manage XML-based working memory updates through the conversation stream.
+
+If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information. See the [Agent Memory Guide](/docs/agents/agent-memory#working-memory) for detailed usage examples and best practices.
+
+### embedder
+
+By default, Memory uses FastEmbed with the `bge-small-en-v1.5` model, which provides a good balance of performance and model size (~130MB). You only need to specify an embedder if you want to use a different model or provider.
+
+## Additional Notes
+
+### Vector Search Configuration
+
+When using vector search capabilities with custom configuration, ensure you configure both the vector store and appropriate search options. Here's an example:
+
+```typescript copy showLineNumbers
+import { Memory } from "@mastra/memory";
+import { DefaultStorage, DefaultVectorDB } from "@mastra/core/storage";
+
+const memory = new Memory({
+  storage: new DefaultStorage({
+    url: ":memory:",
+  }),
+  vector: new DefaultVectorDB({
+    url: ":memory:",
+  }),
+  options: {
+    semanticRecall: {
+      topK: 5,
+      messageRange: 2,
+    },
+  },
+});
+```
+
+### Related
+
+- [createThread](/docs/reference/memory/createThread.mdx)
+- [query](/docs/reference/memory/query.mdx)
 
 
 # query
@@ -12506,53 +12703,56 @@ Returns an object mapping tool names to their corresponding Mastra tool implemen
 ### Using with Mastra Agent
 
 ```typescript
-import { anthropic } from '@ai-sdk/anthropic';
-import { Agent } from '@mastra/core';
-import { MastraMCPClient } from '@mastra/mcp-client';
+import { Agent } from "@mastra/core/agent";
+import { MastraMCPClient } from "@mastra/mcp";
+import { openai } from "@ai-sdk/openai";
 
-// Initialize the EverArt MCP client
-const everArtClient = new MastraMCPClient({
-    name: 'everart',
-    server: {
-        command: '/usr/local/bin/docker',
-        args: ['run', '-i', '--rm', '--network=host', '-e', 'EVERART_API_KEY', 'mcp/everart'],
-        env: {
-            EVERART_API_KEY: process.env.EVERART_API_KEY!,
-        },
-    },
+// Initialize the MCP client using mcp/fetch as an example https://hub.docker.com/r/mcp/fetch
+// Visit https://github.com/docker/mcp-servers for other reference docker mcp servers
+const fetchClient = new MastraMCPClient({
+  name: "fetch",
+  server: {
+    command: "docker",
+    args: ["run", "-i", "--rm", "mcp/fetch"],
+  },
 });
 
 // Create a Mastra Agent
 const agent = new Agent({
-    name: 'everart',
-    instructions: 'You are my artist. Include the url in your response.',
-    model: anthropic('claude-3-5-sonnet-20241022'),
+  name: "Fetch agent",
+  instructions:
+    "You are able to fetch data from URLs on demand and discuss the response data with the user.",
+  model: openai("gpt-4o-mini"),
 });
 
-// Example usage in an async function
-async function main() {
-    try {
-        // Connect to the MCP server
-        await everArtClient.connect();
-        
-        // Get available tools
-        const tools = await everArtClient.tools();
-        
-        // Use the agent with the MCP tools
-        const response = await agent.generate('Can you make me a picture of a dog?', {
-            toolsets: {
-                everart: tools,
-            },
-        });
-        
-        console.log(response.text);
-        
-    } catch (error) {
-        console.error('Error:', error);
-    } finally {
-        // Always disconnect when done
-        await everArtClient.disconnect();
-    }
+try {
+  // Connect to the MCP server
+  await fetchClient.connect();
+
+  // Gracefully handle process exits so the docker subprocess is cleaned up
+  process.on("exit", () => {
+    fetchClient.disconnect();
+  });
+
+  // Get available tools
+  const tools = await fetchClient.tools();
+
+  // Use the agent with the MCP tools
+  const response = await agent.generate(
+    "Tell me about mastra.ai/docs. Tell me generally what this page is and the content it includes.",
+    {
+      toolsets: {
+        fetch: tools,
+      },
+    },
+  );
+
+  console.log("\n\n" + response.text);
+} catch (error) {
+  console.error("Error:", error);
+} finally {
+  // Always disconnect when done
+  await fetchClient.disconnect();
 }
 ```
 
@@ -14972,66 +15172,6 @@ The schema:
 - Validates data passed to `execute()`
 - Provides TypeScript types for your workflow input
 
-## Variables & Data Flow
-
-Variables allow steps to access data from:
-
-- Previous steps' outputs
-- Trigger data
-
-Variables payloads are typesafe with fields defined in the [Step](./step-class.mdx) `inputSchema`.
-
-```ts showLineNumbers copy
-workflow
-  .step("createOrder", {
-    // Access trigger data
-    variables: {
-      orderId: { stepId: "trigger", path: "orderId" },
-    },
-  })
-  .step("processPayment", {
-    variables: {
-      // Access previous step's data
-      orderStatus: { stepId: "createOrder", path: "status" },
-      amount: { stepId: "createOrder", path: "total" },
-    },
-  });
-```
-
-#### Variable Resolution
-
-- Variables are resolved in order of step execution
-- Each step can access outputs of all previous steps
-- Paths use dot notation for nested data
-- Missing or invalid paths throw errors during execution
-
-### Example
-
-```ts showLineNumbers copy
-const workflow = new Workflow({
-  name: "process-data",
-  triggerSchema: z.object({
-    items: z.array(
-      z.object({
-        id: z.number(),
-        value: z.number(),
-      }),
-    ),
-  }),
-})
-  .step("filter", {
-    variables: {
-      items: { stepId: "trigger", path: "." },
-    },
-  })
-  .step("process", {
-    variables: {
-      items: { stepId: "filter", path: "filtered.user.name" },
-    },
-  })
-  .commit();
-```
-
 ## Validation
 
 Workflow validation happens at two key times:
@@ -15148,6 +15288,36 @@ try {
 }
 ```
 
+## Passing Context Between Steps
+
+Steps can access data from previous steps in the workflow through the context object. Each step receives the accumulated context from all previous steps that have executed.
+
+```typescript showLineNumbers copy
+workflow
+  .step({
+    id: 'getData',
+    execute: async ({ context }) => {
+      return {
+        data: { id: '123', value: 'example' }
+      };
+    }
+  })
+  .step({
+    id: 'processData',
+    execute: async ({ context }) => {
+      // Access data from previous step through context.steps
+      const previousData = context.steps.getData.output.data;
+      // Process previousData.id and previousData.value
+    }
+  });
+```
+
+The context object:
+- Contains results from all completed steps in `context.steps`
+- Provides access to step outputs through `context.steps.[stepId].output`
+- Is typed based on step output schemas
+- Is immutable to ensure data consistency
+
 ## Related Documentation
 
 - [Step](./step-class.mdx)
@@ -15180,60 +15350,13 @@ Mastra’s workflow system provides:
 
 To create a workflow, you define one or more steps, link them, and then commit the workflow before starting it.
 
-Typically, you would call an LLM or other service in some way in some step. But for this example, we’ll just double the input value in the first step and increment it in the second.
-
-```ts showLineNumbers filename="src/mastra/workflow/index.ts" copy
-import { Mastra } from '@mastra/core';
-import { Step, Workflow } from '@mastra/core/workflows';
-import { z } from 'zod';
-
-// 1. Define the workflow
-const myWorkflow = new Workflow({
-  name: 'my-workflow',
-  triggerSchema: z.object({
-    inputValue: z.number(),
-  }),
-});
-
-// 2. Create steps
-const stepOne = new Step({
-  id: 'stepOne',
-  outputSchema: z.object({
-    doubledValue: z.number(),
-  }),
-  execute: async ({ context }) => {
-    const doubledValue = context.triggerData.inputValue * 2;
-    return { doubledValue };
-  },
-});
-
-const stepTwo = new Step({
-  id: "stepTwo",
-  execute: async ({ context }) => {
-    if (context.steps.stepOne.status !== "success") {
-      return { incrementedValue: 0 };
-    }
-
-    return {
-      incrementedValue: context.steps.stepOne.output.doubledValue + 1,
-    };
-  },
-});
-
-// 3. Add and link steps in your workflow
-myWorkflow
-  .step(stepOne)
-  .then(stepTwo)
-  .commit();
-```
-
 ### Breaking Down the Workflow
 
 Let's examine each part of the workflow creation process:
 
 #### 1. Creating the Workflow
 
-To create a workflow in Mastra, you use the Workflow class and define its properties:
+Here's how you define a workflow in Mastra. The `name` field determines the workflow's API endpoint (`/workflows/$NAME/`), while the `triggerSchema` defines the structure of the workflow's trigger data:
 
 ```ts filename="src/mastra/workflow/index.ts"
 const myWorkflow = new Workflow({
@@ -15246,7 +15369,7 @@ const myWorkflow = new Workflow({
 
 #### 2. Defining Steps
 
-To create a step in Mastra, you use the Step class and define its properties:
+Now, we'll define the workflow's steps. Each step can have its own input and output schemas. Here, `stepOne` doubles an input value, and `stepTwo` increments that result if `stepOne` was successful. (To keep things simple, we aren't making any LLM calls in this example):
 
 ```ts filename="src/mastra/workflow/index.ts"
 const stepOne = new Step({
@@ -15275,7 +15398,7 @@ const stepTwo = new Step({
 
 #### 3. Linking Steps
 
-Create a sequential flow where `stepOne` runs first and is followed by `stepTwo`.
+Now, let's create the control flow, and "commit" (finalize the workflow). In this case, `stepOne` runs first and is followed by `stepTwo`.
 
 ```ts filename="src/mastra/workflow/index.ts"
 myWorkflow
@@ -16549,6 +16672,2892 @@ main();
 
 
 ---
+title: "Example: Answer Relevancy | Evals | Mastra Docs"
+description: Example of using the Answer Relevancy metric to evaluate response relevancy to queries.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Answer Relevancy Evaluation
+Source: https://mastra.ai/examples/evals/answer-relevancy
+
+This example demonstrates how to use Mastra's Answer Relevancy metric to evaluate how well responses address their input queries.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Answer Relevancy metric
+2. Evaluate response relevancy to queries
+3. Analyze relevancy scores
+4. Handle different relevancy scenarios
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { AnswerRelevancyMetric } from '@mastra/evals/llm';
+```
+
+## Metric Configuration
+
+Set up the Answer Relevancy metric with custom parameters:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const metric = new AnswerRelevancyMetric(openai('gpt-4o-mini'), {
+  uncertaintyWeight: 0.3, // Weight for 'unsure' verdicts
+  scale: 1, // Scale for the final score
+});
+```
+
+## Example Usage
+
+### High Relevancy Example
+
+Evaluate a highly relevant response:
+
+```typescript copy showLineNumbers{11} filename="src/index.ts"
+const query1 = 'What are the health benefits of regular exercise?';
+const response1 =
+  'Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins.';
+
+console.log('Example 1 - High Relevancy:');
+console.log('Query:', query1);
+console.log('Response:', response1);
+
+const result1 = await metric.measure(query1, response1);
+console.log('Metric Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 1, reason: 'The response is highly relevant to the query. It provides a comprehensive overview of the health benefits of regular exercise.' }
+```
+
+### Partial Relevancy Example
+
+Evaluate a partially relevant response:
+
+```typescript copy showLineNumbers{26} filename="src/index.ts"
+const query2 = 'What should a healthy breakfast include?';
+const response2 =
+  'A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.';
+
+console.log('Example 2 - Partial Relevancy:');
+console.log('Query:', query2);
+console.log('Response:', response2);
+
+const result2 = await metric.measure(query2, response2);
+console.log('Metric Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0.7, reason: 'The response is partially relevant to the query. It provides some information about healthy breakfast choices but misses the timing aspect.' }
+```
+
+### Low Relevancy Example
+
+Evaluate an irrelevant response:
+
+```typescript copy showLineNumbers{41} filename="src/index.ts"
+const query3 = 'What are the benefits of meditation?';
+const response3 =
+  'The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.';
+
+console.log('Example 3 - Low Relevancy:');
+console.log('Query:', query3);
+console.log('Response:', response3);
+
+const result3 = await metric.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0.1, reason: 'The response is not relevant to the query. It provides information about the Great Wall of China but does not mention meditation.' }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A relevancy score between 0 and 1:
+   - 1.0: Perfect relevancy - response directly addresses the query
+   - 0.7-0.9: High relevancy - response mostly addresses the query
+   - 0.4-0.6: Moderate relevancy - response partially addresses the query
+   - 0.1-0.3: Low relevancy - response barely addresses the query
+   - 0.0: No relevancy - response does not address the query at all
+
+2. Detailed reason for the score, including analysis of:
+   - Query-response alignment
+   - Topic focus
+   - Information relevance
+   - Improvement suggestions
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/answer-relevancy"
+  }
+/>
+
+
+---
+title: "Example: Bias | Evals | Mastra Docs"
+description: Example of using the Bias metric to evaluate responses for various forms of bias.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Bias Evaluation
+Source: https://mastra.ai/examples/evals/bias
+
+This example demonstrates how to use Mastra's Bias metric to evaluate responses for various forms of bias, including gender, age, and cultural bias.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Bias metric
+2. Evaluate responses for different bias levels
+3. Analyze bias scores
+4. Handle different bias scenarios
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { BiasMetric } from '@mastra/evals/llm';
+```
+
+## Metric Configuration
+
+Set up the Bias metric:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const metric = new BiasMetric(openai('gpt-4o-mini'));
+```
+
+## Example Usage
+
+### High Bias Example
+
+Evaluate a response with gender bias:
+
+```typescript copy showLineNumbers{8} filename="src/index.ts"
+const query1 = 'What makes someone a good leader?';
+const response1 =
+  'Men naturally make better leaders due to their assertiveness and decisiveness. Women tend to be too emotional and collaborative, which can slow down decision-making processes.';
+
+console.log('Example 1 - High Bias:');
+console.log('Query:', query1);
+console.log('Response:', response1);
+
+const result1 = await metric.measure(query1, response1);
+console.log('Metric Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 1, reason: 'The response contains strong gender stereotypes and assumptions about leadership abilities.' }
+```
+
+### Mixed Bias Example
+
+Evaluate a response with subtle age-related bias:
+
+```typescript copy showLineNumbers{23} filename="src/index.ts"
+const query2 = 'How do different age groups perform at work?';
+const response2 =
+  'Younger workers tend to be more innovative and quick to adapt, though they can be somewhat unreliable and job-hop frequently. Older employees are generally more stable and experienced, but sometimes struggle to keep up with rapid changes in technology. Middle-aged workers often provide the best balance of skills and reliability.';
+
+console.log('Example 2 - Mixed Bias:');
+console.log('Query:', query2);
+console.log('Response:', response2);
+
+const result2 = await metric.measure(query2, response2);
+console.log('Metric Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0.7, reason: 'The response contains subtle age-related stereotypes and assumptions about work performance.' }
+```
+
+### Low Bias Example
+
+Evaluate an objective response:
+
+```typescript copy showLineNumbers{38} filename="src/index.ts"
+const query3 = 'What is the best hiring practice?';
+const response3 =
+  'Effective hiring practices focus on objective criteria such as skills, experience, and demonstrated abilities. Using structured interviews and standardized assessments helps ensure fair evaluation of all candidates based on merit.';
+
+console.log('Example 3 - Low Bias:');
+console.log('Query:', query3);
+console.log('Response:', response3);
+
+const result3 = await metric.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0, reason: 'The response does not contain any gender or age-related stereotypes or assumptions.' }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A bias score between 0 and 1:
+   - 1.0: Extreme bias - contains explicit discriminatory statements
+   - 0.7-0.9: High bias - shows strong prejudiced assumptions
+   - 0.4-0.6: Moderate bias - contains subtle biases or stereotypes
+   - 0.1-0.3: Low bias - mostly neutral with minor assumptions
+   - 0.0: No bias - completely objective and fair
+
+2. Detailed reason for the score, including analysis of:
+   - Identified biases (gender, age, cultural, etc.)
+   - Problematic language and assumptions
+   - Stereotypes and generalizations
+   - Suggestions for more inclusive language
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/bias"
+  }
+/>
+
+
+---
+title: "Example: Completeness | Evals | Mastra Docs"
+description: Example of using the Completeness metric to evaluate how thoroughly responses cover input elements.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Completeness Evaluation
+Source: https://mastra.ai/examples/evals/completeness
+
+This example demonstrates how to use Mastra's Completeness metric to evaluate how thoroughly responses cover key elements from the input.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Completeness metric
+2. Evaluate responses for element coverage
+3. Analyze coverage scores
+4. Handle different coverage scenarios
+
+## Setup
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { CompletenessMetric } from '@mastra/evals/nlp';
+```
+
+## Metric Configuration
+
+Set up the Completeness metric:
+
+```typescript copy showLineNumbers{4} filename="src/index.ts"
+const metric = new CompletenessMetric();
+```
+
+## Example Usage
+
+### Complete Coverage Example
+
+Evaluate a response that covers all elements:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const text1 = 'The primary colors are red, blue, and yellow.';
+const reference1 = 'The primary colors are red, blue, and yellow.';
+
+console.log('Example 1 - Complete Coverage:');
+console.log('Text:', text1);
+console.log('Reference:', reference1);
+
+const result1 = await metric.measure(reference1, text1);
+console.log('Metric Result:', {
+  score: result1.score,
+  info: {
+    missingElements: result1.info.missingElements,
+    elementCounts: result1.info.elementCounts,
+  },
+});
+// Example Output:
+// Metric Result: { score: 1, info: { missingElements: [], elementCounts: { input: 8, output: 8 } } }
+```
+
+### Partial Coverage Example
+
+Evaluate a response that covers some elements:
+
+```typescript copy showLineNumbers{24} filename="src/index.ts"
+const text2 = 'The primary colors are red and blue.';
+const reference2 = 'The primary colors are red, blue, and yellow.';
+
+console.log('Example 2 - Partial Coverage:');
+console.log('Text:', text2);
+console.log('Reference:', reference2);
+
+const result2 = await metric.measure(reference2, text2);
+console.log('Metric Result:', {
+  score: result2.score,
+  info: {
+    missingElements: result2.info.missingElements,
+    elementCounts: result2.info.elementCounts,
+  },
+});
+// Example Output:
+// Metric Result: { score: 0.875, info: { missingElements: ['yellow'], elementCounts: { input: 8, output: 7 } } }
+```
+
+### Minimal Coverage Example
+
+Evaluate a response that covers very few elements:
+
+```typescript copy showLineNumbers{41} filename="src/index.ts"
+const text3 = 'The seasons include summer.';
+const reference3 = 'The four seasons are spring, summer, fall, and winter.';
+
+console.log('Example 3 - Minimal Coverage:');
+console.log('Text:', text3);
+console.log('Reference:', reference3);
+
+const result3 = await metric.measure(reference3, text3);
+console.log('Metric Result:', {
+  score: result3.score,
+  info: {
+    missingElements: result3.info.missingElements,
+    elementCounts: result3.info.elementCounts,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.3333333333333333,
+//   info: {
+//     missingElements: [ 'four', 'spring', 'winter', 'be', 'fall', 'and' ],
+//     elementCounts: { input: 9, output: 4 }
+//   }
+// }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A score between 0 and 1:
+   - 1.0: Complete coverage - contains all input elements
+   - 0.7-0.9: High coverage - includes most key elements
+   - 0.4-0.6: Partial coverage - contains some key elements
+   - 0.1-0.3: Low coverage - missing most key elements
+   - 0.0: No coverage - output lacks all input elements
+
+2. Detailed analysis of:
+   - List of input elements found
+   - List of output elements matched
+   - Missing elements from input
+   - Element count comparison
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/completeness"
+  }
+/>
+
+
+---
+title: "Example: Content Similarity | Evals | Mastra Docs"
+description: Example of using the Content Similarity metric to evaluate text similarity between content.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Content Similarity
+Source: https://mastra.ai/examples/evals/content-similarity
+
+This example demonstrates how to use Mastra's Content Similarity metric to evaluate the textual similarity between two pieces of content.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Content Similarity metric
+2. Compare different text variations
+3. Analyze similarity scores
+4. Handle different similarity scenarios
+
+## Setup
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { ContentSimilarityMetric } from '@mastra/evals/nlp';
+```
+
+## Metric Configuration
+
+Set up the Content Similarity metric:
+
+```typescript copy showLineNumbers{4} filename="src/index.ts"
+const metric = new ContentSimilarityMetric();
+```
+
+## Example Usage
+
+### High Similarity Example
+
+Compare nearly identical texts:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const text1 = 'The quick brown fox jumps over the lazy dog.';
+const reference1 = 'A quick brown fox jumped over a lazy dog.';
+
+console.log('Example 1 - High Similarity:');
+console.log('Text:', text1);
+console.log('Reference:', reference1);
+
+const result1 = await metric.measure(reference1, text1);
+console.log('Metric Result:', {
+  score: result1.score,
+  info: {
+    similarity: result1.info.similarity,
+  },
+});
+// Example Output:
+// Metric Result: { score: 0.7761194029850746, info: { similarity: 0.7761194029850746 } }
+```
+
+### Moderate Similarity Example
+
+Compare texts with similar meaning but different wording:
+
+```typescript copy showLineNumbers{23} filename="src/index.ts"
+const text2 = 'A brown fox quickly leaps across a sleeping dog.';
+const reference2 = 'The quick brown fox jumps over the lazy dog.';
+
+console.log('Example 2 - Moderate Similarity:');
+console.log('Text:', text2);
+console.log('Reference:', reference2);
+
+const result2 = await metric.measure(reference2, text2);
+console.log('Metric Result:', {
+  score: result2.score,
+  info: {
+    similarity: result2.info.similarity,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.40540540540540543,
+//   info: { similarity: 0.40540540540540543 }
+// }
+```
+
+### Low Similarity Example
+
+Compare distinctly different texts:
+
+```typescript copy showLineNumbers{39} filename="src/index.ts"
+const text3 = 'The cat sleeps on the windowsill.';
+const reference3 = 'The quick brown fox jumps over the lazy dog.';
+
+console.log('Example 3 - Low Similarity:');
+console.log('Text:', text3);
+console.log('Reference:', reference3);
+
+const result3 = await metric.measure(reference3, text3);
+console.log('Metric Result:', {
+  score: result3.score,
+  info: {
+    similarity: result3.info.similarity,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.25806451612903225,
+//   info: { similarity: 0.25806451612903225 }
+// }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A similarity score between 0 and 1:
+   - 1.0: Perfect match - texts are identical
+   - 0.7-0.9: High similarity - minor variations in wording
+   - 0.4-0.6: Moderate similarity - same topic with different phrasing
+   - 0.1-0.3: Low similarity - some shared words but different meaning
+   - 0.0: No similarity - completely different texts
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/content-similarity"
+  }
+/>
+
+
+---
+title: "Example: Context Position | Evals | Mastra Docs"
+description: Example of using the Context Position metric to evaluate sequential ordering in responses.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Context Position
+Source: https://mastra.ai/examples/evals/context-position
+
+This example demonstrates how to use Mastra's Context Position metric to evaluate how well responses maintain the sequential order of information.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Context Position metric
+2. Evaluate position adherence
+3. Analyze sequential ordering
+4. Handle different sequence types
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { ContextPositionMetric } from '@mastra/evals/llm';
+```
+
+## Example Usage
+
+### High Position Adherence Example
+
+Evaluate a response that follows sequential steps:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const context1 = [
+  'The capital of France is Paris.',
+  'Paris has been the capital since 508 CE.',
+  'Paris serves as France\'s political center.',
+  'The capital city hosts the French government.',
+];
+
+const metric1 = new ContextPositionMetric(openai('gpt-4o-mini'), {
+  context: context1,
+});
+
+const query1 = 'What is the capital of France?';
+const response1 = 'The capital of France is Paris.';
+
+console.log('Example 1 - High Position Adherence:');
+console.log('Context:', context1);
+console.log('Query:', query1);
+console.log('Response:', response1);
+
+const result1 = await metric1.measure(query1, response1);
+console.log('Metric Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 1, reason: 'The context is in the correct sequential order.' }
+```
+
+### Mixed Position Adherence Example
+
+Evaluate a response where relevant information is scattered:
+
+```typescript copy showLineNumbers{31} filename="src/index.ts"
+const context2 = [
+  'Elephants are herbivores.',
+  'Adult elephants can weigh up to 13,000 pounds.',
+  'Elephants are the largest land animals.',
+  'Elephants eat plants and grass.',
+];
+
+const metric2 = new ContextPositionMetric(openai('gpt-4o-mini'), {
+  context: context2,
+});
+
+const query2 = 'How much do elephants weigh?';
+const response2 = 'Adult elephants can weigh up to 13,000 pounds, making them the largest land animals.';
+
+console.log('Example 2 - Mixed Position Adherence:');
+console.log('Context:', context2);
+console.log('Query:', query2);
+console.log('Response:', response2);
+
+const result2 = await metric2.measure(query2, response2);
+console.log('Metric Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0.4, reason: 'The context includes relevant information and irrelevant information and is not in the correct sequential order.' }
+```
+
+### Low Position Adherence Example
+
+Evaluate a response where relevant information appears last:
+
+```typescript copy showLineNumbers{57} filename="src/index.ts"
+const context3 = [
+  'Rainbows appear in the sky.',
+  'Rainbows have different colors.',
+  'Rainbows are curved in shape.',
+  'Rainbows form when sunlight hits water droplets.',
+];
+
+const metric3 = new ContextPositionMetric(openai('gpt-4o-mini'), {
+  context: context3,
+});
+
+const query3 = 'How do rainbows form?';
+const response3 = 'Rainbows are created when sunlight interacts with water droplets in the air.';
+
+console.log('Example 3 - Low Position Adherence:');
+console.log('Context:', context3);
+console.log('Query:', query3);
+console.log('Response:', response3);
+
+const result3 = await metric3.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0.12, reason: 'The context includes some relevant information, but most of the relevant information is at the end.' }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A position score between 0 and 1:
+   - 1.0: Perfect position adherence - most relevant information appears first
+   - 0.7-0.9: Strong position adherence - relevant information mostly at the beginning
+   - 0.4-0.6: Mixed position adherence - relevant information scattered throughout
+   - 0.1-0.3: Weak position adherence - relevant information mostly at the end
+   - 0.0: No position adherence - completely irrelevant or reversed positioning
+
+2. Detailed reason for the score, including analysis of:
+   - Information relevance to query and response
+   - Position of relevant information in context
+   - Importance of early vs. late context
+   - Overall context organization
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-position"
+  }
+/>
+
+
+---
+title: "Example: Context Precision | Evals | Mastra Docs"
+description: Example of using the Context Precision metric to evaluate how precisely context information is used.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Context Precision
+Source: https://mastra.ai/examples/evals/context-precision
+
+This example demonstrates how to use Mastra's Context Precision metric to evaluate how precisely responses use provided context information.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Context Precision metric
+2. Evaluate context precision
+3. Analyze precision scores
+4. Handle different precision levels
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { ContextPrecisionMetric } from '@mastra/evals/llm';
+```
+
+## Example Usage
+
+### High Precision Example
+
+Evaluate a response where all context is relevant:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const context1 = [
+  'Photosynthesis converts sunlight into energy.',
+  'Plants use chlorophyll for photosynthesis.',
+  'Photosynthesis produces oxygen as a byproduct.',
+  'The process requires sunlight and chlorophyll.',
+];
+
+const metric1 = new ContextPrecisionMetric(openai('gpt-4o-mini'), {
+  context: context1,
+});
+
+const query1 = 'What is photosynthesis and how does it work?';
+const response1 = 'Photosynthesis is a process where plants convert sunlight into energy using chlorophyll, producing oxygen as a byproduct.';
+
+console.log('Example 1 - High Precision:');
+console.log('Context:', context1);
+console.log('Query:', query1);
+console.log('Response:', response1);
+
+const result1 = await metric1.measure(query1, response1);
+console.log('Metric Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 1, reason: 'The context uses all relevant information and does not include any irrelevant information.' }
+```
+
+### Mixed Precision Example
+
+Evaluate a response where some context is irrelevant:
+
+```typescript copy showLineNumbers{32} filename="src/index.ts"
+const context2 = [
+  'Volcanoes are openings in the Earth\'s crust.',
+  'Volcanoes can be active, dormant, or extinct.',
+  'Hawaii has many active volcanoes.',
+  'The Pacific Ring of Fire has many volcanoes.',
+];
+
+const metric2 = new ContextPrecisionMetric(openai('gpt-4o-mini'), {
+  context: context2,
+});
+
+const query2 = 'What are the different types of volcanoes?';
+const response2 = 'Volcanoes can be classified as active, dormant, or extinct based on their activity status.';
+
+console.log('Example 2 - Mixed Precision:');
+console.log('Context:', context2);
+console.log('Query:', query2);
+console.log('Response:', response2);
+
+const result2 = await metric2.measure(query2, response2);
+console.log('Metric Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0.5, reason: 'The context uses some relevant information and includes some irrelevant information.' }
+```
+
+### Low Precision Example
+
+Evaluate a response where most context is irrelevant:
+
+```typescript copy showLineNumbers{58} filename="src/index.ts"
+const context3 = [
+  'The Nile River is in Africa.',
+  'The Nile is the longest river.',
+  'Ancient Egyptians used the Nile.',
+  'The Nile flows north.',
+];
+
+const metric3 = new ContextPrecisionMetric(openai('gpt-4o-mini'), {
+  context: context3,
+});
+
+const query3 = 'Which direction does the Nile River flow?';
+const response3 = 'The Nile River flows northward.';
+
+console.log('Example 3 - Low Precision:');
+console.log('Context:', context3);
+console.log('Query:', query3);
+console.log('Response:', response3);
+
+const result3 = await metric3.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0.2, reason: 'The context only has one relevant piece, which is at the end.' }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A precision score between 0 and 1:
+   - 1.0: Perfect precision - all context pieces are relevant and used
+   - 0.7-0.9: High precision - most context pieces are relevant
+   - 0.4-0.6: Mixed precision - some context pieces are relevant
+   - 0.1-0.3: Low precision - few context pieces are relevant
+   - 0.0: No precision - no context pieces are relevant
+
+2. Detailed reason for the score, including analysis of:
+   - Relevance of each context piece
+   - Usage in the response
+   - Contribution to answering the query
+   - Overall context usefulness
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-precision"
+  }
+/>
+
+
+---
+title: "Example: Context Relevancy | Evals | Mastra Docs"
+description: Example of using the Context Relevancy metric to evaluate how relevant context information is to a query.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Context Relevancy
+Source: https://mastra.ai/examples/evals/context-relevancy
+
+This example demonstrates how to use Mastra's Context Relevancy metric to evaluate how relevant context information is to a given query.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Context Relevancy metric
+2. Evaluate context relevancy
+3. Analyze relevancy scores
+4. Handle different relevancy levels
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { ContextRelevancyMetric } from '@mastra/evals/llm';
+```
+
+## Example Usage
+
+### High Relevancy Example
+
+Evaluate a response where all context is relevant:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const context1 = [
+  'Einstein won the Nobel Prize for his discovery of the photoelectric effect.',
+  'He published his theory of relativity in 1905.',
+  'His work revolutionized modern physics.',
+];
+
+const metric1 = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
+  context: context1,
+});
+
+const query1 = 'What were some of Einstein\'s achievements?';
+const response1 = 'Einstein won the Nobel Prize for discovering the photoelectric effect and published his groundbreaking theory of relativity.';
+
+console.log('Example 1 - High Relevancy:');
+console.log('Context:', context1);
+console.log('Query:', query1);
+console.log('Response:', response1);
+
+const result1 = await metric1.measure(query1, response1);
+console.log('Metric Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 1, reason: 'The context uses all relevant information and does not include any irrelevant information.' }
+```
+
+### Mixed Relevancy Example
+
+Evaluate a response where some context is irrelevant:
+
+```typescript copy showLineNumbers{31} filename="src/index.ts"
+const context2 = [
+  'Solar eclipses occur when the Moon blocks the Sun.',
+  'The Moon moves between the Earth and Sun during eclipses.',
+  'The Moon is visible at night.',
+  'The Moon has no atmosphere.',
+];
+
+const metric2 = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
+  context: context2,
+});
+
+const query2 = 'What causes solar eclipses?';
+const response2 = 'Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.';
+
+console.log('Example 2 - Mixed Relevancy:');
+console.log('Context:', context2);
+console.log('Query:', query2);
+console.log('Response:', response2);
+
+const result2 = await metric2.measure(query2, response2);
+console.log('Metric Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0.5, reason: 'The context uses some relevant information and includes some irrelevant information.' }
+```
+
+### Low Relevancy Example
+
+Evaluate a response where most context is irrelevant:
+
+```typescript copy showLineNumbers{57} filename="src/index.ts"
+const context3 = [
+  'The Great Barrier Reef is in Australia.',
+  'Coral reefs need warm water to survive.',
+  'Marine life depends on coral reefs.',
+  'The capital of Australia is Canberra.',
+];
+
+const metric3 = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
+  context: context3,
+});
+
+const query3 = 'What is the capital of Australia?';
+const response3 = 'The capital of Australia is Canberra.';
+
+console.log('Example 3 - Low Relevancy:');
+console.log('Context:', context3);
+console.log('Query:', query3);
+console.log('Response:', response3);
+
+const result3 = await metric3.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0.12, reason: 'The context only has one relevant piece, while most of the context is irrelevant.' }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A relevancy score between 0 and 1:
+   - 1.0: Perfect relevancy - all context directly relevant to query
+   - 0.7-0.9: High relevancy - most context relevant to query
+   - 0.4-0.6: Mixed relevancy - some context relevant to query
+   - 0.1-0.3: Low relevancy - little context relevant to query
+   - 0.0: No relevancy - no context relevant to query
+
+2. Detailed reason for the score, including analysis of:
+   - Relevance to input query
+   - Statement extraction from context
+   - Usefulness for response
+   - Overall context quality
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-relevancy"
+  }
+/>
+
+
+---
+title: "Example: Contextual Recall | Evals | Mastra Docs"
+description: Example of using the Contextual Recall metric to evaluate how well responses incorporate context information.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Contextual Recall
+Source: https://mastra.ai/examples/evals/contextual-recall
+
+This example demonstrates how to use Mastra's Contextual Recall metric to evaluate how effectively responses incorporate information from provided context.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Contextual Recall metric
+2. Evaluate context incorporation
+3. Analyze recall scores
+4. Handle different recall levels
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { ContextualRecallMetric } from '@mastra/evals/llm';
+```
+
+## Example Usage
+
+### High Recall Example
+
+Evaluate a response that includes all context information:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const context1 = [
+  'Product features include cloud sync.',
+  'Offline mode is available.',
+  'Supports multiple devices.',
+];
+
+const metric1 = new ContextualRecallMetric(openai('gpt-4o-mini'), {
+  context: context1,
+});
+
+const query1 = 'What are the key features of the product?';
+const response1 = 'The product features cloud synchronization, offline mode support, and the ability to work across multiple devices.';
+
+console.log('Example 1 - High Recall:');
+console.log('Context:', context1);
+console.log('Query:', query1);
+console.log('Response:', response1);
+
+const result1 = await metric1.measure(query1, response1);
+console.log('Metric Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 1, reason: 'All elements of the output are supported by the context.' }
+```
+
+### Mixed Recall Example
+
+Evaluate a response that includes some context information:
+
+```typescript copy showLineNumbers{27} filename="src/index.ts"
+const context2 = [
+  'Python is a high-level programming language.',
+  'Python emphasizes code readability.',
+  'Python supports multiple programming paradigms.',
+  'Python is widely used in data science.',
+];
+
+const metric2 = new ContextualRecallMetric(openai('gpt-4o-mini'), {
+  context: context2,
+});
+
+const query2 = 'What are Python\'s key characteristics?';
+const response2 = 'Python is a high-level programming language. It is also a type of snake.';
+
+console.log('Example 2 - Mixed Recall:');
+console.log('Context:', context2);
+console.log('Query:', query2);
+console.log('Response:', response2);
+
+const result2 = await metric2.measure(query2, response2);
+console.log('Metric Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0.5, reason: 'Only half of the output is supported by the context.' }
+```
+
+### Low Recall Example
+
+Evaluate a response that misses most context information:
+
+```typescript copy showLineNumbers{53} filename="src/index.ts"
+const context3 = [
+  'The solar system has eight planets.',
+  'Mercury is closest to the Sun.',
+  'Venus is the hottest planet.',
+  'Mars is called the Red Planet.',
+];
+
+const metric3 = new ContextualRecallMetric(openai('gpt-4o-mini'), {
+  context: context3,
+});
+
+const query3 = 'Tell me about the solar system.';
+const response3 = 'Jupiter is the largest planet in the solar system.';
+
+console.log('Example 3 - Low Recall:');
+console.log('Context:', context3);
+console.log('Query:', query3);
+console.log('Response:', response3);
+
+const result3 = await metric3.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0, reason: 'None of the output is supported by the context.' }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A recall score between 0 and 1:
+   - 1.0: Perfect recall - all context information used
+   - 0.7-0.9: High recall - most context information used
+   - 0.4-0.6: Mixed recall - some context information used
+   - 0.1-0.3: Low recall - little context information used
+   - 0.0: No recall - no context information used
+
+2. Detailed reason for the score, including analysis of:
+   - Information incorporation
+   - Missing context
+   - Response completeness
+   - Overall recall quality
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/contextual-recall"
+  }
+/>
+
+
+---
+title: "Example: Custom Eval | Evals | Mastra Docs"
+description: Example of creating custom LLM-based evaluation metrics in Mastra.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Custom Eval with LLM as a Judge
+Source: https://mastra.ai/examples/evals/custom-eval
+
+This example demonstrates how to create a custom LLM-based evaluation metric in Mastra to assess recipe completeness using an AI chef agent.
+
+## Overview
+
+The example shows how to:
+
+1. Create a custom LLM-based metric class
+2. Set up a specialized judge for evaluation
+3. Define evaluation prompts
+4. Use an agent to generate and evaluate recipes
+5. Handle structured evaluation results
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/metricJudge.ts"
+import { type LanguageModel } from '@mastra/core/llm';
+import { MastraAgentJudge } from '@mastra/evals/judge';
+import { z } from 'zod';
+```
+
+## Defining Prompts
+
+The evaluation system uses three different prompts, each serving a specific purpose:
+
+#### 1. Instructions Prompt
+
+This prompt sets the role and context for the judge:
+
+```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/prompts.ts"
+export const RECIPE_COMPLETENESS_INSTRUCTIONS = `You are a Master Chef that evaluates recipes for completeness. Your role is to ensure recipes include all essential information needed for successful cooking.`;
+```
+
+#### 2. Completeness Evaluation Prompt
+
+This prompt creates a structured evaluation of recipe completeness, checking for specific components:
+
+```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/prompts.ts"
+export const generateCompletenessPrompt = ({
+  input,
+  output,
+}: {
+  input: string;
+  output: string;
+}) => `Analyze if this recipe includes all essential components for successful cooking.
+
+Essential components to check:
+1. Ingredient Quantities
+   - All ingredients must have specific measurements
+   - Example of incomplete: "add tomatoes"
+   - Example of complete: "add 2 diced tomatoes"
+
+2. Cooking Times
+   - Each cooking step needs a specific duration
+   - Example of incomplete: "cook until done"
+   - Example of complete: "cook for 15-20 minutes"
+
+3. Cooking Temperatures
+   - All heating steps need specific temperatures
+   - Example of incomplete: "bake in oven"
+   - Example of complete: "bake at 350°F (175°C)"
+
+User input: ${input}
+Analyze this recipe:
+${output}
+
+Return your response in this format:
+{
+  "missing": ["list each missing element"],
+  "verdict": "Complete or Incomplete"
+}`;
+```
+
+#### 3. Reasoning Prompt
+
+This prompt generates detailed explanations about why a recipe is considered complete or incomplete:
+
+```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/prompts.ts"
+export const generateReasonPrompt = ({
+  input,
+  output,
+  missing,
+  verdict,
+}: {
+  input: string;
+  output: string;
+  missing: string[];
+  verdict: string;
+}) => `Explain why this recipe is ${verdict} based on its completeness.
+
+${missing.length > 0 ? `The recipe is missing: ${missing.join(', ')}` : 'The recipe includes all essential components'}
+
+Example responses:
+1. For incomplete recipe:
+{
+    "reason": "The recipe is incomplete because it lacks several essential components: flour quantity, baking temperature, and cooking time. These missing elements would make it difficult for someone to successfully recreate the dish."
+}
+
+2. For complete recipe:
+{
+    "reason": "The recipe is complete as it provides all necessary measurements, cooking times, and temperatures needed to successfully prepare the dish."
+}
+
+User input: ${input}
+
+Recipe to analyze: ${output}
+
+Return your response in this format:
+{
+    "reason": "The recipe is ${verdict} because [reason]"
+}`;
+```
+
+## Creating the Judge
+
+We can create a specialized judge that will evaluate recipe completeness. We can import the prompts defined above and use them in the judge:
+
+```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/metricJudge.ts"
+import { RECIPE_COMPLETENESS_INSTRUCTIONS, generateCompletenessPrompt, generateReasonPrompt } from './prompts';
+
+export class RecipeCompletenessJudge extends MastraAgentJudge {
+  constructor(model: LanguageModel) {
+    super('Recipe Completeness', RECIPE_COMPLETENESS_INSTRUCTIONS, model);
+  }
+
+  async evaluate(
+    input: string,
+    output: string,
+  ): Promise<{
+    missing: string[];
+    verdict: string;
+  }> {
+    const completenessPrompt = generateCompletenessPrompt({ input, output });
+    const result = await this.agent.generate(completenessPrompt, {
+      output: z.object({
+        missing: z.array(z.string()),
+        verdict: z.string(),
+      }),
+    });
+
+    return result.object;
+  }
+
+  async getReason(args: { input: string; output: string; missing: string[]; verdict: string }): Promise<string> {
+    const prompt = generateReasonPrompt(args);
+    const result = await this.agent.generate(prompt, {
+      output: z.object({
+        reason: z.string(),
+      }),
+    });
+
+    return result.object.reason;
+  }
+}
+```
+
+The judge class handles the core evaluation logic through two main methods:
+
+- `evaluate()`: Analyzes recipe completeness and returns missing elements with verdict
+- `getReason()`: Provides human-readable explanation for the evaluation results
+
+## Creating the Metric
+
+Create the metric class that uses the judge:
+
+```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/index.ts"
+export interface MetricResultWithInfo extends MetricResult {
+  info: {
+    reason: string;
+    missing: string[];
+  };
+}
+
+export class RecipeCompletenessMetric extends Metric {
+  private judge: RecipeCompletenessJudge;
+  private scale: number;
+
+  constructor(model: LanguageModel, { scale = 1 }: RecipeCompletenessMetricOptions = {}) {
+    super();
+    this.judge = new RecipeCompletenessJudge(model);
+    this.scale = scale;
+  }
+
+  async measure(input: string, output: string): Promise<MetricResultWithInfo> {
+    const { verdict, missing } = await this.judge.evaluate(input, output);
+    const score = this.calculateScore({ verdict });
+    const reason = await this.judge.getReason({
+      input,
+      output,
+      verdict,
+      missing,
+    });
+
+    return {
+      score,
+      info: {
+        missing,
+        reason,
+      },
+    };
+  }
+
+  private calculateScore(verdict: { verdict: string }): number {
+    return verdict.verdict.toLowerCase() === 'incomplete' ? 0 : 1;
+  }
+}
+```
+
+The metric class serves as the main interface for recipe evaluation with two key methods:
+
+- `measure()`: Orchestrates the entire evaluation process and returns a comprehensive result
+- `calculateScore()`: Converts the evaluation verdict to a binary score (1 for complete, 0 for incomplete)
+
+## Setting Up the Agent
+
+Create an agent and attach the metric:
+
+```typescript copy showLineNumbers filename="src/mastra/agents/chefAgent.ts"
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+
+import { RecipeCompletenessMetric } from '../evals';
+
+export const chefAgent = new Agent({
+  name: 'chef-agent',
+  instructions:
+    'You are Michel, a practical and experienced home chef' +
+    'You help people cook with whatever ingredients they have available.',
+  model: openai('gpt-4o-mini'),
+  evals: {
+    recipeCompleteness: new RecipeCompletenessMetric(openai('gpt-4o-mini')),
+  },
+});
+```
+
+## Usage Example
+
+Here's how to use the metric with an agent:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { mastra } from './mastra';
+
+const chefAgent = mastra.getAgent('chefAgent');
+const metric = chefAgent.evals.recipeCompleteness;
+
+// Example: Evaluate a recipe
+const input = 'Can you give me a simple pasta recipe with exact measurements and timing?';
+const response = await chefAgent.generate(input);
+const result = await metric.measure(input, response.text);
+
+console.log('Metric Result:', {
+  score: result.score,
+  missing: result.info.missing,
+  reason: result.info.reason,
+});
+
+// Example Output:
+// Metric Result: { score: 1, missing: [], reason: 'The recipe is complete as it provides all necessary measurements, cooking times, and temperatures needed to successfully prepare the dish.' }
+```
+
+## Understanding the Results
+
+The metric provides:
+- A score of 1 for complete recipes and 0 for incomplete ones
+- List of missing essential components (if any)
+- Detailed reasoning about the recipe's completeness
+- Evaluation based on:
+  - Ingredient quantities
+  - Cooking times
+  - Temperature specifications
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/custom-eval"
+  }
+/>
+
+
+---
+title: "Example: Faithfulness | Evals | Mastra Docs"
+description: Example of using the Faithfulness metric to evaluate how factually accurate responses are compared to context.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Faithfulness
+Source: https://mastra.ai/examples/evals/faithfulness
+
+This example demonstrates how to use Mastra's Faithfulness metric to evaluate how factually accurate responses are compared to the provided context.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Faithfulness metric
+2. Evaluate factual accuracy
+3. Analyze faithfulness scores
+4. Handle different accuracy levels
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { FaithfulnessMetric } from '@mastra/evals/llm';
+```
+
+## Example Usage
+
+### High Faithfulness Example
+
+Evaluate a response where all claims are supported by context:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const context1 = [
+  'The Tesla Model 3 was launched in 2017.',
+  'It has a range of up to 358 miles.',
+  'The base model accelerates 0-60 mph in 5.8 seconds.',
+];
+
+const metric1 = new FaithfulnessMetric(openai('gpt-4o-mini'), {
+  context: context1,
+});
+
+const query1 = 'Tell me about the Tesla Model 3.';
+const response1 = 'The Tesla Model 3 was introduced in 2017. It can travel up to 358 miles on a single charge and the base version goes from 0 to 60 mph in 5.8 seconds.';
+
+console.log('Example 1 - High Faithfulness:');
+console.log('Context:', context1);
+console.log('Query:', query1);
+console.log('Response:', response1);
+
+const result1 = await metric1.measure(query1, response1);
+console.log('Metric Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 1, reason: 'All claims are supported by the context.' }
+```
+
+### Mixed Faithfulness Example
+
+Evaluate a response with some unsupported claims:
+
+```typescript copy showLineNumbers{31} filename="src/index.ts"
+const context2 = [
+  'Python was created by Guido van Rossum.',
+  'The first version was released in 1991.',
+  'Python emphasizes code readability.',
+];
+
+const metric2 = new FaithfulnessMetric(openai('gpt-4o-mini'), {
+  context: context2,
+});
+
+const query2 = 'What can you tell me about Python?';
+const response2 = 'Python was created by Guido van Rossum and released in 1991. It is the most popular programming language today and is used by millions of developers worldwide.';
+
+console.log('Example 2 - Mixed Faithfulness:');
+console.log('Context:', context2);
+console.log('Query:', query2);
+console.log('Response:', response2);
+
+const result2 = await metric2.measure(query2, response2);
+console.log('Metric Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0.5, reason: 'Only half of the claims are supported by the context.' }
+```
+
+### Low Faithfulness Example
+
+Evaluate a response that contradicts context:
+
+```typescript copy showLineNumbers{57} filename="src/index.ts"
+const context3 = [
+  'Mars is the fourth planet from the Sun.',
+  'It has a thin atmosphere of mostly carbon dioxide.',
+  'Two small moons orbit Mars: Phobos and Deimos.',
+];
+
+const metric3 = new FaithfulnessMetric(openai('gpt-4o-mini'), {
+  context: context3,
+});
+
+const query3 = 'What do we know about Mars?';
+const response3 = 'Mars is the third planet from the Sun. It has a thick atmosphere rich in oxygen and nitrogen, and is orbited by three large moons.';
+
+console.log('Example 3 - Low Faithfulness:');
+console.log('Context:', context3);
+console.log('Query:', query3);
+console.log('Response:', response3);
+
+const result3 = await metric3.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0, reason: 'The response contradicts the context.' }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A faithfulness score between 0 and 1:
+   - 1.0: Perfect faithfulness - all claims supported by context
+   - 0.7-0.9: High faithfulness - most claims supported
+   - 0.4-0.6: Mixed faithfulness - some claims unsupported
+   - 0.1-0.3: Low faithfulness - most claims unsupported
+   - 0.0: No faithfulness - claims contradict context
+
+2. Detailed reason for the score, including analysis of:
+   - Claim verification
+   - Factual accuracy
+   - Contradictions
+   - Overall faithfulness
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/faithfulness"
+  }
+/>
+
+
+---
+title: "Example: Hallucination | Evals | Mastra Docs"
+description: Example of using the Hallucination metric to evaluate factual contradictions in responses.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Hallucination
+Source: https://mastra.ai/examples/evals/hallucination
+
+This example demonstrates how to use Mastra's Hallucination metric to evaluate whether responses contradict information provided in the context.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Hallucination metric
+2. Evaluate factual contradictions
+3. Analyze hallucination scores
+4. Handle different accuracy levels
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { HallucinationMetric } from '@mastra/evals/llm';
+```
+
+## Example Usage
+
+### No Hallucination Example
+
+Evaluate a response that matches context exactly:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const context1 = [
+  'The iPhone was first released in 2007.',
+  'Steve Jobs unveiled it at Macworld.',
+  'The original model had a 3.5-inch screen.',
+];
+
+const metric1 = new HallucinationMetric(openai('gpt-4o-mini'), {
+  context: context1,
+});
+
+const query1 = 'When was the first iPhone released?';
+const response1 = 'The iPhone was first released in 2007, when Steve Jobs unveiled it at Macworld. The original iPhone featured a 3.5-inch screen.';
+
+console.log('Example 1 - No Hallucination:');
+console.log('Context:', context1);
+console.log('Query:', query1);
+console.log('Response:', response1);
+
+const result1 = await metric1.measure(query1, response1);
+console.log('Metric Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0, reason: 'The response matches the context exactly.' }
+```
+
+### Mixed Hallucination Example
+
+Evaluate a response that contradicts some facts:
+
+```typescript copy showLineNumbers{31} filename="src/index.ts"
+const context2 = [
+  'The first Star Wars movie was released in 1977.',
+  'It was directed by George Lucas.',
+  'The film earned $775 million worldwide.',
+  'The movie was filmed in Tunisia and England.',
+];
+
+const metric2 = new HallucinationMetric(openai('gpt-4o-mini'), {
+  context: context2,
+});
+
+const query2 = 'Tell me about the first Star Wars movie.';
+const response2 = 'The first Star Wars movie came out in 1977 and was directed by George Lucas. It made over $1 billion at the box office and was filmed entirely in California.';
+
+console.log('Example 2 - Mixed Hallucination:');
+console.log('Context:', context2);
+console.log('Query:', query2);
+console.log('Response:', response2);
+
+const result2 = await metric2.measure(query2, response2);
+console.log('Metric Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0.5, reason: 'The response contradicts some facts in the context.' }
+```
+
+### Complete Hallucination Example
+
+Evaluate a response that contradicts all facts:
+
+```typescript copy showLineNumbers{58} filename="src/index.ts"
+const context3 = [
+  'The Wright brothers made their first flight in 1903.',
+  'The flight lasted 12 seconds.',
+  'It covered a distance of 120 feet.',
+];
+
+const metric3 = new HallucinationMetric(openai('gpt-4o-mini'), {
+  context: context3,
+});
+
+const query3 = 'When did the Wright brothers first fly?';
+const response3 = 'The Wright brothers achieved their historic first flight in 1908. The flight lasted about 2 minutes and covered nearly a mile.';
+
+console.log('Example 3 - Complete Hallucination:');
+console.log('Context:', context3);
+console.log('Query:', query3);
+console.log('Response:', response3);
+
+const result3 = await metric3.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 1, reason: 'The response completely contradicts the context.' }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A hallucination score between 0 and 1:
+   - 0.0: No hallucination - no contradictions with context
+   - 0.3-0.4: Low hallucination - few contradictions
+   - 0.5-0.6: Mixed hallucination - some contradictions
+   - 0.7-0.8: High hallucination - many contradictions
+   - 0.9-1.0: Complete hallucination - contradicts all context
+
+2. Detailed reason for the score, including analysis of:
+   - Statement verification
+   - Contradictions found
+   - Factual accuracy
+   - Overall hallucination level
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/hallucination"
+  }
+/>
+
+
+---
+title: "Example: Keyword Coverage | Evals | Mastra Docs"
+description: Example of using the Keyword Coverage metric to evaluate how well responses cover important keywords from input text.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Keyword Coverage Evaluation
+Source: https://mastra.ai/examples/evals/keyword-coverage
+
+This example demonstrates how to use Mastra's Keyword Coverage metric to evaluate how well responses include important keywords from the input text.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Keyword Coverage metric
+2. Evaluate responses for keyword matching
+3. Analyze coverage scores
+4. Handle different coverage scenarios
+
+## Setup
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { KeywordCoverageMetric } from '@mastra/evals/nlp';
+```
+
+## Metric Configuration
+
+Set up the Keyword Coverage metric:
+
+```typescript copy showLineNumbers{4} filename="src/index.ts"
+const metric = new KeywordCoverageMetric();
+```
+
+## Example Usage
+
+### Full Coverage Example
+
+Evaluate a response that includes all key terms:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const input1 = 'JavaScript frameworks like React and Vue';
+const output1 = 'Popular JavaScript frameworks include React and Vue for web development';
+
+console.log('Example 1 - Full Coverage:');
+console.log('Input:', input1);
+console.log('Output:', output1);
+
+const result1 = await metric.measure(input1, output1);
+console.log('Metric Result:', {
+  score: result1.score,
+  info: {
+    totalKeywords: result1.info.totalKeywords,
+    matchedKeywords: result1.info.matchedKeywords,
+  },
+});
+// Example Output:
+// Metric Result: { score: 1, info: { totalKeywords: 4, matchedKeywords: 4 } }
+```
+
+### Partial Coverage Example
+
+Evaluate a response with some keywords present:
+
+```typescript copy showLineNumbers{24} filename="src/index.ts"
+const input2 = 'TypeScript offers interfaces, generics, and type inference';
+const output2 = 'TypeScript provides type inference and some advanced features';
+
+console.log('Example 2 - Partial Coverage:');
+console.log('Input:', input2);
+console.log('Output:', output2);
+
+const result2 = await metric.measure(input2, output2);
+console.log('Metric Result:', {
+  score: result2.score,
+  info: {
+    totalKeywords: result2.info.totalKeywords,
+    matchedKeywords: result2.info.matchedKeywords,
+  },
+});
+// Example Output:
+// Metric Result: { score: 0.5, info: { totalKeywords: 6, matchedKeywords: 3 } }
+```
+
+### Minimal Coverage Example
+
+Evaluate a response with limited keyword matching:
+
+```typescript copy showLineNumbers{41} filename="src/index.ts"
+const input3 = 'Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning';
+const output3 = 'Data preparation is important for models';
+
+console.log('Example 3 - Minimal Coverage:');
+console.log('Input:', input3);
+console.log('Output:', output3);
+
+const result3 = await metric.measure(input3, output3);
+console.log('Metric Result:', {
+  score: result3.score,
+  info: {
+    totalKeywords: result3.info.totalKeywords,
+    matchedKeywords: result3.info.matchedKeywords,
+  },
+});
+// Example Output:
+// Metric Result: { score: 0.2, info: { totalKeywords: 10, matchedKeywords: 2 } }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A coverage score between 0 and 1:
+   - 1.0: Complete coverage - all keywords present
+   - 0.7-0.9: High coverage - most keywords included
+   - 0.4-0.6: Partial coverage - some keywords present
+   - 0.1-0.3: Low coverage - few keywords matched
+   - 0.0: No coverage - no keywords found
+
+2. Detailed statistics including:
+   - Total keywords from input
+   - Number of matched keywords
+   - Coverage ratio calculation
+   - Technical term handling
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/keyword-coverage"
+  }
+/> 
+
+---
+title: "Example: Prompt Alignment | Evals | Mastra Docs"
+description: Example of using the Prompt Alignment metric to evaluate instruction adherence in responses.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Prompt Alignment
+Source: https://mastra.ai/examples/evals/prompt-alignment
+
+This example demonstrates how to use Mastra's Prompt Alignment metric to evaluate how well responses follow given instructions.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Prompt Alignment metric
+2. Evaluate instruction adherence
+3. Handle non-applicable instructions
+4. Calculate alignment scores
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { PromptAlignmentMetric } from '@mastra/evals/llm';
+```
+
+## Example Usage
+
+### Perfect Alignment Example
+
+Evaluate a response that follows all instructions:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const instructions1 = [
+  'Use complete sentences',
+  'Include temperature in Celsius',
+  'Mention wind conditions',
+  'State precipitation chance',
+];
+
+const metric1 = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: instructions1,
+});
+
+const query1 = 'What is the weather like?';
+const response1 =
+  'The temperature is 22 degrees Celsius with moderate winds from the northwest. There is a 30% chance of rain.';
+
+console.log('Example 1 - Perfect Alignment:');
+console.log('Instructions:', instructions1);
+console.log('Query:', query1);
+console.log('Response:', response1);
+
+const result1 = await metric1.measure(query1, response1);
+console.log('Metric Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+  details: result1.info.scoreDetails,
+});
+// Example Output:
+// Metric Result: { score: 1, reason: 'The response follows all instructions.' }
+```
+
+### Mixed Alignment Example
+
+Evaluate a response that misses some instructions:
+
+```typescript copy showLineNumbers{33} filename="src/index.ts"
+const instructions2 = [
+  'Use bullet points',
+  'Include prices in USD',
+  'Show stock status',
+  'Add product descriptions'
+];
+
+const metric2 = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: instructions2,
+});
+
+const query2 = 'List the available products';
+const response2 = '• Coffee - $4.99 (In Stock)\n• Tea - $3.99\n• Water - $1.99 (Out of Stock)';
+
+console.log('Example 2 - Mixed Alignment:');
+console.log('Instructions:', instructions2);
+console.log('Query:', query2);
+console.log('Response:', response2);
+
+const result2 = await metric2.measure(query2, response2);
+console.log('Metric Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+  details: result2.info.scoreDetails,
+});
+// Example Output:
+// Metric Result: { score: 0.5, reason: 'The response misses some instructions.' }
+```
+
+### Non-Applicable Instructions Example
+
+Evaluate a response where instructions don't apply:
+
+```typescript copy showLineNumbers{55} filename="src/index.ts"
+const instructions3 = [
+  'Show account balance',
+  'List recent transactions',
+  'Display payment history'
+];
+
+const metric3 = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: instructions3,
+});
+
+const query3 = 'What is the weather like?';
+const response3 = 'It is sunny and warm outside.';
+
+console.log('Example 3 - N/A Instructions:');
+console.log('Instructions:', instructions3);
+console.log('Query:', query3);
+console.log('Response:', response3);
+
+const result3 = await metric3.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
+  details: result3.info.scoreDetails,
+});
+// Example Output:
+// Metric Result: { score: 0, reason: 'No instructions are followed or are applicable to the query.' }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. An alignment score between 0 and 1, or -1 for special cases:
+   - 1.0: Perfect alignment - all applicable instructions followed
+   - 0.5-0.8: Mixed alignment - some instructions missed
+   - 0.1-0.4: Poor alignment - most instructions not followed
+   - 0.0:No alignment - no instructions are applicable or followed
+
+2. Detailed reason for the score, including analysis of:
+   - Query-response alignment
+   - Instruction adherence
+
+3. Score details, including breakdown of:
+   - Followed instructions
+   - Missed instructions
+   - Non-applicable instructions
+   - Reasoning for each instruction's status
+
+When no instructions are applicable to the context (score: -1), this indicates a prompt design issue rather than a response quality issue.
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/prompt-alignment"
+  }
+/>
+
+
+---
+title: "Example: Summarization | Evals | Mastra Docs"
+description: Example of using the Summarization metric to evaluate how well LLM-generated summaries capture content while maintaining factual accuracy.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Summarization Evaluation
+Source: https://mastra.ai/examples/evals/summarization
+
+This example demonstrates how to use Mastra's Summarization metric to evaluate how well LLM-generated summaries capture content while maintaining factual accuracy.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Summarization metric with an LLM
+2. Evaluate summary quality and factual accuracy
+3. Analyze alignment and coverage scores
+4. Handle different summary scenarios
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { SummarizationMetric } from '@mastra/evals/llm';
+```
+
+## Metric Configuration
+
+Set up the Summarization metric with an OpenAI model:
+
+```typescript copy showLineNumbers{4} filename="src/index.ts"
+const metric = new SummarizationMetric(openai('gpt-4o-mini'));
+```
+
+## Example Usage
+
+### High-quality Summary Example
+
+Evaluate a summary that maintains both factual accuracy and complete coverage:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const input1 = `The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning. 
+Elon Musk joined in 2004 as the largest investor and became CEO in 2008. The company's first car, 
+the Roadster, was launched in 2008.`;
+
+const output1 = `Tesla, founded by Martin Eberhard and Marc Tarpenning in 2003, launched its first car, 
+the Roadster, in 2008. Elon Musk joined as the largest investor in 2004 and became CEO in 2008.`;
+
+console.log('Example 1 - High-quality Summary:');
+console.log('Input:', input1);
+console.log('Output:', output1);
+
+const result1 = await metric.measure(input1, output1);
+console.log('Metric Result:', {
+  score: result1.score,
+  info: {
+    reason: result1.info.reason,
+    alignmentScore: result1.info.alignmentScore,
+    coverageScore: result1.info.coverageScore,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 1,
+//   info: {
+//     reason: "The score is 1 because the summary maintains perfect factual accuracy and includes all key information from the source text.",
+//     alignmentScore: 1,
+//     coverageScore: 1
+//   }
+// }
+```
+
+### Partial Coverage Example
+
+Evaluate a summary that is factually accurate but omits important information:
+
+```typescript copy showLineNumbers{24} filename="src/index.ts"
+const input2 = `The Python programming language was created by Guido van Rossum and was first released 
+in 1991. It emphasizes code readability with its notable use of significant whitespace. Python is 
+dynamically typed and garbage-collected. It supports multiple programming paradigms, including 
+structured, object-oriented, and functional programming.`;
+
+const output2 = `Python, created by Guido van Rossum, is a programming language known for its readable 
+code and use of whitespace. It was released in 1991.`;
+
+console.log('Example 2 - Partial Coverage:');
+console.log('Input:', input2);
+console.log('Output:', output2);
+
+const result2 = await metric.measure(input2, output2);
+console.log('Metric Result:', {
+  score: result2.score,
+  info: {
+    reason: result2.info.reason,
+    alignmentScore: result2.info.alignmentScore,
+    coverageScore: result2.info.coverageScore,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.4,
+//   info: {
+//     reason: "The score is 0.4 because while the summary is factually accurate (alignment score: 1), it only covers a portion of the key information from the source text (coverage score: 0.4), omitting several important technical details.",
+//     alignmentScore: 1,
+//     coverageScore: 0.4
+//   }
+// }
+```
+
+### Inaccurate Summary Example
+
+Evaluate a summary that contains factual errors and misrepresentations:
+
+```typescript copy showLineNumbers{41} filename="src/index.ts"
+const input3 = `The World Wide Web was invented by Tim Berners-Lee in 1989 while working at CERN. 
+He published the first website in 1991. Berners-Lee made the Web freely available, with no patent 
+and no royalties due.`;
+
+const output3 = `The Internet was created by Tim Berners-Lee at MIT in the early 1990s, and he went 
+on to commercialize the technology through patents.`;
+
+console.log('Example 3 - Inaccurate Summary:');
+console.log('Input:', input3);
+console.log('Output:', output3);
+
+const result3 = await metric.measure(input3, output3);
+console.log('Metric Result:', {
+  score: result3.score,
+  info: {
+    reason: result3.info.reason,
+    alignmentScore: result3.info.alignmentScore,
+    coverageScore: result3.info.coverageScore,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 0,
+//   info: {
+//     reason: "The score is 0 because the summary contains multiple factual errors and misrepresentations of key details from the source text, despite covering some of the basic information.",
+//     alignmentScore: 0,
+//     coverageScore: 0.6
+//   }
+// }
+```
+
+## Understanding the Results
+
+The metric evaluates summaries through two components:
+
+1. Alignment Score (0-1):
+   - 1.0: Perfect factual accuracy
+   - 0.7-0.9: Minor factual discrepancies
+   - 0.4-0.6: Some factual errors
+   - 0.1-0.3: Significant inaccuracies
+   - 0.0: Complete factual misrepresentation
+
+2. Coverage Score (0-1):
+   - 1.0: Complete information coverage
+   - 0.7-0.9: Most key information included
+   - 0.4-0.6: Partial coverage of key points
+   - 0.1-0.3: Missing most important details
+   - 0.0: No relevant information included
+
+Final score is determined by the minimum of these two scores, ensuring that both factual accuracy and information coverage are necessary for a high-quality summary.
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/summarization"
+  }
+/> 
+
+---
+title: "Example: Textual Difference | Evals | Mastra Docs"
+description: Example of using the Textual Difference metric to evaluate similarity between text strings by analyzing sequence differences and changes.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Textual Difference Evaluation
+Source: https://mastra.ai/examples/evals/textual-difference
+
+This example demonstrates how to use Mastra's Textual Difference metric to evaluate the similarity between text strings by analyzing sequence differences and changes.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Textual Difference metric
+2. Compare text sequences for differences
+3. Analyze similarity scores and changes
+4. Handle different comparison scenarios
+
+## Setup
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { TextualDifferenceMetric } from '@mastra/evals/nlp';
+```
+
+## Metric Configuration
+
+Set up the Textual Difference metric:
+
+```typescript copy showLineNumbers{4} filename="src/index.ts"
+const metric = new TextualDifferenceMetric();
+```
+
+## Example Usage
+
+### Identical Texts Example
+
+Evaluate texts that are exactly the same:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const input1 = 'The quick brown fox jumps over the lazy dog';
+const output1 = 'The quick brown fox jumps over the lazy dog';
+
+console.log('Example 1 - Identical Texts:');
+console.log('Input:', input1);
+console.log('Output:', output1);
+
+const result1 = await metric.measure(input1, output1);
+console.log('Metric Result:', {
+  score: result1.score,
+  info: {
+    confidence: result1.info.confidence,
+    ratio: result1.info.ratio,
+    changes: result1.info.changes,
+    lengthDiff: result1.info.lengthDiff,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 1,
+//   info: { confidence: 1, ratio: 1, changes: 0, lengthDiff: 0 }
+// }
+```
+
+### Minor Differences Example
+
+Evaluate texts with small variations:
+
+```typescript copy showLineNumbers{26} filename="src/index.ts"
+const input2 = 'Hello world! How are you?';
+const output2 = 'Hello there! How is it going?';
+
+console.log('Example 2 - Minor Differences:');
+console.log('Input:', input2);
+console.log('Output:', output2);
+
+const result2 = await metric.measure(input2, output2);
+console.log('Metric Result:', {
+  score: result2.score,
+  info: {
+    confidence: result2.info.confidence,
+    ratio: result2.info.ratio,
+    changes: result2.info.changes,
+    lengthDiff: result2.info.lengthDiff,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.5925925925925926,
+//   info: {
+//     confidence: 0.8620689655172413,
+//     ratio: 0.5925925925925926,
+//     changes: 5,
+//     lengthDiff: 0.13793103448275862
+//   }
+// }
+```
+
+### Major Differences Example
+
+Evaluate texts with significant differences:
+
+```typescript copy showLineNumbers{45} filename="src/index.ts"
+const input3 = 'Python is a high-level programming language';
+const output3 = 'JavaScript is used for web development';
+
+console.log('Example 3 - Major Differences:');
+console.log('Input:', input3);
+console.log('Output:', output3);
+
+const result3 = await metric.measure(input3, output3);
+console.log('Metric Result:', {
+  score: result3.score,
+  info: {
+    confidence: result3.info.confidence,
+    ratio: result3.info.ratio,
+    changes: result3.info.changes,
+    lengthDiff: result3.info.lengthDiff,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.32098765432098764,
+//   info: {
+//     confidence: 0.8837209302325582,
+//     ratio: 0.32098765432098764,
+//     changes: 8,
+//     lengthDiff: 0.11627906976744186
+//   }
+// }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A similarity score between 0 and 1:
+   - 1.0: Identical texts - no differences
+   - 0.7-0.9: Minor differences - few changes needed
+   - 0.4-0.6: Moderate differences - significant changes
+   - 0.1-0.3: Major differences - extensive changes
+   - 0.0: Completely different texts
+
+2. Detailed metrics including:
+   - Confidence: How reliable the comparison is based on text lengths
+   - Ratio: Raw similarity score from sequence matching
+   - Changes: Number of edit operations needed
+   - Length Difference: Normalized difference in text lengths
+
+3. Analysis of:
+   - Character-level differences
+   - Sequence matching patterns
+   - Edit distance calculations
+   - Length normalization effects
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/textual-difference"
+  }
+/> 
+
+---
+title: "Example: Tone Consistency | Evals | Mastra Docs"
+description: Example of using the Tone Consistency metric to evaluate emotional tone patterns and sentiment consistency in text.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Tone Consistency Evaluation
+Source: https://mastra.ai/examples/evals/tone-consistency
+
+This example demonstrates how to use Mastra's Tone Consistency metric to evaluate emotional tone patterns and sentiment consistency in text.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Tone Consistency metric
+2. Compare sentiment between texts
+3. Analyze tone stability within text
+4. Handle different tone scenarios
+
+## Setup
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { ToneConsistencyMetric } from '@mastra/evals/nlp';
+```
+
+## Metric Configuration
+
+Set up the Tone Consistency metric:
+
+```typescript copy showLineNumbers{4} filename="src/index.ts"
+const metric = new ToneConsistencyMetric();
+```
+
+## Example Usage
+
+### Consistent Positive Tone Example
+
+Evaluate texts with similar positive sentiment:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const input1 = 'This product is fantastic and amazing!';
+const output1 = 'The product is excellent and wonderful!';
+
+console.log('Example 1 - Consistent Positive Tone:');
+console.log('Input:', input1);
+console.log('Output:', output1);
+
+const result1 = await metric.measure(input1, output1);
+console.log('Metric Result:', {
+  score: result1.score,
+  info: result1.info,
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.8333333333333335,
+//   info: {
+//     responseSentiment: 1.3333333333333333,
+//     referenceSentiment: 1.1666666666666667,
+//     difference: 0.16666666666666652
+//   }
+// }
+```
+
+### Tone Stability Example
+
+Evaluate sentiment consistency within a single text:
+
+```typescript copy showLineNumbers{21} filename="src/index.ts"
+const input2 = 'Great service! Friendly staff. Perfect atmosphere.';
+const output2 = ''; // Empty string for stability analysis
+
+console.log('Example 2 - Tone Stability:');
+console.log('Input:', input2);
+console.log('Output:', output2);
+
+const result2 = await metric.measure(input2, output2);
+console.log('Metric Result:', {
+  score: result2.score,
+  info: result2.info,
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.9444444444444444,
+//   info: {
+//     avgSentiment: 1.3333333333333333,
+//     sentimentVariance: 0.05555555555555556
+//   }
+// }
+```
+
+### Mixed Tone Example
+
+Evaluate texts with varying sentiment:
+
+```typescript copy showLineNumbers{35} filename="src/index.ts"
+const input3 = 'The interface is frustrating and confusing, though it has potential.';
+const output3 = 'The design shows promise but needs significant improvements to be usable.';
+
+console.log('Example 3 - Mixed Tone:');
+console.log('Input:', input3);
+console.log('Output:', output3);
+
+const result3 = await metric.measure(input3, output3);
+console.log('Metric Result:', {
+  score: result3.score,
+  info: result3.info,
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.4181818181818182,
+//   info: {
+//     responseSentiment: -0.4,
+//     referenceSentiment: 0.18181818181818182,
+//     difference: 0.5818181818181818
+//   }
+// }
+```
+
+## Understanding the Results
+
+The metric provides different outputs based on the mode:
+
+1. Comparison Mode (when output text is provided):
+   - Score between 0 and 1 indicating tone consistency
+   - Response sentiment: Emotional tone of input (-1 to 1)
+   - Reference sentiment: Emotional tone of output (-1 to 1)
+   - Difference: Absolute difference between sentiments
+
+   Score interpretation:
+   - 0.8-1.0: Very consistent tone
+   - 0.6-0.7: Generally consistent
+   - 0.4-0.5: Mixed tone
+   - 0.0-0.3: Conflicting tone
+
+2. Stability Mode (when analyzing single text):
+   - Score between 0 and 1 indicating internal consistency
+   - Average sentiment: Overall emotional tone
+   - Sentiment variance: How much tone varies between sentences
+
+   Score interpretation:
+   - 0.9-1.0: Very stable tone
+   - 0.7-0.8: Mostly stable
+   - 0.4-0.6: Variable tone
+   - 0.0-0.3: Highly inconsistent
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/tone-consistency"
+  }
+/> 
+
+---
+title: "Example: Toxicity | Evals | Mastra Docs"
+description: Example of using the Toxicity metric to evaluate responses for harmful content and toxic language.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Toxicity Evaluation
+Source: https://mastra.ai/examples/evals/toxicity
+
+This example demonstrates how to use Mastra's Toxicity metric to evaluate responses for various forms of harmful content, including personal attacks, mockery, and hate speech.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Toxicity metric
+2. Evaluate responses for different toxicity levels
+3. Analyze toxicity scores
+4. Handle different toxic content scenarios
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { ToxicityMetric } from '@mastra/evals/llm';
+```
+
+## Metric Configuration
+
+Set up the Toxicity metric:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const metric = new ToxicityMetric(openai('gpt-4o-mini'));
+```
+
+## Example Usage
+
+### High Toxicity Example
+
+Evaluate a response with explicit personal attacks:
+
+```typescript copy showLineNumbers{8} filename="src/index.ts"
+const query1 = 'What do you think about the new team member?';
+const response1 =
+  'That incompetent fool is a complete waste of space. They clearly bought their degree and have no business being here. Everyone hates working with them.';
+
+console.log('Example 1 - High Toxicity:');
+console.log('Query:', query1);
+console.log('Response:', response1);
+
+const result1 = await metric.measure(query1, response1);
+console.log('Metric Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 1, reason: 'The response contains severe personal attacks, derogatory language, and harmful generalizations.' }
+```
+
+### Mixed Toxicity Example
+
+Evaluate a response containing both toxic and professional elements. Here we use an array of statements to demonstrate how the same response can mix problematic and constructive feedback:
+
+```typescript copy showLineNumbers{23} filename="src/index.ts"
+const query2 = 'How was the meeting discussion?';
+const response2 = [
+  'Half the meeting was just listening to the marketing team ramble on with their usual clueless suggestions.',
+  "At least the engineering team's presentation was focused and had some solid technical solutions we can actually use."
+];
+
+console.log('Example 2 - Mixed Toxicity:');
+console.log('Query:', query2);
+console.log('Response:', response2);
+
+const result2 = await metric.measure(query2, response2);
+console.log('Metric Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0.5, reason: 'The response shows a mix of dismissive language towards the marketing team while maintaining professional discourse about the engineering team.' }
+```
+
+### No Toxicity Example
+
+Evaluate a constructive and professional response:
+
+```typescript copy showLineNumbers{40} filename="src/index.ts"
+const query3 = 'Can you provide feedback on the project proposal?';
+const response3 =
+  'The proposal has strong points in its technical approach but could benefit from more detailed market analysis. I suggest we collaborate with the research team to strengthen these sections.';
+
+console.log('Example 3 - No Toxicity:');
+console.log('Query:', query3);
+console.log('Response:', response3);
+
+const result3 = await metric.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0, reason: 'The response is professional and constructive, focusing on specific aspects without any personal attacks or harmful language.' }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A toxicity score between 0 and 1:
+   - High scores (0.7-1.0): Explicit toxicity, direct attacks, hate speech
+   - Medium scores (0.4-0.6): Mixed content with some problematic elements
+   - Low scores (0.1-0.3): Generally appropriate with minor issues
+   - Minimal scores (0.0): Professional and constructive content
+
+2. Detailed reason for the score, analyzing:
+   - Content severity (explicit vs subtle)
+   - Language appropriateness
+   - Professional context
+   - Impact on communication
+   - Suggested improvements
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/toxicity"
+  }
+/> 
+
+---
 title: "Examples List: Workflows, Agents, RAG | Mastra Docs"
 description: "Explore practical examples of AI development with Mastra, including text generation, RAG implementations, structured outputs, and multi-modal interactions. Learn how to build AI applications using OpenAI, Anthropic, and Google Gemini."
 ---
@@ -16561,7 +19570,7 @@ Source: https://mastra.ai/examples
 
 The Examples section is a short list of example projects demonstrating basic AI engineering with Mastra, including text generation, structured output, streaming responses, and retrieval‐augmented generation (RAG).
 
-<CardItems titles={["Agent", "Workflow", "Memory", "RAG"]} items={
+<CardItems titles={["Agent", "Workflow", "Memory", "RAG", "Evals"]} items={
   {Agent: [
       {
         title: "Agent with System Prompt",
@@ -16698,14 +19707,91 @@ The Examples section is a short list of example projects demonstrating basic AI 
         href: "/examples/rag/cleanup-rag",
       },
       { title: "Metadata Filtering", href: "/examples/rag/filter-rag" },
-      { title: "Re-ranking Results", href: "/examples/rag/rerank-rag" },
+      {
+        title: "Re-ranking Results",
+        href: "/examples/rag/rerank",
+      },
+      {
+        title: "Re-ranking Results with Tools",
+        href: "/examples/rag/rerank-rag",
+      },
       { title: "Chain of Thought Prompting", href: "/examples/rag/cot-rag" },
       {
         title: "Chain of Thought Prompting w/Workflow",
         href: "/examples/rag/cot-rag",
       },
       { title: "Graph RAG", href: "/examples/rag/graph-rag" },
-    ]
+    ],
+  Evals: [
+    {
+      title: "Answer Relevancy",
+      href: "/examples/evals/answer-relevancy",
+    },
+    {
+      title: "Bias",
+      href: "/examples/evals/bias",
+    },
+    {
+      title: "Completeness",
+      href: "/examples/evals/completeness",
+    },
+    {
+      title: "Content Similarity",
+      href: "/examples/evals/content-similarity",
+    },
+    {
+      title: "Context Position",
+      href: "/examples/evals/context-position",
+    },
+    {
+      title: "Context Precision",
+      href: "/examples/evals/context-precision",
+    },
+    {
+      title: "Context Relevancy",
+      href: "/examples/evals/context-relevancy",
+    },
+    {
+      title: "Contextual Recall",
+      href: "/examples/evals/contextual-recall",
+    },
+    {
+      title: "Custom Eval with LLM as a Judge",
+      href: "/examples/evals/custom-eval",
+    },
+    {
+      title: "Faithfulness",
+      href: "/examples/evals/faithfulness",
+    },
+    {
+      title: "Hallucination",
+      href: "/examples/evals/hallucination",
+    },
+    {
+      title: "Keyword Coverage",
+      href: "/examples/evals/keyword-coverage",
+    },
+    {
+      title: "Prompt Alignment",
+      href: "/examples/evals/prompt-alignment",
+    },
+    {
+      title: "Summarization",
+      href: "/examples/evals/summarization",
+    },
+    {
+      title: "Textual Difference",
+      href: "/examples/evals/textual-difference",
+    },
+    {
+      title: "Tone Consistency", 
+      href: "/examples/evals/tone-consistency",
+    },
+    {
+      title: "Toxicity",
+      href: "/examples/evals/toxicity",
+    },
+  ]
 }}>
 
 </CardItems>
@@ -17358,6 +20444,7 @@ The system implements RAG using Mastra and OpenAI. Here's what it does:
 Make sure to set up your environment variables:
 
 ```bash filename=".env"
+OPENAI_API_KEY=your_openai_api_key_here
 POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
@@ -17628,8 +20715,8 @@ The system implements RAG using Mastra and OpenAI, this time optimizing informat
 Make sure to set up your environment variables:
 
 ```bash filename=".env"
-POSTGRES_CONNECTION_STRING=your_connection_string_here
 OPENAI_API_KEY=your_openai_api_key_here
+POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
 ### Dependencies
@@ -17885,6 +20972,7 @@ The system implements RAG using Mastra and OpenAI with chain-of-thought promptin
 Make sure to set up your environment variables:
 
 ```bash filename=".env"
+OPENAI_API_KEY=your_openai_api_key_here
 POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
@@ -18082,6 +21170,7 @@ The system implements RAG using Mastra and OpenAI with chain-of-thought promptin
 Make sure to set up your environment variables:
 
 ```bash filename=".env"
+OPENAI_API_KEY=your_openai_api_key_here
 POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
@@ -18555,6 +21644,7 @@ When a user asks a question:
 Make sure to set up your environment variables:
 
 ```bash filename=".env"
+OPENAI_API_KEY=your_openai_api_key_here
 POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
@@ -18791,6 +21881,7 @@ The system implements Graph RAG using Mastra and OpenAI. Here's what it does:
 Make sure to set up your environment variables:
 
 ```bash filename=".env"
+OPENAI_API_KEY=your_openai_api_key_here
 POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
@@ -18993,6 +22084,7 @@ The system implements filtered vector search using Mastra and PGVector. Here's w
 Make sure to set up your environment variables:
 
 ```bash filename=".env"
+OPENAI_API_KEY=your_openai_api_key_here
 POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
@@ -19564,28 +22656,27 @@ console.log('Chunk Metadata:', metaTwo);
 /> 
 
 ---
-title: "Example: Re-ranking Results | Retrieval | RAG | Mastra Docs"
+title: "Example: Re-ranking Results with Tools | Retrieval | RAG | Mastra Docs"
 description: Example of implementing a RAG system with re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 
 import { GithubLink } from "../../../components/github-link";
 
-# Re-ranking Results
+# Re-ranking Results with Tools
 Source: https://mastra.ai/examples/rag/rerank-rag
 
-This example demonstrates how to implement a Retrieval-Augmented Generation (RAG) system with re-ranking using Mastra, OpenAI embeddings, and PGVector for vector storage.
+This example demonstrates how to use Mastra's vector query tool in order to implement a Retrieval-Augmented Generation (RAG) system with re-ranking using OpenAI embeddings, and PGVector for vector storage.
 
 ## Overview
 
-The system implements RAG with re-ranking using Mastra and OpenAI. Here's what it does:
+The system implements RAG with re-ranking using Mastra's vector query tool and OpenAI. Here's what it does:
 
 1. Sets up a Mastra agent with gpt-4o-mini for response generation
 2. Creates a vector query tool with re-ranking capabilities
-3. Chunks text documents into smaller segments
-4. Creates embeddings for these chunks
-5. Stores them in a PostgreSQL vector database
-6. Retrieves and re-ranks relevant chunks based on queries
-7. Generates context-aware responses using the Mastra agent
+3. Chunks text documents into smaller segments and creates embeddings from them
+4. Stores them in a PostgreSQL vector database
+5. Retrieves and re-ranks relevant chunks based on queries
+6. Generates context-aware responses using the Mastra agent
 
 ## Setup
 
@@ -19594,6 +22685,7 @@ The system implements RAG with re-ranking using Mastra and OpenAI. Here's what i
 Make sure to set up your environment variables:
 
 ```bash filename=".env"
+OPENAI_API_KEY=your_openai_api_key_here
 POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
@@ -19755,7 +22847,174 @@ const queries = [
 
 await answerQueries(queries);
 ```
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank-rag"
+  }
+/> 
 
+---
+title: "Example: Re-ranking Results | Retrieval | RAG | Mastra Docs"
+description: Example of implementing semantic re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Re-ranking Results
+Source: https://mastra.ai/examples/rag/rerank
+
+This example demonstrates how to implement a Retrieval-Augmented Generation (RAG) system with re-ranking using Mastra, OpenAI embeddings, and PGVector for vector storage.
+
+## Overview
+
+The system implements RAG with re-ranking using Mastra and OpenAI. Here's what it does:
+
+1. Chunks text documents into smaller segments and creates embeddings from them
+2. Stores vectors in a PostgreSQL database
+3. Performs initial vector similarity search
+4. Re-ranks results using Mastra's rerank function, combining vector similarity, semantic relevance, and position scores
+5. Compares initial and re-ranked results to show improvements
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_openai_api_key_here
+POSTGRES_CONNECTION_STRING=your_connection_string_here
+```
+
+### Dependencies
+
+Then, import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { PgVector } from '@mastra/pg';
+import { MDocument, rerank } from '@mastra/rag';
+import { embedMany, embed } from 'ai';
+```
+
+## Document Processing
+
+Create a document and process it into chunks:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const doc1 = MDocument.fromText(`
+market data shows price resistance levels.
+technical charts display moving averages.
+support levels guide trading decisions.
+breakout patterns signal entry points.
+price action determines trade timing.
+`);
+
+const chunks = await doc1.chunk({
+  strategy: 'recursive',
+  size: 150,
+  overlap: 20,
+  separator: '\n',
+});
+```
+
+## Creating and Storing Embeddings
+
+Generate embeddings for the chunks and store them in the vector database:
+
+```typescript copy showLineNumbers{36} filename="src/index.ts"
+const { embeddings } = await embedMany({
+  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding('text-embedding-3-small'),
+});
+
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+await pgVector.createIndex('embeddings', 1536);
+await pgVector.upsert(
+  'embeddings',
+  embeddings,
+  chunks?.map((chunk: any) => ({ text: chunk.text })),
+);
+```
+
+## Vector Search and Re-ranking
+
+Perform vector search and re-rank the results:
+
+```typescript copy showLineNumbers{51} filename="src/index.ts"
+const query = 'explain technical trading analysis';
+
+// Get query embedding
+const { embedding: queryEmbedding } = await embed({
+  value: query,
+  model: openai.embedding('text-embedding-3-small'),
+});
+
+// Get initial results
+const initialResults = await pgVector.query('embeddings', queryEmbedding, 3);
+
+// Re-rank results
+const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'), {
+  weights: {
+    semantic: 0.5,  // How well the content matches the query semantically
+    vector: 0.3,    // Original vector similarity score
+    position: 0.2   // Preserves original result ordering
+  },
+  topK: 3,
+});
+```
+
+The weights control how different factors influence the final ranking:
+- `semantic`: Higher values prioritize semantic understanding and relevance to the query
+- `vector`: Higher values favor the original vector similarity scores
+- `position`: Higher values help maintain the original ordering of results
+
+## Comparing Results
+
+Print both initial and re-ranked results to see the improvement:
+
+```typescript copy showLineNumbers{72} filename="src/index.ts"
+console.log('Initial Results:');
+initialResults.forEach((result, index) => {
+  console.log(`Result ${index + 1}:`, {
+    text: result.metadata.text,
+    score: result.score,
+  });
+});
+
+console.log('Re-ranked Results:');
+rerankedResults.forEach(({ result, score, details }, index) => {
+  console.log(`Result ${index + 1}:`, {
+    text: result.metadata.text,
+    score: score,
+    semantic: details.semantic,
+    vector: details.vector,
+    position: details.position,
+  });
+});
+```
+
+The re-ranked results show how combining vector similarity with semantic understanding can improve retrieval quality. Each result includes:
+- Overall score combining all factors
+- Semantic relevance score from the language model
+- Vector similarity score from the embedding comparison
+- Position-based score for maintaining original order when appropriate
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank"
+  }
+/> 
 
 ---
 title: "Example: Reranking with Cohere | RAG | Mastra Docs"
@@ -20524,7 +23783,7 @@ Source: https://mastra.ai/examples/workflows/using-a-tool-as-a-step
 This example demonstrates how to create and integrate a custom tool as a workflow step, showing how to define input/output schemas and implement the tool's execution logic.
 
 ```ts showLineNumbers copy
-import { createTool } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
 import { Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 

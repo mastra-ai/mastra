@@ -23,6 +23,7 @@ function extractFrontMatter(content: string) {
 function pathToUrl(filePath: string): string {
   // Remove 'src/pages/' prefix, '.mdx' suffix, and 'index' for index pages
   const cleanPath = filePath
+    .replaceAll("\\", "/") // windows support
     .replace(/^src\/pages\//, "")
     .replace(/\/index\.mdx$|\.mdx$/, "");
   return `https://mastra.ai/${cleanPath}`;
@@ -79,7 +80,9 @@ async function concatenateMDXDocs(sourceDir: string) {
 
         try {
           const content = await fs.readFile(fullPath, "utf-8");
-          const relativePath = path.relative(sourceDir, fullPath);
+          const relativePath = path
+            .relative(sourceDir, fullPath)
+            .replaceAll("\\", "/");
           const frontMatter = extractFrontMatter(content);
 
           mdxFiles.push({
