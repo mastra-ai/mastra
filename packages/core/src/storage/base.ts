@@ -18,7 +18,7 @@ export abstract class MastraStorage extends MastraBase {
   /** @deprecated import { TABLE_TRACES } from '@mastra/core/storage' instead */
   static readonly TABLE_TRACES = TABLE_TRACES;
 
-  protected hasInitialized: boolean | Promise<any> = false;
+  protected hasInitialized: null | Promise<boolean> = null;
 
   constructor({ name }: { name: string }) {
     super({
