@@ -37,7 +37,15 @@ export class Workflow extends BaseResource {
    * @param context - Context to resume the workflow with
    * @returns Promise containing the workflow resume results
    */
-  resume(stepId: string, runId: string, context: Record<string, any>): Promise<Record<string, any>> {
+  resume({
+    stepId,
+    runId,
+    context,
+  }: {
+    stepId: string;
+    runId: string;
+    context: Record<string, any>;
+  }): Promise<Record<string, any>> {
     return this.request(`/api/workflows/${this.workflowId}/resume`, {
       method: 'POST',
       body: {

@@ -40,3 +40,48 @@ const result = await workflow.execute({
   },
 });
 ```
+
+### Resume Workflow
+
+Resume a suspended workflow step:
+
+```typescript
+const result = await workflow.resume({
+  stepId: "step-id",
+  runId: "run-id",
+  contextData: { key: "value" },
+});
+```
+
+### Watch Workflow
+
+Watch workflow transitions in real-time:
+
+```typescript
+const response = await workflow.watch();
+
+// Read Transition Data from response body
+const reader = response.body.getReader();
+let buffer = "";
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  buffer += new TextDecoder().decode(value);
+
+  // Split the buffer into records
+  const records = buffer.split("\x1E");
+
+  buffer = records.pop() || "";
+
+  // Process each record
+  for (const record of records) {
+    // Handle each record
+    const { activePaths, context, timestamp } = record;
+    console.log({
+      activePaths,
+      context,
+      timestamp,
+    });
+  }
+}
+```
