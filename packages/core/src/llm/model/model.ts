@@ -1,5 +1,5 @@
 import { generateText, generateObject, jsonSchema, streamText, streamObject } from 'ai';
-import type { LanguageModel, Tool, Schema, CoreMessage } from 'ai';
+import type { LanguageModel, Schema, CoreMessage } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema } from 'zod';
