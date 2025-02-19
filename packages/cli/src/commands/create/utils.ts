@@ -74,11 +74,11 @@ export const createMastraProject = async () => {
 }' > tsconfig.json`);
   s.stop('NPM dependencies installed');
   s.start('Installing mastra');
-  await exec(`npm i -D mastra`);
+  await exec(`npm i -D mastra@latest`);
   s.stop('mastra installed');
 
   s.start('Installing @mastra/core');
-  await exec(`npm i @mastra/core@alpha`);
+  await exec(`npm i @mastra/core@latest`);
   s.stop('@mastra/core installed');
 
   s.start('Adding .gitignore');
