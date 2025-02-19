@@ -5,6 +5,7 @@ packages:
   - "vector-stores/*"
   - "stores/*"
   - "speech/*"
+  - "client-sdks/*"
   - "!packages/cli/admin"
   - "integration-generator/*"
   - "integrations/*"
