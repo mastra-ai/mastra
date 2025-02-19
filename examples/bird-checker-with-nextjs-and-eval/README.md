@@ -1,6 +1,6 @@
 # Bird Checker with eval
 
-A Next.js application that gets a random image from [Unsplash](https://unsplash.com/) that matches a selected query and uses a [Mastra AI Agent](https://mastra.ai/docs/guide/creating-agents/00-overview) to determine if it is a bird or not. It also has braintrust eval to use evaluate the llm prompt
+A Next.js application that gets a random image from [Unsplash](https://unsplash.com/) that matches a selected query and uses a [Mastra AI Agent](https://mastra.ai/docs/agents/00-overview) to determine if it is a bird or not. It also has braintrust eval to use evaluate the llm prompt
 
 ## Features
 
