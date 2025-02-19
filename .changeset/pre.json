@@ -103,7 +103,40 @@
     "@mastra/vector-pinecone": "0.1.0",
     "@mastra/vector-qdrant": "0.1.0",
     "@mastra/vector-upstash": "0.1.0",
-    "@mastra/vector-vectorize": "0.1.0"
+    "@mastra/vector-vectorize": "0.1.0",
+    "examples-answer-relevancy": "0.0.0",
+    "examples-bias": "0.0.0",
+    "examples-completeness": "0.0.0",
+    "examples-content-similarity": "0.0.0",
+    "examples-context-position": "0.0.0",
+    "examples-context-precision": "0.0.0",
+    "examples-context-relevancy": "0.0.0",
+    "examples-contextual-recall": "0.0.0",
+    "examples-custom-eval": "0.0.0",
+    "examples-faithfulness": "0.0.0",
+    "examples-hallucination": "0.0.0",
+    "examples-keyword-coverage": "0.0.0",
+    "examples-prompt-alignment": "0.0.0",
+    "examples-summarization": "0.0.0",
+    "examples-textual-difference": "0.0.0",
+    "examples-tone-consistency": "0.0.0",
+    "examples-toxicity": "0.0.0",
+    "examples-rerank": "0.0.1-alpha.3",
+    "@internal/lint": "0.0.0",
+    "@mastra/memory-integration-tests": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "clean-trains-protect",
+    "four-gorillas-share",
+    "large-cobras-hide",
+    "lovely-rockets-sell",
+    "ninety-parts-reply",
+    "quick-suns-appear",
+    "shiny-cases-dance",
+    "short-kangaroos-cry",
+    "six-bugs-cheat",
+    "thick-pens-fold",
+    "thin-impalas-battle",
+    "tiny-buckets-tease"
+  ]
 }
