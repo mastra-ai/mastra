@@ -103,11 +103,16 @@ jobs:
 
       - name: Publish packages
         if: ${{ !inputs.dry_run }}
-        run: pnpm changeset publish
+        run: pnpm publish -r
 
       - name: Publish packages - dry run
         if: ${{ inputs.dry_run }}
-        run: pnpm changeset publish --dry-run
+        run: pnpm publish -r --dry-run
+
+      - name: Add tags
+        run: |
+          pnpm changeset tag;
+          git push --follow-tags
 
   enter_prerelease:
     needs: release
