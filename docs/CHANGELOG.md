@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.1-alpha.0
+
+### Patch Changes
+
+- d59f1a8: Added example docs for evals and export metricJudge
+
 ## 0.1.0
 
 ### Minor Changes
