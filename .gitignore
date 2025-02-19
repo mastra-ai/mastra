@@ -22,5 +22,4 @@ openapi-ts-error*
 .secrets
 # Local Netlify folder
 .netlify
-
-memory:
+.npmrc
