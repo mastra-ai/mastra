@@ -79,66 +79,6 @@ The schema:
 - Validates data passed to `execute()`
 - Provides TypeScript types for your workflow input
 
-## Variables & Data Flow
-
-Variables allow steps to access data from:
-
-- Previous steps' outputs
-- Trigger data
-
-Variables payloads are typesafe with fields defined in the [Step](./step-class.mdx) `inputSchema`.
-
-```ts showLineNumbers copy
-workflow
-  .step("createOrder", {
-    // Access trigger data
-    variables: {
-      orderId: { stepId: "trigger", path: "orderId" },
-    },
-  })
-  .step("processPayment", {
-    variables: {
-      // Access previous step's data
-      orderStatus: { stepId: "createOrder", path: "status" },
-      amount: { stepId: "createOrder", path: "total" },
-    },
-  });
-```
-
-#### Variable Resolution
-
-- Variables are resolved in order of step execution
-- Each step can access outputs of all previous steps
-- Paths use dot notation for nested data
-- Missing or invalid paths throw errors during execution
-
-### Example
-
-```ts showLineNumbers copy
-const workflow = new Workflow({
-  name: "process-data",
-  triggerSchema: z.object({
-    items: z.array(
-      z.object({
-        id: z.number(),
-        value: z.number(),
-      }),
-    ),
-  }),
-})
-  .step("filter", {
-    variables: {
-      items: { stepId: "trigger", path: "." },
-    },
-  })
-  .step("process", {
-    variables: {
-      items: { stepId: "filter", path: "filtered.user.name" },
-    },
-  })
-  .commit();
-```
-
 ## Validation
 
 Workflow validation happens at two key times:
@@ -254,6 +194,36 @@ try {
   }
 }
 ```
+
+## Passing Context Between Steps
+
+Steps can access data from previous steps in the workflow through the context object. Each step receives the accumulated context from all previous steps that have executed.
+
+```typescript showLineNumbers copy
+workflow
+  .step({
+    id: 'getData',
+    execute: async ({ context }) => {
+      return {
+        data: { id: '123', value: 'example' }
+      };
+    }
+  })
+  .step({
+    id: 'processData',
+    execute: async ({ context }) => {
+      // Access data from previous step through context.steps
+      const previousData = context.steps.getData.output.data;
+      // Process previousData.id and previousData.value
+    }
+  });
+```
+
+The context object:
+- Contains results from all completed steps in `context.steps`
+- Provides access to step outputs through `context.steps.[stepId].output`
+- Is typed based on step output schemas
+- Is immutable to ensure data consistency
 
 ## Related Documentation
 
