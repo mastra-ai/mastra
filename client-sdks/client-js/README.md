@@ -80,6 +80,8 @@ const client = new MastraClient({
 - `getWorkflow(workflowId)`: Get a workflow instance
   - `workflow.details()`: Get workflow details
   - `workflow.execute(params)`: Execute the workflow
+  - `workflow.watch(params)`: Watch the workflow
+  - `workflow.resume(params)`: Resume the workflow
 
 ### Vectors
 

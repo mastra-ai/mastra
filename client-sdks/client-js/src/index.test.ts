@@ -269,10 +269,6 @@ describe('MastraClient Resources', () => {
           {
             role: 'user',
             content: 'test',
-            id: '1',
-            createdAt: new Date(),
-            threadId: '1',
-            type: 'text',
           },
         ],
       });
@@ -312,12 +308,12 @@ describe('MastraClient Resources', () => {
       mockFetchResponse(mockResponse);
       const result = await agent.evals();
       expect(result).toEqual(mockResponse);
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/agents/test-agent/evals`,
-        expect.objectContaining({
-          headers: expect.objectContaining(clientOptions.headers),
-        }),
-      );
+      expect(global.fetch).toHaveBeenCalledWith(`${clientOptions.baseUrl}/api/agents/test-agent/evals/ci`, {
+        headers: {
+          Authorization: 'Bearer test-key',
+          'Content-Type': 'application/json',
+        },
+      });
     });
 
     it('should get live evals', async () => {
@@ -431,11 +427,14 @@ describe('MastraClient Resources', () => {
       expect(result).toEqual(messages);
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/memory/save-messages?agentId=${agentId}`,
-        expect.objectContaining({
+        {
           method: 'POST',
-          headers: expect.objectContaining(clientOptions.headers),
-          body: JSON.stringify({ messages }),
-        }),
+          headers: {
+            Authorization: 'Bearer test-key',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ messages, agentId }),
+        },
       );
     });
   });
@@ -473,16 +472,16 @@ describe('MastraClient Resources', () => {
       };
       mockFetchResponse(mockResponse);
 
-      const result = await tool.execute({ input: 'test' });
+      const result = await tool.execute({ data: '' });
       expect(result).toEqual(mockResponse);
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/tools/test-tool/execute`,
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining(clientOptions.headers),
-          body: JSON.stringify({ input: 'test' }),
-        }),
-      );
+      expect(global.fetch).toHaveBeenCalledWith(`${clientOptions.baseUrl}/api/tools/test-tool/execute`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer test-key',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ data: '' }),
+      });
     });
   });
 
