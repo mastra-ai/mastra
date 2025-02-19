@@ -78,6 +78,12 @@ An optional object that can include:
           description: "Identifier for the user or resource interacting with the agent.",
         },
         {
+          name: "temperature",
+          type: "number",
+          isOptional: true,
+          description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
+        },
+        {
           name: "context",
           type: "Array<Message>",
           isOptional: true,

@@ -1,14 +1,21 @@
 import { createTool } from '@mastra/core/tools';
 import { jsonSchemaToModel } from '@mastra/core/utils';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { StdioServerParameters } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { ListResourcesResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import type { Protocol } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { ClientCapabilities } from '@modelcontextprotocol/sdk/types.js';
+import { ListResourcesResultSchema } from '@modelcontextprotocol/sdk/types.js';
+
+type SSEClientParameters = {
+  url: URL;
+} & ConstructorParameters<typeof SSEClientTransport>[1];
 
 export class MastraMCPClient {
   name: string;
-  private transport: StdioClientTransport;
+  private transport: Transport;
   private client: Client;
   constructor({
     name,
@@ -17,12 +24,20 @@ export class MastraMCPClient {
     capabilities = {},
   }: {
     name: string;
-    server: StdioServerParameters;
+    server: StdioServerParameters | SSEClientParameters;
     capabilities?: ClientCapabilities;
     version?: string;
   }) {
     this.name = name;
-    this.transport = new StdioClientTransport(server);
+
+    if (`url` in server) {
+      this.transport = new SSEClientTransport(server.url, {
+        requestInit: server.requestInit,
+        eventSourceInit: server.eventSourceInit,
+      });
+    } else {
+      this.transport = new StdioClientTransport(server);
+    }
 
     this.client = new Client(
       {
@@ -43,7 +58,9 @@ export class MastraMCPClient {
     return await this.client.close();
   }
 
-  async resources() {
+  // TODO: do the type magic to return the right method type. Right now we get infinitely deep infered type errors from Zod without using "any"
+
+  async resources(): Promise<ReturnType<Protocol<any, any, any>['request']>> {
     return await this.client.request({ method: 'resources/list' }, ListResourcesResultSchema);
   }
 
