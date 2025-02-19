@@ -12,7 +12,7 @@ packages:
   - "examples/*"
   - "examples/basics/**/*"
   - "examples/basics/llms/*"
-  - "examples/client-sdk-js/*"
+  - "examples/client-sdk-with-vite/*"
   - "docs"
   - "packages/cli/src/playground"
   - "packages/*/integration-tests"
