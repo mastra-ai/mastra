@@ -1,7 +1,8 @@
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { parse } from 'superjson';
+import { z } from 'zod';
 
 import { DynamicForm } from '@/components/dynamic-form';
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
@@ -12,25 +13,66 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
-import { useExecuteWorkflow, useWorkflow } from '@/hooks/use-workflows';
+import { useExecuteWorkflow, useWatchWorkflow, useResumeWorkflow, useWorkflow } from '@/hooks/use-workflows';
+
+interface SuspendedStep {
+  stepId: string;
+  runId: string;
+}
+
+interface WorkflowPath {
+  stepId: string;
+}
 
 export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; setRunId: (runId: string) => void }) {
   const { isLoading, workflow } = useWorkflow(workflowId);
   const { executeWorkflow, isExecutingWorkflow } = useExecuteWorkflow();
+  const { watchWorkflow, watchResult } = useWatchWorkflow();
+  const { resumeWorkflow, isResumingWorkflow } = useResumeWorkflow();
   const [result, setResult] = useState<any>(null);
+  const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
 
   const triggerSchema = workflow?.triggerSchema;
 
   const handleExecuteWorkflow = async (data: any) => {
     if (!workflow) return;
 
+    watchWorkflow({ workflowId });
+
     const result = await executeWorkflow({
       workflowId,
       input: data,
     });
+
     setResult(result);
     setRunId(result.runId);
   };
+
+  const handleResumeWorkflow = async (step: SuspendedStep & { context: any }) => {
+    if (!workflow) return;
+
+    const { stepId, runId, context } = step;
+    const result = await resumeWorkflow({
+      stepId,
+      runId,
+      context,
+      workflowId,
+    });
+
+    setResult(result);
+  };
+
+  useEffect(() => {
+    if (!watchResult?.activePaths || !result?.runId) return;
+
+    const suspended = watchResult.activePaths
+      .filter((path: WorkflowPath) => watchResult.context?.steps?.[path.stepId]?.status === 'suspended')
+      .map((path: WorkflowPath) => ({
+        stepId: path.stepId,
+        runId: result.runId,
+      }));
+    setSuspendedSteps(suspended);
+  }, [watchResult, result]);
 
   if (isLoading) {
     return (
@@ -84,9 +126,42 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
     <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs w-[400px]">
       <div className="space-y-4">
         <div>
-          <Text variant="secondary" className="text-mastra-el-3 px-4" size="xs">
-            Input
-          </Text>
+          {suspendedSteps.length > 0 ? (
+            suspendedSteps?.map(step => (
+              <div className="px-4">
+                <Text variant="secondary" className="text-mastra-el-3" size="xs">
+                  {step.stepId}
+                </Text>
+                <DynamicForm
+                  schema={z.record(z.string(), z.any())}
+                  isSubmitLoading={isResumingWorkflow}
+                  submitButtonLabel="Resume"
+                  onSubmit={data => {
+                    handleResumeWorkflow({
+                      stepId: step.stepId,
+                      runId: step.runId,
+                      context: data,
+                    });
+                  }}
+                />
+              </div>
+            ))
+          ) : (
+            <></>
+          )}
+
+          <div className="flex items-center justify-between w-full">
+            <Text variant="secondary" className="text-mastra-el-3 px-4" size="xs">
+              Input
+            </Text>
+            {isResumingWorkflow ? (
+              <span className="flex items-center gap-1">
+                <Loader2 className="animate-spin w-3 h-3 text-mastra-el-accent" /> Resuming workflow
+              </span>
+            ) : (
+              <></>
+            )}
+          </div>
           <DynamicForm
             schema={zodInputSchema}
             isSubmitLoading={isExecutingWorkflow}

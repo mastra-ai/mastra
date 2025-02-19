@@ -48,13 +48,7 @@ export function getDefaultFieldMap() {
       return <ArrayField {...props} renderField={renderField} />;
     },
     [FormConfigType.RECORD]: (props: FieldProps) => {
-      const renderField = ({ fieldName, index: _index }: { fieldName: string; index: number }) => {
-        return getDefaultFieldMap()[FormConfigType.STRING]({
-          ...props,
-          name: fieldName,
-        });
-      };
-      return <RecordField {...props} renderField={renderField} />;
+      return <RecordField {...props} />;
     },
     [FormConfigType.OBJECT]: (props: FieldProps) => {
       const { innerSchema, name, control, handleFieldChange } = props;

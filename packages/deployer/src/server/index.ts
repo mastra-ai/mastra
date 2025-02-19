@@ -47,7 +47,13 @@ import {
   describeIndex,
   deleteIndex,
 } from './handlers/vector.js';
-import { executeWorkflowHandler, getWorkflowByIdHandler, getWorkflowsHandler } from './handlers/workflows.js';
+import {
+  executeWorkflowHandler,
+  getWorkflowByIdHandler,
+  getWorkflowsHandler,
+  resumeWorkflowHandler,
+  watchWorkflowHandler,
+} from './handlers/workflows.js';
 import { html } from './welcome.js';
 
 type Bindings = {};
@@ -798,7 +804,7 @@ export async function createHonoServer(
     '/api/workflows/:workflowId/execute',
     bodyLimit(bodyLimitOptions),
     describeRoute({
-      description: 'Execute a workflow',
+      description: 'Execute/Start a workflow',
       tags: ['workflows'],
       parameters: [
         {
@@ -831,6 +837,60 @@ export async function createHonoServer(
       },
     }),
     executeWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/resume',
+    describeRoute({
+      description: 'Resume a suspended workflow step',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                stepId: { type: 'string' },
+                runId: { type: 'string' },
+                context: { type: 'object' },
+              },
+            },
+          },
+        },
+      },
+    }),
+    resumeWorkflowHandler,
+  );
+
+  app.get(
+    '/api/workflows/:workflowId/watch',
+    describeRoute({
+      description: 'Watch workflow transitions in real-time',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      tags: ['workflows'],
+      responses: {
+        200: {
+          description: 'Workflow transitions in real-time',
+        },
+      },
+    }),
+    watchWorkflowHandler,
   );
 
   // Log routes
