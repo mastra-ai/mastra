@@ -89,7 +89,8 @@ async function rebundleAndRestart(dotMastraPath: string, port: number, bundler: 
     }
 
     const env = await bundler.loadEnvVars();
-    await startServer(dotMastraPath, port, env);
+
+    await startServer(join(dotMastraPath, 'output'), port, env);
   } finally {
     isRestarting = false;
   }
