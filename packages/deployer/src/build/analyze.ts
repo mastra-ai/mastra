@@ -128,7 +128,7 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
   }
 
   const bundler = await rollup({
-    logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'debug',
+    logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     input: Array.from(virtualDependencies.entries()).reduce(
       (acc, [dep, virtualDep]) => {
         acc[virtualDep.name] = `#virtual-${dep}`;
