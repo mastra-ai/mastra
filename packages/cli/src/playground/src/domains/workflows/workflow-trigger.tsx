@@ -156,7 +156,7 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
             </Text>
             {isResumingWorkflow ? (
               <span className="flex items-center gap-1">
-                <Loader2 className="animate-spin w-3 h-3" /> Resuming workflow
+                <Loader2 className="animate-spin w-3 h-3 text-mastra-el-accent" /> Resuming workflow
               </span>
             ) : (
               <></>
