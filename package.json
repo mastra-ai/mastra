@@ -41,7 +41,7 @@
     "test:stores": "pnpm --filter \"@mastra/store-*\" test",
     "test:clients": "pnpm --filter \"./client-sdks/*\" test",
     "test:combined-stores": "pnpm --filter \"./stores/*\" test",
-    "test:vector-stores": "pnclpm --filter \"./vector-stores/*\" test",
+    "test:vector-stores": "pnpm --filter \"./vector-stores/*\" test",
     "test:memory": "pnpm --filter ./packages/memory test",
     "test:evals": "pnpm --filter ./packages/evals test",
     "test:evals:nlp": "pnpm --filter ./packages/evals test src/metrics/nlp",
