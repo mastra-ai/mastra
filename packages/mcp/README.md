@@ -17,16 +17,27 @@ The `@mastra/mcp` package provides a client implementation for the Model Context
 ```typescript
 import { MastraMCPClient } from '@mastra/mcp';
 
-// Create a client
-const client = new MastraMCPClient({
-  name: 'my-mcp-client',
+// Create a client with stdio server
+const stdioClient = new MastraMCPClient({
+  name: 'my-stdio-client',
   version: '1.0.0', // optional
   server: {
-    // StdioServerParameters
     command: 'your-mcp-server-command',
     args: ['--your', 'args'],
   },
   capabilities: {}, // optional ClientCapabilities
+});
+
+// Or create a client with SSE server
+const sseClient = new MastraMCPClient({
+  name: 'my-sse-client',
+  version: '1.0.0',
+  server: {
+    url: new URL('https://your-mcp-server.com/sse'),
+    requestInit: {
+      headers: { 'Authorization': 'Bearer your-token' }
+    }
+  }
 });
 
 // Connect to the MCP server
@@ -47,9 +58,16 @@ await client.disconnect();
 ### Required Parameters
 
 - `name`: Name of the MCP client instance
-- `server`: StdioServerParameters object containing:
+- `server`: Either a StdioServerParameters or SSEClientParameters object:
+  
+  #### StdioServerParameters
   - `command`: Command to start the MCP server
   - `args`: Array of command arguments
+  
+  #### SSEClientParameters
+  - `url`: URL instance pointing to the SSE server
+  - `requestInit`: Optional fetch request configuration
+  - `eventSourceInit`: Optional EventSource configuration
 
 ### Optional Parameters
 
@@ -61,7 +79,9 @@ await client.disconnect();
 - Standard MCP client implementation
 - Automatic tool conversion to Mastra format
 - Resource discovery and management
-- Stdio-based transport layer
+- Multiple transport layers:
+  - Stdio-based for local servers
+  - SSE-based for remote servers
 - Automatic error handling and logging
 - Tool execution with context
 
