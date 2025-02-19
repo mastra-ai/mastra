@@ -81,6 +81,12 @@ An optional object that can include:
       type: 'ToolsetsInput',
       isOptional: true,
       description: 'Additional toolsets to make available to the agent during this stream.',
+    },
+    {
+      name: 'temperature',
+      type: 'number',
+      isOptional: true,
+      description: 'Controls randomness in the model\'s output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.',
     }
   ]}
 />
