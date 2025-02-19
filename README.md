@@ -28,60 +28,22 @@ If you don't have an API key for an LLM provider, you can get one from the follo
 - [Anthropic](https://console.anthropic.com/settings/keys)
 - [Google Gemini](https://ai.google.dev/gemini-api/docs)
 
-If you don't have an account with these providers, you can sign up and get an API key. OpenAI and Anthropic require a credit card to get an API key. Gemini does not and has a generous free tier for its API.
+If you don't have an account with these providers, you can sign up and get an API key. Anthropic require a credit card to get an API key. Some OpenAI models and Gemini do not and have a generous free tier for its API.
 
 ## Create a new project
 
-As a first step, create a project directory and navigate into it:
-
-```bash copy
-mkdir hello-mastra
-cd hello-mastra
-```
-
-Next, initialize a TypeScript project using npm:
-
-```bash copy npm2yarn
-npm init -y
-npm install typescript tsx @types/node --save-dev
-npm install @mastra/core@alpha zod
-```
-
-### Add an index.ts file
+The easiest way to get started with Mastra is by using `create-mastra`. This CLI tool enables you to quickly start building a new Mastra application, with everything set up for you.
 
 ```bash
-mkdir src
-touch src/index.ts
-```
-
-Then, add this code to `src/index.ts`:
-
-```typescript
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-
-async function main() {
-  const agent = new Agent({
-    name: 'story-writer',
-    model: openai('gpt-4o-mini'),
-    instructions: `You are a helpful assistant who writes creative stories.`,
-    tools: {},
-  });
-
-  const result = await agent.generate('Write a short story about a robot learning to paint.');
-
-  console.log('Agent response:', result.text);
-}
-
-main();
+npx create-mastra@latest
 ```
 
 ### Run the script
 
-Finally, run the script:
+Finally, run `mastra dev` to open the Mastra playground.
 
 ```bash copy
-OPENAI_API_KEY=<your-openai-api-key> npx tsx src/index.ts
+npm run dev
 ```
 
 If you're using Anthropic, set the `ANTHROPIC_API_KEY`. If you're using Gemini, set the `GOOGLE_GENERATIVE_AI_API_KEY`.
