@@ -1,6 +1,6 @@
 # OpenAPI Spec Generator
 
-A Next.js application that generates OpenAPI specifications from API documentation URLs and optionally creates pull requests to create a [Mastra integration](https://mastra.ai/docs/guide/how-to/06-adding-integrations) from the generated spec.
+A Next.js application that generates OpenAPI specifications from API documentation URLs and optionally creates pull requests to create a [Mastra integration](https://mastra.ai/docs/local-dev/integrations) from the generated spec.
 
 ## Features
 
