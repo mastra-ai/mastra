@@ -104,3 +104,98 @@ export const useExecuteWorkflow = () => {
 
   return { executeWorkflow, isExecutingWorkflow };
 };
+
+export const useWatchWorkflow = () => {
+  const [isWatchingWorkflow, setIsWatchingWorkflow] = useState(false);
+  const [watchResult, setWatchResult] = useState<any>(null);
+
+  const watchWorkflow = async ({ workflowId }: { workflowId: string }) => {
+    try {
+      setIsWatchingWorkflow(true);
+      const response = await fetch(`/api/workflows/${workflowId}/watch`);
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error?.error || 'Error watching workflow');
+      }
+
+      const reader = response.body?.getReader();
+
+      if (!reader) {
+        throw new Error('No reader available');
+      }
+
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += new TextDecoder().decode(value);
+
+        const records = buffer.split('\x1E');
+
+        buffer = records.pop() || '';
+
+        for (const record of records) {
+          if (record.trim()) {
+            const data = JSON.parse(record);
+            setWatchResult({
+              activePaths: data.activePaths,
+              context: data.context,
+              timestamp: data.timestamp,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error watching workflow:', error);
+      throw error;
+    } finally {
+      setIsWatchingWorkflow(false);
+    }
+  };
+
+  return { watchWorkflow, isWatchingWorkflow, watchResult };
+};
+
+export const useResumeWorkflow = () => {
+  const [isResumingWorkflow, setIsResumingWorkflow] = useState(false);
+
+  const resumeWorkflow = async ({
+    workflowId,
+    stepId,
+    runId,
+    context,
+  }: {
+    workflowId: string;
+    stepId: string;
+    runId: string;
+    context: any;
+  }) => {
+    try {
+      setIsResumingWorkflow(true);
+      const response = await fetch(`/api/workflows/${workflowId}/resume`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ stepId, runId, context }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        toast.error(error?.error || 'Error resuming workflow');
+        return;
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error resuming workflow:', error);
+      throw error;
+    } finally {
+      setIsResumingWorkflow(false);
+    }
+  };
+
+  return { resumeWorkflow, isResumingWorkflow };
+};

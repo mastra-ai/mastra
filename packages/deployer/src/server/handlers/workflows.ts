@@ -48,7 +48,7 @@ export async function getWorkflowByIdHandler(c: Context) {
 
 export async function executeWorkflowHandler(c: Context) {
   try {
-    const mastra = c.get('mastra');
+    const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
     const workflow = mastra.getWorkflow(workflowId);
     const body = await c.req.json();
@@ -61,5 +61,44 @@ export async function executeWorkflowHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error executing workflow');
+  }
+}
+
+export async function watchWorkflowHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const workflowId = c.req.param('workflowId');
+    const workflow = mastra.getWorkflow(workflowId);
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        workflow.watch(({ activePaths, context }) => {
+          controller.enqueue(JSON.stringify({ activePaths, context }) + '\x1E');
+        });
+      },
+    });
+
+    return c.body(stream);
+  } catch (error) {
+    return handleError(error, 'Error watching workflow');
+  }
+}
+
+export async function resumeWorkflowHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const workflowId = c.req.param('workflowId');
+    const workflow = mastra.getWorkflow(workflowId);
+    const { stepId, runId, context } = await c.req.json();
+
+    const result = await workflow.resume({
+      stepId,
+      runId,
+      context,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error resuming workflow step');
   }
 }
