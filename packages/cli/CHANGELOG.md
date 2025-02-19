@@ -1,5 +1,24 @@
 # mastra
 
+## 0.2.1
+
+### Patch Changes
+
+- 936dc26: Add mastra server endpoints for watch/resume + plug watch and resume functionality to dev playground
+- 91ef439: Add eslint and ran autofix
+- b0b975d: Update package installation to latest instead of alpha
+- bf2e88f: Add instrumentation http to mastra
+- 4526a78: Fixed "instrumentation.mjs" not found, and port 4111 in use errors when rebundling in "mastra dev"
+- Updated dependencies [d59f1a8]
+- Updated dependencies [936dc26]
+- Updated dependencies [91ef439]
+- Updated dependencies [4a25be4]
+- Updated dependencies [bf2e88f]
+- Updated dependencies [2f0d707]
+- Updated dependencies [aac1667]
+  - @mastra/core@0.2.1
+  - @mastra/deployer@0.1.1
+
 ## 0.2.1-alpha.0
 
 ### Patch Changes

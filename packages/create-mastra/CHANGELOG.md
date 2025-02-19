@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.1.1
+
+### Patch Changes
+
+- 936dc26: Add mastra server endpoints for watch/resume + plug watch and resume functionality to dev playground
+- b0b975d: Update package installation to latest instead of alpha
+
 ## 0.1.1-alpha.0
 
 ### Patch Changes

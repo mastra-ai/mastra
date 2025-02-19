@@ -1,5 +1,19 @@
 # @mastra/composio
 
+## 0.1.1
+
+### Patch Changes
+
+- c05f0cc: Fixed export map
+- 952e4f3: Fixed composio tool ID length errors. Fixed composio app filtering
+- Updated dependencies [d59f1a8]
+- Updated dependencies [91ef439]
+- Updated dependencies [4a25be4]
+- Updated dependencies [bf2e88f]
+- Updated dependencies [2f0d707]
+- Updated dependencies [aac1667]
+  - @mastra/core@0.2.1
+
 ## 0.1.1-alpha.0
 
 ### Patch Changes
