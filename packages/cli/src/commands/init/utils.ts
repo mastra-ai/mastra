@@ -204,7 +204,7 @@ export async function installCoreDeps() {
 
     const depsService = new DepsService();
 
-    await depsService.installPackages(['@mastra/core@alpha']);
+    await depsService.installPackages(['@mastra/core@latest']);
     spinner.success('@mastra/core installed successfully');
   } catch (err) {
     console.error(err);
