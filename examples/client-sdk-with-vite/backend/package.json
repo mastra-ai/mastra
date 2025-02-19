@@ -1,0 +1,27 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev"
+  },
+  "keywords": [],
+  "author": "Ehindero Israel",
+  "license": "ISC",
+  "description": "",
+  "type": "module",
+  "dependencies": {
+    "@ai-sdk/anthropic": "^1.1.8",
+    "@ai-sdk/openai": "^1.1.12",
+    "@mastra/core": "workspace:*",
+    "@mastra/memory": "^0.1.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "mastra": "workspace:*",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
