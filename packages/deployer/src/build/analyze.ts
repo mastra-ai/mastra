@@ -139,7 +139,7 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
     // this dependency breaks the build, so we need to exclude it
     // TODO actually fix this so we don't need to exclude it
     external: ['jsdom'],
-    treeshake: true,
+    treeshake: 'smallest',
     preserveSymlinks: true,
     plugins: [
       virtual(
@@ -159,6 +159,8 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
       }),
       nodeResolve({
         preferBuiltins: true,
+        exportConditions: ['node', 'import', 'require'],
+        mainFields: ['module', 'main'],
       }),
       // hono is imported from deployer, so we need to resolve from here instead of the project root
       aliasHono(),
@@ -221,7 +223,7 @@ async function validateOutput(
       }
 
       // we might need this on other projects but not sure so let's keep it commented out for now
-      // console.log(file.fileName, file.isEntry, file.isDynamicEntry, err);
+      console.log(file.fileName, file.isEntry, file.isDynamicEntry, err);
       // result.invalidChunks.add(file.fileName);
       // const externalImports = excludeInternalDeps(file.imports.filter(file => !internalFiles.has(file)));
       // externalImports.push(...excludeInternalDeps(file.dynamicImports.filter(file => !internalFiles.has(file))));
