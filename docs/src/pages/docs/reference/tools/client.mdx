@@ -19,7 +19,7 @@ constructor({
     capabilities = {},
 }: {
     name: string;
-    server: StdioServerParameters;
+    server: StdioServerParameters | SSEClientParameters;
     capabilities?: ClientCapabilities;
     version?: string;
 })
@@ -43,8 +43,8 @@ constructor({
     },
     {
       name: 'server',
-      type: 'StdioServerParameters',
-      description: 'Configuration parameters for the stdio server connection.',
+      type: 'StdioServerParameters | SSEClientParameters',
+      description: 'Configuration parameters for either a stdio server connection or an SSE server connection.',
     },
     {
       name: 'capabilities',
@@ -95,6 +95,8 @@ Returns an object mapping tool names to their corresponding Mastra tool implemen
 ## Examples
 
 ### Using with Mastra Agent
+
+#### Example with Stdio Server
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -148,6 +150,26 @@ try {
   // Always disconnect when done
   await fetchClient.disconnect();
 }
+```
+
+#### Example with SSE Server
+
+```typescript
+// Initialize the MCP client using an SSE server
+const sseClient = new MastraMCPClient({
+  name: "sse-client",
+  server: {
+    url: new URL("https://your-mcp-server.com/sse"),
+    // Optional fetch request configuration
+    requestInit: {
+      headers: {
+        "Authorization": "Bearer your-token"
+      }
+    }
+  },
+});
+
+// The rest of the usage is identical to the stdio example
 ```
 
 ## Related Information
