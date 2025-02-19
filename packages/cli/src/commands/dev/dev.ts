@@ -15,9 +15,10 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
     // Restart server
     logger.info('[Mastra Dev] - Starting server...');
 
+    const instrumentation = import.meta.resolve('@opentelemetry/instrumentation/hook.mjs');
     currentServerProcess = execa(
       'node',
-      ['--import=./instrumentation.mjs', '--import=@opentelemetry/instrumentation/hook.mjs', 'index.mjs'],
+      ['--import=./instrumentation.mjs', `--import=${instrumentation}`, 'index.mjs'],
       {
         cwd: dotMastraPath,
         env: {

@@ -18,7 +18,10 @@ export default function (babel) {
 
             // Create the arrow function first
             const arrowFn = t.parenthesizedExpression(
-              t.arrowFunctionExpression([t.identifier('_')], t.blockStatement(nodes.map(node => t.cloneNode(node)))),
+              t.arrowFunctionExpression(
+                [t.identifier('_')],
+                t.blockStatement([...nodes.map(node => t.cloneNode(node)), t.returnStatement(t.identifier(key))]),
+              ),
             );
 
             // Add the comment as a CommentBlock
