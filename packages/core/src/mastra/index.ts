@@ -147,8 +147,18 @@ export class Mastra<
       this.vectors = config.vectors;
     }
 
+    if (config?.memory) {
+      this.memory = config.memory;
+      if (this.telemetry) {
+        this.memory = this.telemetry.traceClass(config.memory, {
+          excludeMethods: ['__setTelemetry', '__getTelemetry'],
+        });
+        this.memory.__setTelemetry(this.telemetry);
+      }
+    }
+
     if (config && `memory` in config) {
-      throw new Error(`
+      this.logger.warn(`
   Memory should be added to Agents, not to Mastra.
 
 Instead of:
@@ -157,7 +167,7 @@ Instead of:
 do:
   new Agent({ memory: new Memory() })
 
-
+This is a warning for now, but will throw an error in the future
 `);
     }
 
