@@ -7,6 +7,7 @@ import { fsTool } from '../tools/fs.js';
 import { imageTool } from '../tools/image.js';
 import { readPDF } from '../tools/pdf.js';
 
+import { memory } from './memory.js';
 import { getBaseModelConfig } from './model.js';
 
 export const daneCommitMessage = new Agent({
@@ -19,6 +20,7 @@ export const daneCommitMessage = new Agent({
     FIGURE OUT THE BEST TOP LEVEL SEMANTIC MATCH TO USE AS THE SCOPE.
     `,
   model: getBaseModelConfig(),
+  memory,
 });
 
 export const daneIssueLabeler = new Agent({
@@ -28,6 +30,7 @@ export const daneIssueLabeler = new Agent({
     You help engineers label their issues.
     `,
   model: getBaseModelConfig(),
+  memory,
 });
 
 export const daneLinkChecker = new Agent({
@@ -43,6 +46,7 @@ export const daneLinkChecker = new Agent({
     - Link to relevant documentation
     `,
   model: getBaseModelConfig(),
+  memory,
 });
 
 export const daneChangeLog = new Agent({
@@ -59,6 +63,7 @@ export const daneChangeLog = new Agent({
     - Use consistent formatting for code references
     `,
   model: getBaseModelConfig(),
+  memory,
 });
 
 export const dane = new Agent({
@@ -100,6 +105,7 @@ export const dane = new Agent({
     * Tell the user what you are doing.
     `,
   model: getBaseModelConfig(),
+  memory,
   tools: {
     fsTool,
     execaTool,
