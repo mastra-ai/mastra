@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.3-alpha.0
+
+### Patch Changes
+
+- dfe2df9: Fix mastra create workflow starter
+
 ## 0.1.2
 
 ### Patch Changes

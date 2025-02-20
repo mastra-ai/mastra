@@ -126,5 +126,8 @@
     "@mastra/vector-upstash": "0.1.1",
     "@mastra/vector-vectorize": "0.1.1"
   },
-  "changesets": []
+  "changesets": [
+    "loose-loops-wear",
+    "warm-facts-think"
+  ]
 }
