@@ -20,7 +20,6 @@ const execWithTimeout = async (command: string, timeoutMs = 180000) => {
     try {
       const result = await Promise.race([promise, timeout]);
       clearTimeout(timeoutId!);
-      await new Promise(resolve => setTimeout(resolve, 100));
       return result;
     } catch (error) {
       clearTimeout(timeoutId!);
