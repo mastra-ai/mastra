@@ -29,9 +29,21 @@ const execWithTimeout = async (command: string, timeoutMs = 180000) => {
       throw error;
     }
   } catch (error: unknown) {
+    console.error(error);
     throw error;
   }
 };
+
+function getPackageManager(): string {
+  const userAgent = process.env.npm_config_user_agent || `npm`;
+  if (userAgent.includes(`pnpm/`)) {
+    return `pnpm`;
+  } else if (userAgent.includes(`yarn/`)) {
+    return `yarn`;
+  }
+
+  return `npm`;
+}
 
 export const createMastraProject = async () => {
   p.intro(color.inverse('Mastra Create'));
@@ -62,8 +74,9 @@ export const createMastraProject = async () => {
   }
 
   process.chdir(projectName);
-
+  const pm = getPackageManager();
   s.message('Creating project');
+  // use npm not ${pm} because this just creates a package.json - compatible with all PMs, each PM has a slightly different init command, ex pnpm does not have a -y flag. Use npm here for simplicity
   await exec(`npm init -y`);
   await exec(`npm pkg set type="module"`);
   const depsService = new DepsService();
@@ -73,9 +86,9 @@ export const createMastraProject = async () => {
 
   s.stop('Project created');
 
-  s.start('Installing npm dependencies');
-  await exec(`npm i zod`);
-  await exec(`npm i typescript tsx @types/node --save-dev`);
+  s.start(`Installing ${pm} dependencies`);
+  await exec(`${pm} i zod`);
+  await exec(`${pm} i typescript tsx @types/node --save-dev`);
   await exec(`echo '{
   "compilerOptions": {
     "target": "ES2022",
@@ -97,13 +110,13 @@ export const createMastraProject = async () => {
   ]
 }' > tsconfig.json`);
 
-  s.stop('NPM dependencies installed');
+  s.stop(`${pm} dependencies installed`);
   s.start('Installing mastra');
-  await execWithTimeout(`npm i -D mastra@latest`);
+  await execWithTimeout(`${pm} i -D mastra@latest`);
   s.stop('mastra installed');
 
   s.start('Installing @mastra/core');
-  await execWithTimeout(`npm i @mastra/core@latest`);
+  await execWithTimeout(`${pm} i @mastra/core@latest`);
   s.stop('@mastra/core installed');
 
   s.start('Adding .gitignore');
