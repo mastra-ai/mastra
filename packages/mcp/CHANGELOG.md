@@ -1,5 +1,11 @@
 # @mastra/mcp
 
+## 0.2.0-alpha.0
+
+### Minor Changes
+
+- 5b7d6fa: Added support for SSE MCP servers in the Mastra MCP client
+
 ## 0.1.1
 
 ### Patch Changes
