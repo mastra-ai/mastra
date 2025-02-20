@@ -123,7 +123,14 @@
     "@mastra/vector-pinecone": "0.1.1",
     "@mastra/vector-qdrant": "0.1.1",
     "@mastra/vector-upstash": "0.1.1",
-    "@mastra/vector-vectorize": "0.1.1"
+    "@mastra/vector-vectorize": "0.1.1",
+    "@mastra/client-js": "0.1.0-alpha.17"
   },
-  "changesets": []
+  "changesets": [
+    "famous-glasses-repeat",
+    "giant-teeth-start",
+    "shiny-banks-push",
+    "three-laws-stay",
+    "whole-aliens-wait"
+  ]
 }
