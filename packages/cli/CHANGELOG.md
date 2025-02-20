@@ -1,5 +1,15 @@
 # mastra
 
+## 0.2.3
+
+### Patch Changes
+
+- 23b2a7a: Fixed a bug when detecting package manager during mastra init where npm would run after pnpm already installed, resulting in errors
+- dfe2df9: Fix mastra create workflow starter
+- Updated dependencies [f205ede]
+  - @mastra/core@0.3.0
+  - @mastra/deployer@0.1.2
+
 ## 0.2.3-alpha.0
 
 ### Patch Changes

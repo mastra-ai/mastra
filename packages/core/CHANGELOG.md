@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.3.0
+
+### Minor Changes
+
+- f205ede: Memory can no longer be added to new Mastra(), only to new Agent() - this is for simplicity as each agent will typically need its own memory settings
+
 ## 0.2.1
 
 ### Patch Changes
