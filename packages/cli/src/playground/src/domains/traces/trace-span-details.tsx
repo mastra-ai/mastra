@@ -62,10 +62,15 @@ export function SpanDetail() {
           </span>
         </div>
       </div>
+      {span?.status?.code !== 0 ? (
+        <div className="border-t-[0.5px] px-6 pt-4">{span && span?.events?.length > 0 && <Events span={span} />}</div>
+      ) : null}
       <div className="border-t-[0.5px] px-6 pt-4">
         {span && <Attributes span={{ ...span, attributes: isAiSpan ? aiSpanAttributes : span?.attributes }} />}
       </div>
-      <div className="border-t-[0.5px] px-6 pt-4">{span && span?.events?.length > 0 && <Events span={span} />}</div>
+      {span?.status?.code === 0 ? (
+        <div className="border-t-[0.5px] px-6 pt-4">{span && span?.events?.length > 0 && <Events span={span} />}</div>
+      ) : null}
     </div>
   );
 }
@@ -76,20 +81,23 @@ function Events({ span }: { span: Span }) {
   return (
     <div className="flex flex-col px-2">
       <p className="text-lg">Events</p>
-      {span.events.map(event => (
-        <div
-          key={event.name}
-          className={cn('flex flex-col gap-2 border-b-[0.5px] pt-4 pb-2', event.attributes?.length === 0 && 'pb-4')}
-        >
-          <p className="text-xs text-mastra-el-3">Name</p>
-          <p className="font-mono text-xs">{event.name}</p>
-          <p className="text-xs text-mastra-el-3">Time</p>
-          <p className="font-mono text-xs">
-            {event.timeUnixNano ? formatOtelTimestamp2(Number(event.timeUnixNano)) : ''}
-          </p>
-          {event.attributes?.length > 0 ? <AttributesValues attributes={JSON.stringify(event.attributes)} /> : null}
-        </div>
-      ))}
+      {span.events.map(event => {
+        const eventAttributes = event?.attributes?.map(att => ({ [att?.key]: att?.value }));
+        return (
+          <div
+            key={event.name}
+            className={cn('flex flex-col gap-2 border-b-[0.5px] last:border-b-0 pt-4 pb-2 first:pb-4')}
+          >
+            <p className="text-xs text-mastra-el-3">Name</p>
+            <p className="font-mono text-xs">{event.name}</p>
+            <p className="text-xs text-mastra-el-3">Time</p>
+            <p className="font-mono text-xs">
+              {event.timeUnixNano ? formatOtelTimestamp2(Number(event.timeUnixNano)) : ''}
+            </p>
+            {event.attributes?.length > 0 ? <AttributesValues attributes={eventAttributes} /> : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -112,7 +120,9 @@ function AttributesValues({ attributes, depth = 0 }: { attributes: unknown; dept
         return <SyntaxHighlighter data={attr} />;
       }
     } catch {
-      return <span className="text-sm">{attributes ? cleanString(attributes.toString()) : 'N/A'}</span>;
+      return (
+        <span className="text-sm overflow-x-scroll">{attributes ? cleanString(attributes.toString()) : 'N/A'}</span>
+      );
     }
   }
 
