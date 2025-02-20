@@ -72,13 +72,35 @@ export const createMastraProject = async () => {
     ".mastra"
   ]
 }' > tsconfig.json`);
+  const execWithTimeout = async (command: string, timeoutMs = 180000) => {
+    try {
+      const promise = exec(command);
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Command timed out')), timeoutMs));
+
+      return await Promise.race([promise, timeout]);
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message === 'Command timed out') {
+        const match = command.match(/(?:npm|pnpm) i(?:nstall)?\s+(?:-[^\s]+\s+)?(@?[^@\s]+)(?:@[^\s]+)?/);
+        if (match) {
+          const pkgName = match[1];
+          try {
+            await fs.access(`node_modules/${pkgName}`);
+            return { stdout: '', stderr: '' };
+          } catch {
+            throw error;
+          }
+        }
+      }
+      throw error;
+    }
+  };
   s.stop('NPM dependencies installed');
   s.start('Installing mastra');
-  await exec(`npm i -D mastra@latest`);
+  await execWithTimeout(`npm i -D mastra@latest`);
   s.stop('mastra installed');
 
   s.start('Installing @mastra/core');
-  await exec(`npm i @mastra/core@latest`);
+  await execWithTimeout(`npm i @mastra/core@latest`);
   s.stop('@mastra/core installed');
 
   s.start('Adding .gitignore');
