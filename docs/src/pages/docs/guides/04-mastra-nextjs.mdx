@@ -1,0 +1,81 @@
+---
+title: "Getting started with Mastra and NextJS | Mastra Guides"
+description: Guide on integrating Mastra with NextJS.
+---
+import { Callout, Steps, Tabs } from "nextra/components";
+
+# Integrate Mastra in your Next.js project
+
+We recommend creating a seperate mastra project as described in our [getting-started](/docs/getting-started/installation) guide.
+
+If you're building a small agent, you can integrate it with your NextJS application by following the steps below.
+
+## Create a Mastra project
+
+We recommend starting a new Mastra project using `mastra init`, which will scaffold mastra in your existing project. To create a project, run:
+
+<Tabs items={["npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+```bash copy
+npx mastra@latest init
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+yarn dlx mastra@latest init
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+pnpm dlx mastra@latest init
+```
+  </Tabs.Tab>
+</Tabs>
+
+If you want to learn more on how to setup your mastra project, check out our [getting-started](/docs/getting-started/installation) guide.
+
+## Configure Next.js
+
+In your `next.config.js` file, add the following property:
+
+```js
+module.exports = {
+  serverExternalPackages: ["@mastra/*"],
+  // other options
+};
+```
+
+It will tell Next.js to bundle the Mastra packages when building your project.
+
+## Create a Route Handler
+Create a route handler, app/api/weatherAgent/route.ts and add the following code:
+
+```ts filename="app/api/weatherAgent/route.ts" copy 
+
+import { mastra } from '@/mastra';
+
+// Allow streaming responses up to 30 seconds
+export const maxDuration = 30;
+
+export async function POST(req: Request) {
+  const { city, country } = await req.json();
+ 
+  const result = await mastra
+    .getAgent("weatherAgent")
+    .generate(`tell me what weather it is in ${city}, ${country}`, {
+      output: z.object({
+        city: z.string(),
+        country: z.string(),
+        details: z.string(),
+      }),
+    });
+
+  return {
+    message: result.object,
+  };
+}
+```
+
+Let's take a look at what is happening in this code:
+
+1. Define an asynchronous POST request handler and extract messages from the body of the request. The messages variable contains a history of the conversation between you and the chatbot and provides the chatbot with the necessary context to make the next generation.

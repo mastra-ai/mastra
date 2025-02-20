@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
     // your project has TypeScript errors.
     ignoreBuildErrors: true,
   },
-  serverExternalPackages: ["require-in-the-middle", "import-in-the-middle"],
+  serverExternalPackages: ["@mastra/*"],
 
   webpack: (config, { isServer }) => {
     // Handle native node modules

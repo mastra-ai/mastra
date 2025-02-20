@@ -2,10 +2,10 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   /* config options here */
+  serverExternalPackages: ['@mastra/*'],
   experimental: {
     ppr: true,
   },
-  serverExternalPackages: ['pg'],
   images: {
     remotePatterns: [
       {

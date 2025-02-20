@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // TODO: convert into an integration
 
-import {
+import type {
   AirbnbLocation,
   AirbnbPlace,
   Attraction,
@@ -11,7 +11,7 @@ import {
   Hotel,
   HotelApiResponse,
 } from "@/lib/types";
-import { StepResult } from "@mastra/core/workflows";
+import type { StepResult } from "@mastra/core/workflows";
 
 export class Booking {
   uri: string;

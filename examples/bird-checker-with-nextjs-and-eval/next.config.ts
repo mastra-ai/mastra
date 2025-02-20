@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["@mastra/*"],
   /* config options here */
   images: {
     remotePatterns: [
