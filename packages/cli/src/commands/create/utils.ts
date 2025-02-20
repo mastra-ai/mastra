@@ -24,16 +24,7 @@ const execWithTimeout = async (command: string, timeoutMs = 180000) => {
     } catch (error) {
       clearTimeout(timeoutId!);
       if (error instanceof Error && error.message === 'Command timed out') {
-        const match = command.match(/(?:npm|pnpm) i(?:nstall)?\s+(?:-[^\s]+\s+)?(@?[^@\s]+)(?:@[^\s]+)?/);
-        if (match) {
-          const pkgName = match[1];
-          try {
-            await fs.access(`node_modules/${pkgName}`);
-            return { stdout: '', stderr: '' };
-          } catch {
-            throw error;
-          }
-        }
+        throw new Error('Something went wrong during installation, please try again.');
       }
       throw error;
     }
