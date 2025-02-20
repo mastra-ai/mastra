@@ -6,6 +6,7 @@ import color from 'picocolors';
 import fs from 'fs/promises';
 
 import { DepsService } from '../../services/service.deps.js';
+import { getPackageManager } from '../utils.js';
 
 const exec = util.promisify(child_process.exec);
 
@@ -33,17 +34,6 @@ const execWithTimeout = async (command: string, timeoutMs = 180000) => {
     throw error;
   }
 };
-
-function getPackageManager(): string {
-  const userAgent = process.env.npm_config_user_agent || `npm`;
-  if (userAgent.includes(`pnpm/`)) {
-    return `pnpm`;
-  } else if (userAgent.includes(`yarn/`)) {
-    return `yarn`;
-  }
-
-  return `npm`;
-}
 
 export const createMastraProject = async () => {
   p.intro(color.inverse('Mastra Create'));
