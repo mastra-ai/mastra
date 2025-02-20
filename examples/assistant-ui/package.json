@@ -11,7 +11,7 @@
     "@ai-sdk/openai": "latest",
     "@assistant-ui/react": "^0.7.68",
     "@assistant-ui/react-markdown": "^0.7.0",
-    "@mastra/client-js": "workspace*",
+    "@mastra/client-js": "workspace:*",
     "next": "15.0.3",
     "react": "^18",
     "react-dom": "^18",
