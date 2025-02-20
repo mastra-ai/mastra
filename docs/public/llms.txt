@@ -68,10 +68,10 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Textual Difference | Evals | Mastra Docs](https://mastra.ai/docs/reference/evals/textual-difference): Documentation for the Textual Difference Metric in Mastra, which measures textual differences between strings using sequence matching.
 - [Reference: Tone Consistency | Metrics | Evals | Mastra Docs](https://mastra.ai/docs/reference/evals/tone-consistency): Documentation for the Tone Consistency Metric in Mastra, which evaluates emotional tone and sentiment consistency in text.
 - [Reference: Toxicity | Metrics | Evals | Mastra Docs](https://mastra.ai/docs/reference/evals/toxicity): Documentation for the Toxicity Metric in Mastra, which evaluates LLM outputs for racist, biased, or toxic elements.
-- [Memory](https://mastra.ai/docs/reference/memory/Memory)
 - [createThread](https://mastra.ai/docs/reference/memory/createThread)
 - [getThreadById](https://mastra.ai/docs/reference/memory/getThreadById)
 - [getThreadsByResourceId](https://mastra.ai/docs/reference/memory/getThreadsByResourceId)
+- [Memory](https://mastra.ai/docs/reference/memory/Memory)
 - [query](https://mastra.ai/docs/reference/memory/query)
 - [Reference: createLogger() | Mastra Observability Docs](https://mastra.ai/docs/reference/observability/create-logger): Documentation for the createLogger function, which instantiates a logger based on a given configuration.
 - [Reference: Logger Instance | Mastra Observability Docs](https://mastra.ai/docs/reference/observability/logger): Documentation for Logger instances, which provide methods to record events at various severity levels.
@@ -136,6 +136,23 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Example: Multi-Agent Workflow | Agents | Mastra Docs](https://mastra.ai/examples/agents/multi-agent-workflow): Example of creating an agentic workflow in Mastra, where work product is passed between multiple agents.
 - [Example: Agents with a System Prompt | Agents | Mastra Docs](https://mastra.ai/examples/agents/system-prompt): Example of creating an AI agent in Mastra with a system prompt to define its personality and capabilities.
 - [Example: Giving an Agent a Tool | Agents | Mastra Docs](https://mastra.ai/examples/agents/using-a-tool): Example of creating an AI agent in Mastra that uses a dedicated tool to provide weather information.
+- [Example: Answer Relevancy | Evals | Mastra Docs](https://mastra.ai/examples/evals/answer-relevancy): Example of using the Answer Relevancy metric to evaluate response relevancy to queries.
+- [Example: Bias | Evals | Mastra Docs](https://mastra.ai/examples/evals/bias): Example of using the Bias metric to evaluate responses for various forms of bias.
+- [Example: Completeness | Evals | Mastra Docs](https://mastra.ai/examples/evals/completeness): Example of using the Completeness metric to evaluate how thoroughly responses cover input elements.
+- [Example: Content Similarity | Evals | Mastra Docs](https://mastra.ai/examples/evals/content-similarity): Example of using the Content Similarity metric to evaluate text similarity between content.
+- [Example: Context Position | Evals | Mastra Docs](https://mastra.ai/examples/evals/context-position): Example of using the Context Position metric to evaluate sequential ordering in responses.
+- [Example: Context Precision | Evals | Mastra Docs](https://mastra.ai/examples/evals/context-precision): Example of using the Context Precision metric to evaluate how precisely context information is used.
+- [Example: Context Relevancy | Evals | Mastra Docs](https://mastra.ai/examples/evals/context-relevancy): Example of using the Context Relevancy metric to evaluate how relevant context information is to a query.
+- [Example: Contextual Recall | Evals | Mastra Docs](https://mastra.ai/examples/evals/contextual-recall): Example of using the Contextual Recall metric to evaluate how well responses incorporate context information.
+- [Example: Custom Eval | Evals | Mastra Docs](https://mastra.ai/examples/evals/custom-eval): Example of creating custom LLM-based evaluation metrics in Mastra.
+- [Example: Faithfulness | Evals | Mastra Docs](https://mastra.ai/examples/evals/faithfulness): Example of using the Faithfulness metric to evaluate how factually accurate responses are compared to context.
+- [Example: Hallucination | Evals | Mastra Docs](https://mastra.ai/examples/evals/hallucination): Example of using the Hallucination metric to evaluate factual contradictions in responses.
+- [Example: Keyword Coverage | Evals | Mastra Docs](https://mastra.ai/examples/evals/keyword-coverage): Example of using the Keyword Coverage metric to evaluate how well responses cover important keywords from input text.
+- [Example: Prompt Alignment | Evals | Mastra Docs](https://mastra.ai/examples/evals/prompt-alignment): Example of using the Prompt Alignment metric to evaluate instruction adherence in responses.
+- [Example: Summarization | Evals | Mastra Docs](https://mastra.ai/examples/evals/summarization): Example of using the Summarization metric to evaluate how well LLM-generated summaries capture content while maintaining factual accuracy.
+- [Example: Textual Difference | Evals | Mastra Docs](https://mastra.ai/examples/evals/textual-difference): Example of using the Textual Difference metric to evaluate similarity between text strings by analyzing sequence differences and changes.
+- [Example: Tone Consistency | Evals | Mastra Docs](https://mastra.ai/examples/evals/tone-consistency): Example of using the Tone Consistency metric to evaluate emotional tone patterns and sentiment consistency in text.
+- [Example: Toxicity | Evals | Mastra Docs](https://mastra.ai/examples/evals/toxicity): Example of using the Toxicity metric to evaluate responses for harmful content and toxic language.
 - [Examples List: Workflows, Agents, RAG | Mastra Docs](https://mastra.ai/examples): Explore practical examples of AI development with Mastra, including text generation, RAG implementations, structured outputs, and multi-modal interactions. Learn how to build AI applications using OpenAI, Anthropic, and Google Gemini.
 - [memory-with-libsql](https://mastra.ai/examples/memory/memory-with-libsql)
 - [memory-with-pg](https://mastra.ai/examples/memory/memory-with-pg)
@@ -167,7 +184,8 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Example: Insert Embeddings in Upstash | RAG | Mastra Docs](https://mastra.ai/examples/rag/insert-embedding-in-upstash): Example of using Mastra to store embeddings in Upstash for similarity search.
 - [Example: Insert Embeddings in Cloudflare Vectorize | RAG | Mastra Docs](https://mastra.ai/examples/rag/insert-embedding-in-vectorize): Example of using Mastra to store embeddings in Cloudflare Vectorize for similarity search.
 - [Example: Metadata Extraction | Retrieval | RAG | Mastra Docs](https://mastra.ai/examples/rag/metadata-extraction): Example of extracting and utilizing metadata from documents in Mastra for enhanced document processing and retrieval.
-- [Example: Re-ranking Results | Retrieval | RAG | Mastra Docs](https://mastra.ai/examples/rag/rerank-rag): Example of implementing a RAG system with re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
+- [Example: Re-ranking Results with Tools | Retrieval | RAG | Mastra Docs](https://mastra.ai/examples/rag/rerank-rag): Example of implementing a RAG system with re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
+- [Example: Re-ranking Results | Retrieval | RAG | Mastra Docs](https://mastra.ai/examples/rag/rerank): Example of implementing semantic re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
 - [Example: Reranking with Cohere | RAG | Mastra Docs](https://mastra.ai/examples/rag/reranking-with-cohere): Example of using Mastra to improve document retrieval relevance with Coheres reranking service.
 - [Example: Retrieving Top-K Results | RAG | Mastra Docs](https://mastra.ai/examples/rag/retrieve-results): Example of using Mastra to query a vector database and retrieve semantically similar chunks.
 - [Example: Branching Paths | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/branching-paths): Example of using Mastra to create workflows with branching paths based on intermediate results.
