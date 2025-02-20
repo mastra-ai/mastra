@@ -1,6 +1,7 @@
 {
-  "name": "workflow-with-parallel-steps",
+  "name": "examples-workflow-with-parallel-steps",
   "type": "module",
+  "private": true,
   "scripts": {
     "start": "pnpx tsx index.ts"
   },

@@ -1,6 +1,7 @@
 {
-  "name": "workflow-with-cyclical-deps",
+  "name": "examples-workflow-with-cyclical-deps",
   "type": "module",
+  "private": true,
   "scripts": {
     "start": "pnpx tsx index.ts"
   },

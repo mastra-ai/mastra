@@ -1,6 +1,7 @@
 {
-  "name": "workflow-with-branching-paths",
+  "name": "examples-workflow-with-branching-paths",
   "type": "module",
+  "private": true,
   "scripts": {
     "start": "pnpx tsx index.ts"
   },
