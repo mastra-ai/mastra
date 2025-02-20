@@ -10,3 +10,18 @@ export async function getPackageVersion() {
   const content = await fsExtra.readJSON(pkgJsonPath);
   return content.version;
 }
+
+export function getCreateVersion(): string | undefined {
+  const createArg = process.argv.find(
+    arg => arg.startsWith('create-mastra@') || arg.startsWith('mastra@') || arg === 'create-mastra' || arg === 'mastra',
+  );
+
+  if (!createArg) return undefined;
+
+  const versionMatch = createArg.match(/@([^/]+)$/);
+  if (versionMatch) {
+    return versionMatch[1];
+  }
+
+  return undefined;
+}

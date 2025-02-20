@@ -10,7 +10,6 @@ import { dev } from './commands/dev/dev';
 import { init } from './commands/init/init';
 import { checkAndInstallCoreDeps, checkPkgJson, interactivePrompt } from './commands/init/utils';
 import { DepsService } from './services/service.deps';
-import { getEnv } from './utils/get-env';
 import { logger } from './utils/logger';
 
 const depsService = new DepsService();

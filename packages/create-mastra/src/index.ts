@@ -4,15 +4,18 @@ import { Command } from 'commander';
 import { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
 import { create } from 'mastra/dist/commands/create/create.js';
 
-import { getPackageVersion } from './utils.js';
+import { getPackageVersion, getCreateVersion } from './utils.js';
 
 const version = await getPackageVersion();
+const createVersion = getCreateVersion();
 
 const analytics = new PosthogAnalytics({
   apiKey: 'phc_SBLpZVAB6jmHOct9CABq3PF0Yn5FU3G2FgT4xUr2XrT',
   host: 'https://us.posthog.com',
   version: version!,
 });
+
+process.env.MASTRA_VERSION_TAG = createVersion || 'latest';
 
 const program = new Command();
 
