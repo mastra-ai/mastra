@@ -27,7 +27,7 @@ export function TreeNode({ node, depth = 0 }: { node: SpanNode; depth?: number }
           e.stopPropagation();
           setSpan(node);
           if (openDetail && node.id !== span?.id) return;
-          setOpenDetail(prev => !prev);
+          setOpenDetail(true);
         }}
         style={{ paddingLeft: `${depth > 0 ? depth * 35 + 28 - depth * 3 : 24}px` }}
       >

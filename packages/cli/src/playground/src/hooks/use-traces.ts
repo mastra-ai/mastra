@@ -3,28 +3,25 @@ import { toast } from 'sonner';
 
 import usePolling from '@/lib/polls';
 
-import { traces_mock_data, workflow_traces_mock_data } from '@/domains/traces/mock-data';
-import type { RefinedTrace, Span } from '@/domains/traces/types';
+import type { RefinedTrace } from '@/domains/traces/types';
 import { refineTraces } from '@/domains/traces/utils';
 
 export const useTraces = (componentName: string, isWorkflow: boolean = false) => {
   const [traces, setTraces] = useState<RefinedTrace[] | null>(null);
 
   const fetchFn = useCallback(async () => {
-    const refinedTraces = refineTraces(traces_mock_data as unknown as Span[], isWorkflow);
-    return refinedTraces;
-    // try {
-    //   const res = await fetch(`/api/telemetry?attribute=componentName:${componentName}`);
-    //   if (!res.ok) {
-    //     const error = await res.json();
-    //     throw new Error(error?.error || 'Error fetching traces');
-    //   }
-    //   const traces = await res.json();
-    //   const refinedTraces = refineTraces(traces?.traces || [], isWorkflow);
-    //   return refinedTraces;
-    // } catch (error) {
-    //   throw error;
-    // }
+    try {
+      const res = await fetch(`/api/telemetry?attribute=componentName:${componentName}`);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error?.error || 'Error fetching traces');
+      }
+      const traces = await res.json();
+      const refinedTraces = refineTraces(traces?.traces || [], isWorkflow);
+      return refinedTraces;
+    } catch (error) {
+      throw error;
+    }
   }, [componentName]);
 
   const onSuccess = useCallback((newTraces: RefinedTrace[]) => {

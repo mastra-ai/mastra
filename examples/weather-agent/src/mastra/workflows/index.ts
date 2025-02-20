@@ -48,37 +48,39 @@ const fetchWeather = new Step({
   inputSchema: z.object({
     city: z.string().describe('The city to get the weather for'),
   }),
-  execute: async ({ context }) => {
+  execute: async ({ context, mastra }) => {
     const triggerData = context?.getStepPayload<{ city: string }>('trigger');
 
     if (!triggerData) {
       throw new Error('Trigger data not found');
     }
 
-    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(triggerData.city)}&count=1`;
-    const geocodingResponse = await fetch(geocodingUrl);
-    const geocodingData = await geocodingResponse.json();
+    const obj = await mastra?.agents?.weatherAgent.generate(triggerData.city, { output: forecastSchema });
 
-    if (!geocodingData.results?.[0]) {
-      throw new Error(`Location '${triggerData.city}' not found`);
-    }
+    // const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(triggerData.city)}&count=1`;
+    // const geocodingResponse = await fetch(geocodingUrl);
+    // const geocodingData = await geocodingResponse.json();
 
-    const { latitude, longitude, name } = geocodingData.results[0];
+    // if (!geocodingData.results?.[0]) {
+    //   throw new Error(`Location '${triggerData.city}' not found`);
+    // }
 
-    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_mean,weathercode&timezone=auto`;
-    const response = await fetch(weatherUrl);
-    const data = await response.json();
+    // const { latitude, longitude, name } = geocodingData.results[0];
 
-    const forecast = data.daily.time.map((date: string, index: number) => ({
-      date,
-      maxTemp: data.daily.temperature_2m_max[index],
-      minTemp: data.daily.temperature_2m_min[index],
-      precipitationChance: data.daily.precipitation_probability_mean[index],
-      condition: getWeatherCondition(data.daily.weathercode[index]),
-      location: name,
-    }));
+    // const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_mean,weathercode&timezone=auto`;
+    // const response = await fetch(weatherUrl);
+    // const data = await response.json();
 
-    return forecast;
+    // const forecast = data.daily.time.map((date: string, index: number) => ({
+    //   date,
+    //   maxTemp: data.daily.temperature_2m_max[index],
+    //   minTemp: data.daily.temperature_2m_min[index],
+    //   precipitationChance: data.daily.precipitation_probability_mean[index],
+    //   condition: getWeatherCondition(data.daily.weathercode[index]),
+    //   location: name,
+    // }));
+
+    return obj?.object;
   },
 });
 

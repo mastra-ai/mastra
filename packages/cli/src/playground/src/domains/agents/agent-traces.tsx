@@ -1,11 +1,12 @@
 import { Braces } from 'lucide-react';
-import { useContext } from 'react';
+import { MouseEvent as ReactMouseEvent, useContext } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 import { cn } from '@/lib/utils';
 
+import { useResizeColumn } from '@/hooks/use-resize-column';
 import { useTraces } from '@/hooks/use-traces';
 
 import { Traces } from '../traces';
@@ -17,6 +18,13 @@ import { AgentInformation } from './agent-information';
 
 export function AgentTraces({ agentId, agentName }: { agentId: string; agentName: string }) {
   const { traces, error, firstCallLoading } = useTraces(agentName);
+  const { isOpen: open } = useContext(TraceContext);
+
+  const { sidebarWidth, isDragging, handleMouseDown, containerRef } = useResizeColumn({
+    defaultWidth: 60,
+    minimumWidth: 50,
+    maximumWidth: 90,
+  });
 
   if (firstCallLoading) {
     return (
@@ -86,28 +94,79 @@ export function AgentTraces({ agentId, agentName }: { agentId: string; agentName
   }
 
   return (
-    <main className="flex-1 relative overflow-hidden">
+    <main className="flex-1 relative overflow-hidden" ref={containerRef}>
       <Traces traces={traces} />
-      <SidebarItems agentId={agentId} />
+      <SidebarItems
+        agentId={agentId}
+        sidebarWidth={sidebarWidth}
+        className={cn(open ? 'grid grid-cols-2 w-[60%]' : '')}
+        isDragging={isDragging}
+        handleMouseDown={handleMouseDown}
+      />
     </main>
   );
 }
 
-export function SidebarItems({ agentId }: { agentId: string }) {
+export function SidebarItems({
+  agentId,
+  className,
+  sidebarWidth,
+  isDragging,
+  handleMouseDown,
+}: {
+  agentId: string;
+  className?: string;
+  sidebarWidth?: number;
+  handleMouseDown?: (e: ReactMouseEvent) => void;
+  isDragging?: boolean;
+}) {
   const { openDetail, isOpen: open } = useContext(TraceContext);
+  const {
+    sidebarWidth: rightSidebarWidth,
+    isDragging: innerIsDragging,
+    handleMouseDown: handleInnerMouseDown,
+    containerRef: innerContainerRef,
+  } = useResizeColumn({
+    defaultWidth: 50,
+    minimumWidth: 30,
+    maximumWidth: 80,
+  });
+
   return (
     <aside
       className={cn(
         'absolute right-0 top-0 h-full w-[400px] z-20 overflow-x-scroll border-l-[0.5px] bg-mastra-bg-1',
-        open ? 'grid w-[80%] 2xl:w-[60%] grid-cols-2' : '',
+        className,
       )}
+      style={{ width: open ? `${sidebarWidth}%` : undefined }}
+      ref={innerContainerRef}
     >
+      {open ? (
+        <div
+          className={`w-1 bg-mastra-border-1 cursor-col-resize hover:w-2 hover:bg-mastra-border-2 active:bg-mastra-border-3 transition-colors absolute inset-y-0 -left-1 -right-1 z-10
+          ${isDragging ? 'bg-mastra-border-2 w-2 cursor-col-resize' : ''}`}
+          onMouseDown={handleMouseDown}
+        />
+      ) : null}
       {open && (
-        <div className="h-full w-full overflow-x-scroll px-0">
+        <div
+          className="h-full overflow-x-scroll px-0 absolute left-0 top-0 min-w-[50%]"
+          style={{ width: `${100 - rightSidebarWidth}%` }}
+        >
           <TraceDetails />
         </div>
       )}
-      <div className="h-full w-full overflow-y-scroll border-l-[0.5px]">
+      <div
+        className="h-full overflow-y-scroll border-l-[0.5px] absolute right-0 top-0 z-20 bg-mastra-bg-1"
+        style={{ width: `${openDetail ? rightSidebarWidth : 100}%` }}
+      >
+        {openDetail ? (
+          <div
+            className={`w-1 h-full bg-mastra-border-1 cursor-col-resize hover:w-2 hover:bg-mastra-border-2 active:bg-mastra-border-3 transition-colors absolute inset-y-0 -left-1 -right-1 z-10
+            ${innerIsDragging ? 'bg-mastra-border-2 w-2 cursor-col-resize' : ''}`}
+            onMouseDown={handleInnerMouseDown}
+          />
+        ) : null}
         {!openDetail ? <AgentInformation agentId={agentId} /> : <SpanDetail />}
       </div>
     </aside>

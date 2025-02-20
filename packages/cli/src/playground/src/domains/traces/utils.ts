@@ -66,8 +66,11 @@ export const refineTraces = (traces: Span[], isWorkflow: boolean = false): Refin
   const listOfSpanIds = new Set<string>();
 
   const newName = (name: string) => {
-    if (isWorkflow && name?.startsWith('workflow.')) {
+    if (name?.startsWith('workflow.') && isWorkflow) {
       return name?.split('.')?.slice(2)?.join('.');
+    }
+    if (name?.startsWith('agent.') && !isWorkflow) {
+      return name?.split('.')?.slice(1)?.join('.');
     }
     return name;
   };
