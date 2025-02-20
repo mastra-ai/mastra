@@ -29,6 +29,7 @@ const execWithTimeout = async (command: string, timeoutMs = 180000) => {
       throw error;
     }
   } catch (error: unknown) {
+    console.error(error);
     throw error;
   }
 };
