@@ -1,6 +1,7 @@
 {
   "name": "examples-rerank",
   "type": "module",
+  "private": true,
   "scripts": {
     "start": "pnpx tsx --env-file .env index.ts"
   },

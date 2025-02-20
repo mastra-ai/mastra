@@ -1,6 +1,7 @@
 {
   "name": "examples-cleanup-rag",
   "type": "module",
+  "private": true,
   "scripts": {
     "start": "pnpx tsx index.ts"
   },
