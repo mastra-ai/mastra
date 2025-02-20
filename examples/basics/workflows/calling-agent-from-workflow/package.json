@@ -4,6 +4,7 @@
   "scripts": {
     "start": "pnpx tsx index.ts"
   },
+  "private": true,
   "dependencies": {
     "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:*",
