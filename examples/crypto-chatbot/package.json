@@ -4,11 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
-    "build": "tsx db/migrate && next build",
+    "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "npx tsx ./db/migrate.ts"
+    "lint": "next lint"
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
