@@ -11,23 +11,24 @@ const exec = util.promisify(child_process.exec);
 
 const execWithTimeout = async (command: string, timeoutMs = 180000) => {
   try {
-    const promise = exec(command);
-    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Command timed out')), timeoutMs));
+    const promise = exec(command, { killSignal: 'SIGTERM' });
+    let timeoutId: NodeJS.Timeout;
+    const timeout = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('Command timed out')), timeoutMs);
+    });
 
-    return await Promise.race([promise, timeout]);
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message === 'Command timed out') {
-      const match = command.match(/(?:npm|pnpm) i(?:nstall)?\s+(?:-[^\s]+\s+)?(@?[^@\s]+)(?:@[^\s]+)?/);
-      if (match) {
-        const pkgName = match[1];
-        try {
-          await fs.access(`node_modules/${pkgName}`);
-          return { stdout: '', stderr: '' };
-        } catch {
-          throw error;
-        }
+    try {
+      const result = await Promise.race([promise, timeout]);
+      clearTimeout(timeoutId!);
+      return result;
+    } catch (error) {
+      clearTimeout(timeoutId!);
+      if (error instanceof Error && error.message === 'Command timed out') {
+        throw new Error('Something went wrong during installation, please try again.');
       }
+      throw error;
     }
+  } catch (error: unknown) {
     throw error;
   }
 };
