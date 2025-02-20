@@ -9,6 +9,30 @@ import { DepsService } from '../../services/service.deps.js';
 
 const exec = util.promisify(child_process.exec);
 
+const execWithTimeout = async (command: string, timeoutMs = 180000) => {
+  try {
+    const promise = exec(command, { killSignal: 'SIGTERM' });
+    let timeoutId: NodeJS.Timeout;
+    const timeout = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('Command timed out')), timeoutMs);
+    });
+
+    try {
+      const result = await Promise.race([promise, timeout]);
+      clearTimeout(timeoutId!);
+      return result;
+    } catch (error) {
+      clearTimeout(timeoutId!);
+      if (error instanceof Error && error.message === 'Command timed out') {
+        throw new Error('Something went wrong during installation, please try again.');
+      }
+      throw error;
+    }
+  } catch (error: unknown) {
+    throw error;
+  }
+};
+
 export const createMastraProject = async () => {
   p.intro(color.inverse('Mastra Create'));
 
@@ -72,13 +96,14 @@ export const createMastraProject = async () => {
     ".mastra"
   ]
 }' > tsconfig.json`);
+
   s.stop('NPM dependencies installed');
   s.start('Installing mastra');
-  await exec(`npm i -D mastra@latest`);
+  await execWithTimeout(`npm i -D mastra@latest`);
   s.stop('mastra installed');
 
   s.start('Installing @mastra/core');
-  await exec(`npm i @mastra/core@latest`);
+  await execWithTimeout(`npm i @mastra/core@latest`);
   s.stop('@mastra/core installed');
 
   s.start('Adding .gitignore');
