@@ -1,5 +1,13 @@
 # mastra
 
+## 0.2.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [f205ede]
+  - @mastra/core@0.3.0-alpha.0
+  - @mastra/deployer@0.1.2-alpha.0
+
 ## 0.2.3-alpha.0
 
 ### Patch Changes
