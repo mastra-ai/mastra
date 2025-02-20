@@ -6,12 +6,30 @@ import { cn } from '@/lib/utils';
 
 import { TraceContext } from './context/trace-context';
 import type { Span } from './types';
-import { cleanString, formatDuration, formatOtelTimestamp, formatOtelTimestamp2, transformKey } from './utils';
+import {
+  allowedAiSpanAttributes,
+  cleanString,
+  formatDuration,
+  formatOtelTimestamp,
+  formatOtelTimestamp2,
+  transformKey,
+} from './utils';
 
 export function SpanDetail() {
   const { span } = useContext(TraceContext);
 
   const duration = span?.endTime ? Number(span?.endTime) - Number(span?.startTime) : 0;
+
+  const isAiSpan = span?.name?.startsWith('ai.');
+
+  const aiSpanAttributes = Object.entries(span?.attributes || {})
+    .filter(([key]) => allowedAiSpanAttributes.includes(key))
+    .reduce((acc, [key, value]) => {
+      return {
+        ...acc,
+        [key]: value,
+      };
+    }, {});
 
   return (
     <div className="flex flex-col gap-6 pb-20">
@@ -44,7 +62,9 @@ export function SpanDetail() {
           </span>
         </div>
       </div>
-      <div className="border-t-[0.5px] px-6 pt-4">{span && <Attributes span={span} />}</div>
+      <div className="border-t-[0.5px] px-6 pt-4">
+        {span && <Attributes span={{ ...span, attributes: isAiSpan ? aiSpanAttributes : span?.attributes }} />}
+      </div>
       <div className="border-t-[0.5px] px-6 pt-4">{span && span?.events?.length > 0 && <Events span={span} />}</div>
     </div>
   );
@@ -73,6 +93,7 @@ function Events({ span }: { span: Span }) {
     </div>
   );
 }
+
 function Attributes({ span }: { span: Span }) {
   if (!span.attributes) return null;
 

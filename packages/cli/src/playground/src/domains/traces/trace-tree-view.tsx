@@ -13,7 +13,7 @@ export function TreeNode({ node, depth = 0 }: { node: SpanNode; depth?: number }
   const hasChildren = node.children && node.children.length > 0;
   const { setOpenDetail, setSpan, openDetail, span } = useContext(TraceContext);
 
-  const widthPercentage = Math.min(node.relativePercentage ? node?.relativePercentage : 0, 100);
+  const widthPercentage = Math.min(node.relativePercentage ? node?.relativePercentage * 100 : 0, 100);
 
   return (
     <div>
@@ -63,7 +63,7 @@ export function TreeNode({ node, depth = 0 }: { node: SpanNode; depth?: number }
           </p>
 
           {node.duration > 0 && (
-            <div className="relative w-full max-w-[200px]">
+            <div className="relative w-full">
               <div className="absolute top-[11px] h-px w-full bg-[hsl(220,14%,19%)]" />
               <div
                 style={{

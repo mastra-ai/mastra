@@ -16,7 +16,7 @@ import { SpanDetail } from '../traces/trace-span-details';
 import { WorkflowInformation } from './workflow-information';
 
 export function WorkflowTraces({ workflowId, workflowName }: { workflowId: string; workflowName: string }) {
-  const { traces, error, firstCallLoading } = useTraces(workflowName);
+  const { traces, error, firstCallLoading } = useTraces(workflowName, true);
 
   if (firstCallLoading) {
     return (
@@ -99,7 +99,7 @@ export function SidebarItems({ workflowId }: { workflowId: string }) {
     <aside
       className={cn(
         'absolute right-0 top-0 h-full w-[400px] z-20 overflow-x-scroll border-l-[0.5px] bg-mastra-bg-1',
-        open ? 'grid w-[60%] grid-cols-2' : '',
+        open ? 'grid w-[80%] 2xl:w-[60%] grid-cols-2' : '',
       )}
     >
       {open && (

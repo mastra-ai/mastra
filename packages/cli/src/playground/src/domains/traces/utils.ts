@@ -62,10 +62,18 @@ export function cleanString(string: string) {
   );
 }
 
-export const refineTraces = (traces: Span[]): RefinedTrace[] => {
+export const refineTraces = (traces: Span[], isWorkflow: boolean = false): RefinedTrace[] => {
   const listOfSpanIds = new Set<string>();
+
+  const newName = (name: string) => {
+    if (isWorkflow && name?.startsWith('workflow.')) {
+      return name?.split('.')?.slice(2)?.join('.');
+    }
+    return name;
+  };
+
   const groupedTraces = traces.reduce<Record<string, Span[]>>((acc, curr) => {
-    const newCurr = { ...curr, duration: curr.endTime - curr.startTime };
+    const newCurr = { ...curr, name: newName(curr.name), duration: curr.endTime - curr.startTime };
 
     listOfSpanIds.add(curr.id);
 
@@ -94,3 +102,23 @@ export const refineTraces = (traces: Span[]): RefinedTrace[] => {
 
   return tracesData;
 };
+
+export const allowedAiSpanAttributes = [
+  'operation.name',
+  'ai.operationId',
+  'ai.model.provider',
+  'ai.model.id',
+  'ai.prompt.format',
+  'ai.prompt.messages',
+  'ai.prompt.tools',
+  'ai.prompt.toolChoice',
+  'ai.settings.toolChoice',
+  'ai.schema',
+  'ai.settings.output',
+  'ai.response.object',
+  'ai.response.text',
+  'ai.response.timestamp',
+  'componentName',
+  'ai.usage.promptTokens',
+  'ai.usage.completionTokens',
+];
