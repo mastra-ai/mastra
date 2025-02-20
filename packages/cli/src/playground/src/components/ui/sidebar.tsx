@@ -81,7 +81,7 @@ export const Sidebar = () => {
           </a>
           <div className="w-1 h-1 bg-gray-300/60 rounded-full" />
           <a
-            href="https://mastra.ai/docs/guide"
+            href="https://mastra.ai/docs"
             target="_blank"
             rel="noopener"
             className="text-sm text-gray-300/60 hover:text-gray-100"
