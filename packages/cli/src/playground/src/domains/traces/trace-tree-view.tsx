@@ -29,7 +29,7 @@ export function TreeNode({ node, depth = 0 }: { node: SpanNode; depth?: number }
           if (openDetail && node.id !== span?.id) return;
           setOpenDetail(prev => !prev);
         }}
-        style={{ paddingLeft: `${depth > 0 ? depth * 35 + 28 : 24}px` }}
+        style={{ paddingLeft: `${depth > 0 ? depth * 35 + 28 - depth * 3 : 24}px` }}
       >
         {hasChildren ? (
           <div
@@ -53,9 +53,10 @@ export function TreeNode({ node, depth = 0 }: { node: SpanNode; depth?: number }
         ) : null}
         <div className="flex w-full gap-4 pr-4">
           <p
-            className={cn('max-w-[400px] truncate px-1 text-sm', {
+            className={cn('max-w-[400px] truncate text-sm', {
               'text-white': node?.status?.code === 0,
               'text-[#FF4500]': node?.status?.code !== 0,
+              'px-1': depth === 0,
             })}
           >
             {node.name}
