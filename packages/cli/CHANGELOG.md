@@ -1,5 +1,13 @@
 # mastra
 
+## 0.2.2
+
+### Patch Changes
+
+- c5a68f9: Optimize create mastra deps install
+- a9e8d7c: Fix create mastra deps install
+- ffbde2b: Fixed issue where "pnpm create mastra" would take so long it would time out
+
 ## 0.2.2-alpha.0
 
 ### Patch Changes

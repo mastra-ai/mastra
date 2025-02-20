@@ -1,7 +1,7 @@
 {
   "name": "memory-with-pg",
   "type": "module",
-  "version": "1.0.1-alpha.65",
+  "version": "1.0.1",
   "description": "",
   "private": true,
   "main": "index.js",

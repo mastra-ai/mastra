@@ -3,7 +3,7 @@
   "description": "",
   "type": "module",
   "main": "index.js",
-  "version": "0.0.1-alpha.2",
+  "version": "0.0.1",
   "scripts": {
     "start": "tsx src/index.ts"
   },

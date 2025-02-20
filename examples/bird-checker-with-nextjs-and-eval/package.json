@@ -37,5 +37,5 @@
     "tailwindcss": "^3.4.1",
     "typescript": "^5.7.3"
   },
-  "version": "0.0.1-alpha.2"
+  "version": "0.0.1"
 }
