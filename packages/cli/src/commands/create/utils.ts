@@ -112,7 +112,7 @@ export const createMastraProject = async () => {
 
   s.stop(`${pm} dependencies installed`);
   s.start('Installing mastra');
-  await exec(`${pm} i -D mastra@latest`);
+  await execWithTimeout(`${pm} i -D mastra@latest`);
   s.stop('mastra installed');
 
   s.start('Installing @mastra/core');
