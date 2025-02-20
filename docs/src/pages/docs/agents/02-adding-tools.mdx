@@ -24,7 +24,7 @@ const getWeatherInfo = async (city: string) => {
 };
 
 export const weatherInfo = createTool({
-  id "Get Weather Information",
+  id: "Get Weather Information",
   inputSchema: z.object({
     city: z.string(),
   }),
