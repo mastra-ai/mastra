@@ -35,9 +35,9 @@ const sseClient = new MastraMCPClient({
   server: {
     url: new URL('https://your-mcp-server.com/sse'),
     requestInit: {
-      headers: { 'Authorization': 'Bearer your-token' }
-    }
-  }
+      headers: { Authorization: 'Bearer your-token' },
+    },
+  },
 });
 
 // Connect to the MCP server
@@ -59,12 +59,14 @@ await client.disconnect();
 
 - `name`: Name of the MCP client instance
 - `server`: Either a StdioServerParameters or SSEClientParameters object:
-  
+
   #### StdioServerParameters
+
   - `command`: Command to start the MCP server
   - `args`: Array of command arguments
-  
+
   #### SSEClientParameters
+
   - `url`: URL instance pointing to the SSE server
   - `requestInit`: Optional fetch request configuration
   - `eventSourceInit`: Optional EventSource configuration

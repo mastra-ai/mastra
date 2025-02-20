@@ -1,11 +1,11 @@
-import { Bot, BotMessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router';
 
+import { Agent } from '@/components/ui/app-sidebar';
 import { Button } from '@/components/ui/button';
 import { Header } from '@/components/ui/header';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 import { useAgents } from '@/hooks/use-agents';
 
@@ -50,7 +50,7 @@ function Agents() {
                   <TableRow key={key} className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem]">
                     <TableCell>
                       <div className="h-8 w-full flex items-center justify-center">
-                        <Bot className="h-4 w-4 text-mastra-el-5" />
+                        <Agent />
                       </div>
                     </TableCell>
                     <TableCell className="font-medium text-mastra-el-5">{agent.name}</TableCell>
@@ -67,7 +67,6 @@ function Agents() {
                         className="hover:no-underline"
                       >
                         <Button size="sm" variant="outline">
-                          <BotMessageSquare className="h-4 w-4 text-inherit" />
                           Chat with agent
                         </Button>
                       </span>

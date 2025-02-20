@@ -1,9 +1,8 @@
-import { PanelLeft } from 'lucide-react';
+// import { Chat } from '@/components/Chat';
+import { AgentChat as Chat } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
-import { Chat } from '@/components/Chat';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { cn } from '@/lib/utils';
@@ -46,36 +45,28 @@ function Agent() {
   }
 
   return (
-    <main
-      className={cn(
-        'flex-1 relative grid divide-x',
-        sidebar && memory?.result ? 'grid-cols-[256px_1fr_400px] overflow-y-hidden h-full' : 'grid-cols-[1fr_400px]',
-      )}
-    >
-      {sidebar && memory?.result ? <AgentSidebar agentId={agentId!} threadId={threadId!} /> : null}
-      <div className="relative">
-        {memory?.result ? (
-          <Button
-            variant="primary"
-            size="icon"
-            className="absolute top-4 left-4 z-50"
-            onClick={() => setSidebar(!sidebar)}
-          >
-            <PanelLeft />
-          </Button>
-        ) : null}
-        <Chat
-          agentId={agentId!}
-          agentName={agent?.name}
-          threadId={threadId!}
-          initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
-          memory={memory?.result}
-        />
+    <section className="h-full">
+      <div
+        className={cn(
+          'relative grid h-full divide-x',
+          sidebar && memory?.result ? 'grid-cols-[256px_1fr_400px]' : 'grid-cols-[1fr_400px]',
+        )}
+      >
+        {sidebar && memory?.result ? <AgentSidebar agentId={agentId!} threadId={threadId!} /> : null}
+        <div className="relative h-full overflow-y-hidden">
+          <Chat
+            agentId={agentId!}
+            agentName={agent?.name}
+            threadId={threadId!}
+            initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
+            memory={memory?.result}
+          />
+        </div>
+        <div className="flex flex-col">
+          <AgentInformation agentId={agentId!} />
+        </div>
       </div>
-      <div className="flex flex-col">
-        <AgentInformation agentId={agentId!} />
-      </div>
-    </main>
+    </section>
   );
 }
 
