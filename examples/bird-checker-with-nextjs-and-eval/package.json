@@ -1,5 +1,6 @@
 {
   "name": "examples-bird-checker-with-nextjs-and-eval",
+  "type": "module",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",

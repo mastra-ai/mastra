@@ -1,7 +1,8 @@
 {
   "name": "examples-workflow-with-separate-steps",
-  "main": "index.js",
+  "type": "module",
   "private": true,
+  "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "mastra dev",

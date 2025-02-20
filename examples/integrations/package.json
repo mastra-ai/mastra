@@ -1,5 +1,6 @@
 {
   "name": "examples-integrations",
+  "type": "module",
   "private": true,
   "main": "index.js",
   "scripts": {

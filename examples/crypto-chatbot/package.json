@@ -1,5 +1,6 @@
 {
   "name": "examples-crypto-chatbot",
+  "type": "module",
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",

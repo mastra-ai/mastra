@@ -1,8 +1,8 @@
 {
   "name": "examples-stock-price-tool",
-  "main": "index.js",
   "type": "module",
   "private": true,
+  "main": "index.js",
   "scripts": {
     "start": "npx bun src/mastra/index.ts",
     "test": "cross-env NODE_OPTIONS='--experimental-vm-modules --max-old-space-size=8192' jest"

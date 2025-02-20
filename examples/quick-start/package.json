@@ -1,7 +1,8 @@
 {
   "name": "examples-quick-start",
-  "description": "",
+  "type": "module",
   "private": true,
+  "description": "",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

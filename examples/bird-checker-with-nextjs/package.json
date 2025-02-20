@@ -1,7 +1,8 @@
 {
   "name": "examples-bird-checker-with-nextjs",
-  "version": "0.0.1",
+  "type": "module",
   "private": true,
+  "version": "0.0.1",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",

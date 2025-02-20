@@ -1,5 +1,6 @@
 {
   "name": "examples-workflow-with-memory",
+  "type": "module",
   "private": true,
   "main": "index.js",
   "scripts": {
