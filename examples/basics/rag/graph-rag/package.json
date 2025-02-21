@@ -15,5 +15,5 @@
   "devDependencies": {
     "dotenv": "^16.4.7"
   },
-  "version": "0.0.1-alpha.3"
+  "version": "0.0.1"
 }

@@ -292,13 +292,17 @@ const memory = new Memory({
 Once configured, the memory system is automatically used by agents. Here's how to use it:
 
 ```typescript copy showLineNumbers
-// Initialize Mastra with memory
+// Initialize Agent with memory
+const myAgent = new Agent({
+  memory,
+  // other agent options
+});
+// Add agent to mastra
 const mastra = new Mastra({
   agents: { myAgent },
-  memory,
 });
 
-// Memory is automatically used in agent interactions
+// Memory is automatically used in agent interactions when resourceId and threadId are added
 const response = await myAgent.generate(
   "What were we discussing earlier about performance?",
   {

@@ -1,11 +1,12 @@
 {
   "name": "examples-chunk-text",
   "type": "module",
+  "private": true,
   "scripts": {
     "start": "pnpx tsx index.ts"
   },
   "dependencies": {
     "@mastra/rag": "workspace:*"
   },
-  "version": "0.0.1-alpha.3"
+  "version": "0.0.1"
 }

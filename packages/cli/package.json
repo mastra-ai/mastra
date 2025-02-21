@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.2.2-alpha.0",
+  "version": "0.2.3",
   "license": "MIT",
   "description": "cli for mastra",
   "type": "module",
@@ -74,7 +74,6 @@
     "zod-to-json-schema": "^3.24.1"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^1.1.9",
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.49.2",
     "@types/express": "^5.0.0",

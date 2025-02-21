@@ -1,5 +1,30 @@
 # mastra
 
+## 0.2.3
+
+### Patch Changes
+
+- 23b2a7a: Fixed a bug when detecting package manager during mastra init where npm would run after pnpm already installed, resulting in errors
+- dfe2df9: Fix mastra create workflow starter
+- Updated dependencies [f205ede]
+  - @mastra/core@0.3.0
+  - @mastra/deployer@0.1.2
+
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- 23b2a7a: Fixed a bug when detecting package manager during mastra init where npm would run after pnpm already installed, resulting in errors
+- dfe2df9: Fix mastra create workflow starter
+
+## 0.2.2
+
+### Patch Changes
+
+- c5a68f9: Optimize create mastra deps install
+- a9e8d7c: Fix create mastra deps install
+- ffbde2b: Fixed issue where "pnpm create mastra" would take so long it would time out
+
 ## 0.2.2-alpha.0
 
 ### Patch Changes

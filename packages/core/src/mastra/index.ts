@@ -18,7 +18,6 @@ export interface Config<
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends Logger = Logger,
 > {
-  memory?: MastraMemory;
   agents?: TAgents;
   storage?: MastraStorage;
   vectors?: TVectors;
@@ -27,6 +26,9 @@ export interface Config<
   tts?: TTTS;
   telemetry?: OtelConfig;
   deployer?: MastraDeployer;
+
+  // @deprecated add memory to your Agent directly instead
+  memory?: MastraMemory;
 }
 
 @InstrumentClass({
@@ -153,6 +155,20 @@ export class Mastra<
         });
         this.memory.__setTelemetry(this.telemetry);
       }
+    }
+
+    if (config && `memory` in config) {
+      this.logger.warn(`
+  Memory should be added to Agents, not to Mastra.
+
+Instead of:
+  new Mastra({ memory: new Memory() })
+
+do:
+  new Agent({ memory: new Memory() })
+
+This is a warning for now, but will throw an error in the future
+`);
     }
 
     if (config?.tts) {

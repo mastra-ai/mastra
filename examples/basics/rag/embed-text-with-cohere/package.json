@@ -1,6 +1,7 @@
 {
   "name": "embed-text-with-cohere",
   "type": "module",
+  "private": true,
   "scripts": {
     "start": "pnpx tsx index.ts"
   },
@@ -9,5 +10,5 @@
     "@mastra/rag": "workspace:*",
     "ai": "latest"
   },
-  "version": "0.0.1-alpha.3"
+  "version": "0.0.1"
 }

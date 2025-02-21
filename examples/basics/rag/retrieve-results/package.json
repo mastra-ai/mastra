@@ -1,6 +1,7 @@
 {
   "name": "examples-retrieve-results",
   "type": "module",
+  "private": true,
   "scripts": {
     "start": "pnpx tsx index.ts"
   },
@@ -10,5 +11,5 @@
     "@mastra/pinecone": "workspace:*",
     "ai": "latest"
   },
-  "version": "0.0.1-alpha.4"
+  "version": "0.0.1"
 }

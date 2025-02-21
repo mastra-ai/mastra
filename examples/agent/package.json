@@ -1,6 +1,5 @@
 {
   "name": "examples-agent",
-  "version": "0.0.1-alpha.4",
   "type": "module",
   "private": true,
   "description": "",

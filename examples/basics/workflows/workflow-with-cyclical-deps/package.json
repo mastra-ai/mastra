@@ -1,6 +1,7 @@
 {
-  "name": "workflow-with-cyclical-deps",
+  "name": "examples-workflow-with-cyclical-deps",
   "type": "module",
+  "private": true,
   "scripts": {
     "start": "pnpx tsx index.ts"
   },
@@ -8,5 +9,5 @@
     "@mastra/core": "workspace:*",
     "zod": "^3.24.1"
   },
-  "version": "0.0.1-alpha.2"
+  "version": "0.0.1"
 }
