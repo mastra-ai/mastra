@@ -63,7 +63,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "axios": "^1.7.9",

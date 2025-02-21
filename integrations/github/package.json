@@ -65,7 +65,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.3",
     "@mastra/core": "workspace:^",
