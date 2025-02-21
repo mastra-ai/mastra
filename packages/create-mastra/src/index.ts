@@ -7,7 +7,7 @@ import { create } from 'mastra/dist/commands/create/create.js';
 import { getPackageVersion, getCreateVersionTag } from './utils.js';
 
 const version = await getPackageVersion();
-const createVersionTag = getCreateVersionTag();
+const createVersionTag = await getCreateVersionTag();
 
 const analytics = new PosthogAnalytics({
   apiKey: 'phc_SBLpZVAB6jmHOct9CABq3PF0Yn5FU3G2FgT4xUr2XrT',

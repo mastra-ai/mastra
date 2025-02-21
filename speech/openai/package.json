@@ -1,7 +1,7 @@
 {
   "name": "@mastra/speech-openai",
-  "version": "0.1.3-alpha.0",
-  "description": "Mastra OpenAI speech integration (deprecated, please use @mastra/voice-openai instead)",
+  "version": "0.1.3-alpha.1",
+  "description": "Mastra OpenAI speech integration  (deprecated, please use @mastra/voice-openai instead)",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
