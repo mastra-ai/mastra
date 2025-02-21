@@ -25,7 +25,7 @@ export async function getCreateVersionTag(): Promise<string | undefined> {
       return tag;
     }
   } catch (error) {
-    console.error('Error reading package.json:', error);
+    console.error('Error getting create-mastra version tag:', error);
   }
 
   return undefined;
