@@ -174,9 +174,11 @@ export async function* maskStreamTags(
   // When checking partial tags: startsWith(buffer, openTag) checks if buffer could be start of tag
   // When checking full tags: startsWith(chunk, openTag) checks if chunk starts with full tag
   const startsWith = (text: string, pattern: string) => {
-    if (pattern.includes(`<`)) {
+    // check start of opening tag
+    if (pattern.includes(openTag.substring(0, 3))) {
       // our pattern for checking the start is always based on xml-like tags
-      // if the pattern includes a tag but the pattern also includes some other chunked text, we just wanted to check the xml part of the pattern
+      // if the pattern looks like our opening tag and the pattern also includes
+      // some other chunked text before it, we just wanted to check the xml part of the pattern
       pattern = trimOutsideDelimiter(pattern, `<`, `before-start`);
     }
 
