@@ -154,10 +154,34 @@ export async function* maskStreamTags(
   let isMasking = false;
   let isBuffering = false;
 
+  // used for checking in chunks that include tags or partial tags + some other non-tag text
+  // eg: "o <tag_name" or "name> w", can trim before-start to get "<tag_name" or after-end to get "name>"
+  const trimOutsideDelimiter = (text: string, delimiter: string, trim: 'before-start' | 'after-end') => {
+    if (!text.includes(delimiter)) {
+      return text;
+    }
+
+    const parts = text.split(delimiter);
+
+    if (trim === `before-start`) {
+      return `${delimiter}${parts[1]}`;
+    }
+
+    return `${parts[0]}${delimiter}`;
+  };
+
   // Helper to check if text starts with pattern (ignoring whitespace)
   // When checking partial tags: startsWith(buffer, openTag) checks if buffer could be start of tag
   // When checking full tags: startsWith(chunk, openTag) checks if chunk starts with full tag
-  const startsWith = (text: string, pattern: string) => text.trim().startsWith(pattern.trim());
+  const startsWith = (text: string, pattern: string) => {
+    if (pattern.includes(`<`)) {
+      // our pattern for checking the start is always based on xml-like tags
+      // if the pattern includes a tag but the pattern also includes some other chunked text, we just wanted to check the xml part of the pattern
+      pattern = trimOutsideDelimiter(pattern, `<`, `before-start`);
+    }
+
+    return text.trim().startsWith(pattern.trim());
+  };
 
   for await (const chunk of stream) {
     fullContent += chunk;
@@ -167,10 +191,18 @@ export async function* maskStreamTags(
     const chunkHasTag = startsWith(chunk, openTag);
     const bufferHasTag = !chunkHasTag && isBuffering && startsWith(openTag, buffer);
 
+    let toYieldBeforeMaskedStartTag = ``;
     // Check if we should start masking chunks
     if (!isMasking && (chunkHasTag || bufferHasTag)) {
       isMasking = true;
       isBuffering = false;
+
+      // check if the buffered text includes text before the start tag. ex "o <tag_name", "o" should be yielded and not masked
+      const taggedTextToMask = trimOutsideDelimiter(buffer, `<`, `before-start`);
+      if (taggedTextToMask !== buffer.trim()) {
+        toYieldBeforeMaskedStartTag = buffer.replace(taggedTextToMask, ``);
+      }
+
       buffer = '';
       onStart?.();
     }
@@ -191,16 +223,30 @@ export async function* maskStreamTags(
     }
 
     // Check if we should stop masking chunks (since the content includes the closing </tag>)
-    if (isMasking && fullContent.trim().includes(closeTag)) {
+    if (isMasking && fullContent.includes(closeTag)) {
       onMask?.(chunk);
       onEnd?.();
       isMasking = false;
+      const lastFullContent = fullContent;
+      fullContent = ``; // reset to handle streams with multiple full tags that have text inbetween
+
+      // check to see if we have a partial chunk outside the close tag. if we do we need to yield it so it isn't swallowed with the masked text
+      const textUntilEndTag = trimOutsideDelimiter(lastFullContent, closeTag, 'after-end');
+      if (textUntilEndTag !== lastFullContent) {
+        yield lastFullContent.replace(textUntilEndTag, ``);
+      }
+
       continue;
     }
 
     // We're currently masking chunks inside a <tag>
     if (isMasking) {
       onMask?.(chunk);
+      // in the case that there was a chunk that included a tag to mask and some other text, ex "o <tag_name" we need to still yield the
+      // text before the tag ("o ") so it's not swallowed with the masked text
+      if (toYieldBeforeMaskedStartTag) {
+        yield toYieldBeforeMaskedStartTag;
+      }
       continue;
     }
 
