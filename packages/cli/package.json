@@ -26,7 +26,6 @@
     "test:watch": "vitest watch",
     "clean": "rm -rf dist && rm -rf node_modules",
     "typecheck": "tsc --noEmit --incremental",
-    "postinstall": "node src/scripts/postinstall.js",
     "lint": "eslint ."
   },
   "keywords": [
