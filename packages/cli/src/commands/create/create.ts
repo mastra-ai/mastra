@@ -12,8 +12,11 @@ export const create = async (args: {
   llmProvider?: LLMProvider;
   addExample?: boolean;
   llmApiKey?: string;
+  createVersionTag?: string;
 }) => {
-  const { projectName } = await createMastraProject();
+  const { projectName } = await createMastraProject({
+    createVersionTag: args?.createVersionTag,
+  });
   const directory = '/src';
 
   if (!args.components || !args.llmProvider || !args.addExample) {
