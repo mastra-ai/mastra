@@ -143,7 +143,7 @@ export function SidebarItems({
     >
       {open ? (
         <div
-          className={`w-1 bg-mastra-border-1 cursor-col-resize hover:w-2 hover:bg-mastra-border-2 active:bg-mastra-border-3 transition-colors absolute inset-y-0 -left-1 -right-1 z-10
+          className={`w-1 bg-mastra-border-1 h-full cursor-col-resize hover:w-2 hover:bg-mastra-border-2 active:bg-mastra-border-3 transition-colors absolute inset-y-0 -left-1 -right-1 z-10
           ${isDragging ? 'bg-mastra-border-2 w-2 cursor-col-resize' : ''}`}
           onMouseDown={handleMouseDown}
         />
@@ -157,7 +157,7 @@ export function SidebarItems({
         </div>
       )}
       <div
-        className="h-full overflow-y-scroll border-l-[0.5px] absolute right-0 top-0 z-20 bg-mastra-bg-1"
+        className="h-full overflow-y-hidden border-l-[0.5px] absolute right-0 top-0 z-20 bg-mastra-bg-1"
         style={{ width: `${openDetail ? rightSidebarWidth : 100}%` }}
       >
         {openDetail ? (
@@ -167,7 +167,9 @@ export function SidebarItems({
             onMouseDown={handleInnerMouseDown}
           />
         ) : null}
-        {!openDetail ? <AgentInformation agentId={agentId} /> : <SpanDetail />}
+        <div className="h-full overflow-y-scroll">
+          {!openDetail ? <AgentInformation agentId={agentId} /> : <SpanDetail />}
+        </div>
       </div>
     </aside>
   );
