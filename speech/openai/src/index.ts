@@ -7,6 +7,10 @@ interface OpenAITTSConfig {
   apiKey?: string;
 }
 
+throw new Error(
+  '@mastra/speech-openai is deprecated. Please use @mastra/voice-openai instead, which provides both Text-to-Speech and Speech-to-Text capabilities.',
+);
+
 export class OpenAITTS extends MastraTTS {
   client: OpenAI;
   constructor({ model }: { model: OpenAITTSConfig }) {
