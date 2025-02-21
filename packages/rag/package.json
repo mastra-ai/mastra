@@ -21,7 +21,7 @@
     "lint": "eslint ."
   },
   "author": "",
-  "license": "MIT",
+  "license": "ISC",
   "dependencies": {
     "@llamaindex/core": "^0.4.10",
     "@llamaindex/env": "^0.1.20",

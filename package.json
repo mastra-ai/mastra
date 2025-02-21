@@ -54,8 +54,7 @@
     "typecheck": "pnpm -r typecheck",
     "dev:services:up": "docker compose -f .dev/docker-compose.yaml up -d",
     "dev:services:down": "docker compose -f .dev/docker-compose.yaml down",
-    "setup": "pnpm install --ignore-scripts && pnpm run build:cli && pnpm install --shamefully-hoist",
-    "update-licenses": "tsx scripts/update-licenses.ts"
+    "setup": "pnpm install --ignore-scripts && pnpm run build:cli && pnpm install --shamefully-hoist"
   },
   "lint-staged": {
     "*.{js,ts,tsx,md,json,graphql,gql}": [
@@ -68,6 +67,5 @@
   "resolutions": {
     "typescript": "^5.7.3"
   },
-  "packageManager": "pnpm@10.4.1+sha512.c753b6c3ad7afa13af388fa6d808035a008e30ea9993f58c6663e2bc5ff21679aa834db094987129aa4d488b86df57f7b634981b2f827cdcacc698cc0cfb88af",
-  "license": "MIT"
+  "packageManager": "pnpm@10.4.1+sha512.c753b6c3ad7afa13af388fa6d808035a008e30ea9993f58c6663e2bc5ff21679aa834db094987129aa4d488b86df57f7b634981b2f827cdcacc698cc0cfb88af"
 }

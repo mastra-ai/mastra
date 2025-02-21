@@ -22,7 +22,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "MIT",
+  "license": "ISC",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.1.1",

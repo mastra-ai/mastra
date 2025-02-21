@@ -39,7 +39,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "MIT",
+  "license": "ISC",
   "dependencies": {
     "@babel/core": "^7.26.7",
     "@babel/helper-module-imports": "^7.25.9",

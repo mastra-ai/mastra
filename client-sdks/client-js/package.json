@@ -15,7 +15,7 @@
     "./package.json": "./package.json"
   },
   "repository": "github:mastra-ai/client-js",
-  "license": "MIT",
+  "license": "ISC",
   "scripts": {
     "build": "tsup-node src/index.ts --format esm --dts --clean --treeshake",
     "dev": "tsup-node src/index.ts --format esm --dts --clean --treeshake --watch",
