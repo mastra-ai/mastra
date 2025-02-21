@@ -11,16 +11,21 @@ export async function getPackageVersion() {
   return content.version;
 }
 
-export function getCreateVersionTag(): string | undefined {
-  const createArg = process.argv.find(
-    arg => arg.startsWith('create-mastra@') || arg.startsWith('mastra@') || arg === 'create-mastra' || arg === 'mastra',
-  );
+export async function getCreateVersionTag(): Promise<string | undefined> {
+  try {
+    const binPath = process.argv[1];
+    const binDir = dirname(binPath);
 
-  if (!createArg) return undefined;
+    const pkgJsonPath = path.join(binDir, '..', 'create-mastra', 'package.json');
 
-  const tagMatch = createArg.match(/@([a-zA-Z]+)$/);
-  if (tagMatch) {
-    return tagMatch[1];
+    const content = await fsExtra.readJSON(pkgJsonPath);
+
+    if (content.version?.includes('-')) {
+      const tag = content.version.split('-')[1].split('.')[0];
+      return tag;
+    }
+  } catch (error) {
+    console.error('Error reading package.json:', error);
   }
 
   return undefined;
