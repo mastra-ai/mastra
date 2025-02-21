@@ -163,11 +163,35 @@ export class MastraClient extends BaseResource {
       ...(page ? { page: String(page) } : {}),
       ...(perPage ? { perPage: String(perPage) } : {}),
       ...(_attribute?.length ? { attribute: _attribute } : {}),
-    };
+    } as const;
 
-    const hasQueryParams = Object.keys(queryObj).length > 0;
+    const searchParams = new URLSearchParams();
+    if (name) {
+      searchParams.set('name', name);
+    }
+    if (scope) {
+      searchParams.set('scope', scope);
+    }
+    if (page) {
+      searchParams.set('page', String(page));
+    }
+    if (perPage) {
+      searchParams.set('perPage', String(perPage));
+    }
+    if (_attribute) {
+      if (Array.isArray(_attribute)) {
+        for (const attr of _attribute) {
+          searchParams.append('attribute', attr);
+        }
+      } else {
+        searchParams.set('attribute', _attribute);
+      }
+    }
 
-    const queryParams = hasQueryParams ? new URLSearchParams(queryObj) : '';
-    return this.request(`/api/telemetry?${queryParams}`);
+    if (searchParams.size) {
+      return this.request(`/api/telemetry?${searchParams}`);
+    } else {
+      return this.request(`/api/telemetry`);
+    }
   }
 }
