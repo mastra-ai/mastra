@@ -35,6 +35,24 @@ describe('maskStreamTags', () => {
     expect(await collectStream(masked)).toBe('Hello  world');
   });
 
+  it('should handle tag split across chunks with other data included with the start tag ', async () => {
+    const input = ['Hell', 'o <sec', 'ret>', 'sensitive', '</sec', 'ret>', ' world'];
+    const masked = maskStreamTags(makeStream(input), 'secret');
+    expect(await collectStream(masked)).toBe('Hello  world');
+  });
+
+  it('should handle tag split across chunks with other data included with the start and end tag ', async () => {
+    const input = ['Hell', 'o <sec', 'ret>', 'sensit', 'ive</sec', 'ret>', ' world'];
+    const masked = maskStreamTags(makeStream(input), 'secret');
+    expect(await collectStream(masked)).toBe('Hello  world');
+  });
+
+  it('should handle tag split across chunks with other data included with the start and end tag where end tag has postfixed text', async () => {
+    const input = ['Hell', 'o <sec', 'ret>', 'sensit', 'ive</sec', 'ret> w', 'orld'];
+    const masked = maskStreamTags(makeStream(input), 'secret');
+    expect(await collectStream(masked)).toBe('Hello  world');
+  });
+
   it('should handle multiple tag pairs', async () => {
     const input = ['Start ', '<secret>hidden1</secret>', ' middle ', '<secret>hidden2</secret>', ' end'];
     const masked = maskStreamTags(makeStream(input), 'secret');
@@ -76,6 +94,6 @@ describe('maskStreamTags', () => {
   it('should handle whitespace around tags', async () => {
     const input = ['Before ', '  <secret>  ', 'hidden ', ' </secret>  ', ' after'];
     const masked = maskStreamTags(makeStream(input), 'secret');
-    expect(await collectStream(masked)).toBe('Before  after');
+    expect(await collectStream(masked)).toBe('Before    after');
   });
 });
