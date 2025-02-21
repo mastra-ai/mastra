@@ -15,7 +15,7 @@ export const create = async (args: {
   createVersionTag?: string;
 }) => {
   const { projectName } = await createMastraProject({
-    createVersionTag: args.createVersionTag,
+    createVersionTag: args?.createVersionTag,
   });
   const directory = '/src';
 
