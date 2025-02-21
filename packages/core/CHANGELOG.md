@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.4.0-alpha.0
+
+### Minor Changes
+
+- 2fc618f: Add MastraVoice class
+
 ## 0.3.0
 
 ### Minor Changes

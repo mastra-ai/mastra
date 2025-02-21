@@ -1,5 +1,13 @@
 # @mastra/speech-playai
 
+## 0.1.3-alpha.0
+
+### Patch Changes
+
+- 5297264: Fix build errors by changing contracts
+- Updated dependencies [2fc618f]
+  - @mastra/core@0.4.0-alpha.0
+
 ## 0.1.2
 
 ### Patch Changes

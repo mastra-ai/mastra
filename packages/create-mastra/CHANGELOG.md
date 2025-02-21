@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.1.4-alpha.0
+
+### Patch Changes
+
+- 13ba53a: Remove cli postinstall script
+- dd3a52b: pass createVersionTag to create mastra deps
+
 ## 0.1.3
 
 ### Patch Changes

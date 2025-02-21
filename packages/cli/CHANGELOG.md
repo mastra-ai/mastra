@@ -1,5 +1,19 @@
 # mastra
 
+## 0.2.4-alpha.0
+
+### Patch Changes
+
+- 13ba53a: Remove cli postinstall script
+- 71cedf8: Allow column resizing on tracing UI
+  Fix UI issues in mastra dev agent chat page
+- dd3a52b: pass createVersionTag to create mastra deps
+- a931e9a: Fix resizer not showing when user has scrolled down the span details column
+- Updated dependencies [5297264]
+- Updated dependencies [2fc618f]
+  - @mastra/deployer@0.1.3-alpha.0
+  - @mastra/core@0.4.0-alpha.0
+
 ## 0.2.3
 
 ### Patch Changes
