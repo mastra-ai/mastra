@@ -41,7 +41,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "compromise": "^14.14.3",
