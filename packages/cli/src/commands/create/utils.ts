@@ -35,7 +35,7 @@ const execWithTimeout = async (command: string, timeoutMs = 180000) => {
   }
 };
 
-export const createMastraProject = async () => {
+export const createMastraProject = async ({ createVersionTag }: { createVersionTag?: string }) => {
   p.intro(color.inverse('Mastra Create'));
 
   const projectName = await p.text({
@@ -102,7 +102,7 @@ export const createMastraProject = async () => {
 
   s.stop(`${pm} dependencies installed`);
   s.start('Installing mastra');
-  const versionTag = process.env.MASTRA_VERSION_TAG ? `@${process.env.MASTRA_VERSION_TAG}` : '@latest';
+  const versionTag = createVersionTag ? `@${createVersionTag}` : '@latest';
   await execWithTimeout(`${pm} i -D mastra${versionTag}`);
   s.stop('mastra installed');
 
