@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.4-alpha.1
+
+### Patch Changes
+
+- 5c7b8db: create-mastra version tag discovery
+
 ## 0.1.4-alpha.0
 
 ### Patch Changes
