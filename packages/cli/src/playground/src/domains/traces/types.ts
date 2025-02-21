@@ -23,8 +23,13 @@ export type SpanOther = {
   droppedLinksCount: number;
 };
 
+export type SpanEventAttributes = {
+  key: string;
+  value: { [key: string]: string | number | boolean | null };
+};
+
 export type SpanEvent = {
-  attributes: Record<string, string | number | boolean | null>[];
+  attributes: SpanEventAttributes[];
   name: string;
   timeUnixNano: string;
   droppedAttributesCount: number;
