@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 
+import { memory } from './memory.js';
 import { getBaseModelConfig } from './model.js';
 
 export const daneNewContributor = new Agent({
@@ -11,4 +12,5 @@ export const daneNewContributor = new Agent({
     `,
   model: getBaseModelConfig(),
   tools: {},
+  memory,
 });

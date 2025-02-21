@@ -1,6 +1,7 @@
 {
   "name": "examples-cot-workflow-rag",
   "type": "module",
+  "private": true,
   "scripts": {
     "start": "pnpx tsx index.ts"
   },
@@ -11,5 +12,5 @@
     "ai": "latest",
     "zod": "^3.24.1"
   },
-  "version": "0.0.1-alpha.3"
+  "version": "0.0.1"
 }

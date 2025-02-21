@@ -1,5 +1,60 @@
 # mastra
 
+## 0.2.4-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [fe0fd01]
+  - @mastra/core@0.4.0-alpha.1
+  - @mastra/deployer@0.1.3-alpha.1
+
+## 0.2.4-alpha.0
+
+### Patch Changes
+
+- 13ba53a: Remove cli postinstall script
+- 71cedf8: Allow column resizing on tracing UI
+  Fix UI issues in mastra dev agent chat page
+- dd3a52b: pass createVersionTag to create mastra deps
+- a931e9a: Fix resizer not showing when user has scrolled down the span details column
+- Updated dependencies [5297264]
+- Updated dependencies [2fc618f]
+  - @mastra/deployer@0.1.3-alpha.0
+  - @mastra/core@0.4.0-alpha.0
+
+## 0.2.3
+
+### Patch Changes
+
+- 23b2a7a: Fixed a bug when detecting package manager during mastra init where npm would run after pnpm already installed, resulting in errors
+- dfe2df9: Fix mastra create workflow starter
+- Updated dependencies [f205ede]
+  - @mastra/core@0.3.0
+  - @mastra/deployer@0.1.2
+
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- 23b2a7a: Fixed a bug when detecting package manager during mastra init where npm would run after pnpm already installed, resulting in errors
+- dfe2df9: Fix mastra create workflow starter
+
+## 0.2.2
+
+### Patch Changes
+
+- c5a68f9: Optimize create mastra deps install
+- a9e8d7c: Fix create mastra deps install
+- ffbde2b: Fixed issue where "pnpm create mastra" would take so long it would time out
+
+## 0.2.2-alpha.0
+
+### Patch Changes
+
+- c5a68f9: Optimize create mastra deps install
+- a9e8d7c: Fix create mastra deps install
+- ffbde2b: Fixed issue where "pnpm create mastra" would take so long it would time out
+
 ## 0.2.1
 
 ### Patch Changes

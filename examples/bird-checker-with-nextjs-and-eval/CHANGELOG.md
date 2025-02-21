@@ -1,5 +1,7 @@
 # bird-checker-with-nextjs-and-eval
 
+## 0.0.1
+
 ## 0.0.1-alpha.2
 
 ### Patch Changes

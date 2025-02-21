@@ -10,3 +10,23 @@ export async function getPackageVersion() {
   const content = await fsExtra.readJSON(pkgJsonPath);
   return content.version;
 }
+
+export async function getCreateVersionTag(): Promise<string | undefined> {
+  try {
+    const binPath = process.argv[1];
+    const binDir = dirname(binPath);
+
+    const pkgJsonPath = path.join(binDir, '..', 'create-mastra', 'package.json');
+
+    const content = await fsExtra.readJSON(pkgJsonPath);
+
+    if (content.version?.includes('-')) {
+      const tag = content.version.split('-')[1].split('.')[0];
+      return tag;
+    }
+  } catch (error) {
+    console.error('Error getting create-mastra version tag:', error);
+  }
+
+  return undefined;
+}

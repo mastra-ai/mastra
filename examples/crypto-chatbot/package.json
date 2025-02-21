@@ -1,5 +1,6 @@
 {
   "name": "examples-crypto-chatbot",
+  "type": "module",
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
@@ -86,5 +87,5 @@
     "tsx": "^4.19.1",
     "typescript": "^5.7.3"
   },
-  "version": "0.0.1-alpha.2"
+  "version": "0.0.1"
 }

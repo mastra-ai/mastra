@@ -1,5 +1,44 @@
 # create-mastra
 
+## 0.1.4-alpha.1
+
+### Patch Changes
+
+- 5c7b8db: create-mastra version tag discovery
+
+## 0.1.4-alpha.0
+
+### Patch Changes
+
+- 13ba53a: Remove cli postinstall script
+- dd3a52b: pass createVersionTag to create mastra deps
+
+## 0.1.3
+
+### Patch Changes
+
+- dfe2df9: Fix mastra create workflow starter
+
+## 0.1.3-alpha.0
+
+### Patch Changes
+
+- dfe2df9: Fix mastra create workflow starter
+
+## 0.1.2
+
+### Patch Changes
+
+- c5a68f9: Optimize create mastra deps install
+- a9e8d7c: Fix create mastra deps install
+
+## 0.1.2-alpha.0
+
+### Patch Changes
+
+- c5a68f9: Optimize create mastra deps install
+- a9e8d7c: Fix create mastra deps install
+
 ## 0.1.1
 
 ### Patch Changes

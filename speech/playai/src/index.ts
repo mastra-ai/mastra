@@ -184,9 +184,8 @@ export class PlayAITTS extends MastraTTS {
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = (await response.json()) as { message: string };
 
-      // @ts-expect-error - PlayAI API returns an error object but we don't type it
       throw new Error(`PlayAI API Error: ${error.message || response.statusText}`);
     }
 

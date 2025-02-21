@@ -6,12 +6,30 @@ import { cn } from '@/lib/utils';
 
 import { TraceContext } from './context/trace-context';
 import type { Span } from './types';
-import { cleanString, formatDuration, formatOtelTimestamp, formatOtelTimestamp2, transformKey } from './utils';
+import {
+  allowedAiSpanAttributes,
+  cleanString,
+  formatDuration,
+  formatOtelTimestamp,
+  formatOtelTimestamp2,
+  transformKey,
+} from './utils';
 
 export function SpanDetail() {
   const { span } = useContext(TraceContext);
 
   const duration = span?.endTime ? Number(span?.endTime) - Number(span?.startTime) : 0;
+
+  const isAiSpan = span?.name?.startsWith('ai.');
+
+  const aiSpanAttributes = Object.entries(span?.attributes || {})
+    .filter(([key]) => allowedAiSpanAttributes.includes(key))
+    .reduce((acc, [key, value]) => {
+      return {
+        ...acc,
+        [key]: value,
+      };
+    }, {});
 
   return (
     <div className="flex flex-col gap-6 pb-20">
@@ -28,7 +46,7 @@ export function SpanDetail() {
         </span>
         <h3 className="text-[0.9rem] font-medium">{span?.name}</h3>
       </div>
-      <div className="grid grid-cols-3 px-6">
+      <div className="grid grid-cols-3 gap-1 px-6">
         <div className="flex flex-col gap-1">
           <span className="text-xs text-mastra-el-3">Duration</span>
           <span className="font-mono text-xs"> {duration ? formatDuration(duration) : ''}ms</span>
@@ -44,8 +62,15 @@ export function SpanDetail() {
           </span>
         </div>
       </div>
-      <div className="border-t-[0.5px] px-6 pt-4">{span && <Attributes span={span} />}</div>
-      <div className="border-t-[0.5px] px-6 pt-4">{span && span?.events?.length > 0 && <Events span={span} />}</div>
+      {span?.status?.code !== 0 ? (
+        <div className="border-t-[0.5px] px-6 pt-4">{span && span?.events?.length > 0 && <Events span={span} />}</div>
+      ) : null}
+      <div className="border-t-[0.5px] px-6 pt-4">
+        {span && <Attributes span={{ ...span, attributes: isAiSpan ? aiSpanAttributes : span?.attributes }} />}
+      </div>
+      {span?.status?.code === 0 ? (
+        <div className="border-t-[0.5px] px-6 pt-4">{span && span?.events?.length > 0 && <Events span={span} />}</div>
+      ) : null}
     </div>
   );
 }
@@ -56,23 +81,27 @@ function Events({ span }: { span: Span }) {
   return (
     <div className="flex flex-col px-2">
       <p className="text-lg">Events</p>
-      {span.events.map(event => (
-        <div
-          key={event.name}
-          className={cn('flex flex-col gap-2 border-b-[0.5px] pt-4 pb-2', event.attributes?.length === 0 && 'pb-4')}
-        >
-          <p className="text-xs text-mastra-el-3">Name</p>
-          <p className="font-mono text-xs">{event.name}</p>
-          <p className="text-xs text-mastra-el-3">Time</p>
-          <p className="font-mono text-xs">
-            {event.timeUnixNano ? formatOtelTimestamp2(Number(event.timeUnixNano)) : ''}
-          </p>
-          {event.attributes?.length > 0 ? <AttributesValues attributes={JSON.stringify(event.attributes)} /> : null}
-        </div>
-      ))}
+      {span.events.map(event => {
+        const eventAttributes = event?.attributes?.map(att => ({ [att?.key]: att?.value }));
+        return (
+          <div
+            key={event.name}
+            className={cn('flex flex-col gap-2 border-b-[0.5px] last:border-b-0 pt-4 pb-2 first:pb-4')}
+          >
+            <p className="text-xs text-mastra-el-3">Name</p>
+            <p className="font-mono text-xs">{event.name}</p>
+            <p className="text-xs text-mastra-el-3">Time</p>
+            <p className="font-mono text-xs">
+              {event.timeUnixNano ? formatOtelTimestamp2(Number(event.timeUnixNano)) : ''}
+            </p>
+            {event.attributes?.length > 0 ? <AttributesValues attributes={eventAttributes} /> : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
+
 function Attributes({ span }: { span: Span }) {
   if (!span.attributes) return null;
 
@@ -91,7 +120,9 @@ function AttributesValues({ attributes, depth = 0 }: { attributes: unknown; dept
         return <SyntaxHighlighter data={attr} />;
       }
     } catch {
-      return <span className="text-sm">{attributes ? cleanString(attributes.toString()) : 'N/A'}</span>;
+      return (
+        <span className="text-sm overflow-x-scroll">{attributes ? cleanString(attributes.toString()) : 'N/A'}</span>
+      );
     }
   }
 

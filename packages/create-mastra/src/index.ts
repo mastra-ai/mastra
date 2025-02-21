@@ -4,9 +4,10 @@ import { Command } from 'commander';
 import { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
 import { create } from 'mastra/dist/commands/create/create.js';
 
-import { getPackageVersion } from './utils.js';
+import { getPackageVersion, getCreateVersionTag } from './utils.js';
 
 const version = await getPackageVersion();
+const createVersionTag = await getCreateVersionTag();
 
 const analytics = new PosthogAnalytics({
   apiKey: 'phc_SBLpZVAB6jmHOct9CABq3PF0Yn5FU3G2FgT4xUr2XrT',
@@ -42,6 +43,7 @@ program
         components: ['agents', 'tools', 'workflows'],
         llmProvider: 'openai',
         addExample: false,
+        createVersionTag,
       });
       return;
     }
@@ -51,6 +53,7 @@ program
       llmProvider: args.llm,
       addExample: args.example,
       llmApiKey: args['llm-api-key'],
+      createVersionTag,
     });
   });
 

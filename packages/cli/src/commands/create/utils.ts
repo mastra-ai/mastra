@@ -6,10 +6,36 @@ import color from 'picocolors';
 import fs from 'fs/promises';
 
 import { DepsService } from '../../services/service.deps.js';
+import { getPackageManager } from '../utils.js';
 
 const exec = util.promisify(child_process.exec);
 
-export const createMastraProject = async () => {
+const execWithTimeout = async (command: string, timeoutMs = 180000) => {
+  try {
+    const promise = exec(command, { killSignal: 'SIGTERM' });
+    let timeoutId: NodeJS.Timeout;
+    const timeout = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('Command timed out')), timeoutMs);
+    });
+
+    try {
+      const result = await Promise.race([promise, timeout]);
+      clearTimeout(timeoutId!);
+      return result;
+    } catch (error) {
+      clearTimeout(timeoutId!);
+      if (error instanceof Error && error.message === 'Command timed out') {
+        throw new Error('Something went wrong during installation, please try again.');
+      }
+      throw error;
+    }
+  } catch (error: unknown) {
+    console.error(error);
+    throw error;
+  }
+};
+
+export const createMastraProject = async ({ createVersionTag }: { createVersionTag?: string }) => {
   p.intro(color.inverse('Mastra Create'));
 
   const projectName = await p.text({
@@ -38,8 +64,9 @@ export const createMastraProject = async () => {
   }
 
   process.chdir(projectName);
-
+  const pm = getPackageManager();
   s.message('Creating project');
+  // use npm not ${pm} because this just creates a package.json - compatible with all PMs, each PM has a slightly different init command, ex pnpm does not have a -y flag. Use npm here for simplicity
   await exec(`npm init -y`);
   await exec(`npm pkg set type="module"`);
   const depsService = new DepsService();
@@ -49,9 +76,9 @@ export const createMastraProject = async () => {
 
   s.stop('Project created');
 
-  s.start('Installing npm dependencies');
-  await exec(`npm i zod`);
-  await exec(`npm i typescript tsx @types/node --save-dev`);
+  s.start(`Installing ${pm} dependencies`);
+  await exec(`${pm} i zod`);
+  await exec(`${pm} i typescript tsx @types/node --save-dev`);
   await exec(`echo '{
   "compilerOptions": {
     "target": "ES2022",
@@ -72,13 +99,15 @@ export const createMastraProject = async () => {
     ".mastra"
   ]
 }' > tsconfig.json`);
-  s.stop('NPM dependencies installed');
+
+  s.stop(`${pm} dependencies installed`);
   s.start('Installing mastra');
-  await exec(`npm i -D mastra@latest`);
+  const versionTag = createVersionTag ? `@${createVersionTag}` : '@latest';
+  await execWithTimeout(`${pm} i -D mastra${versionTag}`);
   s.stop('mastra installed');
 
   s.start('Installing @mastra/core');
-  await exec(`npm i @mastra/core@latest`);
+  await execWithTimeout(`${pm} i @mastra/core${versionTag}`);
   s.stop('@mastra/core installed');
 
   s.start('Adding .gitignore');

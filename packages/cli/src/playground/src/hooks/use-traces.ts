@@ -6,7 +6,7 @@ import usePolling from '@/lib/polls';
 import type { RefinedTrace } from '@/domains/traces/types';
 import { refineTraces } from '@/domains/traces/utils';
 
-export const useTraces = (componentName: string) => {
+export const useTraces = (componentName: string, isWorkflow: boolean = false) => {
   const [traces, setTraces] = useState<RefinedTrace[] | null>(null);
 
   const fetchFn = useCallback(async () => {
@@ -17,7 +17,7 @@ export const useTraces = (componentName: string) => {
         throw new Error(error?.error || 'Error fetching traces');
       }
       const traces = await res.json();
-      const refinedTraces = refineTraces(traces?.traces || []);
+      const refinedTraces = refineTraces(traces?.traces || [], isWorkflow);
       return refinedTraces;
     } catch (error) {
       throw error;
