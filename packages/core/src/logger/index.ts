@@ -10,6 +10,7 @@ export const RegisteredLogger = {
   WORKFLOW: 'WORKFLOW',
   LLM: 'LLM',
   TTS: 'TTS',
+  VOICE: 'VOICE',
   VECTOR: 'VECTOR',
   BUNDLER: 'BUNDLER',
   DEPLOYER: 'DEPLOYER',
