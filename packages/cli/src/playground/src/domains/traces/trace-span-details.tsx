@@ -46,7 +46,7 @@ export function SpanDetail() {
         </span>
         <h3 className="text-[0.9rem] font-medium">{span?.name}</h3>
       </div>
-      <div className="grid grid-cols-3 px-6">
+      <div className="grid grid-cols-3 gap-1 px-6">
         <div className="flex flex-col gap-1">
           <span className="text-xs text-mastra-el-3">Duration</span>
           <span className="font-mono text-xs"> {duration ? formatDuration(duration) : ''}ms</span>

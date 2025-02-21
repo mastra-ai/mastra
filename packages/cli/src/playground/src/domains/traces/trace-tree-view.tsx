@@ -1,4 +1,4 @@
-import { useContext, useState } from 'react';
+import { useContext, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 
@@ -13,10 +13,12 @@ export function TreeNode({ node, depth = 0 }: { node: SpanNode; depth?: number }
   const hasChildren = node.children && node.children.length > 0;
   const { setOpenDetail, setSpan, openDetail, span } = useContext(TraceContext);
 
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const widthPercentage = Math.min(node.relativePercentage ? node?.relativePercentage * 100 : 0, 100);
 
   return (
-    <div>
+    <div ref={containerRef}>
       <Button
         variant={'ghost'}
         className={cn('relative flex w-full items-center justify-start gap-2 py-3 pr-1 text-sm', {
@@ -53,10 +55,15 @@ export function TreeNode({ node, depth = 0 }: { node: SpanNode; depth?: number }
         ) : null}
         <div className="flex w-full gap-4 pr-4">
           <p
-            className={cn('max-w-[400px] truncate text-sm', {
+            className={cn('max-w-[250px] text-sm', {
               'text-white': node?.status?.code === 0,
               'text-[#FF4500]': node?.status?.code !== 0,
               'px-1': depth === 0,
+              truncate:
+                containerRef.current?.offsetWidth &&
+                containerRef.current?.offsetWidth < 450 &&
+                depth > 1 &&
+                node.name?.length > 16,
             })}
           >
             {node.name}
