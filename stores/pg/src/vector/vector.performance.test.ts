@@ -65,12 +65,12 @@ describe('PostgreSQL Index Performance', () => {
 
   const indexConfigs: IndexTestConfig[] = [
     { type: 'flat' }, // Test flat/linear search as baseline
-    { type: 'ivfflat', ivf: { lists: 100 } }, // Test IVF with fixed lists
-    { type: 'ivfflat', ivf: { dynamic: true } }, // Test IVF with dynamic lists
-    { type: 'ivfflat', ivf: { lists: 100 }, rebuild: true }, // Test IVF with fixed lists and rebuild
-    { type: 'ivfflat', ivf: { dynamic: true }, rebuild: true }, // Test IVF with dynamic lists and rebuild
-    { type: 'hnsw', hnsw: { m: 16, efConstruction: 64 } }, // Default settings
-    { type: 'hnsw', hnsw: { m: 64, efConstruction: 256 } }, // Maximum quality
+    // { type: 'ivfflat', ivf: { lists: 100 } }, // Test IVF with fixed lists
+    // { type: 'ivfflat', ivf: { dynamic: true } }, // Test IVF with dynamic lists
+    // { type: 'ivfflat', ivf: { lists: 100 }, rebuild: true }, // Test IVF with fixed lists and rebuild
+    // { type: 'ivfflat', ivf: { dynamic: true }, rebuild: true }, // Test IVF with dynamic lists and rebuild
+    // { type: 'hnsw', hnsw: { m: 16, efConstruction: 64 } }, // Default settings
+    // { type: 'hnsw', hnsw: { m: 64, efConstruction: 256 } }, // Maximum quality
   ];
   beforeAll(async () => {
     // Initialize PgVector
@@ -91,12 +91,11 @@ describe('PostgreSQL Index Performance', () => {
 
   // Combine all test configs
   const allConfigs: TestConfig[] = [
-    ...baseTestConfigs.basicTests.dimension,
-    // ...baseTestConfigs.basicTests.size,
-    // ...baseTestConfigs.basicTests.k,
-    // ...baseTestConfigs.practicalTests,
-    // ...baseTestConfigs.stressTests,
+    ...baseTestConfigs.dimension,
+    ...baseTestConfigs.k,
+    // ...baseTestConfigs.size,
     // ...baseTestConfigs.smokeTests,
+    // ...baseTestConfigs.stressTests,
   ];
 
   // For each index config
@@ -131,7 +130,11 @@ describe('PostgreSQL Index Performance', () => {
               await vectorDB.createIndex(testIndexName, testConfig.dimension, 'cosine', indexConfig);
               await vectorDB.upsert(testIndexName, testVectors, metadata, vectorIds);
               if (indexConfig.rebuild) {
-                await vectorDB.rebuildIndex(testIndexName, indexConfig);
+                await vectorDB.rebuildIndex(testIndexName, {
+                  m: indexConfig.hnsw?.m,
+                  efConstruction: indexConfig.hnsw?.efConstruction,
+                  lists: indexConfig.ivf?.lists,
+                });
               }
               await smartWarmup(vectorDB, testIndexName, indexConfig.type, testConfig.dimension, testConfig.k);
 
@@ -212,15 +215,13 @@ describe('PostgreSQL Index Performance', () => {
 });
 
 function analyzeResults(results: TestResult[]) {
-  const byDimension = groupBy(results, 'dimension');
+  const byType = groupBy(results, (r: TestResult) => r.indexConfig.type);
+  Object.entries(byType).forEach(([type, typeResults]) => {
+    console.log(`\n=== ${type.toUpperCase()} Index Analysis ===\n`);
 
-  Object.entries(byDimension).forEach(([dim, dimResults]) => {
-    console.log(`\n=== Analysis for ${dim} dimensions ===\n`);
-
-    const byType = groupBy(dimResults, (r: TestResult) => r.indexConfig.type);
-
-    Object.entries(byType).forEach(([type, typeResults]) => {
-      console.log(`\n--- ${type.toUpperCase()} Index Analysis ---\n`);
+    const byDimension = groupBy(typeResults, (r: TestResult) => r.dimension.toString());
+    Object.entries(byDimension).forEach(([dim, dimResults]) => {
+      console.log(`\n--- Analysis for ${dim} dimensions ---\n`);
 
       // Recall Analysis
       console.log('Recall Analysis:');
@@ -235,7 +236,7 @@ function analyzeResults(results: TestResult[]) {
       // Group by size and config first, then show distributions together
       const recallData = Object.values(
         groupBy(
-          typeResults,
+          dimResults,
           (r: any) => `${r.size}-${r.k}-${type === 'ivfflat' ? r.metrics.latency.lists : r.indexConfig.hnsw?.m}`,
           (results: any[]) => {
             // Sort by distribution type for consistent ordering
@@ -282,7 +283,7 @@ function analyzeResults(results: TestResult[]) {
 
       const latencyData = Object.values(
         groupBy(
-          typeResults,
+          dimResults,
           (r: any) => `${r.size}-${r.k}-${type === 'ivfflat' ? r.metrics.latency.lists : r.indexConfig.hnsw?.m}`,
           (results: any[]) => {
             const sortedResults = [...results].sort(
@@ -328,7 +329,7 @@ function analyzeResults(results: TestResult[]) {
         ];
         const clusteringData = Object.values(
           groupBy(
-            typeResults,
+            dimResults,
             (r: any) => r.size.toString(),
             (results: any[]) => {
               const sortedResults = [...results].sort(

@@ -201,7 +201,7 @@ export class PgVector extends MastraVector {
     }
   }
 
-  async configureIndex(
+  private async configureIndex(
     indexName: string,
     metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
     indexConfig: IndexConfig = { type: 'ivfflat' },
@@ -251,18 +251,28 @@ export class PgVector extends MastraVector {
     }
   }
 
-  async rebuildIndex(indexName: string, newConfig?: IndexConfig): Promise<void> {
+  async rebuildIndex(
+    indexName: string,
+    newConfig?: {
+      m?: number;
+      efConstruction?: number;
+      lists?: number;
+    },
+  ): Promise<void> {
     const indexInfo = await this.describeIndex(indexName);
-    const config: IndexConfig = newConfig ?? {
+    const hnswConfig =
+      indexInfo.type === 'hnsw'
+        ? {
+            m: newConfig?.m ?? indexInfo.config.m,
+            efConstruction: newConfig?.efConstruction ?? indexInfo.config.efConstruction,
+          }
+        : undefined;
+    const ivfConfig = indexInfo.type === 'ivfflat' ? { lists: newConfig?.lists ?? indexInfo.config.lists } : undefined;
+    const config: IndexConfig = {
       type: indexInfo.type as 'ivfflat' | 'hnsw' | 'flat',
-      ...(indexInfo.type === 'hnsw' ? { hnsw: indexInfo.config } : { ivf: { lists: indexInfo.config?.lists } }),
+      ...(hnswConfig && { hnsw: hnswConfig }),
+      ...(ivfConfig && { ivf: ivfConfig }),
     };
-    // Validate that new config matches index type
-    if (newConfig && newConfig.type !== indexInfo.type) {
-      throw new Error(
-        `Cannot change index type during rebuild. Current: ${indexInfo.type}, Requested: ${newConfig.type}`,
-      );
-    }
     await this.configureIndex(indexName, indexInfo.metric, config);
   }
 
@@ -333,7 +343,7 @@ export class PgVector extends MastraVector {
           : 'cosine';
 
       // Parse index configuration
-      const config: { m?: number; efConstruction?: number; lists?: number; probes?: number } = {};
+      const config: { m?: number; efConstruction?: number; lists?: number } = {};
 
       if (index_method === 'hnsw') {
         const m = index_def.match(/m\s*=\s*'?(\d+)'?/)?.[1];

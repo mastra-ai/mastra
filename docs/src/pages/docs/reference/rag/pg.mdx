@@ -47,6 +47,7 @@ It provides robust vector similarity search capabilities within your existing Po
       name: "indexConfig",
       type: "IndexConfig",
       isOptional: true,
+      defaultValue: "{ type: 'ivfflat' }",
       description: "Index configuration",
     },
   ]}
@@ -60,6 +61,29 @@ It provides robust vector similarity search capabilities within your existing Po
       name: "type",
       type: "'flat' | 'hnsw' | 'ivfflat'",
       description: "Index type",
+      defaultValue: "ivfflat",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "flat",
+              type: "flat",
+              description: "Sequential scan (no index) that performs exhaustive search.",
+            },
+            {
+              name: "ivfflat",
+              type: "ivfflat",
+              description: "Clusters vectors into lists for approximate search.",
+            },
+            {
+              name: "hnsw",
+              type: "hnsw",
+              description: "Graph-based index offering fast search times and high recall.",
+            },
+          ],
+        },
+      ],
     },
     {
       name: "ivf",
@@ -74,6 +98,12 @@ It provides robust vector similarity search capabilities within your existing Po
               name: "lists",
               type: "number",
               description: "Number of lists (default: 100)",
+              isOptional: true,
+            },
+            {
+              name: "dynamic",
+              type: "boolean",
+              description: "Automatically calculate lists based on dataset size (default: false)",
               isOptional: true,
             },
           ],
@@ -107,6 +137,32 @@ It provides robust vector similarity search capabilities within your existing Po
     },
   ]}
 />
+
+#### Example configurations:
+
+```typescript copy
+// IVF index (recommended for most use cases)
+const ivfConfig = {
+  type: 'ivfflat',
+  ivf: {
+    lists: 100,  // or use dynamic: true for auto-scaling
+  }
+};
+
+// HNSW index (recommended for high-recall requirements)
+const hnswConfig = {
+  type: 'hnsw',
+  hnsw: {
+    m: 16,
+    efConstruction: 64
+  }
+};
+
+// Flat index (only recommended for small datasets)
+const flatConfig = {
+  type: 'flat'
+};
+```
 
 ### upsert()
 
@@ -254,6 +310,43 @@ interface PGIndexStats {
 ### disconnect()
 
 Closes the database connection pool. Should be called when done using the store.
+
+### rebuildIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to rebuild",
+    },
+    {
+      name: "newConfig",
+      type: "{ m?: number; efConstruction?: number; lists?: number }",
+      isOptional: true,
+      description: "New configuration parameters for the existing index.",
+    },
+  ]}
+/>
+
+Rebuilds an existing index with optional new configuration parameters. The index type cannot be changed during rebuild (e.g., cannot switch from HNSW to IVF).
+- For HNSW indexes: `m` and `efConstruction`
+- For IVF indexes: `lists`
+- For flat indexes: no configuration needed
+
+#### Example:
+```typescript copy
+// Rebuild HNSW index with new parameters
+await pgVector.rebuildIndex("my_hnsw_index", {
+  m: 24,                 // Increase connections
+  efConstruction: 128    // Increase build-time complexity
+});
+
+// Rebuild IVF index with new parameters
+await pgVector.rebuildIndex("my_ivf_index", {
+  lists: 200            // Increase number of lists
+});
+```
 
 ## Response Types
 
