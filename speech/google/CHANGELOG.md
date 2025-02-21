@@ -1,5 +1,12 @@
 # @mastra/speech-google
 
+## 0.1.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [fe0fd01]
+  - @mastra/core@0.4.0-alpha.1
+
 ## 0.1.3-alpha.0
 
 ### Patch Changes
