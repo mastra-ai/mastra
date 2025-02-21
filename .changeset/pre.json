@@ -123,7 +123,15 @@
     "@mastra/vector-pinecone": "0.1.2",
     "@mastra/vector-qdrant": "0.1.2",
     "@mastra/vector-upstash": "0.1.2",
-    "@mastra/vector-vectorize": "0.1.2"
+    "@mastra/vector-vectorize": "0.1.2",
+    "examples-agent": "0.0.1"
   },
-  "changesets": []
+  "changesets": [
+    "fifty-moons-yawn",
+    "huge-regions-attend",
+    "lovely-results-open",
+    "quiet-cities-lead",
+    "ten-badgers-relax",
+    "tiny-worms-turn"
+  ]
 }

@@ -1,5 +1,12 @@
 # @mastra/store-upstash
 
+## 0.0.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [2fc618f]
+  - @mastra/core@0.4.0-alpha.0
+
 ## 0.0.2
 
 ### Patch Changes
