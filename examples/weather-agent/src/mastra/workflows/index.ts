@@ -48,7 +48,7 @@ const fetchWeather = new Step({
   inputSchema: z.object({
     city: z.string().describe('The city to get the weather for'),
   }),
-  execute: async ({ context, mastra }) => {
+  execute: async ({ context }) => {
     const triggerData = context?.getStepPayload<{ city: string }>('trigger');
 
     if (!triggerData) {
