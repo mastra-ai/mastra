@@ -13,36 +13,60 @@
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
       }
     },
     "./*": {
       "import": {
         "types": "./dist/*/index.d.ts",
         "default": "./dist/*/index.js"
+      },
+      "require": {
+        "types": "./dist/*/index.d.ts",
+        "default": "./dist/*/index.cjs"
       }
     },
     "./vector/libsql": {
       "import": {
         "types": "./dist/vector/libsql/index.d.ts",
         "default": "./dist/vector/libsql/index.js"
+      },
+      "require": {
+        "types": "./dist/vector/libsql/index.d.ts",
+        "default": "./dist/vector/libsql/index.cjs"
       }
     },
     "./utils": {
       "import": {
         "types": "./dist/utils.d.ts",
         "default": "./dist/utils.js"
+      },
+      "require": {
+        "types": "./dist/utils.d.ts",
+        "default": "./dist/utils.cjs"
       }
     },
     "./base": {
       "import": {
         "types": "./dist/base.d.ts",
         "default": "./dist/base.js"
+      },
+      "require": {
+        "types": "./dist/base.d.ts",
+        "default": "./dist/base.cjs"
       }
     },
     "./telemetry/otel-vendor": {
       "import": {
         "types": "./dist/telemetry/otel-vendor.d.ts",
         "default": "./dist/telemetry/otel-vendor.js"
+      },
+      "require": {
+        "types": "./dist/telemetry/otel-vendor.d.ts",
+        "default": "./dist/telemetry/otel-vendor.cjs"
       }
     },
     "./package.json": "./package.json"
@@ -52,7 +76,7 @@
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
     "lint": "eslint .",
-    "build": "tsup --config tsup.config.ts",
+    "build": "tsup --config tsup.config.ts --format esm,cjs",
     "build:watch": "pnpm build --watch",
     "size": "size-limit",
     "test": "vitest run"
