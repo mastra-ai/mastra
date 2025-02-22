@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "@speechify/api-sdk": "^1.50.2",
+    "@speechify/api-sdk": "^2.3.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
