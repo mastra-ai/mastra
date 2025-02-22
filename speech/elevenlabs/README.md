@@ -1,70 +1,46 @@
-# @mastra/speech-elevenlabs
+# ⚠️ DEPRECATED
 
-ElevenLabs Speech integration for Mastra, providing Text-to-Speech (TTS) capabilities using ElevenLabs' advanced AI voice technology.
+This package has been deprecated in favor of [@mastra/voice-elevenlabs](https://github.com/mastra-ai/mastra/tree/main/voice/elevenlabs).
 
-## Installation
+## Migration
 
-```bash
-npm install @mastra/speech-elevenlabs
-```
+To migrate to the new package:
 
-## Configuration
-
-The module requires the following environment variable:
+1. Install the new package:
 
 ```bash
-ELEVENLABS_API_KEY=your_api_key
+npm install @mastra/voice-elevenlabs
 ```
 
-## Usage
+2. Update your imports:
 
-```typescript
-import { ElevenLabsTTS } from '@mastra/speech-elevenlabs';
-
-// Initialize with configuration
-const tts = new ElevenLabsTTS({
-  model: {
-    name: 'Adam', // Default voice
-    apiKey: 'your-api-key', // Optional, can use ELEVENLABS_API_KEY env var
-  },
-});
-
-// List available voices
-const voices = await tts.voices();
-
-// Generate speech
-const result = await tts.generate({
-  voice: 'Adam',
-  text: 'Hello from Mastra!',
-});
-
-// Stream speech
-const stream = await tts.stream({
-  voice: 'Adam',
-  text: 'Hello from Mastra!',
-});
+```diff
+- import { ElevenLabsTTS } from '@mastra/speech-elevenlabs'
++ import { ElevenLabsVoice } from '@mastra/voice-elevenlabs'
 ```
 
-## Features
+3. Update your code:
 
-- High-fidelity Text-to-Speech synthesis
-- Multiple premium voice options
-- Streaming support
-- Highly natural and expressive speech
-- Voice cloning capabilities (with appropriate subscription)
+```diff
+- const tts = new ElevenLabsTTS({
+-   model: {
+-     name: 'Adam',
+-     apiKey: 'your-api-key'
+-   }
+- });
++ const voice = new ElevenLabsVoice({
++   speechModel: {
++     name: 'eleven_multilingual_v2',
++     apiKey: 'your-api-key'
++   },
++   speaker: 'Adam'
++ });
 
-## Voice Options
+- const voices = await tts.voices();
++ const speakers = await voice.getSpeakers();
 
-ElevenLabs provides a variety of premium voices with different characteristics:
+- const result = await tts.generate({ voice: 'Adam', text: 'Hello' });
++ const stream = await voice.speak('Hello', { speaker: 'Adam' });
+```
 
-- Adam (Male)
-- Antoni (Male)
-- Arnold (Male)
-- Bella (Female)
-- Dorothy (Female)
-- Elli (Female)
-- Josh (Male)
-- Rachel (Female)
-- Sam (Male)
-
-View the complete list in the `voices.ts` file or [ElevenLabs' documentation](https://docs.elevenlabs.io/api-reference/voices).
+All functionality remains the same - only the API structure has changed to be more consistent with other voice packages.

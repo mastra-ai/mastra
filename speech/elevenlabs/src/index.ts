@@ -73,3 +73,8 @@ export class ElevenLabsTTS extends MastraTTS {
     };
   }
 }
+
+throw new Error(
+  '@mastra/speech-elevenlabs is deprecated. Please use @mastra/voice-elevenlabs instead. ' +
+    "Update your imports from '@mastra/speech-elevenlabs' to '@mastra/voice-elevenlabs'.",
+);
