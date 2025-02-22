@@ -1,70 +1,43 @@
-# @mastra/speech-speechify
+# ⚠️ DEPRECATED
 
-Mastra Text-to-Speech integration with Speechify's API.
+This package has been deprecated in favor of [@mastra/voice-speechify](https://github.com/mastra-ai/mastra/tree/main/voice/speechify).
 
-## Installation
+## Migration
 
-```bash
-npm install @mastra/speech-speechify
-```
+To migrate to the new package:
 
-## Usage
-
-First, set your Speechify API key in your environment:
+1. Install the new package:
 
 ```bash
-export SPEECHIFY_API_KEY=your_api_key_here
+npm install @mastra/voice-speechify
 ```
 
-Then use it in your code:
+2. Update your imports:
 
-```typescript
-import { SpeechifyTTS } from '@mastra/speech-speechify';
-
-const tts = new SpeechifyTTS({
-  model: {
-    name: 'simba-multilingual',
-    voice: 'george', // Optional, defaults to 'george'
-    properties: {
-      // Optional additional properties
-      audioFormat: 'mp3',
-      // ... other Speechify options
-    },
-  },
-});
-
-// Generate audio
-const { audioResult } = await tts.generate({ text: 'Hello world' });
-
-// Or stream it
-const { audioResult: stream } = await tts.stream({ text: 'Hello world' });
+```diff
+- import { SpeechifyTTS } from '@mastra/speech-speechify'
++ import { SpeechifyVoice } from '@mastra/voice-speechify'
 ```
 
-## Configuration
+3. Update your code:
 
-The `SpeechifyTTS` constructor accepts the following options:
+```diff
+- const tts = new SpeechifyTTS({
+-   model: {
+-     name: 'simba-multilingual',
+-     voice: 'george',
+-   }
+- });
++ const voice = new SpeechifyVoice({
++   speechModel: {
++     name: 'simba-english',
++   },
++   speaker: 'george'
++ });
 
-```typescript
-interface SpeechifyConfig {
-  name: string; // Speechify model name
-  apiKey?: string; // Optional API key (can also use env var)
-  voice?: SpeechifyVoice; // Optional voice ID
-  properties?: {
-    // Optional additional properties
-    audioFormat?: string;
-    // ... other Speechify options
-  };
-}
+- const voices = await tts.voices();
++ const speakers = await voice.getSpeakers();
+
+- const { audioResult } = await tts.generate({ text: 'Hello' });
++ const stream = await voice.speak('Hello');
 ```
-
-## Available Voices
-
-You can get a list of available voices:
-
-```typescript
-const voices = await tts.voices();
-```
-
-## License
-
-MIT
