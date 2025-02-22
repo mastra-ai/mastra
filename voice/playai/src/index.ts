@@ -139,26 +139,6 @@ interface PlayAIConfig {
   userId?: string;
 }
 
-// type PlayAIVoiceId = string;
-
-// interface PlayAIJobResponse {
-//   id: string;
-//   createdAt: string;
-//   input: {
-//     model: string;
-//     text: string;
-//     voice: string;
-//   };
-//   completedAt: string;
-//   output: {
-//     status: string;
-//     url: string;
-//     contentType: string;
-//     fileSize: number;
-//     duration: number;
-//   };
-// }
-
 export class PlayAIVoice extends MastraVoice {
   private baseUrl = 'https://api.play.ai/api/v1';
   private userId: string;
@@ -201,35 +181,6 @@ export class PlayAIVoice extends MastraVoice {
 
     return response;
   }
-
-  // private async pollJobStatus(jobId: string, maxAttempts = 60, interval = 1000): Promise<ArrayBuffer> {
-  //   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-  //     const response = await this.makeRequest(`/tts/${jobId}`, undefined, 'GET');
-  //     const jobStatus = (await response.json()) as PlayAIJobResponse;
-
-  //     // console.log(jobStatus);
-
-  //     if (jobStatus.output.status === 'COMPLETED' && jobStatus.output?.url) {
-  //       // Fetch the actual audio file
-  //       const audioResponse = await fetch(jobStatus.output.url);
-  //       if (!audioResponse.ok) {
-  //         throw new Error('Failed to fetch audio file');
-  //       }
-  //       return await audioResponse.arrayBuffer();
-  //     }
-
-  //     if (jobStatus.output.status === 'FAILED') {
-  //       const errorMessage = 'TTS generation failed';
-  //       const errorType = 'Unknown';
-  //       throw new Error(`PlayAI Error (${errorType}): ${errorMessage}`);
-  //     }
-
-  //     // Wait before next poll
-  //     await new Promise(resolve => setTimeout(resolve, interval));
-  //   }
-
-  //   throw new Error('TTS generation timed out');
-  // }
 
   private async streamToString(stream: NodeJS.ReadableStream): Promise<string> {
     const chunks: Buffer[] = [];
