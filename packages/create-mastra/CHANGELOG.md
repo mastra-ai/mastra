@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.4-alpha.2
+
+### Patch Changes
+
+- cd80117: pnpm create mastra versionTag discovery
+
 ## 0.1.4-alpha.1
 
 ### Patch Changes
