@@ -34,7 +34,7 @@ export function getPackageManagerInstallCommand(pm: string): string {
     case 'yarn':
       return 'add';
     case 'pnpm':
-      return 'install';
+      return 'add';
     default:
       return 'install';
   }
