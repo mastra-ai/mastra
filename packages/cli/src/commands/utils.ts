@@ -26,3 +26,16 @@ export function getPackageManager(): string {
 
   return 'npm'; // Default fallback
 }
+
+export function getPackageManagerInstallCommand(pm: string): string {
+  switch (pm) {
+    case 'npm':
+      return 'install';
+    case 'yarn':
+      return 'add';
+    case 'pnpm':
+      return 'install';
+    default:
+      return 'install';
+  }
+}

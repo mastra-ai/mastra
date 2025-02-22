@@ -60,7 +60,7 @@ export async function getCreateVersionTag(): Promise<string | undefined> {
       return tag;
     }
   } catch (error) {
-    console.error('We could not resolve the create-mastra version tag, falling back to "latest"', error);
+    console.error('We could not resolve the create-mastra version tag, falling back to "latest"');
   }
 
   return 'latest';
