@@ -43,6 +43,68 @@ It provides robust vector similarity search capabilities within your existing Po
       defaultValue: "cosine",
       description: "Distance metric for similarity search",
     },
+    {
+      name: "indexConfig",
+      type: "IndexConfig",
+      isOptional: true,
+      description: "Index configuration",
+    },
+  ]}
+/>
+
+#### IndexConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: "'flat' | 'hnsw' | 'ivfflat'",
+      description: "Index type",
+    },
+    {
+      name: "ivf",
+      type: "IVFConfig",
+      isOptional: true,
+      description: "IVF configuration",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "lists",
+              type: "number",
+              description: "Number of lists (default: 100)",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "hnsw",
+      type: "HNSWConfig",
+      isOptional: true,
+      description: "HNSW configuration",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "m",
+              type: "number",
+              description: "Max number of connections (default: 16)",
+              isOptional: true,
+            },
+            {
+              name: "efConstruction",
+              type: "number",
+              description: "Build-time complexity (default: 64)",
+              isOptional: true,
+            },
+          ],
+        },
+      ]
+    },
   ]}
 />
 
@@ -116,6 +178,31 @@ It provides robust vector similarity search capabilities within your existing Po
       defaultValue: "0",
       description: "Minimum similarity score threshold",
     },
+    {
+      name: "options",
+      type: "{ ef?: number; probes?: number }",
+      isOptional: true,
+      description: "Additional options for HNSW and IVF indexes",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "ef",
+              type: "number",
+              description: "HNSW search parameter",
+              isOptional: true,
+            },
+            {
+              name: "probes",
+              type: "number",
+              description: "IVF search parameter",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
@@ -138,10 +225,17 @@ Returns an array of index names as strings.
 Returns:
 
 ```typescript copy
-interface IndexStats {
+interface PGIndexStats {
   dimension: number;
   count: number;
   metric: "cosine" | "euclidean" | "dotproduct";
+  type: "flat" | "hnsw" | "ivfflat";
+  config: {
+    m?: number;
+    efConstruction?: number;
+    lists?: number;
+    probes?: number;
+  };
 }
 ```
 
