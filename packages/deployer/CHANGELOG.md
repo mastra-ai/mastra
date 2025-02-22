@@ -1,5 +1,14 @@
 # @mastra/deployer
 
+## 0.1.3
+
+### Patch Changes
+
+- 5297264: Fix build errors by changing contracts
+- Updated dependencies [2fc618f]
+- Updated dependencies [fe0fd01]
+  - @mastra/core@0.4.0
+
 ## 0.1.3-alpha.1
 
 ### Patch Changes
