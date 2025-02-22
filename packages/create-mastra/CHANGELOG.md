@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.4-alpha.3
+
+### Patch Changes
+
+- bd98fb6: Fix yarn create mastra, use correct install commnad for deps install
+
 ## 0.1.4-alpha.2
 
 ### Patch Changes
