@@ -1,6 +1,48 @@
-# @mastra/speech-playai
+# ⚠️ DEPRECATED
 
-PlayAI Speech integration for Mastra, providing Text-to-Speech (TTS) capabilities using PlayAI's voice synthesis technology.
+This package has been deprecated in favor of [@mastra/voice-playai](https://github.com/mastra-ai/mastra/tree/main/voice/playai).
+
+## Migration
+
+To migrate to the new package:
+
+1. Install the new package:
+
+```bash
+npm install @mastra/voice-playai
+```
+
+2. Update your imports:
+
+```diff
+- import { PlayAITTS } from '@mastra/speech-playai'
++ import { PlayAIVoice } from '@mastra/voice-playai'
+```
+
+3. Update your code:
+
+```diff
+- const tts = new PlayAITTS({
+-   model: {
+-     name: 'PlayDialog',
+-     voice: 'angelo',
+-   }
+- });
++ const voice = new PlayAIVoice({
++   speechModel: {
++     name: 'PlayDialog',
++   },
++   speaker: 's3://voice-cloning-zero-shot/baf1ef41-36b6-428c-9bdf-50ba54682bd8/original/manifest.json'
++ });
+
+- const voices = await tts.voices();
++ const speakers = await voice.getSpeakers();
+
+- const { audioResult } = await tts.generate({ text: 'Hello' });
++ const stream = await voice.speak('Hello');
+```
+
+All functionality remains the same - only the API structure has changed to be more consistent with other voice packages.
 
 ## Installation
 

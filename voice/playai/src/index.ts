@@ -1,6 +1,7 @@
-import { MastraTTS } from '@mastra/core/tts';
+import { MastraVoice } from '@mastra/core/voice';
+import { PassThrough } from 'stream';
 
-interface PlayAIVoice {
+interface PlayAIVoiceInfo {
   name: string;
   accent: string;
   gender: 'M' | 'F';
@@ -9,7 +10,7 @@ interface PlayAIVoice {
   id: string;
 }
 
-export const PLAYAI_VOICES: PlayAIVoice[] = [
+export const PLAYAI_VOICES: PlayAIVoiceInfo[] = [
   {
     name: 'Angelo',
     accent: 'US',
@@ -132,150 +133,123 @@ export const PLAYAI_VOICES: PlayAIVoice[] = [
   },
 ];
 
-interface PlayAITTSConfig {
-  name: 'PlayDialog' | 'Play3.0-mini';
+interface PlayAIConfig {
+  name?: 'PlayDialog' | 'Play3.0-mini';
   apiKey?: string;
+  userId?: string;
 }
 
-interface PlayAIJobResponse {
-  id: string;
-  createdAt: string;
-  input: {
-    model: string;
-    text: string;
-    voice: string;
-  };
-  completedAt: string;
-  output: {
-    status: string;
-    url: string;
-    contentType: string;
-    fileSize: number;
-    duration: number;
-  };
-}
-
-export class PlayAITTS extends MastraTTS {
+export class PlayAIVoice extends MastraVoice {
   private baseUrl = 'https://api.play.ai/api/v1';
   private userId: string;
-  constructor({ model, userId }: { model: PlayAITTSConfig; userId: string }) {
+
+  constructor({ speechModel, speaker }: { speechModel?: PlayAIConfig; speaker?: string } = {}) {
     super({
-      model: {
-        provider: 'PLAYAI',
-        ...model,
+      speechModel: {
+        name: speechModel?.name ?? 'PlayDialog',
+        apiKey: speechModel?.apiKey ?? process.env.PLAYAI_API_KEY,
       },
+      speaker: speaker ?? PLAYAI_VOICES[0]?.id,
     });
+    const userId = speechModel?.userId ?? process.env.PLAYAI_USER_ID;
+    if (!userId) {
+      throw new Error('userId is required');
+    }
+
     this.userId = userId;
   }
 
-  private get headers() {
-    return {
-      Authorization: `Bearer ${process.env.PLAYAI_API_KEY || this.model.apiKey}`,
+  private async makeRequest(endpoint: string, payload?: any, method: 'GET' | 'POST' = 'POST') {
+    const headers = new Headers({
+      Authorization: `Bearer ${this.speechModel?.apiKey}`,
       'Content-Type': 'application/json',
       'X-USER-ID': this.userId,
-    };
-  }
+    });
 
-  private async makeRequest(endpoint: string, payload?: any, method: 'GET' | 'POST' = 'POST') {
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method,
-      headers: this.headers,
+      headers,
       body: payload ? JSON.stringify(payload) : undefined,
     });
 
     if (!response.ok) {
-      const error = (await response.json()) as { message: string };
+      const error = await response.json();
 
+      // @ts-expect-error - PlayAI API returns an error object but we don't type it
       throw new Error(`PlayAI API Error: ${error.message || response.statusText}`);
     }
 
     return response;
   }
 
-  private async pollJobStatus(jobId: string, maxAttempts = 60, interval = 1000): Promise<ArrayBuffer> {
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const response = await this.makeRequest(`/tts/${jobId}`, undefined, 'GET');
-      const jobStatus = (await response.json()) as PlayAIJobResponse;
-
-      // console.log(jobStatus);
-
-      if (jobStatus.output.status === 'COMPLETED' && jobStatus.output?.url) {
-        // Fetch the actual audio file
-        const audioResponse = await fetch(jobStatus.output.url);
-        if (!audioResponse.ok) {
-          throw new Error('Failed to fetch audio file');
-        }
-        return await audioResponse.arrayBuffer();
-      }
-
-      if (jobStatus.output.status === 'FAILED') {
-        const errorMessage = 'TTS generation failed';
-        const errorType = 'Unknown';
-        throw new Error(`PlayAI Error (${errorType}): ${errorMessage}`);
-      }
-
-      // Wait before next poll
-      await new Promise(resolve => setTimeout(resolve, interval));
+  private async streamToString(stream: NodeJS.ReadableStream): Promise<string> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.from(chunk));
     }
-
-    throw new Error('TTS generation timed out');
+    return Buffer.concat(chunks).toString('utf-8');
   }
 
-  async generate({ text, voice }: { text: string; voice?: string }) {
-    const audio = await this.traced(async () => {
+  async speak(input: string | NodeJS.ReadableStream, options?: { speaker?: string }): Promise<NodeJS.ReadableStream> {
+    const text = typeof input === 'string' ? input : await this.streamToString(input);
+
+    return this.traced(async () => {
       const payload = {
         text,
-        voice,
-        model: this.model.name,
-      };
-
-      const response = await this.makeRequest('/tts', payload);
-      const location = response.headers.get('location');
-
-      if (!location) {
-        throw new Error('No job location returned from API');
-      }
-
-      // Extract the job ID from the location header
-      const jobId = location.split('/').pop();
-
-      if (!jobId) {
-        throw new Error('Could not parse job ID from location header');
-      }
-
-      // Poll the job status and get the final audio
-      const audioBuffer = await this.pollJobStatus(jobId);
-      return Buffer.from(audioBuffer);
-    }, 'tts.playai.generate')();
-
-    return {
-      audioResult: audio,
-    };
-  }
-
-  async stream({ text, voice }: { text: string; voice?: string }) {
-    const audioStream = await this.traced(async () => {
-      const payload = {
-        text,
-        voice,
-        model: this.model.name,
+        voice: options?.speaker || this.speaker,
+        model: this.speechModel?.name,
       };
 
       const response = await this.makeRequest('/tts/stream', payload);
-      return response.body;
-    }, 'tts.playai.stream')();
+      if (!response.body) {
+        throw new Error('No response body received');
+      }
 
-    return {
-      audioResult: audioStream,
-    };
+      // Create a PassThrough stream for the audio
+      const stream = new PassThrough();
+
+      // Process the stream
+      const reader = response.body.getReader();
+      (async () => {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              stream.end();
+              break;
+            }
+            stream.write(value);
+          }
+        } catch (error) {
+          stream.destroy(error as Error);
+        }
+      })();
+
+      return stream;
+    }, 'voice.playai.speak')();
   }
 
-  async voices() {
-    return this.traced(() => Promise.resolve(PLAYAI_VOICES), 'tts.playai.voices')();
+  async listen(
+    _input: NodeJS.ReadableStream,
+    _options?: Record<string, unknown>,
+  ): Promise<string | NodeJS.ReadableStream> {
+    throw new Error('PlayAI does not support speech recognition');
+  }
+
+  async getSpeakers() {
+    return this.traced(
+      () =>
+        Promise.resolve(
+          PLAYAI_VOICES.map(voice => ({
+            voiceId: voice.id,
+            name: voice.name,
+            accent: voice.accent,
+            gender: voice.gender,
+            age: voice.age,
+            style: voice.style,
+          })),
+        ),
+      'voice.playai.voices',
+    )();
   }
 }
-
-throw new Error(
-  '@mastra/speech-playai is deprecated. Please use @mastra/voice-playai instead. ' +
-    "Update your imports from '@mastra/speech-playai' to '@mastra/voice-playai'.",
-);
