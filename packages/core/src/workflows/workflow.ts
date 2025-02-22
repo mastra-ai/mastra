@@ -917,7 +917,21 @@ export class Workflow<
         });
 
         if (typeof stepConfig?.when === 'function') {
-          const conditionMet = await stepConfig.when({ context });
+          const conditionMet = await stepConfig.when({
+            context: {
+              ...context,
+              getStepPayload: ((stepId: string) => {
+                if (stepId === 'trigger') {
+                  return context.triggerData;
+                }
+                const result = context.steps[stepId];
+                if (result && result.status === 'success') {
+                  return result.output;
+                }
+                return undefined;
+              }) as WorkflowContext<TTriggerSchema>['getStepPayload'],
+            },
+          });
           if (conditionMet) {
             this.logger.debug(`Condition met for step ${stepNode.step.id}`, {
               stepId: stepNode.step.id,

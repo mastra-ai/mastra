@@ -225,8 +225,8 @@ describe('Workflow', () => {
         .step(step1)
         .then(step2, {
           when: async ({ context }) => {
-            const step1Result = context.steps.step1;
-            return step1Result && step1Result.status === 'success' && step1Result.output.count > 3;
+            const step1Result = context.getStepPayload<{ count: number }>('step1');
+            return step1Result ? step1Result.count > 3 : false;
           },
         })
         .commit();
