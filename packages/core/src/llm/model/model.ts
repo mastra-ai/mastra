@@ -1,16 +1,16 @@
-import { generateText, generateObject, jsonSchema, streamText, streamObject } from 'ai';
-import type { LanguageModel, Schema, CoreMessage } from 'ai';
+import type { CoreMessage, LanguageModel, Schema } from 'ai';
+import { generateObject, generateText, jsonSchema, streamObject, streamText } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import { z } from 'zod';
 import type { ZodSchema } from 'zod';
+import { z } from 'zod';
 
 import type {
   GenerateReturn,
-  LLMTextOptions,
   LLMInnerStreamOptions,
   LLMStreamObjectOptions,
   LLMStreamOptions,
   LLMTextObjectOptions,
+  LLMTextOptions,
   StreamReturn,
 } from '../';
 import type { MastraPrimitives } from '../../action';
@@ -173,6 +173,7 @@ export class MastraLLM extends MastraLLMBase {
     runId,
     temperature,
     toolChoice = 'auto',
+    telemetryOptions,
   }: LLMTextObjectOptions<T>) {
     const model = this.#model;
 
@@ -228,7 +229,10 @@ export class MastraLLM extends MastraLLMBase {
       ...argsForExecute,
       output: output as any,
       schema,
-      experimental_telemetry: this.experimental_telemetry,
+      experimental_telemetry: {
+        ...this.experimental_telemetry,
+        ...telemetryOptions,
+      },
     });
   }
 
@@ -242,6 +246,7 @@ export class MastraLLM extends MastraLLMBase {
     runId,
     temperature,
     toolChoice = 'auto',
+    telemetryOptions,
   }: LLMInnerStreamOptions) {
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {
@@ -298,7 +303,10 @@ export class MastraLLM extends MastraLLMBase {
     return await streamText({
       messages,
       ...argsForExecute,
-      experimental_telemetry: this.experimental_telemetry,
+      experimental_telemetry: {
+        ...this.experimental_telemetry,
+        ...telemetryOptions,
+      },
     });
   }
 
@@ -313,6 +321,7 @@ export class MastraLLM extends MastraLLMBase {
     runId,
     temperature,
     toolChoice = 'auto',
+    telemetryOptions,
   }: LLMStreamObjectOptions<T>) {
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming structured output`, {
@@ -384,7 +393,10 @@ export class MastraLLM extends MastraLLMBase {
       ...argsForExecute,
       output: output as any,
       schema,
-      experimental_telemetry: this.experimental_telemetry,
+      experimental_telemetry: {
+        ...this.experimental_telemetry,
+        ...telemetryOptions,
+      },
     });
   }
 
@@ -398,6 +410,7 @@ export class MastraLLM extends MastraLLMBase {
       runId,
       output = 'text',
       temperature,
+      telemetryOptions,
     }: LLMStreamOptions<Z> = {},
   ): Promise<GenerateReturn<Z>> {
     const msgs = this.convertToMessages(messages);
@@ -422,6 +435,7 @@ export class MastraLLM extends MastraLLMBase {
       tools,
       convertedTools,
       runId,
+      telemetryOptions,
     })) as unknown as GenerateReturn<Z>;
   }
 
@@ -436,6 +450,7 @@ export class MastraLLM extends MastraLLMBase {
       runId,
       output = 'text',
       temperature,
+      telemetryOptions,
     }: LLMStreamOptions<Z> = {},
   ) {
     const msgs = this.convertToMessages(messages);
@@ -450,6 +465,7 @@ export class MastraLLM extends MastraLLMBase {
         convertedTools,
         runId,
         temperature,
+        telemetryOptions,
       })) as unknown as StreamReturn<Z>;
     }
 
@@ -463,6 +479,7 @@ export class MastraLLM extends MastraLLMBase {
       convertedTools,
       runId,
       temperature,
+      telemetryOptions,
     })) as unknown as StreamReturn<Z>;
   }
 }
