@@ -109,3 +109,8 @@ export class DeepgramTTS extends MastraTTS {
 }
 
 export type { DeepgramConfig, DeepgramVoice, DeepgramModel };
+
+throw new Error(
+  '@mastra/speech-deepgram is deprecated. Please use @mastra/voice-deepgram instead. ' +
+    "Update your imports from '@mastra/speech-deepgram' to '@mastra/voice-deepgram'.",
+);

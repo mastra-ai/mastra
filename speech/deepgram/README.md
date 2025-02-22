@@ -1,67 +1,25 @@
-# @mastra/speech-deepgram
+# @mastra/speech-deepgram (DEPRECATED)
 
-Deepgram Speech integration for Mastra, providing Text-to-Speech (TTS) capabilities using Deepgram's advanced AI models.
+⚠️ **This package is deprecated.** Please use [@mastra/voice-deepgram](https://github.com/mastra-ai/mastra/tree/main/voice/deepgram) instead.
 
-## Installation
+## Migration
 
-```bash
-npm install @mastra/speech-deepgram
-```
+The new package `@mastra/voice-deepgram` provides both Text-to-Speech and Speech-to-Text capabilities. To migrate:
 
-## Configuration
-
-The module requires the following environment variable:
+1. Install the new package:
 
 ```bash
-DEEPGRAM_API_KEY=your_api_key
+npm uninstall @mastra/speech-deepgram
+npm install @mastra/voice-deepgram
 ```
 
-## Usage
+2. Update your imports:
 
 ```typescript
+// Old
 import { DeepgramTTS } from '@mastra/speech-deepgram';
-
-// Initialize with configuration
-const tts = new DeepgramTTS({
-  model: {
-    name: 'aura-asteria-en', // Default voice
-    apiKey: 'your-api-key', // Optional, can use DEEPGRAM_API_KEY env var
-  },
-});
-
-// List available voices
-const voices = await tts.voices();
-
-// Generate speech
-const result = await tts.generate({
-  voice: 'aura-asteria-en',
-  text: 'Hello from Mastra!',
-});
-
-// Stream speech
-const stream = await tts.stream({
-  voice: 'aura-asteria-en',
-  text: 'Hello from Mastra!',
-});
+// New
+import { DeepgramVoice } from '@mastra/voice-deepgram';
 ```
 
-## Features
-
-- High-quality Text-to-Speech synthesis
-- Multiple voice options
-- Streaming support
-- Natural-sounding voice synthesis
-- Low latency generation
-- Multiple output formats
-
-## Voice Options
-
-Deepgram provides several AI voices with different characteristics:
-
-- aura-asteria-en (Female, American)
-- aura-athena-en (Female, American)
-- aura-zeus-en (Male, American)
-- aura-hera-en (Female, American)
-- aura-orion-en (Male, American)
-
-View the complete list in the `voices.ts` file or [Deepgram's documentation](https://developers.deepgram.com/docs/text-to-speech).
+For detailed migration instructions and new features, please refer to the [@mastra/voice-deepgram documentation](https://github.com/mastra-ai/mastra/tree/main/voice/deepgram).
