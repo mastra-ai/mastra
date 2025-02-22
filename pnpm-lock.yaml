@@ -2076,7 +2076,7 @@ importers:
         version: 7.50.0(@types/node@22.13.4)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@4.34.8)
+        version: 3.0.3(rollup@3.29.5)
       '@size-limit/preset-small-lib':
         specifier: ^11.1.4
         version: 11.2.0(size-limit@11.2.0)
@@ -2137,7 +2137,7 @@ importers:
         version: 7.50.0(@types/node@22.13.4)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@3.29.5)
+        version: 3.0.3(rollup@4.34.8)
       '@size-limit/preset-small-lib':
         specifier: ^11.1.4
         version: 11.2.0(size-limit@11.2.0)
@@ -3424,9 +3424,6 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.7.3
-      vitest:
-        specifier: ^2.1.8
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@22.13.4)(jsdom@20.0.3(bufferutil@4.0.9)(canvas@2.11.2)(utf-8-validate@6.0.5))(terser@5.39.0)
 
   speech/openai:
     dependencies:
