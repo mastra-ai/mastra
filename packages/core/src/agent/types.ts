@@ -8,6 +8,7 @@ import type { CoreMessage, OutputType } from '../llm';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { ToolAction } from '../tools';
+import type { CompositeVoice } from '../voice';
 
 export type { Message as AiMessageType } from 'ai';
 
@@ -28,6 +29,7 @@ export interface AgentConfig<
   metrics?: TMetrics;
   evals?: TMetrics;
   memory?: MastraMemory;
+  voice?: CompositeVoice;
 }
 
 export interface AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> {

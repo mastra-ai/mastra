@@ -26,6 +26,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool, ToolAction } from '../tools/types';
+import type { CompositeVoice } from '../voice';
 
 import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
 
@@ -47,6 +48,7 @@ export class Agent<
   /** @deprecated This property is deprecated. Use evals instead. */
   metrics: TMetrics;
   evals: TMetrics;
+  voice?: CompositeVoice;
 
   constructor(config: AgentConfig<TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
@@ -85,6 +87,10 @@ export class Agent<
 
     if (config.memory) {
       this.#memory = config.memory;
+    }
+
+    if (config.voice) {
+      this.voice = config.voice;
     }
   }
 
@@ -960,5 +966,76 @@ export class Agent<
       runId: runIdToUse,
       toolChoice,
     }) as unknown as StreamReturn<Z>;
+  }
+
+  /**
+   * Convert text to speech using the configured voice provider
+   * @param input Text or text stream to convert to speech
+   * @param options Speech options including speaker and provider-specific options
+   * @returns Audio stream
+   */
+  async speak(
+    input: string | NodeJS.ReadableStream,
+    options?: {
+      speaker?: string;
+      [key: string]: any;
+    },
+  ): Promise<NodeJS.ReadableStream> {
+    if (!this.voice) {
+      throw new Error('No voice provider configured');
+    }
+    try {
+      return this.voice.speak(input, options);
+    } catch (e) {
+      this.logger.error('Error during agent speak', {
+        error: e,
+      });
+      throw e;
+    }
+  }
+
+  /**
+   * Convert speech to text using the configured voice provider
+   * @param audioStream Audio stream to transcribe
+   * @param options Provider-specific transcription options
+   * @returns Text or text stream
+   */
+  async listen(
+    audioStream: NodeJS.ReadableStream,
+    options?: {
+      [key: string]: any;
+    },
+  ): Promise<string | NodeJS.ReadableStream> {
+    if (!this.voice) {
+      throw new Error('No voice provider configured');
+    }
+    try {
+      return this.voice.listen(audioStream, options);
+    } catch (e) {
+      this.logger.error('Error during agent listen', {
+        error: e,
+      });
+      throw e;
+    }
+  }
+
+  /**
+   * Get a list of available speakers from the configured voice provider
+   * @throws {Error} If no voice provider is configured
+   * @returns {Promise<Array<{voiceId: string}>>} List of available speakers
+   */
+  async getSpeakers() {
+    if (!this.voice) {
+      throw new Error('No voice provider configured');
+    }
+
+    try {
+      return await this.voice.getSpeakers();
+    } catch (e) {
+      this.logger.error('Error during agent getSpeakers', {
+        error: e,
+      });
+      throw e;
+    }
   }
 }
