@@ -10,14 +10,13 @@ import {
   calculateRecall,
   formatTable,
   groupBy,
-  mean,
-  min,
-  max,
   measureLatency,
   getListCount,
   getSearchEf,
   generateClusteredVectors,
   generateSkewedVectors,
+  getHNSWConfig,
+  getIndexDescription,
 } from './performance.helpers';
 import { IndexConfig } from './types';
 
@@ -25,21 +24,6 @@ import { PgVector } from '.';
 
 interface IndexTestConfig extends IndexConfig {
   rebuild?: boolean;
-}
-
-export function getIndexDescription(indexConfig: IndexTestConfig): string {
-  if (indexConfig.type === 'hnsw') {
-    return `HNSW(m=${indexConfig.hnsw?.m},ef=${indexConfig.hnsw?.efConstruction})`;
-  }
-
-  if (indexConfig.type === 'ivfflat') {
-    if (indexConfig.ivf?.lists) {
-      return `IVF(lists=${indexConfig.ivf.lists}), rebuild=${indexConfig.rebuild ?? false}`;
-    }
-    return `IVF(dynamic), rebuild=${indexConfig.rebuild ?? false}`;
-  }
-
-  return 'Flat';
 }
 
 const warmupCache = new Map<string, boolean>();
@@ -53,24 +37,21 @@ async function smartWarmup(vectorDB: PgVector, testIndexName: string, indexType:
   }
 }
 
-const pgOptions = ['maintenance_work_mem=512MB', 'work_mem=256MB', 'temp_buffers=256MB'].join(' -c ');
-
-const connectionString =
-  process.env.DB_URL ||
-  `postgresql://postgres:postgres@localhost:5434/mastra?options=-c%20${encodeURIComponent(pgOptions)}`;
+const connectionString = process.env.DB_URL || `postgresql://postgres:postgres@localhost:5435/mastra`;
 describe('PostgreSQL Index Performance', () => {
   let vectorDB: PgVector;
   const testIndexName = 'test_index_performance';
   const results: TestResult[] = [];
 
   const indexConfigs: IndexTestConfig[] = [
-    { type: 'flat' }, // Test flat/linear search as baseline
+    // { type: 'flat' }, // Test flat/linear search as baseline
     // { type: 'ivfflat', ivf: { lists: 100 } }, // Test IVF with fixed lists
     // { type: 'ivfflat', ivf: { dynamic: true } }, // Test IVF with dynamic lists
     // { type: 'ivfflat', ivf: { lists: 100 }, rebuild: true }, // Test IVF with fixed lists and rebuild
     // { type: 'ivfflat', ivf: { dynamic: true }, rebuild: true }, // Test IVF with dynamic lists and rebuild
-    // { type: 'hnsw', hnsw: { m: 16, efConstruction: 64 } }, // Default settings
-    // { type: 'hnsw', hnsw: { m: 64, efConstruction: 256 } }, // Maximum quality
+    { type: 'hnsw' },
+    // { type: 'hnsw', hnsw: { m: 16, efConstruction: 64 } },
+    // { type: 'hnsw', hnsw: { m: 32, efConstruction: 128 } },
   ];
   beforeAll(async () => {
     // Initialize PgVector
@@ -91,58 +72,67 @@ describe('PostgreSQL Index Performance', () => {
 
   // Combine all test configs
   const allConfigs: TestConfig[] = [
-    ...baseTestConfigs.dimension,
-    ...baseTestConfigs.k,
-    // ...baseTestConfigs.size,
+    ...baseTestConfigs['64'],
+    // ...baseTestConfigs['384'],
+    // ...baseTestConfigs['1024'],
     // ...baseTestConfigs.smokeTests,
     // ...baseTestConfigs.stressTests,
   ];
 
   // For each index config
   for (const indexConfig of indexConfigs) {
-    describe(`Index: ${getIndexDescription(indexConfig)}`, () => {
+    const indexType = indexConfig.type;
+    const rebuild = indexConfig.rebuild ?? false;
+    const dynamicLists = indexConfig.ivf?.dynamic ?? false;
+    const hnswConfig = getHNSWConfig(indexConfig);
+    const ivfLists = indexConfig.ivf?.lists ?? 100;
+    const indexDescription = getIndexDescription({
+      type: indexType,
+      hnsw: hnswConfig,
+      ivf: {
+        lists: ivfLists,
+        dynamic: dynamicLists,
+        rebuild,
+      },
+    });
+
+    describe(`Index: ${indexDescription}`, () => {
       for (const testConfig of allConfigs) {
         const timeout = calculateTimeout(testConfig.dimension, testConfig.size, testConfig.k);
         const testDesc = `dim=${testConfig.dimension} size=${testConfig.size} k=${testConfig.k}`;
 
-        it(
-          testDesc,
-          async () => {
-            // Test each distribution type
-            const distributions = {
-              random: generateRandomVectors,
-              clustered: generateClusteredVectors,
-              skewed: generateSkewedVectors,
-            };
-
-            for (const [distType, generator] of Object.entries(distributions)) {
+        for (const [distType, generator] of Object.entries(distributions)) {
+          it(
+            testDesc,
+            async () => {
               const testVectors = generator(testConfig.size, testConfig.dimension);
               const queryVectors = generator(testConfig.queryCount, testConfig.dimension);
-              const vectorIds = testVectors.map((_, idx) => `vec_${idx}`);
-              const metadata = testVectors.map((_, idx) => ({ index: idx }));
 
               // Create index and insert vectors
-              const lists =
-                indexConfig.type === 'ivfflat'
-                  ? getListCount({ size: testConfig.size, indexConfig, metrics: {} } as TestResult)
-                  : undefined;
+              const lists = getListCount(indexConfig, testConfig.size, dynamicLists);
 
-              await vectorDB.createIndex(testIndexName, testConfig.dimension, 'cosine', indexConfig);
-              await vectorDB.upsert(testIndexName, testVectors, metadata, vectorIds);
-              if (indexConfig.rebuild) {
+              if (indexType === 'ivfflat') {
+                await vectorDB.createIndex(testIndexName, testConfig.dimension, 'cosine', indexConfig);
+              }
+
+              console.log(
+                `Batched bulk upserting ${testVectors.length} ${distType} vectors into index ${testIndexName}`,
+              );
+              const batchSizes = splitIntoRandomBatches(testConfig.size, testConfig.dimension);
+              await batchedBulkUpsert(vectorDB, testIndexName, testVectors, batchSizes);
+              if (indexType === 'hnsw') {
+                await vectorDB.createIndex(testIndexName, testConfig.dimension, 'cosine', indexConfig);
+              }
+
+              if (rebuild) {
                 await vectorDB.rebuildIndex(testIndexName, {
-                  m: indexConfig.hnsw?.m,
-                  efConstruction: indexConfig.hnsw?.efConstruction,
-                  lists: indexConfig.ivf?.lists,
+                  lists,
                 });
               }
-              await smartWarmup(vectorDB, testIndexName, indexConfig.type, testConfig.dimension, testConfig.k);
+              await smartWarmup(vectorDB, testIndexName, indexType, testConfig.dimension, testConfig.k);
 
               // For HNSW, test different EF values
-              const efValues =
-                indexConfig.type === 'hnsw'
-                  ? getSearchEf(testConfig.k, indexConfig.hnsw?.m || 16)
-                  : { default: undefined };
+              const efValues = indexType === 'hnsw' ? getSearchEf(testConfig.k, hnswConfig.m) : { default: undefined };
 
               for (const [efType, ef] of Object.entries(efValues)) {
                 const recalls: number[] = [];
@@ -151,7 +141,6 @@ describe('PostgreSQL Index Performance', () => {
                 for (const queryVector of queryVectors) {
                   const expectedNeighbors = findNearestBruteForce(queryVector, testVectors, testConfig.k);
 
-                  // Measure latency AND get results in one go
                   const [latency, actualResults] = await measureLatency(async () =>
                     vectorDB.query(
                       testIndexName,
@@ -176,25 +165,26 @@ describe('PostgreSQL Index Performance', () => {
                   dimension: testConfig.dimension,
                   size: testConfig.size,
                   k: testConfig.k,
-                  indexConfig,
+                  type: indexType,
                   metrics: {
-                    recall: mean(recalls),
-                    minRecall: min(recalls),
-                    maxRecall: max(recalls),
+                    recall: recalls.length > 0 ? recalls.reduce((a, b) => a + b, 0) / recalls.length : 0,
+                    minRecall: Math.min(...recalls),
+                    maxRecall: Math.max(...recalls),
                     latency: {
                       p50: sorted[Math.floor(sorted.length * 0.5)],
                       p95: sorted[Math.floor(sorted.length * 0.95)],
-                      ...(indexConfig.type === 'ivfflat' && {
+                      ...(indexType === 'ivfflat' && {
                         lists,
                         vectorsPerList: Math.round(testConfig.size / (lists || 1)),
                       }),
-                      ...(indexConfig.type === 'hnsw' && {
-                        m: indexConfig.hnsw?.m,
+                      ...(indexType === 'hnsw' && {
+                        m: hnswConfig.m,
+                        efConstruction: hnswConfig.efConstruction,
                         ef,
                         efType,
                       }),
                     },
-                    ...(indexConfig.type === 'ivfflat' && {
+                    ...(indexType === 'ivfflat' && {
                       clustering: {
                         numLists: lists,
                         avgVectorsPerList: testConfig.size / (lists || 1),
@@ -205,17 +195,17 @@ describe('PostgreSQL Index Performance', () => {
                   },
                 });
               }
-            }
-          },
-          timeout,
-        );
+            },
+            timeout,
+          );
+        }
       }
     });
   }
 });
 
 function analyzeResults(results: TestResult[]) {
-  const byType = groupBy(results, (r: TestResult) => r.indexConfig.type);
+  const byType = groupBy(results, (r: TestResult) => r.type);
   Object.entries(byType).forEach(([type, typeResults]) => {
     console.log(`\n=== ${type.toUpperCase()} Index Analysis ===\n`);
 
@@ -227,7 +217,7 @@ function analyzeResults(results: TestResult[]) {
       console.log('Recall Analysis:');
       const recallColumns = ['Distribution', 'Dataset Size', 'K'];
       if (type === 'hnsw') {
-        recallColumns.push('M', 'EF', 'EF Type');
+        recallColumns.push('M', 'EF Construction', 'EF', 'EF Type');
       } else if (type === 'ivfflat') {
         recallColumns.push('Lists', 'Vectors/List');
       }
@@ -237,13 +227,13 @@ function analyzeResults(results: TestResult[]) {
       const recallData = Object.values(
         groupBy(
           dimResults,
-          (r: any) => `${r.size}-${r.k}-${type === 'ivfflat' ? r.metrics.latency.lists : r.indexConfig.hnsw?.m}`,
+          (r: any) => `${r.size}-${r.k}-${type === 'ivfflat' ? r.metrics.latency.lists : r.metrics.latency.m}`,
           (results: any[]) => {
             // Sort by distribution type for consistent ordering
             const sortedResults = [...results].sort(
               (a, b) =>
-                ['random', 'clustered', 'skewed'].indexOf(a.distribution) -
-                ['random', 'clustered', 'skewed'].indexOf(b.distribution),
+                ['random', 'clustered', 'skewed', 'mixed'].indexOf(a.distribution) -
+                ['random', 'clustered', 'skewed', 'mixed'].indexOf(b.distribution),
             );
             return sortedResults.map(result => ({
               Distribution: result.distribution,
@@ -257,7 +247,8 @@ function analyzeResults(results: TestResult[]) {
                 : {}),
               ...(type === 'hnsw'
                 ? {
-                    M: result.indexConfig.hnsw?.m,
+                    M: result.metrics.latency.m,
+                    'EF Construction': result.metrics.latency.efConstruction,
                     EF: result.metrics.latency.ef,
                     'EF Type': result.metrics.latency.efType,
                   }
@@ -275,7 +266,7 @@ function analyzeResults(results: TestResult[]) {
       console.log('\nLatency Analysis:');
       const latencyColumns = ['Distribution', 'Dataset Size', 'K'];
       if (type === 'hnsw') {
-        latencyColumns.push('M', 'EF', 'EF Type');
+        latencyColumns.push('M', 'EF Construction', 'EF', 'EF Type');
       } else if (type === 'ivfflat') {
         latencyColumns.push('Lists', 'Vectors/List');
       }
@@ -284,12 +275,12 @@ function analyzeResults(results: TestResult[]) {
       const latencyData = Object.values(
         groupBy(
           dimResults,
-          (r: any) => `${r.size}-${r.k}-${type === 'ivfflat' ? r.metrics.latency.lists : r.indexConfig.hnsw?.m}`,
+          (r: any) => `${r.size}-${r.k}-${type === 'ivfflat' ? r.metrics.latency.lists : r.metrics.latency.m}`,
           (results: any[]) => {
             const sortedResults = [...results].sort(
               (a, b) =>
-                ['random', 'clustered', 'skewed'].indexOf(a.distribution) -
-                ['random', 'clustered', 'skewed'].indexOf(b.distribution),
+                ['random', 'clustered', 'skewed', 'mixed'].indexOf(a.distribution) -
+                ['random', 'clustered', 'skewed', 'mixed'].indexOf(b.distribution),
             );
             return sortedResults.map(result => ({
               Distribution: result.distribution,
@@ -303,7 +294,8 @@ function analyzeResults(results: TestResult[]) {
                 : {}),
               ...(type === 'hnsw'
                 ? {
-                    M: result.indexConfig.hnsw?.m,
+                    M: result.metrics.latency.m,
+                    'EF Construction': result.metrics.latency.efConstruction,
                     EF: result.metrics.latency.ef,
                     'EF Type': result.metrics.latency.efType,
                   }
@@ -334,8 +326,8 @@ function analyzeResults(results: TestResult[]) {
             (results: any[]) => {
               const sortedResults = [...results].sort(
                 (a, b) =>
-                  ['random', 'clustered', 'skewed'].indexOf(a.distribution) -
-                  ['random', 'clustered', 'skewed'].indexOf(b.distribution),
+                  ['random', 'clustered', 'skewed', 'mixed'].indexOf(a.distribution) -
+                  ['random', 'clustered', 'skewed', 'mixed'].indexOf(b.distribution),
               );
               return sortedResults.map(result => ({
                 Distribution: result.distribution,
@@ -355,3 +347,51 @@ function analyzeResults(results: TestResult[]) {
     });
   });
 }
+
+function splitIntoRandomBatches(total: number, dimension: number): number[] {
+  const batches: number[] = [];
+  let remaining = total;
+
+  const batchRange = dimension === 1024 ? 5000 : 15000;
+
+  while (remaining > 0) {
+    const batchSize = Math.min(remaining, batchRange + Math.floor(Math.random() * batchRange));
+    batches.push(batchSize);
+    remaining -= batchSize;
+  }
+
+  return batches;
+}
+
+async function batchedBulkUpsert(vectorDB: PgVector, testIndexName: string, vectors: number[][], batchSizes: number[]) {
+  let offset = 0;
+  const vectorIds = vectors.map((_, idx) => `vec_${idx}`);
+  const metadata = vectors.map((_, idx) => ({ index: idx }));
+
+  for (const size of batchSizes) {
+    const batch = vectors.slice(offset, offset + size);
+    const batchIds = vectorIds.slice(offset, offset + size);
+    const batchMetadata = metadata.slice(offset, offset + size);
+    await vectorDB.bulkUpsert(testIndexName, batch, batchMetadata, batchIds);
+    offset += size;
+    console.log(`${offset} of ${vectors.length} vectors upserted`);
+  }
+}
+
+const distributions = {
+  random: generateRandomVectors,
+  clustered: generateClusteredVectors,
+  skewed: generateSkewedVectors,
+  mixed: (size: number, dimension: number) => {
+    const generators = [generateRandomVectors, generateClusteredVectors, generateSkewedVectors];
+    const batchSizes = splitIntoRandomBatches(size, dimension);
+
+    let vectors: number[][] = [];
+    for (const batchSize of batchSizes) {
+      const generator = generators[Math.floor(Math.random() * generators.length)];
+      vectors = vectors.concat(generator(batchSize, dimension));
+    }
+
+    return vectors;
+  },
+};

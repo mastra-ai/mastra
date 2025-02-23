@@ -122,13 +122,13 @@ It provides robust vector similarity search capabilities within your existing Po
             {
               name: "m",
               type: "number",
-              description: "Max number of connections (default: 16)",
+              description: "Max number of connections (default: 8)",
               isOptional: true,
             },
             {
               name: "efConstruction",
               type: "number",
-              description: "Build-time complexity (default: 64)",
+              description: "Build-time complexity (default: 32)",
               isOptional: true,
             },
           ],
@@ -163,6 +163,15 @@ const flatConfig = {
   type: 'flat'
 };
 ```
+
+#### Memory Requirements
+
+HNSW indexes require significant shared memory during construction. For 100K vectors:
+- Small dimensions (64d): ~60MB with default settings
+- Medium dimensions (256d): ~180MB with default settings
+- Large dimensions (384d+): ~250MB+ with default settings
+
+Higher M values or efConstruction values will increase memory requirements significantly. Adjust your system's shared memory limits if needed.
 
 ### upsert()
 

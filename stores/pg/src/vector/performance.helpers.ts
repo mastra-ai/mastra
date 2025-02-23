@@ -1,11 +1,11 @@
-import { type IndexConfig } from './types';
+import { type IndexConfig, type IndexType } from './types';
 
 import { PgVector } from '.';
 
 export interface TestResult {
   distribution: string;
   dimension: number;
-  indexConfig: IndexConfig;
+  type: IndexType;
   size: number;
   k?: number;
   metrics: {
@@ -56,14 +56,17 @@ export const generateSkewedVectors = (count: number, dim: number) => {
   // Create dense clusters with sparse regions
   const vectors: number[][] = [];
 
+  const denseCount = Math.floor(count * 0.6);
+  const sparseCount = count - denseCount;
+
   // Dense cluster (60% of vectors)
   const denseCenter = Array.from({ length: dim }, () => Math.random() * 0.2);
-  for (let i = 0; i < count * 0.6; i++) {
+  for (let i = 0; i < denseCount; i++) {
     vectors.push(denseCenter.map(c => c + (Math.random() * 0.1 - 0.05)));
   }
 
   // Scattered vectors (40%)
-  for (let i = 0; i < count * 0.4; i++) {
+  for (let i = 0; i < sparseCount; i++) {
     vectors.push(Array.from({ length: dim }, () => Math.random() * 2 - 1));
   }
 
@@ -153,45 +156,42 @@ export const groupBy = <T, K extends keyof T>(
   return grouped;
 };
 
-export const mean = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
-export const min = (arr: number[]) => Math.min(...arr);
-export const max = (arr: number[]) => Math.max(...arr);
-
 export const calculateTimeout = (dimension: number, size: number, k: number) => {
   let timeout = 600000;
   if (dimension >= 1024) timeout *= 3;
   else if (dimension >= 384) timeout *= 1.5;
   if (size >= 10000) timeout *= 2;
   if (k >= 75) timeout *= 1.5;
-  return timeout;
+  return timeout * 2;
 };
 
 export const baseTestConfigs = {
-  smokeTests: [{ dimension: 384, size: 1_000, k: 10, queryCount: 5 }],
-  dimension: [
-    { dimension: 64, size: 10_000, k: 10, queryCount: 15 },
-    { dimension: 384, size: 10_000, k: 10, queryCount: 15 },
-    { dimension: 1024, size: 10_000, k: 10, queryCount: 15 },
+  smokeTests: [{ dimension: 384, size: 1_000, k: 10, queryCount: 10 }],
+  '64': [
+    { dimension: 64, size: 10_000, k: 10, queryCount: 30 },
+    { dimension: 64, size: 100_000, k: 10, queryCount: 30 },
+    { dimension: 64, size: 100_000, k: 25, queryCount: 30 },
+    { dimension: 64, size: 100_000, k: 50, queryCount: 30 },
+    { dimension: 64, size: 100_000, k: 100, queryCount: 30 },
+    { dimension: 64, size: 500_000, k: 10, queryCount: 30 },
+    { dimension: 64, size: 1_000_000, k: 10, queryCount: 30 },
   ],
-  k: [
-    { dimension: 64, size: 100_000, k: 10, queryCount: 10 },
-    { dimension: 64, size: 100_000, k: 25, queryCount: 10 },
-    { dimension: 64, size: 100_000, k: 50, queryCount: 10 },
-    { dimension: 64, size: 100_000, k: 100, queryCount: 5 },
-    { dimension: 384, size: 100_000, k: 10, queryCount: 10 },
-    { dimension: 384, size: 100_000, k: 25, queryCount: 10 },
-    { dimension: 384, size: 100_000, k: 50, queryCount: 10 },
-    { dimension: 384, size: 100_000, k: 100, queryCount: 5 },
-    { dimension: 1024, size: 50_000, k: 10, queryCount: 10 },
-    { dimension: 1024, size: 50_000, k: 25, queryCount: 10 },
-    { dimension: 1024, size: 50_000, k: 50, queryCount: 10 },
-    { dimension: 1024, size: 50_000, k: 100, queryCount: 5 },
+  '384': [
+    { dimension: 384, size: 10_000, k: 10, queryCount: 30 },
+    { dimension: 384, size: 100_000, k: 10, queryCount: 30 },
+    { dimension: 384, size: 100_000, k: 25, queryCount: 30 },
+    { dimension: 384, size: 100_000, k: 50, queryCount: 30 },
+    { dimension: 384, size: 100_000, k: 100, queryCount: 30 },
+    { dimension: 384, size: 500_000, k: 10, queryCount: 30 },
+    { dimension: 384, size: 1_000_000, k: 10, queryCount: 30 },
   ],
-  size: [
-    { dimension: 64, size: 500_000, k: 10, queryCount: 10 },
-    { dimension: 64, size: 1_000_000, k: 10, queryCount: 5 },
-    { dimension: 384, size: 500_000, k: 10, queryCount: 10 },
-    { dimension: 384, size: 1_000_000, k: 10, queryCount: 5 },
+  '1024': [
+    { dimension: 1024, size: 10_000, k: 10, queryCount: 30 },
+    { dimension: 1024, size: 10_000, k: 25, queryCount: 30 },
+    { dimension: 1024, size: 10_000, k: 50, queryCount: 30 },
+    { dimension: 1024, size: 10_000, k: 100, queryCount: 30 },
+    { dimension: 1024, size: 50_000, k: 10, queryCount: 30 },
+    { dimension: 1024, size: 50_000, k: 25, queryCount: 30 },
   ],
   stressTests: [
     // Maximum load
@@ -223,12 +223,19 @@ export async function measureLatency<T>(fn: () => Promise<T>): Promise<[number, 
   return [end - start, result];
 }
 
-export const getListCount = (result: TestResult): number | undefined => {
-  if (result.indexConfig.type !== 'ivfflat') return undefined;
-  if (result.metrics.latency?.lists) {
-    return result.metrics.latency.lists;
+export const getListCount = (indexConfig: IndexConfig, size: number, dynamic: boolean): number | undefined => {
+  if (indexConfig.type !== 'ivfflat') return undefined;
+  if (dynamic) {
+    return Math.max(100, Math.min(4000, Math.floor(Math.sqrt(size) * 2)));
   }
-  return result.indexConfig.ivf?.lists ?? Math.floor(Math.sqrt(result.size));
+  return indexConfig.ivf?.lists ?? 100;
+};
+
+export const getHNSWConfig = (indexConfig: IndexConfig): { m: number; efConstruction: number } => {
+  return {
+    m: indexConfig.hnsw?.m ?? 8,
+    efConstruction: indexConfig.hnsw?.efConstruction ?? 32,
+  };
 };
 
 export function getSearchEf(k: number, m: number) {
@@ -237,4 +244,27 @@ export function getSearchEf(k: number, m: number) {
     lower: Math.max(k, (m * k) / 2), // Lower quality, faster
     higher: Math.max(k, m * k * 2), // Higher quality, slower
   };
+}
+
+export function getIndexDescription({
+  type,
+  hnsw,
+  ivf,
+}: {
+  type: IndexType;
+  hnsw: { m: number; efConstruction: number };
+  ivf: { lists: number; dynamic: boolean; rebuild: boolean };
+}): string {
+  if (type === 'hnsw') {
+    return `HNSW(m=${hnsw.m},ef=${hnsw.efConstruction})`;
+  }
+
+  if (type === 'ivfflat') {
+    if (ivf.dynamic) {
+      return `IVF(dynamic), rebuild=${ivf.rebuild ?? false}`;
+    }
+    return `IVF(lists=${ivf.lists}), rebuild=${ivf.rebuild ?? false}`;
+  }
+
+  return 'Flat';
 }
