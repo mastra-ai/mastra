@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 0.4.0
+
+### Minor Changes
+
+- 2fc618f: Add MastraVoice class
+
+### Patch Changes
+
+- fe0fd01: Fixed a bug where masked tags don't work when a chunk includes other text (ex "o <start_tag" or "tag> w") in the maskStreamTags() util
+
 ## 0.4.0-alpha.1
 
 ### Patch Changes
