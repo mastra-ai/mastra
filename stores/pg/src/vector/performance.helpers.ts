@@ -223,12 +223,10 @@ export async function measureLatency<T>(fn: () => Promise<T>): Promise<[number, 
   return [end - start, result];
 }
 
-export const getListCount = (indexConfig: IndexConfig, size: number, dynamic: boolean): number | undefined => {
+export const getListCount = (indexConfig: IndexConfig, size: number): number | undefined => {
   if (indexConfig.type !== 'ivfflat') return undefined;
-  if (dynamic) {
-    return Math.max(100, Math.min(4000, Math.floor(Math.sqrt(size) * 2)));
-  }
-  return indexConfig.ivf?.lists ?? 100;
+  if (indexConfig.ivf?.lists) return indexConfig.ivf.lists;
+  return Math.max(100, Math.min(4000, Math.floor(Math.sqrt(size) * 2)));
 };
 
 export const getHNSWConfig = (indexConfig: IndexConfig): { m: number; efConstruction: number } => {
@@ -249,21 +247,16 @@ export function getSearchEf(k: number, m: number) {
 export function getIndexDescription({
   type,
   hnsw,
-  ivf,
 }: {
   type: IndexType;
   hnsw: { m: number; efConstruction: number };
-  ivf: { lists: number; dynamic: boolean; rebuild: boolean };
 }): string {
   if (type === 'hnsw') {
     return `HNSW(m=${hnsw.m},ef=${hnsw.efConstruction})`;
   }
 
   if (type === 'ivfflat') {
-    if (ivf.dynamic) {
-      return `IVF(dynamic), rebuild=${ivf.rebuild ?? false}`;
-    }
-    return `IVF(lists=${ivf.lists}), rebuild=${ivf.rebuild ?? false}`;
+    return `IVF`;
   }
 
   return 'Flat';

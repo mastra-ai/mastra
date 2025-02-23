@@ -50,6 +50,13 @@ It provides robust vector similarity search capabilities within your existing Po
       defaultValue: "{ type: 'ivfflat' }",
       description: "Index configuration",
     },
+    {
+      name: "defineIndex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "Whether to define the index",
+    },
   ]}
 />
 
@@ -97,15 +104,9 @@ It provides robust vector similarity search capabilities within your existing Po
             {
               name: "lists",
               type: "number",
-              description: "Number of lists (default: 100)",
+              description: "Number of lists. If not specified, automatically calculated based on dataset size. (Minimum 100, Maximum 4000)",
               isOptional: true,
-            },
-            {
-              name: "dynamic",
-              type: "boolean",
-              description: "Automatically calculate lists based on dataset size (default: false)",
-              isOptional: true,
-            },
+            }
           ],
         },
       ],
@@ -137,32 +138,6 @@ It provides robust vector similarity search capabilities within your existing Po
     },
   ]}
 />
-
-#### Example configurations:
-
-```typescript copy
-// IVF index (recommended for most use cases)
-const ivfConfig = {
-  type: 'ivfflat',
-  ivf: {
-    lists: 100,  // or use dynamic: true for auto-scaling
-  }
-};
-
-// HNSW index (recommended for high-recall requirements)
-const hnswConfig = {
-  type: 'hnsw',
-  hnsw: {
-    m: 16,
-    efConstruction: 64
-  }
-};
-
-// Flat index (only recommended for small datasets)
-const flatConfig = {
-  type: 'flat'
-};
-```
 
 #### Memory Requirements
 
@@ -320,40 +295,53 @@ interface PGIndexStats {
 
 Closes the database connection pool. Should be called when done using the store.
 
-### rebuildIndex()
+### defineIndex()
 
 <PropertiesTable
   content={[
     {
       name: "indexName",
       type: "string",
-      description: "Name of the index to rebuild",
+      description: "Name of the index to define",
     },
     {
-      name: "newConfig",
-      type: "{ m?: number; efConstruction?: number; lists?: number }",
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
-      description: "New configuration parameters for the existing index.",
+      defaultValue: "cosine",
+      description: "Distance metric for similarity search",
+    },
+    {
+      name: "indexConfig",
+      type: "IndexConfig",
+      description: "Configuration for the index type and parameters",
     },
   ]}
 />
 
-Rebuilds an existing index with optional new configuration parameters. The index type cannot be changed during rebuild (e.g., cannot switch from HNSW to IVF).
-- For HNSW indexes: `m` and `efConstruction`
-- For IVF indexes: `lists`
-- For flat indexes: no configuration needed
+Defines or redefines an index with specified metric and configuration. Will drop any existing index before creating the new one.
 
-#### Example:
 ```typescript copy
-// Rebuild HNSW index with new parameters
-await pgVector.rebuildIndex("my_hnsw_index", {
-  m: 24,                 // Increase connections
-  efConstruction: 128    // Increase build-time complexity
+// Define HNSW index
+await pgVector.defineIndex("my_vectors", "cosine", {
+  type: "hnsw",
+  hnsw: {
+    m: 8,
+    efConstruction: 32
+  }
 });
 
-// Rebuild IVF index with new parameters
-await pgVector.rebuildIndex("my_ivf_index", {
-  lists: 200            // Increase number of lists
+// Define IVF index
+await pgVector.defineIndex("my_vectors", "cosine", {
+  type: "ivfflat",
+  ivf: {
+    lists: 100, 
+  }
+});
+
+// Define flat index
+await pgVector.defineIndex("my_vectors", "cosine", {
+  type: "flat" 
 });
 ```
 

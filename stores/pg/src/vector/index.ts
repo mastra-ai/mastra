@@ -155,7 +155,8 @@ export class PgVector extends MastraVector {
     indexName: string,
     dimension: number,
     metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
-    indexConfig: IndexConfig = { type: 'ivfflat' },
+    indexConfig: IndexConfig = {},
+    defineIndex: boolean = true,
   ): Promise<void> {
     const client = await this.pool.connect();
     try {
@@ -191,8 +192,9 @@ export class PgVector extends MastraVector {
         );
       `);
 
-      // Create the index using createOrRebuildIndex
-      await this.configureIndex(indexName, metric, indexConfig);
+      if (defineIndex) {
+        await this.defineIndex(indexName, metric, indexConfig);
+      }
     } catch (error: any) {
       console.error('Failed to create vector table:', error);
       throw error;
@@ -201,10 +203,10 @@ export class PgVector extends MastraVector {
     }
   }
 
-  private async configureIndex(
+  async defineIndex(
     indexName: string,
     metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
-    indexConfig: IndexConfig = { type: 'ivfflat' },
+    indexConfig: IndexConfig,
   ): Promise<void> {
     const client = await this.pool.connect();
     try {
@@ -230,12 +232,13 @@ export class PgVector extends MastraVector {
           )
         `;
       } else {
-        let lists = indexConfig.ivf?.lists ?? 100;
-        if (indexConfig.ivf?.dynamic) {
+        let lists: number;
+        if (indexConfig.ivf?.lists) {
+          lists = indexConfig.ivf.lists;
+        } else {
           const size = (await client.query(`SELECT COUNT(*) FROM ${indexName}`)).rows[0].count;
           lists = Math.max(100, Math.min(4000, Math.floor(Math.sqrt(size) * 2)));
         }
-
         indexSQL = `
           CREATE INDEX ${indexName}_vector_idx
           ON ${indexName}
@@ -249,31 +252,6 @@ export class PgVector extends MastraVector {
     } finally {
       client.release();
     }
-  }
-
-  async rebuildIndex(
-    indexName: string,
-    newConfig?: {
-      m?: number;
-      efConstruction?: number;
-      lists?: number;
-    },
-  ): Promise<void> {
-    const indexInfo = await this.describeIndex(indexName);
-    const hnswConfig =
-      indexInfo.type === 'hnsw'
-        ? {
-            m: newConfig?.m ?? indexInfo.config.m,
-            efConstruction: newConfig?.efConstruction ?? indexInfo.config.efConstruction,
-          }
-        : undefined;
-    const ivfConfig = indexInfo.type === 'ivfflat' ? { lists: newConfig?.lists ?? indexInfo.config.lists } : undefined;
-    const config: IndexConfig = {
-      type: indexInfo.type as 'ivfflat' | 'hnsw' | 'flat',
-      ...(hnswConfig && { hnsw: hnswConfig }),
-      ...(ivfConfig && { ivf: ivfConfig }),
-    };
-    await this.configureIndex(indexName, indexInfo.metric, config);
   }
 
   async listIndexes(): Promise<string[]> {

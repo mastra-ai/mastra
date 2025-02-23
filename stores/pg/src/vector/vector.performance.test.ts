@@ -18,11 +18,12 @@ import {
   getHNSWConfig,
   getIndexDescription,
 } from './performance.helpers';
-import { IndexConfig } from './types';
+import { IndexConfig, IndexType } from './types';
 
 import { PgVector } from '.';
 
 interface IndexTestConfig extends IndexConfig {
+  type: IndexType;
   rebuild?: boolean;
 }
 
@@ -46,12 +47,12 @@ describe('PostgreSQL Index Performance', () => {
   const indexConfigs: IndexTestConfig[] = [
     // { type: 'flat' }, // Test flat/linear search as baseline
     // { type: 'ivfflat', ivf: { lists: 100 } }, // Test IVF with fixed lists
-    // { type: 'ivfflat', ivf: { dynamic: true } }, // Test IVF with dynamic lists
+    // { type: 'ivfflat' }, // Test IVF with calculated lists
     // { type: 'ivfflat', ivf: { lists: 100 }, rebuild: true }, // Test IVF with fixed lists and rebuild
-    // { type: 'ivfflat', ivf: { dynamic: true }, rebuild: true }, // Test IVF with dynamic lists and rebuild
+    // { type: 'ivfflat', rebuild: true }, // Test IVF with calculated lists and rebuild
     { type: 'hnsw' },
-    // { type: 'hnsw', hnsw: { m: 16, efConstruction: 64 } },
-    // { type: 'hnsw', hnsw: { m: 32, efConstruction: 128 } },
+    { type: 'hnsw', hnsw: { m: 16, efConstruction: 64 } },
+    { type: 'hnsw', hnsw: { m: 32, efConstruction: 128 } },
   ];
   beforeAll(async () => {
     // Initialize PgVector
@@ -83,17 +84,10 @@ describe('PostgreSQL Index Performance', () => {
   for (const indexConfig of indexConfigs) {
     const indexType = indexConfig.type;
     const rebuild = indexConfig.rebuild ?? false;
-    const dynamicLists = indexConfig.ivf?.dynamic ?? false;
     const hnswConfig = getHNSWConfig(indexConfig);
-    const ivfLists = indexConfig.ivf?.lists ?? 100;
     const indexDescription = getIndexDescription({
       type: indexType,
       hnsw: hnswConfig,
-      ivf: {
-        lists: ivfLists,
-        dynamic: dynamicLists,
-        rebuild,
-      },
     });
 
     describe(`Index: ${indexDescription}`, () => {
@@ -109,25 +103,23 @@ describe('PostgreSQL Index Performance', () => {
               const queryVectors = generator(testConfig.queryCount, testConfig.dimension);
 
               // Create index and insert vectors
-              const lists = getListCount(indexConfig, testConfig.size, dynamicLists);
+              const lists = getListCount(indexConfig, testConfig.size);
 
-              if (indexType === 'ivfflat') {
-                await vectorDB.createIndex(testIndexName, testConfig.dimension, 'cosine', indexConfig);
-              }
+              await vectorDB.createIndex(
+                testIndexName,
+                testConfig.dimension,
+                'cosine',
+                indexConfig,
+                indexType === 'ivfflat',
+              );
 
               console.log(
                 `Batched bulk upserting ${testVectors.length} ${distType} vectors into index ${testIndexName}`,
               );
               const batchSizes = splitIntoRandomBatches(testConfig.size, testConfig.dimension);
               await batchedBulkUpsert(vectorDB, testIndexName, testVectors, batchSizes);
-              if (indexType === 'hnsw') {
-                await vectorDB.createIndex(testIndexName, testConfig.dimension, 'cosine', indexConfig);
-              }
-
-              if (rebuild) {
-                await vectorDB.rebuildIndex(testIndexName, {
-                  lists,
-                });
+              if (indexType === 'hnsw' || rebuild) {
+                await vectorDB.defineIndex(testIndexName, 'cosine', indexConfig);
               }
               await smartWarmup(vectorDB, testIndexName, indexType, testConfig.dimension, testConfig.k);
 
