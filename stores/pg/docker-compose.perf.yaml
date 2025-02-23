@@ -1,0 +1,21 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: 'pg-perf-test-db'
+    ports:
+      - '5435:5432' 
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-mastra}
+    shm_size: 1gb
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "maintenance_work_mem=512MB"
+      - "-c"
+      - "work_mem=256MB"
+    tmpfs:
+      - /var/lib/postgresql/data 
