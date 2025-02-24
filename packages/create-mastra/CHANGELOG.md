@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.5
+
+### Patch Changes
+
+- 967da43: Logger, transport fixes
+
 ## 0.1.4
 
 ### Patch Changes

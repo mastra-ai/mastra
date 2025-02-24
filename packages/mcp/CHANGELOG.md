@@ -1,5 +1,14 @@
 # @mastra/mcp
 
+## 0.2.3
+
+### Patch Changes
+
+- Updated dependencies [ce44b9b]
+- Updated dependencies [967da43]
+- Updated dependencies [b405f08]
+  - @mastra/core@0.4.1
+
 ## 0.2.2
 
 ### Patch Changes
