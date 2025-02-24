@@ -231,8 +231,8 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     );
 
     if (!snapshot && existingSnapshot) {
-      existingSnapshot.childStates = machineSnapshots;
-      existingSnapshot.suspendedSteps = suspendedSteps;
+      existingSnapshot.childStates = { ...existingSnapshot.childStates, ...machineSnapshots };
+      existingSnapshot.suspendedSteps = { ...existingSnapshot.suspendedSteps, ...suspendedSteps };
       await this.#mastra?.storage?.persistWorkflowSnapshot({
         workflowName: this.name,
         runId: this.#runId,
@@ -253,8 +253,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       return;
     }
 
-    snapshot.childStates = machineSnapshots;
-    snapshot.suspendedSteps = suspendedSteps;
+    snapshot.suspendedSteps = { ...existingSnapshot.suspendedSteps, ...suspendedSteps };
 
     if (!existingSnapshot || snapshot === existingSnapshot) {
       await this.#mastra?.storage?.persistWorkflowSnapshot({
@@ -267,7 +266,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     }
 
     if (existingSnapshot?.childStates) {
-      snapshot.childStates = { ...snapshot.childStates, ...existingSnapshot.childStates };
+      snapshot.childStates = { ...existingSnapshot.childStates, ...machineSnapshots };
     }
 
     console.dir({ persisting: existingSnapshot }, { depth: 3 });

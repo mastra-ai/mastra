@@ -399,9 +399,11 @@ export class Workflow<
     }
 
     const suspendedStepId = parsedSnapshot.suspendedSteps?.[stepId];
-    if (suspendedStepId) {
-      parsedSnapshot = suspendedStepId === 'trigger' ? parsedSnapshot : parsedSnapshot.childStates[suspendedStepId];
+    console.dir({ suspendedSteps: parsedSnapshot.suspendedSteps, stepId, suspendedStepId }, { depth: null });
+    if (!suspendedStepId) {
+      return;
     }
+    parsedSnapshot = suspendedStepId === 'trigger' ? parsedSnapshot : parsedSnapshot.childStates[suspendedStepId];
 
     // Update context if provided
 
