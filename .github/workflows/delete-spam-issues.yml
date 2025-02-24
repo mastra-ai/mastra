@@ -1,0 +1,106 @@
+name: Delete Spam Issues
+
+on:
+  # Trigger when an issue is labeled as spam
+  issues:
+    types: [labeled]
+  # Also run manually from the Actions tab
+  workflow_dispatch:
+  # Run on a schedule to clean up any missed spam issues
+  schedule:
+    - cron: '0 */6 * * *'  # Run every 6 hours
+
+jobs:
+  delete-spam:
+    runs-on: ubuntu-latest
+    # For 'labeled' events, only run if the label is 'spam'
+    if: github.event_name != 'issues' || github.event.label.name == 'spam'
+    permissions:
+      issues: write
+    
+    steps:
+      - name: Delete spam issues with GraphQL
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Function to get issue ID (GraphQL requires global ID, not just number)
+            async function getIssueId(issueNumber) {
+              const query = `
+                query GetIssueId($owner: String!, $repo: String!, $number: Int!) {
+                  repository(owner: $owner, name: $repo) {
+                    issue(number: $number) {
+                      id
+                    }
+                  }
+                }
+              `;
+              
+              const result = await github.graphql(query, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                number: issueNumber
+              });
+              
+              return result.repository.issue.id;
+            }
+            
+            // Function to delete issue using GraphQL
+            async function deleteIssue(issueId) {
+              const mutation = `
+                mutation DeleteIssue($issueId: ID!) {
+                  deleteIssue(input: {issueId: $issueId}) {
+                    clientMutationId
+                  }
+                }
+              `;
+              
+              await github.graphql(mutation, {
+                issueId: issueId
+              });
+            }
+            
+            // For single issue labeled as spam
+            if (github.event_name === 'issues') {
+              const issueNumber = context.issue.number;
+              console.log(`Attempting to delete spam issue #${issueNumber}`);
+              
+              try {
+                const issueId = await getIssueId(issueNumber);
+                await deleteIssue(issueId);
+                console.log(`Successfully deleted issue #${issueNumber}`);
+              } catch (error) {
+                console.error(`Failed to delete issue #${issueNumber}:`, error.message);
+              }
+            } 
+            // For manual runs and scheduled runs: delete all open issues with spam label
+            else {
+              console.log("Finding all issues labeled as spam...");
+              
+              const issues = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                labels: 'spam',
+                per_page: 100
+              });
+              
+              console.log(`Found ${issues.data.length} spam issues to delete`);
+              
+              let successCount = 0;
+              for (const issue of issues.data) {
+                const issueNumber = issue.number;
+                console.log(`Attempting to delete spam issue #${issueNumber}`);
+                
+                try {
+                  const issueId = await getIssueId(issueNumber);
+                  await deleteIssue(issueId);
+                  console.log(`Successfully deleted issue #${issueNumber}`);
+                  successCount++;
+                } catch (error) {
+                  console.error(`Failed to delete issue #${issueNumber}:`, error.message);
+                }
+              }
+              
+              console.log(`Summary: Successfully deleted ${successCount} out of ${issues.data.length} spam issues`);
+            }
