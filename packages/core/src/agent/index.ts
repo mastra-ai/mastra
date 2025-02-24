@@ -115,10 +115,9 @@ export class Agent<
       this.__setLogger(p.logger);
     }
 
-
     this.llm.__registerPrimitives(p);
 
-    this.#mastra = p
+    this.#mastra = p;
 
     this.logger.debug(`[Agents:${this.name}] initialized.`, { model: this.model, name: this.name });
   }
@@ -240,20 +239,20 @@ export class Agent<
         const memoryMessages =
           threadId && memory
             ? (
-              await memory.rememberMessages({
-                threadId,
-                config: memoryConfig,
-                vectorMessageSearch: messages
-                  .slice(-1)
-                  .map(m => {
-                    if (typeof m === `string`) {
-                      return m;
-                    }
-                    return m?.content || ``;
-                  })
-                  .join(`\n`),
-              })
-            ).messages
+                await memory.rememberMessages({
+                  threadId,
+                  config: memoryConfig,
+                  vectorMessageSearch: messages
+                    .slice(-1)
+                    .map(m => {
+                      if (typeof m === `string`) {
+                        return m;
+                      }
+                      return m?.content || ``;
+                    })
+                    .join(`\n`),
+                })
+              ).messages
             : [];
 
         if (memory) {
@@ -358,10 +357,10 @@ export class Agent<
                     return undefined;
                   })
                   ?.filter(Boolean) as Array<{
-                    toolCallId: string;
-                    toolArgs: Record<string, unknown>;
-                    toolName: string;
-                  }>;
+                  toolCallId: string;
+                  toolArgs: Record<string, unknown>;
+                  toolName: string;
+                }>;
 
                 toolCallIds = assistantToolCalls?.map(toolCall => toolCall.toolCallId);
 
