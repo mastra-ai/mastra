@@ -4,7 +4,6 @@ import { InstrumentClass } from '../telemetry';
 interface BuiltInModelConfig {
   name: string;
   apiKey?: string;
-  voice?: MastraVoice;
 }
 
 export interface VoiceConfig {

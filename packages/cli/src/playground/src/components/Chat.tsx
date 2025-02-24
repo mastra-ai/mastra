@@ -52,6 +52,7 @@ export function Chat({ agentId, initialMessages = [], agentName, threadId, memor
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [userMessage],
+          runId: agentId,
           ...(memory ? { threadId, resourceid: agentId } : {}),
         }),
       });

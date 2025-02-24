@@ -34,6 +34,18 @@ export class FileTransport extends LoggerTransport {
     });
   }
 
+  _write(chunk: any, encoding?: string, callback?: (error?: Error | null) => void): boolean {
+    if (typeof callback === 'function') {
+      this._transform(chunk, encoding || 'utf8', callback);
+      return true;
+    }
+
+    this._transform(chunk, encoding || 'utf8', (error: Error | null) => {
+      if (error) console.error('Transform error in write:', error);
+    });
+    return true;
+  }
+
   // Clean up resources
   _destroy(error: Error, callback: Function) {
     if (this.fileStream) {
