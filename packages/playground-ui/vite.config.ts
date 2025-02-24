@@ -24,29 +24,29 @@ export default defineConfig({
       plugins: [tailwindcss, autoprefixer],
     },
   },
-  // build: {
-  //   lib: {
-  //     entry: resolve(__dirname, 'src/index.ts'),
-  //     name: 'MastraPlayground',
-  //     formats: ['es', 'umd'],
-  //     fileName: format => `index.${format}.js`,
-  //   },
-  //   rollupOptions: {
-  //     external: ['react', 'react-dom', 'react/jsx-runtime', 'lucide-react', 'tailwindcss'],
-  //     output: {
-  //       globals: {
-  //         react: 'React',
-  //         'react-dom': 'ReactDOM',
-  //         'react/jsx-runtime': 'ReactJsxRuntime',
-  //         'lucide-react': 'LucideReact',
-  //         tailwindcss: 'tailwindcss',
-  //       },
-  //     },
-  //   },
-  //   sourcemap: true,
-  //   // Reduce bloat from legacy polyfills.
-  //   target: 'esnext',
-  //   // Leave minification up to applications.
-  //   minify: false,
-  // },
+  build: {
+    lib: {
+      entry: resolve(__dirname, 'src/index.ts'),
+      name: 'MastraPlayground',
+      formats: ['es', 'umd'],
+      fileName: format => `index.${format}.js`,
+    },
+    rollupOptions: {
+      external: ['react', 'react-dom', 'react/jsx-runtime', 'lucide-react', 'tailwindcss'],
+      output: {
+        globals: {
+          react: 'React',
+          'react-dom': 'ReactDOM',
+          'react/jsx-runtime': 'ReactJsxRuntime',
+          'lucide-react': 'LucideReact',
+          tailwindcss: 'tailwindcss',
+        },
+      },
+    },
+    sourcemap: true,
+    // Reduce bloat from legacy polyfills.
+    target: 'esnext',
+    // Leave minification up to applications.
+    minify: false,
+  },
 });
