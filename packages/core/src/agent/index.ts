@@ -501,13 +501,13 @@ export class Agent<
                   args,
                   runId,
                 });
-                return tool?.execute
-                  ? tool?.execute({
-                      context: args,
-                      mastra: this.#mastra,
-                      runId,
-                    })
-                  : undefined;
+                return (
+                  tool?.execute?.({
+                    context: args,
+                    mastra: this.#mastra,
+                    runId,
+                  }) ?? undefined
+                );
               } catch (err) {
                 this.logger.error(`[Agent:${this.name}] - Failed execution`, {
                   error: err,

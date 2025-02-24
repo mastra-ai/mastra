@@ -78,13 +78,13 @@ export class MastraLLM extends MastraLLMBase {
                   tool: k,
                   props,
                 });
-                return tool?.execute
-                  ? tool?.execute({
-                      context: props,
-                      mastra: this.#mastra,
-                      runId,
-                    })
-                  : undefined;
+                return (
+                  tool?.execute?.({
+                    context: props,
+                    mastra: this.#mastra,
+                    runId,
+                  }) ?? undefined
+                );
               } catch (error) {
                 this.logger.error('Error executing tool', {
                   tool: k,
