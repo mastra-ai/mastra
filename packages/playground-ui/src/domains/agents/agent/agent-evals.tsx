@@ -151,7 +151,7 @@ function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boo
 
       <div className="overflow-auto">
         <Table className="w-full">
-          <TableHeader className="bg-[#171717] sticky top-0 z-10">
+          <TableHeader className="bg-mastra-bg-2 sticky top-0 z-10">
             <TableRow className="border-gray-6 border-b-[0.1px] text-[0.8125rem]">
               <TableHead className="w-12"></TableHead>
               <TableHead
