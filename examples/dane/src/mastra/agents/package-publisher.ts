@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 
 import { pnpmChangesetStatus, pnpmBuild, pnpmChangesetPublish, activeDistTag } from '../tools/pnpm.js';
 
+import { memory } from './memory.js';
 import { getBaseModelConfig } from './model.js';
 
 const packages_llm_text = `
@@ -186,6 +187,7 @@ export const danePackagePublisher = new Agent({
       - Validate package.json configurations before publishing
       `,
   model: getBaseModelConfig(),
+  memory,
   tools: {
     pnpmChangesetStatus,
     pnpmBuild,

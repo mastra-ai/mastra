@@ -1,7 +1,8 @@
 {
   "name": "examples-quick-start",
-  "description": "",
+  "type": "module",
   "private": true,
+  "description": "",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -21,5 +22,5 @@
     "@mastra/core": "workspace:*",
     "ai": "latest"
   },
-  "version": "0.0.1-alpha.2"
+  "version": "0.0.1"
 }

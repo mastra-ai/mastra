@@ -1,8 +1,8 @@
 {
   "name": "examples-weather-agent",
-  "description": "",
-  "private": true,
   "type": "module",
+  "private": true,
+  "description": "",
   "main": "index.js",
   "scripts": {
     "dev": "npx tsx src/mastra/index.ts"
@@ -15,5 +15,5 @@
     "@mastra/core": "workspace:^",
     "zod": "^3.24.1"
   },
-  "version": "0.0.1-alpha.2"
+  "version": "0.0.1"
 }

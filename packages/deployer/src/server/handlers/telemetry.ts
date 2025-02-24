@@ -12,7 +12,8 @@ export async function getTelemetryHandler(c: Context) {
     const telemetry: Telemetry = mastra.telemetry;
     const storage: MastraStorage = mastra.storage;
 
-    const { name, scope, page, perPage, attribute } = c.req.query();
+    const { name, scope, page, perPage } = c.req.query();
+    const attribute = c.req.queries('attribute');
 
     if (!telemetry) {
       throw new HTTPException(400, { message: 'Telemetry is not initialized' });

@@ -1,5 +1,7 @@
 # insert-embedding-in-pgvector
 
+## 0.0.1
+
 ## 0.0.1-alpha.3
 
 ### Patch Changes

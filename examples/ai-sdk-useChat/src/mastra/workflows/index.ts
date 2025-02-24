@@ -1,9 +1,9 @@
-import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
 import { Agent } from '@mastra/core/agent';
 import { Step, Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
-const llm = openai('gpt-4o');
+const llm = anthropic('claude-3-5-sonnet-20241022');
 
 const agent = new Agent({
   name: 'Weather Agent',
@@ -118,7 +118,7 @@ const planActivities = new Step({
   id: 'plan-activities',
   description: 'Suggests activities based on weather conditions',
   inputSchema: forecastSchema,
-  execute: async ({ context, mastra }) => {
+  execute: async ({ context }) => {
     const forecast = context?.getStepPayload<z.infer<typeof forecastSchema>>('fetch-weather');
 
     if (!forecast || forecast.length === 0) {

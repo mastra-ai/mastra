@@ -1,4 +1,6 @@
 import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { PostgresStore } from '@mastra/pg';
 import { openai } from '@ai-sdk/openai';
 import { systemPrompt } from '@/ai/prompts';
 import {
@@ -6,6 +8,14 @@ import {
   getHistoricalCryptoPrices,
   searchCryptoCoins,
 } from '../tools';
+
+const connectionString = process.env.POSTGRES_URL!;
+
+const memory = new Memory({
+  storage: new PostgresStore({
+    connectionString,
+  }),
+});
 
 export const createCryptoAgent = (modelProvider: any, modelName: any) => {
   let model;
@@ -21,6 +31,7 @@ export const createCryptoAgent = (modelProvider: any, modelName: any) => {
     name: 'cryptoAgent',
     instructions: systemPrompt,
     model,
+    memory,
     tools: {
       searchCryptoCoins,
       getCryptoPrice,

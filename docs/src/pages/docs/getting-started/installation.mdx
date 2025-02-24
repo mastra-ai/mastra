@@ -101,12 +101,40 @@ cd hello-mastra
 
 Then, initialize a TypeScript project including the `@mastra/core` package:
 
-```bash copy npm2yarn
+<Tabs items={["npm", "pnpm", "yarn", "bun"]}>
+  <Tabs.Tab>
+```bash copy
 npm init -y
 npm install typescript tsx @types/node mastra@alpha --save-dev
 npm install @mastra/core@alpha zod
 npx tsc --init
 ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+pnpm init
+pnpm add typescript tsx @types/node mastra@alpha --save-dev
+pnpm add @mastra/core@alpha zod
+pnpm dlx tsc --init
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+yarn init -y
+yarn add typescript tsx @types/node mastra@alpha --dev
+yarn add @mastra/core@alpha zod
+yarn dlx tsc --init
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+bun init -y
+bun add typescript tsx @types/node mastra@alpha --dev
+bun add @mastra/core@alpha zod
+bunx tsc --init
+```
+  </Tabs.Tab>
+</Tabs>
 
 ### Set Up your API Key
 

@@ -3,6 +3,8 @@ import child_process from 'node:child_process';
 import util from 'node:util';
 import color from 'picocolors';
 
+import { getPackageManager, getPackageManagerInstallCommand } from '../utils';
+
 import {
   createComponentsDir,
   createMastraDir,
@@ -65,7 +67,9 @@ export const init = async ({
     const key = await getAPIKey(llmProvider || 'openai');
 
     const aiSdkPackage = getAISDKPackage(llmProvider);
-    await exec(`npm i ${aiSdkPackage}`);
+    const pm = getPackageManager();
+    const installCommand = getPackageManagerInstallCommand(pm);
+    await exec(`${pm} ${installCommand} ${aiSdkPackage}`);
 
     s.stop();
     if (!llmApiKey) {

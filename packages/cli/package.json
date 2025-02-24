@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.2.1",
+  "version": "0.2.4",
   "license": "MIT",
   "description": "cli for mastra",
   "type": "module",
@@ -26,7 +26,6 @@
     "test:watch": "vitest watch",
     "clean": "rm -rf dist && rm -rf node_modules",
     "typecheck": "tsc --noEmit --incremental",
-    "postinstall": "node src/scripts/postinstall.js",
     "lint": "eslint ."
   },
   "keywords": [
@@ -74,7 +73,6 @@
     "zod-to-json-schema": "^3.24.1"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^1.1.9",
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.49.2",
     "@types/express": "^5.0.0",
