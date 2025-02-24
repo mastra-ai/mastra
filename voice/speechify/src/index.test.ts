@@ -1,6 +1,6 @@
-import { createWriteStream, writeFileSync, mkdirSync } from 'fs';
+import { writeFileSync, mkdirSync } from 'fs';
 import path from 'path';
-import { PassThrough, Readable } from 'stream';
+import { Readable } from 'stream';
 import { describe, expect, it, beforeAll } from 'vitest';
 
 import { SpeechifyVoice } from './index';
@@ -14,7 +14,7 @@ describe('SpeechifyVoice Integration Tests', () => {
     try {
       mkdirSync(outputDir, { recursive: true });
     } catch (err) {
-      // Ignore if directory already exists
+      console.error('Failed to create output directory', err);
     }
 
     voice = new SpeechifyVoice({
