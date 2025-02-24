@@ -8,7 +8,7 @@ async function main() {
       doubledValue: z.number(),
     }),
     execute: async ({ context }) => {
-      const inputValue = context?.getStepPayload<{ inputValue: number }>('trigger')?.inputValue;
+      const inputValue = context?.getStepResult<{ inputValue: number }>('trigger')?.inputValue;
       if (!inputValue) throw new Error('No input value provided');
       const doubledValue = inputValue * 2;
       return { doubledValue };
@@ -21,7 +21,7 @@ async function main() {
       incrementedValue: z.number(),
     }),
     execute: async ({ context }) => {
-      const valueToIncrement = context?.getStepPayload<{ inputValue: number }>('trigger')?.inputValue;
+      const valueToIncrement = context?.getStepResult<{ inputValue: number }>('trigger')?.inputValue;
       if (!valueToIncrement) throw new Error('No value to increment provided');
       const incrementedValue = valueToIncrement + 1;
       return { incrementedValue };

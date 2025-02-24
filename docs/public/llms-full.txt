@@ -224,7 +224,7 @@ await agent.stream("When will the project be completed?", {
 
 The key to getting good responses from LLMs is feeding them the right context.
 
-Mastra has a Memory API that stores and manages conversation history and contextual information. The Memory API uses a storage backend to persist conversation history and contextual information (more on this later). 
+Mastra has a Memory API that stores and manages conversation history and contextual information. The Memory API uses a storage backend to persist conversation history and contextual information (more on this later).
 
 The Memory API uses two main mechanisms to maintain context in conversations, recent message history and semantic search.
 
@@ -1151,7 +1151,7 @@ Evals need to be added to an agent. To use any of [the default metrics](/docs/ev
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { ToneConsistencyMetric } from "@mastra/evals/nlp";
- 
+
 export const myAgent = new Agent({
   name: "My Agent",
   instructions: "You are a helpful assistant.",
@@ -1223,8 +1223,8 @@ beforeAll(async () => {
   });
   ```
 
-  This allows you to save evals in Mastra Storage. 
-  With file storage, evals persist and can be queried later. 
+  This allows you to save evals in Mastra Storage.
+  With file storage, evals persist and can be queried later.
   With memory storage, evals are isolated to the test process.
 </details>
 ```
@@ -1252,7 +1252,7 @@ Mastra provides several eval metrics for assessing Agent outputs. Mastra is not 
 
 ### Accuracy and Reliability
 - [`hallucination`](/docs/reference/evals/hallucination): Detects fabricated or unsupported information
-- [`faithfulness`](/docs/reference/evals/faithfulness): Checks output alignment with source material  
+- [`faithfulness`](/docs/reference/evals/faithfulness): Checks output alignment with source material
 - [`content-similarity`](/docs/reference/evals/content-similarity): Compares text similarity
 - [`textual-difference`](/docs/reference/evals/textual-difference): Measures text changes
 - [`completeness`](/docs/reference/evals/completeness): Measures if all required information is present
@@ -1282,10 +1282,10 @@ description: "Mastra allows so create your own evals, here is how."
 # Create your own Eval
 Source: https://mastra.ai/docs/evals/02-custom-eval
 
-Creating your own eval is as easy as creating a new function. You simply create a class that extends the `Metric` class and implement the `measure` method. 
+Creating your own eval is as easy as creating a new function. You simply create a class that extends the `Metric` class and implement the `measure` method.
 
 
-## Basic example 
+## Basic example
 
 Here is a very basic example of a custom eval that checks if the output contains a certain keyword. This is a simplified version of our own [keyword coverage eval](/docs/reference/evals/keyword-coverage).
 
@@ -1880,7 +1880,7 @@ Assuming you select all components and include example code, your project struct
     <FileTree.File name=".env" />
   </FileTree.Folder>
 </FileTree>
-{/* 
+{/*
 ```
 root/
 ├── src/
@@ -2398,7 +2398,7 @@ const gatherCandidateInfo = new Step({
     resumeText: z.string(),
   }),
   execute: async ({ context }) => {
-    const resumeText = context?.getStepPayload<{
+    const resumeText = context?.getStepResult<{
       resumeText: string;
     }>("trigger")?.resumeText;
 
@@ -2439,7 +2439,7 @@ const askAboutSpecialty = new Step({
     question: z.string(),
   }),
   execute: async ({ context }) => {
-    const candidateInfo = context?.getStepPayload<CandidateInfo>(
+    const candidateInfo = context?.getStepResult<CandidateInfo>(
       "gatherCandidateInfo",
     );
 
@@ -2466,7 +2466,7 @@ const askAboutRole = new Step({
     question: z.string(),
   }),
   execute: async ({ context }) => {
-    const candidateInfo = context?.getStepPayload<CandidateInfo>(
+    const candidateInfo = context?.getStepResult<CandidateInfo>(
       "gatherCandidateInfo",
     );
 
@@ -2539,9 +2539,9 @@ description: "Mastra is a Typescript agent framework. It helps you build AI appl
 # About Mastra
 Source: https://mastra.ai/docs
 
-Mastra is an open-source Typescript agent framework. 
+Mastra is an open-source Typescript agent framework.
 
-It's designed to give you the primitives you need to build AI applications and features. 
+It's designed to give you the primitives you need to build AI applications and features.
 
 You can use Mastra to build [AI agents](/docs/agents/00-overview.mdx) that have memory and can execute functions, or chain LLM calls in deterministic [workflows](/docs/workflows/00-overview.mdx). You can chat with your agents in Mastra's [local dev environment](/docs/local-dev/mastra-dev.mdx), feed them application-specific knowledge with [RAG](/docs/rag/overview.mdx), and score their outputs with Mastra's [evals](/docs/08-running-evals.mdx).
 
@@ -2549,10 +2549,10 @@ The main features include:
 
 * **[Model routing](https://sdk.vercel.ai/docs/introduction)**: Mastra uses the [Vercel AI SDK](https://sdk.vercel.ai/docs/introduction) for model routing, providing a unified interface to interact with any LLM provider including OpenAI, Anthropic, and Google Gemini.
 * **[Agent memory and tool calling](/docs/agents/01-agent-memory.mdx)**: With Mastra, you can give your agent tools (functions) that it can call. You can persist agent memory and retrieve it based on recency, semantic similarity, or conversation thread.
-* **[Workflow graphs](/docs/workflows/00-overview.mdx)**: When you want to execute LLM calls in a deterministic way, Mastra gives you a graph-based workflow engine. You can define discrete steps, log inputs and outputs at each step of each run, and pipe them into an observability tool. Mastra workflows have a simple syntax for control flow (`step()`, `.then()`, `.after()`) that allows branching and chaining. 
+* **[Workflow graphs](/docs/workflows/00-overview.mdx)**: When you want to execute LLM calls in a deterministic way, Mastra gives you a graph-based workflow engine. You can define discrete steps, log inputs and outputs at each step of each run, and pipe them into an observability tool. Mastra workflows have a simple syntax for control flow (`step()`, `.then()`, `.after()`) that allows branching and chaining.
 * **[Agent development environment](/docs/local-dev/mastra-dev.mdx)**: When you're developing an agent locally, you can chat with it and see its state and memory in Mastra's agent development environment.
 * **[Retrieval-augmented generation (RAG)](/docs/rag/overview.mdx)**: Mastra gives you APIs to process documents (text, HTML, Markdown, JSON) into chunks, create embeddings, and store them in a vector database. At query time, it retrieves relevant chunks to ground LLM responses in your data, with a unified API on top of multiple vector stores (Pinecone, pgvector, etc) and embedding providers (OpenAI, Cohere, etc).
-* **[Deployment](/docs/deployment/deployment.mdx)**: Mastra supports bundling your agents and workflows within an existing React, Next.js, or Node.js application, or into standalone endpoints. The Mastra deploy helper lets you easily bundle agents and workflows into a Node.js server using Hono, or deploy it onto a serverless platform like Vercel, Cloudflare Workers, or Netlify. 
+* **[Deployment](/docs/deployment/deployment.mdx)**: Mastra supports bundling your agents and workflows within an existing React, Next.js, or Node.js application, or into standalone endpoints. The Mastra deploy helper lets you easily bundle agents and workflows into a Node.js server using Hono, or deploy it onto a serverless platform like Vercel, Cloudflare Workers, or Netlify.
 * **[Evals](/docs/evals/00-overview.mdx)**: Mastra provides automated evaluation metrics that use model-graded, rule-based, and statistical methods to assess LLM outputs, with built-in metrics for toxicity, bias, relevance, and factual accuracy. You can also define your own evals.
 
 
@@ -2574,11 +2574,11 @@ Mastra provides two CLI commands for project setup:
 You can create a new project using either a package manager or the mastra CLI:
 
 ```bash npm2yarn copy
-npm create mastra@latest 
+npm create mastra@latest
 ```
 
 ```bash npm2yarn copy
-npm install -g mastra@latest 
+npm install -g mastra@latest
 mastra create
 ```
 
@@ -3050,7 +3050,7 @@ import { Tabs } from "nextra/components";
 ## Retrieval in RAG Systems
 Source: https://mastra.ai/docs/rag/retrieval
 
-After storing embeddings, you need to retrieve relevant chunks to answer user queries. 
+After storing embeddings, you need to retrieve relevant chunks to answer user queries.
 
 Mastra provides flexible retrieval options with support for semantic search, filtering, and re-ranking.
 
@@ -3147,7 +3147,7 @@ const results = await pgVector.query("embeddings", embedding, 10, {
     { price: { $lt: 200 } }
   ]
 });
-``` 
+```
 
 Common use cases for metadata filtering:
 - Filter by document source or type
@@ -3182,7 +3182,7 @@ For detailed configuration options and advanced usage, see the [Vector Query Too
 
 ### Vector Store Prompts
 
-Vector store prompts define query patterns and filtering capabilities for each vector database implementation. 
+Vector store prompts define query patterns and filtering capabilities for each vector database implementation.
 When implementing filtering, these prompts are required in the agent's instructions to specify valid operators and syntax for each vector store implementation.
 
 <Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare']}>
@@ -3570,15 +3570,15 @@ await vectorStore.upsert(
     // Basic content
     text: chunk.text,
     id: chunk.id,
-    
+
     // Document organization
     source: chunk.source,
     category: chunk.category,
-    
+
     // Temporal metadata
     createdAt: new Date().toISOString(),
     version: "1.0",
-    
+
     // Custom fields
     language: chunk.language,
     author: chunk.author,
@@ -4534,7 +4534,7 @@ yarn add @mastra/client-js
   </Tabs.Tab>
   <Tabs.Tab>
 ```bash copy
-pnpm add @mastra/client-js 
+pnpm add @mastra/client-js
 ```
 </Tabs.Tab>
 </Tabs>
@@ -5643,7 +5643,7 @@ const result = await metric.measure(
 
 - [Answer Relevancy Metric](./answer-relevancy)
 - [Content Similarity Metric](./content-similarity)
-- [Textual Difference Metric](./textual-difference) 
+- [Textual Difference Metric](./textual-difference)
 - [Keyword Coverage Metric](./keyword-coverage)
 
 ---
@@ -5827,7 +5827,7 @@ const result2 = await strictWhitespaceMetric.measure(
 ## Related
 
 - [Completeness Metric](./completeness)
-- [Textual Difference Metric](./textual-difference) 
+- [Textual Difference Metric](./textual-difference)
 - [Answer Relevancy Metric](./answer-relevancy)
 - [Keyword Coverage Metric](./keyword-coverage)
 
@@ -6392,7 +6392,7 @@ const result = await metric.measure(
 // {
 //   score: 60,
 //   info: {
-//     reason: "3 out of 5 statements are relevant to pricing plans. The statements about 
+//     reason: "3 out of 5 statements are relevant to pricing plans. The statements about
 //           company founding and office locations are not relevant to the pricing query."
 //   }
 // }
@@ -6402,7 +6402,7 @@ const result = await metric.measure(
 
 - [Contextual Recall Metric](./contextual-recall)
 - [Context Precision Metric](./context-precision)
-- [Context Position Metric](./context-position) 
+- [Context Position Metric](./context-position)
 
 ---
 title: "Reference: Contextual Recall | Metrics | Evals | Mastra Docs"
@@ -6584,8 +6584,8 @@ const result = await metric.measure(
 // {
 //   score: 50, // Only half of the security measures were mentioned
 //   info: {
-//     reason: "The score is 50 because only half of the security measures were mentioned 
-//           in the response. The response missed the regular security audits and incident 
+//     reason: "The score is 50 because only half of the security measures were mentioned
+//           in the response. The response missed the regular security audits and incident
 //           response team information."
 //   }
 // }
@@ -6593,7 +6593,7 @@ const result = await metric.measure(
 
 ## Related
 
-+ [Context Relevancy Metric](./context-relevancy) 
++ [Context Relevancy Metric](./context-relevancy)
 + [Completeness Metric](./completeness)
 + [Summarization Metric](./summarization)
 
@@ -8863,7 +8863,7 @@ description: Documentation for the OtelConfig object, which configures OpenTelem
 # `OtelConfig`
 Source: https://mastra.ai/docs/reference/observability/otel-config
 
-The `OtelConfig` object is used to configure OpenTelemetry instrumentation, tracing, and exporting behavior within your application. By adjusting its properties, you can control how telemetry data (such as traces) is collected, sampled, and exported. 
+The `OtelConfig` object is used to configure OpenTelemetry instrumentation, tracing, and exporting behavior within your application. By adjusting its properties, you can control how telemetry data (such as traces) is collected, sampled, and exported.
 
 To use the `OtelConfig` within Mastra, pass it as the value of the `telemetry` key when initializing Mastra. This will configure Mastra to use your custom OpenTelemetry settings for tracing and instrumentation.
 
@@ -9552,7 +9552,7 @@ Required environment variables:
 - `ASTRA_DB_ENDPOINT`: Your Astra DB API endpoint
 
 ### Related
-- [Metadata Filters](./metadata-filters) 
+- [Metadata Filters](./metadata-filters)
 
 ---
 title: "Reference: Chroma Vector Store | Vector Databases | RAG | Mastra Docs"
@@ -9562,7 +9562,7 @@ description: Documentation for the ChromaVector class in Mastra, which provides 
 # Chroma Vector Store
 Source: https://mastra.ai/docs/reference/rag/chroma
 
-The ChromaVector class provides vector search using [ChromaDB](https://www.trychroma.com/), an open-source embedding database. 
+The ChromaVector class provides vector search using [ChromaDB](https://www.trychroma.com/), an open-source embedding database.
 It offers efficient vector search with metadata filtering and hybrid search capabilities.
 
 ## Constructor Options
@@ -9758,7 +9758,7 @@ try {
 ```
 
 ### Related
-- [Metadata Filters](./metadata-filters) 
+- [Metadata Filters](./metadata-filters)
 
 ---
 title: "Reference: .chunk() | Document Processing | RAG | Mastra Docs"
@@ -9782,7 +9782,7 @@ This is a sample document that we want to split into chunks.
 ## Section 1
 Here is the first section with some content.
 
-## Section 2 
+## Section 2
 Here is another section with different content.
 `);
 
@@ -10339,7 +10339,7 @@ Creates a document from HTML content.
 static fromHTML(html: string, metadata?: Record<string, any>): MDocument
 ```
 
-### fromMarkdown() 
+### fromMarkdown()
 
 Creates a document from Markdown content.
 
@@ -10609,13 +10609,13 @@ const doc = new Document(text);
 const chunks = await doc.chunk({
   extract: {
     fields: [
-      { 
-        name: 'summary', 
-        description: 'A 1-2 sentence summary of the main points' 
+      {
+        name: 'summary',
+        description: 'A 1-2 sentence summary of the main points'
       },
-      { 
-        name: 'entities', 
-        description: 'List of companies, people, and locations mentioned' 
+      {
+        name: 'entities',
+        description: 'List of companies, people, and locations mentioned'
       },
       {
         name: 'custom_field',
@@ -10645,7 +10645,7 @@ const chunks = await doc.chunk({
       isOptional: true
     }
   ]}
-/> 
+/>
 
 ## Field Types
 
@@ -11158,7 +11158,7 @@ description: Documentation for the PgVector class in Mastra, which provides vect
 Source: https://mastra.ai/docs/reference/rag/pg
 
 The PgVector class provides vector search using [PostgreSQL](https://www.postgresql.org/) with [pgvector](https://github.com/pgvector/pgvector) extension.
-It provides robust vector similarity search capabilities within your existing PostgreSQL database. 
+It provides robust vector similarity search capabilities within your existing PostgreSQL database.
 
 ## Constructor Options
 
@@ -11546,7 +11546,7 @@ description: Documentation for integrating Qdrant with Mastra, a vector similari
 # Qdrant Vector Store
 Source: https://mastra.ai/docs/reference/rag/qdrant
 
-The QdrantVector class provides vector search using [Qdrant](https://qdrant.tech/), a vector similarity search engine. 
+The QdrantVector class provides vector search using [Qdrant](https://qdrant.tech/), a vector similarity search engine.
 It provides a production-ready service with a convenient API to store, search, and manage vectors with additional payload and extended filtering support.
 
 ## Constructor Options
@@ -11654,7 +11654,7 @@ It provides a production-ready service with a convenient API to store, search, a
       name: "includeVector",
       type: "boolean",
       isOptional: true,
-      defaultValue: "false", 
+      defaultValue: "false",
       description: "Whether to include vectors in the results",
     },
   ]}
@@ -11735,7 +11735,7 @@ description: Documentation for the rerank function in Mastra, which provides adv
 # rerank()
 Source: https://mastra.ai/docs/reference/rag/rerank
 
-The `rerank()` function provides advanced reranking capabilities for vector search results by combining semantic relevance, vector similarity, and position-based scoring. 
+The `rerank()` function provides advanced reranking capabilities for vector search results by combining semantic relevance, vector similarity, and position-based scoring.
 
 ```typescript
 function rerank(
@@ -12134,7 +12134,7 @@ Required environment variables:
 - `UPSTASH_VECTOR_TOKEN`: Your Upstash Vector API token
 
 ### Related
-- [Metadata Filters](./metadata-filters) 
+- [Metadata Filters](./metadata-filters)
 
 ---
 title: "Reference: Cloudflare Vector Store | Vector Databases | RAG | Mastra Docs"
@@ -12301,7 +12301,7 @@ Creates an index on a metadata field to enable filtering.
   content={[
     {
       name: "indexName",
-      type: "string", 
+      type: "string",
       description: "Name of the index containing the metadata field",
     },
     {
@@ -12385,7 +12385,7 @@ Required environment variables:
 - `CLOUDFLARE_API_TOKEN`: Your Cloudflare API token with Vectorize permissions
 
 ### Related
-- [Metadata Filters](./metadata-filters) 
+- [Metadata Filters](./metadata-filters)
 
 ---
 title: "LibSQL Storage | Storage System | Mastra Core"
@@ -12901,7 +12901,7 @@ The chunker is created as a Mastra tool with the following properties:
 ## Related
 
 - [MDocument](../rag/document.mdx)
-- [createVectorQueryTool](./vector-query-tool) 
+- [createVectorQueryTool](./vector-query-tool)
 
 
 ---
@@ -13032,7 +13032,7 @@ const graphTool = createGraphRAGTool({
 ## Related
 
 - [createVectorQueryTool](./vector-query-tool)
-- [GraphRAG](../rag/graph-rag) 
+- [GraphRAG](../rag/graph-rag)
 
 ---
 title: "Reference: createVectorQueryTool() | RAG | Mastra Tools Docs"
@@ -13231,8 +13231,8 @@ The tool is created with:
 
 ## Related
 
-- [rerank()](../rag/rerank) 
-- [createGraphRAGTool](./graph-rag-tool) 
+- [rerank()](../rag/rerank)
+- [createGraphRAGTool](./graph-rag-tool)
 
 ---
 title: "Reference: TTS.generate() | Text to Speech (TTS) | Mastra Docs"
@@ -13950,7 +13950,7 @@ workflow
 
 - [Branching Paths example](../../../examples/workflows/branching-paths.mdx)
 - [Workflow Class Reference](./workflow.mdx)
-- [Step Reference](./step-class.mdx) 
+- [Step Reference](./step-class.mdx)
 - [Control Flow Guide](../../workflows/control-flow.mdx)
 
 
@@ -14018,13 +14018,13 @@ try {
       description: "Steps form a circular reference"
     },
     {
-      name: "no_terminal_path", 
+      name: "no_terminal_path",
       type: "string",
       description: "Path has no end point"
     },
     {
       name: "unreachable_step",
-      type: "string", 
+      type: "string",
       description: "Step cannot be reached from workflow start"
     },
     {
@@ -14110,7 +14110,7 @@ try {
 
 
 ---
-title: "Reference: Workflow.execute() | Workflows | Mastra Docs" 
+title: "Reference: Workflow.execute() | Workflows | Mastra Docs"
 description: "Documentation for the `.execute()` method in Mastra workflows, which runs workflow steps and returns results."
 ---
 
@@ -14136,7 +14136,7 @@ const result = await workflow.execute({
 });
 ```
 
-## Parameters 
+## Parameters
 
 <PropertiesTable
   content={[
@@ -14153,7 +14153,7 @@ const result = await workflow.execute({
           isOptional: false
         },
         {
-          name: "runId", 
+          name: "runId",
           type: "string",
           description: "Optional ID to track this execution run",
           isOptional: true
@@ -14174,7 +14174,7 @@ const result = await workflow.execute({
       properties: [
         {
           name: "runId",
-          type: "string", 
+          type: "string",
           description: "Unique identifier for this execution run"
         },
         {
@@ -14236,7 +14236,7 @@ The `.resume()` method continues execution of a suspended workflow step, optiona
 ```typescript copy showLineNumbers
 await workflow.resume({
   runId: "abc-123",
-  stepId: "stepTwo", 
+  stepId: "stepTwo",
   context: {
     secondValue: 100
   }
@@ -14262,7 +14262,7 @@ await workflow.resume({
   content={[
     {
       name: "runId",
-      type: "string", 
+      type: "string",
       description: "Unique identifier of the workflow run to resume",
       isOptional: false
     },
@@ -14337,8 +14337,8 @@ The start function begins execution of a workflow run. It processes all steps in
 
 ```typescript copy showLineNumbers
 const { runId, start } = workflow.createRun();
-const result = await start({ 
-  triggerData: { inputValue: 42 } 
+const result = await start({
+  triggerData: { inputValue: 42 }
 });
 ```
 
@@ -14458,7 +14458,7 @@ const processOrder = new Step({
       required: false
     },
     {
-      name: "outputSchema", 
+      name: "outputSchema",
       type: "z.ZodSchema",
       description: "Zod schema to validate step output data",
       required: false
@@ -14520,13 +14520,13 @@ Conditions determine whether a step should execute based on the output of previo
 
 ## Usage
 
-There are three ways to specify conditions: function, query object, and simple path comparison. 
+There are three ways to specify conditions: function, query object, and simple path comparison.
 
 ### 1. Function Condition
 ```typescript copy showLineNumbers
 workflow.step(processOrder, {
   when: async ({ context }) => {
-    const auth = context?.getStepPayload<{status: string}>("auth");
+    const auth = context?.getStepResult<{status: string}>("auth");
     return auth?.status === "authenticated";
   }
 });
@@ -14578,7 +14578,7 @@ Based on the type of condition, the workflow runner will try to match the condit
 
 ## Query
 
-The Query object provides MongoDB-style query operators for comparing values from previous steps or trigger data. It supports basic comparison operators like `$eq`, `$gt`, `$lt` as well as array operators like `$in` and `$nin`, and can be combined with and/or operators for complex conditions. 
+The Query object provides MongoDB-style query operators for comparing values from previous steps or trigger data. It supports basic comparison operators like `$eq`, `$gt`, `$lt` as well as array operators like `$in` and `$nin`, and can be combined with and/or operators for complex conditions.
 
 This query syntax allows for readable conditional logic for determining whether a step should execute.
 
@@ -14590,7 +14590,7 @@ This query syntax allows for readable conditional logic for determining whether 
       description: "Equal to value"
     },
     {
-      name: "$ne", 
+      name: "$ne",
       type: "any",
       description: "Not equal to value"
     },
@@ -14601,7 +14601,7 @@ This query syntax allows for readable conditional logic for determining whether 
     },
     {
       name: "$gte",
-      type: "number", 
+      type: "number",
       description: "Greater than or equal to value"
     },
     {
@@ -14621,7 +14621,7 @@ This query syntax allows for readable conditional logic for determining whether 
     },
     {
       name: "$nin",
-      type: "any[]", 
+      type: "any[]",
       description: "Value does not exist in array"
     },
     {
@@ -15230,7 +15230,7 @@ A workflow's status indicates its current execution state. The possible values a
     },
     {
       name: "RUNNING",
-      type: "string", 
+      type: "string",
       description: "Workflow is actively executing steps"
     },
     {
@@ -15528,8 +15528,8 @@ myWorkflow
 
 In this example:
 
-- stepA leads to stepB, then to stepD.  
-- Separately, stepA also triggers stepC, which in turn leads to stepE.  
+- stepA leads to stepB, then to stepD.
+- Separately, stepA also triggers stepC, which in turn leads to stepE.
 - The workflow waits for both stepD and stepE to finish before proceeding to stepF.
 
 See the [Branching Paths](../../examples/workflows/branching-paths.mdx) example for more details.
@@ -15571,7 +15571,7 @@ myWorkflow.step(
   }),
   {
     when: async ({ context }) => {
-      const fetchData = context?.getStepPayload<{ status: string }>("fetchData");
+      const fetchData = context?.getStepResult<{ status: string }>("fetchData");
       return fetchData?.status === "success";
     },
   },
@@ -15624,16 +15624,16 @@ myWorkflow.step(
 
 Steps access data from previous steps through the `context` object. The context contains a record of all step results and their payloads.
 
-### Using getStepPayload
+### Using getStepResult
 
-`getStepPayload` retrieves a step's output with type safety:
+`getStepResult` retrieves a step's output with type safety:
 
 ```typescript copy showLineNumbers
 workflow.step(
   new Step({
     id: "processOrder",
     execute: async ({ context }) => {
-      const userData = context.getStepPayload<{ userId: string }>("fetchUser");
+      const userData = context.getStepResult<{ userId: string }>("fetchUser");
       return {
         userId: userData?.userId,
         status: "processing"
@@ -15914,7 +15914,7 @@ const fetchWeather = new Step({
     city: z.string().describe("The city to get the weather for"),
   }),
   execute: async ({ context }) => {
-    const triggerData = context?.getStepPayload<{
+    const triggerData = context?.getStepResult<{
       city: string;
     }>("trigger");
 
@@ -15966,7 +15966,7 @@ const planActivities = new Step({
   inputSchema: forecastSchema,
   execute: async ({ context, mastra }) => {
     const forecast =
-      context?.getStepPayload<z.infer<typeof forecastSchema>>(
+      context?.getStepResult<z.infer<typeof forecastSchema>>(
         "fetch-weather",
       );
 
@@ -16143,7 +16143,7 @@ const getRandomImage = async ({
 };
 
 const instructions = `
-  You can view an image and figure out if it is a bird or not. 
+  You can view an image and figure out if it is a bird or not.
   You can also figure out the species of the bird and where the picture was taken.
 `;
 
@@ -16397,7 +16397,7 @@ Create the editor step that processes the copywriter's output:
 const editorStep = new Step({
   id: "editorStep",
   execute: async ({ context }) => {
-    const copy = context?.getStepPayload<{ copy: number }>("copywriterStep")?.copy;
+    const copy = context?.getStepResult<{ copy: number }>("copywriterStep")?.copy;
 
     const result = await editorAgent.generate(
       `Edit the following blog post only returning the edited copy: ${copy}`,
@@ -18707,7 +18707,7 @@ The metric provides:
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/keyword-coverage"
   }
-/> 
+/>
 
 ---
 title: "Example: Prompt Alignment | Evals | Mastra Docs"
@@ -18942,11 +18942,11 @@ const metric = new SummarizationMetric(openai('gpt-4o-mini'));
 Evaluate a summary that maintains both factual accuracy and complete coverage:
 
 ```typescript copy showLineNumbers{7} filename="src/index.ts"
-const input1 = `The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning. 
-Elon Musk joined in 2004 as the largest investor and became CEO in 2008. The company's first car, 
+const input1 = `The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning.
+Elon Musk joined in 2004 as the largest investor and became CEO in 2008. The company's first car,
 the Roadster, was launched in 2008.`;
 
-const output1 = `Tesla, founded by Martin Eberhard and Marc Tarpenning in 2003, launched its first car, 
+const output1 = `Tesla, founded by Martin Eberhard and Marc Tarpenning in 2003, launched its first car,
 the Roadster, in 2008. Elon Musk joined as the largest investor in 2004 and became CEO in 2008.`;
 
 console.log('Example 1 - High-quality Summary:');
@@ -18978,12 +18978,12 @@ console.log('Metric Result:', {
 Evaluate a summary that is factually accurate but omits important information:
 
 ```typescript copy showLineNumbers{24} filename="src/index.ts"
-const input2 = `The Python programming language was created by Guido van Rossum and was first released 
-in 1991. It emphasizes code readability with its notable use of significant whitespace. Python is 
-dynamically typed and garbage-collected. It supports multiple programming paradigms, including 
+const input2 = `The Python programming language was created by Guido van Rossum and was first released
+in 1991. It emphasizes code readability with its notable use of significant whitespace. Python is
+dynamically typed and garbage-collected. It supports multiple programming paradigms, including
 structured, object-oriented, and functional programming.`;
 
-const output2 = `Python, created by Guido van Rossum, is a programming language known for its readable 
+const output2 = `Python, created by Guido van Rossum, is a programming language known for its readable
 code and use of whitespace. It was released in 1991.`;
 
 console.log('Example 2 - Partial Coverage:');
@@ -19015,11 +19015,11 @@ console.log('Metric Result:', {
 Evaluate a summary that contains factual errors and misrepresentations:
 
 ```typescript copy showLineNumbers{41} filename="src/index.ts"
-const input3 = `The World Wide Web was invented by Tim Berners-Lee in 1989 while working at CERN. 
-He published the first website in 1991. Berners-Lee made the Web freely available, with no patent 
+const input3 = `The World Wide Web was invented by Tim Berners-Lee in 1989 while working at CERN.
+He published the first website in 1991. Berners-Lee made the Web freely available, with no patent
 and no royalties due.`;
 
-const output3 = `The Internet was created by Tim Berners-Lee at MIT in the early 1990s, and he went 
+const output3 = `The Internet was created by Tim Berners-Lee at MIT in the early 1990s, and he went
 on to commercialize the technology through patents.`;
 
 console.log('Example 3 - Inaccurate Summary:');
@@ -19075,7 +19075,7 @@ Final score is determined by the minimum of these two scores, ensuring that both
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/summarization"
   }
-/> 
+/>
 
 ---
 title: "Example: Textual Difference | Evals | Mastra Docs"
@@ -19247,7 +19247,7 @@ The metric provides:
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/textual-difference"
   }
-/> 
+/>
 
 ---
 title: "Example: Tone Consistency | Evals | Mastra Docs"
@@ -19409,7 +19409,7 @@ The metric provides different outputs based on the mode:
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/tone-consistency"
   }
-/> 
+/>
 
 ---
 title: "Example: Toxicity | Evals | Mastra Docs"
@@ -19555,7 +19555,7 @@ The metric provides:
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/toxicity"
   }
-/> 
+/>
 
 ---
 title: "Examples List: Workflows, Agents, RAG | Mastra Docs"
@@ -19784,7 +19784,7 @@ The Examples section is a short list of example projects demonstrating basic AI 
       href: "/examples/evals/textual-difference",
     },
     {
-      title: "Tone Consistency", 
+      title: "Tone Consistency",
       href: "/examples/evals/tone-consistency",
     },
     {
@@ -20508,7 +20508,7 @@ const agent = mastra.getAgent('ragAgent');
 ```typescript copy showLineNumbers{32} filename="src/index.ts"
 const prompt = `
 [Insert query based on document here]
-Please base your answer only on the context provided in the tool. 
+Please base your answer only on the context provided in the tool.
 If the context doesn't contain enough information to fully answer the question, please state that explicitly.
 `;
 
@@ -20891,9 +20891,9 @@ async function generateResponse(query: string, agent: Agent) {
       Please answer the following question:
       ${query}
 
-      Please base your answer only on the context provided in the tool with this index ${index}. 
-      If the context doesn't contain enough information to fully answer the question, 
-      please state that explicitly. 
+      Please base your answer only on the context provided in the tool with this index ${index}.
+      If the context doesn't contain enough information to fully answer the question,
+      please state that explicitly.
       `;
   // Call the agent to generate a response
   const completion = await agent.generate(prompt);
@@ -21090,7 +21090,7 @@ async function generateResponse(query: string) {
     Please answer the following question using chain-of-thought reasoning:
     ${query}
 
-    Please base your answer only on the context provided in the tool. If the context doesn't 
+    Please base your answer only on the context provided in the tool. If the context doesn't
     contain enough information to fully answer the question, please state that explicitly.
     Remember: Explain how you're using the retrieved information to reach your conclusions.
     `;
@@ -21244,7 +21244,7 @@ const analyzeContext = new Step({
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
     const ragAgent = mastra?.agents?.ragAgent;
-    const query = context?.getStepPayload<{ query: string }>(
+    const query = context?.getStepResult<{ query: string }>(
       "trigger",
     )?.query;
 
@@ -21270,7 +21270,7 @@ const breakdownThoughts = new Step({
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
     const ragAgent = mastra?.agents?.ragAgent;
-    const analysis = context?.getStepPayload<{
+    const analysis = context?.getStepResult<{
       initialAnalysis: string;
     }>("analyzeContext")?.initialAnalysis;
 
@@ -21300,7 +21300,7 @@ const connectPieces = new Step({
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
     const ragAgent = mastra?.agents?.ragAgent;
-    const process = context?.getStepPayload<{
+    const process = context?.getStepResult<{
       breakdown: string;
     }>("breakdownThoughts")?.breakdown;
     const connectionPrompt = `
@@ -21329,7 +21329,7 @@ const drawConclusions = new Step({
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
     const ragAgent = mastra?.agents?.ragAgent;
-    const evidence = context?.getStepPayload<{
+    const evidence = context?.getStepResult<{
       connections: string;
     }>("connectPieces")?.connections;
     const conclusionPrompt = `
@@ -21358,7 +21358,7 @@ const finalAnswer = new Step({
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
     const ragAgent = mastra?.agents?.ragAgent;
-    const conclusions = context?.getStepPayload<{
+    const conclusions = context?.getStepResult<{
       conclusions: string;
     }>("drawConclusions")?.conclusions;
     const answerPrompt = `
@@ -21730,7 +21730,7 @@ export const ragAgent = new Agent({
   You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
 
   Use the vectorQueryTool to filter the context by searching the metadata.
-  
+
   The metadata is structured as follows:
 
   {
@@ -22074,7 +22074,7 @@ The system implements filtered vector search using Mastra and PGVector. Here's w
 3. Demonstrates combining vector similarity with metadata filtering
 
 > **Note**: For examples of how to extract metadata from your documents, see the [Metadata Extraction](./metadata-extraction) guide.
-> 
+>
 > To learn how to create and store embeddings in PGVector, see the [Insert Embeddings in PGVector](./insert-embedding-in-pgvector) guide.
 
 ## Setup
@@ -22228,7 +22228,7 @@ await chroma.upsert(
   chunks?.map(chunk => ({ text: chunk.text })),
 );
 ```
-{/* 
+{/*
 <br />
 <br />
 <hr className="dark:border-[#404040] border-gray-300" />
@@ -22523,7 +22523,7 @@ await vectorize.upsert(
   chunks?.map(chunk => ({ text: chunk.text })),
 );
 ```
-{/* 
+{/*
 <br />
 <br />
 <hr className="dark:border-[#404040] border-gray-300" />
@@ -22569,7 +22569,7 @@ Create a document from text content:
 ```typescript copy showLineNumbers{3} filename="src/index.ts"
 const doc = MDocument.fromText(`Title: The Benefits of Regular Exercise
 
-Regular exercise has numerous health benefits. It improves cardiovascular health, 
+Regular exercise has numerous health benefits. It improves cardiovascular health,
 strengthens muscles, and boosts mental wellbeing.
 
 Key Benefits:
@@ -22578,7 +22578,7 @@ Key Benefits:
 • Helps maintain healthy weight
 • Increases energy levels
 
-For optimal results, experts recommend at least 150 minutes of moderate exercise 
+For optimal results, experts recommend at least 150 minutes of moderate exercise
 per week.`);
 ```
 
@@ -22653,7 +22653,7 @@ console.log('Chunk Metadata:', metaTwo);
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/metadata-extraction"
   }
-/> 
+/>
 
 ---
 title: "Example: Re-ranking Results with Tools | Retrieval | RAG | Mastra Docs"
@@ -22815,7 +22815,7 @@ async function generateResponse(query: string) {
       Please answer the following question:
       ${query}
 
-      Please base your answer only on the context provided in the tool. If the context doesn't 
+      Please base your answer only on the context provided in the tool. If the context doesn't
       contain enough information to fully answer the question, please state that explicitly.
       `;
 
@@ -22856,7 +22856,7 @@ await answerQueries(queries);
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank-rag"
   }
-/> 
+/>
 
 ---
 title: "Example: Re-ranking Results | Retrieval | RAG | Mastra Docs"
@@ -23014,7 +23014,7 @@ The re-ranked results show how combining vector similarity with semantic underst
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank"
   }
-/> 
+/>
 
 ---
 title: "Example: Reranking with Cohere | RAG | Mastra Docs"
@@ -23024,11 +23024,11 @@ description: Example of using Mastra to improve document retrieval relevance wit
 # Reranking with Cohere
 Source: https://mastra.ai/examples/rag/reranking-with-cohere
 
-When retrieving documents for RAG, initial vector similarity search may miss important semantic matches. 
+When retrieving documents for RAG, initial vector similarity search may miss important semantic matches.
 
 Cohere's reranking service helps improve result relevance by reordering documents using multiple scoring factors.
 
-```typescript 
+```typescript
 import { rerank } from "@mastra/rag";
 
 const results = rerank(
@@ -23062,7 +23062,7 @@ import { GithubLink } from "../../../components/github-link";
 # Retrieving Top-K Results
 Source: https://mastra.ai/examples/rag/retrieve-results
 
-After storing embeddings in a vector database, you need to query them to find similar content. 
+After storing embeddings in a vector database, you need to query them to find similar content.
 
 The `query` method returns the most semantically similar chunks to your input embedding, ranked by relevance. The `topK` parameter allows you to specify the number of results to return.
 
@@ -23399,7 +23399,7 @@ async function main() {
       incrementedValue: z.number(),
     }),
     execute: async ({ context }) => {
-      const valueToIncrement = context?.getStepPayload<{ firstValue: number }>('trigger')?.firstValue;
+      const valueToIncrement = context?.getStepResult<{ firstValue: number }>('trigger')?.firstValue;
       if (!valueToIncrement) throw new Error('No value to increment provided');
       const incrementedValue = valueToIncrement + 1;
       return { incrementedValue };
@@ -23738,7 +23738,7 @@ export const mastra = new Mastra({
 // Get registered workflow from Mastra
 const registeredWorkflow = mastra.getWorkflow('registeredWorkflow');
 const { runId, start } = registeredWorkflow.createRun();
- 
+
 // Start watching the workflow before executing it
 myWorkflow.watch(async ({ context, activePaths }) => {
   for (const _path of activePaths) {

@@ -9,13 +9,13 @@ Conditions determine whether a step should execute based on the output of previo
 
 ## Usage
 
-There are three ways to specify conditions: function, query object, and simple path comparison. 
+There are three ways to specify conditions: function, query object, and simple path comparison.
 
 ### 1. Function Condition
 ```typescript copy showLineNumbers
 workflow.step(processOrder, {
   when: async ({ context }) => {
-    const auth = context?.getStepPayload<{status: string}>("auth");
+    const auth = context?.getStepResult<{status: string}>("auth");
     return auth?.status === "authenticated";
   }
 });
@@ -67,7 +67,7 @@ Based on the type of condition, the workflow runner will try to match the condit
 
 ## Query
 
-The Query object provides MongoDB-style query operators for comparing values from previous steps or trigger data. It supports basic comparison operators like `$eq`, `$gt`, `$lt` as well as array operators like `$in` and `$nin`, and can be combined with and/or operators for complex conditions. 
+The Query object provides MongoDB-style query operators for comparing values from previous steps or trigger data. It supports basic comparison operators like `$eq`, `$gt`, `$lt` as well as array operators like `$in` and `$nin`, and can be combined with and/or operators for complex conditions.
 
 This query syntax allows for readable conditional logic for determining whether a step should execute.
 
@@ -79,7 +79,7 @@ This query syntax allows for readable conditional logic for determining whether 
       description: "Equal to value"
     },
     {
-      name: "$ne", 
+      name: "$ne",
       type: "any",
       description: "Not equal to value"
     },
@@ -90,7 +90,7 @@ This query syntax allows for readable conditional logic for determining whether 
     },
     {
       name: "$gte",
-      type: "number", 
+      type: "number",
       description: "Greater than or equal to value"
     },
     {
@@ -110,7 +110,7 @@ This query syntax allows for readable conditional logic for determining whether 
     },
     {
       name: "$nin",
-      type: "any[]", 
+      type: "any[]",
       description: "Value does not exist in array"
     },
     {

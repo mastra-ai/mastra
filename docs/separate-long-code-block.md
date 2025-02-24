@@ -53,7 +53,7 @@ const editorAgent = new Agent({
 const editorStep = new Step({
   id: "editorStep",
   execute: async ({ context }) => {
-    const copy = context?.getStepPayload<{ copy: number }>(
+    const copy = context?.getStepResult<{ copy: number }>(
       "copywriterStep",
     )?.copy;
 
@@ -133,7 +133,7 @@ Create a step to execute the editor's task:
 const editorStep = new Step({
   id: "editorStep",
   execute: async ({ context }) => {
-    const copy = context?.getStepPayload<{ copy: number }>(
+    const copy = context?.getStepResult<{ copy: number }>(
       "copywriterStep",
     )?.copy;
 

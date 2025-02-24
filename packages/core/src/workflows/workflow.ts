@@ -96,8 +96,8 @@ export class Workflow<
   private initializeMachine() {
     const machine = setup({
       types: {} as {
-        context: Omit<WorkflowContext, 'getStepPayload'>;
-        input: Omit<WorkflowContext, 'getStepPayload'>;
+        context: Omit<WorkflowContext, 'getStepResult'>;
+        input: Omit<WorkflowContext, 'getStepResult'>;
         events: WorkflowEvent;
         actions: WorkflowActions;
         actors: WorkflowActors;
@@ -920,7 +920,7 @@ export class Workflow<
           const conditionMet = await stepConfig.when({
             context: {
               ...context,
-              getStepPayload: ((stepId: string) => {
+              getStepResult: ((stepId: string) => {
                 if (stepId === 'trigger') {
                   return context.triggerData;
                 }
@@ -929,7 +929,7 @@ export class Workflow<
                   return result.output;
                 }
                 return undefined;
-              }) as WorkflowContext<TTriggerSchema>['getStepPayload'],
+              }) as WorkflowContext<TTriggerSchema>['getStepResult'],
             },
           });
           if (conditionMet) {
@@ -1085,7 +1085,7 @@ export class Workflow<
 
     const resolvedData: Record<string, any> = {
       ...context,
-      getStepPayload: ((stepId: string) => {
+      getStepResult: ((stepId: string) => {
         if (stepId === 'trigger') {
           return context.triggerData;
         }
@@ -1094,7 +1094,7 @@ export class Workflow<
           return result.output;
         }
         return undefined;
-      }) as WorkflowContext<TTriggerSchema>['getStepPayload'],
+      }) as WorkflowContext<TTriggerSchema>['getStepResult'],
     };
 
     for (const [key, variable] of Object.entries(stepConfig.data)) {
