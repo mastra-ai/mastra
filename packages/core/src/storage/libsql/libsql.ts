@@ -2,15 +2,12 @@ import { join } from 'node:path';
 import { createClient } from '@libsql/client';
 import type { Client, InValue } from '@libsql/client';
 
-import type { MetricResult, TestInfo } from '../eval';
-import type { MessageType, StorageThreadType } from '../memory/types';
-
-import { MastraStorage } from './base';
-import { TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_TRACES, TABLE_WORKFLOW_SNAPSHOT } from './constants';
-import type { TABLE_NAMES } from './constants';
-import type { StorageColumn, StorageGetMessagesArg, EvalRow } from './types';
-
-export * from '../vector/libsql/index';
+import type { MetricResult, TestInfo } from '../../eval';
+import type { MessageType, StorageThreadType } from '../../memory/types';
+import { MastraStorage } from '../base';
+import { TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_TRACES, TABLE_WORKFLOW_SNAPSHOT } from '../constants';
+import type { TABLE_NAMES } from '../constants';
+import type { StorageColumn, StorageGetMessagesArg, EvalRow } from '../types';
 
 function safelyParseJSON(jsonString: string): any {
   try {
@@ -25,7 +22,7 @@ export interface LibSQLConfig {
   authToken?: string;
 }
 
-export class DefaultStorage extends MastraStorage {
+export class MastraStorageLibSql extends MastraStorage {
   private client: Client;
 
   constructor({ config }: { config: LibSQLConfig }) {
@@ -534,4 +531,4 @@ export class DefaultStorage extends MastraStorage {
   }
 }
 
-export { DefaultStorage as MastraStorageLibSql };
+export { MastraStorageLibSql as DefaultStorage };

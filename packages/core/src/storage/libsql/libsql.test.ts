@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 
-import type { WorkflowRunState } from '../workflows';
+import type { WorkflowRunState } from '../../workflows';
 
 import { DefaultStorage } from './libsql';
 

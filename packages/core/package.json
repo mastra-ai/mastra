@@ -21,6 +21,12 @@
         "default": "./dist/*/index.js"
       }
     },
+    "./storage/libsql": {
+      "import": {
+        "types": "./dist/storage/libsql/index.d.ts",
+        "default": "./dist/storage/libsql/index.js"
+      }
+    },
     "./vector/libsql": {
       "import": {
         "types": "./dist/vector/libsql/index.d.ts",
