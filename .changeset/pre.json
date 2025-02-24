@@ -130,7 +130,10 @@
     "@mastra/voice-deepgram": "0.1.0-alpha.1",
     "@mastra/voice-elevenlabs": "0.1.0-alpha.1",
     "@mastra/voice-openai": "0.1.0",
-    "@mastra/voice-playai": "0.1.0-alpha.1"
+    "@mastra/voice-playai": "0.1.0-alpha.1",
+    "@mastra/voice-google": "0.1.0-alpha.1",
+    "@mastra/voice-murf": "0.1.0-alpha.1",
+    "@mastra/voice-speechify": "0.1.0-alpha.1"
   },
   "changesets": [
     "breezy-peas-smile",
@@ -138,8 +141,12 @@
     "curvy-wombats-clap",
     "fluffy-donkeys-switch",
     "great-trains-wait",
+    "proud-papayas-thank",
     "purple-coats-feel",
+    "ready-lands-find",
     "silver-ends-fetch",
+    "slimy-days-cover",
+    "solid-hornets-agree",
     "tired-bugs-act"
   ]
 }
