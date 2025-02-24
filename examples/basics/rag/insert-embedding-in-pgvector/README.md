@@ -28,6 +28,7 @@ A simple example showing how to insert your embedding in pgvector using Mastra a
 
    ```env
    OPENAI_API_KEY=sk-your-api-key-here
+   POSTGRES_CONNECTION_STRING=postgresql://your-username:your-password@your-host:your-port/your-database
    ```
 
 3. Install dependencies:

@@ -24,7 +24,10 @@ const { embeddings } = await embedMany({
   model: openai.embedding("text-embedding-3-small"),
 });
 
-const libsql = new DefaultVectorDB(process.env.DATABASE_URL);
+const libsql = new DefaultVectorDB({
+  connectionUrl: process.env.DATABASE_URL,
+  authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
+});
 
 await libsql.createIndex("test_collection", 1536);
 
