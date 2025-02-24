@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-alpha.2
+
+### Patch Changes
+
+- abe4600: deprecate @mastra/speech-deepgram for @mastra/voice-deepgram
+- Updated dependencies [7fceae1]
+- Updated dependencies [f626fbb]
+  - @mastra/core@0.4.2-alpha.0
+
 ## 0.1.0 (2024-XX-XX)
 
 This package replaces the deprecated @mastra/speech-deepgram package. All functionality has been migrated to this new package with a more consistent naming scheme.

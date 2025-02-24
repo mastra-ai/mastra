@@ -132,5 +132,14 @@
     "@mastra/voice-openai": "0.1.0",
     "@mastra/voice-playai": "0.1.0-alpha.1"
   },
-  "changesets": []
+  "changesets": [
+    "breezy-peas-smile",
+    "chatty-files-peel",
+    "curvy-wombats-clap",
+    "fluffy-donkeys-switch",
+    "great-trains-wait",
+    "purple-coats-feel",
+    "silver-ends-fetch",
+    "tired-bugs-act"
+  ]
 }

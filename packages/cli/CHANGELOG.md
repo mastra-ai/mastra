@@ -1,5 +1,16 @@
 # mastra
 
+## 0.2.6-alpha.0
+
+### Patch Changes
+
+- e4ee56c: Enable \* imports in analyze bundle
+- Updated dependencies [7fceae1]
+- Updated dependencies [e4ee56c]
+- Updated dependencies [f626fbb]
+  - @mastra/core@0.4.2-alpha.0
+  - @mastra/deployer@0.1.5-alpha.0
+
 ## 0.2.5
 
 ### Patch Changes
