@@ -1,7 +1,7 @@
 {
-  "name": "@mastra/speech-playai",
-  "version": "0.1.4-alpha.1",
-  "description": "Mastra PlayAI speech integration (DEPRECATED - use @mastra/voice-playai instead)",
+  "name": "@mastra/voice-elevenlabs",
+  "version": "0.1.0-alpha.1",
+  "description": "Mastra ElevenLabs voice integration",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -16,16 +16,22 @@
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --experimental-dts --clean --treeshake",
-    "test": "echo deprecated"
+    "build:watch": "tsup build --watch",
+    "test": "vitest run",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
+    "elevenlabs": "^1.50.2",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "^7.49.2",
     "@types/node": "^22.13.1",
     "tsup": "^8.0.1",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8",
+    "@internal/lint": "workspace:*",
+    "eslint": "^9.20.1"
   }
 }

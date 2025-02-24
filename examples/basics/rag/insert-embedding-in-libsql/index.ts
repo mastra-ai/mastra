@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai';
-import { PgVector } from '@mastra/pg';
+import { DefaultVectorDB } from '@mastra/core/storage';
 import { MDocument } from '@mastra/rag';
 import { embedMany } from 'ai';
 
@@ -12,12 +12,15 @@ const { embeddings } = await embedMany({
   values: chunks.map(chunk => chunk.text),
 });
 
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+const libsql = new DefaultVectorDB({
+  connectionUrl: process.env.DATABASE_URL!,
+  authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
+});
 
-await pgVector.createIndex('test_index', 1536);
+await libsql.createIndex('test_collection', 1536);
 
-await pgVector.upsert(
-  'test_index',
+await libsql.upsert(
+  'test_collection',
   embeddings,
   chunks?.map((chunk: any) => ({ text: chunk.text })),
 );
