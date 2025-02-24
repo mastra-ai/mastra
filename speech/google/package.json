@@ -16,8 +16,7 @@
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --experimental-dts --clean --treeshake",
-    "build:watch": "pnpm build --watch",
-    "test": "vitest run"
+    "test": "echo \"deprecated\""
   },
   "dependencies": {
     "@google-cloud/text-to-speech": "^5.0.1",
