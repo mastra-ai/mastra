@@ -14,7 +14,7 @@ describe('ElevenLabsVoice Integration Tests', () => {
     try {
       mkdirSync(outputDir, { recursive: true });
     } catch (err) {
-      // Ignore if directory already exists
+      console.log('Directory already exists: ', err);
     }
 
     voice = new ElevenLabsVoice({

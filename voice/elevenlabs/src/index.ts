@@ -110,7 +110,7 @@ export class ElevenLabsVoice extends MastraVoice {
     return res;
   }
 
-  async listen(input: NodeJS.ReadableStream | Buffer, _options?: Record<string, unknown>): Promise<string> {
+  async listen(_input: NodeJS.ReadableStream | Buffer, _options?: Record<string, unknown>): Promise<string> {
     throw new Error('ElevenLabs does not support transcription');
   }
 }
