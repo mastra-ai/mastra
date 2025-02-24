@@ -270,20 +270,15 @@ export class Agent<
         return {
           threadId: thread.id,
           messages: [
-            {
-              role: 'system',
-              content: `\n
-             Analyze this message to determine if the user is referring to a previous conversation with the LLM.
-             Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation.
-             Extract any date ranges mentioned in the user message that could help identify the previous chat.
-             Return dates in ISO format.
-             If no specific dates are mentioned but time periods are (like "last week" or "past month"), calculate the appropriate date range.
-             For the end date, return the date 1 day after the end of the time period.
-             Today's date is ${new Date().toISOString()} and the time is ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })} ${memorySystemMessage ? `\n\n${memorySystemMessage}` : ''}`,
-            } as any,
+            memorySystemMessage
+              ? {
+                  role: 'system' as const,
+                  content: memorySystemMessage,
+                }
+              : null,
             ...this.sanitizeResponseMessages(memoryMessages),
             ...newMessages,
-          ],
+          ].filter((message): message is NonNullable<typeof message> => Boolean(message)),
         };
       }
 
@@ -643,7 +638,7 @@ export class Agent<
 
         const systemMessage: CoreMessage = {
           role: 'system',
-          content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
+          content: `${this.instructions}.`,
         };
 
         let coreMessages = messages;
