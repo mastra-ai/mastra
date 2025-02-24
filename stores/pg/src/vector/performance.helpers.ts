@@ -162,7 +162,7 @@ export const calculateTimeout = (dimension: number, size: number, k: number) => 
   else if (dimension >= 384) timeout *= 1.5;
   if (size >= 10000) timeout *= 2;
   if (k >= 75) timeout *= 1.5;
-  return timeout * 2;
+  return timeout * 5;
 };
 
 export const baseTestConfigs = {

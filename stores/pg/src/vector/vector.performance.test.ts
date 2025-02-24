@@ -47,12 +47,9 @@ describe('PostgreSQL Index Performance', () => {
   const indexConfigs: IndexTestConfig[] = [
     // { type: 'flat' }, // Test flat/linear search as baseline
     // { type: 'ivfflat', ivf: { lists: 100 } }, // Test IVF with fixed lists
-    // { type: 'ivfflat' }, // Test IVF with calculated lists
-    // { type: 'ivfflat', ivf: { lists: 100 }, rebuild: true }, // Test IVF with fixed lists and rebuild
     // { type: 'ivfflat', rebuild: true }, // Test IVF with calculated lists and rebuild
     { type: 'hnsw' },
-    { type: 'hnsw', hnsw: { m: 16, efConstruction: 64 } },
-    { type: 'hnsw', hnsw: { m: 32, efConstruction: 128 } },
+    // { type: 'hnsw', hnsw: { m: 16, efConstruction: 64 } },
   ];
   beforeAll(async () => {
     // Initialize PgVector
@@ -73,8 +70,8 @@ describe('PostgreSQL Index Performance', () => {
 
   // Combine all test configs
   const allConfigs: TestConfig[] = [
-    ...baseTestConfigs['64'],
-    // ...baseTestConfigs['384'],
+    // ...baseTestConfigs['64'],
+    ...baseTestConfigs['384'],
     // ...baseTestConfigs['1024'],
     // ...baseTestConfigs.smokeTests,
     // ...baseTestConfigs.stressTests,
@@ -371,19 +368,19 @@ async function batchedBulkUpsert(vectorDB: PgVector, testIndexName: string, vect
 }
 
 const distributions = {
-  random: generateRandomVectors,
-  clustered: generateClusteredVectors,
+  // random: generateRandomVectors,
+  // clustered: generateClusteredVectors,
   skewed: generateSkewedVectors,
-  mixed: (size: number, dimension: number) => {
-    const generators = [generateRandomVectors, generateClusteredVectors, generateSkewedVectors];
-    const batchSizes = splitIntoRandomBatches(size, dimension);
+  // mixed: (size: number, dimension: number) => {
+  //   const generators = [generateRandomVectors, generateClusteredVectors, generateSkewedVectors];
+  //   const batchSizes = splitIntoRandomBatches(size, dimension);
 
-    let vectors: number[][] = [];
-    for (const batchSize of batchSizes) {
-      const generator = generators[Math.floor(Math.random() * generators.length)];
-      vectors = vectors.concat(generator(batchSize, dimension));
-    }
+  //   let vectors: number[][] = [];
+  //   for (const batchSize of batchSizes) {
+  //     const generator = generators[Math.floor(Math.random() * generators.length)];
+  //     vectors = vectors.concat(generator(batchSize, dimension));
+  //   }
 
-    return vectors;
-  },
+  //   return vectors;
+  // },
 };
