@@ -931,6 +931,7 @@ export class Workflow<
                 return undefined;
               }) as WorkflowContext<TTriggerSchema>['getStepResult'],
             },
+            ...this.#getInjectables(),
           });
           if (conditionMet) {
             this.logger.debug(`Condition met for step ${stepNode.step.id}`, {
