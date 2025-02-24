@@ -1,8 +1,7 @@
-import { createWriteStream, mkdirSync, writeFileSync } from 'fs';
+import { mkdirSync } from 'fs';
 import path, { join } from 'path';
 import { Readable } from 'stream';
-import { describe, expect, it } from 'vitest';
-import { beforeAll } from 'vitest';
+import { describe, expect, it, beforeAll } from 'vitest';
 
 import { writeFile, stat as fsStat } from 'fs/promises';
 
@@ -22,7 +21,7 @@ describe('MurfVoice', () => {
     try {
       mkdirSync(outputDir, { recursive: true });
     } catch (err) {
-      // Ignore if directory already exists
+      console.error(`Failed to create output directory: ${err}`);
     }
   });
 

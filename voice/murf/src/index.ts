@@ -2,7 +2,8 @@ import { MastraVoice } from '@mastra/core/voice';
 import ky from 'ky';
 import { PassThrough } from 'stream';
 
-import { MURF_VOICES, type MurfVoiceId } from './voices';
+import { MURF_VOICES } from './voices';
+import type { MurfVoiceId } from './voices';
 
 type MurfConfig = {
   name: 'GEN1' | 'GEN2';
@@ -128,7 +129,9 @@ export class MurfVoice extends MastraVoice {
         } catch (error) {
           stream.destroy(error as Error);
         }
-      })();
+      })().catch(error => {
+        stream.destroy(error as Error);
+      });
 
       return stream;
     }, 'voice.murf.speak')();
