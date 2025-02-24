@@ -1,6 +1,6 @@
-import { createWriteStream, writeFileSync, mkdirSync, rmSync, readFileSync } from 'node:fs';
+import { createWriteStream, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PassThrough, Readable } from 'node:stream';
+import { Readable } from 'node:stream';
 import { describe, expect, it, beforeAll } from 'vitest';
 
 import { GoogleVoice } from './index';
@@ -14,6 +14,7 @@ describe('GoogleVoice Integration Tests', () => {
     try {
       mkdirSync(outputDir, { recursive: true });
     } catch (err) {
+      console.error(err);
       // Ignore if directory already exists
     }
 
