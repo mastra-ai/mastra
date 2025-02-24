@@ -2,6 +2,16 @@
 
 ## 0.1.0
 
+### Patch Changes
+
+- 0821d6b: Deprecate @mastra/speech-openai for @mastra/voice-openai
+- Updated dependencies [ce44b9b]
+- Updated dependencies [967da43]
+- Updated dependencies [b405f08]
+  - @mastra/core@0.4.1
+
+## 0.1.0
+
 ### Changes
 
 - `@mastra/speech-openai` is now deprecated. Please use `@mastra/voice-openai` instead.
