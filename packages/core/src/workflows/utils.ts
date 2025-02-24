@@ -98,11 +98,15 @@ export function getActivePathsAndStatus(value: Record<string, any>): Array<{
   return paths;
 }
 
-export function mergeChildValue(parent: Record<string, any>, child: Record<string, any>): Record<string, any> {
+export function mergeChildValue(
+  startStepId: string,
+  parent: Record<string, any>,
+  child: Record<string, any>,
+): Record<string, any> {
   const traverse = (current: Record<string, any>) => {
     const obj: Record<string, any> = {};
     for (const [key, value] of Object.entries(current)) {
-      if (value === 'runningSubscribers') {
+      if (key === startStepId) {
         // Found child state
         obj[key] = { ...child };
       } else if (typeof value === 'string') {
