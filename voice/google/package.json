@@ -1,7 +1,7 @@
 {
-  "name": "@mastra/speech-google",
-  "version": "0.1.5-alpha.1",
-  "description": "Mastra Google speech integration (DEPRECATED - use @mastra/voice-google instead)",
+  "name": "@mastra/voice-google",
+  "version": "0.1.0-alpha.1",
+  "description": "Mastra Google voice integration",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -16,18 +16,22 @@
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --experimental-dts --clean --treeshake",
-    "test": "echo \"deprecated\""
+    "build:watch": "pnpm build --watch",
+    "test": "vitest run",
+    "lint": "eslint ."
   },
   "dependencies": {
+    "@google-cloud/speech": "^6.7.0",
     "@google-cloud/text-to-speech": "^5.0.1",
     "@mastra/core": "workspace:^",
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@microsoft/api-extractor": "^7.49.2",
     "@types/node": "^22.13.1",
     "tsup": "^8.0.1",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "@internal/lint": "workspace:*",
+    "eslint": "^9.20.1"
   }
 }
