@@ -1,11 +1,13 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { config } from 'dotenv';
-import { describe, it, expect, vi } from 'vitest';
+import { PassThrough } from 'stream';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { Mastra } from '../mastra';
 import { createTool } from '../tools';
+import { CompositeVoice, MastraVoice } from '../voice';
 
 import { Agent } from './index';
 
@@ -274,5 +276,112 @@ describe('agent', () => {
     // The tool call for tool-3 should be removed since there's no matching result
     expect(sanitizedMessages).not.toContainEqual(toolCallThree);
     expect(sanitizedMessages).toHaveLength(2);
+  });
+
+  describe('voice capabilities', () => {
+    class MockVoice extends MastraVoice {
+      async speak(_input: string | NodeJS.ReadableStream): Promise<NodeJS.ReadableStream> {
+        const stream = new PassThrough();
+        stream.end('mock audio');
+        return stream;
+      }
+
+      async listen(): Promise<string> {
+        return 'mock transcription';
+      }
+
+      async getSpeakers() {
+        return [{ voiceId: 'mock-voice' }];
+      }
+    }
+
+    let voiceAgent: Agent;
+    beforeEach(() => {
+      voiceAgent = new Agent({
+        name: 'Voice Agent',
+        instructions: 'You are an agent with voice capabilities',
+        model: openai('gpt-4o'),
+        voice: new CompositeVoice({
+          speakProvider: new MockVoice({
+            speaker: 'mock-voice',
+          }),
+          listenProvider: new MockVoice({
+            speaker: 'mock-voice',
+          }),
+        }),
+      });
+    });
+
+    describe('getSpeakers', () => {
+      it('should list available voices', async () => {
+        const speakers = await voiceAgent.getSpeakers();
+        expect(speakers).toEqual([{ voiceId: 'mock-voice' }]);
+      });
+    });
+
+    describe('speak', () => {
+      it('should generate audio stream from text', async () => {
+        const audioStream = await voiceAgent.speak('Hello World', {
+          speaker: 'mock-voice',
+        });
+
+        const chunks: Buffer[] = [];
+        for await (const chunk of audioStream) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const audioBuffer = Buffer.concat(chunks);
+
+        expect(audioBuffer.toString()).toBe('mock audio');
+      });
+
+      it('should work with different parameters', async () => {
+        const audioStream = await voiceAgent.speak('Test with parameters', {
+          speaker: 'mock-voice',
+          speed: 0.5,
+        });
+
+        const chunks: Buffer[] = [];
+        for await (const chunk of audioStream) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const audioBuffer = Buffer.concat(chunks);
+
+        expect(audioBuffer.toString()).toBe('mock audio');
+      });
+    });
+
+    describe('listen', () => {
+      it('should transcribe audio', async () => {
+        const audioStream = new PassThrough();
+        audioStream.end('test audio data');
+
+        const text = await voiceAgent.listen(audioStream);
+        expect(text).toBe('mock transcription');
+      });
+
+      it('should accept options', async () => {
+        const audioStream = new PassThrough();
+        audioStream.end('test audio data');
+
+        const text = await voiceAgent.listen(audioStream, {
+          language: 'en',
+        });
+        expect(text).toBe('mock transcription');
+      });
+    });
+
+    describe('error handling', () => {
+      it('should throw error when no voice provider is configured', async () => {
+        const agentWithoutVoice = new Agent({
+          name: 'No Voice Agent',
+          instructions: 'You are an agent without voice capabilities',
+          model: openai('gpt-4o'),
+        });
+
+        await expect(agentWithoutVoice.getSpeakers()).rejects.toThrow('No voice provider configured');
+        await expect(agentWithoutVoice.speak('Test')).rejects.toThrow('No voice provider configured');
+        await expect(agentWithoutVoice.listen(new PassThrough())).rejects.toThrow('No voice provider configured');
+      });
+    });
   });
 });

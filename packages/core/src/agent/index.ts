@@ -26,6 +26,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool, ToolAction } from '../tools/types';
+import type { CompositeVoice } from '../voice';
 
 import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
 
@@ -47,6 +48,7 @@ export class Agent<
   /** @deprecated This property is deprecated. Use evals instead. */
   metrics: TMetrics;
   evals: TMetrics;
+  voice?: CompositeVoice;
 
   constructor(config: AgentConfig<TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
@@ -86,6 +88,10 @@ export class Agent<
     if (config.memory) {
       this.#memory = config.memory;
     }
+
+    if (config.voice) {
+      this.voice = config.voice;
+    }
   }
 
   public hasOwnMemory(): boolean {
@@ -109,9 +115,10 @@ export class Agent<
       this.__setLogger(p.logger);
     }
 
+
     this.llm.__registerPrimitives(p);
 
-    this.#mastra = p;
+    this.#mastra = p
 
     this.logger.debug(`[Agents:${this.name}] initialized.`, { model: this.model, name: this.name });
   }
@@ -233,27 +240,27 @@ export class Agent<
         const memoryMessages =
           threadId && memory
             ? (
-                await memory.rememberMessages({
-                  threadId,
-                  config: memoryConfig,
-                  vectorMessageSearch: messages
-                    .slice(-1)
-                    .map(m => {
-                      if (typeof m === `string`) {
-                        return m;
-                      }
-                      return m?.content || ``;
-                    })
-                    .join(`\n`),
-                })
-              ).messages
+              await memory.rememberMessages({
+                threadId,
+                config: memoryConfig,
+                vectorMessageSearch: messages
+                  .slice(-1)
+                  .map(m => {
+                    if (typeof m === `string`) {
+                      return m;
+                    }
+                    return m?.content || ``;
+                  })
+                  .join(`\n`),
+              })
+            ).messages
             : [];
 
         if (memory) {
           await memory.saveMessages({ messages, memoryConfig });
         }
 
-        this.log(LogLevel.DEBUG, 'Saved messages to memory', {
+        this.logger.debug('Saved messages to memory', {
           threadId: thread.id,
           runId,
         });
@@ -351,10 +358,10 @@ export class Agent<
                     return undefined;
                   })
                   ?.filter(Boolean) as Array<{
-                  toolCallId: string;
-                  toolArgs: Record<string, unknown>;
-                  toolName: string;
-                }>;
+                    toolCallId: string;
+                    toolArgs: Record<string, unknown>;
+                    toolName: string;
+                  }>;
 
                 toolCallIds = assistantToolCalls?.map(toolCall => toolCall.toolCallId);
 
@@ -498,6 +505,7 @@ export class Agent<
                   name: k,
                   description: tool.description,
                   args,
+                  runId,
                 });
                 return tool.execute({
                   context: args,
@@ -560,6 +568,7 @@ export class Agent<
                   name: toolName,
                   description: toolObj.description,
                   args,
+                  runId,
                 });
                 return toolObj.execute!({
                   context: args,
@@ -597,7 +606,7 @@ export class Agent<
     let coreMessages: CoreMessage[] = [];
     let threadIdToUse = threadId;
 
-    this.log(LogLevel.DEBUG, `Saving user messages in memory for agent ${this.name}`, { runId });
+    this.logger.debug(`Saving user messages in memory for agent ${this.name}`, { runId });
     const saveMessageResponse = await this.saveMemory({
       threadId,
       resourceId,
@@ -960,5 +969,76 @@ export class Agent<
       runId: runIdToUse,
       toolChoice,
     }) as unknown as StreamReturn<Z>;
+  }
+
+  /**
+   * Convert text to speech using the configured voice provider
+   * @param input Text or text stream to convert to speech
+   * @param options Speech options including speaker and provider-specific options
+   * @returns Audio stream
+   */
+  async speak(
+    input: string | NodeJS.ReadableStream,
+    options?: {
+      speaker?: string;
+      [key: string]: any;
+    },
+  ): Promise<NodeJS.ReadableStream> {
+    if (!this.voice) {
+      throw new Error('No voice provider configured');
+    }
+    try {
+      return this.voice.speak(input, options);
+    } catch (e) {
+      this.logger.error('Error during agent speak', {
+        error: e,
+      });
+      throw e;
+    }
+  }
+
+  /**
+   * Convert speech to text using the configured voice provider
+   * @param audioStream Audio stream to transcribe
+   * @param options Provider-specific transcription options
+   * @returns Text or text stream
+   */
+  async listen(
+    audioStream: NodeJS.ReadableStream,
+    options?: {
+      [key: string]: any;
+    },
+  ): Promise<string | NodeJS.ReadableStream> {
+    if (!this.voice) {
+      throw new Error('No voice provider configured');
+    }
+    try {
+      return this.voice.listen(audioStream, options);
+    } catch (e) {
+      this.logger.error('Error during agent listen', {
+        error: e,
+      });
+      throw e;
+    }
+  }
+
+  /**
+   * Get a list of available speakers from the configured voice provider
+   * @throws {Error} If no voice provider is configured
+   * @returns {Promise<Array<{voiceId: string}>>} List of available speakers
+   */
+  async getSpeakers() {
+    if (!this.voice) {
+      throw new Error('No voice provider configured');
+    }
+
+    try {
+      return await this.voice.getSpeakers();
+    } catch (e) {
+      this.logger.error('Error during agent getSpeakers', {
+        error: e,
+      });
+      throw e;
+    }
   }
 }

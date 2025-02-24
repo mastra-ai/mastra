@@ -1,5 +1,15 @@
 # @mastra/memory
 
+## 0.1.4
+
+### Patch Changes
+
+- ce44b9b: Fixed a bug where embeddings were being created for memory even when semanticRecall was turned off
+- Updated dependencies [ce44b9b]
+- Updated dependencies [967da43]
+- Updated dependencies [b405f08]
+  - @mastra/core@0.4.1
+
 ## 0.1.3
 
 ### Patch Changes
