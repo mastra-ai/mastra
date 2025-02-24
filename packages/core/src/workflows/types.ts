@@ -341,4 +341,7 @@ export interface WorkflowRunState {
   // Metadata
   runId: string;
   timestamp: number;
+
+  childStates?: Record<string, WorkflowRunState>;
+  suspendedSteps?: Record<string, string>;
 }
