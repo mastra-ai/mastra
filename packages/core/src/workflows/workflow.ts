@@ -402,10 +402,6 @@ export class Workflow<
     }
 
     const startStepId = parsedSnapshot.suspendedSteps?.[stepId];
-    console.dir(
-      { suspendedSteps: parsedSnapshot.suspendedSteps, stepId, suspendedStepId: startStepId },
-      { depth: null },
-    );
     if (!startStepId) {
       return;
     }
@@ -423,7 +419,6 @@ export class Workflow<
       };
     }
 
-    console.dir({ parsedSnapshot }, { depth: null });
     // Reattach the step handler
     // TODO: need types
     if (parsedSnapshot.children) {
