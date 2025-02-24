@@ -94,75 +94,74 @@ jobs:
             const ITEMS_PER_PAGE = 30; // Number of items per page
             const MAX_PAGES = 3; // Maximum number of pages to process in one run
               
-              let page = 1;
-              let processedCount = 0;
-              let successCount = 0;
-              let hasMorePages = true;
-              
-              // Process issues page by page with resilience
-              while (hasMorePages && page <= MAX_PAGES) {
-                try {
-                  console.log(`Fetching page ${page} of spam issues...`);
+            let page = 1;
+            let processedCount = 0;
+            let successCount = 0;
+            let hasMorePages = true;
+            
+            // Process issues page by page with resilience
+            while (hasMorePages && page <= MAX_PAGES) {
+              try {
+                console.log(`Fetching page ${page} of spam issues...`);
+                
+                const issues = await github.rest.issues.listForRepo({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  state: 'all', // Get both open and closed issues
+                  labels: 'spam',
+                  per_page: ITEMS_PER_PAGE,
+                  page: page
+                });
+                
+                if (issues.data.length === 0) {
+                  console.log("No more issues found.");
+                  hasMorePages = false;
+                  break;
+                }
+                
+                console.log(`Found ${issues.data.length} spam issues on page ${page}`);
+                
+                for (const issue of issues.data) {
+                  const issueNumber = issue.number;
+                  processedCount++;
                   
-                  const issues = await github.rest.issues.listForRepo({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    state: 'all', // Get both open and closed issues
-                    labels: 'spam',
-                    per_page: ITEMS_PER_PAGE,
-                    page: page
-                  });
-                  
-                  if (issues.data.length === 0) {
-                    console.log("No more issues found.");
-                    hasMorePages = false;
-                    break;
-                  }
-                  
-                  console.log(`Found ${issues.data.length} spam issues on page ${page}`);
-                  
-                  for (const issue of issues.data) {
-                    const issueNumber = issue.number;
-                    processedCount++;
-                    
-                    try {
-                      // Skip if this is a pull request
-                      if (issue.pull_request) {
-                        console.log(`Skipping #${issueNumber} because it's a pull request, not an issue`);
-                        continue;
-                      }
-                      
-                      console.log(`Processing spam issue #${issueNumber}: "${issue.title}"`);
-                      
-                      const issueId = await getIssueId(issueNumber);
-                      if (issueId) {
-                        // Add delay before deletion
-                        await sleep(RATE_LIMIT_DELAY);
-                        const success = await deleteIssue(issueId, issueNumber);
-                        if (success) {
-                          console.log(`Successfully deleted issue #${issueNumber}`);
-                          successCount++;
-                        }
-                      }
-                    } catch (error) {
-                      console.error(`Error processing issue #${issueNumber}:`, error.message);
-                      // Continue with next issue even if this one fails
+                  try {
+                    // Skip if this is a pull request
+                    if (issue.pull_request) {
+                      console.log(`Skipping #${issueNumber} because it's a pull request, not an issue`);
+                      continue;
                     }
                     
-                    // Add delay after each issue processing
-                    await sleep(RATE_LIMIT_DELAY);
+                    console.log(`Processing spam issue #${issueNumber}: "${issue.title}"`);
+                    
+                    const issueId = await getIssueId(issueNumber);
+                    if (issueId) {
+                      // Add delay before deletion
+                      await sleep(RATE_LIMIT_DELAY);
+                      const success = await deleteIssue(issueId, issueNumber);
+                      if (success) {
+                        console.log(`Successfully deleted issue #${issueNumber}`);
+                        successCount++;
+                      }
+                    }
+                  } catch (error) {
+                    console.error(`Error processing issue #${issueNumber}:`, error.message);
+                    // Continue with next issue even if this one fails
                   }
                   
-                  page++;
-                } catch (error) {
-                  console.error(`Error processing page ${page}:`, error.message);
-                  break; // Break the loop if we can't process a page
+                  // Add delay after each issue processing
+                  await sleep(RATE_LIMIT_DELAY);
                 }
+                
+                page++;
+              } catch (error) {
+                console.error(`Error processing page ${page}:`, error.message);
+                break; // Break the loop if we can't process a page
               }
-              
-              if (hasMorePages && page > MAX_PAGES) {
-                console.log(`Pagination limit reached (${MAX_PAGES} pages). Remaining issues will be processed in future runs.`);
-              }
-              
-              console.log(`Summary: Successfully deleted ${successCount} out of ${processedCount} processed spam issues`);
             }
+            
+            if (hasMorePages && page > MAX_PAGES) {
+              console.log(`Pagination limit reached (${MAX_PAGES} pages). Remaining issues will be processed in future runs.`);
+            }
+            
+            console.log(`Summary: Successfully deleted ${successCount} out of ${processedCount} processed spam issues`);
