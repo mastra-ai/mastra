@@ -1,4 +1,4 @@
-import { createWriteStream, writeFileSync, mkdirSync, createReadStream } from 'fs';
+import { writeFileSync, mkdirSync, createReadStream } from 'fs';
 import path from 'path';
 import { PassThrough } from 'stream';
 import { describe, expect, it, beforeAll } from 'vitest';
@@ -10,11 +10,10 @@ describe('DeepgramVoice Integration Tests', () => {
   const outputDir = path.join(process.cwd(), 'test-outputs');
 
   beforeAll(() => {
-    // Create output directory if it doesn't exist
     try {
       mkdirSync(outputDir, { recursive: true });
     } catch (err) {
-      // Ignore if directory already exists
+      console.log('Directory already exists: ', err);
     }
 
     voice = new DeepgramVoice({

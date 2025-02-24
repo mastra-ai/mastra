@@ -2,7 +2,8 @@ import { createClient } from '@deepgram/sdk';
 import { MastraVoice } from '@mastra/core/voice';
 import { PassThrough } from 'stream';
 
-import { DEEPGRAM_VOICES, type DeepgramVoiceId, type DeepgramModel } from './voices';
+import { DEEPGRAM_VOICES } from './voices';
+import type { DeepgramVoiceId, DeepgramModel } from './voices';
 
 interface DeepgramVoiceConfig {
   name?: DeepgramModel;
@@ -125,7 +126,7 @@ export class DeepgramVoice extends MastraVoice {
       const reader = webStream.getReader();
       const nodeStream = new PassThrough();
 
-      // Read from web stream and write to node stream
+      // Add error handling for the stream processing
       (async () => {
         try {
           while (true) {
@@ -139,7 +140,9 @@ export class DeepgramVoice extends MastraVoice {
         } catch (error) {
           nodeStream.destroy(error as Error);
         }
-      })();
+      })().catch(error => {
+        nodeStream.destroy(error as Error);
+      });
 
       return nodeStream;
     }, 'voice.deepgram.speak')();

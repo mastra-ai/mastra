@@ -17,7 +17,8 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --experimental-dts --clean --treeshake",
     "build:watch": "pnpm build --watch",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@deepgram/sdk": "^3.9.0",
@@ -29,6 +30,8 @@
     "@types/node": "^22.13.1",
     "tsup": "^8.3.6",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "@internal/lint": "workspace:*",
+    "eslint": "^9.20.1"
   }
 }
