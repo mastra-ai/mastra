@@ -24,29 +24,52 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            // Function to get issue ID (GraphQL requires global ID, not just number)
+            // Helper function to add delay between operations
+            const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+            
+            // Get issue ID
             async function getIssueId(issueNumber) {
               const query = `
                 query GetIssueId($owner: String!, $repo: String!, $number: Int!) {
                   repository(owner: $owner, name: $repo) {
                     issue(number: $number) {
                       id
+                      title
+                      url
+                      state
                     }
                   }
                 }
               `;
               
-              const result = await github.graphql(query, {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                number: issueNumber
-              });
-              
-              return result.repository.issue.id;
+              try {
+                const result = await github.graphql(query, {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  number: issueNumber
+                });
+                
+                if (!result.repository?.issue?.id) {
+                  console.error(`Could not find GraphQL ID for issue #${issueNumber}. Full response:`, JSON.stringify(result, null, 2));
+                  return null;
+                }
+                
+                console.log(`Found issue #${issueNumber}: "${result.repository.issue.title}" (${result.repository.issue.state})`);
+                return result.repository.issue.id;
+              } catch (error) {
+                console.error(`Failed to get issue ID for #${issueNumber}:`, error.message);
+                console.error(JSON.stringify(error, null, 2));
+                return null;
+              }
             }
             
-            // Function to delete issue using GraphQL
-            async function deleteIssue(issueId) {
+            // Delete issue using GraphQL
+            async function deleteIssue(issueId, issueNumber) {
+              if (!issueId) {
+                console.error(`Cannot delete issue #${issueNumber}: No valid ID provided`);
+                return false;
+              }
+              
               const mutation = `
                 mutation DeleteIssue($issueId: ID!) {
                   deleteIssue(input: {issueId: $issueId}) {
@@ -55,9 +78,16 @@ jobs:
                 }
               `;
               
-              await github.graphql(mutation, {
-                issueId: issueId
-              });
+              try {
+                await github.graphql(mutation, {
+                  issueId: issueId
+                });
+                return true;
+              } catch (error) {
+                console.error(`Failed to delete issue #${issueNumber}:`, error.message);
+                console.error(JSON.stringify(error, null, 2));
+                return false;
+              }
             }
             
             // For single issue labeled as spam
@@ -66,41 +96,108 @@ jobs:
               console.log(`Attempting to delete spam issue #${issueNumber}`);
               
               try {
+                // Skip if this is a pull request
+                const issue = await github.rest.issues.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber
+                });
+                
+                if (issue.data.pull_request) {
+                  console.log(`Skipping #${issueNumber} because it's a pull request, not an issue`);
+                  return;
+                }
+                
                 const issueId = await getIssueId(issueNumber);
-                await deleteIssue(issueId);
-                console.log(`Successfully deleted issue #${issueNumber}`);
+                if (issueId) {
+                  await sleep(1000); // Rate limiting delay
+                  const success = await deleteIssue(issueId, issueNumber);
+                  if (success) {
+                    console.log(`Successfully deleted issue #${issueNumber}`);
+                  }
+                }
               } catch (error) {
-                console.error(`Failed to delete issue #${issueNumber}:`, error.message);
+                console.error(`Error processing issue #${issueNumber}:`, error.message);
               }
             } 
             // For manual runs and scheduled runs: delete all open issues with spam label
             else {
               console.log("Finding all issues labeled as spam...");
               
-              const issues = await github.rest.issues.listForRepo({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                state: 'open',
-                labels: 'spam',
-                per_page: 100
-              });
+              // Rate limiting parameters
+              const RATE_LIMIT_DELAY = 1000; // 1 second delay between operations
+              const ITEMS_PER_PAGE = 30; // Number of items per page
+              const MAX_PAGES = 3; // Maximum number of pages to process in one run
               
-              console.log(`Found ${issues.data.length} spam issues to delete`);
-              
+              let page = 1;
+              let processedCount = 0;
               let successCount = 0;
-              for (const issue of issues.data) {
-                const issueNumber = issue.number;
-                console.log(`Attempting to delete spam issue #${issueNumber}`);
-                
+              let hasMorePages = true;
+              
+              // Process issues page by page with resilience
+              while (hasMorePages && page <= MAX_PAGES) {
                 try {
-                  const issueId = await getIssueId(issueNumber);
-                  await deleteIssue(issueId);
-                  console.log(`Successfully deleted issue #${issueNumber}`);
-                  successCount++;
+                  console.log(`Fetching page ${page} of spam issues...`);
+                  
+                  const issues = await github.rest.issues.listForRepo({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    state: 'all', // Get both open and closed issues
+                    labels: 'spam',
+                    per_page: ITEMS_PER_PAGE,
+                    page: page
+                  });
+                  
+                  if (issues.data.length === 0) {
+                    console.log("No more issues found.");
+                    hasMorePages = false;
+                    break;
+                  }
+                  
+                  console.log(`Found ${issues.data.length} spam issues on page ${page}`);
+                  
+                  for (const issue of issues.data) {
+                    const issueNumber = issue.number;
+                    processedCount++;
+                    
+                    try {
+                      // Skip if this is a pull request
+                      if (issue.pull_request) {
+                        console.log(`Skipping #${issueNumber} because it's a pull request, not an issue`);
+                        continue;
+                      }
+                      
+                      console.log(`Processing spam issue #${issueNumber}: "${issue.title}"`);
+                      
+                      const issueId = await getIssueId(issueNumber);
+                      if (issueId) {
+                        // Add delay before deletion
+                        await sleep(RATE_LIMIT_DELAY);
+                        const success = await deleteIssue(issueId, issueNumber);
+                        if (success) {
+                          console.log(`Successfully deleted issue #${issueNumber}`);
+                          successCount++;
+                        }
+                      }
+                    } catch (error) {
+                      console.error(`Error processing issue #${issueNumber}:`, error.message);
+                      // Continue with next issue even if this one fails
+                    }
+                    
+                    // Add delay after each issue processing
+                    await sleep(RATE_LIMIT_DELAY);
+                  }
+                  
+                  page++;
                 } catch (error) {
-                  console.error(`Failed to delete issue #${issueNumber}:`, error.message);
+                  console.error(`Error processing page ${page}:`, error.message);
+                  break; // Break the loop if we can't process a page
                 }
               }
               
-              console.log(`Summary: Successfully deleted ${successCount} out of ${issues.data.length} spam issues`);
+              if (hasMorePages && page > MAX_PAGES) {
+                console.log(`Pagination limit reached (${MAX_PAGES} pages). Remaining issues will be processed in future runs.`);
+              }
+              
+              console.log(`Summary: Successfully deleted ${successCount} out of ${processedCount} processed spam issues`);
             }
