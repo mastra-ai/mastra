@@ -1,23 +1,14 @@
 import { Mastra } from '@mastra/core';
 import { createLogger } from '@mastra/core/logger';
-import { catOne, agentTwo } from './agents/agent';
-import { logCatWorkflow } from './workflow';
-import { UpstashTransport } from "@mastra/loggers/upstash";
 
-const logger = createLogger({
-  name: "Mastra",
-  transports: {
-    upstash: new UpstashTransport({
-      listName: "production-logs",
-      upstashUrl: process.env.UPSTASH_URL!,
-      upstashToken: process.env.UPSTASH_TOKEN!,
-    })
-  },
-  level: "debug",
-});
+import { catOne } from './agents/agent';
+import { logCatWorkflow } from './workflow';
 
 export const mastra = new Mastra({
-  agents: { catOne, agentTwo },
+  agents: { catOne },
   workflows: { logCatWorkflow },
-  logger,
+  logger: createLogger({
+    name: 'Mastra',
+    level: 'debug',
+  }),
 });
