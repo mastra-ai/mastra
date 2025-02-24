@@ -1,5 +1,3 @@
-import { MastraBundler } from '@mastra/core/bundler';
-import type { getWatcher } from '@mastra/deployer';
 import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions, writeTelemetryConfig } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
@@ -40,7 +38,7 @@ export class DevBundler extends Bundler {
     });
   }
 
-  async watch(entryFile: string, outputDirectory: string): ReturnType<typeof getWatcher> {
+  async watch(entryFile: string, outputDirectory: string): ReturnType<typeof createWatcher> {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
 

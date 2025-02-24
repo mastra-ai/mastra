@@ -1,5 +1,33 @@
 # @mastra/deployer
 
+## 0.1.5-alpha.0
+
+### Patch Changes
+
+- e4ee56c: Enable \* imports in analyze bundle
+- Updated dependencies [7fceae1]
+- Updated dependencies [f626fbb]
+  - @mastra/core@0.4.2-alpha.0
+
+## 0.1.4
+
+### Patch Changes
+
+- 967da43: Logger, transport fixes
+- Updated dependencies [ce44b9b]
+- Updated dependencies [967da43]
+- Updated dependencies [b405f08]
+  - @mastra/core@0.4.1
+
+## 0.1.3
+
+### Patch Changes
+
+- 5297264: Fix build errors by changing contracts
+- Updated dependencies [2fc618f]
+- Updated dependencies [fe0fd01]
+  - @mastra/core@0.4.0
+
 ## 0.1.3-alpha.1
 
 ### Patch Changes
