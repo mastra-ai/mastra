@@ -1,9 +1,10 @@
+import { PassThrough } from 'stream';
+
 import { SpeechClient } from '@google-cloud/speech';
 import type { google as SpeechTypes } from '@google-cloud/speech/build/protos/protos';
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
 import type { google as TextToSpeechTypes } from '@google-cloud/text-to-speech/build/protos/protos';
 import { MastraVoice } from '@mastra/core/voice';
-import { PassThrough } from 'stream';
 
 /**
  * Configuration for Google Cloud Voice models
