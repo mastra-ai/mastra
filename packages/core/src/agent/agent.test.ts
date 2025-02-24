@@ -1,6 +1,6 @@
-import { PassThrough } from 'stream';
 import { createOpenAI } from '@ai-sdk/openai';
 import { config } from 'dotenv';
+import { PassThrough } from 'stream';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 

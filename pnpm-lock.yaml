@@ -3510,9 +3510,6 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.7.3
-      vitest:
-        specifier: ^2.1.8
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@22.13.4)(jsdom@20.0.3(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.39.0)
 
   speech/playai:
     dependencies:
@@ -4000,6 +3997,40 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.7.3
+
+  voice/openai:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      openai:
+        specifier: ^4.28.0
+        version: 4.85.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.2
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
+      '@microsoft/api-extractor':
+        specifier: ^7.49.2
+        version: 7.50.0(@types/node@22.13.4)
+      '@types/node':
+        specifier: ^22.13.1
+        version: 22.13.4
+      eslint:
+        specifier: ^9.20.1
+        version: 9.20.1(jiti@2.4.2)
+      tsup:
+        specifier: ^8.3.6
+        version: 8.3.6(@microsoft/api-extractor@7.50.0(@types/node@22.13.4))(@swc/core@1.10.18(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.2)(tsx@4.19.3)(typescript@5.7.3)(yaml@2.7.0)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.7.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@22.13.4)(jsdom@20.0.3(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(terser@5.39.0)
 
 packages:
 
