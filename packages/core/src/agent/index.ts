@@ -638,7 +638,7 @@ export class Agent<
 
         const systemMessage: CoreMessage = {
           role: 'system',
-          content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
+          content: `${this.instructions}.`,
         };
 
         let coreMessages = messages;
