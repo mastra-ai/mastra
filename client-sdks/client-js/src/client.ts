@@ -149,6 +149,14 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * List of all log transports
+   * @returns Promise containing list of log transports
+   */
+  public getLogTransports(): Promise<{ transports: string[] }> {
+    return this.request('/api/logs/transports');
+  }
+
+  /**
    * List of all traces (paged)
    * @param params - Parameters for filtering traces
    * @returns Promise containing telemetry data

@@ -1,5 +1,38 @@
 # mastra
 
+## 0.2.5
+
+### Patch Changes
+
+- 967da43: Logger, transport fixes
+- Updated dependencies [ce44b9b]
+- Updated dependencies [967da43]
+- Updated dependencies [b405f08]
+  - @mastra/core@0.4.1
+  - @mastra/deployer@0.1.4
+
+## 0.2.4
+
+### Patch Changes
+
+- 13ba53a: Remove cli postinstall script
+- bd98fb6: Fix yarn create mastra, use correct install commnad for deps install
+- 71cedf8: Allow column resizing on tracing UI
+  Fix UI issues in mastra dev agent chat page
+- dd3a52b: pass createVersionTag to create mastra deps
+- a931e9a: Fix resizer not showing when user has scrolled down the span details column
+- Updated dependencies [5297264]
+- Updated dependencies [2fc618f]
+- Updated dependencies [fe0fd01]
+  - @mastra/deployer@0.1.3
+  - @mastra/core@0.4.0
+
+## 0.2.4-alpha.2
+
+### Patch Changes
+
+- bd98fb6: Fix yarn create mastra, use correct install commnad for deps install
+
 ## 0.2.4-alpha.1
 
 ### Patch Changes

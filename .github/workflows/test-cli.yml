@@ -28,7 +28,7 @@ jobs:
         run: pnpm install
 
       - name: Build packages
-        run: pnpm build:core && pnpm build:deployer && pnpm build:cli
+        run: pnpm build:core && pnpm build:deployer && pnpm build:clients && pnpm build:cli
 
       - name: Run CLI tests
         run: pnpm test:cli

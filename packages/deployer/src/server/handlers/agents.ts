@@ -118,7 +118,7 @@ export async function generateHandler(c: Context) {
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const { messages, threadId, resourceid, resourceId, output } = await c.req.json();
+    const { messages, threadId, resourceid, resourceId, output, runId } = await c.req.json();
     validateBody({ messages });
 
     if (!Array.isArray(messages)) {
@@ -128,7 +128,7 @@ export async function generateHandler(c: Context) {
     // Use resourceId if provided, fall back to resourceid (deprecated)
     const finalResourceId = resourceId ?? resourceid;
 
-    const result = await agent.generate(messages, { threadId, resourceId: finalResourceId, output });
+    const result = await agent.generate(messages, { threadId, resourceId: finalResourceId, output, runId });
 
     return c.json(result);
   } catch (error) {
@@ -146,7 +146,7 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const { messages, threadId, resourceid, resourceId, output } = await c.req.json();
+    const { messages, threadId, resourceid, resourceId, output, runId } = await c.req.json();
 
     validateBody({ messages });
 
@@ -157,7 +157,7 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
     // Use resourceId if provided, fall back to resourceid (deprecated)
     const finalResourceId = resourceId ?? resourceid;
 
-    const streamResult = await agent.stream(messages, { threadId, resourceId: finalResourceId, output });
+    const streamResult = await agent.stream(messages, { threadId, resourceId: finalResourceId, output, runId });
 
     const streamResponse = output
       ? streamResult.toTextStreamResponse()
