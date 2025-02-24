@@ -165,7 +165,7 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
           sendUsage: true,
           sendReasoning: true,
           getErrorMessage: (error: any) => {
-            return `An error occurred while processing your request. ${error}`;
+            return `An error occurred while processing your request. ${error instanceof Error ? error.message : String(error)}`;
           },
         });
 
