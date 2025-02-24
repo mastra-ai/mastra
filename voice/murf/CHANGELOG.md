@@ -1,5 +1,11 @@
 # @mastra/voice-murf
 
+## 0.1.0-alpha.2
+
+### Patch Changes
+
+- 5b1af96: deprecate @mastra/speech-murf for @mastra/voice-murf
+
 ## 0.1.0 (2024-XX-XX)
 
 This package replaces the deprecated @mastra/speech-murf package. All functionality has been migrated to this new package with a more consistent naming scheme.

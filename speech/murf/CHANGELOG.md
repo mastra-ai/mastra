@@ -1,5 +1,11 @@
 # @mastra/speech-murf
 
+## 0.1.5-alpha.2
+
+### Patch Changes
+
+- 5b1af96: deprecate @mastra/speech-murf for @mastra/voice-murf
+
 ## 0.1.5-alpha.0
 
 ### Patch Changes

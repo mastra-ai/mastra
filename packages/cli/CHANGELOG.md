@@ -1,5 +1,13 @@
 # mastra
 
+## 0.2.6-alpha.1
+
+### Patch Changes
+
+- 2d68431: Fix mastra server error processing
+- Updated dependencies [2d68431]
+  - @mastra/deployer@0.1.5-alpha.1
+
 ## 0.2.6-alpha.0
 
 ### Patch Changes

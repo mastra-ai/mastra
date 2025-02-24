@@ -1,5 +1,11 @@
 # @mastra/speech-google
 
+## 0.1.5-alpha.2
+
+### Patch Changes
+
+- 5e0f727: deprecate @mastra/speech-google for @mastra/voice-google
+
 ## 0.1.5-alpha.0
 
 ### Patch Changes
