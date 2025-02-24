@@ -1,5 +1,15 @@
 # @mastra/loggers
 
+## 0.1.4
+
+### Patch Changes
+
+- 967da43: Logger, transport fixes
+- Updated dependencies [ce44b9b]
+- Updated dependencies [967da43]
+- Updated dependencies [b405f08]
+  - @mastra/core@0.4.1
+
 ## 0.1.3
 
 ### Patch Changes
