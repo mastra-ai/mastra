@@ -188,7 +188,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       {},
     );
     const allResults = { ...results, ...nestedResults };
-    console.dir({ results, nestedResults, allResults }, { depth: null });
 
     await this.persistWorkflowSnapshot();
 
@@ -203,7 +202,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
    * Persists the workflow state to the database
    */
   async persistWorkflowSnapshot(): Promise<void> {
-    console.log('loading existing snapshot', { workflowName: this.name, runId: this.#runId });
     const existingSnapshot = (await this.#mastra?.storage?.loadWorkflowSnapshot({
       workflowName: this.name,
       runId: this.#runId,
@@ -216,8 +214,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
         machineSnapshots[stepId] = { ...machineSnapshot };
       }
     }
-
-    console.dir({ existingSnapshot, machineSnapshots }, { depth: 3 });
 
     let snapshot = machineSnapshots['trigger'] as unknown as WorkflowRunState;
     delete machineSnapshots['trigger'];
@@ -268,8 +264,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     if (existingSnapshot?.childStates) {
       snapshot.childStates = { ...existingSnapshot.childStates, ...machineSnapshots };
     }
-
-    console.dir({ persisting: existingSnapshot }, { depth: 3 });
 
     await this.#mastra?.storage?.persistWorkflowSnapshot({
       workflowName: this.name,
