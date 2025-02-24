@@ -82,7 +82,9 @@ export class MastraLLMBase extends MastraBase {
     this.#mastra = p;
   }
 
-  async __text(input: LLMTextOptions): Promise<GenerateTextResult<any, any>> {
+  async __text<Z extends ZodSchema | JSONSchema7 | undefined>(
+    input: LLMTextOptions<Z>,
+  ): Promise<GenerateTextResult<any, any>> {
     this.logger.debug(`[LLMs:${this.name}] Generating text.`, { input });
     throw new Error('Method not implemented.');
   }

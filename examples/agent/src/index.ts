@@ -86,6 +86,26 @@ async function textObject() {
   console.log('\n-------------------\n');
 }
 
+async function experimentalTextObject() {
+  // Query 3: Generate a lasagna recipe
+  const query3 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
+  console.log(`Query 3: ${query3}`);
+
+  const lasagnaResponse = await agent.generate(query3, {
+    experimental_output: z.object({
+      ingredients: z.array(
+        z.object({
+          name: z.string(),
+          amount: z.number(),
+        }),
+      ),
+      steps: z.array(z.string()),
+    }),
+  });
+  console.log('\n👨‍🍳 Chef Michel:', lasagnaResponse.experimental_output);
+  console.log('\n-------------------\n');
+}
+
 async function textObjectJsonSchema() {
   // Query 3: Generate a lasagna recipe
   const query3 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
@@ -198,7 +218,9 @@ async function generateStreamObject() {
 }
 
 async function main() {
-  await text();
+  // await text();
+
+  await experimentalTextObject();
 
   // await generateText();
 

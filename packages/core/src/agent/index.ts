@@ -18,7 +18,7 @@ import type { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
-import type { GenerateReturn, StreamReturn } from '../llm';
+import type { GenerateReturn, OutputType, StreamReturn } from '../llm';
 import { MastraLLM } from '../llm/model';
 import type { MastraLLMBase } from '../llm/model';
 import { LogLevel, RegisteredLogger } from '../logger';
@@ -777,11 +777,12 @@ export class Agent<
       onStepFinish,
       runId,
       toolsets,
-      output = 'text',
+      output = 'text' as const,
       temperature,
       toolChoice = 'auto',
+      experimental_output,
     }: AgentGenerateOptions<Z> = {},
-  ): Promise<GenerateReturn<Z>> {
+  ): Promise<GenerateReturn<Z, typeof experimental_output>> {
     let messagesToUse: CoreMessage[] = [];
 
     if (typeof messages === `string`) {
@@ -816,6 +817,26 @@ export class Agent<
     });
 
     const { threadId, messageObjects, convertedTools } = await before();
+
+    if (output === 'text' && experimental_output) {
+      const result = await this.llm.__text({
+        messages: messageObjects,
+        tools: this.tools,
+        convertedTools,
+        onStepFinish,
+        maxSteps,
+        runId: runIdToUse,
+        temperature,
+        toolChoice,
+        experimental_output,
+      });
+
+      const outputText = result.text;
+
+      await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+
+      return result as unknown as GenerateReturn<Z, typeof experimental_output>;
+    }
 
     if (output === 'text') {
       const result = await this.llm.__text({
