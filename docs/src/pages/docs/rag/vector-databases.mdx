@@ -94,7 +94,10 @@ chunks.map(chunk => ({ text: chunk.text }))
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { DefaultVectorDB } from '@mastra/core/storage'
 
-  const store = new DefaultVectorDB(process.env.DATABASE_URL)
+  const store = new DefaultVectorDB({
+    connectionUrl: process.env.DATABASE_URL,
+    authToken: process.env.DATABASE_AUTH_TOKEN // Optional: for Turso cloud databases
+  })
   await store.createIndex("my-collection", 1536);
   await store.upsert(
     "my-collection",

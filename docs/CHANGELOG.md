@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.2-alpha.0
+
+### Patch Changes
+
+- 2e0fe6d: Added example and updated docs
+
 ## 0.1.1
 
 ### Patch Changes

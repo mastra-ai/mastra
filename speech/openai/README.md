@@ -1,67 +1,25 @@
-# @mastra/speech-openai
+# @mastra/speech-openai (DEPRECATED)
 
-OpenAI Speech integration for Mastra, providing Text-to-Speech (TTS) capabilities using OpenAI's advanced speech models.
+⚠️ **This package is deprecated.** Please use [@mastra/voice-openai](https://github.com/mastra-ai/mastra/tree/main/voice/openai) instead.
 
-## Installation
+## Migration
 
-```bash
-npm install @mastra/speech-openai
-```
+The new package `@mastra/voice-openai` provides both Text-to-Speech and Speech-to-Text capabilities. To migrate:
 
-## Configuration
-
-The module requires the following environment variable:
+1. Install the new package:
 
 ```bash
-OPENAI_API_KEY=your_api_key
+npm uninstall @mastra/speech-openai
+npm install @mastra/voice-openai
 ```
 
-## Usage
+2. Update your imports:
 
 ```typescript
+// Old
 import { OpenAITTS } from '@mastra/speech-openai';
-
-// Initialize with configuration
-const tts = new OpenAITTS({
-  model: {
-    name: 'alloy', // Default voice
-    apiKey: 'your-api-key', // Optional, can use OPENAI_API_KEY env var
-  },
-});
-
-// List available voices
-const voices = await tts.voices();
-
-// Generate speech
-const result = await tts.generate({
-  voice: 'alloy',
-  text: 'Hello from Mastra!',
-});
-
-// Stream speech
-const stream = await tts.stream({
-  voice: 'alloy',
-  text: 'Hello from Mastra!',
-});
+// New
+import { OpenAIVoice } from '@mastra/voice-openai';
 ```
 
-## Features
-
-- High-quality Text-to-Speech synthesis
-- Multiple voice options
-- Streaming support
-- Natural and expressive speech output
-- Fast generation times
-
-## Voice Options
-
-OpenAI provides several high-quality voices:
-
-- alloy (Neutral)
-- echo (Male)
-- fable (Male)
-- onyx (Male)
-- nova (Female)
-- shimmer (Female)
-
-View the complete list in the `voices.ts` file or [OpenAI's documentation](https://platform.openai.com/docs/guides/text-to-speech).
+For detailed migration instructions and new features, please refer to the [@mastra/voice-openai documentation](https://github.com/mastra-ai/mastra/tree/main/voice/openai).
