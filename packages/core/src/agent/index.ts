@@ -115,9 +115,10 @@ export class Agent<
       this.__setLogger(p.logger);
     }
 
+
     this.llm.__registerPrimitives(p);
 
-    this.#mastra = p;
+    this.#mastra = p
 
     this.logger.debug(`[Agents:${this.name}] initialized.`, { model: this.model, name: this.name });
   }
@@ -239,27 +240,27 @@ export class Agent<
         const memoryMessages =
           threadId && memory
             ? (
-                await memory.rememberMessages({
-                  threadId,
-                  config: memoryConfig,
-                  vectorMessageSearch: messages
-                    .slice(-1)
-                    .map(m => {
-                      if (typeof m === `string`) {
-                        return m;
-                      }
-                      return m?.content || ``;
-                    })
-                    .join(`\n`),
-                })
-              ).messages
+              await memory.rememberMessages({
+                threadId,
+                config: memoryConfig,
+                vectorMessageSearch: messages
+                  .slice(-1)
+                  .map(m => {
+                    if (typeof m === `string`) {
+                      return m;
+                    }
+                    return m?.content || ``;
+                  })
+                  .join(`\n`),
+              })
+            ).messages
             : [];
 
         if (memory) {
           await memory.saveMessages({ messages, memoryConfig });
         }
 
-        this.log(LogLevel.DEBUG, 'Saved messages to memory', {
+        this.logger.debug('Saved messages to memory', {
           threadId: thread.id,
           runId,
         });
@@ -357,10 +358,10 @@ export class Agent<
                     return undefined;
                   })
                   ?.filter(Boolean) as Array<{
-                  toolCallId: string;
-                  toolArgs: Record<string, unknown>;
-                  toolName: string;
-                }>;
+                    toolCallId: string;
+                    toolArgs: Record<string, unknown>;
+                    toolName: string;
+                  }>;
 
                 toolCallIds = assistantToolCalls?.map(toolCall => toolCall.toolCallId);
 
@@ -504,6 +505,7 @@ export class Agent<
                   name: k,
                   description: tool.description,
                   args,
+                  runId,
                 });
                 return tool.execute({
                   context: args,
@@ -566,6 +568,7 @@ export class Agent<
                   name: toolName,
                   description: toolObj.description,
                   args,
+                  runId,
                 });
                 return toolObj.execute!({
                   context: args,
@@ -603,7 +606,7 @@ export class Agent<
     let coreMessages: CoreMessage[] = [];
     let threadIdToUse = threadId;
 
-    this.log(LogLevel.DEBUG, `Saving user messages in memory for agent ${this.name}`, { runId });
+    this.logger.debug(`Saving user messages in memory for agent ${this.name}`, { runId });
     const saveMessageResponse = await this.saveMemory({
       threadId,
       resourceId,

@@ -1778,6 +1778,9 @@ importers:
 
   examples/quick-start:
     dependencies:
+      '@ai-sdk/anthropic':
+        specifier: ^1.1.9
+        version: 1.1.9(zod@3.24.2)
       '@ai-sdk/groq':
         specifier: latest
         version: 1.1.10(zod@3.24.2)
@@ -1787,6 +1790,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/loggers':
+        specifier: workspace:*
+        version: link:../../packages/loggers
       ai:
         specifier: latest
         version: 4.1.44(react@19.0.0)(zod@3.24.2)
@@ -2125,7 +2131,7 @@ importers:
         version: 7.50.0(@types/node@22.13.4)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@4.34.8)
+        version: 3.0.3(rollup@3.29.5)
       '@size-limit/preset-small-lib':
         specifier: ^11.1.4
         version: 11.2.0(size-limit@11.2.0)
@@ -2186,7 +2192,7 @@ importers:
         version: 7.50.0(@types/node@22.13.4)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@3.29.5)
+        version: 3.0.3(rollup@4.34.8)
       '@size-limit/preset-small-lib':
         specifier: ^11.1.4
         version: 11.2.0(size-limit@11.2.0)
@@ -2551,6 +2557,9 @@ importers:
       '@lezer/highlight':
         specifier: ^1.2.1
         version: 1.2.1
+      '@mastra/client-js':
+        specifier: workspace:*
+        version: link:../../../../client-sdks/client-js
       '@radix-ui/react-alert-dialog':
         specifier: ^1.1.2
         version: 1.1.6(@types/react-dom@18.3.5(@types/react@18.3.18))(@types/react@18.3.18)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -2636,7 +2645,7 @@ importers:
         specifier: ^18.3.1
         version: 18.3.1
       react-code-block:
-        specifier: ^1.1.1
+        specifier: 1.1.1
         version: 1.1.1(prism-react-renderer@2.4.1(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react-day-picker:
         specifier: ^9.0.8

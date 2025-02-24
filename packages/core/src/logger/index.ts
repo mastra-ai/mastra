@@ -33,14 +33,20 @@ export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
 
 // Base Interfaces
 export interface BaseLogMessage extends Run {
-  message: string;
-  destinationPath: string;
-  type: RegisteredLogger;
+  msg: string;
+  level: number;
+  time: Date;
+  pid: number;
+  hostname: string;
+  name: string;
 }
 
 export class LoggerTransport extends Transform {
+  constructor(opts: any = {}) {
+    super({ ...opts, objectMode: true });
+  }
+
   async getLogsByRunId({ runId }: { runId: string }): Promise<BaseLogMessage[]> {
-    console.log(runId);
     return [];
   }
   async getLogs(): Promise<BaseLogMessage[]> {
@@ -76,30 +82,30 @@ export class Logger {
         ? options?.transports?.default
         : transportsAry.length === 0
           ? pretty({
-              colorize: true,
-              levelFirst: true,
-              ignore: 'pid,hostname',
-              colorizeObjects: true,
-              translateTime: 'SYS:standard',
-              singleLine: false,
-            })
+            colorize: true,
+            levelFirst: true,
+            ignore: 'pid,hostname',
+            colorizeObjects: true,
+            translateTime: 'SYS:standard',
+            singleLine: false,
+          })
           : pino.multistream([
-              ...transportsAry.map(([_, transport]) => ({
-                stream: transport,
-                level: options.level || LogLevel.INFO,
-              })),
-              {
-                stream: pretty({
-                  colorize: true,
-                  levelFirst: true,
-                  ignore: 'pid,hostname',
-                  colorizeObjects: true,
-                  translateTime: 'SYS:standard',
-                  singleLine: false,
-                }),
-                level: options.level || LogLevel.INFO,
-              },
-            ]),
+            ...transportsAry.map(([_, transport]) => ({
+              stream: transport,
+              level: options.level || LogLevel.INFO,
+            })),
+            {
+              stream: pretty({
+                colorize: true,
+                levelFirst: true,
+                ignore: 'pid,hostname',
+                colorizeObjects: true,
+                translateTime: 'SYS:standard',
+                singleLine: false,
+              }),
+              level: options.level || LogLevel.INFO,
+            },
+          ]),
     );
   }
 
@@ -181,9 +187,9 @@ export function combineLoggers(loggers: Logger[]): MultiLogger {
 
 // No-op logger implementation
 export const noopLogger = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  cleanup: async () => {},
+  debug: () => { },
+  info: () => { },
+  warn: () => { },
+  error: () => { },
+  cleanup: async () => { },
 };

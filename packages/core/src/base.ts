@@ -1,5 +1,5 @@
 import { createLogger, RegisteredLogger } from './logger';
-import type { Logger, LogLevel, BaseLogMessage } from './logger';
+import type { Logger } from './logger';
 import type { Telemetry } from './telemetry';
 
 export class MastraBase {
@@ -23,25 +23,6 @@ export class MastraBase {
     this.logger.debug(`Logger updated [component=${this.component}] [name=${this.name}]`);
   }
 
-  /**
-   * Internal logging helper that formats and sends logs to the configured logger
-   * @param level - Severity level of the log
-   * @param message - Main log message
-   * @param opts - Optional object for the log
-   */
-  log(level: LogLevel, message: string, opts?: Record<string, any>) {
-    if (!this.logger) return;
-
-    const logMessage: BaseLogMessage = {
-      type: this.component,
-      message,
-      destinationPath: this.name ? `${this.component}/${this.name}` : this.component,
-      ...(opts || {}),
-    };
-
-    const logMethod = level.toLowerCase() as keyof Logger;
-    (this.logger as any)[logMethod]?.(logMessage);
-  }
 
   /**
    * Set the telemetry for the
@@ -66,10 +47,10 @@ export class MastraBase {
   get experimental_telemetry() {
     return this.telemetry
       ? {
-          // tracer: this.telemetry.tracer,
-          tracer: this.telemetry.getBaggageTracer(),
-          isEnabled: !!this.telemetry.tracer,
-        }
+        // tracer: this.telemetry.tracer,
+        tracer: this.telemetry.getBaggageTracer(),
+        isEnabled: !!this.telemetry.tracer,
+      }
       : undefined;
   }
 }
