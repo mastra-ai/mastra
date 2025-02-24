@@ -1,5 +1,27 @@
 # create-mastra
 
+## 0.1.4
+
+### Patch Changes
+
+- 13ba53a: Remove cli postinstall script
+- bd98fb6: Fix yarn create mastra, use correct install commnad for deps install
+- 5c7b8db: create-mastra version tag discovery
+- cd80117: pnpm create mastra versionTag discovery
+- dd3a52b: pass createVersionTag to create mastra deps
+
+## 0.1.4-alpha.3
+
+### Patch Changes
+
+- bd98fb6: Fix yarn create mastra, use correct install commnad for deps install
+
+## 0.1.4-alpha.2
+
+### Patch Changes
+
+- cd80117: pnpm create mastra versionTag discovery
+
 ## 0.1.4-alpha.1
 
 ### Patch Changes

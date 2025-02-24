@@ -24,7 +24,7 @@ import {
 } from './handlers/agents.js';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client.js';
 import { errorHandler } from './handlers/error.js';
-import { getLogsByRunIdHandler, getLogsHandler } from './handlers/logs.js';
+import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs.js';
 import {
   createThreadHandler,
   deleteThreadHandler,
@@ -252,6 +252,7 @@ export async function createHonoServer(
                   description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
                   deprecated: true,
                 },
+                runId: { type: 'string' },
                 output: { type: 'object' },
               },
               required: ['messages'],
@@ -303,6 +304,7 @@ export async function createHonoServer(
                   description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
                   deprecated: true,
                 },
+                runId: { type: 'string' },
                 output: { type: 'object' },
               },
               required: ['messages'],
@@ -914,6 +916,20 @@ export async function createHonoServer(
       },
     }),
     getLogsHandler,
+  );
+
+  app.get(
+    '/api/logs/transports',
+    describeRoute({
+      description: 'List of all log transports',
+      tags: ['logs'],
+      responses: {
+        200: {
+          description: 'List of all log transports',
+        },
+      },
+    }),
+    getLogTransports,
   );
 
   app.get(

@@ -17,9 +17,11 @@
     "zod": "^3.24.0"
   },
   "dependencies": {
-    "@ai-sdk/openai": "latest",
+    "@ai-sdk/anthropic": "^1.1.9",
     "@ai-sdk/groq": "latest",
+    "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:*",
+    "@mastra/loggers": "workspace:*",
     "ai": "latest"
   },
   "version": "0.0.1"

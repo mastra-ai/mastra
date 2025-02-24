@@ -259,7 +259,7 @@ export class Agent<
           await memory.saveMessages({ messages, memoryConfig });
         }
 
-        this.log(LogLevel.DEBUG, 'Saved messages to memory', {
+        this.logger.debug('Saved messages to memory', {
           threadId: thread.id,
           runId,
         });
@@ -504,6 +504,7 @@ export class Agent<
                   name: k,
                   description: tool.description,
                   args,
+                  runId,
                 });
                 return tool.execute({
                   context: args,
@@ -566,6 +567,7 @@ export class Agent<
                   name: toolName,
                   description: toolObj.description,
                   args,
+                  runId,
                 });
                 return toolObj.execute!({
                   context: args,
@@ -603,7 +605,7 @@ export class Agent<
     let coreMessages: CoreMessage[] = [];
     let threadIdToUse = threadId;
 
-    this.log(LogLevel.DEBUG, `Saving user messages in memory for agent ${this.name}`, { runId });
+    this.logger.debug(`Saving user messages in memory for agent ${this.name}`, { runId });
     const saveMessageResponse = await this.saveMemory({
       threadId,
       resourceId,
