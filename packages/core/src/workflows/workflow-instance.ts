@@ -213,7 +213,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     for (const [stepId, machine] of Object.entries(this.#machines)) {
       const machineSnapshot = machine.getSnapshot() as unknown as WorkflowRunState;
       if (machineSnapshot) {
-        machineSnapshots[stepId] = machineSnapshot;
+        machineSnapshots[stepId] = { ...machineSnapshot };
       }
     }
 
