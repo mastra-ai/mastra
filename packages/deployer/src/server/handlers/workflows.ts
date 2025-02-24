@@ -3,6 +3,8 @@ import type { Context } from 'hono';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 
+import { streamText } from 'hono/streaming';
+
 import { handleError } from './error';
 
 export async function getWorkflowsHandler(c: Context) {
@@ -67,18 +69,29 @@ export async function executeWorkflowHandler(c: Context) {
 export async function watchWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const logger = mastra.getLogger();
     const workflowId = c.req.param('workflowId');
     const workflow = mastra.getWorkflow(workflowId);
 
-    const stream = new ReadableStream({
-      async start(controller) {
-        workflow.watch(({ activePaths, context }) => {
-          controller.enqueue(JSON.stringify({ activePaths, context }) + '\x1E');
+    return streamText(
+      c,
+      async stream => {
+        return new Promise((_resolve, _reject) => {
+          let unwatch: () => void = workflow.watch(({ activePaths, context }) => {
+            stream.write(JSON.stringify({ activePaths, context }) + '\x1E');
+          });
+
+          stream.onAbort(() => {
+            unwatch?.();
+          });
         });
       },
-    });
-
-    return c.body(stream);
+      async (err, stream) => {
+        logger.error('Error in watch stream: ' + err?.message);
+        stream.abort();
+        await stream.close();
+      },
+    );
   } catch (error) {
     return handleError(error, 'Error watching workflow');
   }

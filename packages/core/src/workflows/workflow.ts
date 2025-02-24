@@ -197,7 +197,10 @@ export class Workflow<
       },
     });
     this.#runs.set(run.runId, run);
-    return run;
+    return {
+      start: run.start.bind(run),
+      runId: run.runId,
+    };
   }
 
   /**
@@ -398,12 +401,15 @@ export class Workflow<
       throw new Error('Failed to parse workflow snapshot');
     }
 
-    const suspendedStepId = parsedSnapshot.suspendedSteps?.[stepId];
-    console.dir({ suspendedSteps: parsedSnapshot.suspendedSteps, stepId, suspendedStepId }, { depth: null });
-    if (!suspendedStepId) {
+    const startStepId = parsedSnapshot.suspendedSteps?.[stepId];
+    console.dir(
+      { suspendedSteps: parsedSnapshot.suspendedSteps, stepId, suspendedStepId: startStepId },
+      { depth: null },
+    );
+    if (!startStepId) {
       return;
     }
-    parsedSnapshot = suspendedStepId === 'trigger' ? parsedSnapshot : parsedSnapshot.childStates[suspendedStepId];
+    parsedSnapshot = startStepId === 'trigger' ? parsedSnapshot : parsedSnapshot.childStates[startStepId];
 
     // Update context if provided
 
