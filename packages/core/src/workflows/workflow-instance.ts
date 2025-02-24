@@ -7,8 +7,8 @@ import type { Logger } from '../logger';
 
 import { Machine } from './machine';
 import { Step } from './step';
-import type { RetryConfig, StepGraph, StepResult, WorkflowRunState } from './types';
-import { getActivePathsAndStatus } from './utils';
+import type { RetryConfig, StepGraph, StepResult, WorkflowContext, WorkflowRunState } from './types';
+import { getActivePathsAndStatus, mergeChildValue } from './utils';
 
 export interface WorkflowResultReturn<T extends z.ZodType<any>> {
   runId: string;
@@ -35,6 +35,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
   #retryConfig?: RetryConfig;
 
   #runId: string;
+  #state: any | null = null;
   #executionSpan: Span | undefined;
 
   #onStepTransition: Set<(state: WorkflowRunState) => void | Promise<void>> = new Set();
@@ -135,6 +136,8 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       if (stepId && runState?.suspendedSteps?.[stepId]) {
         stepGraph = this.#stepSubscriberGraph[runState.suspendedSteps[stepId]] ?? this.#stepGraph;
         startStepId = stepId;
+        this.#state = runState.value;
+        console.dir({ state: this.#state.value, startStepId }, { depth: null });
       }
     }
 
@@ -145,13 +148,35 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       name: this.name,
       runId: this.runId,
       steps: this.#steps,
-      onStepTransition: this.#onStepTransition,
       stepGraph,
       executionSpan: this.#executionSpan,
       startStepId,
     });
 
     this.#machines[startStepId] = defaultMachine;
+
+    const stateUpdateHandler = (startStepId: string, state: any, context: any) => {
+      if (startStepId === 'trigger') {
+        this.#state = state;
+      } else {
+        this.#state = mergeChildValue(startStepId, this.#state, state);
+      }
+
+      console.dir({ globalState: this.#state }, { depth: null });
+
+      const now = Date.now();
+      if (this.#onStepTransition) {
+        this.#onStepTransition.forEach(onTransition => {
+          onTransition({
+            runId: this.#runId,
+            value: this.#state as Record<string, string>,
+            context: context as WorkflowContext,
+            activePaths: getActivePathsAndStatus(this.#state as Record<string, string>),
+            timestamp: now,
+          });
+        });
+      }
+    };
 
     const nestedMachines: Promise<any>[] = [];
     const spawnHandler = ({ parentStepId, context }: { parentStepId: string; context: any }) => {
@@ -163,7 +188,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
           name: this.name,
           runId: this.runId,
           steps: this.#steps,
-          onStepTransition: this.#onStepTransition,
           stepGraph: this.#stepSubscriberGraph[parentStepId],
           executionSpan: this.#executionSpan,
           startStepId: parentStepId,
@@ -172,12 +196,14 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
         this.#machines[parentStepId] = defaultMachine;
 
         machine.on('spawn-subscriber', spawnHandler);
+        machine.on('state-update', stateUpdateHandler);
 
         nestedMachines.push(machine.execute({ input: context }));
       }
     };
 
     defaultMachine.on('spawn-subscriber', spawnHandler);
+    defaultMachine.on('state-update', stateUpdateHandler);
 
     const { results } = await defaultMachine.execute({ snapshot, stepId, input: machineInput });
     const nestedResults = (await Promise.all(nestedMachines)).reduce(

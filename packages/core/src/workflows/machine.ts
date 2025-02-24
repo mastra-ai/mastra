@@ -25,11 +25,9 @@ import type {
   WorkflowActors,
   WorkflowContext,
   WorkflowEvent,
-  WorkflowRunState,
   WorkflowState,
 } from './types';
 import {
-  getActivePathsAndStatus,
   getStepResult,
   getSuspendedPaths,
   isErrorEvent,
@@ -53,7 +51,6 @@ export class Machine<
   #startStepId: string;
   name: string;
 
-  #onStepTransition: Set<(state: WorkflowRunState) => void | Promise<void>>;
   #actor: ReturnType<typeof createActor<ReturnType<typeof this.initializeMachine>>> | null = null;
   #steps: Record<string, IAction<any, any, any, any>> = {};
   #retryConfig?: RetryConfig;
@@ -68,7 +65,6 @@ export class Machine<
     steps,
     stepGraph,
     retryConfig,
-    onStepTransition,
     startStepId,
   }: {
     logger: Logger;
@@ -80,14 +76,12 @@ export class Machine<
     steps: Record<string, IAction<any, any, any, any>>;
     stepGraph: StepGraph;
     retryConfig?: RetryConfig;
-    onStepTransition: Set<(state: WorkflowRunState) => void | Promise<void>>;
     startStepId: string;
   }) {
     super();
 
     this.#mastra = mastra;
     this.#workflowInstance = workflowInstance;
-    this.#onStepTransition = onStepTransition;
     this.#executionSpan = executionSpan;
     this.logger = logger;
 
@@ -168,17 +162,8 @@ export class Machine<
 
       const suspendedPaths: Set<string> = new Set();
       this.#actor.subscribe(async state => {
-        if (this.#onStepTransition) {
-          this.#onStepTransition.forEach(onTransition => {
-            onTransition({
-              runId: this.#runId,
-              value: state.value as Record<string, string>,
-              context: state.context as WorkflowContext,
-              activePaths: getActivePathsAndStatus(state.value as Record<string, string>),
-              timestamp: Date.now(),
-            });
-          });
-        }
+        this.emit('state-update', this.#startStepId, state.value, state.context);
+
         getSuspendedPaths({
           value: state.value as Record<string, string>,
           path: '',
