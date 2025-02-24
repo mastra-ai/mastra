@@ -183,7 +183,7 @@ export const baseTestConfigs = {
     { dimension: 384, size: 100_000, k: 50, queryCount: 30 },
     { dimension: 384, size: 100_000, k: 100, queryCount: 30 },
     { dimension: 384, size: 500_000, k: 10, queryCount: 30 },
-    { dimension: 384, size: 1_000_000, k: 10, queryCount: 30 },
+    // { dimension: 384, size: 1_000_000, k: 10, queryCount: 30 },
   ],
   '1024': [
     { dimension: 1024, size: 10_000, k: 10, queryCount: 30 },

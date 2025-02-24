@@ -1,3 +1,4 @@
+import pg from 'pg';
 import { describe, it, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 
 import {
@@ -27,8 +28,68 @@ interface IndexTestConfig extends IndexConfig {
   rebuild?: boolean;
 }
 
+class PGPerformanceVector extends PgVector {
+  private perfPool: pg.Pool;
+
+  constructor(connectionString: string) {
+    super(connectionString);
+
+    const basePool = new pg.Pool({
+      connectionString,
+      max: 20, // Maximum number of clients in the pool
+      idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
+      connectionTimeoutMillis: 2000, // Fail fast if can't connect
+    });
+
+    this.perfPool = basePool;
+  }
+
+  async bulkUpsert(indexName: string, vectors: number[][], metadata?: any[], ids?: string[]) {
+    const client = await this.perfPool.connect();
+    try {
+      await client.query('BEGIN');
+      const vectorIds = ids || vectors.map(() => crypto.randomUUID());
+
+      // Same query structure as upsert, just using unnest for bulk operation
+      const query = `
+        INSERT INTO ${indexName} (vector_id, embedding, metadata)
+        SELECT * FROM unnest(
+          $1::text[],
+          $2::vector[],
+          $3::jsonb[]
+        )
+        ON CONFLICT (vector_id)
+        DO UPDATE SET
+          embedding = EXCLUDED.embedding,
+          metadata = EXCLUDED.metadata
+        RETURNING embedding::text
+      `;
+
+      // Same parameter structure as upsert, just as arrays
+      await client.query(query, [
+        vectorIds,
+        vectors.map(v => `[${v.join(',')}]`),
+        (metadata || vectors.map(() => ({}))).map(m => JSON.stringify(m)),
+      ]);
+      await client.query('COMMIT');
+      return vectorIds;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+}
+
 const warmupCache = new Map<string, boolean>();
-async function smartWarmup(vectorDB: PgVector, testIndexName: string, indexType: string, dimension: number, k: number) {
+async function smartWarmup(
+  vectorDB: PGPerformanceVector,
+  testIndexName: string,
+  indexType: string,
+  dimension: number,
+  k: number,
+) {
   const cacheKey = `${dimension}-${k}-${indexType}`;
   if (!warmupCache.has(cacheKey)) {
     console.log(`Warming up ${indexType} index for ${dimension}d vectors, k=${k}`);
@@ -40,7 +101,7 @@ async function smartWarmup(vectorDB: PgVector, testIndexName: string, indexType:
 
 const connectionString = process.env.DB_URL || `postgresql://postgres:postgres@localhost:5435/mastra`;
 describe('PostgreSQL Index Performance', () => {
-  let vectorDB: PgVector;
+  let vectorDB: PGPerformanceVector;
   const testIndexName = 'test_index_performance';
   const results: TestResult[] = [];
 
@@ -48,12 +109,12 @@ describe('PostgreSQL Index Performance', () => {
     // { type: 'flat' }, // Test flat/linear search as baseline
     // { type: 'ivfflat', ivf: { lists: 100 } }, // Test IVF with fixed lists
     // { type: 'ivfflat', rebuild: true }, // Test IVF with calculated lists and rebuild
-    { type: 'hnsw' },
-    // { type: 'hnsw', hnsw: { m: 16, efConstruction: 64 } },
+    // { type: 'hnsw' },
+    { type: 'hnsw', hnsw: { m: 16, efConstruction: 64 } },
   ];
   beforeAll(async () => {
-    // Initialize PgVector
-    vectorDB = new PgVector(connectionString);
+    // Initialize PGPerformanceVector
+    vectorDB = new PGPerformanceVector(connectionString);
   });
   beforeEach(async () => {
     await vectorDB.deleteIndex(testIndexName);
@@ -116,7 +177,9 @@ describe('PostgreSQL Index Performance', () => {
               const batchSizes = splitIntoRandomBatches(testConfig.size, testConfig.dimension);
               await batchedBulkUpsert(vectorDB, testIndexName, testVectors, batchSizes);
               if (indexType === 'hnsw' || rebuild) {
+                console.log('rebuilding index');
                 await vectorDB.defineIndex(testIndexName, 'cosine', indexConfig);
+                console.log('index rebuilt');
               }
               await smartWarmup(vectorDB, testIndexName, indexType, testConfig.dimension, testConfig.k);
 
@@ -352,7 +415,12 @@ function splitIntoRandomBatches(total: number, dimension: number): number[] {
   return batches;
 }
 
-async function batchedBulkUpsert(vectorDB: PgVector, testIndexName: string, vectors: number[][], batchSizes: number[]) {
+async function batchedBulkUpsert(
+  vectorDB: PGPerformanceVector,
+  testIndexName: string,
+  vectors: number[][],
+  batchSizes: number[],
+) {
   let offset = 0;
   const vectorIds = vectors.map((_, idx) => `vec_${idx}`);
   const metadata = vectors.map((_, idx) => ({ index: idx }));
@@ -368,19 +436,19 @@ async function batchedBulkUpsert(vectorDB: PgVector, testIndexName: string, vect
 }
 
 const distributions = {
-  // random: generateRandomVectors,
-  // clustered: generateClusteredVectors,
+  random: generateRandomVectors,
+  clustered: generateClusteredVectors,
   skewed: generateSkewedVectors,
-  // mixed: (size: number, dimension: number) => {
-  //   const generators = [generateRandomVectors, generateClusteredVectors, generateSkewedVectors];
-  //   const batchSizes = splitIntoRandomBatches(size, dimension);
+  mixed: (size: number, dimension: number) => {
+    const generators = [generateRandomVectors, generateClusteredVectors, generateSkewedVectors];
+    const batchSizes = splitIntoRandomBatches(size, dimension);
 
-  //   let vectors: number[][] = [];
-  //   for (const batchSize of batchSizes) {
-  //     const generator = generators[Math.floor(Math.random() * generators.length)];
-  //     vectors = vectors.concat(generator(batchSize, dimension));
-  //   }
+    let vectors: number[][] = [];
+    for (const batchSize of batchSizes) {
+      const generator = generators[Math.floor(Math.random() * generators.length)];
+      vectors = vectors.concat(generator(batchSize, dimension));
+    }
 
-  //   return vectors;
-  // },
+    return vectors;
+  },
 };

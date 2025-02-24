@@ -376,41 +376,4 @@ export class PgVector extends MastraVector {
   async disconnect() {
     await this.pool.end();
   }
-
-  async bulkUpsert(indexName: string, vectors: number[][], metadata?: any[], ids?: string[]) {
-    const client = await this.pool.connect();
-    try {
-      await client.query('BEGIN');
-      const vectorIds = ids || vectors.map(() => crypto.randomUUID());
-
-      // Same query structure as upsert, just using unnest for bulk operation
-      const query = `
-        INSERT INTO ${indexName} (vector_id, embedding, metadata)
-        SELECT * FROM unnest(
-          $1::text[],
-          $2::vector[],
-          $3::jsonb[]
-        )
-        ON CONFLICT (vector_id)
-        DO UPDATE SET
-          embedding = EXCLUDED.embedding,
-          metadata = EXCLUDED.metadata
-        RETURNING embedding::text
-      `;
-
-      // Same parameter structure as upsert, just as arrays
-      await client.query(query, [
-        vectorIds,
-        vectors.map(v => `[${v.join(',')}]`),
-        (metadata || vectors.map(() => ({}))).map(m => JSON.stringify(m)),
-      ]);
-      await client.query('COMMIT');
-      return vectorIds;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
-  }
 }
