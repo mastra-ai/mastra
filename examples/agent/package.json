@@ -4,6 +4,7 @@
   "private": true,
   "description": "",
   "main": "index.js",
+  "version": "0.0.1",
   "scripts": {
     "start-deployed": "npx bun src/with-deployed.ts",
     "start": "npx bun src/index.ts"

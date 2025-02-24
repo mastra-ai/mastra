@@ -6,7 +6,7 @@ import color from 'picocolors';
 import fs from 'fs/promises';
 
 import { DepsService } from '../../services/service.deps.js';
-import { getPackageManager } from '../utils.js';
+import { getPackageManager, getPackageManagerInstallCommand } from '../utils.js';
 
 const exec = util.promisify(child_process.exec);
 
@@ -65,6 +65,8 @@ export const createMastraProject = async ({ createVersionTag }: { createVersionT
 
   process.chdir(projectName);
   const pm = getPackageManager();
+  const installCommand = getPackageManagerInstallCommand(pm);
+
   s.message('Creating project');
   // use npm not ${pm} because this just creates a package.json - compatible with all PMs, each PM has a slightly different init command, ex pnpm does not have a -y flag. Use npm here for simplicity
   await exec(`npm init -y`);
@@ -77,8 +79,8 @@ export const createMastraProject = async ({ createVersionTag }: { createVersionT
   s.stop('Project created');
 
   s.start(`Installing ${pm} dependencies`);
-  await exec(`${pm} i zod`);
-  await exec(`${pm} i typescript tsx @types/node --save-dev`);
+  await exec(`${pm} ${installCommand} zod`);
+  await exec(`${pm} ${installCommand} typescript tsx @types/node --save-dev`);
   await exec(`echo '{
   "compilerOptions": {
     "target": "ES2022",
@@ -103,11 +105,11 @@ export const createMastraProject = async ({ createVersionTag }: { createVersionT
   s.stop(`${pm} dependencies installed`);
   s.start('Installing mastra');
   const versionTag = createVersionTag ? `@${createVersionTag}` : '@latest';
-  await execWithTimeout(`${pm} i -D mastra${versionTag}`);
+  await execWithTimeout(`${pm} ${installCommand} mastra${versionTag}`);
   s.stop('mastra installed');
 
   s.start('Installing @mastra/core');
-  await execWithTimeout(`${pm} i @mastra/core${versionTag}`);
+  await execWithTimeout(`${pm} ${installCommand} @mastra/core${versionTag}`);
   s.stop('@mastra/core installed');
 
   s.start('Adding .gitignore');
