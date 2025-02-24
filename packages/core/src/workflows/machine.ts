@@ -203,8 +203,8 @@ export class Machine<
         if (!allStatesComplete) return;
 
         try {
-          await this.persistMachineSnapshot();
           // Then cleanup and resolve
+          await this.#workflowInstance.persistWorkflowSnapshot();
           this.#cleanup();
           this.#executionSpan?.end();
           resolve({
@@ -291,7 +291,7 @@ export class Machine<
       }),
       persistSnapshot: async ({ context }: { context: MachineContext }) => {
         if (context._snapshot) {
-          return await this.persistMachineSnapshot();
+          await this.#workflowInstance.persistWorkflowSnapshot();
         }
         return;
       },
@@ -308,10 +308,6 @@ export class Machine<
         },
       }),
     };
-  }
-
-  async persistMachineSnapshot(): Promise<void> {
-    await this.#workflowInstance.persistWorkflowSnapshot();
   }
 
   #getDefaultActors() {
@@ -333,13 +329,12 @@ export class Machine<
           context: resolvedData,
           suspend: async () => {
             console.log('SUSPEND CALLED', stepNode.step.id);
-            this.emit('suspend', { stepId: stepNode.step.id });
+            await this.#workflowInstance.suspend(stepNode.step.id, this);
             if (this.#actor) {
               // Update context with current result
               context.steps[stepNode.step.id] = {
                 status: 'suspended',
               };
-              await this.persistMachineSnapshot();
               this.logger.debug(`Sending SUSPENDED event for step ${stepNode.step.id}`);
               this.#actor?.send({ type: 'SUSPENDED', stepId: stepNode.step.id });
             } else {

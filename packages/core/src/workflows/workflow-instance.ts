@@ -172,11 +172,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
           startStepId: parentStepId,
         });
 
-        machine.on('suspend', ({ stepId }) => {
-          console.log('suspend event caught', { stepId });
-          this.#suspendedMachines[stepId] = machine;
-          this.persistWorkflowSnapshot();
-        });
+        this.#machines[parentStepId] = defaultMachine;
 
         machine.on('spawn-subscriber', spawnHandler);
 
@@ -186,11 +182,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
 
     defaultMachine.on('spawn-subscriber', spawnHandler);
 
-    defaultMachine.on('suspend', ({ stepId }) => {
-      console.log('suspend event caught', { stepId });
-      this.#suspendedMachines[stepId] = defaultMachine;
-    });
-
     const { results } = await defaultMachine.execute({ snapshot, stepId, input: machineInput });
     const nestedResults = (await Promise.all(nestedMachines)).reduce(
       (acc, { results }) => ({ ...acc, ...results }),
@@ -198,27 +189,38 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     );
     const allResults = { ...results, ...nestedResults };
     console.dir({ results, nestedResults, allResults }, { depth: null });
+
+    await this.persistWorkflowSnapshot();
+
     return { results: allResults };
+  }
+
+  async suspend(stepId: string, machine: Machine<TSteps, TTriggerSchema>) {
+    this.#suspendedMachines[stepId] = machine;
   }
 
   /**
    * Persists the workflow state to the database
    */
   async persistWorkflowSnapshot(): Promise<void> {
+    console.log('loading existing snapshot', { workflowName: this.name, runId: this.#runId });
+    const existingSnapshot = (await this.#mastra?.storage?.loadWorkflowSnapshot({
+      workflowName: this.name,
+      runId: this.#runId,
+    })) as WorkflowRunState;
+
     const machineSnapshots: Record<string, WorkflowRunState> = {};
     for (const [stepId, machine] of Object.entries(this.#machines)) {
-      machineSnapshots[stepId] = machine.getSnapshot() as unknown as WorkflowRunState;
+      const machineSnapshot = machine.getSnapshot() as unknown as WorkflowRunState;
+      if (machineSnapshot) {
+        machineSnapshots[stepId] = machineSnapshot;
+      }
     }
 
-    const snapshot = machineSnapshots['trigger'] as unknown as WorkflowRunState;
+    console.dir({ existingSnapshot, machineSnapshots }, { depth: 3 });
+
+    let snapshot = machineSnapshots['trigger'] as unknown as WorkflowRunState;
     delete machineSnapshots['trigger'];
-
-    if (!snapshot) {
-      this.logger.debug('Snapshot cannot be persisted. No snapshot received.', { runId: this.#runId });
-      return;
-    }
-
-    snapshot.childStates = machineSnapshots;
 
     const suspendedSteps: Record<string, string> = Object.entries(this.#suspendedMachines).reduce(
       (acc, [stepId, machine]) => {
@@ -227,21 +229,54 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       },
       {} as Record<string, string>,
     );
+
+    if (!snapshot && existingSnapshot) {
+      existingSnapshot.childStates = machineSnapshots;
+      existingSnapshot.suspendedSteps = suspendedSteps;
+      await this.#mastra?.storage?.persistWorkflowSnapshot({
+        workflowName: this.name,
+        runId: this.#runId,
+        snapshot: existingSnapshot,
+      });
+
+      return;
+    } else if (snapshot && !existingSnapshot) {
+      snapshot.suspendedSteps = suspendedSteps;
+      await this.#mastra?.storage?.persistWorkflowSnapshot({
+        workflowName: this.name,
+        runId: this.#runId,
+        snapshot,
+      });
+      return;
+    } else if (!snapshot) {
+      this.logger.debug('Snapshot cannot be persisted. No snapshot received.', { runId: this.#runId });
+      return;
+    }
+
+    snapshot.childStates = machineSnapshots;
     snapshot.suspendedSteps = suspendedSteps;
 
-    const existingSnapshot = ((await this.#mastra?.storage?.loadWorkflowSnapshot({
-      workflowName: this.name,
-      runId: this.#runId,
-    })) ?? {}) as WorkflowRunState;
+    if (!existingSnapshot || snapshot === existingSnapshot) {
+      await this.#mastra?.storage?.persistWorkflowSnapshot({
+        workflowName: this.name,
+        runId: this.#runId,
+        snapshot,
+      });
 
-    if (existingSnapshot) {
-      Object.assign(existingSnapshot, snapshot);
+      return;
     }
+
+    Object.assign(existingSnapshot, snapshot);
+    if (existingSnapshot?.childStates) {
+      Object.assign(snapshot.childStates, existingSnapshot.childStates);
+    }
+
+    console.dir({ persisting: existingSnapshot }, { depth: 3 });
 
     await this.#mastra?.storage?.persistWorkflowSnapshot({
       workflowName: this.name,
       runId: this.#runId,
-      snapshot: existingSnapshot,
+      snapshot,
     });
   }
 

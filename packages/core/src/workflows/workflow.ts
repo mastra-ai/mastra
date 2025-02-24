@@ -456,6 +456,7 @@ export class Workflow<
         stepSubscriberGraph: this.#stepSubscriberGraph,
 
         onStepTransition: this.#onStepTransition,
+        runId,
         onFinish: () => {
           this.#runs.delete(run.runId);
         },
