@@ -29,13 +29,13 @@ export function WorkflowLogs({ runId }: { runId: string }) {
             </a>
           </p>
         ) : (
-          logs.map(log => {
-            const parsedLogMessage = JSON.parse(log.message);
+          logs.map((log, idx) => {
+            const parsedLogMessage = JSON.parse(log.msg);
             return (
-              <div key={log.timestamp} className="space-y-2">
+              <div key={idx} className="space-y-2">
                 <div className="flex gap-2 items-center">
-                  <p className="text-mastra-el-4">[{log.timestamp}]</p>
-                  <p className="text-mastra-el-5">[{log.level}]</p>
+                  <p className="text-mastra-el-5">[{new Date(log.time).toISOString()}]</p>
+                  <p className="text-mastra-el-4">[{log.level}]</p>
                 </div>
                 <p className="text-mastra-el-5 whitespace-pre-wrap">
                   <code>{JSON.stringify(parsedLogMessage, null, 2)}</code>

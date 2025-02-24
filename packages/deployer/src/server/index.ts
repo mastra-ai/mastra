@@ -76,10 +76,10 @@ export async function createHonoServer(
   const mastraToolsPaths = process.env.MASTRA_TOOLS_PATH;
   const toolImports = mastraToolsPaths
     ? await Promise.all(
-        mastraToolsPaths.split(',').map(async toolPath => {
-          return import(pathToFileURL(toolPath).href);
-        }),
-      )
+      mastraToolsPaths.split(',').map(async toolPath => {
+        return import(pathToFileURL(toolPath).href);
+      }),
+    )
     : [];
 
   const tools = toolImports.reduce((acc, toolModule) => {
@@ -252,6 +252,7 @@ export async function createHonoServer(
                   description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
                   deprecated: true,
                 },
+                runId: { type: 'string' },
                 output: { type: 'object' },
               },
               required: ['messages'],
@@ -303,6 +304,7 @@ export async function createHonoServer(
                   description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
                   deprecated: true,
                 },
+                runId: { type: 'string' },
                 output: { type: 'object' },
               },
               required: ['messages'],
