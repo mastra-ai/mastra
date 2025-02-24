@@ -328,7 +328,6 @@ export class Machine<
         const result = await stepNode.config.handler({
           context: resolvedData,
           suspend: async () => {
-            console.log('SUSPEND CALLED', stepNode.step.id);
             await this.#workflowInstance.suspend(stepNode.step.id, this);
             if (this.#actor) {
               // Update context with current result

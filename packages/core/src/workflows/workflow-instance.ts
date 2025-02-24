@@ -156,7 +156,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     const nestedMachines: Promise<any>[] = [];
     const spawnHandler = ({ parentStepId, context }: { parentStepId: string; context: any }) => {
       if (this.#stepSubscriberGraph[parentStepId]) {
-        console.log('spawning subscriber', { parentStepId, context });
         const machine = new Machine({
           logger: this.logger,
           mastra: this.#mastra,
