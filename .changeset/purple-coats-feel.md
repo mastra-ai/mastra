@@ -1,5 +1,4 @@
 ---
-'examples-insert-embedding-in-libsql': patch
 'docs': patch
 ---
 
