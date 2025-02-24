@@ -14,6 +14,7 @@ describe('OpenAIVoice Integration Tests', () => {
       mkdirSync(outputDir, { recursive: true });
     } catch (err) {
       // Ignore if directory already exists
+      console.log('Directory already exists: ', err);
     }
 
     voice = new OpenAIVoice({
