@@ -88,6 +88,18 @@ export class UpstashTransport extends LoggerTransport {
     }
   }
 
+  _write(chunk: any, encoding?: string, callback?: (error?: Error | null) => void): boolean {
+    if (typeof callback === 'function') {
+      this._transform(chunk, encoding || 'utf8', callback);
+      return true;
+    }
+
+    this._transform(chunk, encoding || 'utf8', (error: Error | null) => {
+      if (error) console.error('Transform error in write:', error);
+    });
+    return true;
+  }
+
   _transform(chunk: string, _enc: string, cb: Function) {
     try {
       // Parse the log line if it's a string
@@ -154,10 +166,12 @@ export class UpstashTransport extends LoggerTransport {
   async getLogsByRunId({ runId }: { runId: string }): Promise<BaseLogMessage[]> {
     try {
       const allLogs = await this.getLogs();
-      return (allLogs.filter((log: any) => log.msg?.runId === runId) || []) as BaseLogMessage[];
+      const logs = (allLogs.filter((log: any) => log.runId === runId) || []) as BaseLogMessage[];
+      return logs;
     } catch (error) {
       console.error('Error getting logs by runId from Upstash:', error);
       return [] as BaseLogMessage[];
     }
   }
 }
+
