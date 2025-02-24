@@ -266,9 +266,8 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       return;
     }
 
-    Object.assign(existingSnapshot, snapshot);
     if (existingSnapshot?.childStates) {
-      Object.assign(snapshot.childStates, existingSnapshot.childStates);
+      snapshot.childStates = { ...snapshot.childStates, ...existingSnapshot.childStates };
     }
 
     console.dir({ persisting: existingSnapshot }, { depth: 3 });

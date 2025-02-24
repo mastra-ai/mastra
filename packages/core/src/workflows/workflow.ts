@@ -398,6 +398,11 @@ export class Workflow<
       throw new Error('Failed to parse workflow snapshot');
     }
 
+    const suspendedStepId = parsedSnapshot.suspendedSteps?.[stepId];
+    if (suspendedStepId) {
+      parsedSnapshot = suspendedStepId === 'trigger' ? parsedSnapshot : parsedSnapshot.childStates[suspendedStepId];
+    }
+
     // Update context if provided
 
     if (resumeContext) {
