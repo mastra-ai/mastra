@@ -24,7 +24,7 @@ const { embeddings } = await embedMany({
   model: openai.embedding("text-embedding-3-small"),
  });
 
-const pgVector = new PgVector("postgresql://localhost:5432/mydb");
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 await pgVector.createIndex("test_index", 1536);
 

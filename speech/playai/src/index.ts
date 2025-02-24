@@ -274,3 +274,8 @@ export class PlayAITTS extends MastraTTS {
     return this.traced(() => Promise.resolve(PLAYAI_VOICES), 'tts.playai.voices')();
   }
 }
+
+throw new Error(
+  '@mastra/speech-playai is deprecated. Please use @mastra/voice-playai instead. ' +
+    "Update your imports from '@mastra/speech-playai' to '@mastra/voice-playai'.",
+);

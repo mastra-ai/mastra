@@ -72,6 +72,14 @@ const memory = new Memory({
 })
 
 Visit https://sdk.vercel.ai/docs/foundations/overview#embedding-models to find an alternate embedding provider
+
+If you do not want to use the Memory semantic recall feature, you can disable it entirely and this error will go away.
+
+const memory = new Memory({
+  options: {
+    semanticRecall: false // <- an embedder will not be required with this set to false
+  }
+})
 `);
     }
 

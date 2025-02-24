@@ -97,6 +97,7 @@ const client = new MastraClient({
 
 - `getLogs(params)`: Get system logs
 - `getLog(params)`: Get specific log entry
+- `getLogTransports()`: Get configured Log transports
 
 ### Telemetry
 

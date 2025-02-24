@@ -23,3 +23,6 @@ openapi-ts-error*
 # Local Netlify folder
 .netlify
 .npmrc
+
+# Test output directories
+voice/**/test-output*/

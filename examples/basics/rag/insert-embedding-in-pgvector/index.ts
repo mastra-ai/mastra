@@ -12,7 +12,7 @@ const { embeddings } = await embedMany({
   values: chunks.map(chunk => chunk.text),
 });
 
-const pgVector = new PgVector('postgresql://localhost:5432/mydb'); // TODO: change to your database
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 await pgVector.createIndex('test_index', 1536);
 

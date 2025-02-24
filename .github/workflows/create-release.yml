@@ -103,11 +103,11 @@ jobs:
 
       - name: Publish packages
         if: ${{ !inputs.dry_run }}
-        run: pnpm publish -r
+        run: pnpm publish -r --access public
 
       - name: Publish packages - dry run
         if: ${{ inputs.dry_run }}
-        run: pnpm publish -r --dry-run
+        run: pnpm publish -r --dry-run --access public
 
       - name: Add tags
         run: |
