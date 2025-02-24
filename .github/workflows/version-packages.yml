@@ -34,7 +34,7 @@ jobs:
         run: pnpm install
 
       - name: Build
-        run: pnpm build:core && pnpm build:deployer && pnpm build:cli
+        run: pnpm build:core && pnpm build:deployer && pnpm build:clients && pnpm build:cli
 
       - name: Create Release Pull Request
         uses: changesets/action@v1
