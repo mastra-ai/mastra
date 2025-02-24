@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.4.2-alpha.0
+
+### Patch Changes
+
+- 7fceae1: Removed system prompt with todays date since it can interfere with input token caching. Also removed a memory system prompt that refered to date ranges - we no longer use date ranges for memory so this was removed
+- f626fbb: add stt and tts capabilities on agent
+
 ## 0.4.1
 
 ### Patch Changes
