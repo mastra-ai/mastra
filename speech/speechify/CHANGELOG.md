@@ -1,5 +1,11 @@
 # @mastra/speech-speechify
 
+## 0.1.5-alpha.2
+
+### Patch Changes
+
+- f477df7: deprecate @mastra/speech-speechify for @mastra/voice-speechify
+
 ## 0.1.5-alpha.0
 
 ### Patch Changes

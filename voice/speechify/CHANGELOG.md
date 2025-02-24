@@ -1,5 +1,11 @@
 # @mastra/voice-speechify
 
+## 0.1.0-alpha.2
+
+### Patch Changes
+
+- f477df7: deprecate @mastra/speech-speechify for @mastra/voice-speechify
+
 ## 0.1.0 (2024-XX-XX)
 
 This package replaces the deprecated @mastra/speech-speechify package. All functionality has been migrated to this new package with a more consistent naming scheme.
