@@ -1,5 +1,5 @@
 {
-  "name": "examples-insert-embedding-in-pgvector",
+  "name": "insert-embedding-in-libsql",
   "type": "module",
   "private": true,
   "scripts": {
@@ -8,7 +8,7 @@
   "dependencies": {
     "@ai-sdk/openai": "latest",
     "@mastra/rag": "workspace:*",
-    "@mastra/pg": "workspace:*",
+    "@mastra/core": "workspace:*",
     "ai": "latest"
   },
   "version": "0.0.1"
