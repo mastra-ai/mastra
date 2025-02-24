@@ -57,7 +57,7 @@ describe('GoogleVoice Integration Tests', () => {
       const audioStream = await voice.speak('Test with default voice');
 
       return new Promise((resolve, reject) => {
-        const outputPath = join(outputDir, 'speech-test-default.flac');
+        const outputPath = join(outputDir, 'speech-test-default.wav');
         const fileStream = createWriteStream(outputPath);
         const chunks: Buffer[] = [];
 
@@ -80,7 +80,7 @@ describe('GoogleVoice Integration Tests', () => {
       const audioStream = await voice.speak(textStream);
 
       return new Promise((resolve, reject) => {
-        const outputPath = join(outputDir, 'speech-stream-input-test.flac');
+        const outputPath = join(outputDir, 'speech-stream-input-test.wav');
         const fileStream = createWriteStream(outputPath);
         const chunks: Buffer[] = [];
 
