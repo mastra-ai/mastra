@@ -82,30 +82,30 @@ export class Logger {
         ? options?.transports?.default
         : transportsAry.length === 0
           ? pretty({
-            colorize: true,
-            levelFirst: true,
-            ignore: 'pid,hostname',
-            colorizeObjects: true,
-            translateTime: 'SYS:standard',
-            singleLine: false,
-          })
+              colorize: true,
+              levelFirst: true,
+              ignore: 'pid,hostname',
+              colorizeObjects: true,
+              translateTime: 'SYS:standard',
+              singleLine: false,
+            })
           : pino.multistream([
-            ...transportsAry.map(([_, transport]) => ({
-              stream: transport,
-              level: options.level || LogLevel.INFO,
-            })),
-            {
-              stream: pretty({
-                colorize: true,
-                levelFirst: true,
-                ignore: 'pid,hostname',
-                colorizeObjects: true,
-                translateTime: 'SYS:standard',
-                singleLine: false,
-              }),
-              level: options.level || LogLevel.INFO,
-            },
-          ]),
+              ...transportsAry.map(([_, transport]) => ({
+                stream: transport,
+                level: options.level || LogLevel.INFO,
+              })),
+              {
+                stream: pretty({
+                  colorize: true,
+                  levelFirst: true,
+                  ignore: 'pid,hostname',
+                  colorizeObjects: true,
+                  translateTime: 'SYS:standard',
+                  singleLine: false,
+                }),
+                level: options.level || LogLevel.INFO,
+              },
+            ]),
     );
   }
 
@@ -187,9 +187,9 @@ export function combineLoggers(loggers: Logger[]): MultiLogger {
 
 // No-op logger implementation
 export const noopLogger = {
-  debug: () => { },
-  info: () => { },
-  warn: () => { },
-  error: () => { },
-  cleanup: async () => { },
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  cleanup: async () => {},
 };

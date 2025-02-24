@@ -174,4 +174,3 @@ export class UpstashTransport extends LoggerTransport {
     }
   }
 }
-

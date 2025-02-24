@@ -23,7 +23,6 @@ export class MastraBase {
     this.logger.debug(`Logger updated [component=${this.component}] [name=${this.name}]`);
   }
 
-
   /**
    * Set the telemetry for the
    * @param telemetry
@@ -47,10 +46,10 @@ export class MastraBase {
   get experimental_telemetry() {
     return this.telemetry
       ? {
-        // tracer: this.telemetry.tracer,
-        tracer: this.telemetry.getBaggageTracer(),
-        isEnabled: !!this.telemetry.tracer,
-      }
+          // tracer: this.telemetry.tracer,
+          tracer: this.telemetry.getBaggageTracer(),
+          isEnabled: !!this.telemetry.tracer,
+        }
       : undefined;
   }
 }
