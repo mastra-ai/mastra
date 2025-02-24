@@ -76,6 +76,8 @@ export async function watchWorkflowHandler(c: Context) {
     return streamText(
       c,
       async stream => {
+        // NOTE: looks like the UI is closing the watch request, so as long as that is the case
+        // this promise doesn't need to be resolved or rejected
         return new Promise((_resolve, _reject) => {
           let unwatch: () => void = workflow.watch(({ activePaths, context }) => {
             stream.write(JSON.stringify({ activePaths, context }) + '\x1E');
