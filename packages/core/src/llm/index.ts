@@ -63,13 +63,6 @@ export type StructuredOutput = {
       };
 };
 
-// export type GenerateReturn<
-//   Z extends ZodSchema | JSONSchema7 | undefined = undefined,
-//   ExperimentalOutput extends object | undefined = undefined,
-// > = Z extends undefined
-//   ? GenerateTextResult<any, any>
-//   : (ExperimentalOutput extends object ? GenerateTextResult<any, any> : GenerateObjectResult<any>);
-
 export type GenerateReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends undefined
   ? GenerateTextResult<any, any>
   : GenerateObjectResult<any>;
