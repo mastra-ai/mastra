@@ -1,6 +1,6 @@
 {
   "name": "@mastra/composio",
-  "version": "0.1.5-alpha.1",
+  "version": "0.1.5",
   "description": "",
   "type": "module",
   "main": "dist/index.js",

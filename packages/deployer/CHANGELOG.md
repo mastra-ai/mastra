@@ -1,5 +1,32 @@
 # @mastra/deployer
 
+## 0.1.5
+
+### Patch Changes
+
+- e4ee56c: Enable \* imports in analyze bundle
+- 2d68431: Fix mastra server error processing
+- e752340: Move storage/vector libSQL to own files so they do not get imported when not using bundlers.
+- Updated dependencies [7fceae1]
+- Updated dependencies [8d94c3e]
+- Updated dependencies [99dcdb5]
+- Updated dependencies [6cb63e0]
+- Updated dependencies [f626fbb]
+- Updated dependencies [e752340]
+- Updated dependencies [eb91535]
+  - @mastra/core@0.4.2
+
+## 0.1.5-alpha.3
+
+### Patch Changes
+
+- e752340: Move storage/vector libSQL to own files so they do not get imported when not using bundlers.
+- Updated dependencies [8d94c3e]
+- Updated dependencies [99dcdb5]
+- Updated dependencies [e752340]
+- Updated dependencies [eb91535]
+  - @mastra/core@0.4.2-alpha.2
+
 ## 0.1.5-alpha.2
 
 ### Patch Changes
