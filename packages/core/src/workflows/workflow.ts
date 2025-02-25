@@ -1,5 +1,6 @@
 import { trace, context as otlpContext } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
+import { setTimeout } from 'node:timers/promises';
 import type { z } from 'zod';
 
 import type { IAction, MastraPrimitives } from '../action';
@@ -384,6 +385,21 @@ export class Workflow<
   }
 
   async resume({
+    runId,
+    stepId,
+    context: resumeContext,
+  }: {
+    runId: string;
+    stepId: string;
+    context?: Record<string, any>;
+  }) {
+    // NOTE: setTimeout(0) makes sure that if the workflow is still running
+    // we'll wait for any state changes to be applied before resuming
+    await setTimeout(0);
+    return this._resume({ runId, stepId, context: resumeContext });
+  }
+
+  async _resume({
     runId,
     stepId,
     context: resumeContext,
