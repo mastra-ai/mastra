@@ -345,3 +345,8 @@ export interface WorkflowRunState {
   childStates?: Record<string, WorkflowRunState>;
   suspendedSteps?: Record<string, string>;
 }
+
+export type WorkflowResumeResult<TTriggerSchema extends z.ZodType<any>> = {
+  triggerData?: z.infer<TTriggerSchema>;
+  results: Record<string, StepResult<any>>;
+};

@@ -1,9 +1,9 @@
 import type { Mastra } from '@mastra/core';
 import type { Context } from 'hono';
+import { streamText } from 'hono/streaming';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 
-import { streamText } from 'hono/streaming';
 
 import { handleError } from './error';
 
@@ -80,7 +80,7 @@ export async function watchWorkflowHandler(c: Context) {
         // this promise doesn't need to be resolved or rejected
         return new Promise((_resolve, _reject) => {
           let unwatch: () => void = workflow.watch(({ activePaths, context }) => {
-            stream.write(JSON.stringify({ activePaths, context }) + '\x1E');
+            void stream.write(JSON.stringify({ activePaths, context }) + '\x1E');
           });
 
           stream.onAbort(() => {

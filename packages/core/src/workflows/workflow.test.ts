@@ -7,8 +7,9 @@ import { MastraStorageLibSql } from '../storage';
 import { createTool } from '../tools';
 
 import { Step } from './step';
-import type { WorkflowContext } from './types';
+import type { WorkflowContext, WorkflowResumeResult } from './types';
 import { Workflow } from './workflow';
+import { WorkflowResultReturn } from './workflow-instance';
 
 const storage = new MastraStorageLibSql({
   config: {
@@ -1298,16 +1299,11 @@ describe('Workflow', async () => {
       const wf = mastra.getWorkflow('test-workflow');
       const run = wf.createRun();
 
-      // Create a promise to track when the workflow is ready to resume
-      // let resolveWorkflowSuspended: (value: unknown) => void;
-      // const workflowSuspended = new Promise(resolve => {
-      //   resolveWorkflowSuspended = resolve;
-      // });
-
       const started = run.start({ triggerData: { input: 'test' } });
-      await new Promise((resolve, reject) => {
+
+      const result = await new Promise<WorkflowResumeResult<any>>((resolve, reject) => {
         let hasResumed = false;
-        wf.watch(data => {
+        wf.watch(async data => {
           const suspended = data.activePaths.find(p => p.status === 'suspended');
           if (suspended?.stepId === 'humanIntervention') {
             const newCtx = {
@@ -1315,22 +1311,19 @@ describe('Workflow', async () => {
               humanPrompt: 'What improvements would you suggest?',
             };
             console.log('newCtx', { newCtx, data });
-            // resolveWorkflowSuspended({ runId: run.runId, stepId: suspended.stepId, context: newCtx });
             if (!hasResumed) {
               hasResumed = true;
-              setTimeout(async () => {
-                try {
-                  const resumed = await wf.resume({
-                    runId: run.runId,
-                    stepId: suspended.stepId,
-                    context: newCtx,
-                  });
-                  console.log('resumed', resumed);
-                  resolve(resumed);
-                } catch (error) {
-                  reject(error);
-                }
-              }, 10);
+
+              try {
+                const resumed = await wf.resume({
+                  runId: run.runId,
+                  stepId: suspended.stepId,
+                  context: newCtx,
+                });
+                resolve(resumed as any);
+              } catch (error) {
+                reject(error);
+              }
             }
           }
         });
@@ -1343,25 +1336,20 @@ describe('Workflow', async () => {
       expect(humanInterventionAction).toHaveBeenCalledTimes(2);
       expect(explainResponseAction).not.toHaveBeenCalled();
 
-      // Wait for the workflow to be ready to resume
-      // const resumeData = await workflowSuspended;
+      if (!result) {
+        throw new Error('Resume failed to return a result');
+      }
 
-      // console.log('resumeData', resumeData);
-
-      // if (!resumeResult) {
-      //   throw new Error('Resume failed to return a result');
-      // }
-
-      // expect(resumeResult.results).toEqual({
-      //   getUserInput: { status: 'success', output: { userInput: 'test input' } },
-      //   promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
-      //   evaluateToneConsistency: {
-      //     status: 'success',
-      //     output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
-      //   },
-      //   humanIntervention: { status: 'success', output: { improvedOutput: 'human intervention output' } },
-      //   explainResponse: { status: 'failed', error: 'Step:explainResponse condition check failed' },
-      // });
+      expect(result.results).toEqual({
+        getUserInput: { status: 'success', output: { userInput: 'test input' } },
+        promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+        },
+        humanIntervention: { status: 'success', output: { improvedOutput: 'human intervention output' } },
+        explainResponse: { status: 'failed', error: 'Step:explainResponse condition check failed' },
+      });
     });
 
     it('should handle complex workflow with multiple suspends', async () => {
