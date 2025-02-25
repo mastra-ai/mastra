@@ -137,6 +137,30 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
         stepGraph = this.#stepSubscriberGraph[runState.suspendedSteps[stepId]] ?? this.#stepGraph;
         startStepId = stepId;
         this.#state = runState.value;
+        console.dir(
+          {
+            resumed: {
+              stepId,
+              startStepId,
+              suspendedSteps: runState.suspendedSteps,
+              hasStepGraph: !!this.#stepSubscriberGraph[runState.suspendedSteps[stepId]],
+              stepGraphKeys: Object.keys(this.#stepSubscriberGraph),
+            },
+          },
+          { depth: null },
+        );
+      } else {
+        console.dir(
+          {
+            resumed: {
+              stepId,
+              startStepId,
+              suspendedSteps: runState.suspendedSteps,
+              stepGraphKeys: Object.keys(this.#stepSubscriberGraph),
+            },
+          },
+          { depth: null },
+        );
       }
     }
 
@@ -188,7 +212,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
           logger: this.logger,
           mastra: this.#mastra,
           workflowInstance: this,
-          name: this.name,
+          name: parentStepId === 'trigger' ? this.name : `${this.name}-${parentStepId}`,
           runId: this.runId,
           steps: this.#steps,
           stepGraph: this.#stepSubscriberGraph[parentStepId],
@@ -203,13 +227,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
         machine.on('state-update', stateUpdateHandler);
 
         nestedMachines.push(machine.execute({ input: context }));
-        console.log(
-          'active machines',
-          Object.entries(this.#machines).map(([k, v]) => ({
-            key: k,
-            startStepId: v.startStepId,
-          })),
-        );
       }
     };
 
@@ -244,7 +261,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     const machineSnapshots: Record<string, WorkflowRunState> = {};
     for (const [stepId, machine] of Object.entries(this.#machines)) {
       const machineSnapshot = machine?.getSnapshot() as unknown as WorkflowRunState;
-      console.log('machineSnapshot', { machineSnapshot, stepId, machine });
       if (machineSnapshot) {
         machineSnapshots[stepId] = { ...machineSnapshot };
       }

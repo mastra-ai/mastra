@@ -501,7 +501,7 @@ export class Machine<
       actions: this.#getDefaultActions() as any,
       actors: this.#getDefaultActors(),
     }).createMachine({
-      id: this.#startStepId === 'trigger' ? this.name : `${this.name}-${this.#startStepId}`,
+      id: this.name,
       type: 'parallel',
       context: ({ input }) => ({
         ...input,

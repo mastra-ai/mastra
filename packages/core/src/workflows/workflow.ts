@@ -398,8 +398,6 @@ export class Workflow<
       throw new Error(`No snapshot found for workflow run ${runId}`);
     }
 
-    console.dir({ resume: { snapshot, resumeContext } }, { depth: 4 });
-
     let parsedSnapshot;
     try {
       parsedSnapshot = typeof snapshot === 'string' ? JSON.parse(snapshot as unknown as string) : snapshot;
@@ -414,7 +412,10 @@ export class Workflow<
     if (!startStepId) {
       return;
     }
-    parsedSnapshot = startStepId === 'trigger' ? parsedSnapshot : parsedSnapshot?.childStates?.[startStepId];
+    parsedSnapshot =
+      startStepId === 'trigger'
+        ? parsedSnapshot
+        : { ...parsedSnapshot?.childStates?.[startStepId], ...{ suspendedSteps: parsedSnapshot.suspendedSteps } };
     if (!parsedSnapshot) {
       throw new Error(`No snapshot found for step: ${stepId} starting at ${startStepId}`);
     }
@@ -463,7 +464,13 @@ export class Workflow<
       stepId,
     });
 
-    console.dir({ resuming: startStepId, value: parsedSnapshot?.value }, { depth: null });
+    console.dir({
+      resuming: {
+        runId,
+        stepId,
+        startStepId,
+      },
+    });
     const run =
       this.#runs.get(runId) ??
       new WorkflowInstance({
@@ -485,7 +492,7 @@ export class Workflow<
 
     return run?.execute({
       snapshot: parsedSnapshot,
-      stepId: startStepId,
+      stepId,
     });
   }
   __registerPrimitives(p: MastraPrimitives) {

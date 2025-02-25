@@ -1340,7 +1340,7 @@ describe('Workflow', async () => {
       console.log('initialResult', initialResult);
       expect(initialResult.results.humanIntervention.status).toBe('suspended');
       expect(initialResult.results.explainResponse.status).toBe('failed');
-      expect(humanInterventionAction).toHaveBeenCalledTimes(1);
+      expect(humanInterventionAction).toHaveBeenCalledTimes(2);
       expect(explainResponseAction).not.toHaveBeenCalled();
 
       // Wait for the workflow to be ready to resume
