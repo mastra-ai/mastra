@@ -1,0 +1,15 @@
+{
+  "name": "insert-embedding-in-libsql",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "pnpx tsx --env-file=.env index.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@mastra/rag": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "ai": "latest"
+  },
+  "version": "0.0.2-alpha.1"
+}

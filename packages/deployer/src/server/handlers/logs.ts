@@ -37,3 +37,17 @@ export async function getLogsByRunIdHandler(c: Context) {
     return handleError(error, 'Error getting logs by run ID');
   }
 }
+
+export async function getLogTransports(c: Context) {
+  console.log('here');
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const logger = mastra.getLogger();
+    const transports = logger.transports;
+    return c.json({
+      transports: Object.keys(transports),
+    });
+  } catch (e) {
+    return handleError(e, 'Error getting log Transports ');
+  }
+}

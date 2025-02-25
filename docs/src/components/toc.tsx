@@ -80,7 +80,7 @@ export function TableOfContents(props: TOCProps) {
             })}
           </nav>
         </div>
-        <div className="mt-2 pt-4 border-t  dark:border-gray-800">
+        <div className="mt-2 pt-4 border-t  dark:border-neutral-700">
           <a
             href="https://github.com/mastra-ai/mastra/issues"
             target="_blank"

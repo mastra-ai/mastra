@@ -33,14 +33,20 @@ export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
 
 // Base Interfaces
 export interface BaseLogMessage extends Run {
-  message: string;
-  destinationPath: string;
-  type: RegisteredLogger;
+  msg: string;
+  level: number;
+  time: Date;
+  pid: number;
+  hostname: string;
+  name: string;
 }
 
 export class LoggerTransport extends Transform {
+  constructor(opts: any = {}) {
+    super({ ...opts, objectMode: true });
+  }
+
   async getLogsByRunId({ runId }: { runId: string }): Promise<BaseLogMessage[]> {
-    console.log(runId);
     return [];
   }
   async getLogs(): Promise<BaseLogMessage[]> {
