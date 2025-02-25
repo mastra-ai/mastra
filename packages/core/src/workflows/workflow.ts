@@ -276,6 +276,8 @@ export class Workflow<
       };
     };
 
+    // NOTE: destructuring rest breaks some injected runtime fields, like runId
+    // TODO: investigate why that is exactly
     const handler = async ({ context, ...rest }: ActionContext<TSteps[number]['inputSchema']>) => {
       const targetStep = this.#steps[stepId];
       if (!targetStep) throw new Error(`Step not found`);
