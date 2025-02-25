@@ -63,19 +63,20 @@ export type StructuredOutput = {
       };
 };
 
-export type GenerateReturn<
-  Z extends ZodSchema | JSONSchema7 | undefined = undefined,
-  ExperimentalOutput extends object | undefined = undefined,
-> = ExperimentalOutput extends object
-  ? GenerateTextResult<any, any>
-  : Z extends undefined
-    ? GenerateTextResult<any, any>
-    : GenerateObjectResult<Z>;
+// export type GenerateReturn<
+//   Z extends ZodSchema | JSONSchema7 | undefined = undefined,
+//   ExperimentalOutput extends object | undefined = undefined,
+// > = Z extends undefined
+//   ? GenerateTextResult<any, any>
+//   : (ExperimentalOutput extends object ? GenerateTextResult<any, any> : GenerateObjectResult<any>);
 
-export type StreamReturn<
-  Z extends ZodSchema | JSONSchema7 | undefined = undefined,
-  O extends OutputType = OutputType,
-> = Z extends undefined ? StreamTextResult<any, any> : StreamObjectResult<any, any, any>;
+export type GenerateReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends undefined
+  ? GenerateTextResult<any, any>
+  : GenerateObjectResult<any>;
+
+export type StreamReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends undefined
+  ? StreamTextResult<any, any>
+  : StreamObjectResult<any, any, any>;
 
 export type OutputType = 'text' | StructuredOutput | ZodSchema | JSONSchema7 | undefined;
 

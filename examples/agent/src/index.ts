@@ -102,7 +102,7 @@ async function experimentalTextObject() {
       steps: z.array(z.string()),
     }),
   });
-  console.log('\n👨‍🍳 Chef Michel:', lasagnaResponse.experimental_output);
+  console.log('\n👨‍🍳 Chef Michel:', lasagnaResponse.object);
   console.log('\n-------------------\n');
 }
 
@@ -217,10 +217,40 @@ async function generateStreamObject() {
   console.log('\n\n✅ Recipe complete!');
 }
 
+async function generateExperimentalStreamObject() {
+  // Query 9: Generate a lasagna recipe
+  const query9 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
+  console.log(`Query 9: ${query9}`);
+
+  const lasagnaStreamResponse = await agent.stream([query9], {
+    experimental_output: z.object({
+      ingredients: z.array(
+        z.object({
+          name: z.string(),
+          amount: z.number(),
+        }),
+      ),
+      steps: z.array(z.string()),
+    }),
+  });
+
+  console.log('\n👨‍🍳 Chef Michel: ');
+
+  // Handle the stream
+  for await (const chunk of lasagnaStreamResponse.textStream) {
+    // Write each chunk without a newline to create a continuous stream
+    process.stdout.write(chunk);
+  }
+
+  console.log('\n\n✅ Recipe complete!');
+}
+
 async function main() {
   // await text();
 
-  await experimentalTextObject();
+  // await experimentalTextObject();
+
+  await generateExperimentalStreamObject();
 
   // await generateText();
 

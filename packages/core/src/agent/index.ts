@@ -782,7 +782,7 @@ export class Agent<
       toolChoice = 'auto',
       experimental_output,
     }: AgentGenerateOptions<Z> = {},
-  ): Promise<GenerateReturn<Z, typeof experimental_output>> {
+  ): Promise<GenerateReturn<Z>> {
     let messagesToUse: CoreMessage[] = [];
 
     if (typeof messages === `string`) {
@@ -835,7 +835,11 @@ export class Agent<
 
       await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
 
-      return result as unknown as GenerateReturn<Z, typeof experimental_output>;
+      const newResult = result as any;
+
+      newResult.object = result.experimental_output;
+
+      return newResult as unknown as GenerateReturn<Z>;
     }
 
     if (output === 'text') {
@@ -891,6 +895,7 @@ export class Agent<
       output = 'text',
       temperature,
       toolChoice = 'auto',
+      experimental_output,
     }: AgentStreamOptions<Z> = {},
   ): Promise<StreamReturn<Z>> {
     const runIdToUse = runId || randomUUID();
@@ -928,7 +933,40 @@ export class Agent<
 
     const { threadId, messageObjects, convertedTools } = await before();
 
-    if (output === 'text') {
+    if (output === 'text' && experimental_output) {
+      this.logger.debug(`Starting agent ${this.name} llm stream call`, {
+        runId,
+      });
+
+      const streamResult = await this.llm.__stream({
+        messages: messageObjects,
+        temperature,
+        tools: this.tools,
+        convertedTools,
+        onStepFinish,
+        onFinish: async (result: string) => {
+          try {
+            const res = JSON.parse(result) || {};
+            const outputText = res.text;
+            await after({ result: res, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+          } catch (e) {
+            this.logger.error('Error saving memory on finish', {
+              error: e,
+              runId,
+            });
+          }
+          onFinish?.(result);
+        },
+        maxSteps,
+        runId: runIdToUse,
+        toolChoice,
+        experimental_output,
+      });
+
+      const newStreamResult = streamResult as any;
+      newStreamResult.partialObjectStream = streamResult.experimental_partialOutputStream;
+      return newStreamResult as unknown as StreamReturn<Z>;
+    } else if (output === 'text') {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
       });
@@ -960,6 +998,7 @@ export class Agent<
     this.logger.debug(`Starting agent ${this.name} llm streamObject call`, {
       runId,
     });
+
     return this.llm.__streamObject({
       messages: messageObjects,
       tools: this.tools,

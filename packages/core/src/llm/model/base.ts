@@ -102,7 +102,9 @@ export class MastraLLMBase extends MastraBase {
     throw new Error('Method not implemented.');
   }
 
-  async __stream(input: LLMInnerStreamOptions): Promise<StreamTextResult<any, any>> {
+  async __stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    input: LLMInnerStreamOptions<Z>,
+  ): Promise<StreamTextResult<any, any>> {
     this.logger.debug(`[LLMs:${this.name}] Streaming text.`, { input });
     throw new Error('Method not implemented.');
   }
