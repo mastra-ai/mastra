@@ -173,9 +173,9 @@ export class PlayAIVoice extends MastraVoice {
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = (await response.json()) as { message: string };
 
-      throw new Error(`PlayAI API Error: ${error || response.statusText}`);
+      throw new Error(`PlayAI API Error: ${error.message || response.statusText}`);
     }
 
     return response;
