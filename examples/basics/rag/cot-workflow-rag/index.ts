@@ -38,7 +38,7 @@ const analyzeContext = new Step({
   execute: async ({ context, mastra }) => {
     console.log('---------------------------');
     const ragAgent = mastra?.agents?.ragAgent;
-    const query = context?.getStepPayload<{ query: string }>('trigger')?.query;
+    const query = context?.getStepResult<{ query: string }>('trigger')?.query;
 
     const analysisPrompt = `${query} 1. First, carefully analyze the retrieved context chunks and identify key information.`;
 
@@ -58,7 +58,7 @@ const breakdownThoughts = new Step({
   execute: async ({ context, mastra }) => {
     console.log('---------------------------');
     const ragAgent = mastra?.agents?.ragAgent;
-    const analysis = context?.getStepPayload<{ initialAnalysis: string }>(
+    const analysis = context?.getStepResult<{ initialAnalysis: string }>(
       'analyzeContext',
     )?.initialAnalysis;
 
@@ -84,7 +84,7 @@ const connectPieces = new Step({
   execute: async ({ context, mastra }) => {
     console.log('---------------------------');
     const ragAgent = mastra?.agents?.ragAgent;
-    const process = context?.getStepPayload<{ breakdown: string }>('breakdownThoughts')?.breakdown;
+    const process = context?.getStepResult<{ breakdown: string }>('breakdownThoughts')?.breakdown;
     const connectionPrompt = `
         Based on the breakdown: ${process}
 
@@ -107,7 +107,7 @@ const drawConclusions = new Step({
   execute: async ({ context, mastra }) => {
     console.log('---------------------------');
     const ragAgent = mastra?.agents?.ragAgent;
-    const evidence = context?.getStepPayload<{ connections: string }>('connectPieces')?.connections;
+    const evidence = context?.getStepResult<{ connections: string }>('connectPieces')?.connections;
     const conclusionPrompt = `
         Based on the connections: ${evidence}
 
@@ -130,7 +130,7 @@ const finalAnswer = new Step({
   execute: async ({ context, mastra }) => {
     console.log('---------------------------');
     const ragAgent = mastra?.agents?.ragAgent;
-    const conclusions = context?.getStepPayload<{ conclusions: string }>(
+    const conclusions = context?.getStepResult<{ conclusions: string }>(
       'drawConclusions',
     )?.conclusions;
     const answerPrompt = `

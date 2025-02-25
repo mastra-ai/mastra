@@ -7,7 +7,7 @@ const logCatName = new Step({
     rawText: z.string(),
   }),
   execute: async ({ context }) => {
-    const name = context?.getStepPayload<{ name: string }>('trigger')?.name;
+    const name = context?.getStepResult<{ name: string }>('trigger')?.name;
     console.log(`Hello, ${name} 🐈`);
     return { rawText: `Hello ${name}` };
   },

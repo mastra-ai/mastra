@@ -101,7 +101,7 @@ const analyzeContext = new Step({
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
     const ragAgent = mastra?.agents?.ragAgent;
-    const query = context?.getStepPayload<{ query: string }>(
+    const query = context?.getStepResult<{ query: string }>(
       "trigger",
     )?.query;
 
@@ -127,7 +127,7 @@ const breakdownThoughts = new Step({
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
     const ragAgent = mastra?.agents?.ragAgent;
-    const analysis = context?.getStepPayload<{
+    const analysis = context?.getStepResult<{
       initialAnalysis: string;
     }>("analyzeContext")?.initialAnalysis;
 
@@ -157,7 +157,7 @@ const connectPieces = new Step({
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
     const ragAgent = mastra?.agents?.ragAgent;
-    const process = context?.getStepPayload<{
+    const process = context?.getStepResult<{
       breakdown: string;
     }>("breakdownThoughts")?.breakdown;
     const connectionPrompt = `
@@ -186,7 +186,7 @@ const drawConclusions = new Step({
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
     const ragAgent = mastra?.agents?.ragAgent;
-    const evidence = context?.getStepPayload<{
+    const evidence = context?.getStepResult<{
       connections: string;
     }>("connectPieces")?.connections;
     const conclusionPrompt = `
@@ -215,7 +215,7 @@ const finalAnswer = new Step({
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
     const ragAgent = mastra?.agents?.ragAgent;
-    const conclusions = context?.getStepPayload<{
+    const conclusions = context?.getStepResult<{
       conclusions: string;
     }>("drawConclusions")?.conclusions;
     const answerPrompt = `

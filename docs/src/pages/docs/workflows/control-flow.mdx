@@ -45,8 +45,8 @@ myWorkflow
 
 In this example:
 
-- stepA leads to stepB, then to stepD.  
-- Separately, stepA also triggers stepC, which in turn leads to stepE.  
+- stepA leads to stepB, then to stepD.
+- Separately, stepA also triggers stepC, which in turn leads to stepE.
 - The workflow waits for both stepD and stepE to finish before proceeding to stepF.
 
 See the [Branching Paths](../../examples/workflows/branching-paths.mdx) example for more details.
@@ -88,7 +88,7 @@ myWorkflow.step(
   }),
   {
     when: async ({ context }) => {
-      const fetchData = context?.getStepPayload<{ status: string }>("fetchData");
+      const fetchData = context?.getStepResult<{ status: string }>("fetchData");
       return fetchData?.status === "success";
     },
   },
@@ -141,16 +141,16 @@ myWorkflow.step(
 
 Steps access data from previous steps through the `context` object. The context contains a record of all step results and their payloads.
 
-### Using getStepPayload
+### Using getStepResult
 
-`getStepPayload` retrieves a step's output with type safety:
+`getStepResult` retrieves a step's output with type safety:
 
 ```typescript copy showLineNumbers
 workflow.step(
   new Step({
     id: "processOrder",
     execute: async ({ context }) => {
-      const userData = context.getStepPayload<{ userId: string }>("fetchUser");
+      const userData = context.getStepResult<{ userId: string }>("fetchUser");
       return {
         userId: userData?.userId,
         status: "processing"
