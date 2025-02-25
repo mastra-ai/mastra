@@ -25,9 +25,9 @@ const { embeddings } = await embedMany({
   maxRetries: 3,
 });
 
-const qdrant = new QdrantVector({
-  url: process.env.QDRANT_URL,
-  apiKey: process.env.QDRANT_API_KEY,
+const qdrant = new QdrantVector(
+  process.env.QDRANT_URL,
+  process.env.QDRANT_API_KEY,
 });
 
 await qdrant.createIndex('test_collection', 1536);
