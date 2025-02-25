@@ -12,10 +12,10 @@ services:
     command:
       - "postgres"
       - "-c"
-      - "shared_buffers=256MB"
+      - "shared_buffers=512MB"
       - "-c"
-      - "maintenance_work_mem=512MB"
+      - "maintenance_work_mem=1024MB"
       - "-c"
-      - "work_mem=256MB"
+      - "work_mem=512MB"
     tmpfs:
       - /var/lib/postgresql/data 

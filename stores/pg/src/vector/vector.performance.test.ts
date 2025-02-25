@@ -106,11 +106,11 @@ describe('PostgreSQL Index Performance', () => {
   const results: TestResult[] = [];
 
   const indexConfigs: IndexTestConfig[] = [
-    // { type: 'flat' }, // Test flat/linear search as baseline
-    // { type: 'ivfflat', ivf: { lists: 100 } }, // Test IVF with fixed lists
-    // { type: 'ivfflat', rebuild: true }, // Test IVF with calculated lists and rebuild
-    // { type: 'hnsw' },
-    { type: 'hnsw', hnsw: { m: 16, efConstruction: 64 } },
+    { type: 'flat' }, // Test flat/linear search as baseline
+    { type: 'ivfflat', ivf: { lists: 100 } }, // Test IVF with fixed lists
+    { type: 'ivfflat', rebuild: true }, // Test IVF with calculated lists and rebuild
+    { type: 'hnsw' }, // Test HNSW with default parameters
+    { type: 'hnsw', hnsw: { m: 16, efConstruction: 64 } }, // Test HNSW with custom parameters
   ];
   beforeAll(async () => {
     // Initialize PGPerformanceVector
@@ -131,11 +131,11 @@ describe('PostgreSQL Index Performance', () => {
 
   // Combine all test configs
   const allConfigs: TestConfig[] = [
-    // ...baseTestConfigs['64'],
+    ...baseTestConfigs['64'],
     ...baseTestConfigs['384'],
-    // ...baseTestConfigs['1024'],
-    // ...baseTestConfigs.smokeTests,
-    // ...baseTestConfigs.stressTests,
+    ...baseTestConfigs['1024'],
+    ...baseTestConfigs.smokeTests,
+    ...baseTestConfigs.stressTests,
   ];
 
   // For each index config
@@ -265,23 +265,20 @@ function analyzeResults(results: TestResult[]) {
     Object.entries(byDimension).forEach(([dim, dimResults]) => {
       console.log(`\n--- Analysis for ${dim} dimensions ---\n`);
 
-      // Recall Analysis
-      console.log('Recall Analysis:');
-      const recallColumns = ['Distribution', 'Dataset Size', 'K'];
+      // Combined Performance Analysis
+      const columns = ['Distribution', 'Dataset Size', 'K'];
       if (type === 'hnsw') {
-        recallColumns.push('M', 'EF Construction', 'EF', 'EF Type');
+        columns.push('M', 'EF Construction', 'EF', 'EF Type');
       } else if (type === 'ivfflat') {
-        recallColumns.push('Lists', 'Vectors/List');
+        columns.push('Lists', 'Vectors/List');
       }
-      recallColumns.push('Min Recall', 'Avg Recall', 'Max Recall');
+      columns.push('Min Recall', 'Avg Recall', 'Max Recall', 'P50 (ms)', 'P95 (ms)');
 
-      // Group by size and config first, then show distributions together
-      const recallData = Object.values(
+      const performanceData = Object.values(
         groupBy(
           dimResults,
           (r: any) => `${r.size}-${r.k}-${type === 'ivfflat' ? r.metrics.latency.lists : r.metrics.latency.m}`,
           (results: any[]) => {
-            // Sort by distribution type for consistent ordering
             const sortedResults = [...results].sort(
               (a, b) =>
                 ['random', 'clustered', 'skewed', 'mixed'].indexOf(a.distribution) -
@@ -308,94 +305,14 @@ function analyzeResults(results: TestResult[]) {
               'Min Recall': result.metrics.minRecall.toFixed(3),
               'Avg Recall': result.metrics.recall.toFixed(3),
               'Max Recall': result.metrics.maxRecall.toFixed(3),
-            }));
-          },
-        ),
-      ).flat(); // Flatten to show all distributions
-      console.log(formatTable(recallData, recallColumns));
-
-      // Latency Analysis
-      console.log('\nLatency Analysis:');
-      const latencyColumns = ['Distribution', 'Dataset Size', 'K'];
-      if (type === 'hnsw') {
-        latencyColumns.push('M', 'EF Construction', 'EF', 'EF Type');
-      } else if (type === 'ivfflat') {
-        latencyColumns.push('Lists', 'Vectors/List');
-      }
-      latencyColumns.push('P50 (ms)', 'P95 (ms)');
-
-      const latencyData = Object.values(
-        groupBy(
-          dimResults,
-          (r: any) => `${r.size}-${r.k}-${type === 'ivfflat' ? r.metrics.latency.lists : r.metrics.latency.m}`,
-          (results: any[]) => {
-            const sortedResults = [...results].sort(
-              (a, b) =>
-                ['random', 'clustered', 'skewed', 'mixed'].indexOf(a.distribution) -
-                ['random', 'clustered', 'skewed', 'mixed'].indexOf(b.distribution),
-            );
-            return sortedResults.map(result => ({
-              Distribution: result.distribution,
-              'Dataset Size': result.size,
-              K: result.k,
-              ...(type === 'ivfflat'
-                ? {
-                    Lists: result.metrics.latency.lists,
-                    'Vectors/List': result.metrics.latency.vectorsPerList,
-                  }
-                : {}),
-              ...(type === 'hnsw'
-                ? {
-                    M: result.metrics.latency.m,
-                    'EF Construction': result.metrics.latency.efConstruction,
-                    EF: result.metrics.latency.ef,
-                    'EF Type': result.metrics.latency.efType,
-                  }
-                : {}),
               'P50 (ms)': result.metrics.latency.p50.toFixed(2),
               'P95 (ms)': result.metrics.latency.p95.toFixed(2),
             }));
           },
         ),
       ).flat();
-      console.log(formatTable(latencyData, latencyColumns));
 
-      // IVF-specific Clustering Analysis
-      if (type === 'ivfflat') {
-        console.log('\nClustering Analysis:');
-        const clusteringColumns = [
-          'Distribution',
-          'Dataset Size',
-          'Lists',
-          'Vectors/List',
-          'Recommended Lists',
-          'Efficiency',
-        ];
-        const clusteringData = Object.values(
-          groupBy(
-            dimResults,
-            (r: any) => r.size.toString(),
-            (results: any[]) => {
-              const sortedResults = [...results].sort(
-                (a, b) =>
-                  ['random', 'clustered', 'skewed', 'mixed'].indexOf(a.distribution) -
-                  ['random', 'clustered', 'skewed', 'mixed'].indexOf(b.distribution),
-              );
-              return sortedResults.map(result => ({
-                Distribution: result.distribution,
-                'Dataset Size': result.size,
-                Lists: result.metrics.clustering.numLists,
-                'Vectors/List': Math.round(result.metrics.clustering.avgVectorsPerList),
-                'Recommended Lists': result.metrics.clustering.recommendedLists,
-                Efficiency: (result.metrics.clustering.recommendedLists / result.metrics.clustering.numLists).toFixed(
-                  2,
-                ),
-              }));
-            },
-          ),
-        ).flat();
-        console.log(formatTable(clusteringData, clusteringColumns));
-      }
+      console.log(formatTable(performanceData, columns));
     });
   });
 }
