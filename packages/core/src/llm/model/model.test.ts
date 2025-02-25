@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai';
 import type { CoreMessage } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, it, expect, vi } from 'vitest';
@@ -7,7 +6,6 @@ import { z } from 'zod';
 import { createTool } from '../../tools';
 
 import { MockProvider } from './mock';
-import { MastraLLM } from './model';
 
 describe('MastraLLM', () => {
   const mockMastra = {
