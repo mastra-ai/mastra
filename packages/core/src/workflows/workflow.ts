@@ -505,6 +505,7 @@ export class Workflow<
         },
       });
 
+    this.#runs.set(run.runId, run);
     return run?.execute({
       snapshot: parsedSnapshot,
       stepId,
