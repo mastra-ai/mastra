@@ -39,15 +39,16 @@ myWorkflow
   .after(stepA)
     .step(stepC)
     .then(stepE)
-  .after([stepD, stepE])
+  .after(stepD)
     .step(stepF);
+    .step(stepE)
 ```
 
 In this example:
 
 - stepA leads to stepB, then to stepD.
 - Separately, stepA also triggers stepC, which in turn leads to stepE.
-- The workflow waits for both stepD and stepE to finish before proceeding to stepF.
+- Separately, stepD also triggers stepF and stepE in parallel.
 
 See the [Branching Paths](../../examples/workflows/branching-paths.mdx) example for more details.
 

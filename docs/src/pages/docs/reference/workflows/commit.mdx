@@ -1,17 +1,11 @@
 ---
 title: "Reference: Workflow.commit() | Running Workflows | Mastra Docs"
-description: Documentation for the `.commit()` method in workflows, which finalizes and validates workflow definitions.
+description: Documentation for the `.commit()` method in workflows, which re-initializes the workflow machine with the current step configuration.
 ---
 
 # Workflow.commit()
 
-The `.commit()` method finalizes a workflow definition, validating its structure and making it ready for execution. When calling `.commit()`, the workflow validates:
-
-- No circular dependencies between steps
-- All paths must have an end point
-- No unreachable steps
-- No duplicate step IDs
-- Variable references to non-existent steps
+The `.commit()` method re-initializes the workflow's state machine with the current step configuration.
 
 ## Usage
 
@@ -29,51 +23,7 @@ workflow
     {
       name: "workflow",
       type: "Workflow",
-      description: "The validated workflow instance"
-    }
-  ]}
-/>
-
-## Error Handling
-
-```typescript
-try {
-  workflow
-    .step(stepA)
-    .after(['stepB', 'stepC'])
-    .step(stepD)
-    .commit();
-} catch (error) {
-  if (error instanceof ValidationError) {
-    console.log(error.type); // 'circular_dependency' | 'no_terminal_path' | 'unreachable_step'
-    console.log(error.details);
-  }
-}
-```
-
-### Validation Error Types
-
-<PropertiesTable
-  content={[
-    {
-      name: "circular_dependency",
-      type: "string",
-      description: "Steps form a circular reference"
-    },
-    {
-      name: "no_terminal_path", 
-      type: "string",
-      description: "Path has no end point"
-    },
-    {
-      name: "unreachable_step",
-      type: "string", 
-      description: "Step cannot be reached from workflow start"
-    },
-    {
-      name: "duplicate_step_id",
-      type: "string",
-      description: "Multiple steps share the same ID"
+      description: "The workflow instance"
     }
   ]}
 />
