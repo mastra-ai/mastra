@@ -123,7 +123,7 @@ It provides robust vector similarity search capabilities within your existing Po
             {
               name: "m",
               type: "number",
-              description: "Max number of connections (default: 8)",
+              description: "Maximum number of connections per node (default: 8)",
               isOptional: true,
             },
             {
@@ -371,6 +371,12 @@ try {
   }
 }
 ```
+
+## Best Practices
+
+- Regularly evaluate your index configuration to ensure optimal performance.
+- Adjust parameters like `lists` and `m` based on dataset size and query requirements.
+- Rebuild indexes periodically to maintain efficiency, especially after significant data changes.
 
 ### Related
 - [Metadata Filters](./metadata-filters)
