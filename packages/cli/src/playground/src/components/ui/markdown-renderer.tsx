@@ -12,7 +12,7 @@ interface MarkdownRendererProps {
 }
 
 export function MarkdownRenderer({ children }: MarkdownRendererProps) {
-  const processedText = children.replace(/\\/g, '\\\\').replace(/\\n/g, '\n');
+  const processedText = children.replace(/\\n/g, '\n');
 
   return (
     <Markdown remarkPlugins={[remarkGfm]} components={COMPONENTS} className="space-y-3">
