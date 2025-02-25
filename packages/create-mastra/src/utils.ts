@@ -1,6 +1,6 @@
-import fsExtra from 'fs-extra';
 import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
+import fsExtra from 'fs-extra';
 
 export async function getPackageVersion() {
   const __filename = fileURLToPath(import.meta.url);
@@ -59,7 +59,7 @@ export async function getCreateVersionTag(): Promise<string | undefined> {
       const tag = content.version.split('-')[1].split('.')[0];
       return tag;
     }
-  } catch (error) {
+  } catch {
     console.error('We could not resolve the create-mastra version tag, falling back to "latest"');
   }
 
