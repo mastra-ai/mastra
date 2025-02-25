@@ -58,9 +58,7 @@ const breakdownThoughts = new Step({
   execute: async ({ context, mastra }) => {
     console.log('---------------------------');
     const ragAgent = mastra?.agents?.ragAgent;
-    const analysis = context?.getStepResult<{ initialAnalysis: string }>(
-      'analyzeContext',
-    )?.initialAnalysis;
+    const analysis = context?.getStepResult<{ initialAnalysis: string }>('analyzeContext')?.initialAnalysis;
 
     const connectionPrompt = `
       Based on the initial analysis: ${analysis}
@@ -130,9 +128,7 @@ const finalAnswer = new Step({
   execute: async ({ context, mastra }) => {
     console.log('---------------------------');
     const ragAgent = mastra?.agents?.ragAgent;
-    const conclusions = context?.getStepResult<{ conclusions: string }>(
-      'drawConclusions',
-    )?.conclusions;
+    const conclusions = context?.getStepResult<{ conclusions: string }>('drawConclusions')?.conclusions;
     const answerPrompt = `
         Based on the conclusions: ${conclusions}
         Format your response as:
