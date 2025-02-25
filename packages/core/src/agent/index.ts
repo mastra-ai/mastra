@@ -57,7 +57,7 @@ export class Agent<
     this.instructions = config.instructions;
 
     if (!config.model) {
-      throw new Error(`LanugageModel is required to create an Agent. Please provider the 'model'.`);
+      throw new Error(`LanguageModel is required to create an Agent. Please provide the 'model'.`);
     }
 
     this.llm = new MastraLLM({ model: config.model });
