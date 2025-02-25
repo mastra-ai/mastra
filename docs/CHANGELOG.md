@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.2-alpha.1
+
+### Patch Changes
+
+- 82197f8: Update PG vector to allow for multiple index types
+
 ## 0.1.2-alpha.0
 
 ### Patch Changes
