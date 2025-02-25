@@ -62,7 +62,7 @@ const fetchWeather = new Step({
     city: z.string().describe("The city to get the weather for"),
   }),
   execute: async ({ context }) => {
-    const triggerData = context?.getStepPayload<{
+    const triggerData = context?.getStepResult<{
       city: string;
     }>("trigger");
 
@@ -114,7 +114,7 @@ const planActivities = new Step({
   inputSchema: forecastSchema,
   execute: async ({ context, mastra }) => {
     const forecast =
-      context?.getStepPayload<z.infer<typeof forecastSchema>>(
+      context?.getStepResult<z.infer<typeof forecastSchema>>(
         "fetch-weather",
       );
 

@@ -1,17 +1,17 @@
+import { readFile } from 'fs/promises';
+import { join } from 'path';
+import { pathToFileURL } from 'url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { describeRoute, openAPISpecs } from 'hono-openapi';
-import { join } from 'path';
-import { pathToFileURL } from 'url';
 
-import { readFile } from 'fs/promises';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { describeRoute, openAPISpecs } from 'hono-openapi';
 
 import {
   generateHandler,

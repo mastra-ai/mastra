@@ -1,5 +1,5 @@
 import { createLogger } from '@mastra/core/logger'
-import { MastraStorageLibSql } from '@mastra/core/storage'
+import { LibSQLStore } from '@mastra/core/storage/libsql'
 import { OTLPStorageExporter } from '@mastra/core/telemetry'
 import {
   NodeSDK, getNodeAutoInstrumentations, ATTR_SERVICE_NAME, Resource,
@@ -46,7 +46,7 @@ async function getExporter(config) {
   } else if (config.export?.type === 'custom') {
     return config.export.exporter
   } else {
-    const storage = new MastraStorageLibSql({
+    const storage = new LibSQLStore({
       config: {
         // file lives in ./.mastra/output, and we need to write to ./.mastra/mastra.db
         url: "file:../mastra.db",

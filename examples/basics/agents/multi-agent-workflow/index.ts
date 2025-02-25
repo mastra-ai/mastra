@@ -32,7 +32,7 @@ const editorAgent = new Agent({
 const editorStep = new Step({
   id: 'editorStep',
   execute: async ({ context }) => {
-    const copy = context?.getStepPayload<{ copy: number }>('copywriterStep')?.copy;
+    const copy = context?.getStepResult<{ copy: number }>('copywriterStep')?.copy;
 
     const result = await editorAgent.generate(`Edit the following blog post only returning the edited copy: ${copy}`);
     console.log('editor result', result.text);

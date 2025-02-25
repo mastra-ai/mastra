@@ -1,9 +1,8 @@
-import * as p from '@clack/prompts';
+import fs from 'fs/promises';
 import child_process from 'node:child_process';
 import util from 'node:util';
+import * as p from '@clack/prompts';
 import color from 'picocolors';
-
-import fs from 'fs/promises';
 
 import { DepsService } from '../../services/service.deps.js';
 import { getPackageManager, getPackageManagerInstallCommand } from '../utils.js';

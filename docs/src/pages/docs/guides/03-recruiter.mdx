@@ -53,7 +53,7 @@ const gatherCandidateInfo = new Step({
     resumeText: z.string(),
   }),
   execute: async ({ context }) => {
-    const resumeText = context?.getStepPayload<{
+    const resumeText = context?.getStepResult<{
       resumeText: string;
     }>("trigger")?.resumeText;
 
@@ -94,7 +94,7 @@ const askAboutSpecialty = new Step({
     question: z.string(),
   }),
   execute: async ({ context }) => {
-    const candidateInfo = context?.getStepPayload<CandidateInfo>(
+    const candidateInfo = context?.getStepResult<CandidateInfo>(
       "gatherCandidateInfo",
     );
 
@@ -121,7 +121,7 @@ const askAboutRole = new Step({
     question: z.string(),
   }),
   execute: async ({ context }) => {
-    const candidateInfo = context?.getStepPayload<CandidateInfo>(
+    const candidateInfo = context?.getStepResult<CandidateInfo>(
       "gatherCandidateInfo",
     );
 

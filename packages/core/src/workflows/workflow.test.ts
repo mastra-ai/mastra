@@ -30,10 +30,10 @@ describe('Workflow', () => {
     });
 
     it('should execute multiple steps in parallel', async () => {
-      const step1Action = vi.fn().mockImplementation(async ({ context }: { context: any }) => {
+      const step1Action = vi.fn().mockImplementation(async () => {
         return { value: 'step1' };
       });
-      const step2Action = vi.fn().mockImplementation(async ({ context }: { context: any }) => {
+      const step2Action = vi.fn().mockImplementation(async () => {
         return { value: 'step2' };
       });
 
@@ -59,11 +59,11 @@ describe('Workflow', () => {
     it('should execute steps sequentially', async () => {
       const executionOrder: string[] = [];
 
-      const step1Action = vi.fn().mockImplementation(async ({ context }: { context: any }) => {
+      const step1Action = vi.fn().mockImplementation(() => {
         executionOrder.push('step1');
         return { value: 'step1' };
       });
-      const step2Action = vi.fn().mockImplementation(async ({ context }: { context: any }) => {
+      const step2Action = vi.fn().mockImplementation(() => {
         executionOrder.push('step2');
         return { value: 'step2' };
       });
@@ -225,8 +225,8 @@ describe('Workflow', () => {
         .step(step1)
         .then(step2, {
           when: async ({ context }) => {
-            const step1Result = context.steps.step1;
-            return step1Result && step1Result.status === 'success' && step1Result.output.count > 3;
+            const step1Result = context.getStepResult<{ count: number }>('step1');
+            return step1Result ? step1Result.count > 3 : false;
           },
         })
         .commit();
@@ -275,14 +275,14 @@ describe('Workflow', () => {
       expect(result.results.step2).toEqual({ status: 'success', output: { result: 'success' } });
     });
 
-    it('should provide access to step results and trigger data via getStepPayload helper', async () => {
+    it('should provide access to step results and trigger data via getStepResult helper', async () => {
       type TestTriggerSchema = z.ZodObject<{ inputValue: z.ZodString }>;
 
       const step1Action = vi
         .fn()
         .mockImplementation(async ({ context }: { context: WorkflowContext<TestTriggerSchema> }) => {
           // Test accessing trigger data with correct type
-          const triggerData = context?.getStepPayload<{ inputValue: string }>('trigger');
+          const triggerData = context?.getStepResult<{ inputValue: string }>('trigger');
           expect(triggerData).toEqual({ inputValue: 'test-input' });
           return { value: 'step1-result' };
         });
@@ -292,11 +292,11 @@ describe('Workflow', () => {
         .mockImplementation(async ({ context }: { context: WorkflowContext<TestTriggerSchema> }) => {
           // Test accessing previous step result with type
           type Step1Result = { value: string };
-          const step1Result = context?.getStepPayload<Step1Result>('step1');
+          const step1Result = context?.getStepResult<Step1Result>('step1');
           expect(step1Result).toEqual({ value: 'step1-result' });
 
           // Verify that failed steps return undefined
-          const failedStep = context?.getStepPayload<never>('non-existent-step');
+          const failedStep = context?.getStepResult<never>('non-existent-step');
           expect(failedStep).toBeUndefined();
 
           return { value: 'step2-result' };
@@ -349,7 +349,7 @@ describe('Workflow', () => {
         attempts: { step1: 3 },
         steps: {},
         triggerData: { inputData: 'test-input' },
-        getStepPayload: expect.any(Function),
+        getStepResult: expect.any(Function),
       };
 
       expect(execute).toHaveBeenCalledWith(
@@ -389,7 +389,7 @@ describe('Workflow', () => {
         attempts: { step1: 3 },
         steps: {},
         triggerData: { inputData: { nested: { value: 'test' } } },
-        getStepPayload: expect.any(Function),
+        getStepResult: expect.any(Function),
       };
 
       await workflow.execute({ triggerData: { inputData: { nested: { value: 'test' } } } });
@@ -442,7 +442,7 @@ describe('Workflow', () => {
         attempts: { step1: 3, step2: 3 },
         steps: {},
         triggerData: {},
-        getStepPayload: expect.any(Function),
+        getStepResult: expect.any(Function),
       };
 
       expect(step2Action).toHaveBeenCalledWith(
@@ -678,7 +678,7 @@ describe('Workflow', () => {
         attempts: { step1: 3, step2: 3, step3: 3, step4: 3, step5: 3 },
         steps: {},
         triggerData: {},
-        getStepPayload: expect.any(Function),
+        getStepResult: expect.any(Function),
       };
 
       const workflow = new Workflow({

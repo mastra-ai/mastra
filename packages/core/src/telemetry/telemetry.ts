@@ -180,7 +180,7 @@ export class Telemetry {
         args.forEach((arg, index) => {
           try {
             span.setAttribute(`${context.spanName}.argument.${index}`, JSON.stringify(arg));
-          } catch (e) {
+          } catch {
             span.setAttribute(`${context.spanName}.argument.${index}`, '[Not Serializable]');
           }
         });
@@ -193,7 +193,7 @@ export class Telemetry {
         function recordResult(res: any) {
           try {
             span.setAttribute(`${context.spanName}.result`, JSON.stringify(res));
-          } catch (e) {
+          } catch {
             span.setAttribute(`${context.spanName}.result`, '[Not Serializable]');
           }
 

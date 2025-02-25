@@ -7,11 +7,11 @@ import { GithubLink } from "../../../components/github-link";
 
 # Insert Embedding in LibSQL
 
-After generating embeddings, you need to store them in a vector database for similarity search. The `DefaultVectorDB` class provides methods to create collections and insert embeddings into LibSQL, a fork of SQLite with vector extensions. This example shows how to store embeddings in LibSQL for later retrieval.
+After generating embeddings, you need to store them in a vector database for similarity search. The `LibSQLVector` class provides methods to create collections and insert embeddings into LibSQL, a fork of SQLite with vector extensions. This example shows how to store embeddings in LibSQL for later retrieval.
 
 ```tsx copy
 import { openai } from "@ai-sdk/openai";
-import { DefaultVectorDB } from "@mastra/core/storage";
+import { LibSQLVector } from "@mastra/core/vector/libsql";
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
 
@@ -24,7 +24,7 @@ const { embeddings } = await embedMany({
   model: openai.embedding("text-embedding-3-small"),
 });
 
-const libsql = new DefaultVectorDB({
+const libsql = new LibSQLVector({
   connectionUrl: process.env.DATABASE_URL,
   authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
 });

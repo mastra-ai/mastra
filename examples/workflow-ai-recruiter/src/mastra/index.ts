@@ -21,7 +21,7 @@ const gatherCandidateInfo = new Step({
     resumeText: z.string(),
   }),
   execute: async ({ context, mastra }) => {
-    const resumeText = context?.getStepPayload<{ resumeText: string }>('trigger')?.resumeText;
+    const resumeText = context?.getStepResult<{ resumeText: string }>('trigger')?.resumeText;
 
     const prompt = `
           You are given this resume text:
@@ -53,7 +53,7 @@ const askAboutSpecialty = new Step({
     question: z.string(),
   }),
   execute: async ({ context, mastra }) => {
-    const candidateInfo = context?.getStepPayload<CandidateInfo>('gatherCandidateInfo');
+    const candidateInfo = context?.getStepResult<CandidateInfo>('gatherCandidateInfo');
 
     const prompt = `
           You are a recruiter. Given the resume below, craft a short question
@@ -71,7 +71,7 @@ const askAboutRole = new Step({
     question: z.string(),
   }),
   execute: async ({ context, mastra }) => {
-    const candidateInfo = context?.getStepPayload<CandidateInfo>('gatherCandidateInfo');
+    const candidateInfo = context?.getStepResult<CandidateInfo>('gatherCandidateInfo');
 
     const prompt = `
           You are a recruiter. Given the resume below, craft a short question

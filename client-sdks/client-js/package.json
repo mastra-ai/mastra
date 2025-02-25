@@ -17,8 +17,8 @@
   "repository": "github:mastra-ai/client-js",
   "license": "ISC",
   "scripts": {
-    "build": "tsup-node src/index.ts --format esm --dts --clean --treeshake",
-    "dev": "tsup-node src/index.ts --format esm --dts --clean --treeshake --watch",
+    "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
+    "dev": "tsup src/index.ts --format esm --dts --clean --treeshake --watch",
     "test": "vitest run"
   },
   "dependencies": {

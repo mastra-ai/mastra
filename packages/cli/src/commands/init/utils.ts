@@ -1,13 +1,12 @@
-import * as p from '@clack/prompts';
+import fs from 'fs/promises';
 import child_process from 'node:child_process';
 import util from 'node:util';
 import path from 'path';
+import * as p from '@clack/prompts';
+import fsExtra from 'fs-extra/esm';
 import color from 'picocolors';
 import prettier from 'prettier';
 import yoctoSpinner from 'yocto-spinner';
-
-import fsExtra from 'fs-extra/esm';
-import fs from 'fs/promises';
 
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
@@ -64,7 +63,7 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
       ${addExampleTool ? 'Use the weatherTool to fetch current weather data.' : ''}
 `;
   const content = `
-${providerImport}  
+${providerImport}
 import { Agent } from '@mastra/core/agent';
 ${addExampleTool ? `import { weatherTool } from '../tools';` : ''}
 
@@ -149,7 +148,7 @@ const fetchWeather = new Step({
     city: z.string().describe('The city to get the weather for'),
   }),
   execute: async ({ context }) => {
-    const triggerData = context?.getStepPayload<{ city: string }>('trigger');
+    const triggerData = context?.getStepResult<{ city: string }>('trigger');
 
     if (!triggerData) {
       throw new Error('Trigger data not found');
@@ -208,7 +207,7 @@ const planActivities = new Step({
   description: 'Suggests activities based on weather conditions',
   inputSchema: forecastSchema,
   execute: async ({ context, mastra }) => {
-    const forecast = context?.getStepPayload<z.infer<typeof forecastSchema>>('fetch-weather');
+    const forecast = context?.getStepResult<z.infer<typeof forecastSchema>>('fetch-weather');
 
     if (!forecast || forecast.length === 0) {
       throw new Error('Forecast data not found');
@@ -365,7 +364,7 @@ export const checkInitialization = async (dirPath: string) => {
   try {
     await fs.access(dirPath);
     return true;
-  } catch (err) {
+  } catch {
     return false;
   }
 };
@@ -546,7 +545,7 @@ export const checkPkgJson = async () => {
   try {
     await fsExtra.readJSON(pkgJsonPath);
     isPkgJsonPresent = true;
-  } catch (err) {
+  } catch {
     isPkgJsonPresent = false;
   }
 

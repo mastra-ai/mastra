@@ -1,7 +1,7 @@
-import { createLogger, LogLevel } from '@mastra/core/logger';
 import fs from 'fs';
 import path from 'path';
-import { describe, it, expect, beforeEach, afterEach, vi, afterAll } from 'vitest';
+import { createLogger, LogLevel } from '@mastra/core/logger';
+import { describe, it, expect, beforeEach, vi, afterAll } from 'vitest';
 
 import { FileTransport } from './index.js';
 

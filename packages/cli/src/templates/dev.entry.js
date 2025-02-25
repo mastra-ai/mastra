@@ -1,10 +1,10 @@
 // @ts-ignore
 // @ts-ignore
-import { mastra } from '#mastra';
-import { createNodeServer } from '#server';
 import { evaluate } from '@mastra/core/eval';
 import { AvailableHooks, registerHook } from '@mastra/core/hooks';
 import { TABLE_EVALS } from '@mastra/core/storage';
+import { mastra } from '#mastra';
+import { createNodeServer } from '#server';
 
 // init storage
 if (mastra.storage) {

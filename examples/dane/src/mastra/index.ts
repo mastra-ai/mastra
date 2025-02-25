@@ -1,5 +1,5 @@
 import { Mastra } from '@mastra/core';
-import { DefaultStorage } from '@mastra/core/storage';
+import { LibSQLStore } from '@mastra/core/storage/libsql';
 
 import { dane, daneChangeLog, daneCommitMessage, daneIssueLabeler, daneLinkChecker } from './agents/index.js';
 import { daneNewContributor } from './agents/new-contributor.js';
@@ -21,7 +21,7 @@ export const mastra = new Mastra({
     daneChangeLog,
     daneNewContributor,
   },
-  storage: new DefaultStorage({
+  storage: new LibSQLStore({
     config: {
       url: ':memory:',
     },
