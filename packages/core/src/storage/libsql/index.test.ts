@@ -1,9 +1,9 @@
 import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 
-import type { WorkflowRunState } from '../workflows';
+import type { WorkflowRunState } from '../../workflows';
 
-import { DefaultStorage } from './libsql';
+import { DefaultStorage } from './index';
 
 // Test database configuration
 const TEST_DB_URL = 'file:memory:'; // Use in-memory SQLite for tests

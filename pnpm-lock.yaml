@@ -2850,6 +2850,9 @@ importers:
       eslint:
         specifier: ^9.20.1
         version: 9.20.1(jiti@2.4.2)
+      rollup:
+        specifier: ^4.30.1
+        version: 4.34.8
       size-limit:
         specifier: ^11.1.4
         version: 11.2.0
