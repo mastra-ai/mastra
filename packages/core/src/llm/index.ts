@@ -71,7 +71,22 @@ export type StreamReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefin
   ? StreamTextResult<any, any>
   : StreamObjectResult<any, any, any>;
 
-export type OutputType = 'text' | StructuredOutput;
+export type OutputType = 'text' | StructuredOutput | ZodSchema | JSONSchema7 | undefined;
+
+export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+  tools?: ToolsInput;
+  convertedTools?: Record<string, CoreTool>;
+  messages: CoreMessage[];
+  onStepFinish?: (step: string) => void;
+  toolChoice?: 'auto' | 'required';
+  maxSteps?: number;
+  temperature?: number;
+  experimental_output?: Z;
+} & Run;
+
+export type LLMTextObjectOptions<T> = LLMTextOptions & {
+  structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
+};
 
 export type LLMStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
   runId?: string;
@@ -82,23 +97,10 @@ export type LLMStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = und
   convertedTools?: Record<string, CoreTool>;
   output?: OutputType | Z;
   temperature?: number;
+  experimental_output?: Z;
 };
 
-export type LLMTextOptions = {
-  tools?: ToolsInput;
-  convertedTools?: Record<string, CoreTool>;
-  messages: CoreMessage[];
-  onStepFinish?: (step: string) => void;
-  toolChoice?: 'auto' | 'required';
-  maxSteps?: number;
-  temperature?: number;
-} & Run;
-
-export type LLMTextObjectOptions<T> = LLMTextOptions & {
-  structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
-};
-
-export type LLMInnerStreamOptions = {
+export type LLMInnerStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
   tools?: ToolsInput;
   convertedTools?: Record<string, CoreTool>;
   messages: CoreMessage[];
@@ -107,6 +109,7 @@ export type LLMInnerStreamOptions = {
   maxSteps?: number;
   temperature?: number;
   toolChoice?: 'auto' | 'required';
+  experimental_output?: Z;
 } & Run;
 
 export type LLMStreamObjectOptions<T> = LLMInnerStreamOptions & {

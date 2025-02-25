@@ -33,87 +33,107 @@ An optional object that can include:
 <PropertiesTable
   content={[
     {
-      name: 'output',
-      type: 'string | JSONSchema7 | ZodSchema',
-      isOptional: true,
-      default: "'text'",
-      description: 'Defines the output format. Can be "text" or a schema for structured output.',
-    },
-    {
-      name: 'context',
-      type: 'CoreMessage[]',
-      isOptional: true,
-      description: 'Additional context messages to provide to the agent.',
-    },
-    {
-      name: 'threadId',
-      type: 'string',
-      isOptional: true,
-      description: 'Identifier for the conversation thread. Allows for maintaining context across multiple interactions.',
-    },
-    {
-      name: 'resourceId',
-      type: 'string',
-      isOptional: true,
-      description: 'Identifier for the user or resource interacting with the agent.',
-    },
-    {
-      name: 'onFinish',
-      type: '(result: string) => Promise<void> | void',
-      isOptional: true,
-      description: 'Callback function called when streaming is complete.',
-    },
-    {
-      name: 'onStepFinish',
-      type: '(step: string) => void',
-      isOptional: true,
-      description: 'Callback function called after each step during streaming.',
-    },
-    {
-      name: 'maxSteps',
-      type: 'number',
-      isOptional: true,
-      default: '5',
-      description: 'Maximum number of steps allowed during streaming.',
-    },
-    {
-      name: 'toolsets',
-      type: 'ToolsetsInput',
-      isOptional: true,
-      description: 'Additional toolsets to make available to the agent during this stream.',
-    },
-    {
-      name: 'temperature',
-      type: 'number',
-      isOptional: true,
-      description: 'Controls randomness in the model\'s output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.',
+      name: "options",
+      type: "object",
+      required: false,
+      description: "Additional options for the `stream` method.",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "output",
+              type: "Zod schema | JsonSchema7",
+              isOptional: true,
+              description: "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
+            },
+            {
+              name: "experimental_output",
+              type: "Zod schema | JsonSchema7",
+              isOptional: true,
+              description: "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
+            },
+            {
+              name: "context",
+              type: "CoreMessage[]",
+              isOptional: true,
+              description: "Additional context messages to provide to the agent.",
+            },
+            {
+              name: "threadId",
+              type: "string",
+              isOptional: true,
+              description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions.",
+            },
+            {
+              name: "resourceId",
+              type: "string",
+              isOptional: true,
+              description: "Identifier for the user or resource interacting with the agent.",
+            },
+            {
+              name: "onFinish",
+              type: "(result: string) => Promise<void> | void",
+              isOptional: true,
+              description: "Callback function called when streaming is complete.",
+            },
+            {
+              name: "onStepFinish",
+              type: "(step: string) => void",
+              isOptional: true,
+              description: "Callback function called after each step during streaming.",
+            },
+            {
+              name: "maxSteps",
+              type: "number",
+              isOptional: true,
+              defaultValue: "5",
+              description: "Maximum number of steps allowed during streaming.",
+            },
+            {
+              name: "toolsets",
+              type: "ToolsetsInput",
+              isOptional: true,
+              description: "Additional toolsets to make available to the agent during this stream.",
+            },
+            {
+              name: "temperature",
+              type: "number",
+              isOptional: true,
+              description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
+            }
+          ]
+        }
+      ]
     }
   ]}
 />
 
 ## Returns
 
-The method returns a promise that resolves to an object containing one or more of the following properties:
+The return value of the `stream()` method depends on the options provided, specifically the `output` option.
+
+### PropertiesTable for Return Values
 
 <PropertiesTable
   content={[
     {
-      name: 'textStream',
-      type: 'AsyncIterable<string>',
-      isOptional: true,
-      description: 'An async iterable stream of text chunks. Present when output is "text".',
+      name: "textStream",
+      type: "AsyncIterable<string>",
+      required: false,
+      description: "An async iterable stream of text chunks. Present when output is 'text'.",
     },
     {
-      name: 'objectStream',
-      type: 'AsyncIterable<object>',
-      isOptional: true,
-      description: 'An async iterable stream of structured data. Present when a schema is provided.',
+      name: "objectStream",
+      type: "AsyncIterable<object>",
+      required: false,
+      description: "An async iterable stream of structured data. Present when a schema is provided.",
     },
     {
-      name: 'object',
-      type: 'Promise<object>',
-      isOptional: true,
-      description: 'A promise that resolves to the final structured output when using a schema.',
+      name: "object",
+      type: "Promise<object>",
+      required: false,
+      description: "A promise that resolves to the final structured output when using a schema.",
     }
   ]}
 />

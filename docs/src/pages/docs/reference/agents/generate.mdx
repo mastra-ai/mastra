@@ -38,59 +38,71 @@ An optional object that can include:
     {
       name: "messages",
       type: "string | Array<string> | Array<Message>",
+      required: true,
       description: "The messages to be processed by the agent. Can be a single string, an array of strings, or an array of message objects with `role` and `content`.",
     },
     {
       name: "options",
       type: "object",
-      isOptional: true,
+      required: false,
       description: "Additional options for the `generate` method.",
       properties: [
         {
-          name: "structuredOutput",
-          type: "object | Zod schema",
-          isOptional: true,
-          description: "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
-        },
-        {
-          name: "onStepFinish",
-          type: "(step: string) => void",
-          isOptional: true,
-          description: "Callback function called after each execution step. Receives step details as a JSON string.",
-        },
-        {
-          name: "maxSteps",
-          type: "number",
-          isOptional: true,
-          default: 5,
-          description: "Maximum number of execution steps allowed.",
-        },
-        {
-          name: "threadId",
-          type: "string",
-          isOptional: true,
-          description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions.",
-        },
-        {
-          name: "resourceId",
-          type: "string",
-          isOptional: true,
-          description: "Identifier for the user or resource interacting with the agent.",
-        },
-        {
-          name: "temperature",
-          type: "number",
-          isOptional: true,
-          description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
-        },
-        {
-          name: "context",
-          type: "Array<Message>",
-          isOptional: true,
-          description: "Additional context messages to provide to the agent.",
-        },
-      ],
-    },
+          type: "object",
+          parameters: [
+            {
+              name: "output",
+              type: "Zod schema | JsonSchema7",
+              isOptional: true,
+              description: "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
+            },
+            {
+              name: "experimental_output",
+              type: "Zod schema | JsonSchema7",
+              isOptional: true,
+              description: "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
+            },
+            {
+              name: "onStepFinish",
+              type: "(step: string) => void",
+              isOptional: true,
+              description: "Callback function called after each execution step. Receives step details as a JSON string.",
+            },
+            {
+              name: "maxSteps",
+              type: "number",
+              isOptional: true,
+              defaultValue: "5",
+              description: "Maximum number of execution steps allowed.",
+            },
+            {
+              name: "threadId",
+              type: "string",
+              isOptional: true,
+              description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions.",
+            },
+            {
+              name: "resourceId",
+              type: "string",
+              isOptional: true,
+              description: "Identifier for the user or resource interacting with the agent.",
+            },
+            {
+              name: "temperature",
+              type: "number",
+              isOptional: true,
+              description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
+            },
+            {
+              name: "context",
+              type: "Array<Message>",
+              isOptional: true,
+              description: "Additional context messages to provide to the agent.",
+            }
+          ]
+        }
+      ]
+    }
   ]}
 />
 
@@ -105,27 +117,27 @@ The return value of the `generate()` method depends on the options provided, spe
     {
       name: "text",
       type: "string",
-      isOptional: true,
+      required: false,
       description: "The generated text response. Present if `structuredOutput` is not provided.",
     },
     {
       name: "object",
       type: "object",
-      isOptional: true,
+      required: false,
       description: "The generated structured response based on the provided schema. Present if `structuredOutput` is provided.",
     },
     {
       name: "toolCalls",
       type: "Array<ToolCall>",
-      isOptional: true,
+      required: false,
       description: "The tool calls made during the generation process.",
     },
     {
       name: "error",
       type: "string",
-      isOptional: true,
+      required: false,
       description: "Error message if the generation fails.",
-    },
+    }
   ]}
 />
 
@@ -136,13 +148,15 @@ The return value of the `generate()` method depends on the options provided, spe
     {
       name: "toolName",
       type: "string",
+      required: true,
       description: "The name of the tool invoked.",
     },
     {
       name: "args",
       type: "any",
+      required: true,
       description: "The arguments passed to the tool.",
-    },
+    }
   ]}
 />
 
