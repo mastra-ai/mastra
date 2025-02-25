@@ -137,7 +137,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
         stepGraph = this.#stepSubscriberGraph[runState.suspendedSteps[stepId]] ?? this.#stepGraph;
         startStepId = stepId;
         this.#state = runState.value;
-        console.dir({ state: this.#state.value, startStepId }, { depth: null });
       }
     }
 
@@ -161,8 +160,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       } else {
         this.#state = mergeChildValue(startStepId, this.#state, state);
       }
-
-      console.dir({ globalState: this.#state }, { depth: null });
 
       const now = Date.now();
       if (this.#onStepTransition) {
