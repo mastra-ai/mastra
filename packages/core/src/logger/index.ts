@@ -46,7 +46,7 @@ export class LoggerTransport extends Transform {
     super({ ...opts, objectMode: true });
   }
 
-  async getLogsByRunId({ runId: _runId }: { runId: string }): Promise<BaseLogMessage[]> {
+  async getLogsByRunId(_args: { runId: string }): Promise<BaseLogMessage[]> {
     return [];
   }
   async getLogs(): Promise<BaseLogMessage[]> {
