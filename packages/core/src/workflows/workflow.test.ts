@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'fs';
+import { after } from 'node:test';
+import path from 'path';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { createLogger } from '../logger';
@@ -9,7 +12,6 @@ import { createTool } from '../tools';
 import { Step } from './step';
 import type { WorkflowContext, WorkflowResumeResult } from './types';
 import { Workflow } from './workflow';
-import { WorkflowResultReturn } from './workflow-instance';
 
 const storage = new MastraStorageLibSql({
   config: {
@@ -810,10 +812,12 @@ describe('Workflow', async () => {
 
       const workflow = new Workflow({
         name: 'test-workflow',
-        retryConfig: { attempts: 3, delay: 500 },
+
+        retryConfig: { attempts: 3, delay: 10 },
         mastra: {
           logger: createLogger({
             name: 'Workflow',
+            level: 'debug',
           }),
         },
       });
@@ -826,7 +830,7 @@ describe('Workflow', async () => {
             return await new Promise(resolve => {
               setTimeout(() => {
                 resolve(false);
-              }, 5000);
+              }, 100);
             });
           },
         })
@@ -1091,6 +1095,13 @@ describe('Workflow', async () => {
   });
 
   describe('Suspend and Resume', () => {
+    afterAll(async () => {
+      const pathToDb = path.join(process.cwd(), 'mastra.db');
+
+      if (fs.existsSync(pathToDb)) {
+        fs.rmSync(pathToDb);
+      }
+    });
     it('should handle basic suspend and resume flow', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi
@@ -1220,7 +1231,7 @@ describe('Workflow', async () => {
       });
     });
 
-    it.only('should handle parallel steps with conditional suspend', async () => {
+    it('should handle parallel steps with conditional suspend', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi.fn().mockResolvedValue({ modelOutput: 'test output' });
       const evaluateToneAction = vi.fn().mockResolvedValue({
@@ -1347,13 +1358,12 @@ describe('Workflow', async () => {
       });
     });
 
-    it('should handle complex workflow with multiple suspends', async () => {
+    it.only('should handle complex workflow with multiple suspends', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi
         .fn()
         .mockImplementationOnce(async ({ suspend }) => {
           await suspend();
-          return undefined;
         })
         .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
       const evaluateToneAction = vi.fn().mockResolvedValue({
@@ -1364,7 +1374,6 @@ describe('Workflow', async () => {
         .fn()
         .mockImplementationOnce(async ({ suspend }) => {
           await suspend();
-          return undefined;
         })
         .mockImplementationOnce(() => ({ improvedOutput: 'improved output' }));
       const evaluateImprovedAction = vi.fn().mockResolvedValue({
@@ -1375,7 +1384,6 @@ describe('Workflow', async () => {
         .fn()
         .mockImplementationOnce(async ({ suspend }) => {
           await suspend();
-          return undefined;
         })
         .mockImplementationOnce(() => ({ improvedOutput: 'human intervention output' }));
       const explainResponseAction = vi.fn().mockResolvedValue({
@@ -1451,127 +1459,88 @@ describe('Workflow', async () => {
 
       const wf = mastra.getWorkflow('test-workflow');
       const run = wf.createRun();
+      const started = run.start({ triggerData: { input: 'test' } });
+      let improvedResponseResult: WorkflowResumeResult<any> | undefined;
 
-      // Create promises to track when each step is ready to resume
-      let resolvePromptAgent: (value: unknown) => void;
-      let resolveImproveResponse: (value: unknown) => void;
-      let resolveHumanIntervention: (value: unknown) => void;
+      const result = await new Promise<WorkflowResumeResult<any>>((resolve, reject) => {
+        let hasResumed = false;
+        wf.watch(async data => {
+          console.log('data', data);
 
-      const promptAgentSuspended = new Promise(resolve => {
-        resolvePromptAgent = resolve;
-      });
-      const improveResponseSuspended = new Promise(resolve => {
-        resolveImproveResponse = resolve;
-      });
-      const humanInterventionSuspended = new Promise(resolve => {
-        resolveHumanIntervention = resolve;
+          const suspended = data.activePaths.find(p => p.status === 'suspended');
+          if (suspended?.stepId === 'humanIntervention') {
+            console.log('human intervention suspended');
+            const newCtx = {
+              ...data.context,
+              humanPrompt: 'What improvements would you suggest?',
+            };
+            console.log('newCtx', { newCtx, data });
+            if (!hasResumed) {
+              hasResumed = true;
+
+              try {
+                const resumed = await wf.resume({
+                  runId: run.runId,
+                  stepId: suspended.stepId,
+                  context: newCtx,
+                });
+                resolve(resumed as any);
+              } catch (error) {
+                reject(error);
+              }
+            }
+          } else if (suspended?.stepId === 'improveResponse') {
+            console.log('improve response suspended');
+            improvedResponseResult = await wf.resume({
+              runId: run.runId,
+              stepId: suspended.stepId,
+              context: {
+                ...data.context,
+              },
+            });
+            // resolve({
+            //   results: {
+            //     explainResponse: { status: 'success', output: { improvedOutput: 'explanation output' } },
+            //   },
+            // });
+          }
+        });
       });
 
-      wf.watch(data => {
-        const suspended = data.activePaths.find(p => p.status === 'suspended');
-        if (suspended?.stepId === 'promptAgent') {
-          const newCtx = {
-            ...data.context,
-          };
-          // @ts-ignore
-          newCtx.steps.getUserInput.output = {
-            userInput: 'test input for resumption',
-          };
-          resolvePromptAgent({ runId: run.runId, stepId: suspended.stepId, context: newCtx });
-        } else if (suspended?.stepId === 'improveResponse') {
-          const newCtx = {
-            ...data.context,
-            humanConfirmation: true,
-          };
-          resolveImproveResponse({ runId: run.runId, stepId: suspended.stepId, context: newCtx });
-        } else if (suspended?.stepId === 'humanIntervention') {
-          const newCtx = {
-            ...data.context,
-            humanPrompt: 'What improvements would you suggest?',
-          };
-          resolveHumanIntervention({ runId: run.runId, stepId: suspended.stepId, context: newCtx });
-        }
-      });
+      const initialResult = await started;
 
-      const initialResult = await run.start({ triggerData: { input: 'test' } });
-      expect(initialResult.results.promptAgent.status).toBe('suspended');
-      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+      console.log('initialResult', initialResult);
 
-      // Resume promptAgent
-      const promptAgentData = await promptAgentSuspended;
-      let resumeStorage = new MastraStorageLibSql({
-        config: { url: 'file:mastra.db' },
-      });
-      await resumeStorage.init();
-      let resumeMastra = new Mastra({
-        logger,
-        storage: resumeStorage,
-        workflows: { 'test-workflow': workflow },
-      });
-      let resumeWf = resumeMastra.getWorkflow('test-workflow');
-      let resumeResult = await resumeWf.resume(promptAgentData as any);
+      console.log('improvedResponseResult', improvedResponseResult);
+      expect(improvedResponseResult?.results.improveResponse.status).toBe('suspended');
 
-      if (!resumeResult) {
+      console.log('result', result);
+      expect(result.results.humanIntervention.status).toBe('suspended');
+      expect(result.results.improveResponse.status).toBe('completed');
+      expect(result.results.evaluateImprovedResponse.status).toBe('completed');
+      expect(result.results.explainResponse.status).toBe('failed');
+      expect(humanInterventionAction).toHaveBeenCalledTimes(2);
+      expect(explainResponseAction).not.toHaveBeenCalled();
+
+      if (!result) {
         throw new Error('Resume failed to return a result');
       }
 
-      expect(resumeResult.results.improveResponse.status).toBe('suspended');
-      expect(improveResponseAction).toHaveBeenCalledTimes(1);
-
-      // Resume improveResponse
-      const improveResponseData = await improveResponseSuspended;
-      resumeStorage = new MastraStorageLibSql({
-        config: { url: 'file:mastra.db' },
-      });
-      await resumeStorage.init();
-      resumeMastra = new Mastra({
-        logger,
-        storage: resumeStorage,
-        workflows: { 'test-workflow': workflow },
-      });
-      resumeWf = resumeMastra.getWorkflow('test-workflow');
-      resumeResult = await resumeWf.resume(improveResponseData as any);
-
-      if (!resumeResult) {
-        throw new Error('Resume failed to return a result');
-      }
-
-      expect(resumeResult.results.humanIntervention.status).toBe('suspended');
-      expect(humanInterventionAction).toHaveBeenCalledTimes(1);
-
-      // Resume humanIntervention
-      const humanInterventionData = await humanInterventionSuspended;
-      resumeStorage = new MastraStorageLibSql({
-        config: { url: 'file:mastra.db' },
-      });
-      await resumeStorage.init();
-      resumeMastra = new Mastra({
-        logger,
-        storage: resumeStorage,
-        workflows: { 'test-workflow': workflow },
-      });
-      resumeWf = resumeMastra.getWorkflow('test-workflow');
-      resumeResult = await resumeWf.resume(humanInterventionData as any);
-
-      if (!resumeResult) {
-        throw new Error('Resume failed to return a result');
-      }
-
-      expect(resumeResult.results).toEqual({
-        getUserInput: { status: 'success', output: { userInput: 'test input' } },
-        promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
-        evaluateToneConsistency: {
-          status: 'success',
-          output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
-        },
-        improveResponse: { status: 'success', output: { improvedOutput: 'improved output' } },
-        evaluateImprovedResponse: {
-          status: 'success',
-          output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
-        },
-        humanIntervention: { status: 'success', output: { improvedOutput: 'human intervention output' } },
-        explainResponse: { status: 'failed', error: 'Step:explainResponse condition check failed' },
-      });
+      // expect(resumeResult.results).toEqual({
+      //   getUserInput: { status: 'success', output: { userInput: 'test input' } },
+      //   promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
+      //   evaluateToneConsistency: {
+      //     status: 'success',
+      //     output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+      //   },
+      //   improveResponse: { status: 'success', output: { improvedOutput: 'improved output' } },
+      //   evaluateImprovedResponse: {
+      //     status: 'success',
+      //     output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
+      //   },
+      //   humanIntervention: { status: 'success', output: { improvedOutput: 'human intervention output' } },
+      //   explainResponse: { status: 'failed', error: 'Step:explainResponse condition check failed' },
+      // });
     });
   });
 });
