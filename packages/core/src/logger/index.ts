@@ -1,6 +1,6 @@
+import { Transform } from 'stream';
 import pino from 'pino';
 import pretty from 'pino-pretty';
-import { Transform } from 'stream';
 
 import type { Run } from '../run/types';
 
@@ -46,7 +46,7 @@ export class LoggerTransport extends Transform {
     super({ ...opts, objectMode: true });
   }
 
-  async getLogsByRunId({ runId }: { runId: string }): Promise<BaseLogMessage[]> {
+  async getLogsByRunId({ runId: _runId }: { runId: string }): Promise<BaseLogMessage[]> {
     return [];
   }
   async getLogs(): Promise<BaseLogMessage[]> {

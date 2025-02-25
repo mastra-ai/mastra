@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import type {
   AssistantContent,
   CoreAssistantMessage,
@@ -9,7 +10,6 @@ import type {
   UserContent,
   LanguageModelV1,
 } from 'ai';
-import { randomUUID } from 'crypto';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema } from 'zod';
@@ -21,7 +21,7 @@ import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
 import { MastraLLM } from '../llm/model';
 import type { MastraLLMBase } from '../llm/model';
-import { LogLevel, RegisteredLogger } from '../logger';
+import { RegisteredLogger } from '../logger';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
