@@ -422,8 +422,6 @@ export class Workflow<
       throw new Error('Failed to parse workflow snapshot');
     }
 
-    console.log('parsedSnapshot', parsedSnapshot);
-
     const startStepId = parsedSnapshot.suspendedSteps?.[stepId];
     if (!startStepId) {
       return;
@@ -480,13 +478,6 @@ export class Workflow<
       stepId,
     });
 
-    console.dir({
-      resuming: {
-        runId,
-        stepId,
-        startStepId,
-      },
-    });
     const run =
       this.#runs.get(runId) ??
       new WorkflowInstance({
