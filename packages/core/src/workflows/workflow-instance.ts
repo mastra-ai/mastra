@@ -172,7 +172,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       runId: this.runId,
       steps: this.#steps,
       stepGraph,
-      globalStepGraph: this.#stepGraph,
       executionSpan: this.#executionSpan,
       startStepId,
     });
@@ -216,7 +215,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
           runId: this.runId,
           steps: this.#steps,
           stepGraph: this.#stepSubscriberGraph[parentStepId],
-          globalStepGraph: this.#stepGraph,
           executionSpan: this.#executionSpan,
           startStepId: parentStepId,
         });

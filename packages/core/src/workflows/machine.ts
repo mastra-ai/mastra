@@ -47,7 +47,6 @@ export class Machine<
   #executionSpan?: Span | undefined;
 
   #stepGraph: StepGraph;
-  #globalStepGraph: StepGraph;
   #machine!: ReturnType<typeof this.initializeMachine>;
   #runId: string;
   #startStepId: string;
@@ -66,7 +65,6 @@ export class Machine<
     runId,
     steps,
     stepGraph,
-    globalStepGraph,
     retryConfig,
     startStepId,
   }: {
@@ -78,7 +76,6 @@ export class Machine<
     runId: string;
     steps: Record<string, IAction<any, any, any, any>>;
     stepGraph: StepGraph;
-    globalStepGraph: StepGraph;
     retryConfig?: RetryConfig;
     startStepId: string;
   }) {
@@ -94,7 +91,6 @@ export class Machine<
     this.name = name;
 
     this.#stepGraph = stepGraph;
-    this.#globalStepGraph = globalStepGraph;
     this.#steps = steps;
     this.#retryConfig = retryConfig;
     this.initializeMachine();
