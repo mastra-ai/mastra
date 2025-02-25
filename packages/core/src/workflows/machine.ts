@@ -136,6 +136,7 @@ export class Machine<
       machineStates: this.#machine.config.states,
     });
 
+    console.log('machine states', this.#machine.config.states);
     this.#actor = createActor(this.#machine, {
       inspect: (inspectionEvent: any) => {
         this.logger.debug('XState inspection event', {

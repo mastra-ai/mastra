@@ -1304,30 +1304,39 @@ describe('Workflow', async () => {
       //   resolveWorkflowSuspended = resolve;
       // });
 
-      let hasResumed = false;
-      wf.watch(data => {
-        const suspended = data.activePaths.find(p => p.status === 'suspended');
-        if (suspended?.stepId === 'humanIntervention') {
-          const newCtx = {
-            ...data.context,
-            humanPrompt: 'What improvements would you suggest?',
-          };
-          console.log('newCtx', { newCtx, data });
-          // resolveWorkflowSuspended({ runId: run.runId, stepId: suspended.stepId, context: newCtx });
-          if (!hasResumed) {
-            hasResumed = true;
-            setTimeout(() => {
-              wf.resume({
-                runId: run.runId,
-                stepId: suspended.stepId,
-                context: newCtx,
-              });
-            }, 10);
+      const started = run.start({ triggerData: { input: 'test' } });
+      await new Promise((resolve, reject) => {
+        let hasResumed = false;
+        wf.watch(data => {
+          const suspended = data.activePaths.find(p => p.status === 'suspended');
+          if (suspended?.stepId === 'humanIntervention') {
+            const newCtx = {
+              ...data.context,
+              humanPrompt: 'What improvements would you suggest?',
+            };
+            console.log('newCtx', { newCtx, data });
+            // resolveWorkflowSuspended({ runId: run.runId, stepId: suspended.stepId, context: newCtx });
+            if (!hasResumed) {
+              hasResumed = true;
+              setTimeout(async () => {
+                try {
+                  const resumed = await wf.resume({
+                    runId: run.runId,
+                    stepId: suspended.stepId,
+                    context: newCtx,
+                  });
+                  console.log('resumed', resumed);
+                  resolve(resumed);
+                } catch (error) {
+                  reject(error);
+                }
+              }, 10);
+            }
           }
-        }
+        });
       });
 
-      const initialResult = await run.start({ triggerData: { input: 'test' } });
+      const initialResult = await started;
       console.log('initialResult', initialResult);
       expect(initialResult.results.humanIntervention.status).toBe('suspended');
       expect(initialResult.results.explainResponse.status).toBe('failed');
@@ -1452,17 +1461,8 @@ describe('Workflow', async () => {
         })
         .commit();
 
-      // Create a new storage instance for initial run
-      const initialStorage = new MastraStorageLibSql({
-        config: {
-          url: 'file:mastra.db',
-        },
-      });
-      await initialStorage.init();
-
       const mastra = new Mastra({
         logger,
-        storage: initialStorage,
         workflows: { 'test-workflow': workflow },
       });
 
