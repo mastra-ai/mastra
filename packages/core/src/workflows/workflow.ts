@@ -406,7 +406,6 @@ export class Workflow<
       return;
     }
     parsedSnapshot = startStepId === 'trigger' ? parsedSnapshot : parsedSnapshot.childStates[startStepId];
-    console.dir({ resuming: startStepId, value: parsedSnapshot.value }, { depth: null });
 
     // Update context if provided
 
