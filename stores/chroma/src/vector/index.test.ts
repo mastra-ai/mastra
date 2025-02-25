@@ -92,6 +92,7 @@ describe('ChromaVector Integration Tests', () => {
       // Query each vector to verify metadata
       for (let i = 0; i < testVectors.length; i++) {
         const results = await vectorDB.query(testIndexName, testVectors?.[i]!, 1);
+        console.log(results);
         expect(results?.[0]?.id).toBe(testIds[i]);
         expect(results?.[0]?.metadata).toEqual(testMetadata[i]);
       }

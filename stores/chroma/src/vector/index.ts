@@ -4,6 +4,11 @@ import { ChromaClient } from 'chromadb';
 
 import { ChromaFilterTranslator } from './filter';
 
+export interface DocumentMetadata {
+  content?: string;
+  metadata?: Record<string, any>;
+}
+
 export class ChromaVector extends MastraVector {
   private client: ChromaClient;
   private collections: Map<string, any>;
@@ -54,6 +59,7 @@ export class ChromaVector extends MastraVector {
     vectors: number[][],
     metadata?: Record<string, any>[],
     ids?: string[],
+    // documents?: string[],
   ): Promise<string[]> {
     const collection = await this.getCollection(indexName);
 
@@ -73,9 +79,21 @@ export class ChromaVector extends MastraVector {
       ids: generatedIds,
       embeddings: vectors,
       metadatas: normalizedMetadata,
+      // documents: documents,
     });
 
     return generatedIds;
+  }
+
+  private mapMetricToHnswSpace(metric: 'cosine' | 'euclidean' | 'dotproduct'): string {
+    switch (metric) {
+      case 'euclidean':
+        return 'l2';
+      case 'dotproduct':
+        return 'ip';
+      case 'cosine':
+        return 'cosine';
+    }
   }
 
   async createIndex(
@@ -90,7 +108,7 @@ export class ChromaVector extends MastraVector {
       name: indexName,
       metadata: {
         dimension,
-        metric,
+        'hnsw:space': this.mapMetricToHnswSpace(metric),
       },
     });
   }
@@ -120,11 +138,14 @@ export class ChromaVector extends MastraVector {
       include: includeVector ? [...defaultInclude, 'embeddings'] : defaultInclude,
     });
 
+    console.log(results);
+
     // Transform ChromaDB results to QueryResult format
     return (results.ids[0] || []).map((id: string, index: number) => ({
       id,
       score: results.distances?.[0]?.[index] || 0,
       metadata: results.metadatas?.[0]?.[index] || {},
+      // document: results.documents?.[0]?.[index],
       ...(includeVector && { vector: results.embeddings?.[0]?.[index] || [] }),
     }));
   }

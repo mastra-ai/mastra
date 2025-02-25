@@ -5,6 +5,7 @@ export interface QueryResult {
   score: number;
   metadata?: Record<string, any>;
   vector?: number[];
+  document?: string;
 }
 
 export interface IndexStats {
