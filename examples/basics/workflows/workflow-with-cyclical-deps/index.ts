@@ -1,4 +1,4 @@
-import { Workflow, Step } from '@mastra/core';
+import { Step, Workflow } from '@mastra/core';
 import { z } from 'zod';
 
 async function main() {
