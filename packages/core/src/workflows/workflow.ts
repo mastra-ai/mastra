@@ -242,6 +242,11 @@ export class Workflow<
       this.logger.debug('Snapshot cannot be loaded. Mastra engine is not initialized', { runId });
       return;
     }
+
+    const activeRun = this.#runs.get(runId);
+    if (activeRun) {
+      await activeRun.persistWorkflowSnapshot();
+    }
     return this.#mastra.storage.loadWorkflowSnapshot({ runId, workflowName: this.name });
   }
 
