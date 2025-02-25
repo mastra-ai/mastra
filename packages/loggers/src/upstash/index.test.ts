@@ -104,7 +104,6 @@ describe('UpstashTransport', () => {
   });
 
   it('should handle errors in _transform', () => {
-    const errorObj = new Error('Test error');
     const callback = vi.fn();
 
     transport._transform('invalid json', 'utf8', callback);

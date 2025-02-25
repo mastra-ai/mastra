@@ -175,7 +175,6 @@ export class PlayAIVoice extends MastraVoice {
     if (!response.ok) {
       const error = await response.json();
 
-      // @ts-expect-error - PlayAI API returns an error object but we don't type it
       throw new Error(`PlayAI API Error: ${error.message || response.statusText}`);
     }
 

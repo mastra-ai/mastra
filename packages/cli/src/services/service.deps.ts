@@ -1,11 +1,10 @@
-import { execa } from 'execa';
 import fs from 'fs';
-import path, { dirname } from 'path';
-import type { PackageJson } from 'type-fest';
-import { fileURLToPath } from 'url';
-
-import fsExtra from 'fs-extra/esm';
 import fsPromises from 'fs/promises';
+import path, { dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { execa } from 'execa';
+import fsExtra from 'fs-extra/esm';
+import type { PackageJson } from 'type-fest';
 
 export class DepsService {
   private packageManager: string;

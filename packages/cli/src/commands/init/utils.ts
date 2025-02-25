@@ -1,13 +1,12 @@
-import * as p from '@clack/prompts';
+import fs from 'fs/promises';
 import child_process from 'node:child_process';
 import util from 'node:util';
 import path from 'path';
+import * as p from '@clack/prompts';
+import fsExtra from 'fs-extra/esm';
 import color from 'picocolors';
 import prettier from 'prettier';
 import yoctoSpinner from 'yocto-spinner';
-
-import fsExtra from 'fs-extra/esm';
-import fs from 'fs/promises';
 
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
@@ -365,7 +364,7 @@ export const checkInitialization = async (dirPath: string) => {
   try {
     await fs.access(dirPath);
     return true;
-  } catch (err) {
+  } catch {
     return false;
   }
 };
@@ -546,7 +545,7 @@ export const checkPkgJson = async () => {
   try {
     await fsExtra.readJSON(pkgJsonPath);
     isPkgJsonPresent = true;
-  } catch (err) {
+  } catch {
     isPkgJsonPresent = false;
   }
 

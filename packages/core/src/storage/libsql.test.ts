@@ -158,7 +158,7 @@ describe('DefaultStorage', () => {
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
-      retrievedMessages.forEach((msg, idx) => {
+      retrievedMessages.forEach((_msg, _idx) => {
         // expect(msg.content[0]).toBe(messages[idx].content.text)
       });
     });

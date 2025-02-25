@@ -1,8 +1,7 @@
 import { Transform } from 'stream';
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { Logger, LogLevel, RegisteredLogger, createLogger, combineLoggers, LoggerTransport } from './index.js';
-import type { BaseLogMessage } from './index.js';
+import { Logger, LogLevel, createLogger, combineLoggers, LoggerTransport } from './index.js';
 
 // Helper to create a memory stream that captures log output
 class MemoryStream extends LoggerTransport {
@@ -12,7 +11,7 @@ class MemoryStream extends LoggerTransport {
     super({ objectMode: true });
   }
 
-  _transform(chunk: any, encoding: string, callback: (error: Error | null, chunk: any) => void) {
+  _transform(chunk: any, _encoding: string, callback: (error: Error | null, chunk: any) => void) {
     try {
       // Handle both string and object chunks
       const logEntry = typeof chunk === 'string' ? JSON.parse(chunk) : chunk;
@@ -41,13 +40,6 @@ describe('Logger', () => {
 
   describe('Logging Methods', () => {
     let logger: Logger;
-
-    const testMessage: BaseLogMessage = {
-      message: 'test message',
-      destinationPath: 'test/path',
-      type: RegisteredLogger.AGENT,
-      runId: 'test-run',
-    };
 
     beforeEach(() => {
       logger = new Logger({

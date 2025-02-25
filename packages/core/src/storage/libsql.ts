@@ -1,6 +1,6 @@
+import { join } from 'node:path';
 import { createClient } from '@libsql/client';
 import type { Client, InValue } from '@libsql/client';
-import { join } from 'node:path';
 
 import type { MetricResult, TestInfo } from '../eval';
 import type { MessageType, StorageThreadType } from '../memory/types';
@@ -277,7 +277,7 @@ export class DefaultStorage extends MastraStorage {
     let content = row.content;
     try {
       content = JSON.parse(row.content);
-    } catch (e) {
+    } catch {
       // use content as is if it's not JSON
     }
     return {

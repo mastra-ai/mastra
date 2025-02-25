@@ -1,8 +1,8 @@
-import { execa } from 'execa';
 import fs from 'fs';
 import path from 'path';
-import { check } from 'tcp-port-used';
 import { fileURLToPath } from 'url';
+import { execa } from 'execa';
+import { check } from 'tcp-port-used';
 
 import { FileService } from './service.file';
 
@@ -86,7 +86,7 @@ export class DockerService {
     try {
       await execa('docker', ['info'], { stdio: 'ignore', shell: true });
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -95,7 +95,7 @@ export class DockerService {
     try {
       await execa('docker', ['compose', '-f', dockerComposeFile, 'up', '-d'], { stdio: 'inherit' });
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -104,7 +104,7 @@ export class DockerService {
     try {
       await execa('docker', ['compose', '-f', dockerComposeFile, 'down'], { stdio: 'inherit' });
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }

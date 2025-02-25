@@ -30,10 +30,10 @@ describe('Workflow', () => {
     });
 
     it('should execute multiple steps in parallel', async () => {
-      const step1Action = vi.fn().mockImplementation(async ({ context }: { context: any }) => {
+      const step1Action = vi.fn().mockImplementation(async () => {
         return { value: 'step1' };
       });
-      const step2Action = vi.fn().mockImplementation(async ({ context }: { context: any }) => {
+      const step2Action = vi.fn().mockImplementation(async () => {
         return { value: 'step2' };
       });
 
@@ -59,11 +59,11 @@ describe('Workflow', () => {
     it('should execute steps sequentially', async () => {
       const executionOrder: string[] = [];
 
-      const step1Action = vi.fn().mockImplementation(async ({ context }: { context: any }) => {
+      const step1Action = vi.fn().mockImplementation(() => {
         executionOrder.push('step1');
         return { value: 'step1' };
       });
-      const step2Action = vi.fn().mockImplementation(async ({ context }: { context: any }) => {
+      const step2Action = vi.fn().mockImplementation(() => {
         executionOrder.push('step2');
         return { value: 'step2' };
       });

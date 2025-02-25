@@ -1,6 +1,5 @@
 #! /usr/bin/env node
 import { Command } from 'commander';
-import color from 'picocolors';
 
 import { PosthogAnalytics } from './analytics/index';
 import { build } from './commands/build/build';
@@ -32,7 +31,9 @@ program
         command: 'version',
       });
       console.log(`Mastra CLI: ${version}`);
-    } catch (e) {}
+    } catch {
+      // ignore
+    }
   });
 
 program
