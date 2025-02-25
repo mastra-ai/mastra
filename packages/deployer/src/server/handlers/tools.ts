@@ -1,8 +1,7 @@
 import type { Context } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
-
-import { HTTPException } from 'hono/http-exception';
 
 import { handleError } from './error';
 

@@ -1,5 +1,5 @@
-import { getDeployer } from '@mastra/deployer';
 import { join } from 'path';
+import { getDeployer } from '@mastra/deployer';
 
 import { FileService } from '../../services/service.file';
 import { logger } from '../../utils/logger';

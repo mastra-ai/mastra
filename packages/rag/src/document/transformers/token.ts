@@ -59,7 +59,7 @@ export class TokenTransformer extends TextTransformer {
 
     try {
       this.tokenizer = modelName ? encodingForModel(modelName) : getEncoding(encodingName);
-    } catch (error) {
+    } catch {
       throw new Error('Could not load tiktoken encoding. ' + 'Please install it with `npm install js-tiktoken`.');
     }
 
@@ -115,7 +115,7 @@ export class TokenTransformer extends TextTransformer {
       } else {
         tokenizer = getEncoding(encodingName);
       }
-    } catch (error) {
+    } catch {
       throw new Error('Could not load tiktoken encoding. ' + 'Please install it with `npm install js-tiktoken`.');
     }
 

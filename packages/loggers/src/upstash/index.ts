@@ -153,7 +153,7 @@ export class UpstashTransport extends LoggerTransport {
       return response?.[0]?.result.map((log: string) => {
         try {
           return JSON.parse(log);
-        } catch (e) {
+        } catch {
           return '';
         }
       }) as BaseLogMessage[];

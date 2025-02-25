@@ -1,6 +1,6 @@
-import * as p from '@clack/prompts';
 import child_process from 'node:child_process';
 import util from 'node:util';
+import * as p from '@clack/prompts';
 import color from 'picocolors';
 
 import { getPackageManager, getPackageManagerInstallCommand } from '../utils';

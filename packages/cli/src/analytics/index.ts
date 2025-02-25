@@ -2,8 +2,8 @@ import { randomUUID } from 'crypto';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import os from 'os';
 import path from 'path';
-import { PostHog } from 'posthog-node';
 import { fileURLToPath } from 'url';
+import { PostHog } from 'posthog-node';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,7 +38,7 @@ export class PosthogAnalytics {
         const { distinctId, sessionId } = JSON.parse(readFileSync(cliConfigPath, 'utf-8'));
         this.distinctId = distinctId;
         this.sessionId = sessionId;
-      } catch (e) {
+      } catch {
         this.sessionId = randomUUID();
         this.distinctId = this.getDistinctId();
       }
@@ -64,7 +64,7 @@ export class PosthogAnalytics {
   private writeCliConfig({ distinctId, sessionId }: { distinctId: string; sessionId: string }): void {
     try {
       writeFileSync(path.join(__dirname, 'mastra-cli.json'), JSON.stringify({ distinctId, sessionId }));
-    } catch (e) {
+    } catch {
       //swallow
     }
   }
@@ -162,7 +162,7 @@ export class PosthogAnalytics {
           ...commandData,
         },
       });
-    } catch (e) {
+    } catch {
       //swallow
     }
   }
@@ -215,7 +215,7 @@ export class PosthogAnalytics {
     }
     try {
       await this.client.shutdown();
-    } catch (e) {
+    } catch {
       //swallow
     }
   }
