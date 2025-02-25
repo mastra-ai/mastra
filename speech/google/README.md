@@ -1,66 +1,42 @@
-# @mastra/speech-google
+# @mastra/speech-google (DEPRECATED)
 
-Google Cloud Speech integration for Mastra, providing Text-to-Speech (TTS) capabilities using Google Cloud's Neural Voice technology.
+⚠️ **This package is deprecated.** Please use [@mastra/voice-google](https://www.npmjs.com/package/@mastra/voice-google) instead.
 
-## Installation
+## Migration
 
-```bash
-npm install @mastra/speech-google
-```
-
-## Configuration
-
-The module requires the following environment variable:
+1. Install the new package:
 
 ```bash
-GOOGLE_API_KEY=your_api_key
+npm install @mastra/voice-google
 ```
 
-## Usage
+2. Update your imports:
 
 ```typescript
+// Old
 import { GoogleTTS } from '@mastra/speech-google';
+// New
+import { GoogleVoice } from '@mastra/voice-google';
+```
 
-// Initialize with configuration
+3. Update initialization:
+
+```typescript
+// Old
 const tts = new GoogleTTS({
   model: {
-    name: 'en-US-Standard-C', // Default voice
-    apiKey: 'your-api-key', // Optional, can use GOOGLE_API_KEY env var
+    name: 'en-US-Standard-C',
+    apiKey: 'your-api-key',
   },
 });
 
-// List available voices
-const voices = await tts.voices();
-
-// Generate speech
-const result = await tts.generate({
-  voice: 'en-US-Standard-C',
-  text: 'Hello from Mastra!',
-});
-
-// Stream speech
-const stream = await tts.stream({
-  voice: 'en-US-Standard-C',
-  text: 'Hello from Mastra!',
+// New
+const voice = new GoogleVoice({
+  speechModel: {
+    apiKey: 'your-api-key',
+  },
+  speaker: 'en-US-Standard-C',
 });
 ```
 
-## Features
-
-- Neural Text-to-Speech synthesis
-- Multiple voice options across different languages
-- Streaming support
-- High-quality speech output
-- Natural-sounding voice synthesis
-
-## Voice Options
-
-The module provides access to all Google Cloud TTS voices. Some popular English voices include:
-
-- en-US-Standard-A (Female)
-- en-US-Standard-B (Male)
-- en-US-Standard-C (Female)
-- en-US-Standard-D (Male)
-- en-US-Standard-E (Female)
-
-View the complete list in the `voices.ts` file or [Google Cloud's documentation](https://cloud.google.com/text-to-speech/docs/voices).
+The new package combines both speech synthesis and recognition capabilities.

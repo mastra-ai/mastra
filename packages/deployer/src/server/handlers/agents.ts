@@ -162,12 +162,12 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
     const streamResponse = output
       ? streamResult.toTextStreamResponse()
       : streamResult.toDataStreamResponse({
-        sendUsage: true,
-        sendReasoning: true,
-        getErrorMessage: (error: any) => {
-          return `An error occurred while processing your request. ${error}`;
-        },
-      });
+          sendUsage: true,
+          sendReasoning: true,
+          getErrorMessage: (error: any) => {
+            return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
+          },
+        });
 
     return streamResponse;
   } catch (error) {

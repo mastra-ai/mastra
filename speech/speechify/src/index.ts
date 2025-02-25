@@ -110,3 +110,8 @@ export class SpeechifyTTS extends MastraTTS {
 }
 
 export type { SpeechifyConfig, SpeechifyVoice };
+
+throw new Error(
+  '@mastra/speech-speechify is deprecated. Please use @mastra/voice-speechify instead. ' +
+    "Update your imports from '@mastra/speech-speechify' to '@mastra/voice-speechify'.",
+);

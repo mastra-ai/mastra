@@ -16,7 +16,7 @@ jobs:
     name: Changesets Release
     runs-on: ubuntu-latest
     outputs:
-      exited_prerelease: ${{ steps.exit_prerelease.outputs.executed }}
+      exited_prerelease: ${{ steps.exit-prerelease-mode.outputs.executed }}
 
     steps:
       - uses: actions/create-github-app-token@v1

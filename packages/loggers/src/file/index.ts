@@ -46,7 +46,6 @@ export class FileTransport extends LoggerTransport {
     return true;
   }
 
-
   // Clean up resources
   _destroy(error: Error, callback: Function) {
     if (this.fileStream) {

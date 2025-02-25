@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.6-alpha.0
+
+### Patch Changes
+
+- 2d68431: Fix mastra server error processing
+
 ## 0.1.5
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @mastra/speech-elevenlabs
 
+## 0.1.4-alpha.2
+
+### Patch Changes
+
+- f626fbb: deprecate @mastra/speech-deepgram for @mastra/voice-deepgram
+- Updated dependencies [7fceae1]
+- Updated dependencies [f626fbb]
+  - @mastra/core@0.4.2-alpha.0
+
 ## 0.1.4
 
 ### Patch Changes

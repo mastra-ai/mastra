@@ -85,3 +85,8 @@ export class GoogleTTS extends MastraTTS {
 // Export available voices for external use
 export { voices };
 export type { VoiceId, GoogleTTSConfig };
+
+throw new Error(
+  '@mastra/speech-google is deprecated. Please use @mastra/voice-google instead. ' +
+    "Update your imports from '@mastra/speech-google' to '@mastra/voice-google'.",
+);
