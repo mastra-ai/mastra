@@ -56,7 +56,7 @@ const store = new PostgresStore({
   port: 5432,
   database: 'mastra',
   user: 'postgres',
-  password: 'postgres'
+  password: 'postgres',
 });
 
 // Create a thread
@@ -64,17 +64,19 @@ await store.saveThread({
   id: 'thread-123',
   resourceId: 'resource-456',
   title: 'My Thread',
-  metadata: { key: 'value' }
+  metadata: { key: 'value' },
 });
 
 // Add messages to thread
-await store.saveMessages([{
-  id: 'msg-789',
-  threadId: 'thread-123',
-  role: 'user',
-  type: 'text',
-  content: [{ type: 'text', text: 'Hello' }]
-}]);
+await store.saveMessages([
+  {
+    id: 'msg-789',
+    threadId: 'thread-123',
+    role: 'user',
+    type: 'text',
+    content: [{ type: 'text', text: 'Hello' }],
+  },
+]);
 
 // Query threads and messages
 const savedThread = await store.getThread('thread-123');
@@ -97,14 +99,18 @@ Connection pool settings:
 ## Features
 
 ### Vector Store Features
+
 - Vector similarity search with cosine, euclidean, and dot product metrics
 - Advanced metadata filtering with MongoDB-like query syntax
 - Minimum score threshold for queries
 - Automatic UUID generation for vectors
 - Table management (create, list, describe, delete, truncate)
-- Uses pgvector's IVFFLAT indexing with 100 lists
+- Uses pgvector's IVFFLAT indexing with 100 lists by default
+- Supports HNSW indexing with configurable parameters
+- Supports flat indexing
 
 ### Storage Features
+
 - Thread and message storage with JSON support
 - Atomic transactions for data consistency
 - Efficient batch operations

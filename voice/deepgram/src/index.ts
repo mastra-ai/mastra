@@ -47,8 +47,7 @@ export class DeepgramVoice extends MastraVoice {
 
     const speechApiKey = speechModel?.apiKey || defaultApiKey;
     const listeningApiKey = listeningModel?.apiKey || defaultApiKey;
-    console.log('speechApiKey', speechApiKey);
-    console.log('listeningApiKey', listeningApiKey);
+
     if (!speechApiKey && !listeningApiKey) {
       throw new Error('At least one of DEEPGRAM_API_KEY, speechModel.apiKey, or listeningModel.apiKey must be set');
     }

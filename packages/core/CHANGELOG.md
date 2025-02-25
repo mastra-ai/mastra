@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.4.2-alpha.1
+
+### Patch Changes
+
+- 6cb63e0: Experimental output support
+
 ## 0.4.2-alpha.0
 
 ### Patch Changes
