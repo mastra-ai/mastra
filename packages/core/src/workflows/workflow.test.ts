@@ -817,7 +817,6 @@ describe('Workflow', async () => {
         mastra: {
           logger: createLogger({
             name: 'Workflow',
-            level: 'debug',
           }),
         },
       });
@@ -1358,14 +1357,10 @@ describe('Workflow', async () => {
       });
     });
 
-    it.only('should handle complex workflow with multiple suspends', async () => {
+    it('should handle complex workflow with multiple suspends', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
-      const promptAgentAction = vi
-        .fn()
-        .mockImplementationOnce(async ({ suspend }) => {
-          await suspend();
-        })
-        .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
+      const promptAgentAction = vi.fn().mockResolvedValue({ modelOutput: 'test output' });
+
       const evaluateToneAction = vi.fn().mockResolvedValue({
         toneScore: { score: 0.8 },
         completenessScore: { score: 0.7 },
@@ -1460,21 +1455,18 @@ describe('Workflow', async () => {
       const wf = mastra.getWorkflow('test-workflow');
       const run = wf.createRun();
       const started = run.start({ triggerData: { input: 'test' } });
-      let improvedResponseResult: WorkflowResumeResult<any> | undefined;
+      let improvedResponseResultPromise: Promise<WorkflowResumeResult<any> | undefined>;
 
       const result = await new Promise<WorkflowResumeResult<any>>((resolve, reject) => {
         let hasResumed = false;
         wf.watch(async data => {
-          console.log('data', data);
-
           const suspended = data.activePaths.find(p => p.status === 'suspended');
+
           if (suspended?.stepId === 'humanIntervention') {
-            console.log('human intervention suspended');
             const newCtx = {
               ...data.context,
               humanPrompt: 'What improvements would you suggest?',
             };
-            console.log('newCtx', { newCtx, data });
             if (!hasResumed) {
               hasResumed = true;
 
@@ -1490,35 +1482,28 @@ describe('Workflow', async () => {
               }
             }
           } else if (suspended?.stepId === 'improveResponse') {
-            console.log('improve response suspended');
-            improvedResponseResult = await wf.resume({
+            const resumed = wf.resume({
               runId: run.runId,
               stepId: suspended.stepId,
               context: {
                 ...data.context,
               },
             });
-            // resolve({
-            //   results: {
-            //     explainResponse: { status: 'success', output: { improvedOutput: 'explanation output' } },
-            //   },
-            // });
+            improvedResponseResultPromise = resumed;
           }
         });
       });
 
       const initialResult = await started;
 
-      console.log('initialResult', initialResult);
+      // @ts-ignore
+      const improvedResponseResult = await improvedResponseResultPromise;
+      expect(initialResult?.results.improveResponse.status).toBe('suspended');
 
-      console.log('improvedResponseResult', improvedResponseResult);
-      expect(improvedResponseResult?.results.improveResponse.status).toBe('suspended');
-
-      console.log('result', result);
-      expect(result.results.humanIntervention.status).toBe('suspended');
-      expect(result.results.improveResponse.status).toBe('completed');
-      expect(result.results.evaluateImprovedResponse.status).toBe('completed');
-      expect(result.results.explainResponse.status).toBe('failed');
+      expect(improvedResponseResult?.results.humanIntervention.status).toBe('suspended');
+      expect(improvedResponseResult?.results.improveResponse.status).toBe('success');
+      expect(improvedResponseResult?.results.evaluateImprovedResponse.status).toBe('success');
+      expect(improvedResponseResult?.results.explainResponse.status).toBe('failed');
       expect(humanInterventionAction).toHaveBeenCalledTimes(2);
       expect(explainResponseAction).not.toHaveBeenCalled();
 
@@ -1526,21 +1511,21 @@ describe('Workflow', async () => {
         throw new Error('Resume failed to return a result');
       }
 
-      // expect(resumeResult.results).toEqual({
-      //   getUserInput: { status: 'success', output: { userInput: 'test input' } },
-      //   promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
-      //   evaluateToneConsistency: {
-      //     status: 'success',
-      //     output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
-      //   },
-      //   improveResponse: { status: 'success', output: { improvedOutput: 'improved output' } },
-      //   evaluateImprovedResponse: {
-      //     status: 'success',
-      //     output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
-      //   },
-      //   humanIntervention: { status: 'success', output: { improvedOutput: 'human intervention output' } },
-      //   explainResponse: { status: 'failed', error: 'Step:explainResponse condition check failed' },
-      // });
+      expect(result.results).toEqual({
+        getUserInput: { status: 'success', output: { userInput: 'test input' } },
+        promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+        },
+        improveResponse: { status: 'success', output: { improvedOutput: 'improved output' } },
+        evaluateImprovedResponse: {
+          status: 'success',
+          output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
+        },
+        humanIntervention: { status: 'success', output: { improvedOutput: 'human intervention output' } },
+        explainResponse: { status: 'failed', error: 'Step:explainResponse condition check failed' },
+      });
     });
   });
 });
