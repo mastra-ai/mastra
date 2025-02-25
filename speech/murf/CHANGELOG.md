@@ -1,5 +1,15 @@
 # @mastra/speech-murf
 
+## 0.1.5-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [8d94c3e]
+- Updated dependencies [99dcdb5]
+- Updated dependencies [e752340]
+- Updated dependencies [eb91535]
+  - @mastra/core@0.4.2-alpha.2
+
 ## 0.1.5-alpha.3
 
 ### Patch Changes
