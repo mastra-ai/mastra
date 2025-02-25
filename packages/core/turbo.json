@@ -5,7 +5,7 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"],
-      "inputs": ["$TURBO_DEFAULT$", "tsup.config.ts"]
+      "inputs": ["$TURBO_DEFAULT$", "./tsup.config.ts"]
     }
   }
 }

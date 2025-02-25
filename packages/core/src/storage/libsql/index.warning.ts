@@ -1,7 +1,7 @@
-import { LibSQLStore as BaseLibSQLStore } from './libsql';
-import type { LibSQLConfig } from './libsql';
+import { LibSQLStore as BaseLibSQLStore } from '.';
+import type { LibSQLConfig } from '.';
 
-export * from './libsql';
+export * from '.';
 
 export class LibSQLStore extends BaseLibSQLStore {
   constructor(args: { config: LibSQLConfig }) {

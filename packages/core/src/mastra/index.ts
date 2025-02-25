@@ -4,7 +4,7 @@ import { LogLevel, createLogger, noopLogger } from '../logger';
 import type { Logger } from '../logger';
 import type { MastraMemory } from '../memory/memory';
 import type { MastraStorage } from '../storage';
-import { DefaultStorage } from '../storage/libsql/libsql';
+import { DefaultStorage } from '../storage/libsql';
 import { InstrumentClass, OTLPStorageExporter, Telemetry } from '../telemetry';
 import type { OtelConfig } from '../telemetry';
 import type { MastraTTS } from '../tts';

@@ -10,7 +10,7 @@ import type {
 
 import { MastraBase } from '../base';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
-import { DefaultStorage } from '../storage/libsql/libsql';
+import { DefaultStorage } from '../storage/libsql';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
 import { defaultEmbedder } from '../vector/fastembed';
