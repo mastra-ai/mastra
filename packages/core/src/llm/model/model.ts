@@ -1,4 +1,4 @@
-import { generateText, generateObject, jsonSchema, streamText, streamObject } from 'ai';
+import { generateText, generateObject, jsonSchema, streamText, streamObject, Output } from 'ai';
 import type { LanguageModel, Schema, CoreMessage } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
@@ -105,7 +105,7 @@ export class MastraLLM extends MastraLLMBase {
     return converted;
   }
 
-  async __text({
+  async __text<Z extends ZodSchema | JSONSchema7 | undefined>({
     runId,
     messages,
     maxSteps,
@@ -114,7 +114,8 @@ export class MastraLLM extends MastraLLMBase {
     temperature,
     toolChoice = 'auto',
     onStepFinish,
-  }: LLMTextOptions) {
+    experimental_output,
+  }: LLMTextOptions<Z>) {
     const model = this.#model;
 
     this.logger.debug(`[LLM] - Generating text`, {
@@ -150,16 +151,37 @@ export class MastraLLM extends MastraLLMBase {
           props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
           parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
         ) {
-          this.logger.warn('Rate limit approaching, waiting 10 seconds');
+          this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
           await delay(10 * 1000);
         }
       },
     };
 
+    let schema: z.ZodType<Z> | Schema<Z> | undefined;
+
+    if (experimental_output) {
+      this.logger.debug('[LLM] - Using experimental output', {
+        runId,
+      });
+      if (typeof (experimental_output as any).parse === 'function') {
+        schema = experimental_output as z.ZodType<Z>;
+        if (schema instanceof z.ZodArray) {
+          schema = schema._def.type as z.ZodType<Z>;
+        }
+      } else {
+        schema = jsonSchema(experimental_output as JSONSchema7) as Schema<Z>;
+      }
+    }
+
     return await generateText({
       messages,
       ...argsForExecute,
       experimental_telemetry: this.experimental_telemetry,
+      experimental_output: schema
+        ? Output.object({
+            schema,
+          })
+        : undefined,
     });
   }
 
@@ -232,7 +254,7 @@ export class MastraLLM extends MastraLLMBase {
     });
   }
 
-  async __stream({
+  async __stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>({
     messages,
     onStepFinish,
     onFinish,
@@ -242,7 +264,8 @@ export class MastraLLM extends MastraLLMBase {
     runId,
     temperature,
     toolChoice = 'auto',
-  }: LLMInnerStreamOptions) {
+    experimental_output,
+  }: LLMInnerStreamOptions<Z>) {
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {
       runId,
@@ -295,10 +318,31 @@ export class MastraLLM extends MastraLLMBase {
       },
     };
 
+    let schema: z.ZodType<Z> | Schema<Z> | undefined;
+
+    if (experimental_output) {
+      this.logger.debug('[LLM] - Using experimental output', {
+        runId,
+      });
+      if (typeof (experimental_output as any).parse === 'function') {
+        schema = experimental_output as z.ZodType<Z>;
+        if (schema instanceof z.ZodArray) {
+          schema = schema._def.type as z.ZodType<Z>;
+        }
+      } else {
+        schema = jsonSchema(experimental_output as JSONSchema7) as Schema<Z>;
+      }
+    }
+
     return await streamText({
       messages,
       ...argsForExecute,
       experimental_telemetry: this.experimental_telemetry,
+      experimental_output: schema
+        ? Output.object({
+            schema,
+          })
+        : undefined,
     });
   }
 

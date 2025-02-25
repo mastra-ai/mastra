@@ -44,6 +44,7 @@ export interface AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefi
   output?: OutputType | Z;
   temperature?: number;
   toolChoice?: 'auto' | 'required';
+  experimental_output?: Z;
 }
 
 export interface AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> {
@@ -59,4 +60,5 @@ export interface AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefine
   output?: OutputType | Z;
   temperature?: number;
   toolChoice?: 'auto' | 'required';
+  experimental_output?: Z;
 }
