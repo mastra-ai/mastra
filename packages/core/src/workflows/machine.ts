@@ -377,7 +377,22 @@ export class Machine<
         });
 
         if (typeof stepConfig?.when === 'function') {
-          const conditionMet = await stepConfig.when({ context });
+          const conditionMet = await stepConfig.when({
+            context: {
+              ...context,
+              getStepResult: ((stepId: string) => {
+                if (stepId === 'trigger') {
+                  return context.triggerData;
+                }
+                const result = context.steps[stepId];
+                if (result && result.status === 'success') {
+                  return result.output;
+                }
+                return undefined;
+              }) as WorkflowContext<TTriggerSchema>['getStepResult'],
+            },
+            mastra: this.#mastra,
+          });
           if (conditionMet) {
             this.logger.debug(`Condition met for step ${stepNode.step.id}`, {
               stepId: stepNode.step.id,
@@ -437,7 +452,7 @@ export class Machine<
 
     const resolvedData: Record<string, any> = {
       ...context,
-      getStepPayload: ((stepId: string) => {
+      getStepResult: ((stepId: string) => {
         if (stepId === 'trigger') {
           return context.triggerData;
         }
@@ -446,7 +461,7 @@ export class Machine<
           return result.output;
         }
         return undefined;
-      }) as WorkflowContext<TTriggerSchema>['getStepPayload'],
+      }) as WorkflowContext<TTriggerSchema>['getStepResult'],
     };
 
     for (const [key, variable] of Object.entries(stepConfig.data)) {
@@ -485,8 +500,8 @@ export class Machine<
   private initializeMachine() {
     const machine = setup({
       types: {} as {
-        context: Omit<WorkflowContext, 'getStepPayload'>;
-        input: Omit<WorkflowContext, 'getStepPayload'>;
+        context: Omit<WorkflowContext, 'getStepResult'>;
+        input: Omit<WorkflowContext, 'getStepResult'>;
         events: WorkflowEvent;
         actions: WorkflowActions;
         actors: WorkflowActors;

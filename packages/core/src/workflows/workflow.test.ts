@@ -6,14 +6,14 @@ import { z } from 'zod';
 
 import { createLogger } from '../logger';
 import { Mastra } from '../mastra';
-import { MastraStorageLibSql } from '../storage';
+import { DefaultStorage } from '../storage/libsql';
 import { createTool } from '../tools';
 
 import { Step } from './step';
 import type { WorkflowContext, WorkflowResumeResult } from './types';
 import { Workflow } from './workflow';
 
-const storage = new MastraStorageLibSql({
+const storage = new DefaultStorage({
   config: {
     url: 'file:mastra.db',
   },
@@ -1166,7 +1166,7 @@ describe('Workflow', async () => {
         .commit();
 
       // Create a new storage instance for initial run
-      const initialStorage = new MastraStorageLibSql({
+      const initialStorage = new DefaultStorage({
         config: {
           url: 'file:mastra.db',
         },
@@ -1240,7 +1240,7 @@ describe('Workflow', async () => {
       const humanInterventionAction = vi
         .fn()
         .mockImplementationOnce(async ({ suspend, context }) => {
-          const { humanPrompt } = context.getStepPayload('humanIntervention') ?? {};
+          const { humanPrompt } = context.getStepResult('humanIntervention') ?? {};
 
           if (!humanPrompt) {
             await suspend();
