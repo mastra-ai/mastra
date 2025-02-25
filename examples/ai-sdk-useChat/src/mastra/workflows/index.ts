@@ -141,7 +141,7 @@ const planActivities = new Step({
     }
 
     return {
-      activities: response.text,
+      activities: await response.text,
     };
   },
 });
