@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-playai",
-  "version": "0.1.4-alpha.3",
+  "version": "0.1.4-alpha.4",
   "description": "Mastra PlayAI speech integration (DEPRECATED - use @mastra/voice-playai instead)",
   "type": "module",
   "main": "dist/index.js",
