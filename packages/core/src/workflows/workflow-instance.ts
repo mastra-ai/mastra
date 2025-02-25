@@ -86,6 +86,10 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     return this.#runId;
   }
 
+  get executionSpan() {
+    return this.#executionSpan;
+  }
+
   async start({ triggerData }: { triggerData?: z.infer<TTriggerSchema> } = {}) {
     const results = await this.execute({ triggerData });
 

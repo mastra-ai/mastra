@@ -39,7 +39,6 @@ export class Workflow<
   #stepSubscriberGraph: Record<string, StepGraph> = {};
   #steps: Record<string, IAction<any, any, any, any>> = {};
   #onStepTransition: Set<(state: WorkflowRunState) => void | Promise<void>> = new Set();
-  #executionSpan: Span | undefined;
 
   /**
    * Creates a new Workflow instance
@@ -251,6 +250,10 @@ export class Workflow<
     return this.#mastra.storage.loadWorkflowSnapshot({ runId, workflowName: this.name });
   }
 
+  getExecutionSpan(runId: string) {
+    return this.#runs.get(runId)?.executionSpan;
+  }
+
   #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
     stepId: TStepId,
   ): StepDef<TStepId, TSteps, any, any>[TStepId] {
@@ -260,13 +263,16 @@ export class Workflow<
       attributes?: Record<string, string>,
     ) => {
       return async (data: any) => {
-        return await otlpContext.with(trace.setSpan(otlpContext.active(), this.#executionSpan as Span), async () => {
-          // @ts-ignore
-          return this.#mastra.telemetry.traceMethod(handler, {
-            spanName,
-            attributes,
-          })(data);
-        });
+        return await otlpContext.with(
+          trace.setSpan(otlpContext.active(), this.getExecutionSpan(attributes?.runId ?? data?.runId) as Span),
+          async () => {
+            // @ts-ignore
+            return this.#mastra.telemetry.traceMethod(handler, {
+              spanName,
+              attributes,
+            })(data);
+          },
+        );
       };
     };
 
@@ -287,7 +293,7 @@ export class Workflow<
       const finalAction = this.#mastra?.telemetry
         ? executeStep(execute, `workflow.${this.name}.action.${stepId}`, {
             componentName: this.name,
-            runId: context.runId,
+            runId: rest.runId as string,
           })
         : execute;
 
@@ -297,10 +303,10 @@ export class Workflow<
     // Only trace handler if telemetry is available
 
     const finalHandler = ({ context, ...rest }: ActionContext<TSteps[number]['inputSchema']>) => {
-      if (this.#executionSpan) {
+      if (this.getExecutionSpan(rest?.runId as string)) {
         return executeStep(handler, `workflow.${this.name}.step.${stepId}`, {
           componentName: this.name,
-          runId: context.runId,
+          runId: rest?.runId as string,
         })({ context, ...rest });
       }
 
