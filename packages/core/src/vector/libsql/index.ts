@@ -1,6 +1,6 @@
+import { join } from 'path';
 import { createClient } from '@libsql/client';
 import type { Client as TursoClient, InValue } from '@libsql/client';
-import { join } from 'path';
 
 import type { Filter } from '../../filter';
 import { MastraVector } from '../index';
@@ -9,7 +9,7 @@ import type { IndexStats, QueryResult } from '../index';
 import { LibSQLFilterTranslator } from './filter';
 import { buildFilterQuery } from './sql-builder';
 
-export class DefaultVectorDB extends MastraVector {
+export class LibSQLVector extends MastraVector {
   private turso: TursoClient;
 
   constructor({
@@ -286,4 +286,4 @@ export class DefaultVectorDB extends MastraVector {
   }
 }
 
-export { DefaultVectorDB as LibSQLVector };
+export { LibSQLVector as DefaultVectorDB };

@@ -1,7 +1,7 @@
 {
   "name": "@mastra/speech-murf",
-  "version": "0.1.3",
-  "description": "Mastra Murf speech integration",
+  "version": "0.1.5-alpha.3",
+  "description": "Mastra Murf speech integration (DEPRECATED - use @mastra/voice-murf instead)",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -16,8 +16,7 @@
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --experimental-dts --clean --treeshake",
-    "build:watch": "pnpm build --watch",
-    "test": "vitest run"
+    "test": "echo deprecated"
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
@@ -28,7 +27,6 @@
     "@microsoft/api-extractor": "^7.49.2",
     "@types/node": "^22.13.1",
     "tsup": "^8.0.1",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "typescript": "^5.7.3"
   }
 }

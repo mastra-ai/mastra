@@ -43,8 +43,110 @@ It provides robust vector similarity search capabilities within your existing Po
       defaultValue: "cosine",
       description: "Distance metric for similarity search",
     },
+    {
+      name: "indexConfig",
+      type: "IndexConfig",
+      isOptional: true,
+      defaultValue: "{ type: 'ivfflat' }",
+      description: "Index configuration",
+    },
+    {
+      name: "defineIndex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "Whether to define the index",
+    },
   ]}
 />
+
+#### IndexConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: "'flat' | 'hnsw' | 'ivfflat'",
+      description: "Index type",
+      defaultValue: "ivfflat",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "flat",
+              type: "flat",
+              description: "Sequential scan (no index) that performs exhaustive search.",
+            },
+            {
+              name: "ivfflat",
+              type: "ivfflat",
+              description: "Clusters vectors into lists for approximate search.",
+            },
+            {
+              name: "hnsw",
+              type: "hnsw",
+              description: "Graph-based index offering fast search times and high recall.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "ivf",
+      type: "IVFConfig",
+      isOptional: true,
+      description: "IVF configuration",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "lists",
+              type: "number",
+              description: "Number of lists. If not specified, automatically calculated based on dataset size. (Minimum 100, Maximum 4000)",
+              isOptional: true,
+            }
+          ],
+        },
+      ],
+    },
+    {
+      name: "hnsw",
+      type: "HNSWConfig",
+      isOptional: true,
+      description: "HNSW configuration",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "m",
+              type: "number",
+              description: "Maximum number of connections per node (default: 8)",
+              isOptional: true,
+            },
+            {
+              name: "efConstruction",
+              type: "number",
+              description: "Build-time complexity (default: 32)",
+              isOptional: true,
+            },
+          ],
+        },
+      ]
+    },
+  ]}
+/>
+
+#### Memory Requirements
+
+HNSW indexes require significant shared memory during construction. For 100K vectors:
+- Small dimensions (64d): ~60MB with default settings
+- Medium dimensions (256d): ~180MB with default settings
+- Large dimensions (384d+): ~250MB+ with default settings
+
+Higher M values or efConstruction values will increase memory requirements significantly. Adjust your system's shared memory limits if needed.
 
 ### upsert()
 
@@ -116,6 +218,31 @@ It provides robust vector similarity search capabilities within your existing Po
       defaultValue: "0",
       description: "Minimum similarity score threshold",
     },
+    {
+      name: "options",
+      type: "{ ef?: number; probes?: number }",
+      isOptional: true,
+      description: "Additional options for HNSW and IVF indexes",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "ef",
+              type: "number",
+              description: "HNSW search parameter",
+              isOptional: true,
+            },
+            {
+              name: "probes",
+              type: "number",
+              description: "IVF search parameter",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
@@ -138,10 +265,17 @@ Returns an array of index names as strings.
 Returns:
 
 ```typescript copy
-interface IndexStats {
+interface PGIndexStats {
   dimension: number;
   count: number;
   metric: "cosine" | "euclidean" | "dotproduct";
+  type: "flat" | "hnsw" | "ivfflat";
+  config: {
+    m?: number;
+    efConstruction?: number;
+    lists?: number;
+    probes?: number;
+  };
 }
 ```
 
@@ -160,6 +294,56 @@ interface IndexStats {
 ### disconnect()
 
 Closes the database connection pool. Should be called when done using the store.
+
+### defineIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to define",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "Distance metric for similarity search",
+    },
+    {
+      name: "indexConfig",
+      type: "IndexConfig",
+      description: "Configuration for the index type and parameters",
+    },
+  ]}
+/>
+
+Defines or redefines an index with specified metric and configuration. Will drop any existing index before creating the new one.
+
+```typescript copy
+// Define HNSW index
+await pgVector.defineIndex("my_vectors", "cosine", {
+  type: "hnsw",
+  hnsw: {
+    m: 8,
+    efConstruction: 32
+  }
+});
+
+// Define IVF index
+await pgVector.defineIndex("my_vectors", "cosine", {
+  type: "ivfflat",
+  ivf: {
+    lists: 100, 
+  }
+});
+
+// Define flat index
+await pgVector.defineIndex("my_vectors", "cosine", {
+  type: "flat" 
+});
+```
 
 ## Response Types
 
@@ -187,6 +371,12 @@ try {
   }
 }
 ```
+
+## Best Practices
+
+- Regularly evaluate your index configuration to ensure optimal performance.
+- Adjust parameters like `lists` and `m` based on dataset size and query requirements.
+- Rebuild indexes periodically to maintain efficiency, especially after significant data changes.
 
 ### Related
 - [Metadata Filters](./metadata-filters)

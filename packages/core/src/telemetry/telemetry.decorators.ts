@@ -44,7 +44,7 @@ export function withSpan(options: {
       args.forEach((arg, index) => {
         try {
           span.setAttribute(`${spanName}.argument.${index}`, JSON.stringify(arg));
-        } catch (e) {
+        } catch {
           span.setAttribute(`${spanName}.argument.${index}`, '[Not Serializable]');
         }
       });
@@ -77,7 +77,7 @@ export function withSpan(options: {
             .then(resolvedValue => {
               try {
                 span.setAttribute(`${spanName}.result`, JSON.stringify(resolvedValue));
-              } catch (e) {
+              } catch {
                 span.setAttribute(`${spanName}.result`, '[Not Serializable]');
               }
               return resolvedValue;
@@ -88,7 +88,7 @@ export function withSpan(options: {
         // Record result for non-promise returns
         try {
           span.setAttribute(`${spanName}.result`, JSON.stringify(result));
-        } catch (e) {
+        } catch {
           span.setAttribute(`${spanName}.result`, '[Not Serializable]');
         }
 

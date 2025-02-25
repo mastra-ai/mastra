@@ -1,17 +1,17 @@
+import { readFile } from 'fs/promises';
+import { join } from 'path';
+import { pathToFileURL } from 'url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { describeRoute, openAPISpecs } from 'hono-openapi';
-import { join } from 'path';
-import { pathToFileURL } from 'url';
 
-import { readFile } from 'fs/promises';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { describeRoute, openAPISpecs } from 'hono-openapi';
 
 import {
   generateHandler,
@@ -24,7 +24,7 @@ import {
 } from './handlers/agents.js';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client.js';
 import { errorHandler } from './handlers/error.js';
-import { getLogsByRunIdHandler, getLogsHandler } from './handlers/logs.js';
+import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs.js';
 import {
   createThreadHandler,
   deleteThreadHandler,
@@ -252,6 +252,7 @@ export async function createHonoServer(
                   description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
                   deprecated: true,
                 },
+                runId: { type: 'string' },
                 output: { type: 'object' },
               },
               required: ['messages'],
@@ -303,6 +304,7 @@ export async function createHonoServer(
                   description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
                   deprecated: true,
                 },
+                runId: { type: 'string' },
                 output: { type: 'object' },
               },
               required: ['messages'],
@@ -914,6 +916,20 @@ export async function createHonoServer(
       },
     }),
     getLogsHandler,
+  );
+
+  app.get(
+    '/api/logs/transports',
+    describeRoute({
+      description: 'List of all log transports',
+      tags: ['logs'],
+      responses: {
+        200: {
+          description: 'List of all log transports',
+        },
+      },
+    }),
+    getLogTransports,
   );
 
   app.get(

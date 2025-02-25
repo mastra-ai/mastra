@@ -1,6 +1,6 @@
-import type { Logger } from '@mastra/core/logger';
 import { spawn } from 'child_process';
 import { Transform } from 'stream';
+import type { Logger } from '@mastra/core/logger';
 
 export const createPinoStream = (logger: Logger) => {
   return new Transform({

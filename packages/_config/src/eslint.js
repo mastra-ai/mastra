@@ -113,8 +113,10 @@ export const createConfig = async () =>
           {
             args: 'after-used',
             argsIgnorePattern: '^_',
+            caughtErrors: 'all',
+            destructuredArrayIgnorePattern: '^_',
+            varsIgnorePattern: '^_',
             ignoreRestSiblings: true,
-            varsIgnorePattern: '^ignored',
           },
         ],
       },
@@ -139,8 +141,10 @@ export const createConfig = async () =>
               {
                 args: 'after-used',
                 argsIgnorePattern: '^_',
+                caughtErrors: 'all',
+                destructuredArrayIgnorePattern: '^_',
+                varsIgnorePattern: '^_',
                 ignoreRestSiblings: true,
-                varsIgnorePattern: '^ignored',
               },
             ],
             'import/consistent-type-specifier-style': [WARN, 'prefer-top-level'],

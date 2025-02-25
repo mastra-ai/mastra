@@ -56,7 +56,7 @@ export class Memory extends MastraMemory {
             messageRange: config?.semanticRecall?.messageRange ?? { before: 2, after: 2 },
           };
 
-    if (selectBy?.vectorSearchString && this.vector) {
+    if (config?.semanticRecall && selectBy?.vectorSearchString && this.vector) {
       const { embedding } = await embed({
         value: selectBy.vectorSearchString,
         model: this.embedder,
@@ -187,14 +187,22 @@ export class Memory extends MastraMemory {
     // }
   }
 
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages({
+    messages,
+    memoryConfig,
+  }: {
+    messages: MessageType[];
+    memoryConfig?: MemoryConfig;
+  }): Promise<MessageType[]> {
     // First save working memory from any messages
     await this.saveWorkingMemory(messages);
 
     // Then strip working memory tags from all messages
     this.mutateMessagesToHideWorkingMemory(messages);
 
-    if (this.vector) {
+    const config = this.getMergedThreadConfig(memoryConfig);
+
+    if (this.vector && config.semanticRecall) {
       const { indexName } = await this.createEmbeddingIndex();
 
       for (const message of messages) {

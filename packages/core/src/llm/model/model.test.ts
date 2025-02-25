@@ -352,13 +352,13 @@ describe('MastraLLM', () => {
     it('should handle rate limiting', async () => {
       const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
       const onStepFinish = vi.fn();
-      const mockResponse = {
-        response: {
-          headers: {
-            'x-ratelimit-remaining-tokens': '1500',
-          },
-        },
-      };
+      // const mockResponse = {
+      //   response: {
+      //     headers: {
+      //       'x-ratelimit-remaining-tokens': '1500',
+      //     },
+      //   },
+      // };
 
       await aisdkText.__text({
         messages,
@@ -387,13 +387,13 @@ describe('MastraLLM', () => {
     it('should handle step change logging', async () => {
       const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
       const runId = 'test-run';
-      const mockStepData = {
-        text: 'Custom text response',
-        toolCalls: [],
-        toolResults: [],
-        finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 20 },
-      };
+      // const mockStepData = {
+      //   text: 'Custom text response',
+      //   toolCalls: [],
+      //   toolResults: [],
+      //   finishReason: 'stop',
+      //   usage: { promptTokens: 10, completionTokens: 20 },
+      // };
 
       await aisdkText.__text({
         messages,
@@ -489,13 +489,13 @@ describe('MastraLLM', () => {
     it('should handle step change logging', async () => {
       const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
       const runId = 'test-run';
-      const mockStepData = {
-        text: 'Custom text response',
-        toolCalls: [],
-        toolResults: [],
-        finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 20 },
-      };
+      // const mockStepData = {
+      //   text: 'Custom text response',
+      //   toolCalls: [],
+      //   toolResults: [],
+      //   finishReason: 'stop',
+      //   usage: { promptTokens: 10, completionTokens: 20 },
+      // };
 
       await aisdkText.__stream({
         messages,
@@ -531,7 +531,7 @@ describe('MastraLLM', () => {
 
       const arraySchema = z.object({ content: z.array(z.string()) });
 
-      const d = await aisdkArray.__textObject({
+      await aisdkArray.__textObject({
         messages,
         structuredOutput: arraySchema,
         temperature: 0.7,

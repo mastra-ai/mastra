@@ -1,7 +1,7 @@
-import { FileService } from '@mastra/deployer';
 import type { ChildProcess } from 'child_process';
-import { execa } from 'execa';
 import { join } from 'path';
+import { FileService } from '@mastra/deployer';
+import { execa } from 'execa';
 
 import { logger } from '../../utils/logger.js';
 
@@ -49,7 +49,7 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
           'Content-Type': 'application/json',
         },
       });
-    } catch (err) {
+    } catch {
       // Retry after another second
       await new Promise(resolve => setTimeout(resolve, 1500));
       try {
@@ -59,7 +59,7 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
             'Content-Type': 'application/json',
           },
         });
-      } catch (retryErr) {
+      } catch {
         // Ignore retry errors
       }
     }

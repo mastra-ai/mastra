@@ -168,3 +168,8 @@ export class MurfTTS extends MastraTTS {
 }
 
 export type { MurfConfig, MurfVoice };
+
+throw new Error(
+  '@mastra/speech-murf is deprecated. Please use @mastra/voice-murf instead. ' +
+    "Update your imports from '@mastra/speech-murf' to '@mastra/voice-murf'.",
+);

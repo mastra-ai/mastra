@@ -6,6 +6,6 @@ const config = await createConfig();
 export default [
   ...config,
   {
-    ignores: ['../starter-files/**'],
+    ignores: ['./starter-files/**'],
   },
 ];

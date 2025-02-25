@@ -1,7 +1,7 @@
-import { LoggerTransport } from '@mastra/core/logger';
-import type { BaseLogMessage } from '@mastra/core/logger';
 import type { WriteStream } from 'fs';
 import { createWriteStream, existsSync, readFileSync } from 'fs';
+import { LoggerTransport } from '@mastra/core/logger';
+import type { BaseLogMessage } from '@mastra/core/logger';
 
 export class FileTransport extends LoggerTransport {
   path: string;
@@ -32,6 +32,18 @@ export class FileTransport extends LoggerTransport {
     this.fileStream.end(() => {
       callback();
     });
+  }
+
+  _write(chunk: any, encoding?: string, callback?: (error?: Error | null) => void): boolean {
+    if (typeof callback === 'function') {
+      this._transform(chunk, encoding || 'utf8', callback);
+      return true;
+    }
+
+    this._transform(chunk, encoding || 'utf8', (error: Error | null) => {
+      if (error) console.error('Transform error in write:', error);
+    });
+    return true;
   }
 
   // Clean up resources

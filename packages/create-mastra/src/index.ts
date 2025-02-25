@@ -26,7 +26,9 @@ program
         command: 'version',
       });
       console.log(`create-mastra ${version}`);
-    } catch (e) {}
+    } catch {
+      // ignore
+    }
   });
 
 program

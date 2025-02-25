@@ -274,7 +274,7 @@ export class Workflow<
       const targetStep = this.#steps[stepId];
       if (!targetStep) throw new Error(`Step not found`);
 
-      const { payload = {}, execute } = targetStep;
+      const { payload = {}, execute = async () => {} } = targetStep;
 
       // Merge static payload with dynamically resolved variables
       // Variables take precedence over payload values

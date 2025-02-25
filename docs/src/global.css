@@ -6,6 +6,15 @@
 https://nextra.site/docs/docs-theme/theme-configuration#theme-color
 */
 
+body:is(html[class~="dark"] *),
+html:is(html[class~="dark"] *) {
+  background: #0a0a0a !important;
+}
+
+.nextra-nav-container:is(html[class~="dark"] *) {
+  background: #0a0a0a !important;
+}
+
 .dark\:_bg-black:is(html[class~="dark"] *) {
   background-color: #141415 !important;
 }
@@ -171,12 +180,25 @@ nav a[aria-current="true"] {
   border-radius: 0.375rem;
 }
 
-button[title="Change theme"],
+/* button[title="Change theme"],
 input[type="search"] {
   border-radius: 9999px !important;
-}
+} */
 
 ul[role="listbox"] {
   border-radius: 0.375rem !important;
   box-shadow: none;
+}
+
+.gh-link {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.1) 4.66%,
+    rgba(255, 255, 255, 0.03) 97.46%
+  ) !important;
+  margin-right: -13px !important;
+}
+
+.nextra-sidebar-footer:is(html[class~="dark"] *) {
+  background: #0a0a0a !important;
 }

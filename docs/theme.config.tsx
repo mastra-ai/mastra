@@ -6,6 +6,7 @@ import { useRouter } from "next/router";
 import { OperatorsTable } from "./src/components/operators-table";
 import { PropertiesTable } from "./src/components/properties-table";
 import { TableOfContents } from "./src/components/toc";
+import { GithubStarCount } from "@/components/github-star-count";
 
 const logo = (
   <svg
@@ -64,29 +65,7 @@ const docs: DocsThemeConfig = {
   logoLink: process.env.NEXT_PUBLIC_APP_URL,
   project: {
     link: "https://github.com/mastra-ai/mastra",
-    icon: (
-      <svg
-        height="24"
-        strokeLinejoin="round"
-        viewBox="0 0 16 16"
-        width="24"
-        className="w-5 h-5 text-inherit"
-      >
-        <g clipPath="url(#clip0_872_3147)">
-          <path
-            fillRule="evenodd"
-            clipRule="evenodd"
-            d="M8 0C3.58 0 0 3.57879 0 7.99729C0 11.5361 2.29 14.5251 5.47 15.5847C5.87 15.6547 6.02 15.4148 6.02 15.2049C6.02 15.0149 6.01 14.3851 6.01 13.7154C4 14.0852 3.48 13.2255 3.32 12.7757C3.23 12.5458 2.84 11.836 2.5 11.6461C2.22 11.4961 1.82 11.1262 2.49 11.1162C3.12 11.1062 3.57 11.696 3.72 11.936C4.44 13.1455 5.59 12.8057 6.05 12.5957C6.12 12.0759 6.33 11.726 6.56 11.5261C4.78 11.3262 2.92 10.6364 2.92 7.57743C2.92 6.70773 3.23 5.98797 3.74 5.42816C3.66 5.22823 3.38 4.40851 3.82 3.30888C3.82 3.30888 4.49 3.09895 6.02 4.1286C6.66 3.94866 7.34 3.85869 8.02 3.85869C8.7 3.85869 9.38 3.94866 10.02 4.1286C11.55 3.08895 12.22 3.30888 12.22 3.30888C12.66 4.40851 12.38 5.22823 12.3 5.42816C12.81 5.98797 13.12 6.69773 13.12 7.57743C13.12 10.6464 11.25 11.3262 9.47 11.5261C9.76 11.776 10.01 12.2558 10.01 13.0056C10.01 14.0752 10 14.9349 10 15.2049C10 15.4148 10.15 15.6647 10.55 15.5847C12.1381 15.0488 13.5182 14.0284 14.4958 12.6673C15.4735 11.3062 15.9996 9.67293 16 7.99729C16 3.57879 12.42 0 8 0Z"
-            fill="currentColor"
-          ></path>
-        </g>
-        <defs>
-          <clipPath id="clip0_872_3147">
-            <rect width="16" height="16" fill="white"></rect>
-          </clipPath>
-        </defs>
-      </svg>
-    ),
+    icon: typeof window !== undefined ? GithubStarCount : null,
   },
   docsRepositoryBase: "https://github.com/mastra-ai/mastra/blob/main/docs",
   chat: {
@@ -98,7 +77,7 @@ const docs: DocsThemeConfig = {
         height="24"
         fill="currentColor"
         viewBox="0 0 16 16"
-        className="w-5 h-5"
+        className="w-4 h-4"
       >
         <path d="M13.545 2.907a13.2 13.2 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.2 12.2 0 0 0-3.658 0 8 8 0 0 0-.412-.833.05.05 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.04.04 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032q.003.022.021.037a13.3 13.3 0 0 0 3.995 2.02.05.05 0 0 0 .056-.019q.463-.63.818-1.329a.05.05 0 0 0-.01-.059l-.018-.011a9 9 0 0 1-1.248-.595.05.05 0 0 1-.02-.066l.015-.019q.127-.095.248-.195a.05.05 0 0 1 .051-.007c2.619 1.196 5.454 1.196 8.041 0a.05.05 0 0 1 .053.007q.121.1.248.195a.05.05 0 0 1-.004.085 8 8 0 0 1-1.249.594.05.05 0 0 0-.03.03.05.05 0 0 0 .003.041c.24.465.515.909.817 1.329a.05.05 0 0 0 .056.019 13.2 13.2 0 0 0 4.001-2.02.05.05 0 0 0 .021-.037c.334-3.451-.559-6.449-2.366-9.106a.03.03 0 0 0-.02-.019m-8.198 7.307c-.789 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.45.73 1.438 1.613 0 .888-.637 1.612-1.438 1.612m5.316 0c-.788 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.451.73 1.438 1.613 0 .888-.631 1.612-1.438 1.612" />
       </svg>
@@ -145,6 +124,14 @@ const docs: DocsThemeConfig = {
   },
   footer: {
     component: null,
+  },
+  banner: {
+    key: "beta-release",
+    content: (
+      <a href="https://nextra.site" target="_blank">
+        🎉 Mastra is in beta. Read more →
+      </a>
+    ),
   },
 };
 

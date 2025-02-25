@@ -92,9 +92,12 @@ chunks.map(chunk => ({ text: chunk.text }))
 </Tabs.Tab>
 <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
-  import { DefaultVectorDB } from '@mastra/core/storage'
+import { LibSQLVector } from "@mastra/core/vector/libsql";
 
-  const store = new DefaultVectorDB(process.env.DATABASE_URL)
+  const store = new LibSQLVector({
+    connectionUrl: process.env.DATABASE_URL,
+    authToken: process.env.DATABASE_AUTH_TOKEN // Optional: for Turso cloud databases
+  })
   await store.createIndex("my-collection", 1536);
   await store.upsert(
     "my-collection",

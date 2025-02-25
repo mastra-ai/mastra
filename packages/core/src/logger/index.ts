@@ -1,6 +1,6 @@
+import { Transform } from 'stream';
 import pino from 'pino';
 import pretty from 'pino-pretty';
-import { Transform } from 'stream';
 
 import type { Run } from '../run/types';
 
@@ -33,14 +33,20 @@ export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
 
 // Base Interfaces
 export interface BaseLogMessage extends Run {
-  message: string;
-  destinationPath: string;
-  type: RegisteredLogger;
+  msg: string;
+  level: number;
+  time: Date;
+  pid: number;
+  hostname: string;
+  name: string;
 }
 
 export class LoggerTransport extends Transform {
-  async getLogsByRunId({ runId }: { runId: string }): Promise<BaseLogMessage[]> {
-    console.log(runId);
+  constructor(opts: any = {}) {
+    super({ ...opts, objectMode: true });
+  }
+
+  async getLogsByRunId(_args: { runId: string }): Promise<BaseLogMessage[]> {
     return [];
   }
   async getLogs(): Promise<BaseLogMessage[]> {

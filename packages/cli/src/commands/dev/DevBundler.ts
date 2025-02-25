@@ -1,11 +1,9 @@
-import { MastraBundler } from '@mastra/core/bundler';
-import type { getWatcher } from '@mastra/deployer';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions, writeTelemetryConfig } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { RollupWatcherEvent } from 'rollup';
 
 export class DevBundler extends Bundler {
@@ -21,7 +19,9 @@ export class DevBundler extends Bundler {
       const envFile = fileService.getFirstExistingFile(possibleFiles);
 
       return Promise.resolve([envFile]);
-    } catch (err) {}
+    } catch {
+      // ignore
+    }
 
     return Promise.resolve([]);
   }
@@ -40,7 +40,7 @@ export class DevBundler extends Bundler {
     });
   }
 
-  async watch(entryFile: string, outputDirectory: string): ReturnType<typeof getWatcher> {
+  async watch(entryFile: string, outputDirectory: string): ReturnType<typeof createWatcher> {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
 

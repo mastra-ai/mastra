@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import type {
   AssistantContent,
   CoreAssistantMessage,
@@ -9,7 +10,6 @@ import type {
   UserContent,
   LanguageModelV1,
 } from 'ai';
-import { randomUUID } from 'crypto';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema } from 'zod';
@@ -21,11 +21,12 @@ import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
 import { MastraLLM } from '../llm/model';
 import type { MastraLLMBase } from '../llm/model';
-import { LogLevel, RegisteredLogger } from '../logger';
+import { RegisteredLogger } from '../logger';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool, ToolAction } from '../tools/types';
+import type { CompositeVoice } from '../voice';
 
 import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
 
@@ -47,6 +48,7 @@ export class Agent<
   /** @deprecated This property is deprecated. Use evals instead. */
   metrics: TMetrics;
   evals: TMetrics;
+  voice?: CompositeVoice;
 
   constructor(config: AgentConfig<TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
@@ -85,6 +87,10 @@ export class Agent<
 
     if (config.memory) {
       this.#memory = config.memory;
+    }
+
+    if (config.voice) {
+      this.voice = config.voice;
     }
   }
 
@@ -253,7 +259,7 @@ export class Agent<
           await memory.saveMessages({ messages, memoryConfig });
         }
 
-        this.log(LogLevel.DEBUG, 'Saved messages to memory', {
+        this.logger.debug('Saved messages to memory', {
           threadId: thread.id,
           runId,
         });
@@ -264,20 +270,15 @@ export class Agent<
         return {
           threadId: thread.id,
           messages: [
-            {
-              role: 'system',
-              content: `\n
-             Analyze this message to determine if the user is referring to a previous conversation with the LLM.
-             Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation.
-             Extract any date ranges mentioned in the user message that could help identify the previous chat.
-             Return dates in ISO format.
-             If no specific dates are mentioned but time periods are (like "last week" or "past month"), calculate the appropriate date range.
-             For the end date, return the date 1 day after the end of the time period.
-             Today's date is ${new Date().toISOString()} and the time is ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })} ${memorySystemMessage ? `\n\n${memorySystemMessage}` : ''}`,
-            } as any,
+            memorySystemMessage
+              ? {
+                  role: 'system' as const,
+                  content: memorySystemMessage,
+                }
+              : null,
             ...this.sanitizeResponseMessages(memoryMessages),
             ...newMessages,
-          ],
+          ].filter((message): message is NonNullable<typeof message> => Boolean(message)),
         };
       }
 
@@ -498,12 +499,15 @@ export class Agent<
                   name: k,
                   description: tool.description,
                   args,
-                });
-                return tool.execute({
-                  context: args,
-                  mastra: this.#mastra,
                   runId,
                 });
+                return (
+                  tool?.execute?.({
+                    context: args,
+                    mastra: this.#mastra,
+                    runId,
+                  }) ?? undefined
+                );
               } catch (err) {
                 this.logger.error(`[Agent:${this.name}] - Failed execution`, {
                   error: err,
@@ -560,6 +564,7 @@ export class Agent<
                   name: toolName,
                   description: toolObj.description,
                   args,
+                  runId,
                 });
                 return toolObj.execute!({
                   context: args,
@@ -597,7 +602,7 @@ export class Agent<
     let coreMessages: CoreMessage[] = [];
     let threadIdToUse = threadId;
 
-    this.log(LogLevel.DEBUG, `Saving user messages in memory for agent ${this.name}`, { runId });
+    this.logger.debug(`Saving user messages in memory for agent ${this.name}`, { runId });
     const saveMessageResponse = await this.saveMemory({
       threadId,
       resourceId,
@@ -635,7 +640,7 @@ export class Agent<
 
         const systemMessage: CoreMessage = {
           role: 'system',
-          content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
+          content: `${this.instructions}.`,
         };
 
         let coreMessages = messages;
@@ -774,9 +779,10 @@ export class Agent<
       onStepFinish,
       runId,
       toolsets,
-      output = 'text',
+      output = 'text' as const,
       temperature,
       toolChoice = 'auto',
+      experimental_output,
     }: AgentGenerateOptions<Z> = {},
   ): Promise<GenerateReturn<Z>> {
     let messagesToUse: CoreMessage[] = [];
@@ -813,6 +819,30 @@ export class Agent<
     });
 
     const { threadId, messageObjects, convertedTools } = await before();
+
+    if (output === 'text' && experimental_output) {
+      const result = await this.llm.__text({
+        messages: messageObjects,
+        tools: this.tools,
+        convertedTools,
+        onStepFinish,
+        maxSteps,
+        runId: runIdToUse,
+        temperature,
+        toolChoice,
+        experimental_output,
+      });
+
+      const outputText = result.text;
+
+      await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+
+      const newResult = result as any;
+
+      newResult.object = result.experimental_output;
+
+      return newResult as unknown as GenerateReturn<Z>;
+    }
 
     if (output === 'text') {
       const result = await this.llm.__text({
@@ -867,6 +897,7 @@ export class Agent<
       output = 'text',
       temperature,
       toolChoice = 'auto',
+      experimental_output,
     }: AgentStreamOptions<Z> = {},
   ): Promise<StreamReturn<Z>> {
     const runIdToUse = runId || randomUUID();
@@ -904,7 +935,40 @@ export class Agent<
 
     const { threadId, messageObjects, convertedTools } = await before();
 
-    if (output === 'text') {
+    if (output === 'text' && experimental_output) {
+      this.logger.debug(`Starting agent ${this.name} llm stream call`, {
+        runId,
+      });
+
+      const streamResult = await this.llm.__stream({
+        messages: messageObjects,
+        temperature,
+        tools: this.tools,
+        convertedTools,
+        onStepFinish,
+        onFinish: async (result: string) => {
+          try {
+            const res = JSON.parse(result) || {};
+            const outputText = res.text;
+            await after({ result: res, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+          } catch (e) {
+            this.logger.error('Error saving memory on finish', {
+              error: e,
+              runId,
+            });
+          }
+          onFinish?.(result);
+        },
+        maxSteps,
+        runId: runIdToUse,
+        toolChoice,
+        experimental_output,
+      });
+
+      const newStreamResult = streamResult as any;
+      newStreamResult.partialObjectStream = streamResult.experimental_partialOutputStream;
+      return newStreamResult as unknown as StreamReturn<Z>;
+    } else if (output === 'text') {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
       });
@@ -936,6 +1000,7 @@ export class Agent<
     this.logger.debug(`Starting agent ${this.name} llm streamObject call`, {
       runId,
     });
+
     return this.llm.__streamObject({
       messages: messageObjects,
       tools: this.tools,
@@ -960,5 +1025,76 @@ export class Agent<
       runId: runIdToUse,
       toolChoice,
     }) as unknown as StreamReturn<Z>;
+  }
+
+  /**
+   * Convert text to speech using the configured voice provider
+   * @param input Text or text stream to convert to speech
+   * @param options Speech options including speaker and provider-specific options
+   * @returns Audio stream
+   */
+  async speak(
+    input: string | NodeJS.ReadableStream,
+    options?: {
+      speaker?: string;
+      [key: string]: any;
+    },
+  ): Promise<NodeJS.ReadableStream> {
+    if (!this.voice) {
+      throw new Error('No voice provider configured');
+    }
+    try {
+      return this.voice.speak(input, options);
+    } catch (e) {
+      this.logger.error('Error during agent speak', {
+        error: e,
+      });
+      throw e;
+    }
+  }
+
+  /**
+   * Convert speech to text using the configured voice provider
+   * @param audioStream Audio stream to transcribe
+   * @param options Provider-specific transcription options
+   * @returns Text or text stream
+   */
+  async listen(
+    audioStream: NodeJS.ReadableStream,
+    options?: {
+      [key: string]: any;
+    },
+  ): Promise<string | NodeJS.ReadableStream> {
+    if (!this.voice) {
+      throw new Error('No voice provider configured');
+    }
+    try {
+      return this.voice.listen(audioStream, options);
+    } catch (e) {
+      this.logger.error('Error during agent listen', {
+        error: e,
+      });
+      throw e;
+    }
+  }
+
+  /**
+   * Get a list of available speakers from the configured voice provider
+   * @throws {Error} If no voice provider is configured
+   * @returns {Promise<Array<{voiceId: string}>>} List of available speakers
+   */
+  async getSpeakers() {
+    if (!this.voice) {
+      throw new Error('No voice provider configured');
+    }
+
+    try {
+      return await this.voice.getSpeakers();
+    } catch (e) {
+      this.logger.error('Error during agent getSpeakers', {
+        error: e,
+      });
+      throw e;
+    }
   }
 }

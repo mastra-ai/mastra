@@ -1,6 +1,5 @@
-import { parse } from 'dotenv';
-
 import { readFile } from 'fs/promises';
+import { parse } from 'dotenv';
 
 import { MastraBase } from '../base';
 

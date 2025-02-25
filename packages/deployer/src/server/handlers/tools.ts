@@ -1,8 +1,7 @@
 import type { Context } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
-
-import { HTTPException } from 'hono/http-exception';
 
 import { handleError } from './error';
 
@@ -66,6 +65,10 @@ export function executeToolHandler(tools: Record<string, any>) {
         return c.json({ error: 'Tool not found' }, 404);
       }
 
+      if (!tool?.execute) {
+        return c.json({ error: 'Tool is not executable' }, 400);
+      }
+
       const { data } = await c.req.json();
       const mastra = c.get('mastra');
       const result = await tool.execute({
@@ -91,6 +94,10 @@ export async function executeAgentToolHandler(c: Context) {
 
     if (!tool) {
       throw new HTTPException(404, { message: 'Tool not found' });
+    }
+
+    if (!tool?.execute) {
+      return c.json({ error: 'Tool is not executable' }, 400);
     }
 
     const { data } = await c.req.json();

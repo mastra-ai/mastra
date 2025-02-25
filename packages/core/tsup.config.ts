@@ -44,6 +44,7 @@ export default defineConfig({
     'src/utils.ts',
     '!src/action/index.ts',
     'src/*/index.ts',
+    'src/storage/libsql/index.ts',
     'src/vector/libsql/index.ts',
     'src/telemetry/otel-vendor.ts',
   ],

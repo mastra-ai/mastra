@@ -1,6 +1,6 @@
-import { config } from 'dotenv';
 import fs from 'fs';
 import path from 'node:path';
+import { config } from 'dotenv';
 
 export function getEnv() {
   const projectDir = process.cwd();

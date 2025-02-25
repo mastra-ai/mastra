@@ -1,10 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { MessageType } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { DefaultStorage } from '@mastra/core/storage';
+import { DefaultStorage } from '@mastra/core/storage/libsql';
 import { Memory } from '@mastra/memory';
 import dotenv from 'dotenv';
-import { randomUUID } from 'node:crypto';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 
 const resourceId = 'test-resource';

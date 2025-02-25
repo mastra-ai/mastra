@@ -19,7 +19,7 @@ const getDiff = new Step({
     diff: z.string(),
   }),
   execute: async ({ context }) => {
-    const repoPath = context?.getStepPayload<{ repoPath: string }>('trigger')?.repoPath;
+    const repoPath = context?.getStepResult<{ repoPath: string }>('trigger')?.repoPath;
 
     // Get the git diff of staged changes
     const diff = execSync('git diff --staged', {
@@ -54,8 +54,8 @@ const generateMessage = new Step({
     guidelines: z.array(z.string()),
   }),
   execute: async ({ context, mastra }) => {
-    const diffData = context?.getStepPayload<{ diff: string }>('getDiff');
-    const fileData = context?.getStepPayload<{ fileData: any }>('readConventionalCommitSpec');
+    const diffData = context?.getStepResult<{ diff: string }>('getDiff');
+    const fileData = context?.getStepResult<{ fileData: any }>('readConventionalCommitSpec');
 
     if (!diffData) {
       return { commitMessage: '', generated: false, guidelines: [] };
