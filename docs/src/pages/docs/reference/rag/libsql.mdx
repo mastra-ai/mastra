@@ -1,11 +1,11 @@
 ---
 title: "Default Vector Store | Vector Databases | RAG | Mastra Docs"
-description: Documentation for the DefaultVectorDB class in Mastra, which provides vector search using LibSQL with vector extensions.
+description: Documentation for the LibSQLVector class in Mastra, which provides vector search using LibSQL with vector extensions.
 ---
 
-# DefaultVectorDB Store
+# LibSQLVector Store
 
-The DefaultVectorDB class provides vector search using [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
+The LibSQL storage implementation provides a SQLite-compatible vector search  [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
 It's part of the `@mastra/core` package and offers efficient vector similarity search with metadata filtering.
 
 ## Installation
@@ -19,10 +19,10 @@ npm install @mastra/core
 ## Usage
 
 ```typescript copy showLineNumbers
-import { DefaultVectorDB } from '@mastra/core/storage';
+import { LibSQLVector } from "@mastra/core/vector/libsql";
 
 // Create a new vector store instance
-const store = new DefaultVectorDB({
+const store = new LibSQLVector({
   connectionUrl: process.env.DATABASE_URL,
   // Optional: for Turso cloud databases
   authToken: process.env.DATABASE_AUTH_TOKEN,

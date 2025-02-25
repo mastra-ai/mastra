@@ -44,7 +44,7 @@ beforeAll(async () => {
 it.for([
   ['DefaultStorage'],
   ['DefaultVectorDB'],
-  ['MastraStorageLibSql'],
+  ['LibSQLStore'],
   ['MastraVector'],
   ['DefaultVectorDBMongo'],
   ['defaultEmbedder'],

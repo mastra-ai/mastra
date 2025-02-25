@@ -28,13 +28,14 @@ If you need more control, you can explicitly configure the storage, vector datab
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
-import { DefaultStorage, DefaultVectorDB } from "@mastra/core/storage";
+import { LibSQLStore } from "@mastra/core/storage/libsql";
+import { LibSQLVector } from "@mastra/core/vector/libsql";
 
 const customMemory = new Memory({
-  storage: new DefaultStorage({
+  storage: new LibSQLStore({
     url: process.env.DATABASE_URL || "file:local.db",
   }),
-  vector: new DefaultVectorDB({
+  vector: new LibSQLVector({
     connectionUrl: process.env.DATABASE_URL || "file:local.db",
   }),
   options: {

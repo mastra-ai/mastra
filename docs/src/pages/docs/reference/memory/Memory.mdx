@@ -18,17 +18,18 @@ const agent = new Agent({
 
 ```typescript copy showLineNumbers
 import { Memory } from "@mastra/memory";
-import { DefaultStorage, DefaultVectorDB } from "@mastra/core/storage";
+import { LibSQLStore } from "@mastra/core/storage/libsql";
+import { LibSQLVector } from "@mastra/core/vector/libsql";
 import { Agent } from "@mastra/core/agent";
 
 const memory = new Memory({
   // Custom storage configuration
-  storage: new DefaultStorage({
+  storage: new LibSQLStore({
     url: "file:memory.db",
   }),
 
   // Custom vector database for semantic search
-  vector: new DefaultVectorDB({
+  vector: new LibSQLVector({
     url: "file:vector.db",
   }),
 
@@ -159,13 +160,14 @@ When using vector search capabilities with custom configuration, ensure you conf
 
 ```typescript copy showLineNumbers
 import { Memory } from "@mastra/memory";
-import { DefaultStorage, DefaultVectorDB } from "@mastra/core/storage";
+import { LibSQLStore } from "@mastra/core/storage/libsql";
+import { LibSQLVector } from "@mastra/core/vector/libsql";
 
 const memory = new Memory({
-  storage: new DefaultStorage({
+  storage: new LibSQLStore({
     url: ":memory:",
   }),
-  vector: new DefaultVectorDB({
+  vector: new LibSQLVector({
     url: ":memory:",
   }),
   options: {

@@ -22,11 +22,11 @@ export interface LibSQLConfig {
   authToken?: string;
 }
 
-export class MastraStorageLibSql extends MastraStorage {
+export class LibSQLStore extends MastraStorage {
   private client: Client;
 
   constructor({ config }: { config: LibSQLConfig }) {
-    super({ name: `MastraStorageLibSql` });
+    super({ name: `LibSQLStore` });
 
     this.client = createClient({
       url: this.rewriteDbUrl(config.url),
@@ -531,4 +531,4 @@ export class MastraStorageLibSql extends MastraStorage {
   }
 }
 
-export { MastraStorageLibSql as DefaultStorage };
+export { LibSQLStore as DefaultStorage };
