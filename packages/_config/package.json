@@ -21,6 +21,7 @@
     "eslint-plugin-react": "^7.37.4",
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-testing-library": "^7.1.1",
-    "globals": "^15.14.0"
+    "globals": "^15.14.0",
+    "typescript-eslint": "^8.20.0"
   }
 }
