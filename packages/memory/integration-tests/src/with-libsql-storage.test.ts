@@ -1,4 +1,4 @@
-import { DefaultStorage } from '@mastra/core/storage';
+import { DefaultStorage } from '@mastra/core/storage/libsql';
 import { Memory } from '@mastra/memory';
 import dotenv from 'dotenv';
 import { describe } from 'vitest';
