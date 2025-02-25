@@ -1,0 +1,160 @@
+# CompositeVoice Reference
+
+The CompositeVoice class allows you to combine different voice providers for text-to-speech and speech-to-text operations. This is particularly useful when you want to use the best provider for each operation - for example, using OpenAI for speech-to-text and PlayAI for text-to-speech.
+
+CompositeVoice is used internally by the Agent class to provide flexible voice capabilities.
+
+## Usage Example
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice/openai";
+import { PlayAIVoice } from "@mastra/voice/playai";
+
+// Create voice providers
+const openai = new OpenAIVoice();
+const playai = new PlayAIVoice();
+
+// Use OpenAI for listening (speech-to-text) and PlayAI for speaking (text-to-speech)
+const voice = new CompositeVoice({
+  listeningProvider: openai,
+  speakingProvider: playai
+});
+
+// Convert speech to text using OpenAI
+const text = await voice.listen(audioStream);
+
+// Convert text to speech using PlayAI
+const audio = await voice.speak("Hello, world!");
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "config",
+      type: "object",
+      description: "Configuration object for the composite voice service",
+      isOptional: false,
+    },
+    {
+      name: "config.listeningProvider",
+      type: "MastraVoice",
+      description: "Voice provider to use for speech-to-text operations",
+      isOptional: true,
+    },
+    {
+      name: "config.speakingProvider",
+      type: "MastraVoice",
+      description: "Voice provider to use for text-to-speech operations",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Methods
+
+### speak()
+
+Converts text to speech using the configured speaking provider.
+
+```typescript
+async speak(
+  input: string | NodeJS.ReadableStream,
+  options?: {
+    speaker?: string;
+    [key: string]: any;
+  }
+): Promise<NodeJS.ReadableStream>
+```
+
+#### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text to convert to speech",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Provider-specific options passed to the speaking provider",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### Notes
+- If no speaking provider is configured, this method will throw an error
+- Options are passed through to the configured speaking provider
+- Returns a stream of audio data
+
+### listen()
+
+Converts speech to text using the configured listening provider.
+
+```typescript
+async listen(
+  audioStream: NodeJS.ReadableStream,
+  options?: {
+    [key: string]: any;
+  }
+): Promise<string | NodeJS.ReadableStream>
+```
+
+#### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "Audio stream to convert to text",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Provider-specific options passed to the listening provider",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### Notes
+- If no listening provider is configured, this method will throw an error
+- Options are passed through to the configured listening provider
+- Returns either a string or a stream of transcribed text, depending on the provider
+
+### getSpeakers()
+
+Returns a list of available voices from the speaking provider.
+
+```typescript
+async getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: any }>>
+```
+
+#### Notes
+- Returns voices from the speaking provider only
+- If no speaking provider is configured, returns an empty array
+- Each voice object will have at least a voiceId property
+- Additional voice properties depend on the speaking provider
+
+## Notes
+
+- CompositeVoice implements the MastraVoice interface
+- Each provider maintains its own configuration and state
+- Error handling should consider both providers' potential failure modes
+- Ideal for scenarios where different providers excel at different operations
+
+## Related
+
+- [MastraVoice Reference](/reference/voice/voice.mdx)
+- [OpenAI Voice Reference](/reference/voice/openai.mdx)
+- [Deepgram Voice Reference](/reference/voice/deepgram.mdx)
+- [PlayAI Voice Reference](/reference/voice/playai.mdx)
+- [Speechify Voice Reference](/reference/voice/speechify.mdx)
