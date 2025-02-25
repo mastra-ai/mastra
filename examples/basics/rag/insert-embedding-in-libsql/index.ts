@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai';
-import { DefaultVectorDB } from '@mastra/core/storage';
+import { LibSQLVector } from '@mastra/core/vector/libsql';
 import { MDocument } from '@mastra/rag';
 import { embedMany } from 'ai';
 
@@ -12,7 +12,7 @@ const { embeddings } = await embedMany({
   values: chunks.map(chunk => chunk.text),
 });
 
-const libsql = new DefaultVectorDB({
+const libsql = new LibSQLVector({
   connectionUrl: process.env.DATABASE_URL!,
   authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
 });
