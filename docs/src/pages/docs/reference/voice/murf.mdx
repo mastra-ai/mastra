@@ -210,45 +210,10 @@ Returns: `Promise<Array<{ voiceId: string, name: string, language: string, gende
 
 This method is not supported by Murf and will throw an error. Murf does not provide speech-to-text functionality.
 
-## Available Voices
-
-Murf provides a wide range of voices across multiple languages. Here are some examples:
-
-**English (US)**
-- en-US-cooper
-- en-US-imani
-- en-US-wayne
-- en-US-daniel
-- en-US-zion
-- en-US-riley
-- en-US-carter
-- en-US-samantha
-
-**English (UK)**
-- en-UK-hazel
-- en-UK-gabriel
-- en-UK-juliet
-- en-UK-hugo
-- en-UK-heidi
-- en-UK-peter
-
-**Other Languages**
-- it-IT-giorgio
-- bn-IN-anwesha
-- es-MX-alejandro
-- ko-KR-hwan
-- fr-FR-adélie
-- de-DE-josephine
-- zh-CN-baolin
-- pt-BR-isadora
-- nl-NL-famke
-- hi-IN-rahul
-
 ## Important Notes
 
 1. A Murf API key is required. Set it via the `MURF_API_KEY` environment variable or pass it in the constructor.
 2. The service uses GEN2 as the default model version.
 3. Speech properties can be set at the constructor level and overridden per request.
 4. The service supports extensive audio customization through properties like format, sample rate, and channel type.
-5. Custom pronunciation dictionaries can be provided for better text-to-speech accuracy.
-6. Speech-to-text functionality is not supported.
+5. Speech-to-text functionality is not supported.
