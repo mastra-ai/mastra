@@ -1201,8 +1201,6 @@ describe('Workflow', async () => {
       const resumeWf = mastra.getWorkflow('test-workflow');
       const resumeResult = await resumeWf.resume(resumeData as any);
 
-      console.log('resumeResult', resumeResult);
-
       if (!resumeResult) {
         throw new Error('Resume failed to return a result');
       }
@@ -1235,7 +1233,6 @@ describe('Workflow', async () => {
           const { humanPrompt } = context.getStepPayload('humanIntervention') ?? {};
 
           if (!humanPrompt) {
-            console.log('no human prompt, suspending');
             await suspend();
           }
         })
@@ -1310,7 +1307,6 @@ describe('Workflow', async () => {
               ...data.context,
               humanPrompt: 'What improvements would you suggest?',
             };
-            console.log('newCtx', { newCtx, data });
             if (!hasResumed) {
               hasResumed = true;
 
@@ -1330,7 +1326,6 @@ describe('Workflow', async () => {
       });
 
       const initialResult = await started;
-      console.log('initialResult', initialResult);
       expect(initialResult.results.humanIntervention.status).toBe('suspended');
       expect(initialResult.results.explainResponse.status).toBe('failed');
       expect(humanInterventionAction).toHaveBeenCalledTimes(2);

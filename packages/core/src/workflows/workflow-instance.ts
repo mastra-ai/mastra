@@ -137,30 +137,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
         stepGraph = this.#stepSubscriberGraph[runState.suspendedSteps[stepId]] ?? this.#stepGraph;
         startStepId = stepId;
         this.#state = runState.value;
-        console.dir(
-          {
-            resumed: {
-              stepId,
-              startStepId,
-              suspendedSteps: runState.suspendedSteps,
-              hasStepGraph: !!this.#stepSubscriberGraph[runState.suspendedSteps[stepId]],
-              stepGraphKeys: Object.keys(this.#stepSubscriberGraph),
-            },
-          },
-          { depth: null },
-        );
-      } else {
-        console.dir(
-          {
-            resumed: {
-              stepId,
-              startStepId,
-              suspendedSteps: runState.suspendedSteps,
-              stepGraphKeys: Object.keys(this.#stepSubscriberGraph),
-            },
-          },
-          { depth: null },
-        );
       }
     }
 
@@ -201,11 +177,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
 
     const nestedMachines: Promise<any>[] = [];
     const spawnHandler = ({ parentStepId, context }: { parentStepId: string; context: any }) => {
-      console.log('spawning', {
-        parentStepId,
-        stepGraph: JSON.stringify(this.#stepSubscriberGraph[parentStepId], null, 2),
-        stepSubscriberGraph: JSON.stringify(this.#stepSubscriberGraph, null, 2),
-      });
       if (this.#stepSubscriberGraph[parentStepId]) {
         const machine = new Machine({
           logger: this.logger,
