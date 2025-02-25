@@ -1,5 +1,14 @@
 # @mastra/core
 
+## 0.4.2-alpha.2
+
+### Patch Changes
+
+- 8d94c3e: Optional tool execute
+- 99dcdb5: Inject primitives into condition function, and renames getStepPayload to getStepResult.
+- e752340: Move storage/vector libSQL to own files so they do not get imported when not using bundlers.
+- eb91535: Correct typo in LanguageModel-related
+
 ## 0.4.2-alpha.1
 
 ### Patch Changes
