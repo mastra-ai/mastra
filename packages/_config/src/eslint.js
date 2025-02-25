@@ -111,7 +111,7 @@ export const createConfig = async () =>
         'no-unused-vars': [
           WARN,
           {
-            "args": "all",
+            "args": "after-used",
             "argsIgnorePattern": "^_",
             "caughtErrors": "all",
             "destructuredArrayIgnorePattern": "^_",
