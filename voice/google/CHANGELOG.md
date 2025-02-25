@@ -1,5 +1,19 @@
 # @mastra/voice-google
 
+## 0.1.0
+
+### Patch Changes
+
+- 5e0f727: deprecate @mastra/speech-google for @mastra/voice-google
+- Updated dependencies [7fceae1]
+- Updated dependencies [8d94c3e]
+- Updated dependencies [99dcdb5]
+- Updated dependencies [6cb63e0]
+- Updated dependencies [f626fbb]
+- Updated dependencies [e752340]
+- Updated dependencies [eb91535]
+  - @mastra/core@0.4.2
+
 ## 0.1.0-alpha.4
 
 ### Patch Changes

@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 0.4.2
+
+### Patch Changes
+
+- 7fceae1: Removed system prompt with todays date since it can interfere with input token caching. Also removed a memory system prompt that refered to date ranges - we no longer use date ranges for memory so this was removed
+- 8d94c3e: Optional tool execute
+- 99dcdb5: Inject primitives into condition function, and renames getStepPayload to getStepResult.
+- 6cb63e0: Experimental output support
+- f626fbb: add stt and tts capabilities on agent
+- e752340: Move storage/vector libSQL to own files so they do not get imported when not using bundlers.
+- eb91535: Correct typo in LanguageModel-related
+
 ## 0.4.2-alpha.2
 
 ### Patch Changes

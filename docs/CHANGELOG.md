@@ -1,5 +1,14 @@
 # docs
 
+## 0.1.2
+
+### Patch Changes
+
+- e3212c4: Removes references to unimplemented workflow APIs
+- 82197f8: Update PG vector to allow for multiple index types
+- 99dcdb5: Inject primitives into condition function, and renames getStepPayload to getStepResult.
+- 2e0fe6d: Added example and updated docs
+
 ## 0.1.2-alpha.2
 
 ### Patch Changes

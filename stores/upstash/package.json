@@ -1,6 +1,6 @@
 {
   "name": "@mastra/upstash",
-  "version": "0.1.5-alpha.2",
+  "version": "0.1.5",
   "description": "Upstash provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",

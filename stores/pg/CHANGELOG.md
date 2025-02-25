@@ -1,5 +1,19 @@
 # @mastra/pg
 
+## 0.1.5
+
+### Patch Changes
+
+- 82197f8: Update PG vector to allow for multiple index types
+- Updated dependencies [7fceae1]
+- Updated dependencies [8d94c3e]
+- Updated dependencies [99dcdb5]
+- Updated dependencies [6cb63e0]
+- Updated dependencies [f626fbb]
+- Updated dependencies [e752340]
+- Updated dependencies [eb91535]
+  - @mastra/core@0.4.2
+
 ## 0.1.5-alpha.2
 
 ### Patch Changes
