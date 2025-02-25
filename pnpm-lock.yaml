@@ -2573,8 +2573,8 @@ importers:
         specifier: ^1.2.1
         version: 1.2.1
       '@mastra/client-js':
-        specifier: ^0.1.2
-        version: 0.1.2(bufferutil@4.0.9)(encoding@0.1.13)(react@18.3.1)(utf-8-validate@6.0.5)
+        specifier: workspace:*
+        version: link:../../../../client-sdks/client-js
       '@radix-ui/react-alert-dialog':
         specifier: ^1.1.2
         version: 1.1.6(@types/react-dom@18.3.5(@types/react@18.3.18))(@types/react@18.3.18)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -7656,15 +7656,8 @@ packages:
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
 
-  '@mastra/client-js@0.1.2':
-    resolution: {integrity: sha512-DUZitFx4FpV4zR9fu9VZPb+tsdhgy+RerKMXNPL6ZmZa8iatte00r3JylFRXNoFmTci/OLEh3CiYtNWeThdGOg==}
-
   '@mastra/core@0.3.0':
     resolution: {integrity: sha512-Uej+L2cKGar0WCrChke8WH4PrUZaKoc6ON7aXXgi/p4rIM4AceBs7hWXR+IHPk7Sc229ghZa8C/Jbc4YPC0oqg==}
-    engines: {node: '>=20'}
-
-  '@mastra/core@0.4.0':
-    resolution: {integrity: sha512-7d/dl5oh/FL/6Uew3E0nQrbiJubAoFux8Q++2XGD1myWgXHxlDPo1uIaw0EMokA60hHnYcUHug4nvvswVPVhMQ==}
     engines: {node: '>=20'}
 
   '@mdx-js/mdx@3.1.0':
@@ -21647,16 +21640,6 @@ snapshots:
       react: 19.0.0
       zod: 3.24.2
 
-  '@ai-sdk/react@1.1.18(react@18.3.1)(zod@3.24.2)':
-    dependencies:
-      '@ai-sdk/provider-utils': 2.1.10(zod@3.24.2)
-      '@ai-sdk/ui-utils': 1.1.16(zod@3.24.2)
-      swr: 2.3.2(react@18.3.1)
-      throttleit: 2.1.0
-    optionalDependencies:
-      react: 18.3.1
-      zod: 3.24.2
-
   '@ai-sdk/react@1.1.18(react@19.0.0)(zod@3.24.2)':
     dependencies:
       '@ai-sdk/provider-utils': 2.1.10(zod@3.24.2)
@@ -25751,20 +25734,6 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mastra/client-js@0.1.2(bufferutil@4.0.9)(encoding@0.1.13)(react@18.3.1)(utf-8-validate@6.0.5)':
-    dependencies:
-      '@mastra/core': 0.4.0(bufferutil@4.0.9)(encoding@0.1.13)(react@18.3.1)(utf-8-validate@6.0.5)
-      json-schema: 0.4.0
-      zod: 3.24.2
-      zod-to-json-schema: 3.24.1(zod@3.24.2)
-    transitivePeerDependencies:
-      - aws-crt
-      - bufferutil
-      - encoding
-      - react
-      - supports-color
-      - utf-8-validate
-
   '@mastra/core@0.3.0(bufferutil@4.0.9)(react@19.0.0)(utf-8-validate@6.0.5)':
     dependencies:
       '@libsql/client': 0.14.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
@@ -25781,42 +25750,6 @@ snapshots:
       '@opentelemetry/sdk-trace-node': 1.30.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/semantic-conventions': 1.30.0
       ai: 4.1.45(react@19.0.0)(zod@3.24.2)
-      cohere-ai: 7.15.4(encoding@0.1.13)
-      date-fns: 3.6.0
-      dotenv: 16.4.7
-      fastembed: 1.14.1
-      json-schema: 0.4.0
-      node_modules-path: 2.0.8
-      pino: 9.6.0
-      pino-pretty: 13.0.0
-      radash: 12.1.0
-      sift: 17.1.3
-      xstate: 5.19.2
-      zod: 3.24.2
-    transitivePeerDependencies:
-      - aws-crt
-      - bufferutil
-      - encoding
-      - react
-      - supports-color
-      - utf-8-validate
-
-  '@mastra/core@0.4.0(bufferutil@4.0.9)(encoding@0.1.13)(react@18.3.1)(utf-8-validate@6.0.5)':
-    dependencies:
-      '@libsql/client': 0.14.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
-      '@opentelemetry/api': 1.9.0
-      '@opentelemetry/auto-instrumentations-node': 0.53.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
-      '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.0)
-      '@opentelemetry/exporter-trace-otlp-http': 0.55.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/otlp-exporter-base': 0.57.2(@opentelemetry/api@1.9.0)
-      '@opentelemetry/otlp-transformer': 0.57.2(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resources': 1.30.1(@opentelemetry/api@1.9.0)
-      '@opentelemetry/sdk-metrics': 1.30.1(@opentelemetry/api@1.9.0)
-      '@opentelemetry/sdk-node': 0.55.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/sdk-trace-base': 1.30.1(@opentelemetry/api@1.9.0)
-      '@opentelemetry/sdk-trace-node': 1.30.1(@opentelemetry/api@1.9.0)
-      '@opentelemetry/semantic-conventions': 1.30.0
-      ai: 4.1.46(react@18.3.1)(zod@3.24.2)
       cohere-ai: 7.15.4(encoding@0.1.13)
       date-fns: 3.6.0
       dotenv: 16.4.7
@@ -31382,18 +31315,6 @@ snapshots:
       jsondiffpatch: 0.6.0
     optionalDependencies:
       react: 19.0.0
-      zod: 3.24.2
-
-  ai@4.1.46(react@18.3.1)(zod@3.24.2):
-    dependencies:
-      '@ai-sdk/provider': 1.0.9
-      '@ai-sdk/provider-utils': 2.1.10(zod@3.24.2)
-      '@ai-sdk/react': 1.1.18(react@18.3.1)(zod@3.24.2)
-      '@ai-sdk/ui-utils': 1.1.16(zod@3.24.2)
-      '@opentelemetry/api': 1.9.0
-      jsondiffpatch: 0.6.0
-    optionalDependencies:
-      react: 18.3.1
       zod: 3.24.2
 
   ai@4.1.46(react@19.0.0)(zod@3.24.2):
@@ -42570,12 +42491,6 @@ snapshots:
       css-what: 6.1.0
       csso: 5.0.5
       picocolors: 1.1.1
-
-  swr@2.3.2(react@18.3.1):
-    dependencies:
-      dequal: 2.0.3
-      react: 18.3.1
-      use-sync-external-store: 1.4.0(react@18.3.1)
 
   swr@2.3.2(react@19.0.0):
     dependencies:
