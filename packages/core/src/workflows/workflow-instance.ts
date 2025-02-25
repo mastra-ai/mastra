@@ -1,12 +1,12 @@
 import type { Span } from '@opentelemetry/api';
-import { type Snapshot } from 'xstate';
+import type {Snapshot} from 'xstate';
 import type { z } from 'zod';
 
 import type { IAction, MastraPrimitives } from '../action';
 import type { Logger } from '../logger';
 
 import { Machine } from './machine';
-import { Step } from './step';
+import type { Step } from './step';
 import type { RetryConfig, StepGraph, StepResult, WorkflowContext, WorkflowRunState } from './types';
 import { getActivePathsAndStatus, mergeChildValue } from './utils';
 
@@ -167,7 +167,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       const now = Date.now();
       if (this.#onStepTransition) {
         this.#onStepTransition.forEach(onTransition => {
-          onTransition({
+          void onTransition({
             runId: this.#runId,
             value: this.#state as Record<string, string>,
             context: context as WorkflowContext,
@@ -225,18 +225,23 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
    * Persists the workflow state to the database
    */
   async persistWorkflowSnapshot(): Promise<void> {
+    console.log('persisting snapshot');
     const existingSnapshot = (await this.#mastra?.storage?.loadWorkflowSnapshot({
       workflowName: this.name,
       runId: this.#runId,
     })) as WorkflowRunState;
 
+    console.log('existingSnapshot', existingSnapshot);
+
     const machineSnapshots: Record<string, WorkflowRunState> = {};
     for (const [stepId, machine] of Object.entries(this.#machines)) {
-      const machineSnapshot = machine.getSnapshot() as unknown as WorkflowRunState;
+      const machineSnapshot = machine?.getSnapshot() as unknown as WorkflowRunState;
+      console.log('machineSnapshot', {machineSnapshot, stepId, machine});
       if (machineSnapshot) {
         machineSnapshots[stepId] = { ...machineSnapshot };
       }
     }
+    console.log('machineSnapshots', {machineSnapshots, machines: this.#machines});
 
     let snapshot = machineSnapshots['trigger'] as unknown as WorkflowRunState;
     delete machineSnapshots['trigger'];
@@ -249,7 +254,10 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       {} as Record<string, string>,
     );
 
+    console.log({snapshot, existingSnapshot});
+
     if (!snapshot && existingSnapshot) {
+      console.log('persisting snapshot', {existingSnapshot});
       existingSnapshot.childStates = { ...existingSnapshot.childStates, ...machineSnapshots };
       existingSnapshot.suspendedSteps = { ...existingSnapshot.suspendedSteps, ...suspendedSteps };
       await this.#mastra?.storage?.persistWorkflowSnapshot({
@@ -260,6 +268,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
 
       return;
     } else if (snapshot && !existingSnapshot) {
+      console.log('persisting snapshot', {snapshot});
       snapshot.suspendedSteps = suspendedSteps;
       await this.#mastra?.storage?.persistWorkflowSnapshot({
         workflowName: this.name,
@@ -268,6 +277,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       });
       return;
     } else if (!snapshot) {
+      console.log('no snapshot to persist');
       this.logger.debug('Snapshot cannot be persisted. No snapshot received.', { runId: this.#runId });
       return;
     }
@@ -285,7 +295,11 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     }
 
     if (existingSnapshot?.childStates) {
+      console.log('merging child states');
       snapshot.childStates = { ...existingSnapshot.childStates, ...machineSnapshots };
+    } else {
+      console.log('setting child states');
+      snapshot.childStates = machineSnapshots;
     }
 
     await this.#mastra?.storage?.persistWorkflowSnapshot({

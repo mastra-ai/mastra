@@ -1,8 +1,9 @@
-import type { Span } from '@opentelemetry/api';
 import EventEmitter from 'node:events';
+import type { Span } from '@opentelemetry/api';
 import { get } from 'radash';
 import sift from 'sift';
-import { assign, createActor, fromPromise, setup, type MachineContext, type Snapshot } from 'xstate';
+import { assign, createActor, fromPromise, setup   } from 'xstate';
+import type {MachineContext, Snapshot} from 'xstate';
 import type { z } from 'zod';
 
 import type { IAction, MastraPrimitives } from '../action';
@@ -100,9 +101,9 @@ export class Machine<
   }
 
   async execute({
+    stepId,
     input,
     snapshot,
-    stepId,
   }: {
     stepId?: string;
     input?: any;
@@ -130,6 +131,8 @@ export class Machine<
       runId: this.#runId,
       machineStates: this.#machine.config.states,
     });
+
+    console.log('creating actor ....');
 
     this.#actor = createActor(this.#machine, {
       inspect: (inspectionEvent: any) => {
@@ -190,7 +193,8 @@ export class Machine<
         try {
           // Then cleanup and resolve
           await this.#workflowInstance.persistWorkflowSnapshot();
-          this.#cleanup();
+          // TODO: REMOVE THIS
+          // this.#cleanup();
           this.#executionSpan?.end();
           resolve({
             results: state.context.steps,
@@ -200,7 +204,8 @@ export class Machine<
           // but maybe log the error
           this.logger.debug('Failed to persist final snapshot', { error });
 
-          this.#cleanup();
+          // TODO: REMOVE THIS
+          // this.#cleanup();
           this.#executionSpan?.end();
           resolve({
             results: state.context.steps,
@@ -211,6 +216,7 @@ export class Machine<
   }
 
   #cleanup() {
+    console.log('cleaning up');
     if (this.#actor) {
       this.#actor.stop();
       this.#actor = null;
@@ -314,6 +320,7 @@ export class Machine<
           context: resolvedData,
           suspend: async () => {
             await this.#workflowInstance.suspend(stepNode.step.id, this);
+            // console.log('suspended =============', this.#actor);
             if (this.#actor) {
               // Update context with current result
               context.steps[stepNode.step.id] = {
@@ -883,6 +890,11 @@ export class Machine<
   }
 
   getSnapshot() {
-    return this.#actor?.getSnapshot();
+    console.log('getting snapshot');
+    // console.log('this.#actor', this.#actor);
+    const snapshot = this.#actor?.getSnapshot();
+    // Only cleanup after getting the snapshot
+    // this.#cleanup();
+    return snapshot;
   }
 }

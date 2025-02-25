@@ -1,6 +1,6 @@
 import { trace, context as otlpContext } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 import type { IAction, MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
@@ -393,6 +393,8 @@ export class Workflow<
       throw new Error(`No snapshot found for workflow run ${runId}`);
     }
 
+    console.log('resume snapshot', {snapshot, resumeContext});
+
     let parsedSnapshot;
     try {
       parsedSnapshot = typeof snapshot === 'string' ? JSON.parse(snapshot as unknown as string) : snapshot;
@@ -405,12 +407,19 @@ export class Workflow<
     if (!startStepId) {
       return;
     }
-    parsedSnapshot = startStepId === 'trigger' ? parsedSnapshot : parsedSnapshot.childStates[startStepId];
-    console.dir({ resuming: startStepId, value: parsedSnapshot.value }, { depth: null });
+    console.log('parsedSnapshot', parsedSnapshot, startStepId);
+    parsedSnapshot = startStepId === 'trigger' ? parsedSnapshot : parsedSnapshot?.childStates?.[startStepId];
+    if (!parsedSnapshot) {
+      throw new Error(`No snapshot found for step: ${stepId} starting at ${startStepId}`);
+    }
+    console.log('parsedSnapshot', parsedSnapshot);
+    console.dir({ resuming: startStepId, value: parsedSnapshot?.value }, { depth: null });
+
 
     // Update context if provided
 
     if (resumeContext) {
+      console.log('updating context', {resumeContext, stepId});
       parsedSnapshot.context.steps[stepId] = {
         status: 'success',
         output: {
