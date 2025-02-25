@@ -1,19 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-
-
 import { createLogger } from '../logger';
 import { Mastra } from '../mastra';
 import { MastraStorageLibSql } from '../storage';
 import { createTool } from '../tools';
 
-
-
 import { Step } from './step';
 import type { WorkflowContext } from './types';
 import { Workflow } from './workflow';
-
 
 const storage = new MastraStorageLibSql({
   config: {
@@ -830,7 +825,7 @@ describe('Workflow', async () => {
             return await new Promise(resolve => {
               setTimeout(() => {
                 resolve(false);
-              }, 100);
+              }, 5000);
             });
           },
         })
@@ -1295,17 +1290,8 @@ describe('Workflow', async () => {
         })
         .commit();
 
-      // Create a new storage instance for initial run
-      const initialStorage = new MastraStorageLibSql({
-        config: {
-          url: 'file:mastra.db',
-        },
-      });
-      await initialStorage.init();
-
       const mastra = new Mastra({
         logger,
-        storage: initialStorage,
         workflows: { 'test-workflow': workflow },
       });
 
@@ -1318,6 +1304,7 @@ describe('Workflow', async () => {
       //   resolveWorkflowSuspended = resolve;
       // });
 
+      let hasResumed = false;
       wf.watch(data => {
         const suspended = data.activePaths.find(p => p.status === 'suspended');
         if (suspended?.stepId === 'humanIntervention') {
@@ -1327,13 +1314,16 @@ describe('Workflow', async () => {
           };
           console.log('newCtx', { newCtx, data });
           // resolveWorkflowSuspended({ runId: run.runId, stepId: suspended.stepId, context: newCtx });
-          setTimeout(() => {
-            wf.resume({
-              runId: run.runId,
-              stepId: suspended.stepId,
-              context: newCtx,
-            });
-          }, 3000);
+          if (!hasResumed) {
+            hasResumed = true;
+            setTimeout(() => {
+              wf.resume({
+                runId: run.runId,
+                stepId: suspended.stepId,
+                context: newCtx,
+              });
+            }, 10);
+          }
         }
       });
 

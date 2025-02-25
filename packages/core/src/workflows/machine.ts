@@ -1,9 +1,9 @@
-import EventEmitter from 'node:events';
 import type { Span } from '@opentelemetry/api';
+import EventEmitter from 'node:events';
 import { get } from 'radash';
 import sift from 'sift';
-import { assign, createActor, fromPromise, setup   } from 'xstate';
-import type {MachineContext, Snapshot} from 'xstate';
+import { assign, createActor, fromPromise, setup } from 'xstate';
+import type { MachineContext, Snapshot } from 'xstate';
 import type { z } from 'zod';
 
 import type { IAction, MastraPrimitives } from '../action';
@@ -47,6 +47,7 @@ export class Machine<
   #executionSpan?: Span | undefined;
 
   #stepGraph: StepGraph;
+  #globalStepGraph: StepGraph;
   #machine!: ReturnType<typeof this.initializeMachine>;
   #runId: string;
   #startStepId: string;
@@ -65,6 +66,7 @@ export class Machine<
     runId,
     steps,
     stepGraph,
+    globalStepGraph,
     retryConfig,
     startStepId,
   }: {
@@ -76,6 +78,7 @@ export class Machine<
     runId: string;
     steps: Record<string, IAction<any, any, any, any>>;
     stepGraph: StepGraph;
+    globalStepGraph: StepGraph;
     retryConfig?: RetryConfig;
     startStepId: string;
   }) {
@@ -91,6 +94,7 @@ export class Machine<
     this.name = name;
 
     this.#stepGraph = stepGraph;
+    this.#globalStepGraph = globalStepGraph;
     this.#steps = steps;
     this.#retryConfig = retryConfig;
     this.initializeMachine();
@@ -131,8 +135,6 @@ export class Machine<
       runId: this.#runId,
       machineStates: this.#machine.config.states,
     });
-
-    console.log('creating actor ....');
 
     this.#actor = createActor(this.#machine, {
       inspect: (inspectionEvent: any) => {
@@ -193,8 +195,7 @@ export class Machine<
         try {
           // Then cleanup and resolve
           await this.#workflowInstance.persistWorkflowSnapshot();
-          // TODO: REMOVE THIS
-          // this.#cleanup();
+          this.#cleanup();
           this.#executionSpan?.end();
           resolve({
             results: state.context.steps,
@@ -204,8 +205,7 @@ export class Machine<
           // but maybe log the error
           this.logger.debug('Failed to persist final snapshot', { error });
 
-          // TODO: REMOVE THIS
-          // this.#cleanup();
+          this.#cleanup();
           this.#executionSpan?.end();
           resolve({
             results: state.context.steps,
@@ -320,7 +320,6 @@ export class Machine<
           context: resolvedData,
           suspend: async () => {
             await this.#workflowInstance.suspend(stepNode.step.id, this);
-            // console.log('suspended =============', this.#actor);
             if (this.#actor) {
               // Update context with current result
               context.steps[stepNode.step.id] = {
@@ -501,7 +500,7 @@ export class Machine<
       actions: this.#getDefaultActions() as any,
       actors: this.#getDefaultActors(),
     }).createMachine({
-      id: this.name,
+      id: this.#startStepId === 'trigger' ? this.name : `${this.name}-${this.#startStepId}`,
       type: 'parallel',
       context: ({ input }) => ({
         ...input,
@@ -890,11 +889,7 @@ export class Machine<
   }
 
   getSnapshot() {
-    console.log('getting snapshot');
-    // console.log('this.#actor', this.#actor);
     const snapshot = this.#actor?.getSnapshot();
-    // Only cleanup after getting the snapshot
-    // this.#cleanup();
     return snapshot;
   }
 }

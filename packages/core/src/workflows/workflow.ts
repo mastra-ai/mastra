@@ -393,7 +393,7 @@ export class Workflow<
       throw new Error(`No snapshot found for workflow run ${runId}`);
     }
 
-    console.log('resume snapshot', {snapshot, resumeContext});
+    console.dir({ resume: { snapshot, resumeContext } }, { depth: 4 });
 
     let parsedSnapshot;
     try {
@@ -403,23 +403,20 @@ export class Workflow<
       throw new Error('Failed to parse workflow snapshot');
     }
 
+    console.log('parsedSnapshot', parsedSnapshot);
+
     const startStepId = parsedSnapshot.suspendedSteps?.[stepId];
     if (!startStepId) {
       return;
     }
-    console.log('parsedSnapshot', parsedSnapshot, startStepId);
     parsedSnapshot = startStepId === 'trigger' ? parsedSnapshot : parsedSnapshot?.childStates?.[startStepId];
     if (!parsedSnapshot) {
       throw new Error(`No snapshot found for step: ${stepId} starting at ${startStepId}`);
     }
-    console.log('parsedSnapshot', parsedSnapshot);
-    console.dir({ resuming: startStepId, value: parsedSnapshot?.value }, { depth: null });
-
 
     // Update context if provided
 
     if (resumeContext) {
-      console.log('updating context', {resumeContext, stepId});
       parsedSnapshot.context.steps[stepId] = {
         status: 'success',
         output: {
@@ -461,6 +458,7 @@ export class Workflow<
       stepId,
     });
 
+    console.dir({ resuming: startStepId, value: parsedSnapshot?.value }, { depth: null });
     const run =
       this.#runs.get(runId) ??
       new WorkflowInstance({
