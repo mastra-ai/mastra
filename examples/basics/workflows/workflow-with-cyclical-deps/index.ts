@@ -1,4 +1,4 @@
-import { Workflow, Step } from '@mastra/core';
+import { Step, Workflow } from '@mastra/core';
 import { z } from 'zod';
 
 async function main() {
@@ -50,10 +50,6 @@ async function main() {
     .then(incrementByOne)
     .after(doubleValue)
     .step(doubleValue, {
-      when: {
-        ref: { step: doubleValue, path: 'doubledValue' },
-        query: { $eq: 12 },
-      },
       variables: {
         inputValue: {
           step: doubleValue,

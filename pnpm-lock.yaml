@@ -864,6 +864,21 @@ importers:
         specifier: ^16.4.7
         version: 16.4.7
 
+  examples/basics/rag/insert-embedding-in-chroma:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: latest
+        version: 1.1.14(zod@3.24.2)
+      '@mastra/chroma':
+        specifier: workspace:*
+        version: link:../../../../stores/chroma
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../../../packages/rag
+      ai:
+        specifier: latest
+        version: 4.1.46(react@19.0.0)(zod@3.24.2)
+
   examples/basics/rag/insert-embedding-in-libsql:
     dependencies:
       '@ai-sdk/openai':

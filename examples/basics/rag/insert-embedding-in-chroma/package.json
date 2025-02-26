@@ -1,0 +1,15 @@
+{
+  "name": "insert-embedding-in-chroma",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "pnpx tsx --env-file=.env index.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@mastra/rag": "workspace:*",
+    "@mastra/chroma": "workspace:*",
+    "ai": "latest"
+  },
+  "version": "0.0.2"
+}
