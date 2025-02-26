@@ -10,19 +10,13 @@ export interface UpstashConfig {
 }
 
 export class UpstashStore extends MastraStorage {
-  batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+  batchInsert(_input: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     throw new Error('Method not implemented.');
   }
-  getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
+  getEvalsByAgentName(_agentName: string, _type?: 'test' | 'live'): Promise<EvalRow[]> {
     throw new Error('Method not implemented.');
   }
-  getTraces({
-    name,
-    scope,
-    page,
-    perPage,
-    attributes,
-  }: {
+  getTraces(_input: {
     name?: string;
     scope?: string;
     page: number;

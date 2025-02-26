@@ -36,7 +36,7 @@ export class ChromaVector extends MastraVector {
     try {
       const collection = await this.client.getCollection({ name: indexName, embeddingFunction: undefined as any });
       this.collections.set(indexName, collection);
-    } catch (error) {
+    } catch {
       if (throwIfNotExists) {
         throw new Error(`Index ${indexName} does not exist`);
       }
