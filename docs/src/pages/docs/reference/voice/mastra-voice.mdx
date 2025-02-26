@@ -1,0 +1,193 @@
+---
+title: "Reference: MastraVoice | Voice Providers | Mastra Docs"
+description: "Documentation for the MastraVoice abstract base class, which defines the core interface for all voice services in Mastra."
+---
+
+# MastraVoice Reference
+
+The MastraVoice class is an abstract base class that defines the core interface for voice services in Mastra. All voice provider implementations (like OpenAI, Deepgram, PlayAI, Speechify) extend this class to provide their specific functionality.
+
+## Usage Example
+
+```typescript
+import { MastraVoice } from "@mastra/core/voice";
+
+// Create a voice provider implementation
+class MyVoiceProvider extends MastraVoice {
+  constructor(config: { speechModel?: ModelConfig; listeningModel?: ModelConfig; speaker?: string }) {
+    super({
+      speechModel: config.speechModel,
+      listeningModel: config.listeningModel,
+      speaker: config.speaker
+    });
+  }
+
+  // Implement required abstract methods
+  async speak(input: string | NodeJS.ReadableStream, options?: { speaker?: string }): Promise<NodeJS.ReadableStream> {
+    // Implement text-to-speech conversion
+  }
+
+  async listen(audioStream: NodeJS.ReadableStream, options?: any): Promise<string | NodeJS.ReadableStream> {
+    // Implement speech-to-text conversion
+  }
+
+  async getSpeakers(): Promise<Array<{ voiceId: string }>> {
+    // Return list of available voices
+  }
+}
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "config",
+      type: "object",
+      description: "Configuration object for the voice service",
+      isOptional: false,
+    },
+    {
+      name: "config.speechModel",
+      type: "BuiltInModelConfig",
+      description: "Configuration for the text-to-speech model",
+      isOptional: true,
+    },
+    {
+      name: "config.listeningModel",
+      type: "BuiltInModelConfig",
+      description: "Configuration for the speech-to-text model",
+      isOptional: true,
+    },
+    {
+      name: "config.speaker",
+      type: "string",
+      description: "Default speaker/voice ID to use",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### BuiltInModelConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "Name of the model to use",
+      isOptional: false,
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "API key for the model service",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Abstract Methods
+
+These methods must be implemented by any class extending MastraVoice.
+
+### speak()
+
+Converts text to speech using the configured speech model.
+
+```typescript
+abstract speak(
+  input: string | NodeJS.ReadableStream,
+  options?: {
+    speaker?: string;
+    [key: string]: any;
+  }
+): Promise<NodeJS.ReadableStream>
+```
+
+#### Purpose
+- Takes text input and converts it to speech using the provider's text-to-speech service
+- Supports both string and stream input for flexibility
+- Allows overriding the default speaker/voice through options
+- Returns a stream of audio data that can be played or saved
+
+### listen()
+
+Converts speech to text using the configured listening model.
+
+```typescript
+abstract listen(
+  audioStream: NodeJS.ReadableStream,
+  options?: {
+    [key: string]: any;
+  }
+): Promise<string | NodeJS.ReadableStream>
+```
+
+#### Purpose
+- Takes an audio stream and converts it to text using the provider's speech-to-text service
+- Supports provider-specific options for transcription configuration
+- Can return either a complete text transcription or a stream of transcribed text
+- Not all providers support this functionality (e.g., PlayAI, Speechify)
+
+### getSpeakers()
+
+Returns a list of available voices supported by the provider.
+
+```typescript
+abstract getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: any }>>
+```
+
+#### Purpose
+- Retrieves the list of available voices/speakers from the provider
+- Each voice must have at least a voiceId property
+- Providers can include additional metadata about each voice
+- Used to discover available voices for text-to-speech conversion
+
+## Protected Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "BuiltInModelConfig | undefined",
+      description: "Configuration for the text-to-speech model",
+      isOptional: true,
+    },
+    {
+      name: "listeningModel",
+      type: "BuiltInModelConfig | undefined",
+      description: "Configuration for the speech-to-text model",
+      isOptional: true,
+    },
+    {
+      name: "speaker",
+      type: "string | undefined",
+      description: "Default speaker/voice ID",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Telemetry Support
+
+MastraVoice includes built-in telemetry support through the `traced` method, which wraps method calls with performance tracking and error monitoring.
+
+```typescript
+protected traced<T extends Function>(method: T, methodName: string): T
+```
+
+## Notes
+
+- MastraVoice is an abstract class and cannot be instantiated directly
+- Implementations must provide concrete implementations for all abstract methods
+- The class provides a consistent interface across different voice service providers
+- Configuration and authentication details are provider-specific
+- Telemetry is automatically handled for all method calls
+
+## Related
+
+- [OpenAI Voice Reference](/reference/voice/openai.mdx)
+- [Deepgram Voice Reference](/reference/voice/deepgram.mdx)
+- [PlayAI Voice Reference](/reference/voice/playai.mdx)
+- [Speechify Voice Reference](/reference/voice/speechify.mdx)

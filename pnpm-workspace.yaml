@@ -11,6 +11,5 @@ packages:
   - "examples/*"
   - "examples/basics/**/*"
   - "examples/basics/llms/*"
-  - "docs"
   - "packages/cli/src/playground"
   - "packages/*/integration-tests"
