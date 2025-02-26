@@ -1,16 +1,16 @@
-import { generateText, generateObject, jsonSchema, streamText, streamObject, Output } from 'ai';
-import type { LanguageModel, Schema, CoreMessage } from 'ai';
+import type { CoreMessage, LanguageModel, Schema } from 'ai';
+import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import { z } from 'zod';
 import type { ZodSchema } from 'zod';
+import { z } from 'zod';
 
 import type {
   GenerateReturn,
-  LLMTextOptions,
   LLMInnerStreamOptions,
   LLMStreamObjectOptions,
   LLMStreamOptions,
   LLMTextObjectOptions,
+  LLMTextOptions,
   StreamReturn,
 } from '../';
 import type { MastraPrimitives } from '../../action';
@@ -117,6 +117,7 @@ export class MastraLLM extends MastraLLMBase {
     toolChoice = 'auto',
     onStepFinish,
     experimental_output,
+    telemetry,
   }: LLMTextOptions<Z>) {
     const model = this.#model;
 
@@ -178,7 +179,10 @@ export class MastraLLM extends MastraLLMBase {
     return await generateText({
       messages,
       ...argsForExecute,
-      experimental_telemetry: this.experimental_telemetry,
+      experimental_telemetry: {
+        ...this.experimental_telemetry,
+        ...telemetry,
+      },
       experimental_output: schema
         ? Output.object({
             schema,
@@ -197,6 +201,7 @@ export class MastraLLM extends MastraLLMBase {
     runId,
     temperature,
     toolChoice = 'auto',
+    telemetry,
   }: LLMTextObjectOptions<T>) {
     const model = this.#model;
 
@@ -252,7 +257,10 @@ export class MastraLLM extends MastraLLMBase {
       ...argsForExecute,
       output: output as any,
       schema,
-      experimental_telemetry: this.experimental_telemetry,
+      experimental_telemetry: {
+        ...this.experimental_telemetry,
+        ...telemetry,
+      },
     });
   }
 
@@ -267,6 +275,7 @@ export class MastraLLM extends MastraLLMBase {
     temperature,
     toolChoice = 'auto',
     experimental_output,
+    telemetry,
   }: LLMInnerStreamOptions<Z>) {
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {
@@ -339,7 +348,10 @@ export class MastraLLM extends MastraLLMBase {
     return await streamText({
       messages,
       ...argsForExecute,
-      experimental_telemetry: this.experimental_telemetry,
+      experimental_telemetry: {
+        ...this.experimental_telemetry,
+        ...telemetry,
+      },
       experimental_output: schema
         ? Output.object({
             schema,
@@ -359,6 +371,7 @@ export class MastraLLM extends MastraLLMBase {
     runId,
     temperature,
     toolChoice = 'auto',
+    telemetry,
   }: LLMStreamObjectOptions<T>) {
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming structured output`, {
@@ -430,7 +443,10 @@ export class MastraLLM extends MastraLLMBase {
       ...argsForExecute,
       output: output as any,
       schema,
-      experimental_telemetry: this.experimental_telemetry,
+      experimental_telemetry: {
+        ...this.experimental_telemetry,
+        ...telemetry,
+      },
     });
   }
 
@@ -444,6 +460,7 @@ export class MastraLLM extends MastraLLMBase {
       runId,
       output = 'text',
       temperature,
+      telemetry,
     }: LLMStreamOptions<Z> = {},
   ): Promise<GenerateReturn<Z>> {
     const msgs = this.convertToMessages(messages);
@@ -468,6 +485,7 @@ export class MastraLLM extends MastraLLMBase {
       tools,
       convertedTools,
       runId,
+      telemetry,
     })) as unknown as GenerateReturn<Z>;
   }
 
@@ -482,6 +500,7 @@ export class MastraLLM extends MastraLLMBase {
       runId,
       output = 'text',
       temperature,
+      telemetry,
     }: LLMStreamOptions<Z> = {},
   ) {
     const msgs = this.convertToMessages(messages);
@@ -496,6 +515,7 @@ export class MastraLLM extends MastraLLMBase {
         convertedTools,
         runId,
         temperature,
+        telemetry,
       })) as unknown as StreamReturn<Z>;
     }
 
@@ -509,6 +529,7 @@ export class MastraLLM extends MastraLLMBase {
       convertedTools,
       runId,
       temperature,
+      telemetry,
     })) as unknown as StreamReturn<Z>;
   }
 }

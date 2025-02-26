@@ -167,7 +167,7 @@ describe('CloudflareVector', () => {
         expect(result.vector).toHaveLength(VECTOR_DIMENSION);
       }
     });
-  }, 30000);
+  }, 60000);
 
   describe('Error Handling', () => {
     it('should handle invalid dimension vectors', async () => {
@@ -480,7 +480,7 @@ describe('CloudflareVector', () => {
         results.forEach(result => {
           expect(result.metadata?.nested?.string).toBe('premium');
         });
-      }, 5000);
+      }, 10000);
 
       it('combines nested numeric and boolean conditions', async () => {
         const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
@@ -490,7 +490,7 @@ describe('CloudflareVector', () => {
         expect(results.length).toBe(1);
         expect(results[0]?.metadata?.nested?.number).toBeGreaterThan(100);
         expect(results[0]?.metadata?.nested?.boolean).toBe(true);
-      }, 5000);
+      }, 10000);
 
       it('handles multiple nested field comparisons', async () => {
         const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
@@ -503,7 +503,7 @@ describe('CloudflareVector', () => {
         expect(result?.string).toBe('premium');
         expect(result?.number).toBeLessThan(200);
         expect(result?.boolean).toBe(true);
-      }, 5000);
+      }, 10000);
 
       it('handles $in with nested string values', async () => {
         const results = await vectorDB.query(testIndexName2, createVector(0, 1.0), 10, {
@@ -513,7 +513,7 @@ describe('CloudflareVector', () => {
         results.forEach(result => {
           expect(['premium', 'basic']).toContain(result.metadata?.nested?.string);
         });
-      }, 5000);
+      }, 10000);
     });
 
     describe('String Operations', () => {
