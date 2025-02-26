@@ -224,7 +224,7 @@ await agent.stream("When will the project be completed?", {
 
 The key to getting good responses from LLMs is feeding them the right context.
 
-Mastra has a Memory API that stores and manages conversation history and contextual information. The Memory API uses a storage backend to persist conversation history and contextual information (more on this later).
+Mastra has a Memory API that stores and manages conversation history and contextual information. The Memory API uses a storage backend to persist conversation history and contextual information (more on this later). 
 
 The Memory API uses two main mechanisms to maintain context in conversations, recent message history and semantic search.
 
@@ -403,9 +403,9 @@ Mastra currently supports several storage backends:
 ### LibSQL Storage
 
 ```typescript copy showLineNumbers
-import { DefaultStorage } from "@mastra/core/storage";
+import { LibSQLStore } from "@mastra/core/storage/libsql";
 
-const storage = new DefaultStorage({
+const storage = new LibSQLStore({
   config: {
     url: "file:example.db",
   },
@@ -481,13 +481,17 @@ const memory = new Memory({
 Once configured, the memory system is automatically used by agents. Here's how to use it:
 
 ```typescript copy showLineNumbers
-// Initialize Mastra with memory
+// Initialize Agent with memory
+const myAgent = new Agent({
+  memory,
+  // other agent options
+});
+// Add agent to mastra
 const mastra = new Mastra({
   agents: { myAgent },
-  memory,
 });
 
-// Memory is automatically used in agent interactions
+// Memory is automatically used in agent interactions when resourceId and threadId are added
 const response = await myAgent.generate(
   "What were we discussing earlier about performance?",
   {
@@ -630,7 +634,7 @@ const agent = new Agent({
   model: openai("gpt-4o-mini"),
 
   memory: new Memory({
-    storage: new DefaultStorage({ url: ":memory:" }),
+    storage: new LibSQLStore({ url: ":memory:" }),
     options: {
       workingMemory: {
         enabled: true, // enables working memory
@@ -650,7 +654,7 @@ const todoAgent = new Agent({
     "You are a TODO list manager. Update the todo list in working memory whenever tasks are added, completed, or modified.",
   model: openai("gpt-4o-mini"),
   memory: new Memory({
-    storage: new DefaultStorage({ url: ":memory:" }),
+    storage: new LibSQLStore({ url: ":memory:" }),
     options: {
       workingMemory: {
         enabled: true,
@@ -739,7 +743,7 @@ const getWeatherInfo = async (city: string) => {
 };
 
 export const weatherInfo = createTool({
-  id "Get Weather Information",
+  id: "Get Weather Information",
   inputSchema: z.object({
     city: z.string(),
   }),
@@ -1151,7 +1155,7 @@ Evals need to be added to an agent. To use any of [the default metrics](/docs/ev
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { ToneConsistencyMetric } from "@mastra/evals/nlp";
-
+ 
 export const myAgent = new Agent({
   name: "My Agent",
   instructions: "You are a helpful assistant.",
@@ -1223,8 +1227,8 @@ beforeAll(async () => {
   });
   ```
 
-  This allows you to save evals in Mastra Storage.
-  With file storage, evals persist and can be queried later.
+  This allows you to save evals in Mastra Storage. 
+  With file storage, evals persist and can be queried later. 
   With memory storage, evals are isolated to the test process.
 </details>
 ```
@@ -1252,7 +1256,7 @@ Mastra provides several eval metrics for assessing Agent outputs. Mastra is not 
 
 ### Accuracy and Reliability
 - [`hallucination`](/docs/reference/evals/hallucination): Detects fabricated or unsupported information
-- [`faithfulness`](/docs/reference/evals/faithfulness): Checks output alignment with source material
+- [`faithfulness`](/docs/reference/evals/faithfulness): Checks output alignment with source material  
 - [`content-similarity`](/docs/reference/evals/content-similarity): Compares text similarity
 - [`textual-difference`](/docs/reference/evals/textual-difference): Measures text changes
 - [`completeness`](/docs/reference/evals/completeness): Measures if all required information is present
@@ -1282,10 +1286,10 @@ description: "Mastra allows so create your own evals, here is how."
 # Create your own Eval
 Source: https://mastra.ai/docs/evals/02-custom-eval
 
-Creating your own eval is as easy as creating a new function. You simply create a class that extends the `Metric` class and implement the `measure` method.
+Creating your own eval is as easy as creating a new function. You simply create a class that extends the `Metric` class and implement the `measure` method. 
 
 
-## Basic example
+## Basic example 
 
 Here is a very basic example of a custom eval that checks if the output contains a certain keyword. This is a simplified version of our own [keyword coverage eval](/docs/reference/evals/keyword-coverage).
 
@@ -1568,12 +1572,69 @@ cd hello-mastra
 
 Then, initialize a TypeScript project including the `@mastra/core` package:
 
-```bash copy npm2yarn
+<Tabs items={["npm", "pnpm", "yarn", "bun"]}>
+  <Tabs.Tab>
+```bash copy
 npm init -y
 npm install typescript tsx @types/node mastra@alpha --save-dev
 npm install @mastra/core@alpha zod
 npx tsc --init
 ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+pnpm init
+pnpm add typescript tsx @types/node mastra@alpha --save-dev
+pnpm add @mastra/core@alpha zod
+pnpm dlx tsc --init
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+yarn init -y
+yarn add typescript tsx @types/node mastra@alpha --dev
+yarn add @mastra/core@alpha zod
+yarn dlx tsc --init
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+bun init -y
+bun add typescript tsx @types/node mastra@alpha --dev
+bun add @mastra/core@alpha zod
+bunx tsc --init
+```
+  </Tabs.Tab>
+</Tabs>
+
+### Initialize TypeScript
+
+Create a `tsconfig.json` file in your project root with the following configuration:
+
+```json copy
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": "dist"
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".mastra"
+  ]
+}
+```
+
+This TypeScript configuration is optimized for Mastra projects, using modern module resolution and strict type checking.
 
 ### Set Up your API Key
 
@@ -1880,7 +1941,7 @@ Assuming you select all components and include example code, your project struct
     <FileTree.File name=".env" />
   </FileTree.Folder>
 </FileTree>
-{/*
+{/* 
 ```
 root/
 ├── src/
@@ -2539,9 +2600,9 @@ description: "Mastra is a Typescript agent framework. It helps you build AI appl
 # About Mastra
 Source: https://mastra.ai/docs
 
-Mastra is an open-source Typescript agent framework.
+Mastra is an open-source Typescript agent framework. 
 
-It's designed to give you the primitives you need to build AI applications and features.
+It's designed to give you the primitives you need to build AI applications and features. 
 
 You can use Mastra to build [AI agents](/docs/agents/00-overview.mdx) that have memory and can execute functions, or chain LLM calls in deterministic [workflows](/docs/workflows/00-overview.mdx). You can chat with your agents in Mastra's [local dev environment](/docs/local-dev/mastra-dev.mdx), feed them application-specific knowledge with [RAG](/docs/rag/overview.mdx), and score their outputs with Mastra's [evals](/docs/08-running-evals.mdx).
 
@@ -2549,10 +2610,10 @@ The main features include:
 
 * **[Model routing](https://sdk.vercel.ai/docs/introduction)**: Mastra uses the [Vercel AI SDK](https://sdk.vercel.ai/docs/introduction) for model routing, providing a unified interface to interact with any LLM provider including OpenAI, Anthropic, and Google Gemini.
 * **[Agent memory and tool calling](/docs/agents/01-agent-memory.mdx)**: With Mastra, you can give your agent tools (functions) that it can call. You can persist agent memory and retrieve it based on recency, semantic similarity, or conversation thread.
-* **[Workflow graphs](/docs/workflows/00-overview.mdx)**: When you want to execute LLM calls in a deterministic way, Mastra gives you a graph-based workflow engine. You can define discrete steps, log inputs and outputs at each step of each run, and pipe them into an observability tool. Mastra workflows have a simple syntax for control flow (`step()`, `.then()`, `.after()`) that allows branching and chaining.
+* **[Workflow graphs](/docs/workflows/00-overview.mdx)**: When you want to execute LLM calls in a deterministic way, Mastra gives you a graph-based workflow engine. You can define discrete steps, log inputs and outputs at each step of each run, and pipe them into an observability tool. Mastra workflows have a simple syntax for control flow (`step()`, `.then()`, `.after()`) that allows branching and chaining. 
 * **[Agent development environment](/docs/local-dev/mastra-dev.mdx)**: When you're developing an agent locally, you can chat with it and see its state and memory in Mastra's agent development environment.
 * **[Retrieval-augmented generation (RAG)](/docs/rag/overview.mdx)**: Mastra gives you APIs to process documents (text, HTML, Markdown, JSON) into chunks, create embeddings, and store them in a vector database. At query time, it retrieves relevant chunks to ground LLM responses in your data, with a unified API on top of multiple vector stores (Pinecone, pgvector, etc) and embedding providers (OpenAI, Cohere, etc).
-* **[Deployment](/docs/deployment/deployment.mdx)**: Mastra supports bundling your agents and workflows within an existing React, Next.js, or Node.js application, or into standalone endpoints. The Mastra deploy helper lets you easily bundle agents and workflows into a Node.js server using Hono, or deploy it onto a serverless platform like Vercel, Cloudflare Workers, or Netlify.
+* **[Deployment](/docs/deployment/deployment.mdx)**: Mastra supports bundling your agents and workflows within an existing React, Next.js, or Node.js application, or into standalone endpoints. The Mastra deploy helper lets you easily bundle agents and workflows into a Node.js server using Hono, or deploy it onto a serverless platform like Vercel, Cloudflare Workers, or Netlify. 
 * **[Evals](/docs/evals/00-overview.mdx)**: Mastra provides automated evaluation metrics that use model-graded, rule-based, and statistical methods to assess LLM outputs, with built-in metrics for toxicity, bias, relevance, and factual accuracy. You can also define your own evals.
 
 
@@ -2574,11 +2635,11 @@ Mastra provides two CLI commands for project setup:
 You can create a new project using either a package manager or the mastra CLI:
 
 ```bash npm2yarn copy
-npm create mastra@latest
+npm create mastra@latest 
 ```
 
 ```bash npm2yarn copy
-npm install -g mastra@latest
+npm install -g mastra@latest 
 mastra create
 ```
 
@@ -3050,7 +3111,7 @@ import { Tabs } from "nextra/components";
 ## Retrieval in RAG Systems
 Source: https://mastra.ai/docs/rag/retrieval
 
-After storing embeddings, you need to retrieve relevant chunks to answer user queries.
+After storing embeddings, you need to retrieve relevant chunks to answer user queries. 
 
 Mastra provides flexible retrieval options with support for semantic search, filtering, and re-ranking.
 
@@ -3147,7 +3208,7 @@ const results = await pgVector.query("embeddings", embedding, 10, {
     { price: { $lt: 200 } }
   ]
 });
-```
+``` 
 
 Common use cases for metadata filtering:
 - Filter by document source or type
@@ -3182,7 +3243,7 @@ For detailed configuration options and advanced usage, see the [Vector Query Too
 
 ### Vector Store Prompts
 
-Vector store prompts define query patterns and filtering capabilities for each vector database implementation.
+Vector store prompts define query patterns and filtering capabilities for each vector database implementation. 
 When implementing filtering, these prompts are required in the agent's instructions to specify valid operators and syntax for each vector store implementation.
 
 <Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare']}>
@@ -3465,9 +3526,12 @@ chunks.map(chunk => ({ text: chunk.text }))
 </Tabs.Tab>
 <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
-  import { DefaultVectorDB } from '@mastra/core/storage'
+import { LibSQLVector } from "@mastra/core/vector/libsql";
 
-  const store = new DefaultVectorDB(process.env.DATABASE_URL)
+  const store = new LibSQLVector({
+    connectionUrl: process.env.DATABASE_URL,
+    authToken: process.env.DATABASE_AUTH_TOKEN // Optional: for Turso cloud databases
+  })
   await store.createIndex("my-collection", 1536);
   await store.upsert(
     "my-collection",
@@ -3570,15 +3634,15 @@ await vectorStore.upsert(
     // Basic content
     text: chunk.text,
     id: chunk.id,
-
+    
     // Document organization
     source: chunk.source,
     category: chunk.category,
-
+    
     // Temporal metadata
     createdAt: new Date().toISOString(),
     version: "1.0",
-
+    
     // Custom fields
     language: chunk.language,
     author: chunk.author,
@@ -3817,53 +3881,71 @@ An optional object that can include:
     {
       name: "messages",
       type: "string | Array<string> | Array<Message>",
+      required: true,
       description: "The messages to be processed by the agent. Can be a single string, an array of strings, or an array of message objects with `role` and `content`.",
     },
     {
       name: "options",
       type: "object",
-      isOptional: true,
+      required: false,
       description: "Additional options for the `generate` method.",
       properties: [
         {
-          name: "structuredOutput",
-          type: "object | Zod schema",
-          isOptional: true,
-          description: "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
-        },
-        {
-          name: "onStepFinish",
-          type: "(step: string) => void",
-          isOptional: true,
-          description: "Callback function called after each execution step. Receives step details as a JSON string.",
-        },
-        {
-          name: "maxSteps",
-          type: "number",
-          isOptional: true,
-          default: 5,
-          description: "Maximum number of execution steps allowed.",
-        },
-        {
-          name: "threadId",
-          type: "string",
-          isOptional: true,
-          description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions.",
-        },
-        {
-          name: "resourceId",
-          type: "string",
-          isOptional: true,
-          description: "Identifier for the user or resource interacting with the agent.",
-        },
-        {
-          name: "context",
-          type: "Array<Message>",
-          isOptional: true,
-          description: "Additional context messages to provide to the agent.",
-        },
-      ],
-    },
+          type: "object",
+          parameters: [
+            {
+              name: "output",
+              type: "Zod schema | JsonSchema7",
+              isOptional: true,
+              description: "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
+            },
+            {
+              name: "experimental_output",
+              type: "Zod schema | JsonSchema7",
+              isOptional: true,
+              description: "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
+            },
+            {
+              name: "onStepFinish",
+              type: "(step: string) => void",
+              isOptional: true,
+              description: "Callback function called after each execution step. Receives step details as a JSON string.",
+            },
+            {
+              name: "maxSteps",
+              type: "number",
+              isOptional: true,
+              defaultValue: "5",
+              description: "Maximum number of execution steps allowed.",
+            },
+            {
+              name: "threadId",
+              type: "string",
+              isOptional: true,
+              description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions.",
+            },
+            {
+              name: "resourceId",
+              type: "string",
+              isOptional: true,
+              description: "Identifier for the user or resource interacting with the agent.",
+            },
+            {
+              name: "temperature",
+              type: "number",
+              isOptional: true,
+              description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
+            },
+            {
+              name: "context",
+              type: "Array<Message>",
+              isOptional: true,
+              description: "Additional context messages to provide to the agent.",
+            }
+          ]
+        }
+      ]
+    }
   ]}
 />
 
@@ -3878,27 +3960,27 @@ The return value of the `generate()` method depends on the options provided, spe
     {
       name: "text",
       type: "string",
-      isOptional: true,
+      required: false,
       description: "The generated text response. Present if `structuredOutput` is not provided.",
     },
     {
       name: "object",
       type: "object",
-      isOptional: true,
+      required: false,
       description: "The generated structured response based on the provided schema. Present if `structuredOutput` is provided.",
     },
     {
       name: "toolCalls",
       type: "Array<ToolCall>",
-      isOptional: true,
+      required: false,
       description: "The tool calls made during the generation process.",
     },
     {
       name: "error",
       type: "string",
-      isOptional: true,
+      required: false,
       description: "Error message if the generation fails.",
-    },
+    }
   ]}
 />
 
@@ -3909,13 +3991,15 @@ The return value of the `generate()` method depends on the options provided, spe
     {
       name: "toolName",
       type: "string",
+      required: true,
       description: "The name of the tool invoked.",
     },
     {
       name: "args",
       type: "any",
+      required: true,
       description: "The arguments passed to the tool.",
-    },
+    }
   ]}
 />
 
@@ -4017,81 +4101,107 @@ An optional object that can include:
 <PropertiesTable
   content={[
     {
-      name: 'output',
-      type: 'string | JSONSchema7 | ZodSchema',
-      isOptional: true,
-      default: "'text'",
-      description: 'Defines the output format. Can be "text" or a schema for structured output.',
-    },
-    {
-      name: 'context',
-      type: 'CoreMessage[]',
-      isOptional: true,
-      description: 'Additional context messages to provide to the agent.',
-    },
-    {
-      name: 'threadId',
-      type: 'string',
-      isOptional: true,
-      description: 'Identifier for the conversation thread. Allows for maintaining context across multiple interactions.',
-    },
-    {
-      name: 'resourceId',
-      type: 'string',
-      isOptional: true,
-      description: 'Identifier for the user or resource interacting with the agent.',
-    },
-    {
-      name: 'onFinish',
-      type: '(result: string) => Promise<void> | void',
-      isOptional: true,
-      description: 'Callback function called when streaming is complete.',
-    },
-    {
-      name: 'onStepFinish',
-      type: '(step: string) => void',
-      isOptional: true,
-      description: 'Callback function called after each step during streaming.',
-    },
-    {
-      name: 'maxSteps',
-      type: 'number',
-      isOptional: true,
-      default: '5',
-      description: 'Maximum number of steps allowed during streaming.',
-    },
-    {
-      name: 'toolsets',
-      type: 'ToolsetsInput',
-      isOptional: true,
-      description: 'Additional toolsets to make available to the agent during this stream.',
+      name: "options",
+      type: "object",
+      required: false,
+      description: "Additional options for the `stream` method.",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "output",
+              type: "Zod schema | JsonSchema7",
+              isOptional: true,
+              description: "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
+            },
+            {
+              name: "experimental_output",
+              type: "Zod schema | JsonSchema7",
+              isOptional: true,
+              description: "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
+            },
+            {
+              name: "context",
+              type: "CoreMessage[]",
+              isOptional: true,
+              description: "Additional context messages to provide to the agent.",
+            },
+            {
+              name: "threadId",
+              type: "string",
+              isOptional: true,
+              description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions.",
+            },
+            {
+              name: "resourceId",
+              type: "string",
+              isOptional: true,
+              description: "Identifier for the user or resource interacting with the agent.",
+            },
+            {
+              name: "onFinish",
+              type: "(result: string) => Promise<void> | void",
+              isOptional: true,
+              description: "Callback function called when streaming is complete.",
+            },
+            {
+              name: "onStepFinish",
+              type: "(step: string) => void",
+              isOptional: true,
+              description: "Callback function called after each step during streaming.",
+            },
+            {
+              name: "maxSteps",
+              type: "number",
+              isOptional: true,
+              defaultValue: "5",
+              description: "Maximum number of steps allowed during streaming.",
+            },
+            {
+              name: "toolsets",
+              type: "ToolsetsInput",
+              isOptional: true,
+              description: "Additional toolsets to make available to the agent during this stream.",
+            },
+            {
+              name: "temperature",
+              type: "number",
+              isOptional: true,
+              description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
+            }
+          ]
+        }
+      ]
     }
   ]}
 />
 
 ## Returns
 
-The method returns a promise that resolves to an object containing one or more of the following properties:
+The return value of the `stream()` method depends on the options provided, specifically the `output` option.
+
+### PropertiesTable for Return Values
 
 <PropertiesTable
   content={[
     {
-      name: 'textStream',
-      type: 'AsyncIterable<string>',
-      isOptional: true,
-      description: 'An async iterable stream of text chunks. Present when output is "text".',
+      name: "textStream",
+      type: "AsyncIterable<string>",
+      required: false,
+      description: "An async iterable stream of text chunks. Present when output is 'text'.",
     },
     {
-      name: 'objectStream',
-      type: 'AsyncIterable<object>',
-      isOptional: true,
-      description: 'An async iterable stream of structured data. Present when a schema is provided.',
+      name: "objectStream",
+      type: "AsyncIterable<object>",
+      required: false,
+      description: "An async iterable stream of structured data. Present when a schema is provided.",
     },
     {
-      name: 'object',
-      type: 'Promise<object>',
-      isOptional: true,
-      description: 'A promise that resolves to the final structured output when using a schema.',
+      name: "object",
+      type: "Promise<object>",
+      required: false,
+      description: "A promise that resolves to the final structured output when using a schema.",
     }
   ]}
 />
@@ -4534,7 +4644,7 @@ yarn add @mastra/client-js
   </Tabs.Tab>
   <Tabs.Tab>
 ```bash copy
-pnpm add @mastra/client-js
+pnpm add @mastra/client-js 
 ```
 </Tabs.Tab>
 </Tabs>
@@ -4953,6 +5063,51 @@ const result = await workflow.execute({
     param2: "value2",
   },
 });
+```
+
+### Resume Workflow
+
+Resume a suspended workflow step:
+
+```typescript
+const result = await workflow.resume({
+  stepId: "step-id",
+  runId: "run-id",
+  contextData: { key: "value" },
+});
+```
+
+### Watch Workflow
+
+Watch workflow transitions in real-time:
+
+```typescript
+const response = await workflow.watch();
+
+// Read Transition Data from response body
+const reader = response.body.getReader();
+let buffer = "";
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  buffer += new TextDecoder().decode(value);
+
+  // Split the buffer into records
+  const records = buffer.split("\x1E");
+
+  buffer = records.pop() || "";
+
+  // Process each record
+  for (const record of records) {
+    // Handle each record
+    const { activePaths, context, timestamp } = record;
+    console.log({
+      activePaths,
+      context,
+      timestamp,
+    });
+  }
+}
 ```
 
 
@@ -5643,7 +5798,7 @@ const result = await metric.measure(
 
 - [Answer Relevancy Metric](./answer-relevancy)
 - [Content Similarity Metric](./content-similarity)
-- [Textual Difference Metric](./textual-difference)
+- [Textual Difference Metric](./textual-difference) 
 - [Keyword Coverage Metric](./keyword-coverage)
 
 ---
@@ -5827,7 +5982,7 @@ const result2 = await strictWhitespaceMetric.measure(
 ## Related
 
 - [Completeness Metric](./completeness)
-- [Textual Difference Metric](./textual-difference)
+- [Textual Difference Metric](./textual-difference) 
 - [Answer Relevancy Metric](./answer-relevancy)
 - [Keyword Coverage Metric](./keyword-coverage)
 
@@ -6392,7 +6547,7 @@ const result = await metric.measure(
 // {
 //   score: 60,
 //   info: {
-//     reason: "3 out of 5 statements are relevant to pricing plans. The statements about
+//     reason: "3 out of 5 statements are relevant to pricing plans. The statements about 
 //           company founding and office locations are not relevant to the pricing query."
 //   }
 // }
@@ -6402,7 +6557,7 @@ const result = await metric.measure(
 
 - [Contextual Recall Metric](./contextual-recall)
 - [Context Precision Metric](./context-precision)
-- [Context Position Metric](./context-position)
+- [Context Position Metric](./context-position) 
 
 ---
 title: "Reference: Contextual Recall | Metrics | Evals | Mastra Docs"
@@ -6584,8 +6739,8 @@ const result = await metric.measure(
 // {
 //   score: 50, // Only half of the security measures were mentioned
 //   info: {
-//     reason: "The score is 50 because only half of the security measures were mentioned
-//           in the response. The response missed the regular security audits and incident
+//     reason: "The score is 50 because only half of the security measures were mentioned 
+//           in the response. The response missed the regular security audits and incident 
 //           response team information."
 //   }
 // }
@@ -6593,7 +6748,7 @@ const result = await metric.measure(
 
 ## Related
 
-+ [Context Relevancy Metric](./context-relevancy)
++ [Context Relevancy Metric](./context-relevancy) 
 + [Completeness Metric](./completeness)
 + [Summarization Metric](./summarization)
 
@@ -8152,6 +8307,194 @@ const result = await metric.measure(
 - [Bias Metric](./bias)
 
 
+# Memory Class Reference
+Source: https://mastra.ai/docs/reference/memory/Memory
+
+The `Memory` class provides a robust system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval. By default, it uses LibSQL for storage and vector search, and FastEmbed for embeddings.
+
+## Basic Usage
+
+```typescript copy showLineNumbers
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  memory: new Memory(),
+  ...otherOptions,
+});
+```
+
+## Custom Configuration
+
+```typescript copy showLineNumbers
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/core/storage/libsql";
+import { LibSQLVector } from "@mastra/core/vector/libsql";
+import { Agent } from "@mastra/core/agent";
+
+const memory = new Memory({
+  // Custom storage configuration
+  storage: new LibSQLStore({
+    url: "file:memory.db",
+  }),
+
+  // Custom vector database for semantic search
+  vector: new LibSQLVector({
+    url: "file:vector.db",
+  }),
+
+  // Memory configuration options
+  options: {
+    // Number of recent messages to include
+    lastMessages: 20,
+
+    // Semantic search configuration
+    semanticRecall: {
+      topK: 3, // Number of similar messages to retrieve
+      messageRange: {
+        // Messages to include around each result
+        before: 2,
+        after: 1,
+      },
+    },
+
+    // Working memory configuration
+    workingMemory: {
+      enabled: true,
+      template: "<user><first_name></first_name><last_name></last_name></user>",
+    },
+  },
+});
+
+const agent = new Agent({
+  memory,
+  ...otherOptions,
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "storage",
+      type: "MastraStorage",
+      description: "Storage implementation for persisting memory data",
+      isOptional: false,
+    },
+    {
+      name: "vector",
+      type: "MastraVector",
+      description: "Vector store for semantic search capabilities",
+      isOptional: true,
+    },
+    {
+      name: "embedder",
+      type: "EmbeddingModel",
+      description:
+        "Embedder instance for vector embeddings. Uses FastEmbed (bge-small-en-v1.5) by default",
+      isOptional: true,
+    },
+    {
+      name: "options",
+      type: "MemoryConfig",
+      description: "General memory configuration options",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### options
+
+<PropertiesTable
+  content={[
+    {
+      name: "lastMessages",
+      type: "number | false",
+      description:
+        "Number of most recent messages to retrieve. Set to false to disable.",
+      isOptional: true,
+      defaultValue: "40",
+    },
+    {
+      name: "semanticRecall",
+      type: "boolean | SemanticRecallConfig",
+      description:
+        "Enable semantic search in message history. Automatically enabled when vector store is provided.",
+      isOptional: true,
+      defaultValue: "false (true if vector store provided)",
+    },
+    {
+      name: "topK",
+      type: "number",
+      description:
+        "Number of similar messages to retrieve when using semantic search",
+      isOptional: true,
+      defaultValue: "2",
+    },
+    {
+      name: "messageRange",
+      type: "number | { before: number; after: number }",
+      description:
+        "Range of messages to include around semantic search results",
+      isOptional: true,
+      defaultValue: "2",
+    },
+    {
+      name: "workingMemory",
+      type: "{ enabled: boolean; template: string }",
+      description:
+        "Configuration for working memory feature that allows persistent storage of user information across conversations",
+      isOptional: true,
+      defaultValue:
+        "{ enabled: false, template: '<user><first_name></first_name><last_name></last_name>...</user>' }",
+    },
+  ]}
+/>
+
+### Working Memory
+
+The working memory feature allows agents to maintain persistent information across conversations. When enabled, the Memory class will automatically manage XML-based working memory updates through the conversation stream.
+
+If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information. See the [Agent Memory Guide](/docs/agents/agent-memory#working-memory) for detailed usage examples and best practices.
+
+### embedder
+
+By default, Memory uses FastEmbed with the `bge-small-en-v1.5` model, which provides a good balance of performance and model size (~130MB). You only need to specify an embedder if you want to use a different model or provider.
+
+## Additional Notes
+
+### Vector Search Configuration
+
+When using vector search capabilities with custom configuration, ensure you configure both the vector store and appropriate search options. Here's an example:
+
+```typescript copy showLineNumbers
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/core/storage/libsql";
+import { LibSQLVector } from "@mastra/core/vector/libsql";
+
+const memory = new Memory({
+  storage: new LibSQLStore({
+    url: ":memory:",
+  }),
+  vector: new LibSQLVector({
+    url: ":memory:",
+  }),
+  options: {
+    semanticRecall: {
+      topK: 5,
+      messageRange: 2,
+    },
+  },
+});
+```
+
+### Related
+
+- [createThread](/docs/reference/memory/createThread.mdx)
+- [query](/docs/reference/memory/query.mdx)
+
+
 # createThread
 Source: https://mastra.ai/docs/reference/memory/createThread
 
@@ -8340,192 +8683,6 @@ const threads = await memory.getThreadsByResourceId({
 ### Related
 
 - [Memory](/docs/reference/memory/Memory.mdx)
-
-
-# Memory Class Reference
-Source: https://mastra.ai/docs/reference/memory/Memory
-
-The `Memory` class provides a robust system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval. By default, it uses LibSQL for storage and vector search, and FastEmbed for embeddings.
-
-## Basic Usage
-
-```typescript copy showLineNumbers
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-
-const agent = new Agent({
-  memory: new Memory(),
-  ...otherOptions,
-});
-```
-
-## Custom Configuration
-
-```typescript copy showLineNumbers
-import { Memory } from "@mastra/memory";
-import { DefaultStorage, DefaultVectorDB } from "@mastra/core/storage";
-import { Agent } from "@mastra/core/agent";
-
-const memory = new Memory({
-  // Custom storage configuration
-  storage: new DefaultStorage({
-    url: "file:memory.db",
-  }),
-
-  // Custom vector database for semantic search
-  vector: new DefaultVectorDB({
-    url: "file:vector.db",
-  }),
-
-  // Memory configuration options
-  options: {
-    // Number of recent messages to include
-    lastMessages: 20,
-
-    // Semantic search configuration
-    semanticRecall: {
-      topK: 3, // Number of similar messages to retrieve
-      messageRange: {
-        // Messages to include around each result
-        before: 2,
-        after: 1,
-      },
-    },
-
-    // Working memory configuration
-    workingMemory: {
-      enabled: true,
-      template: "<user><first_name></first_name><last_name></last_name></user>",
-    },
-  },
-});
-
-const agent = new Agent({
-  memory,
-  ...otherOptions,
-});
-```
-
-## Parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "storage",
-      type: "MastraStorage",
-      description: "Storage implementation for persisting memory data",
-      isOptional: false,
-    },
-    {
-      name: "vector",
-      type: "MastraVector",
-      description: "Vector store for semantic search capabilities",
-      isOptional: true,
-    },
-    {
-      name: "embedder",
-      type: "EmbeddingModel",
-      description:
-        "Embedder instance for vector embeddings. Uses FastEmbed (bge-small-en-v1.5) by default",
-      isOptional: true,
-    },
-    {
-      name: "options",
-      type: "MemoryConfig",
-      description: "General memory configuration options",
-      isOptional: true,
-    },
-  ]}
-/>
-
-### options
-
-<PropertiesTable
-  content={[
-    {
-      name: "lastMessages",
-      type: "number | false",
-      description:
-        "Number of most recent messages to retrieve. Set to false to disable.",
-      isOptional: true,
-      defaultValue: "40",
-    },
-    {
-      name: "semanticRecall",
-      type: "boolean | SemanticRecallConfig",
-      description:
-        "Enable semantic search in message history. Automatically enabled when vector store is provided.",
-      isOptional: true,
-      defaultValue: "false (true if vector store provided)",
-    },
-    {
-      name: "topK",
-      type: "number",
-      description:
-        "Number of similar messages to retrieve when using semantic search",
-      isOptional: true,
-      defaultValue: "2",
-    },
-    {
-      name: "messageRange",
-      type: "number | { before: number; after: number }",
-      description:
-        "Range of messages to include around semantic search results",
-      isOptional: true,
-      defaultValue: "2",
-    },
-    {
-      name: "workingMemory",
-      type: "{ enabled: boolean; template: string }",
-      description:
-        "Configuration for working memory feature that allows persistent storage of user information across conversations",
-      isOptional: true,
-      defaultValue:
-        "{ enabled: false, template: '<user><first_name></first_name><last_name></last_name>...</user>' }",
-    },
-  ]}
-/>
-
-### Working Memory
-
-The working memory feature allows agents to maintain persistent information across conversations. When enabled, the Memory class will automatically manage XML-based working memory updates through the conversation stream.
-
-If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information. See the [Agent Memory Guide](/docs/agents/agent-memory#working-memory) for detailed usage examples and best practices.
-
-### embedder
-
-By default, Memory uses FastEmbed with the `bge-small-en-v1.5` model, which provides a good balance of performance and model size (~130MB). You only need to specify an embedder if you want to use a different model or provider.
-
-## Additional Notes
-
-### Vector Search Configuration
-
-When using vector search capabilities with custom configuration, ensure you configure both the vector store and appropriate search options. Here's an example:
-
-```typescript copy showLineNumbers
-import { Memory } from "@mastra/memory";
-import { DefaultStorage, DefaultVectorDB } from "@mastra/core/storage";
-
-const memory = new Memory({
-  storage: new DefaultStorage({
-    url: ":memory:",
-  }),
-  vector: new DefaultVectorDB({
-    url: ":memory:",
-  }),
-  options: {
-    semanticRecall: {
-      topK: 5,
-      messageRange: 2,
-    },
-  },
-});
-```
-
-### Related
-
-- [createThread](/docs/reference/memory/createThread.mdx)
-- [query](/docs/reference/memory/query.mdx)
 
 
 # query
@@ -8863,7 +9020,7 @@ description: Documentation for the OtelConfig object, which configures OpenTelem
 # `OtelConfig`
 Source: https://mastra.ai/docs/reference/observability/otel-config
 
-The `OtelConfig` object is used to configure OpenTelemetry instrumentation, tracing, and exporting behavior within your application. By adjusting its properties, you can control how telemetry data (such as traces) is collected, sampled, and exported.
+The `OtelConfig` object is used to configure OpenTelemetry instrumentation, tracing, and exporting behavior within your application. By adjusting its properties, you can control how telemetry data (such as traces) is collected, sampled, and exported. 
 
 To use the `OtelConfig` within Mastra, pass it as the value of the `telemetry` key when initializing Mastra. This will configure Mastra to use your custom OpenTelemetry settings for tracing and instrumentation.
 
@@ -9113,11 +9270,10 @@ import { LangfuseExporter } from "langfuse-vercel";
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: "your-service-name",
+    serviceName: "ai", // this must be set to "ai" so that the LangfuseExporter thinks it's an AI SDK trace
     enabled: true,
     export: {
       type: "custom",
-      traceName: "ai",
       exporter: new LangfuseExporter({
         publicKey: process.env.LANGFUSE_PUBLIC_KEY,
         secretKey: process.env.LANGFUSE_SECRET_KEY,
@@ -9552,7 +9708,7 @@ Required environment variables:
 - `ASTRA_DB_ENDPOINT`: Your Astra DB API endpoint
 
 ### Related
-- [Metadata Filters](./metadata-filters)
+- [Metadata Filters](./metadata-filters) 
 
 ---
 title: "Reference: Chroma Vector Store | Vector Databases | RAG | Mastra Docs"
@@ -9562,7 +9718,7 @@ description: Documentation for the ChromaVector class in Mastra, which provides 
 # Chroma Vector Store
 Source: https://mastra.ai/docs/reference/rag/chroma
 
-The ChromaVector class provides vector search using [ChromaDB](https://www.trychroma.com/), an open-source embedding database.
+The ChromaVector class provides vector search using [ChromaDB](https://www.trychroma.com/), an open-source embedding database. 
 It offers efficient vector search with metadata filtering and hybrid search capabilities.
 
 ## Constructor Options
@@ -9758,7 +9914,7 @@ try {
 ```
 
 ### Related
-- [Metadata Filters](./metadata-filters)
+- [Metadata Filters](./metadata-filters) 
 
 ---
 title: "Reference: .chunk() | Document Processing | RAG | Mastra Docs"
@@ -9782,7 +9938,7 @@ This is a sample document that we want to split into chunks.
 ## Section 1
 Here is the first section with some content.
 
-## Section 2
+## Section 2 
 Here is another section with different content.
 `);
 
@@ -10000,301 +10156,6 @@ interface DocumentNode {
 ```
 
 ---
-title: "Default Vector Store | Vector Databases | RAG | Mastra Docs"
-description: Documentation for the DefaultVectorDB class in Mastra, which provides vector search using LibSQL with vector extensions.
----
-
-# DefaultVectorDB Store
-Source: https://mastra.ai/docs/reference/rag/default
-
-The DefaultVectorDB class provides vector search using [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
-It's part of the `@mastra/core` package and offers efficient vector similarity search with metadata filtering.
-
-## Installation
-
-Default vector store is included in the core package:
-
-```bash copy
-npm install @mastra/core
-```
-
-## Usage
-
-```typescript copy showLineNumbers
-import { DefaultVectorDB } from '@mastra/core/storage';
-
-// Create a new vector store instance
-const store = new DefaultVectorDB({
-  connectionUrl: process.env.DATABASE_URL,
-  // Optional: for Turso cloud databases
-  authToken: process.env.DATABASE_AUTH_TOKEN,
-});
-
-// Create an index
-await store.createIndex("my-collection", 1536);
-
-// Add vectors with metadata
-const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
-const metadata = [
-  { text: "first document", category: "A" },
-  { text: "second document", category: "B" }
-];
-await store.upsert("my-collection", vectors, metadata);
-
-// Query similar vectors
-const queryVector = [0.1, 0.2, ...];
-const results = await store.query(
-  "my-collection",
-  queryVector,
-  10, // top K results
-  { category: "A" } // optional metadata filter
-);
-```
-
-## Constructor Options
-
-<PropertiesTable
-  content={[
-    {
-      name: "connectionUrl",
-      type: "string",
-      description:
-        "LibSQL database URL. Use ':memory:' for in-memory database, 'file:local.db' for local file, or a LibSQL-compatible connection string like 'libsql://your-database.turso.io'.",
-    },
-    {
-      name: "authToken",
-      type: "string",
-      isOptional: true,
-      description: "Authentication token for Turso cloud databases",
-    },
-    {
-      name: "syncUrl",
-      type: "string",
-      isOptional: true,
-      description: "URL for database replication (Turso specific)",
-    },
-    {
-      name: "syncInterval",
-      type: "number",
-      isOptional: true,
-      description:
-        "Interval in milliseconds for database sync (Turso specific)",
-    },
-  ]}
-/>
-
-## Methods
-
-### createIndex()
-
-Creates a new vector collection. The index name must start with a letter or underscore and can only contain letters, numbers, and underscores. The dimension must be a positive integer.
-
-<PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to create",
-    },
-    {
-      name: "dimension",
-      type: "number",
-      description: "Vector dimension size (must match your embedding model)",
-    },
-    {
-      name: "metric",
-      type: "'cosine' | 'euclidean' | 'dotproduct'",
-      isOptional: true,
-      defaultValue: "cosine",
-      description:
-        "Distance metric for similarity search. Note: Currently only cosine similarity is supported by LibSQL.",
-    },
-  ]}
-/>
-
-### upsert()
-
-Adds or updates vectors and their metadata in the index. Uses a transaction to ensure all vectors are inserted atomically - if any insert fails, the entire operation is rolled back.
-
-<PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to insert into",
-    },
-    {
-      name: "vectors",
-      type: "number[][]",
-      description: "Array of embedding vectors",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>[]",
-      isOptional: true,
-      description: "Metadata for each vector",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Optional vector IDs (auto-generated if not provided)",
-    },
-  ]}
-/>
-
-### query()
-
-Searches for similar vectors with optional metadata filtering.
-
-<PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to search in",
-    },
-    {
-      name: "queryVector",
-      type: "number[]",
-      description: "Query vector to find similar vectors for",
-    },
-    {
-      name: "topK",
-      type: "number",
-      isOptional: true,
-      defaultValue: "10",
-      description: "Number of results to return",
-    },
-    {
-      name: "filter",
-      type: "Filter",
-      isOptional: true,
-      description: "Metadata filters",
-    },
-    {
-      name: "includeVector",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether to include vector data in results",
-    },
-    {
-      name: "minScore",
-      type: "number",
-      isOptional: true,
-      defaultValue: "0",
-      description: "Minimum similarity score threshold",
-    },
-  ]}
-/>
-
-### describeIndex()
-
-Gets information about an index.
-
-<PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to describe",
-    },
-  ]}
-/>
-
-Returns:
-
-```typescript copy
-interface IndexStats {
-  dimension: number;
-  count: number;
-  metric: "cosine" | "euclidean" | "dotproduct";
-}
-```
-
-### deleteIndex()
-
-Deletes an index and all its data.
-
-<PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to delete",
-    },
-  ]}
-/>
-
-### listIndexes()
-
-Lists all vector indexes in the database.
-
-Returns: `Promise<string[]>`
-
-### truncateIndex()
-
-Removes all vectors from an index while keeping the index structure.
-
-<PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to truncate",
-    },
-  ]}
-/>
-
-## Response Types
-
-Query results are returned in this format:
-
-```typescript copy
-interface QueryResult {
-  id: string;
-  score: number;
-  metadata: Record<string, any>;
-  vector?: number[]; // Only included if includeVector is true
-}
-```
-
-## Error Handling
-
-The store throws specific errors for different failure cases:
-
-```typescript copy
-try {
-  await store.query("my-collection", queryVector);
-} catch (error) {
-  // Handle specific error cases
-  if (error.message.includes("Invalid index name format")) {
-    console.error(
-      "Index name must start with a letter/underscore and contain only alphanumeric characters",
-    );
-  } else if (error.message.includes("Table not found")) {
-    console.error("The specified index does not exist");
-  } else {
-    console.error("Vector store error:", error.message);
-  }
-}
-```
-
-Common error cases include:
-
-- Invalid index name format
-- Invalid vector dimensions
-- Table/index not found
-- Database connection issues
-- Transaction failures during upsert
-
-### Related
-
-- [Metadata Filters](./metadata-filters)
-
-
----
 title: "Reference: MDocument | Document Processing | RAG | Mastra Docs"
 description: Documentation for the MDocument class in Mastra, which handles document processing and chunking.
 ---
@@ -10339,7 +10200,7 @@ Creates a document from HTML content.
 static fromHTML(html: string, metadata?: Record<string, any>): MDocument
 ```
 
-### fromMarkdown()
+### fromMarkdown() 
 
 Creates a document from Markdown content.
 
@@ -10609,13 +10470,13 @@ const doc = new Document(text);
 const chunks = await doc.chunk({
   extract: {
     fields: [
-      {
-        name: 'summary',
-        description: 'A 1-2 sentence summary of the main points'
+      { 
+        name: 'summary', 
+        description: 'A 1-2 sentence summary of the main points' 
       },
-      {
-        name: 'entities',
-        description: 'List of companies, people, and locations mentioned'
+      { 
+        name: 'entities', 
+        description: 'List of companies, people, and locations mentioned' 
       },
       {
         name: 'custom_field',
@@ -10645,7 +10506,7 @@ const chunks = await doc.chunk({
       isOptional: true
     }
   ]}
-/>
+/> 
 
 ## Field Types
 
@@ -10846,6 +10707,301 @@ const results = await graphRag.query({
 ## Related
 
 - [createGraphRAGTool](../tools/graph-rag-tool)
+
+
+---
+title: "Default Vector Store | Vector Databases | RAG | Mastra Docs"
+description: Documentation for the LibSQLVector class in Mastra, which provides vector search using LibSQL with vector extensions.
+---
+
+# LibSQLVector Store
+Source: https://mastra.ai/docs/reference/rag/libsql
+
+The LibSQL storage implementation provides a SQLite-compatible vector search  [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
+It's part of the `@mastra/core` package and offers efficient vector similarity search with metadata filtering.
+
+## Installation
+
+Default vector store is included in the core package:
+
+```bash copy
+npm install @mastra/core
+```
+
+## Usage
+
+```typescript copy showLineNumbers
+import { LibSQLVector } from "@mastra/core/vector/libsql";
+
+// Create a new vector store instance
+const store = new LibSQLVector({
+  connectionUrl: process.env.DATABASE_URL,
+  // Optional: for Turso cloud databases
+  authToken: process.env.DATABASE_AUTH_TOKEN,
+});
+
+// Create an index
+await store.createIndex("my-collection", 1536);
+
+// Add vectors with metadata
+const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
+const metadata = [
+  { text: "first document", category: "A" },
+  { text: "second document", category: "B" }
+];
+await store.upsert("my-collection", vectors, metadata);
+
+// Query similar vectors
+const queryVector = [0.1, 0.2, ...];
+const results = await store.query(
+  "my-collection",
+  queryVector,
+  10, // top K results
+  { category: "A" } // optional metadata filter
+);
+```
+
+## Constructor Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "connectionUrl",
+      type: "string",
+      description:
+        "LibSQL database URL. Use ':memory:' for in-memory database, 'file:local.db' for local file, or a LibSQL-compatible connection string like 'libsql://your-database.turso.io'.",
+    },
+    {
+      name: "authToken",
+      type: "string",
+      isOptional: true,
+      description: "Authentication token for Turso cloud databases",
+    },
+    {
+      name: "syncUrl",
+      type: "string",
+      isOptional: true,
+      description: "URL for database replication (Turso specific)",
+    },
+    {
+      name: "syncInterval",
+      type: "number",
+      isOptional: true,
+      description:
+        "Interval in milliseconds for database sync (Turso specific)",
+    },
+  ]}
+/>
+
+## Methods
+
+### createIndex()
+
+Creates a new vector collection. The index name must start with a letter or underscore and can only contain letters, numbers, and underscores. The dimension must be a positive integer.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to create",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "Vector dimension size (must match your embedding model)",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description:
+        "Distance metric for similarity search. Note: Currently only cosine similarity is supported by LibSQL.",
+    },
+  ]}
+/>
+
+### upsert()
+
+Adds or updates vectors and their metadata in the index. Uses a transaction to ensure all vectors are inserted atomically - if any insert fails, the entire operation is rolled back.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to insert into",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "Array of embedding vectors",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "Metadata for each vector",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "Optional vector IDs (auto-generated if not provided)",
+    },
+  ]}
+/>
+
+### query()
+
+Searches for similar vectors with optional metadata filtering.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to search in",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "Query vector to find similar vectors for",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "Number of results to return",
+    },
+    {
+      name: "filter",
+      type: "Filter",
+      isOptional: true,
+      description: "Metadata filters",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include vector data in results",
+    },
+    {
+      name: "minScore",
+      type: "number",
+      isOptional: true,
+      defaultValue: "0",
+      description: "Minimum similarity score threshold",
+    },
+  ]}
+/>
+
+### describeIndex()
+
+Gets information about an index.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to describe",
+    },
+  ]}
+/>
+
+Returns:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+Deletes an index and all its data.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to delete",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+Lists all vector indexes in the database.
+
+Returns: `Promise<string[]>`
+
+### truncateIndex()
+
+Removes all vectors from an index while keeping the index structure.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to truncate",
+    },
+  ]}
+/>
+
+## Response Types
+
+Query results are returned in this format:
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // Only included if includeVector is true
+}
+```
+
+## Error Handling
+
+The store throws specific errors for different failure cases:
+
+```typescript copy
+try {
+  await store.query("my-collection", queryVector);
+} catch (error) {
+  // Handle specific error cases
+  if (error.message.includes("Invalid index name format")) {
+    console.error(
+      "Index name must start with a letter/underscore and contain only alphanumeric characters",
+    );
+  } else if (error.message.includes("Table not found")) {
+    console.error("The specified index does not exist");
+  } else {
+    console.error("Vector store error:", error.message);
+  }
+}
+```
+
+Common error cases include:
+
+- Invalid index name format
+- Invalid vector dimensions
+- Table/index not found
+- Database connection issues
+- Transaction failures during upsert
+
+### Related
+
+- [Metadata Filters](./metadata-filters)
 
 
 ---
@@ -11158,7 +11314,7 @@ description: Documentation for the PgVector class in Mastra, which provides vect
 Source: https://mastra.ai/docs/reference/rag/pg
 
 The PgVector class provides vector search using [PostgreSQL](https://www.postgresql.org/) with [pgvector](https://github.com/pgvector/pgvector) extension.
-It provides robust vector similarity search capabilities within your existing PostgreSQL database.
+It provides robust vector similarity search capabilities within your existing PostgreSQL database. 
 
 ## Constructor Options
 
@@ -11195,8 +11351,110 @@ It provides robust vector similarity search capabilities within your existing Po
       defaultValue: "cosine",
       description: "Distance metric for similarity search",
     },
+    {
+      name: "indexConfig",
+      type: "IndexConfig",
+      isOptional: true,
+      defaultValue: "{ type: 'ivfflat' }",
+      description: "Index configuration",
+    },
+    {
+      name: "defineIndex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "Whether to define the index",
+    },
   ]}
 />
+
+#### IndexConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: "'flat' | 'hnsw' | 'ivfflat'",
+      description: "Index type",
+      defaultValue: "ivfflat",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "flat",
+              type: "flat",
+              description: "Sequential scan (no index) that performs exhaustive search.",
+            },
+            {
+              name: "ivfflat",
+              type: "ivfflat",
+              description: "Clusters vectors into lists for approximate search.",
+            },
+            {
+              name: "hnsw",
+              type: "hnsw",
+              description: "Graph-based index offering fast search times and high recall.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "ivf",
+      type: "IVFConfig",
+      isOptional: true,
+      description: "IVF configuration",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "lists",
+              type: "number",
+              description: "Number of lists. If not specified, automatically calculated based on dataset size. (Minimum 100, Maximum 4000)",
+              isOptional: true,
+            }
+          ],
+        },
+      ],
+    },
+    {
+      name: "hnsw",
+      type: "HNSWConfig",
+      isOptional: true,
+      description: "HNSW configuration",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "m",
+              type: "number",
+              description: "Maximum number of connections per node (default: 8)",
+              isOptional: true,
+            },
+            {
+              name: "efConstruction",
+              type: "number",
+              description: "Build-time complexity (default: 32)",
+              isOptional: true,
+            },
+          ],
+        },
+      ]
+    },
+  ]}
+/>
+
+#### Memory Requirements
+
+HNSW indexes require significant shared memory during construction. For 100K vectors:
+- Small dimensions (64d): ~60MB with default settings
+- Medium dimensions (256d): ~180MB with default settings
+- Large dimensions (384d+): ~250MB+ with default settings
+
+Higher M values or efConstruction values will increase memory requirements significantly. Adjust your system's shared memory limits if needed.
 
 ### upsert()
 
@@ -11268,6 +11526,31 @@ It provides robust vector similarity search capabilities within your existing Po
       defaultValue: "0",
       description: "Minimum similarity score threshold",
     },
+    {
+      name: "options",
+      type: "{ ef?: number; probes?: number }",
+      isOptional: true,
+      description: "Additional options for HNSW and IVF indexes",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "ef",
+              type: "number",
+              description: "HNSW search parameter",
+              isOptional: true,
+            },
+            {
+              name: "probes",
+              type: "number",
+              description: "IVF search parameter",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
@@ -11290,10 +11573,17 @@ Returns an array of index names as strings.
 Returns:
 
 ```typescript copy
-interface IndexStats {
+interface PGIndexStats {
   dimension: number;
   count: number;
   metric: "cosine" | "euclidean" | "dotproduct";
+  type: "flat" | "hnsw" | "ivfflat";
+  config: {
+    m?: number;
+    efConstruction?: number;
+    lists?: number;
+    probes?: number;
+  };
 }
 ```
 
@@ -11312,6 +11602,56 @@ interface IndexStats {
 ### disconnect()
 
 Closes the database connection pool. Should be called when done using the store.
+
+### defineIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to define",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "Distance metric for similarity search",
+    },
+    {
+      name: "indexConfig",
+      type: "IndexConfig",
+      description: "Configuration for the index type and parameters",
+    },
+  ]}
+/>
+
+Defines or redefines an index with specified metric and configuration. Will drop any existing index before creating the new one.
+
+```typescript copy
+// Define HNSW index
+await pgVector.defineIndex("my_vectors", "cosine", {
+  type: "hnsw",
+  hnsw: {
+    m: 8,
+    efConstruction: 32
+  }
+});
+
+// Define IVF index
+await pgVector.defineIndex("my_vectors", "cosine", {
+  type: "ivfflat",
+  ivf: {
+    lists: 100, 
+  }
+});
+
+// Define flat index
+await pgVector.defineIndex("my_vectors", "cosine", {
+  type: "flat" 
+});
+```
 
 ## Response Types
 
@@ -11339,6 +11679,12 @@ try {
   }
 }
 ```
+
+## Best Practices
+
+- Regularly evaluate your index configuration to ensure optimal performance.
+- Adjust parameters like `lists` and `m` based on dataset size and query requirements.
+- Rebuild indexes periodically to maintain efficiency, especially after significant data changes.
 
 ### Related
 - [Metadata Filters](./metadata-filters)
@@ -11546,7 +11892,7 @@ description: Documentation for integrating Qdrant with Mastra, a vector similari
 # Qdrant Vector Store
 Source: https://mastra.ai/docs/reference/rag/qdrant
 
-The QdrantVector class provides vector search using [Qdrant](https://qdrant.tech/), a vector similarity search engine.
+The QdrantVector class provides vector search using [Qdrant](https://qdrant.tech/), a vector similarity search engine. 
 It provides a production-ready service with a convenient API to store, search, and manage vectors with additional payload and extended filtering support.
 
 ## Constructor Options
@@ -11654,7 +12000,7 @@ It provides a production-ready service with a convenient API to store, search, a
       name: "includeVector",
       type: "boolean",
       isOptional: true,
-      defaultValue: "false",
+      defaultValue: "false", 
       description: "Whether to include vectors in the results",
     },
   ]}
@@ -11735,7 +12081,7 @@ description: Documentation for the rerank function in Mastra, which provides adv
 # rerank()
 Source: https://mastra.ai/docs/reference/rag/rerank
 
-The `rerank()` function provides advanced reranking capabilities for vector search results by combining semantic relevance, vector similarity, and position-based scoring.
+The `rerank()` function provides advanced reranking capabilities for vector search results by combining semantic relevance, vector similarity, and position-based scoring. 
 
 ```typescript
 function rerank(
@@ -12134,7 +12480,7 @@ Required environment variables:
 - `UPSTASH_VECTOR_TOKEN`: Your Upstash Vector API token
 
 ### Related
-- [Metadata Filters](./metadata-filters)
+- [Metadata Filters](./metadata-filters) 
 
 ---
 title: "Reference: Cloudflare Vector Store | Vector Databases | RAG | Mastra Docs"
@@ -12301,7 +12647,7 @@ Creates an index on a metadata field to enable filtering.
   content={[
     {
       name: "indexName",
-      type: "string",
+      type: "string", 
       description: "Name of the index containing the metadata field",
     },
     {
@@ -12385,7 +12731,7 @@ Required environment variables:
 - `CLOUDFLARE_API_TOKEN`: Your Cloudflare API token with Vectorize permissions
 
 ### Related
-- [Metadata Filters](./metadata-filters)
+- [Metadata Filters](./metadata-filters) 
 
 ---
 title: "LibSQL Storage | Storage System | Mastra Core"
@@ -12406,15 +12752,15 @@ npm install @mastra/storage-libsql
 ## Usage
 
 ```typescript copy showLineNumbers
-import { DefaultStorage } from "@mastra/core/storage";
+import { LibSQLStore } from "@mastra/core/storage/libsql";
 
 // In-memory database (development)
-const storage = new DefaultStorage({
+const storage = new LibSQLStore({
   url: ":memory:",
 });
 
 // Persistent database (production)
-const storage = new DefaultStorage({
+const storage = new LibSQLStore({
   url: process.env.DATABASE_URL,
 });
 ```
@@ -12625,7 +12971,7 @@ constructor({
     capabilities = {},
 }: {
     name: string;
-    server: StdioServerParameters;
+    server: StdioServerParameters | SSEClientParameters;
     capabilities?: ClientCapabilities;
     version?: string;
 })
@@ -12649,8 +12995,8 @@ constructor({
     },
     {
       name: 'server',
-      type: 'StdioServerParameters',
-      description: 'Configuration parameters for the stdio server connection.',
+      type: 'StdioServerParameters | SSEClientParameters',
+      description: 'Configuration parameters for either a stdio server connection or an SSE server connection.',
     },
     {
       name: 'capabilities',
@@ -12701,6 +13047,8 @@ Returns an object mapping tool names to their corresponding Mastra tool implemen
 ## Examples
 
 ### Using with Mastra Agent
+
+#### Example with Stdio Server
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -12754,6 +13102,26 @@ try {
   // Always disconnect when done
   await fetchClient.disconnect();
 }
+```
+
+#### Example with SSE Server
+
+```typescript
+// Initialize the MCP client using an SSE server
+const sseClient = new MastraMCPClient({
+  name: "sse-client",
+  server: {
+    url: new URL("https://your-mcp-server.com/sse"),
+    // Optional fetch request configuration
+    requestInit: {
+      headers: {
+        "Authorization": "Bearer your-token"
+      }
+    }
+  },
+});
+
+// The rest of the usage is identical to the stdio example
 ```
 
 ## Related Information
@@ -12901,7 +13269,7 @@ The chunker is created as a Mastra tool with the following properties:
 ## Related
 
 - [MDocument](../rag/document.mdx)
-- [createVectorQueryTool](./vector-query-tool)
+- [createVectorQueryTool](./vector-query-tool) 
 
 
 ---
@@ -13032,7 +13400,7 @@ const graphTool = createGraphRAGTool({
 ## Related
 
 - [createVectorQueryTool](./vector-query-tool)
-- [GraphRAG](../rag/graph-rag)
+- [GraphRAG](../rag/graph-rag) 
 
 ---
 title: "Reference: createVectorQueryTool() | RAG | Mastra Tools Docs"
@@ -13231,8 +13599,8 @@ The tool is created with:
 
 ## Related
 
-- [rerank()](../rag/rerank)
-- [createGraphRAGTool](./graph-rag-tool)
+- [rerank()](../rag/rerank) 
+- [createGraphRAGTool](./graph-rag-tool) 
 
 ---
 title: "Reference: TTS.generate() | Text to Speech (TTS) | Mastra Docs"
@@ -13950,25 +14318,19 @@ workflow
 
 - [Branching Paths example](../../../examples/workflows/branching-paths.mdx)
 - [Workflow Class Reference](./workflow.mdx)
-- [Step Reference](./step-class.mdx)
+- [Step Reference](./step-class.mdx) 
 - [Control Flow Guide](../../workflows/control-flow.mdx)
 
 
 ---
 title: "Reference: Workflow.commit() | Running Workflows | Mastra Docs"
-description: Documentation for the `.commit()` method in workflows, which finalizes and validates workflow definitions.
+description: Documentation for the `.commit()` method in workflows, which re-initializes the workflow machine with the current step configuration.
 ---
 
 # Workflow.commit()
 Source: https://mastra.ai/docs/reference/workflows/commit
 
-The `.commit()` method finalizes a workflow definition, validating its structure and making it ready for execution. When calling `.commit()`, the workflow validates:
-
-- No circular dependencies between steps
-- All paths must have an end point
-- No unreachable steps
-- No duplicate step IDs
-- Variable references to non-existent steps
+The `.commit()` method re-initializes the workflow's state machine with the current step configuration.
 
 ## Usage
 
@@ -13986,51 +14348,7 @@ workflow
     {
       name: "workflow",
       type: "Workflow",
-      description: "The validated workflow instance"
-    }
-  ]}
-/>
-
-## Error Handling
-
-```typescript
-try {
-  workflow
-    .step(stepA)
-    .after(['stepB', 'stepC'])
-    .step(stepD)
-    .commit();
-} catch (error) {
-  if (error instanceof ValidationError) {
-    console.log(error.type); // 'circular_dependency' | 'no_terminal_path' | 'unreachable_step'
-    console.log(error.details);
-  }
-}
-```
-
-### Validation Error Types
-
-<PropertiesTable
-  content={[
-    {
-      name: "circular_dependency",
-      type: "string",
-      description: "Steps form a circular reference"
-    },
-    {
-      name: "no_terminal_path",
-      type: "string",
-      description: "Path has no end point"
-    },
-    {
-      name: "unreachable_step",
-      type: "string",
-      description: "Step cannot be reached from workflow start"
-    },
-    {
-      name: "duplicate_step_id",
-      type: "string",
-      description: "Multiple steps share the same ID"
+      description: "The workflow instance"
     }
   ]}
 />
@@ -14110,7 +14428,7 @@ try {
 
 
 ---
-title: "Reference: Workflow.execute() | Workflows | Mastra Docs"
+title: "Reference: Workflow.execute() | Workflows | Mastra Docs" 
 description: "Documentation for the `.execute()` method in Mastra workflows, which runs workflow steps and returns results."
 ---
 
@@ -14136,7 +14454,7 @@ const result = await workflow.execute({
 });
 ```
 
-## Parameters
+## Parameters 
 
 <PropertiesTable
   content={[
@@ -14153,7 +14471,7 @@ const result = await workflow.execute({
           isOptional: false
         },
         {
-          name: "runId",
+          name: "runId", 
           type: "string",
           description: "Optional ID to track this execution run",
           isOptional: true
@@ -14174,7 +14492,7 @@ const result = await workflow.execute({
       properties: [
         {
           name: "runId",
-          type: "string",
+          type: "string", 
           description: "Unique identifier for this execution run"
         },
         {
@@ -14236,7 +14554,7 @@ The `.resume()` method continues execution of a suspended workflow step, optiona
 ```typescript copy showLineNumbers
 await workflow.resume({
   runId: "abc-123",
-  stepId: "stepTwo",
+  stepId: "stepTwo", 
   context: {
     secondValue: 100
   }
@@ -14262,7 +14580,7 @@ await workflow.resume({
   content={[
     {
       name: "runId",
-      type: "string",
+      type: "string", 
       description: "Unique identifier of the workflow run to resume",
       isOptional: false
     },
@@ -14337,8 +14655,8 @@ The start function begins execution of a workflow run. It processes all steps in
 
 ```typescript copy showLineNumbers
 const { runId, start } = workflow.createRun();
-const result = await start({
-  triggerData: { inputValue: 42 }
+const result = await start({ 
+  triggerData: { inputValue: 42 } 
 });
 ```
 
@@ -14458,7 +14776,7 @@ const processOrder = new Step({
       required: false
     },
     {
-      name: "outputSchema",
+      name: "outputSchema", 
       type: "z.ZodSchema",
       description: "Zod schema to validate step output data",
       required: false
@@ -15230,7 +15548,7 @@ A workflow's status indicates its current execution state. The possible values a
     },
     {
       name: "RUNNING",
-      type: "string",
+      type: "string", 
       description: "Workflow is actively executing steps"
     },
     {
@@ -15440,9 +15758,7 @@ Or use the API (requires running `mastra dev`):
 curl --location 'http://localhost:4111/api/workflows/myWorkflow/execute' \
      --header 'Content-Type: application/json' \
      --data '{
-       "triggerData": {
-         "inputValue": 45
-       }
+       "inputValue": 45
      }'
 ```
 
@@ -15522,15 +15838,16 @@ myWorkflow
   .after(stepA)
     .step(stepC)
     .then(stepE)
-  .after([stepD, stepE])
+  .after(stepD)
     .step(stepF);
+    .step(stepE)
 ```
 
 In this example:
 
 - stepA leads to stepB, then to stepD.
 - Separately, stepA also triggers stepC, which in turn leads to stepE.
-- The workflow waits for both stepD and stepE to finish before proceeding to stepF.
+- Separately, stepD also triggers stepF and stepE in parallel.
 
 See the [Branching Paths](../../examples/workflows/branching-paths.mdx) example for more details.
 
@@ -15652,7 +15969,7 @@ workflow.step(
   new Step({
     id: "sendEmail",
     execute: async ({ context }) => {
-      const orderStatus = context.steps.processOrder.payload.status;
+      const orderStatus = context.steps.processOrder.output.status;
       console.log(orderStatus);
     },
   })
@@ -16143,7 +16460,7 @@ const getRandomImage = async ({
 };
 
 const instructions = `
-  You can view an image and figure out if it is a bird or not.
+  You can view an image and figure out if it is a bird or not. 
   You can also figure out the species of the bird and where the picture was taken.
 `;
 
@@ -18707,7 +19024,7 @@ The metric provides:
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/keyword-coverage"
   }
-/>
+/> 
 
 ---
 title: "Example: Prompt Alignment | Evals | Mastra Docs"
@@ -18942,11 +19259,11 @@ const metric = new SummarizationMetric(openai('gpt-4o-mini'));
 Evaluate a summary that maintains both factual accuracy and complete coverage:
 
 ```typescript copy showLineNumbers{7} filename="src/index.ts"
-const input1 = `The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning.
-Elon Musk joined in 2004 as the largest investor and became CEO in 2008. The company's first car,
+const input1 = `The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning. 
+Elon Musk joined in 2004 as the largest investor and became CEO in 2008. The company's first car, 
 the Roadster, was launched in 2008.`;
 
-const output1 = `Tesla, founded by Martin Eberhard and Marc Tarpenning in 2003, launched its first car,
+const output1 = `Tesla, founded by Martin Eberhard and Marc Tarpenning in 2003, launched its first car, 
 the Roadster, in 2008. Elon Musk joined as the largest investor in 2004 and became CEO in 2008.`;
 
 console.log('Example 1 - High-quality Summary:');
@@ -18978,12 +19295,12 @@ console.log('Metric Result:', {
 Evaluate a summary that is factually accurate but omits important information:
 
 ```typescript copy showLineNumbers{24} filename="src/index.ts"
-const input2 = `The Python programming language was created by Guido van Rossum and was first released
-in 1991. It emphasizes code readability with its notable use of significant whitespace. Python is
-dynamically typed and garbage-collected. It supports multiple programming paradigms, including
+const input2 = `The Python programming language was created by Guido van Rossum and was first released 
+in 1991. It emphasizes code readability with its notable use of significant whitespace. Python is 
+dynamically typed and garbage-collected. It supports multiple programming paradigms, including 
 structured, object-oriented, and functional programming.`;
 
-const output2 = `Python, created by Guido van Rossum, is a programming language known for its readable
+const output2 = `Python, created by Guido van Rossum, is a programming language known for its readable 
 code and use of whitespace. It was released in 1991.`;
 
 console.log('Example 2 - Partial Coverage:');
@@ -19015,11 +19332,11 @@ console.log('Metric Result:', {
 Evaluate a summary that contains factual errors and misrepresentations:
 
 ```typescript copy showLineNumbers{41} filename="src/index.ts"
-const input3 = `The World Wide Web was invented by Tim Berners-Lee in 1989 while working at CERN.
-He published the first website in 1991. Berners-Lee made the Web freely available, with no patent
+const input3 = `The World Wide Web was invented by Tim Berners-Lee in 1989 while working at CERN. 
+He published the first website in 1991. Berners-Lee made the Web freely available, with no patent 
 and no royalties due.`;
 
-const output3 = `The Internet was created by Tim Berners-Lee at MIT in the early 1990s, and he went
+const output3 = `The Internet was created by Tim Berners-Lee at MIT in the early 1990s, and he went 
 on to commercialize the technology through patents.`;
 
 console.log('Example 3 - Inaccurate Summary:');
@@ -19075,7 +19392,7 @@ Final score is determined by the minimum of these two scores, ensuring that both
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/summarization"
   }
-/>
+/> 
 
 ---
 title: "Example: Textual Difference | Evals | Mastra Docs"
@@ -19247,7 +19564,7 @@ The metric provides:
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/textual-difference"
   }
-/>
+/> 
 
 ---
 title: "Example: Tone Consistency | Evals | Mastra Docs"
@@ -19409,7 +19726,7 @@ The metric provides different outputs based on the mode:
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/tone-consistency"
   }
-/>
+/> 
 
 ---
 title: "Example: Toxicity | Evals | Mastra Docs"
@@ -19555,7 +19872,7 @@ The metric provides:
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/toxicity"
   }
-/>
+/> 
 
 ---
 title: "Examples List: Workflows, Agents, RAG | Mastra Docs"
@@ -19784,7 +20101,7 @@ The Examples section is a short list of example projects demonstrating basic AI 
       href: "/examples/evals/textual-difference",
     },
     {
-      title: "Tone Consistency",
+      title: "Tone Consistency", 
       href: "/examples/evals/tone-consistency",
     },
     {
@@ -19828,13 +20145,14 @@ If you need more control, you can explicitly configure the storage, vector datab
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
-import { DefaultStorage, DefaultVectorDB } from "@mastra/core/storage";
+import { LibSQLStore } from "@mastra/core/storage/libsql";
+import { LibSQLVector } from "@mastra/core/vector/libsql";
 
 const customMemory = new Memory({
-  storage: new DefaultStorage({
+  storage: new LibSQLStore({
     url: process.env.DATABASE_URL || "file:local.db",
   }),
-  vector: new DefaultVectorDB({
+  vector: new LibSQLVector({
     connectionUrl: process.env.DATABASE_URL || "file:local.db",
   }),
   options: {
@@ -20508,7 +20826,7 @@ const agent = mastra.getAgent('ragAgent');
 ```typescript copy showLineNumbers{32} filename="src/index.ts"
 const prompt = `
 [Insert query based on document here]
-Please base your answer only on the context provided in the tool.
+Please base your answer only on the context provided in the tool. 
 If the context doesn't contain enough information to fully answer the question, please state that explicitly.
 `;
 
@@ -20891,9 +21209,9 @@ async function generateResponse(query: string, agent: Agent) {
       Please answer the following question:
       ${query}
 
-      Please base your answer only on the context provided in the tool with this index ${index}.
-      If the context doesn't contain enough information to fully answer the question,
-      please state that explicitly.
+      Please base your answer only on the context provided in the tool with this index ${index}. 
+      If the context doesn't contain enough information to fully answer the question, 
+      please state that explicitly. 
       `;
   // Call the agent to generate a response
   const completion = await agent.generate(prompt);
@@ -21090,7 +21408,7 @@ async function generateResponse(query: string) {
     Please answer the following question using chain-of-thought reasoning:
     ${query}
 
-    Please base your answer only on the context provided in the tool. If the context doesn't
+    Please base your answer only on the context provided in the tool. If the context doesn't 
     contain enough information to fully answer the question, please state that explicitly.
     Remember: Explain how you're using the retrieved information to reach your conclusions.
     `;
@@ -21730,7 +22048,7 @@ export const ragAgent = new Agent({
   You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
 
   Use the vectorQueryTool to filter the context by searching the metadata.
-
+  
   The metadata is structured as follows:
 
   {
@@ -22074,7 +22392,7 @@ The system implements filtered vector search using Mastra and PGVector. Here's w
 3. Demonstrates combining vector similarity with metadata filtering
 
 > **Note**: For examples of how to extract metadata from your documents, see the [Metadata Extraction](./metadata-extraction) guide.
->
+> 
 > To learn how to create and store embeddings in PGVector, see the [Insert Embeddings in PGVector](./insert-embedding-in-pgvector) guide.
 
 ## Setup
@@ -22228,7 +22546,7 @@ await chroma.upsert(
   chunks?.map(chunk => ({ text: chunk.text })),
 );
 ```
-{/*
+{/* 
 <br />
 <br />
 <hr className="dark:border-[#404040] border-gray-300" />
@@ -22247,11 +22565,11 @@ import { GithubLink } from "../../../components/github-link";
 # Insert Embedding in LibSQL
 Source: https://mastra.ai/examples/rag/insert-embedding-in-libsql
 
-After generating embeddings, you need to store them in a vector database for similarity search. The `DefaultVectorDB` class provides methods to create collections and insert embeddings into LibSQL, a fork of SQLite with vector extensions. This example shows how to store embeddings in LibSQL for later retrieval.
+After generating embeddings, you need to store them in a vector database for similarity search. The `LibSQLVector` class provides methods to create collections and insert embeddings into LibSQL, a fork of SQLite with vector extensions. This example shows how to store embeddings in LibSQL for later retrieval.
 
 ```tsx copy
 import { openai } from "@ai-sdk/openai";
-import { DefaultVectorDB } from "@mastra/core/storage";
+import { LibSQLVector } from "@mastra/core/vector/libsql";
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
 
@@ -22264,7 +22582,10 @@ const { embeddings } = await embedMany({
   model: openai.embedding("text-embedding-3-small"),
 });
 
-const libsql = new DefaultVectorDB(process.env.DATABASE_URL);
+const libsql = new LibSQLVector({
+  connectionUrl: process.env.DATABASE_URL,
+  authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
+});
 
 await libsql.createIndex("test_collection", 1536);
 
@@ -22315,7 +22636,7 @@ const { embeddings } = await embedMany({
   model: openai.embedding("text-embedding-3-small"),
  });
 
-const pgVector = new PgVector("postgresql://localhost:5432/mydb");
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 await pgVector.createIndex("test_index", 1536);
 
@@ -22365,12 +22686,12 @@ const { embeddings } = await embedMany({
   model: openai.embedding('text-embedding-3-small'),
 });
 
-const pinecone = new PineconeVector('your-api-key');
+const pinecone = new PineconeVector(process.env.PINECONE_API_KEY!);
 
-await pinecone.createIndex('test_index', 1536);
+await pinecone.createIndex('testindex', 1536);
 
 await pinecone.upsert(
-  'test_index',
+  'testindex',
   embeddings,
   chunks?.map(chunk => ({ text: chunk.text })),
 );
@@ -22412,9 +22733,9 @@ const { embeddings } = await embedMany({
   maxRetries: 3,
 });
 
-const qdrant = new QdrantVector({
-  url: process.env.QDRANT_URL,
-  apiKey: process.env.QDRANT_API_KEY,
+const qdrant = new QdrantVector(
+  process.env.QDRANT_URL,
+  process.env.QDRANT_API_KEY,
 });
 
 await qdrant.createIndex('test_collection', 1536);
@@ -22523,7 +22844,7 @@ await vectorize.upsert(
   chunks?.map(chunk => ({ text: chunk.text })),
 );
 ```
-{/*
+{/* 
 <br />
 <br />
 <hr className="dark:border-[#404040] border-gray-300" />
@@ -22569,7 +22890,7 @@ Create a document from text content:
 ```typescript copy showLineNumbers{3} filename="src/index.ts"
 const doc = MDocument.fromText(`Title: The Benefits of Regular Exercise
 
-Regular exercise has numerous health benefits. It improves cardiovascular health,
+Regular exercise has numerous health benefits. It improves cardiovascular health, 
 strengthens muscles, and boosts mental wellbeing.
 
 Key Benefits:
@@ -22578,7 +22899,7 @@ Key Benefits:
 • Helps maintain healthy weight
 • Increases energy levels
 
-For optimal results, experts recommend at least 150 minutes of moderate exercise
+For optimal results, experts recommend at least 150 minutes of moderate exercise 
 per week.`);
 ```
 
@@ -22653,7 +22974,7 @@ console.log('Chunk Metadata:', metaTwo);
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/metadata-extraction"
   }
-/>
+/> 
 
 ---
 title: "Example: Re-ranking Results with Tools | Retrieval | RAG | Mastra Docs"
@@ -22815,7 +23136,7 @@ async function generateResponse(query: string) {
       Please answer the following question:
       ${query}
 
-      Please base your answer only on the context provided in the tool. If the context doesn't
+      Please base your answer only on the context provided in the tool. If the context doesn't 
       contain enough information to fully answer the question, please state that explicitly.
       `;
 
@@ -22856,7 +23177,7 @@ await answerQueries(queries);
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank-rag"
   }
-/>
+/> 
 
 ---
 title: "Example: Re-ranking Results | Retrieval | RAG | Mastra Docs"
@@ -23014,7 +23335,7 @@ The re-ranked results show how combining vector similarity with semantic underst
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank"
   }
-/>
+/> 
 
 ---
 title: "Example: Reranking with Cohere | RAG | Mastra Docs"
@@ -23024,11 +23345,11 @@ description: Example of using Mastra to improve document retrieval relevance wit
 # Reranking with Cohere
 Source: https://mastra.ai/examples/rag/reranking-with-cohere
 
-When retrieving documents for RAG, initial vector similarity search may miss important semantic matches.
+When retrieving documents for RAG, initial vector similarity search may miss important semantic matches. 
 
 Cohere's reranking service helps improve result relevance by reordering documents using multiple scoring factors.
 
-```typescript
+```typescript 
 import { rerank } from "@mastra/rag";
 
 const results = rerank(
@@ -23062,7 +23383,7 @@ import { GithubLink } from "../../../components/github-link";
 # Retrieving Top-K Results
 Source: https://mastra.ai/examples/rag/retrieve-results
 
-After storing embeddings in a vector database, you need to query them to find similar content.
+After storing embeddings in a vector database, you need to query them to find similar content. 
 
 The `query` method returns the most semantically similar chunks to your input embedding, ranked by relevance. The `topK` parameter allows you to specify the number of results to return.
 
@@ -23738,7 +24059,7 @@ export const mastra = new Mastra({
 // Get registered workflow from Mastra
 const registeredWorkflow = mastra.getWorkflow('registeredWorkflow');
 const { runId, start } = registeredWorkflow.createRun();
-
+ 
 // Start watching the workflow before executing it
 myWorkflow.watch(async ({ context, activePaths }) => {
   for (const _path of activePaths) {
