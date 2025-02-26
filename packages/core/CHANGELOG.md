@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.4.3-alpha.0
+
+### Patch Changes
+
+- 06aa827: add option for specifying telemetry settings at generation time
+
 ## 0.4.2
 
 ### Patch Changes

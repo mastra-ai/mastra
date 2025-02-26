@@ -1,5 +1,15 @@
 # mastra
 
+## 0.2.7-alpha.0
+
+### Patch Changes
+
+- b24970d: Added Mastra svg favicon to playground
+- 7a0866e: Use non-crypto uuid function in playground, to allow for local urls like local.lan:4111 during development
+- Updated dependencies [06aa827]
+  - @mastra/core@0.4.3-alpha.0
+  - @mastra/deployer@0.1.6-alpha.0
+
 ## 0.2.6
 
 ### Patch Changes
