@@ -425,8 +425,8 @@ export class Machine<
           };
         }) => {
           const { parentStepId, context } = input;
-          this.emit('spawn-subscriber', { parentStepId, context });
-          return Promise.resolve({ steps: context.steps });
+          const result = await this.#workflowInstance.runMachine(parentStepId, context);
+          return Promise.resolve({ steps: result?.results });
         },
       ),
     };
