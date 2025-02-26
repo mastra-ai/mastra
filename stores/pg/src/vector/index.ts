@@ -204,7 +204,7 @@ export class PgVector extends MastraVector {
   }
 
   /**
-   * @deprecated Use buildIndex instead
+   * @deprecated This function is deprecated. Use buildIndex instead
    */
   async defineIndex(
     indexName: string,
