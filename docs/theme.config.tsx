@@ -128,7 +128,7 @@ const docs: DocsThemeConfig = {
   banner: {
     key: "beta-release",
     content: (
-      <a href="https://nextra.site" target="_blank">
+      <a href="https://mastra.ai/blog/beta-launch" target="_blank">
         🎉 Mastra is in beta. Read more →
       </a>
     ),
