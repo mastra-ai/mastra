@@ -4,14 +4,6 @@ import type { EvalRow, StorageColumn, StorageGetMessagesArg, TABLE_NAMES } from 
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 
-function safelyParseJSON(json: string): any {
-  try {
-    return JSON.parse(json);
-  } catch (e) {
-    return {};
-  }
-}
-
 export type PostgresConfig =
   | {
       host: string;
@@ -44,7 +36,7 @@ export class PostgresStore extends MastraStorage {
     );
   }
 
-  getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
+  getEvalsByAgentName(_agentName: string, _type?: 'test' | 'live'): Promise<EvalRow[]> {
     throw new Error('Method not implemented.');
   }
 
@@ -485,7 +477,7 @@ export class PostgresStore extends MastraStorage {
         if (typeof message.content === 'string') {
           try {
             message.content = JSON.parse(message.content);
-          } catch (e) {
+          } catch {
             // If parsing fails, leave as string
           }
         }
