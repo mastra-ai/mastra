@@ -5,6 +5,12 @@ on:
     branches: [main]
     paths:
       - 'packages/**'
+      - 'deployers/**'
+      - 'integrations/**'
+      - 'speech/**'
+      - 'stores/**'
+      - 'voice/**'
+      - '.github/workflows/lint.yml'
 
 jobs:
   lint:
@@ -30,4 +36,4 @@ jobs:
         run: pnpm install
 
       - name: Lint
-        run: pnpm turbo --filter "./packages/*" lint
+        run: pnpm turbo lint --filter="{./packages/*,./deployers/*,./integrations/*,./speech/*,./stores/*,./voice/*}"
