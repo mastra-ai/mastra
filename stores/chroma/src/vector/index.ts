@@ -31,7 +31,7 @@ export class ChromaVector extends MastraVector {
     this.collections = new Map();
   }
 
-  private async getCollection(indexName: string, throwIfNotExists: boolean = true) {
+  async getCollection(indexName: string, throwIfNotExists: boolean = true) {
     try {
       const collection = await this.client.getCollection({ name: indexName, embeddingFunction: undefined as any });
       this.collections.set(indexName, collection);
@@ -59,7 +59,7 @@ export class ChromaVector extends MastraVector {
     vectors: number[][],
     metadata?: Record<string, any>[],
     ids?: string[],
-    // documents?: string[],
+    documents?: string[],
   ): Promise<string[]> {
     const collection = await this.getCollection(indexName);
 
@@ -79,22 +79,19 @@ export class ChromaVector extends MastraVector {
       ids: generatedIds,
       embeddings: vectors,
       metadatas: normalizedMetadata,
-      // documents: documents,
+      documents: documents,
     });
 
     return generatedIds;
   }
 
-  private mapMetricToHnswSpace(metric: 'cosine' | 'euclidean' | 'dotproduct'): string {
-    switch (metric) {
-      case 'euclidean':
-        return 'l2';
-      case 'dotproduct':
-        return 'ip';
-      case 'cosine':
-        return 'cosine';
-    }
-  }
+  private HnswSpaceMap = {
+    cosine: 'cosine',
+    euclidean: 'l2',
+    dotproduct: 'ip',
+    l2: 'euclidean',
+    ip: 'dotproduct',
+  };
 
   async createIndex(
     indexName: string,
@@ -108,7 +105,7 @@ export class ChromaVector extends MastraVector {
       name: indexName,
       metadata: {
         dimension,
-        'hnsw:space': this.mapMetricToHnswSpace(metric),
+        'hnsw:space': this.HnswSpaceMap[metric],
       },
     });
   }
@@ -124,28 +121,28 @@ export class ChromaVector extends MastraVector {
     topK: number = 10,
     filter?: Filter,
     includeVector: boolean = false,
+    documentFilter?: Filter,
   ): Promise<QueryResult[]> {
     const collection = await this.getCollection(indexName, true);
 
     const defaultInclude = ['documents', 'metadatas', 'distances'];
 
     const translatedFilter = this.transformFilter(filter);
-
+    // const translatedDocumentFilter = this.transformDocumentFilter(documentFilter);
     const results = await collection.query({
       queryEmbeddings: [queryVector],
       nResults: topK,
       where: translatedFilter,
+      whereDocument: documentFilter,
       include: includeVector ? [...defaultInclude, 'embeddings'] : defaultInclude,
     });
-
-    console.log(results);
 
     // Transform ChromaDB results to QueryResult format
     return (results.ids[0] || []).map((id: string, index: number) => ({
       id,
       score: results.distances?.[0]?.[index] || 0,
       metadata: results.metadatas?.[0]?.[index] || {},
-      // document: results.documents?.[0]?.[index],
+      document: results.documents?.[0]?.[index],
       ...(includeVector && { vector: results.embeddings?.[0]?.[index] || [] }),
     }));
   }
@@ -160,10 +157,12 @@ export class ChromaVector extends MastraVector {
     const count = await collection.count();
     const metadata = collection.metadata;
 
+    const hnswSpace = metadata?.['hnsw:space'] as 'cosine' | 'l2' | 'ip';
+
     return {
       dimension: metadata?.dimension || 0,
       count,
-      metric: metadata?.metric as 'cosine' | 'euclidean' | 'dotproduct',
+      metric: this.HnswSpaceMap[hnswSpace] as 'cosine' | 'euclidean' | 'dotproduct',
     };
   }
 
