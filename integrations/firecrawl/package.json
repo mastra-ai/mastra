@@ -46,6 +46,7 @@
     }
   ],
   "devDependencies": {
+    "@internal/lint": "workspace:*",
     "@jest/globals": "^29.7.0",
     "@microsoft/api-extractor": "^7.49.2",
     "@rollup/plugin-image": "^3.0.3",

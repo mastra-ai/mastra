@@ -2135,6 +2135,9 @@ importers:
         specifier: ^3.24.0
         version: 3.24.2
     devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
       '@jest/globals':
         specifier: ^29.7.0
         version: 29.7.0
@@ -2196,6 +2199,9 @@ importers:
         specifier: ^3.24.0
         version: 3.24.2
     devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
       '@jest/globals':
         specifier: ^29.7.0
         version: 29.7.0
@@ -2254,6 +2260,9 @@ importers:
         specifier: ^3.24.0
         version: 3.24.2
     devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
       '@jest/globals':
         specifier: ^29.7.0
         version: 29.7.0
@@ -2370,6 +2379,9 @@ importers:
         specifier: ^3.24.0
         version: 3.24.2
     devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
       '@jest/globals':
         specifier: ^29.7.0
         version: 29.7.0

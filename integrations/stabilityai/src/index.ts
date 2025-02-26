@@ -1,8 +1,8 @@
-import { Integration } from '@mastra/core';
 import { createHash } from 'crypto';
+import { Integration } from '@mastra/core';
 
 import { StabilityAIClient } from './client';
-import { type StabilityAiConfig } from './types';
+import type { StabilityAiConfig } from './types';
 
 export class StabilityAiIntegration extends Integration<void, StabilityAIClient> {
   config: StabilityAiConfig;
@@ -38,4 +38,3 @@ export class StabilityAiIntegration extends Integration<void, StabilityAIClient>
     return this.client;
   }
 }
-

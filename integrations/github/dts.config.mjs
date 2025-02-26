@@ -1,5 +1,5 @@
-import { defineConfig } from 'dts-cli';
 import image from '@rollup/plugin-image';
+import { defineConfig } from 'dts-cli';
 
 export default defineConfig({
   rollup: {
