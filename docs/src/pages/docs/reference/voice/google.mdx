@@ -3,7 +3,7 @@ title: "Reference: Google Voice | Voice Providers | Mastra Docs"
 description: "Documentation for the Google Voice implementation, providing text-to-speech and speech-to-text capabilities."
 ---
 
-# Google Voice Reference
+# Google
 
 The Google Voice implementation in Mastra provides both text-to-speech (TTS) and speech-to-text (STT) capabilities using Google Cloud services. It supports multiple voices, languages, and advanced audio configuration options.
 
@@ -169,27 +169,24 @@ Returns: `Promise<string>`
 
 ### getSpeakers()
 
-Returns a list of available voices for a specific language.
+Returns an array of available voice options, where each node contains:
 
 <PropertiesTable
   content={[
     {
-      name: "options",
-      type: "object",
-      description: "Options for listing voices",
-      isOptional: true,
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+      isOptional: false,
     },
     {
-      name: "options.languageCode",
-      type: "string",
-      description: "Language code to filter voices by",
-      isOptional: true,
-      defaultValue: "'en-US'",
-    },
+      name: "languageCodes",
+      type: "string[]",
+      description: "List of language codes supported by this voice",
+      isOptional: false,
+    }
   ]}
 />
-
-Returns: `Promise<Array<{ voiceId: string, languageCodes: string[] }>>`
 
 ## Important Notes
 

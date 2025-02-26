@@ -14,7 +14,7 @@ import { OpenAIVoice } from "@mastra/voice-openai";
 const voice = new OpenAIVoice();
 
 // Create an agent with voice capabilities
-export const weatherAgent = new Agent({
+export const agent = new Agent({
   name: 'Agent',
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
   model: openai('gpt-4o'),
@@ -36,7 +36,7 @@ import { CompositeVoice } from "@mastra/core/voice";
 import { OpenAIVoice } from "@mastra/voice-openai";
 import { PlayAIVoice } from "@mastra/voice-playai";
 
-export const weatherAgent = new Agent({
+export const agent = new Agent({
   name: 'Agent',
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
   model: openai('gpt-4o'),
@@ -60,8 +60,8 @@ import { createWriteStream } from 'fs';
 import path from 'path';
 
 // Generate speech and save to file
-const audio = await weatherAgent.speak('Hello, World!');
-const filePath = path.join(process.cwd(), 'weather-agent.mp3');
+const audio = await agent.speak('Hello, World!');
+const filePath = path.join(process.cwd(), 'agent.mp3');
 const writer = createWriteStream(filePath);
 
 audio.pipe(writer);
@@ -79,12 +79,12 @@ import { createReadStream } from 'fs';
 import path from 'path';
 
 // Read audio file and transcribe
-const audioFilePath = path.join(process.cwd(), '/weather-agent.mp3');
+const audioFilePath = path.join(process.cwd(), '/agent.mp3');
 const audioStream = createReadStream(audioFilePath);
 
 try {
   console.log('Transcribing audio file...');
-  const transcription = await weatherAgent.listen(audioStream);
+  const transcription = await agent.listen(audioStream);
   console.log('Transcription:', transcription);
 } catch (error) {
   console.error('Error transcribing audio:', error);
