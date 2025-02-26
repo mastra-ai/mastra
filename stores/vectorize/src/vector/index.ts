@@ -27,18 +27,26 @@ export class CloudflareVector extends MastraVector {
 
     // Create NDJSON string - each line is a JSON object
     const ndjson = vectors
-      .map((vector, index) => ({
-        id: generatedIds[index]!,
-        values: vector,
-        metadata: metadata?.[index],
-      }))
-      .map(record => JSON.stringify(record))
+      .map((vector, index) =>
+        JSON.stringify({
+          id: generatedIds[index]!,
+          values: vector,
+          metadata: metadata?.[index],
+        }),
+      )
       .join('\n');
 
-    await this.client.vectorize.indexes.upsert(indexName, {
-      account_id: this.accountId,
-      body: ndjson as any,
-    });
+    // Note: __binaryRequest is required for proper NDJSON handling
+    await this.client.vectorize.indexes.upsert(
+      indexName,
+      {
+        account_id: this.accountId,
+        body: ndjson,
+      },
+      {
+        __binaryRequest: true,
+      },
+    );
 
     return generatedIds;
   }
