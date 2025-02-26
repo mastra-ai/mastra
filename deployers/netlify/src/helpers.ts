@@ -66,7 +66,7 @@ export async function getOrCreateSite({ token, name, scope }: { token: string; n
   let existingSite;
   try {
     existingSite = await findNetlifySite({ token, name, scope });
-  } catch (e) {}
+  } catch {}
 
   if (existingSite) {
     return existingSite;

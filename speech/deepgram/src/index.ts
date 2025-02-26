@@ -1,8 +1,10 @@
-import { type SpeakSchema, createClient } from '@deepgram/sdk';
-import { MastraTTS } from '@mastra/core/tts';
 import { PassThrough } from 'stream';
+import { createClient } from '@deepgram/sdk';
+import type { SpeakSchema } from '@deepgram/sdk';
+import { MastraTTS } from '@mastra/core/tts';
 
-import { DEEPGRAM_VOICES, type DeepgramVoice, type DeepgramModel } from './voices';
+import { DEEPGRAM_VOICES } from './voices';
+import type { DeepgramVoice, DeepgramModel } from './voices';
 
 type DeepgramConfig = {
   name: DeepgramModel;
@@ -88,7 +90,7 @@ export class DeepgramTTS extends MastraTTS {
       const nodeStream = new PassThrough();
 
       // Read from web stream and write to node stream
-      (async () => {
+      void (async () => {
         try {
           while (true) {
             const { done, value } = await reader.read();

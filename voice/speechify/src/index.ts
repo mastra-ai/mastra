@@ -1,7 +1,8 @@
+import { Readable } from 'stream';
+
 import { MastraVoice } from '@mastra/core/voice';
 import { Speechify } from '@speechify/api-sdk';
 import type { AudioStreamRequest, VoiceModelName } from '@speechify/api-sdk';
-import { Readable } from 'stream';
 
 import { SPEECHIFY_VOICES } from './voices';
 import type { SpeechifyVoiceId } from './voices';
