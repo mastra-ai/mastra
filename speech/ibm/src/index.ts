@@ -1,11 +1,12 @@
-import { MastraTTS } from '@mastra/core/tts';
 import { PassThrough } from 'stream';
+import { MastraTTS } from '@mastra/core/tts';
 
 import { IamAuthenticator } from 'ibm-watson/auth';
 import TextToSpeechV1 from 'ibm-watson/text-to-speech/v1';
 import type { SynthesizeParams } from 'ibm-watson/text-to-speech/v1-generated';
 
-import { IBM_VOICES, type IbmVoice } from './voices';
+import { IBM_VOICES } from './voices';
+import type { IbmVoice } from './voices';
 
 type IbmConfig = {
   voice?: IbmVoice;
@@ -91,7 +92,7 @@ export class IbmTTS extends MastraTTS {
       const nodeStream = new PassThrough();
 
       // Process the stream
-      (async () => {
+      void (async () => {
         try {
           for await (const chunk of response.result) {
             const part = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;

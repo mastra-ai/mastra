@@ -1,8 +1,10 @@
-import { MastraTTS } from '@mastra/core/tts';
-import { type AudioSpeechRequest, type AudioStreamRequest, Speechify, type VoiceModelName } from '@speechify/api-sdk';
 import { Readable } from 'stream';
+import { MastraTTS } from '@mastra/core/tts';
+import {   Speechify  } from '@speechify/api-sdk';
+import type {AudioSpeechRequest, AudioStreamRequest, VoiceModelName} from '@speechify/api-sdk';
 
-import { SPEECHIFY_VOICES, type SpeechifyVoice } from './voices';
+import { SPEECHIFY_VOICES  } from './voices';
+import type {SpeechifyVoice} from './voices';
 
 interface SpeechifyConfig {
   name: VoiceModelName;

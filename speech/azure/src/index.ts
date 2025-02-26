@@ -1,8 +1,9 @@
+import { PassThrough } from 'stream';
 import { MastraTTS } from '@mastra/core/tts';
 import Azure from 'microsoft-cognitiveservices-speech-sdk';
-import { PassThrough } from 'stream';
 
-import { type VoiceId, voices } from './voices';
+import {  voices } from './voices';
+import type {VoiceId} from './voices';
 
 interface AzureTTSConfig {
   name: VoiceId;

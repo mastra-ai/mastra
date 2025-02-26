@@ -1,9 +1,10 @@
+import { PassThrough } from 'stream';
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
 import type { google as TextToSpeechTypes } from '@google-cloud/text-to-speech/build/protos/protos';
 import { MastraTTS } from '@mastra/core/tts';
-import { PassThrough } from 'stream';
 
-import { type VoiceId, voices } from './voices';
+import {  voices } from './voices';
+import type {VoiceId} from './voices';
 
 interface GoogleTTSConfig {
   name: VoiceId;

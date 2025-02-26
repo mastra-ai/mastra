@@ -1,8 +1,8 @@
+import { writeFile } from 'fs/promises';
 import { join } from 'path';
 import { PassThrough } from 'stream';
 import { describe, expect, it } from 'vitest';
 
-import { writeFile } from 'fs/promises';
 
 import { ReplicateTTS } from './index';
 

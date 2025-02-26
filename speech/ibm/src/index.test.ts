@@ -1,8 +1,8 @@
 import { createWriteStream } from 'fs';
+import { writeFile, stat as fsStat } from 'fs/promises';
 import { join } from 'path';
 import { describe, expect, it } from 'vitest';
 
-import { writeFile, stat as fsStat } from 'fs/promises';
 
 import { IbmTTS } from './index';
 
