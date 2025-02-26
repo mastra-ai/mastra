@@ -13698,678 +13698,11 @@ The tool is created with:
 - [createGraphRAGTool](./graph-rag-tool) 
 
 ---
-title: "Reference: TTS.generate() | Text to Speech (TTS) | Mastra Docs"
-description: "Documentation for the `.generate()` method in TTS, which produces an audio response."
----
-
-# TTS.generate()
-Source: https://mastra.ai/docs/reference/tts/generate
-
-The `.generate()` method is used to interact with the TTS model to produce an audio response. This method accepts `text` and `voice` as parameters.
-
-## Parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "text",
-      type: "string",
-      description: "The messages to be processed by TTS.",
-    },
-    {
-      name: "voice",
-      type: "string",
-      description: "Voice ID to be used with generation.",
-    },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "audioResult",
-      type: "Readable",
-      isOptional: true,
-      description: "The generated audio stream",
-    },
-  ]}
-/>
-
-## Examples
-
-### Basic Audio Generation (ElevenLabs)
-
-```typescript
-import { ElevenLabsTTS } from "@mastra/speech-elevenlabs";
-
-const tts = new ElevenLabsTTS({
-  model: {
-    name: "eleven_multilingual_v2",
-    apiKey: process.env.ELEVENLABS_API_KEY!,
-  },
-});
-
-const voices = await tts.voices();
-const voiceId = voices?.[0]?.voice_id!;
-
-const { audioResult } = await tts.generate({
-  text: "What is AI?",
-  voice: voiceId,
-});
-
-await writeFile(
-  path.join(process.cwd(), "/test-outputs/generate-output.mp3"),
-  audioBuffer,
-);
-```
-
-### Basic Audio Generation (OpenAI)
-
-```typescript
-import { OpenAITTS } from "@mastra/speech-openai";
-
-const tts = new OpenAITTS({
-  model: {
-    name: "tts-1",
-    apiKey: process.env.OPENAI_API_KEY!,
-  },
-});
-
-const voices = await tts.voices();
-const voiceId = voices?.[0]?.voice_id!;
-
-const { audioResult } = await tts.generate({
-  text: "What is AI?",
-  voice: voiceId,
-});
-
-const outputPath = path.join(
-  process.cwd(),
-  "test-outputs/open-aigenerate-test.mp3",
-);
-writeFileSync(outputPath, audioResult);
-```
-
-### Basic Audio Generation (PlayAI)
-
-```typescript
-import { PlayAITTS } from "@mastra/speech-playai";
-
-const tts = new PlayAITTS({
-  model: {
-    name: "PlayDialog",
-    apiKey: process.env.PLAYAI_API_KEY!,
-  },
-  userId: process.env.PLAYAI_USER_ID!,
-});
-
-const voices = await tts.voices();
-const voiceId = voices?.[0]?.voice_id!;
-
-const { audioResult } = await tts.generate({
-  text: "What is AI?",
-  voice: voiceId,
-});
-
-const outputPath = path.join(
-  process.cwd(),
-  "test-outputs/open-aigenerate-test.mp3",
-);
-writeFileSync(outputPath, audioResult);
-```
-
-### Azure Generation
-
-```typescript
-import { AzureTTS } from "@mastra/speech-azure";
-
-const tts = new AzureTTS({
-  model: {
-    name: "en-US-JennyNeural",
-    apiKey: process.env.AZURE_API_KEY,
-    region: process.env.AZURE_REGION,
-  },
-});
-
-const { audioResult } = await tts.generate({ text: "What is AI?" });
-await writeFile(
-  path.join(process.cwd(), "/test-outputs/azure-output.mp3"),
-  audioResult,
-);
-```
-
-### Deepgram Generation
-
-```typescript
-import { DeepgramTTS } from "@mastra/speech-deepgram";
-
-const tts = new DeepgramTTS({
-  model: {
-    name: "aura",
-    voice: "asteria-en",
-    apiKey: process.env.DEEPGRAM_API_KEY,
-  },
-});
-
-const { audioResult } = await tts.generate({ text: "What is AI?" });
-await writeFile(
-  path.join(process.cwd(), "/test-outputs/deepgram-output.mp3"),
-  audioResult,
-);
-```
-
-### Google Generation
-
-```typescript
-import { GoogleTTS } from "@mastra/speech-google";
-
-const tts = new GoogleTTS({
-  model: {
-    name: "en-US-Standard-A",
-    credentials: process.env.GOOGLE_CREDENTIALS,
-  },
-});
-
-const { audioResult } = await tts.generate({ text: "What is AI?" });
-await writeFile(
-  path.join(process.cwd(), "/test-outputs/google-output.mp3"),
-  audioResult,
-);
-```
-
-### IBM Generation
-
-```typescript
-import { IbmTTS } from "@mastra/speech-ibm";
-
-const tts = new IbmTTS({
-  model: {
-    voice: "en-US_AllisonV3Voice",
-    apiKey: process.env.IBM_API_KEY,
-  },
-});
-
-const { audioResult } = await tts.generate({ text: "What is AI?" });
-await writeFile(
-  path.join(process.cwd(), "/test-outputs/ibm-output.mp3"),
-  audioResult,
-);
-```
-
-### Murf Generation
-
-```typescript
-import { MurfTTS } from "@mastra/speech-murf";
-
-const tts = new MurfTTS({
-  model: {
-    name: "GEN2",
-    voice: "en-US-natalie",
-    apiKey: process.env.MURF_API_KEY,
-  },
-});
-
-const { audioResult } = await tts.generate({ text: "What is AI?" });
-await writeFile(
-  path.join(process.cwd(), "/test-outputs/murf-output.mp3"),
-  audioResult,
-);
-```
-
-## Related Methods
-
-For streaming audio responses, see the [`stream()`](./stream.mdx) method documentation.
-
-
----
-title: "Reference: Providers and Models | TTS | Mastra Docs"
-description: Overview of supported TTS providers and their models.
----
-
-# Providers and Models
-Source: https://mastra.ai/docs/reference/tts/providers-and-models
-
-## Most popular providers
-
-| Provider   | Supported Models                                                                                                        |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------- |
-| ElevenLabs | `eleven_multilingual_v2`, `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_multilingual_sts_v2`, `eleven_english_sts_v2` |
-| OpenAI     | `tts-1`, `tts-1-hd`                                                                                                     |
-| PlayAI     | `PlayDialog`, `Play3.0-mini`                                                                                            |
-| Azure      | Various voices available through Azure Cognitive Services                                                               |
-| Deepgram   | `aura` and other models with voice options like `asteria-en`                                                            |
-| Google     | Various voices through Google Cloud Text-to-Speech                                                                      |
-| IBM        | Various voices including `en-US_AllisonV3Voice`                                                                         |
-| Murf       | `GEN1`, `GEN2` with various voices like `en-US-natalie`                                                                 |
-
-## Configuration
-
-Each provider requires specific configuration. Here are examples for each provider:
-
-### ElevenLabs Configuration
-
-```typescript
-import { ElevenLabsTTS } from "@mastra/speech-elevenlabs";
-
-const tts = new ElevenLabsTTS({
-  model: {
-    name: "eleven_multilingual_v2",
-    apiKey: process.env.ELEVENLABS_API_KEY,
-  },
-});
-```
-
-### OpenAI Configuration
-
-```typescript
-import { OpenAITTS } from "@mastra/speech-openai";
-
-const tts = new OpenAITTS({
-  model: {
-    name: "tts-1", // or 'tts-1-hd' for higher quality
-    apiKey: process.env.OPENAI_API_KEY,
-  },
-});
-```
-
-### PlayAI Configuration
-
-```typescript
-import { PlayAITTS } from "@mastra/speech-playai";
-
-const tts = new PlayAITTS({
-  model: {
-    name: "PlayDialog", // or 'Play3.0-mini'
-    apiKey: process.env.PLAYAI_API_KEY,
-  },
-  userId: process.env.PLAYAI_USER_ID,
-});
-```
-
-### Azure Configuration
-
-```typescript
-import { AzureTTS } from "@mastra/speech-azure";
-
-const tts = new AzureTTS({
-  model: {
-    name: "en-US-JennyNeural",
-    apiKey: process.env.AZURE_API_KEY,
-    region: process.env.AZURE_REGION,
-  },
-});
-```
-
-### Deepgram Configuration
-
-```typescript
-import { DeepgramTTS } from "@mastra/speech-deepgram";
-
-const tts = new DeepgramTTS({
-  model: {
-    name: "aura",
-    voice: "asteria-en",
-    apiKey: process.env.DEEPGRAM_API_KEY,
-  },
-});
-```
-
-### Google Configuration
-
-```typescript
-const tts = new GoogleTTS({
-  model: {
-    name: "en-US-Standard-A",
-    credentials: process.env.GOOGLE_CREDENTIALS,
-  },
-});
-```
-
-### IBM Configuration
-
-```typescript
-const tts = new IbmTTS({
-  model: {
-    voice: "en-US_AllisonV3Voice",
-    apiKey: process.env.IBM_API_KEY,
-  },
-});
-```
-
-### Murf Configuration
-
-```typescript
-const tts = new MurfTTS({
-  model: {
-    name: "GEN2",
-    voice: "en-US-natalie",
-    apiKey: process.env.MURF_API_KEY,
-  },
-});
-```
-
-
----
-title: "Reference: TTS.stream() | Text to Speech (TTS) | Mastra Docs"
-description: "Documentation for the `.stream()` method in TTS, which produces an audio response stream."
----
-
-# TTS.stream()
-Source: https://mastra.ai/docs/reference/tts/stream
-
-The `stream()` method is used to interact with the TTS model to produce an audio response stream. This method accepts `text` and `voice` as parameters.
-
-## Parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "text",
-      type: "string",
-      description: "The messages to be processed by TTS.",
-    },
-    {
-      name: "voice",
-      type: "string",
-      description: "Voice ID to be used with generation.",
-    },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "audioResult",
-      type: "Readable",
-      isOptional: true,
-      description: "The generated audio stream",
-    },
-  ]}
-/>
-
-## Examples
-
-### ElevenLabs Streaming
-
-```typescript
-import { ElevenLabsTTS } from "@mastra/speech-elevenlabs";
-
-const tts = new ElevenLabsTTS({
-  model: {
-    name: "eleven_multilingual_v2",
-    apiKey: process.env.ELEVENLABS_API_KEY!,
-  },
-});
-
-const voices = await tts.voices();
-const voiceId = voices?.[0]?.voice_id!;
-
-const { audioResult } = await tts.stream({
-  text: "What is AI?",
-  voice: voiceId,
-});
-
-// Create a write stream to simulate real-time playback
-const outputPath = path.join(
-  process.cwd(),
-  "/test-outputs/streaming-output.mp3",
-);
-const writeStream = createWriteStream(outputPath);
-
-let firstChunkTime: number | null = null;
-let lastChunkTime: number | null = null;
-let totalChunks = 0;
-
-// Process chunks as they arrive
-for await (const chunk of audioResult) {
-  if (!firstChunkTime) {
-    firstChunkTime = Date.now();
-  }
-  lastChunkTime = Date.now();
-  totalChunks++;
-
-  // Write chunk immediately as it arrives
-  writeStream.write(chunk);
-
-  // Log timing of chunk arrival
-  console.log(
-    `Received chunk ${totalChunks} at ${lastChunkTime - firstChunkTime!}ms`,
-  );
-}
-
-writeStream.end();
-```
-
-### OpenAI Streaming
-
-```typescript
-import { OpenAITTS } from "@mastra/speech-openai";
-
-const tts = new OpenAITTS({
-  model: {
-    name: "tts-1",
-    apiKey: process.env.OPENAI_API_KEY!,
-  },
-});
-
-const voices = await tts.voices();
-const voiceId = voices?.[0]?.voice_id!;
-
-const { audioResult } = await tts.stream({
-  text: "What is AI?",
-  voice: voiceId,
-});
-
-// Create a write stream to simulate real-time playback
-const outputPath = path.join(
-  process.cwd(),
-  "/test-outputs/streaming-output.mp3",
-);
-const writeStream = createWriteStream(outputPath);
-
-let firstChunkTime: number | null = null;
-let lastChunkTime: number | null = null;
-let totalChunks = 0;
-
-// Process chunks as they arrive
-for await (const chunk of audioResult) {
-  if (!firstChunkTime) {
-    firstChunkTime = Date.now();
-  }
-  lastChunkTime = Date.now();
-  totalChunks++;
-
-  // Write chunk immediately as it arrives
-  writeStream.write(chunk);
-
-  // Log timing of chunk arrival
-  console.log(
-    `Received chunk ${totalChunks} at ${lastChunkTime - firstChunkTime!}ms`,
-  );
-}
-
-writeStream.end();
-```
-
-### PlayAI Streaming
-
-```typescript
-import { PlayAITTS } from "@mastra/speech-playai";
-
-const tts = new PlayAITTS({
-  model: {
-    name: "PlayDialog",
-    apiKey: process.env.PLAYAI_API_KEY!,
-  },
-  userId: process.env.PLAYAI_USER_ID!,
-});
-
-const voices = await tts.voices();
-const voiceId = voices?.[0]?.voice_id!;
-
-const { audioResult } = await tts.stream({
-  text: "What is AI?",
-  voice: voiceId,
-});
-
-// Create a write stream to simulate real-time playback
-const outputPath = path.join(
-  process.cwd(),
-  "/test-outputs/streaming-output.mp3",
-);
-const writeStream = createWriteStream(outputPath);
-
-let firstChunkTime: number | null = null;
-let lastChunkTime: number | null = null;
-let totalChunks = 0;
-
-// Process chunks as they arrive
-for await (const chunk of audioResult) {
-  if (!firstChunkTime) {
-    firstChunkTime = Date.now();
-  }
-  lastChunkTime = Date.now();
-  totalChunks++;
-
-  // Write chunk immediately as it arrives
-  writeStream.write(chunk);
-
-  // Log timing of chunk arrival
-  console.log(
-    `Received chunk ${totalChunks} at ${lastChunkTime - firstChunkTime!}ms`,
-  );
-}
-
-writeStream.end();
-```
-
-### Azure Streaming
-
-```typescript
-import { AzureTTS } from "@mastra/speech-azure";
-
-const tts = new AzureTTS({
-  model: {
-    name: "en-US-JennyNeural",
-    apiKey: process.env.AZURE_API_KEY,
-    region: process.env.AZURE_REGION,
-  },
-});
-
-const { audioResult } = await tts.stream({ text: "What is AI?" });
-
-// Create a write stream
-const outputPath = path.join(process.cwd(), "/test-outputs/azure-stream.mp3");
-const writeStream = createWriteStream(outputPath);
-
-// Pipe the audio stream to the file
-audioResult.pipe(writeStream);
-```
-
-### Deepgram Streaming
-
-```typescript
-import { DeepgramTTS } from "@mastra/speech-deepgram";
-
-const tts = new DeepgramTTS({
-  model: {
-    name: "aura",
-    voice: "asteria-en",
-    apiKey: process.env.DEEPGRAM_API_KEY,
-  },
-});
-
-const { audioResult } = await tts.stream({ text: "What is AI?" });
-
-// Create a write stream
-const outputPath = path.join(
-  process.cwd(),
-  "/test-outputs/deepgram-stream.mp3",
-);
-const writeStream = createWriteStream(outputPath);
-
-// Pipe the audio stream to the file
-audioResult.pipe(writeStream);
-```
-
-### Google Streaming
-
-```typescript
-import { GoogleTTS } from "@mastra/speech-google";
-
-const tts = new GoogleTTS({
-  model: {
-    name: "en-US-Standard-A",
-    credentials: process.env.GOOGLE_CREDENTIALS,
-  },
-});
-
-const { audioResult } = await tts.stream({ text: "What is AI?" });
-
-// Create a write stream
-const outputPath = path.join(process.cwd(), "/test-outputs/google-stream.mp3");
-const writeStream = createWriteStream(outputPath);
-
-// Pipe the audio stream to the file
-audioResult.pipe(writeStream);
-```
-
-### IBM Streaming
-
-```typescript
-import { IbmTTS } from "@mastra/speech-ibm";
-
-const tts = new IbmTTS({
-  model: {
-    voice: "en-US_AllisonV3Voice",
-    apiKey: process.env.IBM_API_KEY,
-  },
-});
-
-const { audioResult } = await tts.stream({ text: "What is AI?" });
-
-// Create a write stream
-const outputPath = path.join(process.cwd(), "/test-outputs/ibm-stream.mp3");
-const writeStream = createWriteStream(outputPath);
-
-// Pipe the audio stream to the file
-audioResult.pipe(writeStream);
-```
-
-### Murf Streaming
-
-```typescript
-import { MurfTTS } from "@mastra/speech-murf";
-
-const tts = new MurfTTS({
-  model: {
-    name: "GEN2",
-    voice: "en-US-natalie",
-    apiKey: process.env.MURF_API_KEY,
-  },
-});
-
-const { audioResult } = await tts.stream({ text: "What is AI?" });
-
-// Create a write stream
-const outputPath = path.join(process.cwd(), "/test-outputs/murf-stream.mp3");
-const writeStream = createWriteStream(outputPath);
-
-// Pipe the audio stream to the file
-audioResult.pipe(writeStream);
-```
-
-
----
 title: "Reference: CompositeVoice | Voice Providers | Mastra Docs"
 description: "Documentation for the CompositeVoice class, which enables combining multiple voice providers for flexible text-to-speech and speech-to-text operations."
 ---
 
-# CompositeVoice Reference
+# CompositeVoice
 Source: https://mastra.ai/docs/reference/voice/composite-voice
 
 The CompositeVoice class allows you to combine different voice providers for text-to-speech and speech-to-text operations. This is particularly useful when you want to use the best provider for each operation - for example, using OpenAI for speech-to-text and PlayAI for text-to-speech.
@@ -14431,18 +13764,6 @@ const audio = await voice.speak("Hello, world!");
 
 Converts text to speech using the configured speaking provider.
 
-```typescript
-async speak(
-  input: string | NodeJS.ReadableStream,
-  options?: {
-    speaker?: string;
-    [key: string]: any;
-  }
-): Promise<NodeJS.ReadableStream>
-```
-
-#### Parameters
-
 <PropertiesTable
   content={[
     {
@@ -14469,17 +13790,6 @@ async speak(
 
 Converts speech to text using the configured listening provider.
 
-```typescript
-async listen(
-  audioStream: NodeJS.ReadableStream,
-  options?: {
-    [key: string]: any;
-  }
-): Promise<string | NodeJS.ReadableStream>
-```
-
-#### Parameters
-
 <PropertiesTable
   content={[
     {
@@ -14504,11 +13814,24 @@ async listen(
 
 ### getSpeakers()
 
-Returns a list of available voices from the speaking provider.
+Returns a list of available voices from the speaking provider, where each node contains:
 
-```typescript
-async getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: any }>>
-```
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+      isOptional: false,
+    },
+    {
+      name: "key",
+      type: "value",
+      description: "Additional voice properties that vary by provider (e.g., name, language)",
+      isOptional: true,
+    },
+  ]}
+/>
 
 #### Notes
 - Returns voices from the speaking provider only
@@ -14523,21 +13846,13 @@ async getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: any }>>
 - Error handling should consider both providers' potential failure modes
 - Ideal for scenarios where different providers excel at different operations
 
-## Related
-
-- [MastraVoice Reference](/reference/voice/voice.mdx)
-- [OpenAI Voice Reference](/reference/voice/openai.mdx)
-- [Deepgram Voice Reference](/reference/voice/deepgram.mdx)
-- [PlayAI Voice Reference](/reference/voice/playai.mdx)
-- [Speechify Voice Reference](/reference/voice/speechify.mdx)
-
 
 ---
 title: "Reference: Deepgram Voice | Voice Providers | Mastra Docs"
 description: "Documentation for the Deepgram voice implementation, providing text-to-speech and speech-to-text capabilities with multiple voice models and languages."
 ---
 
-# Deepgram Voice Reference
+# Deepgram
 Source: https://mastra.ai/docs/reference/voice/deepgram
 
 The Deepgram voice implementation in Mastra provides text-to-speech (TTS) and speech-to-text (STT) capabilities using Deepgram's API. It supports multiple voice models and languages, with configurable options for both speech synthesis and transcription.
@@ -14577,16 +13892,16 @@ const transcript = await voice.listen(audioStream);
     {
       name: "speechModel",
       type: "DeepgramVoiceConfig",
-      description: "Configuration for text-to-speech functionality",
+      description: "Configuration for text-to-speech functionality.",
       isOptional: true,
-      defaultValue: "{ name: 'aura', apiKey: process.env.DEEPGRAM_API_KEY }",
+      defaultValue: "{ name: 'aura' }"
     },
     {
       name: "listeningModel",
       type: "DeepgramVoiceConfig",
-      description: "Configuration for speech-to-text functionality",
+      description: "Configuration for speech-to-text functionality.",
       isOptional: true,
-      defaultValue: "{ name: 'nova', apiKey: process.env.DEEPGRAM_API_KEY }",
+      defaultValue: "{ name: 'nova' }"
     },
     {
       name: "speaker",
@@ -14687,39 +14002,23 @@ Returns: `Promise<string>`
 
 Returns a list of available voice options.
 
-Returns: `Promise<Array<{ voiceId: DeepgramVoiceId }>>`
-
-## Available Models and Voices
-
-### Speech Models (DeepgramModel)
-- `aura`: Default model for text-to-speech
-- `base`: Base model for speech recognition
-- `enhanced`: Enhanced speech recognition model
-- `nova`: Nova model for speech recognition (default for listening)
-- `nova-2`: Improved Nova model
-- `nova-3`: Latest Nova model
-
-### Voice Options (DeepgramVoiceId)
-- `asteria-en`: Default English voice
-- `luna-en`: English voice
-- `stella-en`: English voice
-- `athena-en`: English voice
-- `hera-en`: English voice
-- `orion-en`: English voice
-- `arcas-en`: English voice
-- `perseus-en`: English voice
-- `angus-en`: English voice
-- `orpheus-en`: English voice
-- `helios-en`: English voice
-- `zeus-en`: English voice
-
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+      isOptional: false,
+    }
+  ]}
+/>
 
 ---
 title: "Reference: ElevenLabs Voice | Voice Providers | Mastra Docs"
 description: "Documentation for the ElevenLabs voice implementation, offering high-quality text-to-speech capabilities with multiple voice models and natural-sounding synthesis."
 ---
 
-# ElevenLabs Voice Reference
+# ElevenLabs
 Source: https://mastra.ai/docs/reference/voice/elevenlabs
 
 The ElevenLabs voice implementation in Mastra provides high-quality text-to-speech (TTS) capabilities using the ElevenLabs API. It supports multiple voice models and speakers, with a focus on natural-sounding speech synthesis.
@@ -14755,9 +14054,9 @@ const speakers = await voice.getSpeakers();
     {
       name: "speechModel",
       type: "ElevenLabsVoiceConfig",
-      description: "Configuration for text-to-speech functionality",
+      description: "Configuration for text-to-speech functionality.",
       isOptional: true,
-      defaultValue: "{ name: 'eleven_multilingual_v2', apiKey: process.env.ELEVENLABS_API_KEY }",
+      defaultValue: "{ name: 'eleven_multilingual_v2' }"
     },
     {
       name: "speaker",
@@ -14822,47 +14121,40 @@ Returns: `Promise<NodeJS.ReadableStream>`
 
 ### getSpeakers()
 
-Returns a list of available voice options from the ElevenLabs API.
-
-Returns: `Promise<Array<{ voiceId: string, name: string, language: string, gender: string }>>`
-
-### listen()
-
-This method is not supported by ElevenLabs and will throw an error. ElevenLabs does not provide speech-to-text functionality.
-
-## Available Models (ElevenLabsModel)
-
-The following models are available for text-to-speech:
+Returns an array of available voice options, where each node contains:
 
 <PropertiesTable
   content={[
     {
-      name: "eleven_multilingual_v2",
+      name: "voiceId",
       type: "string",
-      description: "Default model with multilingual support",
+      description: "Unique identifier for the voice",
+      isOptional: false,
     },
     {
-      name: "eleven_flash_v2_5",
+      name: "name",
       type: "string",
-      description: "Flash model version 2.5 for faster generation",
+      description: "Display name of the voice",
+      isOptional: false,
     },
     {
-      name: "eleven_flash_v2",
+      name: "language",
       type: "string",
-      description: "Flash model version 2",
+      description: "Language code for the voice",
+      isOptional: false,
     },
     {
-      name: "eleven_multilingual_sts_v2",
+      name: "gender",
       type: "string",
-      description: "Multilingual model with speech-to-speech support",
-    },
-    {
-      name: "eleven_english_sts_v2",
-      type: "string",
-      description: "English-specific model with speech-to-speech support",
-    },
+      description: "Gender of the voice",
+      isOptional: false,
+    }
   ]}
 />
+
+### listen()
+
+This method is not supported by ElevenLabs and will throw an error. ElevenLabs does not provide speech-to-text functionality.
 
 ## Important Notes
 
@@ -14877,7 +14169,7 @@ title: "Reference: Google Voice | Voice Providers | Mastra Docs"
 description: "Documentation for the Google Voice implementation, providing text-to-speech and speech-to-text capabilities."
 ---
 
-# Google Voice Reference
+# Google
 Source: https://mastra.ai/docs/reference/voice/google
 
 The Google Voice implementation in Mastra provides both text-to-speech (TTS) and speech-to-text (STT) capabilities using Google Cloud services. It supports multiple voices, languages, and advanced audio configuration options.
@@ -15044,27 +14336,24 @@ Returns: `Promise<string>`
 
 ### getSpeakers()
 
-Returns a list of available voices for a specific language.
+Returns an array of available voice options, where each node contains:
 
 <PropertiesTable
   content={[
     {
-      name: "options",
-      type: "object",
-      description: "Options for listing voices",
-      isOptional: true,
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+      isOptional: false,
     },
     {
-      name: "options.languageCode",
-      type: "string",
-      description: "Language code to filter voices by",
-      isOptional: true,
-      defaultValue: "'en-US'",
-    },
+      name: "languageCodes",
+      type: "string[]",
+      description: "List of language codes supported by this voice",
+      isOptional: false,
+    }
   ]}
 />
-
-Returns: `Promise<Array<{ voiceId: string, languageCodes: string[] }>>`
 
 ## Important Notes
 
@@ -15081,7 +14370,7 @@ title: "Reference: MastraVoice | Voice Providers | Mastra Docs"
 description: "Documentation for the MastraVoice abstract base class, which defines the core interface for all voice services in Mastra."
 ---
 
-# MastraVoice Reference
+# MastraVoice
 Source: https://mastra.ai/docs/reference/voice/mastra-voice
 
 The MastraVoice class is an abstract base class that defines the core interface for voice services in Mastra. All voice provider implementations (like OpenAI, Deepgram, PlayAI, Speechify) extend this class to provide their specific functionality.
@@ -15252,10 +14541,6 @@ abstract getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: any }>>
 
 MastraVoice includes built-in telemetry support through the `traced` method, which wraps method calls with performance tracking and error monitoring.
 
-```typescript
-protected traced<T extends Function>(method: T, methodName: string): T
-```
-
 ## Notes
 
 - MastraVoice is an abstract class and cannot be instantiated directly
@@ -15264,20 +14549,13 @@ protected traced<T extends Function>(method: T, methodName: string): T
 - Configuration and authentication details are provider-specific
 - Telemetry is automatically handled for all method calls
 
-## Related
-
-- [OpenAI Voice Reference](/reference/voice/openai.mdx)
-- [Deepgram Voice Reference](/reference/voice/deepgram.mdx)
-- [PlayAI Voice Reference](/reference/voice/playai.mdx)
-- [Speechify Voice Reference](/reference/voice/speechify.mdx)
-
 
 ---
 title: "Reference: Murf Voice | Voice Providers | Mastra Docs"
 description: "Documentation for the Murf voice implementation, providing text-to-speech capabilities."
 ---
 
-# Murf Voice Reference
+# Murf
 Source: https://mastra.ai/docs/reference/voice/murf
 
 The Murf voice implementation in Mastra provides text-to-speech (TTS) capabilities using Murf's AI voice service. It supports multiple voices across different languages.
@@ -15332,14 +14610,14 @@ const voices = await voice.getSpeakers();
       type: "MurfConfig",
       description: "Configuration for text-to-speech functionality",
       isOptional: true,
-      defaultValue: "{ name: 'GEN2', apiKey: process.env.MURF_API_KEY }",
+      defaultValue: "{ name: 'GEN2' }",
     },
     {
       name: "speaker",
       type: "string",
       description: "Default voice ID to use for text-to-speech",
       isOptional: true,
-      defaultValue: "First voice from MURF_VOICES",
+      defaultValue: "'en-UK-hazel'",
     },
   ]}
 />
@@ -15482,9 +14760,36 @@ Returns: `Promise<NodeJS.ReadableStream>`
 
 ### getSpeakers()
 
-Returns a list of available voices with their properties.
+Returns an array of available voice options, where each node contains:
 
-Returns: `Promise<Array<{ voiceId: string, name: string, language: string, gender: string }>>`
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Display name of the voice",
+      isOptional: false,
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "Language code for the voice",
+      isOptional: false,
+    },
+    {
+      name: "gender",
+      type: "string",
+      description: "Gender of the voice",
+      isOptional: false,
+    }
+  ]}
+/>
 
 ### listen()
 
@@ -15504,16 +14809,10 @@ title: "Reference: OpenAI Voice | Voice Providers | Mastra Docs"
 description: "Documentation for the OpenAIVoice class, providing text-to-speech and speech-to-text capabilities."
 ---
 
-# OpenAIVoice Reference
+# OpenAI
 Source: https://mastra.ai/docs/reference/voice/openai
 
 The OpenAIVoice class in Mastra provides text-to-speech and speech-to-text capabilities using OpenAI's models.
-
-## Installation
-
-```bash
-npm install @mastra/voice-openai openai
-```
 
 ## Usage Example
 
@@ -15559,14 +14858,14 @@ const text = await voice.listen(audioStream, {
       type: "OpenAIConfig",
       description: "Configuration for text-to-speech synthesis.",
       isOptional: true,
-      defaultValue: "{ name: 'tts-1', apiKey: process.env.OPENAI_API_KEY }",
+      defaultValue: "{ name: 'tts-1' }",
     },
     {
       name: "listeningModel",
       type: "OpenAIConfig",
       description: "Configuration for speech-to-text recognition.",
       isOptional: true,
-      defaultValue: "{ name: 'whisper-1', apiKey: process.env.OPENAI_API_KEY }",
+      defaultValue: "{ name: 'whisper-1' }",
     },
     {
       name: "speaker",
@@ -15603,18 +14902,6 @@ const text = await voice.listen(audioStream, {
 
 Converts text to speech using OpenAI's text-to-speech models.
 
-```typescript
-async speak(
-  input: string | NodeJS.ReadableStream,
-  options?: {
-    speaker?: OpenAIVoiceId;
-    speed?: number;
-  }
-): Promise<NodeJS.ReadableStream>
-```
-
-#### Parameters
-
 <PropertiesTable
   content={[
     {
@@ -15640,24 +14927,11 @@ async speak(
   ]}
 />
 
-#### Returns
-
-A `Promise<NodeJS.ReadableStream>` containing the generated audio.
+Returns: `Promise<NodeJS.ReadableStream>`
 
 ### listen()
 
 Transcribes audio using OpenAI's Whisper model.
-
-```typescript
-async listen(
-  audioStream: NodeJS.ReadableStream,
-  options?: {
-    filetype?: 'mp3' | 'mp4' | 'mpeg' | 'mpga' | 'm4a' | 'wav' | 'webm';
-  }
-): Promise<string>
-```
-
-#### Parameters
 
 <PropertiesTable
   content={[
@@ -15677,51 +14951,22 @@ async listen(
   ]}
 />
 
-#### Returns
-
-A `Promise<string>` containing the transcribed text.
+Returns: `Promise<string>`
 
 ### getSpeakers()
 
-Returns a list of available OpenAI voices.
+Returns an array of available voice options, where each node contains:
 
-```typescript
-async getSpeakers(): Promise<Array<{ voiceId: OpenAIVoiceId }>>
-```
-
-#### Returns
-
-A `Promise<Array<{ voiceId: OpenAIVoiceId }>>` containing available voice IDs.
-
-## Types
-
-### OpenAIVoiceId
-
-Available voices for speech synthesis:
-
-```typescript
-type OpenAIVoiceId =
-  | 'alloy'    // Neutral, versatile voice
-  | 'echo'     // Balanced, clear voice
-  | 'fable'    // British-accented voice
-  | 'onyx'     // Deep, authoritative voice
-  | 'nova'     // Warm, engaging voice
-  | 'shimmer'  // Clear, energetic voice
-  | 'ash'      // Mature, refined voice
-  | 'coral'    // Expressive, dynamic voice
-  | 'sage';    // Gentle, measured voice
-```
-
-### OpenAIModel
-
-Available models for speech synthesis and recognition:
-
-```typescript
-type OpenAIModel =
-  | 'tts-1'     // Standard quality speech synthesis
-  | 'tts-1-hd'  // High-quality speech synthesis
-  | 'whisper-1'; // Speech recognition
-```
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+      isOptional: false,
+    },
+  ]}
+/>
 
 ## Notes
 
@@ -15729,19 +14974,13 @@ type OpenAIModel =
 - The `tts-1-hd` model provides higher quality audio but may have slower processing times
 - Speech recognition supports multiple audio formats including mp3, wav, and webm
 
-## Related
-
-- [Voice API Reference](/reference/voice/voice.mdx)
-- [Deepgram Voice Reference](/reference/voice/deepgram.mdx)
-- [Google Voice Reference](/reference/voice/google.mdx)
-
 
 ---
 title: "Reference: PlayAI Voice | Voice Providers | Mastra Docs"
 description: "Documentation for the PlayAI voice implementation, providing text-to-speech capabilities."
 ---
 
-# PlayAI Voice Reference
+# PlayAI
 Source: https://mastra.ai/docs/reference/voice/playai
 
 The PlayAI voice implementation in Mastra provides text-to-speech capabilities using PlayAI's API.
@@ -15779,7 +15018,7 @@ const audioStream = await voice.speak("Hello, world!", {
       type: "PlayAIConfig",
       description: "Configuration for text-to-speech functionality",
       isOptional: true,
-      defaultValue: "{ name: 'PlayDialog', apiKey: process.env.PLAYAI_API_KEY, userId: process.env.PLAYAI_USER_ID }",
+      defaultValue: "{ name: 'PlayDialog' }",
     },
     {
       name: "speaker",
@@ -15823,17 +15062,6 @@ const audioStream = await voice.speak("Hello, world!", {
 
 Converts text to speech using the configured speech model and voice.
 
-```typescript
-async speak(
-  input: string | NodeJS.ReadableStream,
-  options?: {
-    speaker?: string;
-  }
-): Promise<NodeJS.ReadableStream>
-```
-
-#### Parameters
-
 <PropertiesTable
   content={[
     {
@@ -15852,21 +15080,11 @@ async speak(
   ]}
 />
 
-#### Returns
-
-A `Promise<NodeJS.ReadableStream>` containing the generated audio.
+Returns: `Promise<NodeJS.ReadableStream>`.
 
 ### getSpeakers()
 
-Returns a list of available voice options.
-
-```typescript
-async getSpeakers(): Promise<Array<PlayAIVoiceInfo>>
-```
-
-#### Returns
-
-Returns an array of voice information objects with the following properties:
+Returns an array of available voice options, where each node contains:
 
 <PropertiesTable
   content={[
@@ -15901,14 +15119,13 @@ Returns an array of voice information objects with the following properties:
       isOptional: false,
     },
     {
-      name: "id",
+      name: "voiceId",
       type: "string",
       description: "Unique identifier for the voice",
       isOptional: false,
     },
   ]}
 />
-
 ### listen()
 
 This method is not supported by PlayAI and will throw an error. PlayAI does not provide speech-to-text functionality.
@@ -15920,19 +15137,12 @@ This method is not supported by PlayAI and will throw an error. PlayAI does not 
 - Each voice has a unique S3 manifest ID that must be used when making API calls
 
 
-## Related
-
-- [Voice API Reference](/reference/voice/voice.mdx)
-- [OpenAI Voice Reference](/reference/voice/openai.mdx)
-- [Deepgram Voice Reference](/reference/voice/deepgram.mdx)
-
-
 ---
 title: "Reference: Speechify Voice | Voice Providers | Mastra Docs"
 description: "Documentation for the Speechify voice implementation, providing text-to-speech capabilities."
 ---
 
-# Speechify Voice Reference
+# Speechify
 Source: https://mastra.ai/docs/reference/voice/speechify
 
 The Speechify voice implementation in Mastra provides text-to-speech capabilities using Speechify's API.
@@ -15969,7 +15179,7 @@ const audioStream = await voice.speak("Hello, world!", {
       type: "SpeechifyConfig",
       description: "Configuration for text-to-speech functionality",
       isOptional: true,
-      defaultValue: "{ name: 'simba-english', apiKey: process.env.SPEECHIFY_API_KEY }",
+      defaultValue: "{ name: 'simba-english' }",
     },
     {
       name: "speaker",
@@ -16007,17 +15217,6 @@ const audioStream = await voice.speak("Hello, world!", {
 
 Converts text to speech using the configured speech model and voice.
 
-```typescript
-async speak(
-  input: string | NodeJS.ReadableStream,
-  options?: {
-    speaker?: string;
-  } & Omit<AudioStreamRequest, 'voiceId' | 'input'>
-): Promise<NodeJS.ReadableStream>
-```
-
-#### Parameters
-
 <PropertiesTable
   content={[
     {
@@ -16043,29 +15242,40 @@ async speak(
   ]}
 />
 
-#### Returns
-
-A `Promise<NodeJS.ReadableStream>` containing the generated audio.
+Returns: `Promise<NodeJS.ReadableStream>`
 
 ### getSpeakers()
 
-Returns a list of available voice options.
+Returns an array of available voice options, where each node contains:
 
-```typescript
-async getSpeakers(): Promise<Array<{ voiceId: string; name: string; }>>
-```
-
-#### Returns
-
-Returns an array of voice information objects containing the voice ID and name.
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Display name of the voice",
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "Language code for the voice",
+    },
+    {
+      name: "gender",
+      type: "string",
+      description: "Gender of the voice",
+    },
+  ]}
+/>
 
 ### listen()
 
 This method is not supported by Speechify and will throw an error. Speechify does not provide speech-to-text functionality.
-
-## Available Voices
-
-Use the `getSpeakers()` method to get a complete list of available voices.
 
 ## Notes
 
@@ -16073,13 +15283,6 @@ Use the `getSpeakers()` method to get a complete list of available voices.
 - The default model is 'simba-english'
 - Speech-to-text functionality is not supported
 - Additional audio stream options can be passed through the speak() method's options parameter
-
-## Related
-
-- [Voice API Reference](/reference/voice/voice.mdx)
-- [OpenAI Voice Reference](/reference/voice/openai.mdx)
-- [Deepgram Voice Reference](/reference/voice/deepgram.mdx)
-- [PlayAI Voice Reference](/reference/voice/playai.mdx)
 
 
 ---
@@ -16108,7 +15311,7 @@ workflow
   content={[
     {
       name: "stepId",
-      type: "string | string[]",
+      type: "string",
       description: "ID(s) of step(s) that must complete before continuing",
       isOptional: false
     }
@@ -16131,7 +15334,7 @@ workflow
 
 - [Branching Paths example](../../../examples/workflows/branching-paths.mdx)
 - [Workflow Class Reference](./workflow.mdx)
-- [Step Reference](./step-class.mdx) 
+- [Step Reference](./step-class.mdx)
 - [Control Flow Guide](../../workflows/control-flow.mdx)
 
 
@@ -17986,7 +17189,7 @@ description: "Example of adding voice capabilities to Mastra agents, enabling th
 
 import { GithubLink } from "../../../components/github-link";
 
-# Adding Voice Capabilities to Agents
+# Giving your Agent a Voice
 Source: https://mastra.ai/examples/agents/adding-voice-capabilities
 
 This example demonstrates how to add voice capabilities to Mastra agents, enabling them to speak and listen using different voice providers. We'll create two agents with different voice configurations and show how they can interact using speech.
@@ -18096,8 +17299,18 @@ async function convertToText(input: string | NodeJS.ReadableStream): Promise<str
 3. Audio can be handled as streams, making it efficient for real-time processing
 4. Voice capabilities can be combined with the agent's natural language processing
 
-<GithubLink path="examples/basics/agents/voice-capabilities/index.ts" />
 
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/voice-capabilities"
+  }
+/>
 
 ---
 title: "Example: Calling Agentic Workflows | Agents | Mastra Docs"
