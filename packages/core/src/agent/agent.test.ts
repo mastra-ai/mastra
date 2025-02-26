@@ -1,7 +1,9 @@
-import { PassThrough } from 'stream';
 import { createOpenAI } from '@ai-sdk/openai';
+import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { config } from 'dotenv';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { PassThrough } from 'stream';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { TestIntegration } from '../integration/openapi-toolset.mock';
@@ -276,6 +278,44 @@ describe('agent', () => {
     // The tool call for tool-3 should be removed since there's no matching result
     expect(sanitizedMessages).not.toContainEqual(toolCallThree);
     expect(sanitizedMessages).toHaveLength(2);
+  });
+
+  it('should use telemetry options when generating a response', async () => {
+    const electionAgent = new Agent({
+      name: 'US Election agent',
+      instructions: 'You know about the past US elections',
+      model: openai('gpt-4o'),
+    });
+
+    const memoryExporter = new InMemorySpanExporter();
+    const tracerProvider = new NodeTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
+    });
+    tracerProvider.register();
+
+    const mastra = new Mastra({
+      agents: { electionAgent },
+      telemetry: {
+        enabled: true,
+        serviceName: 'test-service',
+        export: {
+          type: 'custom',
+          exporter: memoryExporter,
+        },
+      },
+    });
+    const agentOne = mastra.getAgent('electionAgent');
+
+    const response = await agentOne.generate('Who won the 2016 US presidential election?', {
+      telemetry: { functionId: 'test-function-id', metadata: { test: 'test' } },
+    });
+
+    const spans = memoryExporter.getFinishedSpans();
+    const aiSpan = spans.find(span => span.name === 'ai.generateText');
+    expect(aiSpan).toBeDefined();
+    expect(aiSpan?.attributes['ai.telemetry.metadata.test']).toBe('test');
+    expect(aiSpan?.attributes['resource.name']).toBe('test-function-id');
+    await tracerProvider.shutdown();
   });
 
   describe('voice capabilities', () => {
