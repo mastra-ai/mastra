@@ -1,5 +1,6 @@
 'use client';
 
+import { v4 as uuid } from '@lukeed/uuid';
 import { Plus, X } from 'lucide-react';
 import * as React from 'react';
 import { type Control, useWatch } from 'react-hook-form';
@@ -25,7 +26,7 @@ export function RecordField({ name, control, handleFieldChange }: RecordFieldPro
   const formValue = useWatch({ control, name }) || {};
   const [pairs, setPairs] = React.useState<KeyValuePair[]>(() =>
     Object.entries(formValue).map(([key, value]) => ({
-      id: key || crypto.randomUUID(),
+      id: key || uuid(),
       key,
       value: value as string,
     })),
@@ -33,7 +34,7 @@ export function RecordField({ name, control, handleFieldChange }: RecordFieldPro
 
   React.useEffect(() => {
     if (pairs.length === 0) {
-      setPairs([{ id: crypto.randomUUID(), key: '', value: '' }]);
+      setPairs([{ id: uuid(), key: '', value: '' }]);
     }
   }, [pairs]);
 
@@ -63,7 +64,7 @@ export function RecordField({ name, control, handleFieldChange }: RecordFieldPro
   };
 
   const addPair = () => {
-    const newPairs = [...pairs, { id: crypto.randomUUID(), key: '', value: '' }];
+    const newPairs = [...pairs, { id: uuid(), key: '', value: '' }];
     setPairs(newPairs);
     updateForm(newPairs);
   };
@@ -71,7 +72,7 @@ export function RecordField({ name, control, handleFieldChange }: RecordFieldPro
   const removePair = (id: string) => {
     const newPairs = pairs.filter(p => p.id !== id);
     if (newPairs.length === 0) {
-      newPairs.push({ id: crypto.randomUUID(), key: '', value: '' });
+      newPairs.push({ id: uuid(), key: '', value: '' });
     }
     setPairs(newPairs);
     updateForm(newPairs);

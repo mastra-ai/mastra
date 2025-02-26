@@ -124,7 +124,7 @@ const docs: DocsThemeConfig = {
   },
   footer: {
     component: null,
-  }
+  },
 };
 
 export default docs;
