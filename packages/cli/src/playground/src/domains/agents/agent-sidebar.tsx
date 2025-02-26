@@ -1,3 +1,4 @@
+import { v4 as uuid } from '@lukeed/uuid';
 import { Ellipsis, Plus, Trash } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -24,7 +25,7 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
     await deleteThread({ threadId: deleteId!, resourceid: agentId, agentId });
     setShowDeleteDialog(false);
     if (deleteId === threadId) {
-      navigate(`/agents/${agentId}/chat/${crypto.randomUUID()}`);
+      navigate(`/agents/${agentId}/chat/${uuid()}`);
     }
   };
 
@@ -51,7 +52,7 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
           <Button
             variant="primary"
             size="icon"
-            onClick={() => navigate(`/agents/${agentId}/chat/${crypto.randomUUID()}`)}
+            onClick={() => navigate(`/agents/${agentId}/chat/${uuid()}`)}
           >
             <Plus />
           </Button>
@@ -69,7 +70,7 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
           <Button
             variant="primary"
             size="icon"
-            onClick={() => navigate(`/agents/${agentId}/chat/${crypto.randomUUID()}`)}
+            onClick={() => navigate(`/agents/${agentId}/chat/${uuid()}`)}
           >
             <Plus />
           </Button>
