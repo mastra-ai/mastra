@@ -1,0 +1,9 @@
+# *
+User-agent: *
+Allow: /
+
+# Host
+Host: http://localhost:3004
+
+# Sitemaps
+Sitemap: http://localhost:3004/sitemap.xml
