@@ -1,0 +1,155 @@
+---
+title: "Reference: ElevenLabs Voice | Voice Providers | Mastra Docs"
+description: "Documentation for the ElevenLabs voice implementation, offering high-quality text-to-speech capabilities with multiple voice models and natural-sounding synthesis."
+---
+
+# ElevenLabs Voice Reference
+
+The ElevenLabs voice implementation in Mastra provides high-quality text-to-speech (TTS) capabilities using the ElevenLabs API. It supports multiple voice models and speakers, with a focus on natural-sounding speech synthesis.
+
+## Usage Example
+
+```typescript
+import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+
+// Initialize with default configuration (uses ELEVENLABS_API_KEY environment variable)
+const voice = new ElevenLabsVoice();
+
+// Initialize with custom configuration
+const voice = new ElevenLabsVoice({
+  speechModel: {
+    name: 'eleven_multilingual_v2',
+    apiKey: 'your-api-key',
+  },
+  speaker: 'custom-speaker-id',
+});
+
+// Text-to-Speech
+const audioStream = await voice.speak("Hello, world!");
+
+// Get available speakers
+const speakers = await voice.getSpeakers();
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "ElevenLabsVoiceConfig",
+      description: "Configuration for text-to-speech functionality",
+      isOptional: true,
+      defaultValue: "{ name: 'eleven_multilingual_v2', apiKey: process.env.ELEVENLABS_API_KEY }",
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "ID of the speaker to use for text-to-speech",
+      isOptional: true,
+      defaultValue: "'9BWtsMINqrJLrRacOk9x' (Aria voice)",
+    },
+  ]}
+/>
+
+### ElevenLabsVoiceConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "ElevenLabsModel",
+      description: "The ElevenLabs model to use",
+      isOptional: true,
+      defaultValue: "'eleven_multilingual_v2'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "ElevenLabs API key. Falls back to ELEVENLABS_API_KEY environment variable",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Methods
+
+### speak()
+
+Converts text to speech using the configured speech model and voice.
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Additional options for speech synthesis",
+      isOptional: true,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "Override the default speaker ID for this request",
+      isOptional: true,
+    },
+  ]}
+/>
+
+Returns: `Promise<NodeJS.ReadableStream>`
+
+### getSpeakers()
+
+Returns a list of available voice options from the ElevenLabs API.
+
+Returns: `Promise<Array<{ voiceId: string, name: string, language: string, gender: string }>>`
+
+### listen()
+
+This method is not supported by ElevenLabs and will throw an error. ElevenLabs does not provide speech-to-text functionality.
+
+## Available Models (ElevenLabsModel)
+
+The following models are available for text-to-speech:
+
+<PropertiesTable
+  content={[
+    {
+      name: "eleven_multilingual_v2",
+      type: "string",
+      description: "Default model with multilingual support",
+    },
+    {
+      name: "eleven_flash_v2_5",
+      type: "string",
+      description: "Flash model version 2.5 for faster generation",
+    },
+    {
+      name: "eleven_flash_v2",
+      type: "string",
+      description: "Flash model version 2",
+    },
+    {
+      name: "eleven_multilingual_sts_v2",
+      type: "string",
+      description: "Multilingual model with speech-to-speech support",
+    },
+    {
+      name: "eleven_english_sts_v2",
+      type: "string",
+      description: "English-specific model with speech-to-speech support",
+    },
+  ]}
+/>
+
+## Important Notes
+
+1. An ElevenLabs API key is required. Set it via the `ELEVENLABS_API_KEY` environment variable or pass it in the constructor.
+2. The default speaker is set to Aria (ID: '9BWtsMINqrJLrRacOk9x').
+3. Speech-to-text functionality is not supported by ElevenLabs.
+4. Available speakers can be retrieved using the `getSpeakers()` method, which returns detailed information about each voice including language and gender.
