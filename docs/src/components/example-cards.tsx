@@ -1,8 +1,7 @@
-import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-
 import { useState } from "react";
+import { Card, CardContent } from "./ui/card";
 
 export function CardItem({
   links,
@@ -10,19 +9,21 @@ export function CardItem({
   links: Array<{ title: string; href: string }>;
 }) {
   return (
-    <Card className="dark:border-[#404040] px-0 rounded-none border-none shadow-none transition-colors">
-      <CardContent className="space-y-2 px-0">
-        {links.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className="flex border-b-[0.5px] dark:border-[#343434] items-center rounded-t-md group justify-between p-2 px-0 pl-2 text-sm"
-          >
-            {item.title}
-          </Link>
-        ))}
-      </CardContent>
-    </Card>
+    <div>
+      <Card className="dark:border-[#404040] px-0 rounded-none border-none shadow-none transition-colors">
+        <CardContent className="space-y-2 px-0">
+          {links.map((item) => (
+            <Link
+              key={`${item.title}-${item.href}`}
+              href={item.href}
+              className="flex border-b-[0.5px] dark:border-[#343434] items-center rounded-t-md group justify-between p-2 px-0 pl-2 text-sm"
+            >
+              {item.title}
+            </Link>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

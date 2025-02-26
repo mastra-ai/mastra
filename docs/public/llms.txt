@@ -16,6 +16,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Creating and Calling Agents | Agent Documentation | Mastra](https://mastra.ai/docs/agents/00-overview): Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
 - [Using Agent Memory | Agents | Mastra Docs](https://mastra.ai/docs/agents/01-agent-memory): Documentation on how agents in Mastra use memory to store conversation history and contextual information.
 - [Agent Tool Selection | Agent Documentation | Mastra](https://mastra.ai/docs/agents/02-adding-tools): Tools are typed functions that can be executed by agents or workflows, with built-in integration access and parameter validation. Each tool has a schema that defines its inputs, an executor function that implements its logic, and access to configured integrations.
+- [03-adding-voice](https://mastra.ai/docs/agents/03-adding-voice)
 - [Deployment](https://mastra.ai/docs/deployment/deployment): Build and deploy Mastra applications using platform-specific deployers or standard HTTP servers
 - [Logging and Tracing | Mastra Deployment Documentation](https://mastra.ai/docs/deployment/logging-and-tracing): Documentation on effective logging and tracing in Mastra, crucial for understanding application behavior and improving AI accuracy.
 - [Overview](https://mastra.ai/docs/evals/00-overview): Mastra evals help you measure LLM output quality with metrics for relevance, bias, hallucination, and more.
@@ -110,6 +111,15 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: TTS.generate() | Text to Speech (TTS) | Mastra Docs](https://mastra.ai/docs/reference/tts/generate): Documentation for the `.generate()` method in TTS, which produces an audio response.
 - [Reference: Providers and Models | TTS | Mastra Docs](https://mastra.ai/docs/reference/tts/providers-and-models): Overview of supported TTS providers and their models.
 - [Reference: TTS.stream() | Text to Speech (TTS) | Mastra Docs](https://mastra.ai/docs/reference/tts/stream): Documentation for the `.stream()` method in TTS, which produces an audio response stream.
+- [Reference: CompositeVoice | Voice Providers | Mastra Docs](https://mastra.ai/docs/reference/voice/composite-voice): Documentation for the CompositeVoice class, which enables combining multiple voice providers for flexible text-to-speech and speech-to-text operations.
+- [Reference: Deepgram Voice | Voice Providers | Mastra Docs](https://mastra.ai/docs/reference/voice/deepgram): Documentation for the Deepgram voice implementation, providing text-to-speech and speech-to-text capabilities with multiple voice models and languages.
+- [Reference: ElevenLabs Voice | Voice Providers | Mastra Docs](https://mastra.ai/docs/reference/voice/elevenlabs): Documentation for the ElevenLabs voice implementation, offering high-quality text-to-speech capabilities with multiple voice models and natural-sounding synthesis.
+- [Reference: Google Voice | Voice Providers | Mastra Docs](https://mastra.ai/docs/reference/voice/google): Documentation for the Google Voice implementation, providing text-to-speech and speech-to-text capabilities.
+- [Reference: MastraVoice | Voice Providers | Mastra Docs](https://mastra.ai/docs/reference/voice/mastra-voice): Documentation for the MastraVoice abstract base class, which defines the core interface for all voice services in Mastra.
+- [Reference: Murf Voice | Voice Providers | Mastra Docs](https://mastra.ai/docs/reference/voice/murf): Documentation for the Murf voice implementation, providing text-to-speech capabilities.
+- [Reference: OpenAI Voice | Voice Providers | Mastra Docs](https://mastra.ai/docs/reference/voice/openai): Documentation for the OpenAIVoice class, providing text-to-speech and speech-to-text capabilities.
+- [Reference: PlayAI Voice | Voice Providers | Mastra Docs](https://mastra.ai/docs/reference/voice/playai): Documentation for the PlayAI voice implementation, providing text-to-speech capabilities.
+- [Reference: Speechify Voice | Voice Providers | Mastra Docs](https://mastra.ai/docs/reference/voice/speechify): Documentation for the Speechify voice implementation, providing text-to-speech capabilities.
 - [Reference: .after() | Building Workflows | Mastra Docs](https://mastra.ai/docs/reference/workflows/after): Documentation for the `after()` method in workflows, enabling branching and merging paths.
 - [Reference: Workflow.commit() | Running Workflows | Mastra Docs](https://mastra.ai/docs/reference/workflows/commit): Documentation for the `.commit()` method in workflows, which re-initializes the workflow machine with the current step configuration.
 - [Reference: Workflow.createRun() | Running Workflows | Mastra Docs](https://mastra.ai/docs/reference/workflows/createRun): Documentation for the `.createRun()` method in workflows, which initializes a new workflow run instance.
@@ -130,6 +140,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Suspend & Resume Workflows | Human-in-the-Loop | Mastra Docs](https://mastra.ai/docs/workflows/suspend-and-resume): Suspend and resume in Mastra workflows allows you to pause execution while waiting for external input or resources.
 
 ## examples
+- [Example: Adding Voice Capabilities | Agents | Mastra](https://mastra.ai/examples/agents/adding-voice-capabilities): Example of adding voice capabilities to Mastra agents, enabling them to speak and listen using different voice providers.
 - [Example: Calling Agentic Workflows | Agents | Mastra Docs](https://mastra.ai/examples/agents/agentic-workflows): Example of creating AI workflows in Mastra, demonstrating integration of external APIs with LLM-powered planning.
 - [Example: Categorizing Birds | Agents | Mastra Docs](https://mastra.ai/examples/agents/bird-checker): Example of using a Mastra AI Agent to determine if an image from Unsplash depicts a bird.
 - [Example: Hierarchical Multi-Agent System | Agents | Mastra](https://mastra.ai/examples/agents/hierarchical-multi-agent): Example of creating a hierarchical multi-agent system using Mastra, where agents interact through tool functions.

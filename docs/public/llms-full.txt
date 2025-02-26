@@ -818,6 +818,101 @@ main();
 The agent will use the `weatherInfo` tool to get the current weather in New York City and respond accordingly.
 
 
+# Adding Voice to Agents
+Source: https://mastra.ai/docs/agents/03-adding-voice
+
+Mastra agents can be enhanced with voice capabilities, allowing them to speak responses and listen to user input. You can configure an agent to use either a single voice provider or combine multiple providers for different operations.
+
+## Using a Single Provider
+
+The simplest way to add voice to an agent is to use a single provider for both speaking and listening:
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { OpenAIVoice } from "@mastra/voice-openai";
+
+// Initialize the voice provider with default settings
+const voice = new OpenAIVoice();
+
+// Create an agent with voice capabilities
+export const weatherAgent = new Agent({
+  name: 'Agent',
+  instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
+  model: openai('gpt-4o'),
+  voice
+});
+
+// The agent can now use voice for interaction
+await agent.speak("Hello, I'm your AI assistant!");
+const userInput = await agent.listen();
+```
+
+## Using Multiple Providers
+
+For more flexibility, you can use different providers for speaking and listening using the CompositeVoice class:
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
+
+export const weatherAgent = new Agent({
+  name: 'Agent',
+  instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
+  model: openai('gpt-4o'),
+
+  // Create a composite voice using OpenAI for listening and PlayAI for speaking
+  voice: new CompositeVoice({
+    listenProvider: new OpenAIVoice(),
+    speakProvider: new PlayAIVoice(),
+  }),
+});
+```
+
+## Working with Audio Streams
+
+The `speak()` and `listen()` methods work with Node.js streams. Here's how to save and load audio files:
+
+### Saving Speech Output
+
+```typescript
+import { createWriteStream } from 'fs';
+import path from 'path';
+
+// Generate speech and save to file
+const audio = await weatherAgent.speak('Hello, World!');
+const filePath = path.join(process.cwd(), 'weather-agent.mp3');
+const writer = createWriteStream(filePath);
+
+audio.pipe(writer);
+
+await new Promise<void>((resolve, reject) => {
+  writer.on('finish', () => resolve());
+  writer.on('error', reject);
+});
+```
+
+### Transcribing Audio Input
+
+```typescript
+import { createReadStream } from 'fs';
+import path from 'path';
+
+// Read audio file and transcribe
+const audioFilePath = path.join(process.cwd(), '/weather-agent.mp3');
+const audioStream = createReadStream(audioFilePath);
+
+try {
+  console.log('Transcribing audio file...');
+  const transcription = await weatherAgent.listen(audioStream);
+  console.log('Transcription:', transcription);
+} catch (error) {
+  console.error('Error transcribing audio:', error);
+}
+```
+
+
 ---
 title: "Deployment"
 description: "Build and deploy Mastra applications using platform-specific deployers or standard HTTP servers"
@@ -14270,6 +14365,1724 @@ audioResult.pipe(writeStream);
 
 
 ---
+title: "Reference: CompositeVoice | Voice Providers | Mastra Docs"
+description: "Documentation for the CompositeVoice class, which enables combining multiple voice providers for flexible text-to-speech and speech-to-text operations."
+---
+
+# CompositeVoice Reference
+Source: https://mastra.ai/docs/reference/voice/composite-voice
+
+The CompositeVoice class allows you to combine different voice providers for text-to-speech and speech-to-text operations. This is particularly useful when you want to use the best provider for each operation - for example, using OpenAI for speech-to-text and PlayAI for text-to-speech.
+
+CompositeVoice is used internally by the Agent class to provide flexible voice capabilities.
+
+## Usage Example
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
+
+// Create voice providers
+const openai = new OpenAIVoice();
+const playai = new PlayAIVoice();
+
+// Use OpenAI for listening (speech-to-text) and PlayAI for speaking (text-to-speech)
+const voice = new CompositeVoice({
+  listeningProvider: openai,
+  speakingProvider: playai
+});
+
+// Convert speech to text using OpenAI
+const text = await voice.listen(audioStream);
+
+// Convert text to speech using PlayAI
+const audio = await voice.speak("Hello, world!");
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "config",
+      type: "object",
+      description: "Configuration object for the composite voice service",
+      isOptional: false,
+    },
+    {
+      name: "config.listeningProvider",
+      type: "MastraVoice",
+      description: "Voice provider to use for speech-to-text operations",
+      isOptional: true,
+    },
+    {
+      name: "config.speakingProvider",
+      type: "MastraVoice",
+      description: "Voice provider to use for text-to-speech operations",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Methods
+
+### speak()
+
+Converts text to speech using the configured speaking provider.
+
+```typescript
+async speak(
+  input: string | NodeJS.ReadableStream,
+  options?: {
+    speaker?: string;
+    [key: string]: any;
+  }
+): Promise<NodeJS.ReadableStream>
+```
+
+#### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text to convert to speech",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Provider-specific options passed to the speaking provider",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### Notes
+- If no speaking provider is configured, this method will throw an error
+- Options are passed through to the configured speaking provider
+- Returns a stream of audio data
+
+### listen()
+
+Converts speech to text using the configured listening provider.
+
+```typescript
+async listen(
+  audioStream: NodeJS.ReadableStream,
+  options?: {
+    [key: string]: any;
+  }
+): Promise<string | NodeJS.ReadableStream>
+```
+
+#### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "Audio stream to convert to text",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Provider-specific options passed to the listening provider",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### Notes
+- If no listening provider is configured, this method will throw an error
+- Options are passed through to the configured listening provider
+- Returns either a string or a stream of transcribed text, depending on the provider
+
+### getSpeakers()
+
+Returns a list of available voices from the speaking provider.
+
+```typescript
+async getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: any }>>
+```
+
+#### Notes
+- Returns voices from the speaking provider only
+- If no speaking provider is configured, returns an empty array
+- Each voice object will have at least a voiceId property
+- Additional voice properties depend on the speaking provider
+
+## Notes
+
+- CompositeVoice implements the MastraVoice interface
+- Each provider maintains its own configuration and state
+- Error handling should consider both providers' potential failure modes
+- Ideal for scenarios where different providers excel at different operations
+
+## Related
+
+- [MastraVoice Reference](/reference/voice/voice.mdx)
+- [OpenAI Voice Reference](/reference/voice/openai.mdx)
+- [Deepgram Voice Reference](/reference/voice/deepgram.mdx)
+- [PlayAI Voice Reference](/reference/voice/playai.mdx)
+- [Speechify Voice Reference](/reference/voice/speechify.mdx)
+
+
+---
+title: "Reference: Deepgram Voice | Voice Providers | Mastra Docs"
+description: "Documentation for the Deepgram voice implementation, providing text-to-speech and speech-to-text capabilities with multiple voice models and languages."
+---
+
+# Deepgram Voice Reference
+Source: https://mastra.ai/docs/reference/voice/deepgram
+
+The Deepgram voice implementation in Mastra provides text-to-speech (TTS) and speech-to-text (STT) capabilities using Deepgram's API. It supports multiple voice models and languages, with configurable options for both speech synthesis and transcription.
+
+## Usage Example
+
+```typescript
+import { DeepgramVoice } from "@mastra/voice-deepgram";
+
+// Initialize with default configuration (uses DEEPGRAM_API_KEY environment variable)
+const voice = new DeepgramVoice();
+
+// Initialize with custom configuration
+const voice = new DeepgramVoice({
+  speechModel: {
+    name: 'aura',
+    apiKey: 'your-api-key',
+  },
+  listeningModel: {
+    name: 'nova-2',
+    apiKey: 'your-api-key',
+  },
+  speaker: 'asteria-en',
+});
+
+// Text-to-Speech
+const audioStream = await voice.speak("Hello, world!");
+
+// Speech-to-Text
+const transcript = await voice.listen(audioStream);
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "DeepgramVoiceConfig",
+      description: "Configuration for text-to-speech functionality",
+      isOptional: true,
+      defaultValue: "{ name: 'aura', apiKey: process.env.DEEPGRAM_API_KEY }",
+    },
+    {
+      name: "listeningModel",
+      type: "DeepgramVoiceConfig",
+      description: "Configuration for speech-to-text functionality",
+      isOptional: true,
+      defaultValue: "{ name: 'nova', apiKey: process.env.DEEPGRAM_API_KEY }",
+    },
+    {
+      name: "speaker",
+      type: "DeepgramVoiceId",
+      description: "Default voice to use for text-to-speech",
+      isOptional: true,
+      defaultValue: "'asteria-en'",
+    },
+  ]}
+/>
+
+### DeepgramVoiceConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "DeepgramModel",
+      description: "The Deepgram model to use",
+      isOptional: true,
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Deepgram API key. Falls back to DEEPGRAM_API_KEY environment variable",
+      isOptional: true,
+    },
+    {
+      name: "properties",
+      type: "Record<string, any>",
+      description: "Additional properties to pass to the Deepgram API",
+      isOptional: true,
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "Language code for the model",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Methods
+
+### speak()
+
+Converts text to speech using the configured speech model and voice.
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Additional options for speech synthesis",
+      isOptional: true,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "Override the default speaker for this request",
+      isOptional: true,
+    },
+  ]}
+/>
+
+Returns: `Promise<NodeJS.ReadableStream>`
+
+### listen()
+
+Converts speech to text using the configured listening model.
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "Audio stream to transcribe",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Additional options to pass to the Deepgram API",
+      isOptional: true,
+    },
+  ]}
+/>
+
+Returns: `Promise<string>`
+
+### getSpeakers()
+
+Returns a list of available voice options.
+
+Returns: `Promise<Array<{ voiceId: DeepgramVoiceId }>>`
+
+## Available Models and Voices
+
+### Speech Models (DeepgramModel)
+- `aura`: Default model for text-to-speech
+- `base`: Base model for speech recognition
+- `enhanced`: Enhanced speech recognition model
+- `nova`: Nova model for speech recognition (default for listening)
+- `nova-2`: Improved Nova model
+- `nova-3`: Latest Nova model
+
+### Voice Options (DeepgramVoiceId)
+- `asteria-en`: Default English voice
+- `luna-en`: English voice
+- `stella-en`: English voice
+- `athena-en`: English voice
+- `hera-en`: English voice
+- `orion-en`: English voice
+- `arcas-en`: English voice
+- `perseus-en`: English voice
+- `angus-en`: English voice
+- `orpheus-en`: English voice
+- `helios-en`: English voice
+- `zeus-en`: English voice
+
+
+---
+title: "Reference: ElevenLabs Voice | Voice Providers | Mastra Docs"
+description: "Documentation for the ElevenLabs voice implementation, offering high-quality text-to-speech capabilities with multiple voice models and natural-sounding synthesis."
+---
+
+# ElevenLabs Voice Reference
+Source: https://mastra.ai/docs/reference/voice/elevenlabs
+
+The ElevenLabs voice implementation in Mastra provides high-quality text-to-speech (TTS) capabilities using the ElevenLabs API. It supports multiple voice models and speakers, with a focus on natural-sounding speech synthesis.
+
+## Usage Example
+
+```typescript
+import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+
+// Initialize with default configuration (uses ELEVENLABS_API_KEY environment variable)
+const voice = new ElevenLabsVoice();
+
+// Initialize with custom configuration
+const voice = new ElevenLabsVoice({
+  speechModel: {
+    name: 'eleven_multilingual_v2',
+    apiKey: 'your-api-key',
+  },
+  speaker: 'custom-speaker-id',
+});
+
+// Text-to-Speech
+const audioStream = await voice.speak("Hello, world!");
+
+// Get available speakers
+const speakers = await voice.getSpeakers();
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "ElevenLabsVoiceConfig",
+      description: "Configuration for text-to-speech functionality",
+      isOptional: true,
+      defaultValue: "{ name: 'eleven_multilingual_v2', apiKey: process.env.ELEVENLABS_API_KEY }",
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "ID of the speaker to use for text-to-speech",
+      isOptional: true,
+      defaultValue: "'9BWtsMINqrJLrRacOk9x' (Aria voice)",
+    },
+  ]}
+/>
+
+### ElevenLabsVoiceConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "ElevenLabsModel",
+      description: "The ElevenLabs model to use",
+      isOptional: true,
+      defaultValue: "'eleven_multilingual_v2'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "ElevenLabs API key. Falls back to ELEVENLABS_API_KEY environment variable",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Methods
+
+### speak()
+
+Converts text to speech using the configured speech model and voice.
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Additional options for speech synthesis",
+      isOptional: true,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "Override the default speaker ID for this request",
+      isOptional: true,
+    },
+  ]}
+/>
+
+Returns: `Promise<NodeJS.ReadableStream>`
+
+### getSpeakers()
+
+Returns a list of available voice options from the ElevenLabs API.
+
+Returns: `Promise<Array<{ voiceId: string, name: string, language: string, gender: string }>>`
+
+### listen()
+
+This method is not supported by ElevenLabs and will throw an error. ElevenLabs does not provide speech-to-text functionality.
+
+## Available Models (ElevenLabsModel)
+
+The following models are available for text-to-speech:
+
+<PropertiesTable
+  content={[
+    {
+      name: "eleven_multilingual_v2",
+      type: "string",
+      description: "Default model with multilingual support",
+    },
+    {
+      name: "eleven_flash_v2_5",
+      type: "string",
+      description: "Flash model version 2.5 for faster generation",
+    },
+    {
+      name: "eleven_flash_v2",
+      type: "string",
+      description: "Flash model version 2",
+    },
+    {
+      name: "eleven_multilingual_sts_v2",
+      type: "string",
+      description: "Multilingual model with speech-to-speech support",
+    },
+    {
+      name: "eleven_english_sts_v2",
+      type: "string",
+      description: "English-specific model with speech-to-speech support",
+    },
+  ]}
+/>
+
+## Important Notes
+
+1. An ElevenLabs API key is required. Set it via the `ELEVENLABS_API_KEY` environment variable or pass it in the constructor.
+2. The default speaker is set to Aria (ID: '9BWtsMINqrJLrRacOk9x').
+3. Speech-to-text functionality is not supported by ElevenLabs.
+4. Available speakers can be retrieved using the `getSpeakers()` method, which returns detailed information about each voice including language and gender.
+
+
+---
+title: "Reference: Google Voice | Voice Providers | Mastra Docs"
+description: "Documentation for the Google Voice implementation, providing text-to-speech and speech-to-text capabilities."
+---
+
+# Google Voice Reference
+Source: https://mastra.ai/docs/reference/voice/google
+
+The Google Voice implementation in Mastra provides both text-to-speech (TTS) and speech-to-text (STT) capabilities using Google Cloud services. It supports multiple voices, languages, and advanced audio configuration options.
+
+## Usage Example
+
+```typescript
+import { GoogleVoice } from "@mastra/voice-google";
+
+// Initialize with default configuration (uses GOOGLE_API_KEY environment variable)
+const voice = new GoogleVoice();
+
+// Initialize with custom configuration
+const voice = new GoogleVoice({
+  speechModel: {
+    apiKey: 'your-speech-api-key',
+  },
+  listeningModel: {
+    apiKey: 'your-listening-api-key',
+  },
+  speaker: 'en-US-Casual-K',
+});
+
+// Text-to-Speech
+const audioStream = await voice.speak("Hello, world!", {
+  languageCode: 'en-US',
+  audioConfig: {
+    audioEncoding: 'LINEAR16',
+  },
+});
+
+// Speech-to-Text
+const transcript = await voice.listen(audioStream, {
+  config: {
+    encoding: 'LINEAR16',
+    languageCode: 'en-US',
+  },
+});
+
+// Get available voices for a specific language
+const voices = await voice.getSpeakers({ languageCode: 'en-US' });
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "GoogleModelConfig",
+      description: "Configuration for text-to-speech functionality",
+      isOptional: true,
+      defaultValue: "{ apiKey: process.env.GOOGLE_API_KEY }",
+    },
+    {
+      name: "listeningModel",
+      type: "GoogleModelConfig",
+      description: "Configuration for speech-to-text functionality",
+      isOptional: true,
+      defaultValue: "{ apiKey: process.env.GOOGLE_API_KEY }",
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "Default voice ID to use for text-to-speech",
+      isOptional: true,
+      defaultValue: "'en-US-Casual-K'",
+    },
+  ]}
+/>
+
+### GoogleModelConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Google Cloud API key. Falls back to GOOGLE_API_KEY environment variable",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Methods
+
+### speak()
+
+Converts text to speech using Google Cloud Text-to-Speech service.
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Speech synthesis options",
+      isOptional: true,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "Voice ID to use for this request",
+      isOptional: true,
+    },
+    {
+      name: "options.languageCode",
+      type: "string",
+      description: "Language code for the voice (e.g., 'en-US'). Defaults to the language code from the speaker ID or 'en-US'",
+      isOptional: true,
+    },
+    {
+      name: "options.audioConfig",
+      type: "ISynthesizeSpeechRequest['audioConfig']",
+      description: "Audio configuration options from Google Cloud Text-to-Speech API",
+      isOptional: true,
+      defaultValue: "{ audioEncoding: 'LINEAR16' }",
+    },
+  ]}
+/>
+
+Returns: `Promise<NodeJS.ReadableStream>`
+
+### listen()
+
+Converts speech to text using Google Cloud Speech-to-Text service.
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "Audio stream to transcribe",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Recognition options",
+      isOptional: true,
+    },
+    {
+      name: "options.stream",
+      type: "boolean",
+      description: "Whether to use streaming recognition",
+      isOptional: true,
+    },
+    {
+      name: "options.config",
+      type: "IRecognitionConfig",
+      description: "Recognition configuration from Google Cloud Speech-to-Text API",
+      isOptional: true,
+      defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
+    },
+  ]}
+/>
+
+Returns: `Promise<string>`
+
+### getSpeakers()
+
+Returns a list of available voices for a specific language.
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "object",
+      description: "Options for listing voices",
+      isOptional: true,
+    },
+    {
+      name: "options.languageCode",
+      type: "string",
+      description: "Language code to filter voices by",
+      isOptional: true,
+      defaultValue: "'en-US'",
+    },
+  ]}
+/>
+
+Returns: `Promise<Array<{ voiceId: string, languageCodes: string[] }>>`
+
+## Important Notes
+
+1. A Google Cloud API key is required. Set it via the `GOOGLE_API_KEY` environment variable or pass it in the constructor.
+2. The default voice is set to 'en-US-Casual-K'.
+3. Both text-to-speech and speech-to-text services use LINEAR16 as the default audio encoding.
+4. The `speak()` method supports advanced audio configuration through the Google Cloud Text-to-Speech API.
+5. The `listen()` method supports various recognition configurations through the Google Cloud Speech-to-Text API.
+6. Available voices can be filtered by language code using the `getSpeakers()` method.
+
+
+---
+title: "Reference: MastraVoice | Voice Providers | Mastra Docs"
+description: "Documentation for the MastraVoice abstract base class, which defines the core interface for all voice services in Mastra."
+---
+
+# MastraVoice Reference
+Source: https://mastra.ai/docs/reference/voice/mastra-voice
+
+The MastraVoice class is an abstract base class that defines the core interface for voice services in Mastra. All voice provider implementations (like OpenAI, Deepgram, PlayAI, Speechify) extend this class to provide their specific functionality.
+
+## Usage Example
+
+```typescript
+import { MastraVoice } from "@mastra/core/voice";
+
+// Create a voice provider implementation
+class MyVoiceProvider extends MastraVoice {
+  constructor(config: { speechModel?: ModelConfig; listeningModel?: ModelConfig; speaker?: string }) {
+    super({
+      speechModel: config.speechModel,
+      listeningModel: config.listeningModel,
+      speaker: config.speaker
+    });
+  }
+
+  // Implement required abstract methods
+  async speak(input: string | NodeJS.ReadableStream, options?: { speaker?: string }): Promise<NodeJS.ReadableStream> {
+    // Implement text-to-speech conversion
+  }
+
+  async listen(audioStream: NodeJS.ReadableStream, options?: any): Promise<string | NodeJS.ReadableStream> {
+    // Implement speech-to-text conversion
+  }
+
+  async getSpeakers(): Promise<Array<{ voiceId: string }>> {
+    // Return list of available voices
+  }
+}
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "config",
+      type: "object",
+      description: "Configuration object for the voice service",
+      isOptional: false,
+    },
+    {
+      name: "config.speechModel",
+      type: "BuiltInModelConfig",
+      description: "Configuration for the text-to-speech model",
+      isOptional: true,
+    },
+    {
+      name: "config.listeningModel",
+      type: "BuiltInModelConfig",
+      description: "Configuration for the speech-to-text model",
+      isOptional: true,
+    },
+    {
+      name: "config.speaker",
+      type: "string",
+      description: "Default speaker/voice ID to use",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### BuiltInModelConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "Name of the model to use",
+      isOptional: false,
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "API key for the model service",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Abstract Methods
+
+These methods must be implemented by any class extending MastraVoice.
+
+### speak()
+
+Converts text to speech using the configured speech model.
+
+```typescript
+abstract speak(
+  input: string | NodeJS.ReadableStream,
+  options?: {
+    speaker?: string;
+    [key: string]: any;
+  }
+): Promise<NodeJS.ReadableStream>
+```
+
+#### Purpose
+- Takes text input and converts it to speech using the provider's text-to-speech service
+- Supports both string and stream input for flexibility
+- Allows overriding the default speaker/voice through options
+- Returns a stream of audio data that can be played or saved
+
+### listen()
+
+Converts speech to text using the configured listening model.
+
+```typescript
+abstract listen(
+  audioStream: NodeJS.ReadableStream,
+  options?: {
+    [key: string]: any;
+  }
+): Promise<string | NodeJS.ReadableStream>
+```
+
+#### Purpose
+- Takes an audio stream and converts it to text using the provider's speech-to-text service
+- Supports provider-specific options for transcription configuration
+- Can return either a complete text transcription or a stream of transcribed text
+- Not all providers support this functionality (e.g., PlayAI, Speechify)
+
+### getSpeakers()
+
+Returns a list of available voices supported by the provider.
+
+```typescript
+abstract getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: any }>>
+```
+
+#### Purpose
+- Retrieves the list of available voices/speakers from the provider
+- Each voice must have at least a voiceId property
+- Providers can include additional metadata about each voice
+- Used to discover available voices for text-to-speech conversion
+
+## Protected Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "BuiltInModelConfig | undefined",
+      description: "Configuration for the text-to-speech model",
+      isOptional: true,
+    },
+    {
+      name: "listeningModel",
+      type: "BuiltInModelConfig | undefined",
+      description: "Configuration for the speech-to-text model",
+      isOptional: true,
+    },
+    {
+      name: "speaker",
+      type: "string | undefined",
+      description: "Default speaker/voice ID",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Telemetry Support
+
+MastraVoice includes built-in telemetry support through the `traced` method, which wraps method calls with performance tracking and error monitoring.
+
+```typescript
+protected traced<T extends Function>(method: T, methodName: string): T
+```
+
+## Notes
+
+- MastraVoice is an abstract class and cannot be instantiated directly
+- Implementations must provide concrete implementations for all abstract methods
+- The class provides a consistent interface across different voice service providers
+- Configuration and authentication details are provider-specific
+- Telemetry is automatically handled for all method calls
+
+## Related
+
+- [OpenAI Voice Reference](/reference/voice/openai.mdx)
+- [Deepgram Voice Reference](/reference/voice/deepgram.mdx)
+- [PlayAI Voice Reference](/reference/voice/playai.mdx)
+- [Speechify Voice Reference](/reference/voice/speechify.mdx)
+
+
+---
+title: "Reference: Murf Voice | Voice Providers | Mastra Docs"
+description: "Documentation for the Murf voice implementation, providing text-to-speech capabilities."
+---
+
+# Murf Voice Reference
+Source: https://mastra.ai/docs/reference/voice/murf
+
+The Murf voice implementation in Mastra provides text-to-speech (TTS) capabilities using Murf's AI voice service. It supports multiple voices across different languages.
+
+## Usage Example
+
+```typescript
+import { MurfVoice } from "@mastra/voice-murf";
+
+// Initialize with default configuration (uses MURF_API_KEY environment variable)
+const voice = new MurfVoice();
+
+// Initialize with custom configuration
+const voice = new MurfVoice({
+  speechModel: {
+    name: 'GEN2',
+    apiKey: 'your-api-key',
+    properties: {
+      format: 'MP3',
+      rate: 1.0,
+      pitch: 1.0,
+      sampleRate: 48000,
+      channelType: 'STEREO',
+    },
+  },
+  speaker: 'en-US-cooper',
+});
+
+// Text-to-Speech with default settings
+const audioStream = await voice.speak("Hello, world!");
+
+// Text-to-Speech with custom properties
+const audioStream = await voice.speak("Hello, world!", {
+  speaker: 'en-UK-hazel',
+  properties: {
+    format: 'WAV',
+    rate: 1.2,
+    style: 'casual',
+  },
+});
+
+// Get available voices
+const voices = await voice.getSpeakers();
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "MurfConfig",
+      description: "Configuration for text-to-speech functionality",
+      isOptional: true,
+      defaultValue: "{ name: 'GEN2', apiKey: process.env.MURF_API_KEY }",
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "Default voice ID to use for text-to-speech",
+      isOptional: true,
+      defaultValue: "First voice from MURF_VOICES",
+    },
+  ]}
+/>
+
+### MurfConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "'GEN1' | 'GEN2'",
+      description: "The Murf model generation to use",
+      isOptional: false,
+      defaultValue: "'GEN2'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Murf API key. Falls back to MURF_API_KEY environment variable",
+      isOptional: true,
+    },
+    {
+      name: "properties",
+      type: "object",
+      description: "Default properties for all speech synthesis requests",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Speech Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: "style",
+      type: "string",
+      description: "Speaking style for the voice",
+      isOptional: true,
+    },
+    {
+      name: "rate",
+      type: "number",
+      description: "Speech rate multiplier",
+      isOptional: true,
+    },
+    {
+      name: "pitch",
+      type: "number",
+      description: "Voice pitch adjustment",
+      isOptional: true,
+    },
+    {
+      name: "sampleRate",
+      type: "8000 | 24000 | 44100 | 48000",
+      description: "Audio sample rate in Hz",
+      isOptional: true,
+    },
+    {
+      name: "format",
+      type: "'MP3' | 'WAV' | 'FLAC' | 'ALAW' | 'ULAW'",
+      description: "Output audio format",
+      isOptional: true,
+    },
+    {
+      name: "channelType",
+      type: "'STEREO' | 'MONO'",
+      description: "Audio channel configuration",
+      isOptional: true,
+    },
+    {
+      name: "pronunciationDictionary",
+      type: "Record<string, string>",
+      description: "Custom pronunciation mappings",
+      isOptional: true,
+    },
+    {
+      name: "encodeAsBase64",
+      type: "boolean",
+      description: "Whether to encode the audio as base64",
+      isOptional: true,
+    },
+    {
+      name: "variation",
+      type: "number",
+      description: "Voice variation parameter",
+      isOptional: true,
+    },
+    {
+      name: "audioDuration",
+      type: "number",
+      description: "Target audio duration in seconds",
+      isOptional: true,
+    },
+    {
+      name: "multiNativeLocale",
+      type: "string",
+      description: "Locale for multilingual support",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Methods
+
+### speak()
+
+Converts text to speech using Murf's API.
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Speech synthesis options",
+      isOptional: true,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "Override the default speaker for this request",
+      isOptional: true,
+    },
+    {
+      name: "options.properties",
+      type: "object",
+      description: "Override default speech properties for this request",
+      isOptional: true,
+    },
+  ]}
+/>
+
+Returns: `Promise<NodeJS.ReadableStream>`
+
+### getSpeakers()
+
+Returns a list of available voices with their properties.
+
+Returns: `Promise<Array<{ voiceId: string, name: string, language: string, gender: string }>>`
+
+### listen()
+
+This method is not supported by Murf and will throw an error. Murf does not provide speech-to-text functionality.
+
+## Important Notes
+
+1. A Murf API key is required. Set it via the `MURF_API_KEY` environment variable or pass it in the constructor.
+2. The service uses GEN2 as the default model version.
+3. Speech properties can be set at the constructor level and overridden per request.
+4. The service supports extensive audio customization through properties like format, sample rate, and channel type.
+5. Speech-to-text functionality is not supported.
+
+
+---
+title: "Reference: OpenAI Voice | Voice Providers | Mastra Docs"
+description: "Documentation for the OpenAIVoice class, providing text-to-speech and speech-to-text capabilities."
+---
+
+# OpenAIVoice Reference
+Source: https://mastra.ai/docs/reference/voice/openai
+
+The OpenAIVoice class in Mastra provides text-to-speech and speech-to-text capabilities using OpenAI's models.
+
+## Installation
+
+```bash
+npm install @mastra/voice-openai openai
+```
+
+## Usage Example
+
+```typescript
+import { OpenAIVoice } from '@mastra/voice-openai';
+
+// Initialize with default configuration using environment variables
+const voice = new OpenAIVoice();
+
+// Or initialize with specific configuration
+const voiceWithConfig = new OpenAIVoice({
+  speechModel: {
+    name: 'tts-1-hd',
+    apiKey: 'your-openai-api-key'
+  },
+  listeningModel: {
+    name: 'whisper-1',
+    apiKey: 'your-openai-api-key'
+  },
+  speaker: 'alloy'  // Default voice
+});
+
+// Convert text to speech
+const audioStream = await voice.speak('Hello, how can I help you?', {
+  speaker: 'nova',  // Override default voice
+  speed: 1.2  // Adjust speech speed
+});
+
+// Convert speech to text
+const text = await voice.listen(audioStream, {
+  filetype: 'mp3'
+});
+```
+
+## Configuration
+
+### Constructor Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "OpenAIConfig",
+      description: "Configuration for text-to-speech synthesis.",
+      isOptional: true,
+      defaultValue: "{ name: 'tts-1', apiKey: process.env.OPENAI_API_KEY }",
+    },
+    {
+      name: "listeningModel",
+      type: "OpenAIConfig",
+      description: "Configuration for speech-to-text recognition.",
+      isOptional: true,
+      defaultValue: "{ name: 'whisper-1', apiKey: process.env.OPENAI_API_KEY }",
+    },
+    {
+      name: "speaker",
+      type: "OpenAIVoiceId",
+      description: "Default voice ID for speech synthesis.",
+      isOptional: true,
+      defaultValue: "'alloy'",
+    },
+  ]}
+/>
+
+### OpenAIConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "'tts-1' | 'tts-1-hd' | 'whisper-1'",
+      description: "Model name. Use 'tts-1-hd' for higher quality audio.",
+      isOptional: true,
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "OpenAI API key. Falls back to OPENAI_API_KEY environment variable.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Methods
+
+### speak()
+
+Converts text to speech using OpenAI's text-to-speech models.
+
+```typescript
+async speak(
+  input: string | NodeJS.ReadableStream,
+  options?: {
+    speaker?: OpenAIVoiceId;
+    speed?: number;
+  }
+): Promise<NodeJS.ReadableStream>
+```
+
+#### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text or text stream to convert to speech.",
+      isOptional: false,
+    },
+    {
+      name: "options.speaker",
+      type: "OpenAIVoiceId",
+      description: "Voice ID to use for speech synthesis.",
+      isOptional: true,
+      defaultValue: "Constructor's speaker value",
+    },
+    {
+      name: "options.speed",
+      type: "number",
+      description: "Speech speed multiplier.",
+      isOptional: true,
+      defaultValue: "1.0",
+    },
+  ]}
+/>
+
+#### Returns
+
+A `Promise<NodeJS.ReadableStream>` containing the generated audio.
+
+### listen()
+
+Transcribes audio using OpenAI's Whisper model.
+
+```typescript
+async listen(
+  audioStream: NodeJS.ReadableStream,
+  options?: {
+    filetype?: 'mp3' | 'mp4' | 'mpeg' | 'mpga' | 'm4a' | 'wav' | 'webm';
+  }
+): Promise<string>
+```
+
+#### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "Audio stream to transcribe.",
+      isOptional: false,
+    },
+    {
+      name: "options.filetype",
+      type: "string",
+      description: "Audio format of the input stream.",
+      isOptional: true,
+      defaultValue: "'mp3'",
+    },
+  ]}
+/>
+
+#### Returns
+
+A `Promise<string>` containing the transcribed text.
+
+### getSpeakers()
+
+Returns a list of available OpenAI voices.
+
+```typescript
+async getSpeakers(): Promise<Array<{ voiceId: OpenAIVoiceId }>>
+```
+
+#### Returns
+
+A `Promise<Array<{ voiceId: OpenAIVoiceId }>>` containing available voice IDs.
+
+## Types
+
+### OpenAIVoiceId
+
+Available voices for speech synthesis:
+
+```typescript
+type OpenAIVoiceId =
+  | 'alloy'    // Neutral, versatile voice
+  | 'echo'     // Balanced, clear voice
+  | 'fable'    // British-accented voice
+  | 'onyx'     // Deep, authoritative voice
+  | 'nova'     // Warm, engaging voice
+  | 'shimmer'  // Clear, energetic voice
+  | 'ash'      // Mature, refined voice
+  | 'coral'    // Expressive, dynamic voice
+  | 'sage';    // Gentle, measured voice
+```
+
+### OpenAIModel
+
+Available models for speech synthesis and recognition:
+
+```typescript
+type OpenAIModel =
+  | 'tts-1'     // Standard quality speech synthesis
+  | 'tts-1-hd'  // High-quality speech synthesis
+  | 'whisper-1'; // Speech recognition
+```
+
+## Notes
+
+- API keys can be provided via constructor options or the `OPENAI_API_KEY` environment variable
+- The `tts-1-hd` model provides higher quality audio but may have slower processing times
+- Speech recognition supports multiple audio formats including mp3, wav, and webm
+
+## Related
+
+- [Voice API Reference](/reference/voice/voice.mdx)
+- [Deepgram Voice Reference](/reference/voice/deepgram.mdx)
+- [Google Voice Reference](/reference/voice/google.mdx)
+
+
+---
+title: "Reference: PlayAI Voice | Voice Providers | Mastra Docs"
+description: "Documentation for the PlayAI voice implementation, providing text-to-speech capabilities."
+---
+
+# PlayAI Voice Reference
+Source: https://mastra.ai/docs/reference/voice/playai
+
+The PlayAI voice implementation in Mastra provides text-to-speech capabilities using PlayAI's API.
+
+## Usage Example
+
+```typescript
+import { PlayAIVoice } from "@mastra/voice-playai";
+
+// Initialize with default configuration (uses PLAYAI_API_KEY environment variable and PLAYAI_USER_ID environment variable)
+const voice = new PlayAIVoice();
+
+// Initialize with default configuration
+const voice = new PlayAIVoice({
+  speechModel: {
+    name: 'PlayDialog',
+    apiKey: process.env.PLAYAI_API_KEY,
+    userId: process.env.PLAYAI_USER_ID
+  },
+  speaker: 'Angelo'  // Default voice
+});
+
+// Convert text to speech with a specific voice
+const audioStream = await voice.speak("Hello, world!", {
+  speaker: 's3://voice-cloning-zero-shot/b27bc13e-996f-4841-b584-4d35801aea98/original/manifest.json' // Dexter voice
+});
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "PlayAIConfig",
+      description: "Configuration for text-to-speech functionality",
+      isOptional: true,
+      defaultValue: "{ name: 'PlayDialog', apiKey: process.env.PLAYAI_API_KEY, userId: process.env.PLAYAI_USER_ID }",
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "Default voice ID to use for speech synthesis",
+      isOptional: true,
+      defaultValue: "First available voice ID",
+    },
+  ]}
+/>
+
+### PlayAIConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "'PlayDialog' | 'Play3.0-mini'",
+      description: "The PlayAI model to use",
+      isOptional: true,
+      defaultValue: "'PlayDialog'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "PlayAI API key. Falls back to PLAYAI_API_KEY environment variable",
+      isOptional: true,
+    },
+    {
+      name: "userId",
+      type: "string",
+      description: "PlayAI user ID. Falls back to PLAYAI_USER_ID environment variable",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Methods
+
+### speak()
+
+Converts text to speech using the configured speech model and voice.
+
+```typescript
+async speak(
+  input: string | NodeJS.ReadableStream,
+  options?: {
+    speaker?: string;
+  }
+): Promise<NodeJS.ReadableStream>
+```
+
+#### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      isOptional: false,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "Override the default speaker for this request",
+      isOptional: true,
+      defaultValue: "Constructor's speaker value",
+    },
+  ]}
+/>
+
+#### Returns
+
+A `Promise<NodeJS.ReadableStream>` containing the generated audio.
+
+### getSpeakers()
+
+Returns a list of available voice options.
+
+```typescript
+async getSpeakers(): Promise<Array<PlayAIVoiceInfo>>
+```
+
+#### Returns
+
+Returns an array of voice information objects with the following properties:
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "Name of the voice",
+      isOptional: false,
+    },
+    {
+      name: "accent",
+      type: "string",
+      description: "Accent of the voice (e.g., 'US', 'British', 'Australian')",
+      isOptional: false,
+    },
+    {
+      name: "gender",
+      type: "'M' | 'F'",
+      description: "Gender of the voice",
+      isOptional: false,
+    },
+    {
+      name: "age",
+      type: "'Young' | 'Middle' | 'Old'",
+      description: "Age category of the voice",
+      isOptional: false,
+    },
+    {
+      name: "style",
+      type: "'Conversational' | 'Narrative'",
+      description: "Speaking style of the voice",
+      isOptional: false,
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for the voice",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### listen()
+
+This method is not supported by PlayAI and will throw an error. PlayAI does not provide speech-to-text functionality.
+
+## Notes
+
+- PlayAI requires both an API key and a user ID for authentication
+- The service offers two models: 'PlayDialog' and 'Play3.0-mini'
+- Each voice has a unique S3 manifest ID that must be used when making API calls
+
+
+## Related
+
+- [Voice API Reference](/reference/voice/voice.mdx)
+- [OpenAI Voice Reference](/reference/voice/openai.mdx)
+- [Deepgram Voice Reference](/reference/voice/deepgram.mdx)
+
+
+---
+title: "Reference: Speechify Voice | Voice Providers | Mastra Docs"
+description: "Documentation for the Speechify voice implementation, providing text-to-speech capabilities."
+---
+
+# Speechify Voice Reference
+Source: https://mastra.ai/docs/reference/voice/speechify
+
+The Speechify voice implementation in Mastra provides text-to-speech capabilities using Speechify's API.
+
+## Usage Example
+
+```typescript
+import { SpeechifyVoice } from "@mastra/voice-speechify";
+
+// Initialize with default configuration (uses SPEECHIFY_API_KEY environment variable)
+const voice = new SpeechifyVoice();
+
+// Initialize with custom configuration
+const voice = new SpeechifyVoice({
+  speechModel: {
+    name: 'simba-english',
+    apiKey: 'your-api-key'
+  },
+  speaker: 'george'  // Default voice
+});
+
+// Convert text to speech
+const audioStream = await voice.speak("Hello, world!", {
+  speaker: 'henry',  // Override default voice
+});
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "SpeechifyConfig",
+      description: "Configuration for text-to-speech functionality",
+      isOptional: true,
+      defaultValue: "{ name: 'simba-english', apiKey: process.env.SPEECHIFY_API_KEY }",
+    },
+    {
+      name: "speaker",
+      type: "SpeechifyVoiceId",
+      description: "Default voice ID to use for speech synthesis",
+      isOptional: true,
+      defaultValue: "'george'",
+    },
+  ]}
+/>
+
+### SpeechifyConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "VoiceModelName",
+      description: "The Speechify model to use",
+      isOptional: true,
+      defaultValue: "'simba-english'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Speechify API key. Falls back to SPEECHIFY_API_KEY environment variable",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Methods
+
+### speak()
+
+Converts text to speech using the configured speech model and voice.
+
+```typescript
+async speak(
+  input: string | NodeJS.ReadableStream,
+  options?: {
+    speaker?: string;
+  } & Omit<AudioStreamRequest, 'voiceId' | 'input'>
+): Promise<NodeJS.ReadableStream>
+```
+
+#### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      isOptional: false,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "Override the default speaker for this request",
+      isOptional: true,
+      defaultValue: "Constructor's speaker value",
+    },
+    {
+      name: "options.model",
+      type: "VoiceModelName",
+      description: "Override the default model for this request",
+      isOptional: true,
+      defaultValue: "Constructor's model value",
+    },
+  ]}
+/>
+
+#### Returns
+
+A `Promise<NodeJS.ReadableStream>` containing the generated audio.
+
+### getSpeakers()
+
+Returns a list of available voice options.
+
+```typescript
+async getSpeakers(): Promise<Array<{ voiceId: string; name: string; }>>
+```
+
+#### Returns
+
+Returns an array of voice information objects containing the voice ID and name.
+
+### listen()
+
+This method is not supported by Speechify and will throw an error. Speechify does not provide speech-to-text functionality.
+
+## Available Voices
+
+Use the `getSpeakers()` method to get a complete list of available voices.
+
+## Notes
+
+- Speechify requires an API key for authentication
+- The default model is 'simba-english'
+- Speech-to-text functionality is not supported
+- Additional audio stream options can be passed through the speak() method's options parameter
+
+## Related
+
+- [Voice API Reference](/reference/voice/voice.mdx)
+- [OpenAI Voice Reference](/reference/voice/openai.mdx)
+- [Deepgram Voice Reference](/reference/voice/deepgram.mdx)
+- [PlayAI Voice Reference](/reference/voice/playai.mdx)
+
+
+---
 title: "Reference: .after() | Building Workflows | Mastra Docs"
 description: Documentation for the `after()` method in workflows, enabling branching and merging paths.
 ---
@@ -16164,6 +17977,126 @@ await start({ triggerData: { inputValue: 45 } });
 - See the [Suspend and Resume Example](../../examples/workflows/suspend-and-resume.mdx) for a complete working example
 - Check the [Step Class Reference](../reference/workflows/step-class.mdx) for suspend/resume API details
 - Review [Workflow Observability](../reference/observability/otel-config.mdx) for monitoring suspended workflows
+
+
+---
+title: "Example: Adding Voice Capabilities | Agents | Mastra"
+description: "Example of adding voice capabilities to Mastra agents, enabling them to speak and listen using different voice providers."
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Adding Voice Capabilities to Agents
+Source: https://mastra.ai/examples/agents/adding-voice-capabilities
+
+This example demonstrates how to add voice capabilities to Mastra agents, enabling them to speak and listen using different voice providers. We'll create two agents with different voice configurations and show how they can interact using speech.
+
+The example showcases:
+1. Using CompositeVoice to combine different providers for speaking and listening
+2. Using a single provider for both capabilities
+3. Basic voice interactions between agents
+
+First, let's import the required dependencies and set up our agents:
+
+```ts showLineNumbers copy
+// Import required dependencies
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { CompositeVoice } from '@mastra/core/voice';
+import { OpenAIVoice } from '@mastra/voice-openai';
+import { createReadStream, createWriteStream } from 'fs';
+import { PlayAIVoice } from '@mastra/voice-playai';
+import path from 'path';
+
+// Initialize Agent 1 with both listening and speaking capabilities
+const agent1 = new Agent({
+  name: 'Agent1',
+  instructions: `You are an agent with both STT and TTS capabilities.`,
+  model: openai('gpt-4o'),
+  voice: new CompositeVoice({
+    listenProvider: new OpenAIVoice(), // For converting speech to text
+    speakProvider: new PlayAIVoice(), // For converting text to speech
+  }),
+});
+
+// Initialize Agent 2 with just OpenAI for both listening and speaking capabilities
+const agent2 = new Agent({
+  name: 'Agent2',
+  instructions: `You are an agent with both STT and TTS capabilities.`,
+  model: openai('gpt-4o'),
+  voice: new OpenAIVoice(),
+});
+```
+
+In this setup:
+- Agent1 uses a CompositeVoice that combines OpenAI for speech-to-text and PlayAI for text-to-speech
+- Agent2 uses OpenAI's voice capabilities for both functions
+
+Now let's demonstrate a basic interaction between the agents:
+
+```ts showLineNumbers copy
+// Step 1: Agent 1 speaks a question and saves it to a file
+const audio1 = await agent1.speak('What is the meaning of life in one sentence?');
+await saveAudioToFile(audio1, 'agent1-question.mp3');
+
+// Step 2: Agent 2 listens to Agent 1's question
+const audioFilePath = path.join(process.cwd(), 'agent1-question.mp3');
+const audioStream = createReadStream(audioFilePath);
+const audio2 = await agent2.listen(audioStream);
+const text = await convertToText(audio2);
+
+// Step 3: Agent 2 generates and speaks a response
+const agent2Response = await agent2.generate(text);
+const agent2ResponseAudio = await agent2.speak(agent2Response.text);
+await saveAudioToFile(agent2ResponseAudio, 'agent2-response.mp3');
+```
+
+Here's what's happening in the interaction:
+1. Agent1 converts text to speech using PlayAI and saves it to a file (we save the audio so you can hear the interaction)
+2. Agent2 listens to the audio file using OpenAI's speech-to-text
+3. Agent2 generates a response and converts it to speech
+
+The example includes helper functions for handling audio files:
+
+```ts showLineNumbers copy
+/**
+ * Saves an audio stream to a file
+ */
+async function saveAudioToFile(audio: NodeJS.ReadableStream, filename: string): Promise<void> {
+  const filePath = path.join(process.cwd(), filename);
+  const writer = createWriteStream(filePath);
+  audio.pipe(writer);
+  return new Promise<void>((resolve, reject) => {
+    writer.on('finish', resolve);
+    writer.on('error', reject);
+  });
+}
+
+/**
+ * Converts either a string or a readable stream to text
+ */
+async function convertToText(input: string | NodeJS.ReadableStream): Promise<string> {
+  if (typeof input === 'string') {
+    return input;
+  }
+
+  const chunks: Buffer[] = [];
+  return new Promise<string>((resolve, reject) => {
+    input.on('data', chunk => chunks.push(Buffer.from(chunk)));
+    input.on('error', err => reject(err));
+    input.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+  });
+}
+```
+
+## Key Points
+
+1. The `voice` property in the Agent configuration accepts any implementation of MastraVoice
+2. CompositeVoice allows using different providers for speaking and listening
+3. Audio can be handled as streams, making it efficient for real-time processing
+4. Voice capabilities can be combined with the agent's natural language processing
+
+<GithubLink path="examples/basics/agents/voice-capabilities/index.ts" />
 
 
 ---
@@ -20035,7 +21968,7 @@ The Examples section is a short list of example projects demonstrating basic AI 
       { title: "Chain of Thought Prompting", href: "/examples/rag/cot-rag" },
       {
         title: "Chain of Thought Prompting w/Workflow",
-        href: "/examples/rag/cot-rag",
+        href: "/examples/rag/cot-workflow-rag",
       },
       { title: "Graph RAG", href: "/examples/rag/graph-rag" },
     ],
