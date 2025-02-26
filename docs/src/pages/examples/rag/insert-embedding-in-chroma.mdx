@@ -30,10 +30,13 @@ const chroma = new ChromaVector({
 
 await chroma.createIndex('test_collection', 1536);
 
+// Store both metadata and original documents in Chroma
 await chroma.upsert(
   'test_collection',
   embeddings,
-  chunks?.map(chunk => ({ text: chunk.text })),
+  chunks.map(chunk => ({ text: chunk.text })), // metadata
+  undefined, // let Chroma auto-generate IDs
+  chunks.map(chunk => chunk.text), // store original documents
 );
 ```
 
