@@ -121,6 +121,9 @@ importers:
         specifier: ^3.24.1
         version: 3.24.2
     devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.50.0(@types/node@22.13.4)
@@ -161,6 +164,9 @@ importers:
         specifier: ^3.24.1
         version: 3.24.2
     devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.50.0(@types/node@22.13.4)
@@ -192,6 +198,9 @@ importers:
         specifier: ^11.2.0
         version: 11.3.0
     devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.50.0(@types/node@22.13.4)

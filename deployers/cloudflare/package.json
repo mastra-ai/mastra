@@ -19,7 +19,8 @@
   "scripts": {
     "build": "tsup src/index.ts src/secrets-manager/index.ts --format esm --experimental-dts --clean --treeshake",
     "build:watch": "pnpm build --watch",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint ."
   },
   "keywords": [],
   "author": "",
@@ -37,6 +38,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.49.2",
     "@types/node": "^22.13.1",
     "tsup": "^8.0.1",
