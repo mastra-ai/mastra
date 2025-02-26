@@ -36,4 +36,4 @@ jobs:
         run: pnpm install
 
       - name: Lint
-        run: pnpm turbo lint --filter="{./packages/*,./deployers/*,./integrations/*,./speech/*,./stores/*,./voice/*}"
+        run: pnpm turbo lint --filter="./packages/*" --filter="./deployers/*" --filter="./integrations/*" --filter="./speech/*" --filter="./stores/*" --filter="./voice/*"
