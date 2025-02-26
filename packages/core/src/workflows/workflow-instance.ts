@@ -82,6 +82,10 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     this.#onFinish = onFinish;
   }
 
+  setState(state: any) {
+    this.#state = state;
+  }
+
   get runId() {
     return this.#runId;
   }
@@ -138,9 +142,8 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       const runState = snapshot as unknown as WorkflowRunState;
       machineInput = runState.context;
       if (stepId && runState?.suspendedSteps?.[stepId]) {
-        stepGraph = this.#stepSubscriberGraph[runState.suspendedSteps[stepId]] ?? this.#stepGraph;
-        startStepId = stepId;
-        this.#state = runState.value;
+        startStepId = runState.suspendedSteps[stepId];
+        stepGraph = this.#stepSubscriberGraph[startStepId] ?? this.#stepGraph;
       }
     }
 
@@ -179,43 +182,57 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       }
     };
 
-    const nestedMachines: Promise<any>[] = [];
-    const spawnHandler = ({ parentStepId, context }: { parentStepId: string; context: any }) => {
-      if (this.#stepSubscriberGraph[parentStepId]) {
-        const machine = new Machine({
-          logger: this.logger,
-          mastra: this.#mastra,
-          workflowInstance: this,
-          name: parentStepId === 'trigger' ? this.name : `${this.name}-${parentStepId}`,
-          runId: this.runId,
-          steps: this.#steps,
-          stepGraph: this.#stepSubscriberGraph[parentStepId],
-          executionSpan: this.#executionSpan,
-          startStepId: parentStepId,
-        });
-
-        this.#machines[parentStepId] = machine;
-
-        machine.on('spawn-subscriber', spawnHandler);
-        machine.on('state-update', stateUpdateHandler);
-
-        nestedMachines.push(machine.execute({ input: context }));
-      }
-    };
-
-    defaultMachine.on('spawn-subscriber', spawnHandler);
     defaultMachine.on('state-update', stateUpdateHandler);
 
     const { results } = await defaultMachine.execute({ snapshot, stepId, input: machineInput });
-    const nestedResults = (await Promise.all(nestedMachines)).reduce(
-      (acc, { results }) => ({ ...acc, ...results }),
-      {},
-    );
-    const allResults = { ...results, ...nestedResults };
 
     await this.persistWorkflowSnapshot();
 
-    return { results: allResults };
+    return { results };
+  }
+
+  async runMachine(parentStepId: string, input: any) {
+    if (!this.#stepSubscriberGraph[parentStepId]) {
+      return;
+    }
+
+    const stateUpdateHandler = (startStepId: string, state: any, context: any) => {
+      if (startStepId === 'trigger') {
+        this.#state = state;
+      } else {
+        this.#state = mergeChildValue(startStepId, this.#state, state);
+      }
+
+      const now = Date.now();
+      if (this.#onStepTransition) {
+        this.#onStepTransition.forEach(onTransition => {
+          void onTransition({
+            runId: this.#runId,
+            value: this.#state as Record<string, string>,
+            context: context as WorkflowContext,
+            activePaths: getActivePathsAndStatus(this.#state as Record<string, string>),
+            timestamp: now,
+          });
+        });
+      }
+    };
+
+    const machine = new Machine({
+      logger: this.logger,
+      mastra: this.#mastra,
+      workflowInstance: this,
+      name: parentStepId === 'trigger' ? this.name : `${this.name}-${parentStepId}`,
+      runId: this.runId,
+      steps: this.#steps,
+      stepGraph: this.#stepSubscriberGraph[parentStepId],
+      executionSpan: this.#executionSpan,
+      startStepId: parentStepId,
+    });
+
+    machine.on('state-update', stateUpdateHandler);
+    this.#machines[parentStepId] = machine;
+
+    return await machine.execute({ input });
   }
 
   async suspend(stepId: string, machine: Machine<TSteps, TTriggerSchema>) {
@@ -262,6 +279,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       return;
     } else if (snapshot && !existingSnapshot) {
       snapshot.suspendedSteps = suspendedSteps;
+      snapshot.childStates = { ...machineSnapshots };
       await this.#mastra?.storage?.persistWorkflowSnapshot({
         workflowName: this.name,
         runId: this.#runId,
