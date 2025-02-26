@@ -306,7 +306,7 @@ describe('agent', () => {
     });
     const agentOne = mastra.getAgent('electionAgent');
 
-    const response = await agentOne.generate('Who won the 2016 US presidential election?', {
+    await agentOne.generate('Who won the 2016 US presidential election?', {
       telemetry: { functionId: 'test-function-id', metadata: { test: 'test' } },
     });
 

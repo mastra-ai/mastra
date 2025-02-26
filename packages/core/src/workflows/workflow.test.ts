@@ -1,7 +1,6 @@
 import fs from 'fs';
-import { after } from 'node:test';
 import path from 'path';
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { createLogger } from '../logger';
@@ -189,7 +188,7 @@ describe('Workflow', async () => {
       let result: Awaited<ReturnType<typeof run.start>> | undefined = undefined;
       try {
         result = await run.start();
-      } catch (err) {
+      } catch {
         // do nothing
       }
 
@@ -423,7 +422,7 @@ describe('Workflow', async () => {
       };
 
       const run = workflow.createRun();
-      const result = await run.start({ triggerData: { inputData: { nested: { value: 'test' } } } });
+      await run.start({ triggerData: { inputData: { nested: { value: 'test' } } } });
 
       expect(execute).toHaveBeenCalledWith(
         expect.objectContaining({
