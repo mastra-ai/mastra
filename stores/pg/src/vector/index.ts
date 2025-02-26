@@ -203,7 +203,18 @@ export class PgVector extends MastraVector {
     }
   }
 
+  /**
+   * @deprecated This function is deprecated. Use buildIndex instead
+   */
   async defineIndex(
+    indexName: string,
+    metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
+    indexConfig: IndexConfig,
+  ): Promise<void> {
+    return this.buildIndex(indexName, metric, indexConfig);
+  }
+
+  async buildIndex(
     indexName: string,
     metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
     indexConfig: IndexConfig,
