@@ -430,6 +430,7 @@ export class Workflow<
       throw new Error('Failed to parse workflow snapshot');
     }
 
+    const origSnapshot = parsedSnapshot;
     const startStepId = parsedSnapshot.suspendedSteps?.[stepId];
     if (!startStepId) {
       return;
@@ -505,6 +506,7 @@ export class Workflow<
         },
       });
 
+    run.setState(origSnapshot?.value);
     this.#runs.set(run.runId, run);
     return run?.execute({
       snapshot: parsedSnapshot,
