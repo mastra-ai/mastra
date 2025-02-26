@@ -68,10 +68,10 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Textual Difference | Evals | Mastra Docs](https://mastra.ai/docs/reference/evals/textual-difference): Documentation for the Textual Difference Metric in Mastra, which measures textual differences between strings using sequence matching.
 - [Reference: Tone Consistency | Metrics | Evals | Mastra Docs](https://mastra.ai/docs/reference/evals/tone-consistency): Documentation for the Tone Consistency Metric in Mastra, which evaluates emotional tone and sentiment consistency in text.
 - [Reference: Toxicity | Metrics | Evals | Mastra Docs](https://mastra.ai/docs/reference/evals/toxicity): Documentation for the Toxicity Metric in Mastra, which evaluates LLM outputs for racist, biased, or toxic elements.
+- [Memory](https://mastra.ai/docs/reference/memory/Memory)
 - [createThread](https://mastra.ai/docs/reference/memory/createThread)
 - [getThreadById](https://mastra.ai/docs/reference/memory/getThreadById)
 - [getThreadsByResourceId](https://mastra.ai/docs/reference/memory/getThreadsByResourceId)
-- [Memory](https://mastra.ai/docs/reference/memory/Memory)
 - [query](https://mastra.ai/docs/reference/memory/query)
 - [Reference: createLogger() | Mastra Observability Docs](https://mastra.ai/docs/reference/observability/create-logger): Documentation for the createLogger function, which instantiates a logger based on a given configuration.
 - [Reference: Logger Instance | Mastra Observability Docs](https://mastra.ai/docs/reference/observability/logger): Documentation for Logger instances, which provide methods to record events at various severity levels.
@@ -88,11 +88,11 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Astra Vector Store | Vector Databases | RAG | Mastra Docs](https://mastra.ai/docs/reference/rag/astra): Documentation for the AstraVector class in Mastra, which provides vector search using DataStax Astra DB.
 - [Reference: Chroma Vector Store | Vector Databases | RAG | Mastra Docs](https://mastra.ai/docs/reference/rag/chroma): Documentation for the ChromaVector class in Mastra, which provides vector search using ChromaDB.
 - [Reference: .chunk() | Document Processing | RAG | Mastra Docs](https://mastra.ai/docs/reference/rag/chunk): Documentation for the chunk function in Mastra, which splits documents into smaller segments using various strategies.
-- [Default Vector Store | Vector Databases | RAG | Mastra Docs](https://mastra.ai/docs/reference/rag/default): Documentation for the DefaultVectorDB class in Mastra, which provides vector search using LibSQL with vector extensions.
 - [Reference: MDocument | Document Processing | RAG | Mastra Docs](https://mastra.ai/docs/reference/rag/document): Documentation for the MDocument class in Mastra, which handles document processing and chunking.
 - [Reference: embed() | Document Embedding | RAG | Mastra Docs](https://mastra.ai/docs/reference/rag/embeddings): Documentation for embedding functionality in Mastra using the AI SDK.
 - [Reference: ExtractParams | Document Processing | RAG | Mastra Docs](https://mastra.ai/docs/reference/rag/extract-params): Documentation for metadata extraction configuration in Mastra.
 - [Reference: GraphRAG | Graph-based RAG | RAG | Mastra Docs](https://mastra.ai/docs/reference/rag/graph-rag): Documentation for the GraphRAG class in Mastra, which implements a graph-based approach to retrieval augmented generation.
+- [Default Vector Store | Vector Databases | RAG | Mastra Docs](https://mastra.ai/docs/reference/rag/libsql): Documentation for the LibSQLVector class in Mastra, which provides vector search using LibSQL with vector extensions.
 - [Reference: Metadata Filters | Metadata Filtering | RAG | Mastra Docs](https://mastra.ai/docs/reference/rag/metadata-filters): Documentation for metadata filtering capabilities in Mastra, which allow for precise querying of vector search results across different vector stores.
 - [Reference: PG Vector Store | Vector Databases | RAG | Mastra Docs](https://mastra.ai/docs/reference/rag/pg): Documentation for the PgVector class in Mastra, which provides vector search using PostgreSQL with pgvector extension.
 - [Reference: Pinecone Vector Store | Vector DBs | RAG | Mastra Docs](https://mastra.ai/docs/reference/rag/pinecone): Documentation for the PineconeVector class in Mastra, which provides an interface to Pinecones vector database.
@@ -111,7 +111,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Providers and Models | TTS | Mastra Docs](https://mastra.ai/docs/reference/tts/providers-and-models): Overview of supported TTS providers and their models.
 - [Reference: TTS.stream() | Text to Speech (TTS) | Mastra Docs](https://mastra.ai/docs/reference/tts/stream): Documentation for the `.stream()` method in TTS, which produces an audio response stream.
 - [Reference: .after() | Building Workflows | Mastra Docs](https://mastra.ai/docs/reference/workflows/after): Documentation for the `after()` method in workflows, enabling branching and merging paths.
-- [Reference: Workflow.commit() | Running Workflows | Mastra Docs](https://mastra.ai/docs/reference/workflows/commit): Documentation for the `.commit()` method in workflows, which finalizes and validates workflow definitions.
+- [Reference: Workflow.commit() | Running Workflows | Mastra Docs](https://mastra.ai/docs/reference/workflows/commit): Documentation for the `.commit()` method in workflows, which re-initializes the workflow machine with the current step configuration.
 - [Reference: Workflow.createRun() | Running Workflows | Mastra Docs](https://mastra.ai/docs/reference/workflows/createRun): Documentation for the `.createRun()` method in workflows, which initializes a new workflow run instance.
 - [Reference: Workflow.execute() | Workflows | Mastra Docs](https://mastra.ai/docs/reference/workflows/execute): Documentation for the `.execute()` method in Mastra workflows, which runs workflow steps and returns results.
 - [Reference: Workflow.resume() | Running Workflows | Mastra Docs](https://mastra.ai/docs/reference/workflows/resume): Documentation for the `.resume()` method in workflows, which continues execution of a suspended workflow step.

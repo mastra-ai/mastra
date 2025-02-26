@@ -1,26 +1,26 @@
-import { randomUUID } from 'crypto';
 import type {
   AssistantContent,
   CoreAssistantMessage,
   CoreMessage,
   CoreToolMessage,
   CoreUserMessage,
+  LanguageModelV1,
   TextPart,
   ToolCallPart,
   UserContent,
-  LanguageModelV1,
 } from 'ai';
+import { randomUUID } from 'crypto';
 import type { JSONSchema7 } from 'json-schema';
-import { z } from 'zod';
 import type { ZodSchema } from 'zod';
+import { z } from 'zod';
 
 import type { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
-import { MastraLLM } from '../llm/model';
 import type { MastraLLMBase } from '../llm/model';
+import { MastraLLM } from '../llm/model';
 import { RegisteredLogger } from '../logger';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
@@ -783,6 +783,7 @@ export class Agent<
       temperature,
       toolChoice = 'auto',
       experimental_output,
+      telemetry,
     }: AgentGenerateOptions<Z> = {},
   ): Promise<GenerateReturn<Z>> {
     let messagesToUse: CoreMessage[] = [];
@@ -854,6 +855,7 @@ export class Agent<
         runId: runIdToUse,
         temperature,
         toolChoice,
+        telemetry,
       });
 
       const outputText = result.text;
@@ -873,6 +875,7 @@ export class Agent<
       runId: runIdToUse,
       temperature,
       toolChoice,
+      telemetry,
     });
 
     const outputText = JSON.stringify(result.object);
@@ -898,6 +901,7 @@ export class Agent<
       temperature,
       toolChoice = 'auto',
       experimental_output,
+      telemetry,
     }: AgentStreamOptions<Z> = {},
   ): Promise<StreamReturn<Z>> {
     const runIdToUse = runId || randomUUID();
@@ -994,6 +998,7 @@ export class Agent<
         maxSteps,
         runId: runIdToUse,
         toolChoice,
+        telemetry,
       }) as unknown as StreamReturn<Z>;
     }
 
@@ -1024,6 +1029,7 @@ export class Agent<
       maxSteps,
       runId: runIdToUse,
       toolChoice,
+      telemetry,
     }) as unknown as StreamReturn<Z>;
   }
 
