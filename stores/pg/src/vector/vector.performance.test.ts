@@ -178,7 +178,7 @@ describe('PostgreSQL Index Performance', () => {
               await batchedBulkUpsert(vectorDB, testIndexName, testVectors, batchSizes);
               if (indexType === 'hnsw' || rebuild) {
                 console.log('rebuilding index');
-                await vectorDB.defineIndex(testIndexName, 'cosine', indexConfig);
+                await vectorDB.buildIndex(testIndexName, 'cosine', indexConfig);
                 console.log('index rebuilt');
               }
               await smartWarmup(vectorDB, testIndexName, indexType, testConfig.dimension, testConfig.k);

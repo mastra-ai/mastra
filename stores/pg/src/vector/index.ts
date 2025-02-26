@@ -156,7 +156,7 @@ export class PgVector extends MastraVector {
     dimension: number,
     metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
     indexConfig: IndexConfig = {},
-    defineIndex: boolean = true,
+    buildIndex: boolean = true,
   ): Promise<void> {
     const client = await this.pool.connect();
     try {
@@ -192,8 +192,8 @@ export class PgVector extends MastraVector {
         );
       `);
 
-      if (defineIndex) {
-        await this.defineIndex(indexName, metric, indexConfig);
+      if (buildIndex) {
+        await this.buildIndex(indexName, metric, indexConfig);
       }
     } catch (error: any) {
       console.error('Failed to create vector table:', error);
@@ -203,7 +203,7 @@ export class PgVector extends MastraVector {
     }
   }
 
-  async defineIndex(
+  async buildIndex(
     indexName: string,
     metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
     indexConfig: IndexConfig,

@@ -835,7 +835,7 @@ import { OpenAIVoice } from "@mastra/voice-openai";
 const voice = new OpenAIVoice();
 
 // Create an agent with voice capabilities
-export const weatherAgent = new Agent({
+export const agent = new Agent({
   name: 'Agent',
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
   model: openai('gpt-4o'),
@@ -857,7 +857,7 @@ import { CompositeVoice } from "@mastra/core/voice";
 import { OpenAIVoice } from "@mastra/voice-openai";
 import { PlayAIVoice } from "@mastra/voice-playai";
 
-export const weatherAgent = new Agent({
+export const agent = new Agent({
   name: 'Agent',
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
   model: openai('gpt-4o'),
@@ -881,8 +881,8 @@ import { createWriteStream } from 'fs';
 import path from 'path';
 
 // Generate speech and save to file
-const audio = await weatherAgent.speak('Hello, World!');
-const filePath = path.join(process.cwd(), 'weather-agent.mp3');
+const audio = await agent.speak('Hello, World!');
+const filePath = path.join(process.cwd(), 'agent.mp3');
 const writer = createWriteStream(filePath);
 
 audio.pipe(writer);
@@ -900,12 +900,12 @@ import { createReadStream } from 'fs';
 import path from 'path';
 
 // Read audio file and transcribe
-const audioFilePath = path.join(process.cwd(), '/weather-agent.mp3');
+const audioFilePath = path.join(process.cwd(), '/agent.mp3');
 const audioStream = createReadStream(audioFilePath);
 
 try {
   console.log('Transcribing audio file...');
-  const transcription = await weatherAgent.listen(audioStream);
+  const transcription = await agent.listen(audioStream);
   console.log('Transcription:', transcription);
 } catch (error) {
   console.error('Error transcribing audio:', error);
@@ -9777,6 +9777,7 @@ interface QueryResult {
   id: string;
   score: number;
   metadata: Record<string, any>;
+  vector?: number[]; // Only included if includeVector is true
 }
 ```
 
@@ -9903,6 +9904,12 @@ It offers efficient vector search with metadata filtering and hybrid search capa
       isOptional: true,
       description: "Optional vector IDs (auto-generated if not provided)",
     },
+    {
+      name: "documents",
+      type: "string[]",
+      isOptional: true,
+      description: "Chroma-specific: Original text documents associated with the vectors",
+    },
   ]}
 />
 
@@ -9939,6 +9946,12 @@ It offers efficient vector search with metadata filtering and hybrid search capa
       isOptional: true,
       defaultValue: "false",
       description: "Whether to include vectors in the results",
+    },
+    {
+      name: "documentFilter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Chroma-specific: Filter to apply on the document content",
     },
   ]}
 />
@@ -9990,6 +10003,8 @@ interface QueryResult {
   id: string;
   score: number;
   metadata: Record<string, any>;
+  document?: string; // Chroma-specific: Original document if it was stored
+  vector?: number[]; // Only included if includeVector is true
 }
 ```
 
@@ -11454,11 +11469,11 @@ It provides robust vector similarity search capabilities within your existing Po
       description: "Index configuration",
     },
     {
-      name: "defineIndex",
+      name: "buildIndex",
       type: "boolean",
       isOptional: true,
       defaultValue: "true",
-      description: "Whether to define the index",
+      description: "Whether to build the index",
     },
   ]}
 />
@@ -11698,7 +11713,7 @@ interface PGIndexStats {
 
 Closes the database connection pool. Should be called when done using the store.
 
-### defineIndex()
+### buildIndex()
 
 <PropertiesTable
   content={[
@@ -11722,11 +11737,11 @@ Closes the database connection pool. Should be called when done using the store.
   ]}
 />
 
-Defines or redefines an index with specified metric and configuration. Will drop any existing index before creating the new one.
+Builds or rebuilds an index with specified metric and configuration. Will drop any existing index before creating the new one.
 
 ```typescript copy
 // Define HNSW index
-await pgVector.defineIndex("my_vectors", "cosine", {
+await pgVector.buildIndex("my_vectors", "cosine", {
   type: "hnsw",
   hnsw: {
     m: 8,
@@ -11735,7 +11750,7 @@ await pgVector.defineIndex("my_vectors", "cosine", {
 });
 
 // Define IVF index
-await pgVector.defineIndex("my_vectors", "cosine", {
+await pgVector.buildIndex("my_vectors", "cosine", {
   type: "ivfflat",
   ivf: {
     lists: 100, 
@@ -11743,7 +11758,7 @@ await pgVector.defineIndex("my_vectors", "cosine", {
 });
 
 // Define flat index
-await pgVector.defineIndex("my_vectors", "cosine", {
+await pgVector.buildIndex("my_vectors", "cosine", {
   type: "flat" 
 });
 ```
@@ -11757,6 +11772,7 @@ interface QueryResult {
   id: string;
   score: number;
   metadata: Record<string, any>;
+  vector?: number[]; // Only included if includeVector is true
 }
 ```
 
@@ -11951,6 +11967,7 @@ interface QueryResult {
   id: string;
   score: number;
   metadata: Record<string, any>;
+  vector?: number[]; // Only included if includeVector is true
 }
 ```
 
@@ -12148,6 +12165,7 @@ interface QueryResult {
   id: string;
   score: number;
   metadata: Record<string, any>;
+  vector?: number[]; // Only included if includeVector is true
 }
 ```
 
@@ -12549,6 +12567,7 @@ interface QueryResult {
   id: string;
   score: number;
   metadata: Record<string, any>;
+  vector?: number[]; // Only included if includeVector is true
 }
 ```
 
@@ -12800,6 +12819,7 @@ interface QueryResult {
   id: string;
   score: number;
   metadata: Record<string, any>;
+  vector?: number[];
 }
 ```
 
@@ -23686,19 +23706,22 @@ const chroma = new ChromaVector({
 
 await chroma.createIndex('test_collection', 1536);
 
+// Store both metadata and original documents in Chroma
 await chroma.upsert(
   'test_collection',
   embeddings,
-  chunks?.map(chunk => ({ text: chunk.text })),
+  chunks.map(chunk => ({ text: chunk.text })), // metadata
+  undefined, // let Chroma auto-generate IDs
+  chunks.map(chunk => chunk.text), // store original documents
 );
 ```
-{/* 
+
 <br />
 <br />
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-chroma'} /> */}
+<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-chroma'} />
 
 
 ---
