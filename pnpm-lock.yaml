@@ -3595,12 +3595,18 @@ importers:
         specifier: workspace:^
         version: link:../../packages/core
     devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.50.0(@types/node@22.13.4)
       '@types/node':
         specifier: ^22.13.1
         version: 22.13.4
+      eslint:
+        specifier: ^9.20.1
+        version: 9.20.1(jiti@2.4.2)
       tsup:
         specifier: ^8.0.1
         version: 8.3.6(@microsoft/api-extractor@7.50.0(@types/node@22.13.4))(@swc/core@1.10.18(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.2)(tsx@4.19.3)(typescript@5.7.3)(yaml@2.7.0)
@@ -3620,12 +3626,18 @@ importers:
         specifier: ^1.9.4
         version: 1.10.4(cohere-ai@7.15.4(encoding@0.1.13))(encoding@0.1.13)(openai@4.85.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
     devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.50.0(@types/node@22.13.4)
       '@types/node':
         specifier: ^22.13.1
         version: 22.13.4
+      eslint:
+        specifier: ^9.20.1
+        version: 9.20.1(jiti@2.4.2)
       tsup:
         specifier: ^8.0.1
         version: 8.3.6(@microsoft/api-extractor@7.50.0(@types/node@22.13.4))(@swc/core@1.10.18(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.2)(tsx@4.19.3)(typescript@5.7.3)(yaml@2.7.0)
@@ -3648,6 +3660,9 @@ importers:
         specifier: ^11.5.4
         version: 11.10.2(pg-query-stream@4.7.1(pg@8.13.3))
     devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.50.0(@types/node@22.13.4)
@@ -3657,6 +3672,9 @@ importers:
       '@types/pg':
         specifier: ^8.11.10
         version: 8.11.11
+      eslint:
+        specifier: ^9.20.1
+        version: 9.20.1(jiti@2.4.2)
       tsup:
         specifier: ^8.0.1
         version: 8.3.6(@microsoft/api-extractor@7.50.0(@types/node@22.13.4))(@swc/core@1.10.18(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.2)(tsx@4.19.3)(typescript@5.7.3)(yaml@2.7.0)
@@ -3676,6 +3694,9 @@ importers:
         specifier: ^3.0.3
         version: 3.0.3
     devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.50.0(@types/node@22.13.4)
@@ -3685,6 +3706,9 @@ importers:
       dotenv:
         specifier: ^16.4.7
         version: 16.4.7
+      eslint:
+        specifier: ^9.20.1
+        version: 9.20.1(jiti@2.4.2)
       tsup:
         specifier: ^8.0.1
         version: 8.3.6(@microsoft/api-extractor@7.50.0(@types/node@22.13.4))(@swc/core@1.10.18(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.2)(tsx@4.19.3)(typescript@5.7.3)(yaml@2.7.0)
@@ -3704,12 +3728,18 @@ importers:
         specifier: ^1.12.0
         version: 1.13.0(typescript@5.7.3)
     devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.50.0(@types/node@22.13.4)
       '@types/node':
         specifier: ^22.13.1
         version: 22.13.4
+      eslint:
+        specifier: ^9.20.1
+        version: 9.20.1(jiti@2.4.2)
       tsup:
         specifier: ^8.0.1
         version: 8.3.6(@microsoft/api-extractor@7.50.0(@types/node@22.13.4))(@swc/core@1.10.18(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.2)(tsx@4.19.3)(typescript@5.7.3)(yaml@2.7.0)
@@ -3732,12 +3762,18 @@ importers:
         specifier: ^1.1.7
         version: 1.2.0
     devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.50.0(@types/node@22.13.4)
       '@types/node':
         specifier: ^22.13.1
         version: 22.13.4
+      eslint:
+        specifier: ^9.20.1
+        version: 9.20.1(jiti@2.4.2)
       tsup:
         specifier: ^8.0.1
         version: 8.3.6(@microsoft/api-extractor@7.50.0(@types/node@22.13.4))(@swc/core@1.10.18(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.2)(tsx@4.19.3)(typescript@5.7.3)(yaml@2.7.0)
@@ -3757,12 +3793,18 @@ importers:
         specifier: ^4.0.0
         version: 4.1.0(encoding@0.1.13)
     devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.49.2
         version: 7.50.0(@types/node@22.13.4)
       '@types/node':
         specifier: ^22.13.1
         version: 22.13.4
+      eslint:
+        specifier: ^9.20.1
+        version: 9.20.1(jiti@2.4.2)
       tsup:
         specifier: ^8.0.1
         version: 8.3.6(@microsoft/api-extractor@7.50.0(@types/node@22.13.4))(@swc/core@1.10.18(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.2)(tsx@4.19.3)(typescript@5.7.3)(yaml@2.7.0)
