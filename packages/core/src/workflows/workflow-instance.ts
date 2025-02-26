@@ -82,6 +82,10 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     this.#onFinish = onFinish;
   }
 
+  setState(state: any) {
+    this.#state = state;
+  }
+
   get runId() {
     return this.#runId;
   }
@@ -138,9 +142,8 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       const runState = snapshot as unknown as WorkflowRunState;
       machineInput = runState.context;
       if (stepId && runState?.suspendedSteps?.[stepId]) {
-        stepGraph = this.#stepSubscriberGraph[runState.suspendedSteps[stepId]] ?? this.#stepGraph;
-        startStepId = stepId;
-        this.#state = runState.value;
+        startStepId = runState.suspendedSteps[stepId];
+        stepGraph = this.#stepSubscriberGraph[startStepId] ?? this.#stepGraph;
       }
     }
 
