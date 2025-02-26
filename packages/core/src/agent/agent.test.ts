@@ -1,8 +1,8 @@
+import { PassThrough } from 'stream';
 import { createOpenAI } from '@ai-sdk/openai';
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { config } from 'dotenv';
-import { PassThrough } from 'stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
