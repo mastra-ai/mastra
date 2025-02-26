@@ -1,6 +1,6 @@
 {
   "name": "voice-agent",
-  "version": "1.0.0",
+  "version": "1.0.1-alpha.0",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -13,12 +13,12 @@
   "type": "module",
   "dependencies": {
     "@ai-sdk/openai": "^1.1.14",
-    "@mastra/core": "^0.4.2",
-    "mastra": "^0.2.6",
+    "@mastra/core": "^0.4.3-alpha.0",
+    "mastra": "^0.2.7-alpha.0",
     "zod": "^3.24.2",
-    "@mastra/voice-openai": "0.1.1",
-    "@mastra/voice-elevenlabs": "0.1.0",
-    "@mastra/voice-playai": "0.1.0"
+    "@mastra/voice-openai": "0.1.2-alpha.0",
+    "@mastra/voice-elevenlabs": "0.1.1-alpha.0",
+    "@mastra/voice-playai": "0.1.1-alpha.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",

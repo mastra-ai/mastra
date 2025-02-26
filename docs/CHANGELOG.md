@@ -1,5 +1,11 @@
 # docs
 
+## 0.1.3-alpha.0
+
+### Patch Changes
+
+- ca4aedd: Add documentation and examples for voice api
+
 ## 0.1.2
 
 ### Patch Changes

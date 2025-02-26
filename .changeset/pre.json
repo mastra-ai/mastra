@@ -133,7 +133,13 @@
     "@mastra/voice-murf": "0.1.0",
     "@mastra/voice-openai": "0.1.1",
     "@mastra/voice-playai": "0.1.0",
-    "@mastra/voice-speechify": "0.1.0"
+    "@mastra/voice-speechify": "0.1.0",
+    "voice-agent": "1.0.0"
   },
-  "changesets": []
+  "changesets": [
+    "clear-seals-tease",
+    "cool-papers-check",
+    "five-hands-bet",
+    "open-ideas-kick"
+  ]
 }
