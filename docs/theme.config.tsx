@@ -124,15 +124,7 @@ const docs: DocsThemeConfig = {
   },
   footer: {
     component: null,
-  },
-  banner: {
-    key: "beta-release",
-    content: (
-      <a href="https://mastra.ai/blog/beta-launch" target="_blank">
-        🎉 Mastra is in beta. Read more →
-      </a>
-    ),
-  },
+  }
 };
 
 export default docs;
