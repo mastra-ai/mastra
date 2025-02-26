@@ -95,6 +95,12 @@ It offers efficient vector search with metadata filtering and hybrid search capa
       isOptional: true,
       description: "Optional vector IDs (auto-generated if not provided)",
     },
+    {
+      name: "documents",
+      type: "string[]",
+      isOptional: true,
+      description: "Chroma-specific: Original text documents associated with the vectors",
+    },
   ]}
 />
 
@@ -131,6 +137,12 @@ It offers efficient vector search with metadata filtering and hybrid search capa
       isOptional: true,
       defaultValue: "false",
       description: "Whether to include vectors in the results",
+    },
+    {
+      name: "documentFilter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Chroma-specific: Filter to apply on the document content",
     },
   ]}
 />
@@ -182,6 +194,8 @@ interface QueryResult {
   id: string;
   score: number;
   metadata: Record<string, any>;
+  document?: string; // Chroma-specific: Original document if it was stored
+  vector?: number[]; // Only included if includeVector is true
 }
 ```
 
