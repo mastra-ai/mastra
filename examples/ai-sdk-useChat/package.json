@@ -1,6 +1,6 @@
 {
   "name": "mastra-ai-sdk-use-chat-example",
-  "version": "0.1.0",
+  "version": "0.1.1-alpha.0",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -11,7 +11,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^1.1.9",
     "@ai-sdk/react": "^1.1.17",
-    "@mastra/core": "^0.3.0",
+    "@mastra/core": "workspace:*",
     "next": "15.1.7",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

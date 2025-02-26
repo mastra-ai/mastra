@@ -99,7 +99,7 @@ export type StepDef<
   TStepId,
   {
     snapshotOnTimeout?: boolean;
-    when?: Condition<any, any> | ((args: { context: WorkflowContext, mastra?: MastraPrimitives }) => Promise<boolean>);
+    when?: Condition<any, any> | ((args: { context: WorkflowContext; mastra?: MastraPrimitives }) => Promise<boolean>);
     data: TSchemaIn;
     handler: (args: ActionContext<TSchemaIn>) => Promise<z.infer<TSchemaOut>>;
   }
@@ -126,7 +126,7 @@ export interface StepConfig<
   snapshotOnTimeout?: boolean;
   when?:
     | Condition<CondStep, TTriggerSchema>
-    | ((args: { context: WorkflowContext<TTriggerSchema>, mastra?: MastraPrimitives }) => Promise<boolean>);
+    | ((args: { context: WorkflowContext<TTriggerSchema>; mastra?: MastraPrimitives }) => Promise<boolean>);
   variables?: StepInputType<TStep, 'inputSchema'> extends never
     ? Record<string, VariableReference<VarStep, TTriggerSchema>>
     : {
@@ -341,4 +341,12 @@ export interface WorkflowRunState {
   // Metadata
   runId: string;
   timestamp: number;
+
+  childStates?: Record<string, WorkflowRunState>;
+  suspendedSteps?: Record<string, string>;
 }
+
+export type WorkflowResumeResult<TTriggerSchema extends z.ZodType<any>> = {
+  triggerData?: z.infer<TTriggerSchema>;
+  results: Record<string, StepResult<any>>;
+};

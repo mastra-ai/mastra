@@ -10,6 +10,7 @@ describe('ChromaVector Integration Tests', () => {
 
   const testIndexName = 'test-index';
   const testIndexName2 = 'test-index-2';
+  const testIndexName3 = 'test-index-3';
   const dimension = 3;
 
   beforeEach(async () => {
@@ -883,6 +884,161 @@ describe('ChromaVector Integration Tests', () => {
           ],
         });
         expect(results.length).toBeGreaterThan(0);
+      });
+    });
+  });
+
+  describe('Document Operations and Filtering', () => {
+    const testDocuments = [
+      'The quick brown fox jumps over the lazy dog',
+      'Pack my box with five dozen liquor jugs',
+      'How vexingly quick daft zebras JUMP',
+    ];
+
+    beforeAll(async () => {
+      try {
+        await vectorDB.deleteIndex(testIndexName3);
+      } catch (error) {
+        // Ignore errors if index doesn't exist
+      }
+      await vectorDB.createIndex(testIndexName3, dimension);
+
+      const testVectors = [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+      ];
+
+      const testMetadata = [
+        { source: 'pangram1', length: 43 },
+        { source: 'pangram2', length: 32 },
+        { source: 'pangram3', length: 30 },
+      ];
+      const testIds = ['doc1', 'doc2', 'doc3'];
+
+      await vectorDB.upsert(testIndexName3, testVectors, testMetadata, testIds, testDocuments);
+
+      // Wait for indexing
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    });
+
+    afterAll(async () => {
+      // Cleanup after tests
+      try {
+        await vectorDB.deleteIndex(testIndexName3);
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    });
+
+    describe('Basic Document Operations', () => {
+      it('should store and retrieve documents', async () => {
+        const results = await vectorDB.query(testIndexName3, [1.0, 0.0, 0.0], 3);
+        expect(results).toHaveLength(3);
+        // Verify documents are returned
+        expect(results[0].document).toBe(testDocuments[0]);
+      });
+
+      it('should filter documents using $contains', async () => {
+        const results = await vectorDB.query(testIndexName3, [1.0, 0.0, 0.0], 3, undefined, false, {
+          $contains: 'quick',
+        });
+        expect(results).toHaveLength(2);
+      });
+
+      it('should filter with $not_contains', async () => {
+        const results = await vectorDB.query(testIndexName3, [1.0, 0.0, 0.0], 3, undefined, false, {
+          $not_contains: 'fox',
+        });
+        expect(results.every(r => !r.document?.includes('fox'))).toBe(true);
+      });
+
+      it('should combine metadata and document filters', async () => {
+        const results = await vectorDB.query(testIndexName3, [1.0, 0.0, 0.0], 3, { source: 'pangram1' }, false, {
+          $contains: 'fox',
+        });
+        expect(results).toHaveLength(1);
+        expect(results[0].metadata?.source).toBe('pangram1');
+        expect(results[0].document).toContain('fox');
+      });
+    });
+
+    describe('Complex Document Filtering', () => {
+      it('should handle $and conditions', async () => {
+        const results = await vectorDB.query(testIndexName3, [1.0, 0.0, 0.0], 3, undefined, false, {
+          $and: [{ $contains: 'quick' }, { $not_contains: 'fox' }],
+        });
+        expect(results).toHaveLength(1);
+        expect(results[0].document).toContain('quick');
+        expect(results[0].document).not.toContain('fox');
+      });
+
+      it('should handle $or conditions', async () => {
+        const results = await vectorDB.query(testIndexName3, [1.0, 0.0, 0.0], 3, undefined, false, {
+          $or: [{ $contains: 'fox' }, { $contains: 'zebras' }],
+        });
+        expect(results).toHaveLength(2);
+      });
+    });
+
+    describe('Edge Cases and Validation', () => {
+      it('should reject empty string in $contains', async () => {
+        await expect(
+          vectorDB.query(testIndexName3, [1.0, 0.0, 0.0], 3, undefined, false, { $contains: '' }),
+        ).rejects.toThrow('Expected where document operand value for operator $contains to be a non-empty str');
+      });
+
+      it('should be case sensitive', async () => {
+        // First verify lowercase works
+        const lowerResults = await vectorDB.query(testIndexName3, [1.0, 0.0, 0.0], 3, undefined, false, {
+          $contains: 'quick',
+        });
+        expect(lowerResults.length).toBe(2);
+
+        // Then verify uppercase doesn't match
+        const upperResults = await vectorDB.query(testIndexName3, [1.0, 0.0, 0.0], 3, undefined, false, {
+          $contains: 'QUICK',
+        });
+        expect(upperResults.length).toBe(0);
+
+        const upperResults2 = await vectorDB.query(testIndexName3, [1.0, 0.0, 0.0], 3, undefined, false, {
+          $contains: 'JUMP',
+        });
+        expect(upperResults2.length).toBe(1);
+      });
+
+      it('should handle exact string matches', async () => {
+        const results = await vectorDB.query(
+          testIndexName3,
+          [1.0, 0.0, 0.0],
+          3,
+          undefined,
+          false,
+          { $contains: 'quick brown' }, // Test multi-word match
+        );
+        expect(results.length).toBe(1);
+        expect(results[0].document).toContain('quick brown');
+      });
+
+      it('should handle deeply nested logical operators', async () => {
+        const results = await vectorDB.query(testIndexName3, [1.0, 0.0, 0.0], 3, undefined, false, {
+          $or: [
+            {
+              $and: [{ $contains: 'quick' }, { $not_contains: 'fox' }],
+            },
+            {
+              $and: [{ $contains: 'box' }, { $not_contains: 'quick' }],
+            },
+          ],
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          if (result.document?.includes('quick')) {
+            expect(result.document).not.toContain('fox');
+          } else if (result.document?.includes('box')) {
+            expect(result.document).not.toContain('quick');
+          }
+        });
       });
     });
   });

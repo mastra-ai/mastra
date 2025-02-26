@@ -224,7 +224,7 @@ await agent.stream("When will the project be completed?", {
 
 The key to getting good responses from LLMs is feeding them the right context.
 
-Mastra has a Memory API that stores and manages conversation history and contextual information. The Memory API uses a storage backend to persist conversation history and contextual information (more on this later).
+Mastra has a Memory API that stores and manages conversation history and contextual information. The Memory API uses a storage backend to persist conversation history and contextual information (more on this later). 
 
 The Memory API uses two main mechanisms to maintain context in conversations, recent message history and semantic search.
 
@@ -403,9 +403,9 @@ Mastra currently supports several storage backends:
 ### LibSQL Storage
 
 ```typescript copy showLineNumbers
-import { DefaultStorage } from "@mastra/core/storage";
+import { LibSQLStore } from "@mastra/core/storage/libsql";
 
-const storage = new DefaultStorage({
+const storage = new LibSQLStore({
   config: {
     url: "file:example.db",
   },
@@ -481,13 +481,17 @@ const memory = new Memory({
 Once configured, the memory system is automatically used by agents. Here's how to use it:
 
 ```typescript copy showLineNumbers
-// Initialize Mastra with memory
+// Initialize Agent with memory
+const myAgent = new Agent({
+  memory,
+  // other agent options
+});
+// Add agent to mastra
 const mastra = new Mastra({
   agents: { myAgent },
-  memory,
 });
 
-// Memory is automatically used in agent interactions
+// Memory is automatically used in agent interactions when resourceId and threadId are added
 const response = await myAgent.generate(
   "What were we discussing earlier about performance?",
   {
@@ -630,7 +634,7 @@ const agent = new Agent({
   model: openai("gpt-4o-mini"),
 
   memory: new Memory({
-    storage: new DefaultStorage({ url: ":memory:" }),
+    storage: new LibSQLStore({ url: ":memory:" }),
     options: {
       workingMemory: {
         enabled: true, // enables working memory
@@ -650,7 +654,7 @@ const todoAgent = new Agent({
     "You are a TODO list manager. Update the todo list in working memory whenever tasks are added, completed, or modified.",
   model: openai("gpt-4o-mini"),
   memory: new Memory({
-    storage: new DefaultStorage({ url: ":memory:" }),
+    storage: new LibSQLStore({ url: ":memory:" }),
     options: {
       workingMemory: {
         enabled: true,
@@ -739,7 +743,7 @@ const getWeatherInfo = async (city: string) => {
 };
 
 export const weatherInfo = createTool({
-  id "Get Weather Information",
+  id: "Get Weather Information",
   inputSchema: z.object({
     city: z.string(),
   }),
@@ -812,6 +816,101 @@ main();
 ```
 
 The agent will use the `weatherInfo` tool to get the current weather in New York City and respond accordingly.
+
+
+# Adding Voice to Agents
+Source: https://mastra.ai/docs/agents/03-adding-voice
+
+Mastra agents can be enhanced with voice capabilities, allowing them to speak responses and listen to user input. You can configure an agent to use either a single voice provider or combine multiple providers for different operations.
+
+## Using a Single Provider
+
+The simplest way to add voice to an agent is to use a single provider for both speaking and listening:
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { OpenAIVoice } from "@mastra/voice-openai";
+
+// Initialize the voice provider with default settings
+const voice = new OpenAIVoice();
+
+// Create an agent with voice capabilities
+export const weatherAgent = new Agent({
+  name: 'Agent',
+  instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
+  model: openai('gpt-4o'),
+  voice
+});
+
+// The agent can now use voice for interaction
+await agent.speak("Hello, I'm your AI assistant!");
+const userInput = await agent.listen();
+```
+
+## Using Multiple Providers
+
+For more flexibility, you can use different providers for speaking and listening using the CompositeVoice class:
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
+
+export const weatherAgent = new Agent({
+  name: 'Agent',
+  instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
+  model: openai('gpt-4o'),
+
+  // Create a composite voice using OpenAI for listening and PlayAI for speaking
+  voice: new CompositeVoice({
+    listenProvider: new OpenAIVoice(),
+    speakProvider: new PlayAIVoice(),
+  }),
+});
+```
+
+## Working with Audio Streams
+
+The `speak()` and `listen()` methods work with Node.js streams. Here's how to save and load audio files:
+
+### Saving Speech Output
+
+```typescript
+import { createWriteStream } from 'fs';
+import path from 'path';
+
+// Generate speech and save to file
+const audio = await weatherAgent.speak('Hello, World!');
+const filePath = path.join(process.cwd(), 'weather-agent.mp3');
+const writer = createWriteStream(filePath);
+
+audio.pipe(writer);
+
+await new Promise<void>((resolve, reject) => {
+  writer.on('finish', () => resolve());
+  writer.on('error', reject);
+});
+```
+
+### Transcribing Audio Input
+
+```typescript
+import { createReadStream } from 'fs';
+import path from 'path';
+
+// Read audio file and transcribe
+const audioFilePath = path.join(process.cwd(), '/weather-agent.mp3');
+const audioStream = createReadStream(audioFilePath);
+
+try {
+  console.log('Transcribing audio file...');
+  const transcription = await weatherAgent.listen(audioStream);
+  console.log('Transcription:', transcription);
+} catch (error) {
+  console.error('Error transcribing audio:', error);
+}
+```
 
 
 ---
@@ -1151,7 +1250,7 @@ Evals need to be added to an agent. To use any of [the default metrics](/docs/ev
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { ToneConsistencyMetric } from "@mastra/evals/nlp";
-
+ 
 export const myAgent = new Agent({
   name: "My Agent",
   instructions: "You are a helpful assistant.",
@@ -1223,8 +1322,8 @@ beforeAll(async () => {
   });
   ```
 
-  This allows you to save evals in Mastra Storage.
-  With file storage, evals persist and can be queried later.
+  This allows you to save evals in Mastra Storage. 
+  With file storage, evals persist and can be queried later. 
   With memory storage, evals are isolated to the test process.
 </details>
 ```
@@ -1252,7 +1351,7 @@ Mastra provides several eval metrics for assessing Agent outputs. Mastra is not 
 
 ### Accuracy and Reliability
 - [`hallucination`](/docs/reference/evals/hallucination): Detects fabricated or unsupported information
-- [`faithfulness`](/docs/reference/evals/faithfulness): Checks output alignment with source material
+- [`faithfulness`](/docs/reference/evals/faithfulness): Checks output alignment with source material  
 - [`content-similarity`](/docs/reference/evals/content-similarity): Compares text similarity
 - [`textual-difference`](/docs/reference/evals/textual-difference): Measures text changes
 - [`completeness`](/docs/reference/evals/completeness): Measures if all required information is present
@@ -1282,10 +1381,10 @@ description: "Mastra allows so create your own evals, here is how."
 # Create your own Eval
 Source: https://mastra.ai/docs/evals/02-custom-eval
 
-Creating your own eval is as easy as creating a new function. You simply create a class that extends the `Metric` class and implement the `measure` method.
+Creating your own eval is as easy as creating a new function. You simply create a class that extends the `Metric` class and implement the `measure` method. 
 
 
-## Basic example
+## Basic example 
 
 Here is a very basic example of a custom eval that checks if the output contains a certain keyword. This is a simplified version of our own [keyword coverage eval](/docs/reference/evals/keyword-coverage).
 
@@ -1568,12 +1667,69 @@ cd hello-mastra
 
 Then, initialize a TypeScript project including the `@mastra/core` package:
 
-```bash copy npm2yarn
+<Tabs items={["npm", "pnpm", "yarn", "bun"]}>
+  <Tabs.Tab>
+```bash copy
 npm init -y
 npm install typescript tsx @types/node mastra@alpha --save-dev
 npm install @mastra/core@alpha zod
 npx tsc --init
 ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+pnpm init
+pnpm add typescript tsx @types/node mastra@alpha --save-dev
+pnpm add @mastra/core@alpha zod
+pnpm dlx tsc --init
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+yarn init -y
+yarn add typescript tsx @types/node mastra@alpha --dev
+yarn add @mastra/core@alpha zod
+yarn dlx tsc --init
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+bun init -y
+bun add typescript tsx @types/node mastra@alpha --dev
+bun add @mastra/core@alpha zod
+bunx tsc --init
+```
+  </Tabs.Tab>
+</Tabs>
+
+### Initialize TypeScript
+
+Create a `tsconfig.json` file in your project root with the following configuration:
+
+```json copy
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": "dist"
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".mastra"
+  ]
+}
+```
+
+This TypeScript configuration is optimized for Mastra projects, using modern module resolution and strict type checking.
 
 ### Set Up your API Key
 
@@ -1880,7 +2036,7 @@ Assuming you select all components and include example code, your project struct
     <FileTree.File name=".env" />
   </FileTree.Folder>
 </FileTree>
-{/*
+{/* 
 ```
 root/
 ├── src/
@@ -2539,9 +2695,9 @@ description: "Mastra is a Typescript agent framework. It helps you build AI appl
 # About Mastra
 Source: https://mastra.ai/docs
 
-Mastra is an open-source Typescript agent framework.
+Mastra is an open-source Typescript agent framework. 
 
-It's designed to give you the primitives you need to build AI applications and features.
+It's designed to give you the primitives you need to build AI applications and features. 
 
 You can use Mastra to build [AI agents](/docs/agents/00-overview.mdx) that have memory and can execute functions, or chain LLM calls in deterministic [workflows](/docs/workflows/00-overview.mdx). You can chat with your agents in Mastra's [local dev environment](/docs/local-dev/mastra-dev.mdx), feed them application-specific knowledge with [RAG](/docs/rag/overview.mdx), and score their outputs with Mastra's [evals](/docs/08-running-evals.mdx).
 
@@ -2549,10 +2705,10 @@ The main features include:
 
 * **[Model routing](https://sdk.vercel.ai/docs/introduction)**: Mastra uses the [Vercel AI SDK](https://sdk.vercel.ai/docs/introduction) for model routing, providing a unified interface to interact with any LLM provider including OpenAI, Anthropic, and Google Gemini.
 * **[Agent memory and tool calling](/docs/agents/01-agent-memory.mdx)**: With Mastra, you can give your agent tools (functions) that it can call. You can persist agent memory and retrieve it based on recency, semantic similarity, or conversation thread.
-* **[Workflow graphs](/docs/workflows/00-overview.mdx)**: When you want to execute LLM calls in a deterministic way, Mastra gives you a graph-based workflow engine. You can define discrete steps, log inputs and outputs at each step of each run, and pipe them into an observability tool. Mastra workflows have a simple syntax for control flow (`step()`, `.then()`, `.after()`) that allows branching and chaining.
+* **[Workflow graphs](/docs/workflows/00-overview.mdx)**: When you want to execute LLM calls in a deterministic way, Mastra gives you a graph-based workflow engine. You can define discrete steps, log inputs and outputs at each step of each run, and pipe them into an observability tool. Mastra workflows have a simple syntax for control flow (`step()`, `.then()`, `.after()`) that allows branching and chaining. 
 * **[Agent development environment](/docs/local-dev/mastra-dev.mdx)**: When you're developing an agent locally, you can chat with it and see its state and memory in Mastra's agent development environment.
 * **[Retrieval-augmented generation (RAG)](/docs/rag/overview.mdx)**: Mastra gives you APIs to process documents (text, HTML, Markdown, JSON) into chunks, create embeddings, and store them in a vector database. At query time, it retrieves relevant chunks to ground LLM responses in your data, with a unified API on top of multiple vector stores (Pinecone, pgvector, etc) and embedding providers (OpenAI, Cohere, etc).
-* **[Deployment](/docs/deployment/deployment.mdx)**: Mastra supports bundling your agents and workflows within an existing React, Next.js, or Node.js application, or into standalone endpoints. The Mastra deploy helper lets you easily bundle agents and workflows into a Node.js server using Hono, or deploy it onto a serverless platform like Vercel, Cloudflare Workers, or Netlify.
+* **[Deployment](/docs/deployment/deployment.mdx)**: Mastra supports bundling your agents and workflows within an existing React, Next.js, or Node.js application, or into standalone endpoints. The Mastra deploy helper lets you easily bundle agents and workflows into a Node.js server using Hono, or deploy it onto a serverless platform like Vercel, Cloudflare Workers, or Netlify. 
 * **[Evals](/docs/evals/00-overview.mdx)**: Mastra provides automated evaluation metrics that use model-graded, rule-based, and statistical methods to assess LLM outputs, with built-in metrics for toxicity, bias, relevance, and factual accuracy. You can also define your own evals.
 
 
@@ -2574,11 +2730,11 @@ Mastra provides two CLI commands for project setup:
 You can create a new project using either a package manager or the mastra CLI:
 
 ```bash npm2yarn copy
-npm create mastra@latest
+npm create mastra@latest 
 ```
 
 ```bash npm2yarn copy
-npm install -g mastra@latest
+npm install -g mastra@latest 
 mastra create
 ```
 
@@ -3050,7 +3206,7 @@ import { Tabs } from "nextra/components";
 ## Retrieval in RAG Systems
 Source: https://mastra.ai/docs/rag/retrieval
 
-After storing embeddings, you need to retrieve relevant chunks to answer user queries.
+After storing embeddings, you need to retrieve relevant chunks to answer user queries. 
 
 Mastra provides flexible retrieval options with support for semantic search, filtering, and re-ranking.
 
@@ -3147,7 +3303,7 @@ const results = await pgVector.query("embeddings", embedding, 10, {
     { price: { $lt: 200 } }
   ]
 });
-```
+``` 
 
 Common use cases for metadata filtering:
 - Filter by document source or type
@@ -3182,7 +3338,7 @@ For detailed configuration options and advanced usage, see the [Vector Query Too
 
 ### Vector Store Prompts
 
-Vector store prompts define query patterns and filtering capabilities for each vector database implementation.
+Vector store prompts define query patterns and filtering capabilities for each vector database implementation. 
 When implementing filtering, these prompts are required in the agent's instructions to specify valid operators and syntax for each vector store implementation.
 
 <Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare']}>
@@ -3465,9 +3621,12 @@ chunks.map(chunk => ({ text: chunk.text }))
 </Tabs.Tab>
 <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
-  import { DefaultVectorDB } from '@mastra/core/storage'
+import { LibSQLVector } from "@mastra/core/vector/libsql";
 
-  const store = new DefaultVectorDB(process.env.DATABASE_URL)
+  const store = new LibSQLVector({
+    connectionUrl: process.env.DATABASE_URL,
+    authToken: process.env.DATABASE_AUTH_TOKEN // Optional: for Turso cloud databases
+  })
   await store.createIndex("my-collection", 1536);
   await store.upsert(
     "my-collection",
@@ -3570,15 +3729,15 @@ await vectorStore.upsert(
     // Basic content
     text: chunk.text,
     id: chunk.id,
-
+    
     // Document organization
     source: chunk.source,
     category: chunk.category,
-
+    
     // Temporal metadata
     createdAt: new Date().toISOString(),
     version: "1.0",
-
+    
     // Custom fields
     language: chunk.language,
     author: chunk.author,
@@ -3817,53 +3976,71 @@ An optional object that can include:
     {
       name: "messages",
       type: "string | Array<string> | Array<Message>",
+      required: true,
       description: "The messages to be processed by the agent. Can be a single string, an array of strings, or an array of message objects with `role` and `content`.",
     },
     {
       name: "options",
       type: "object",
-      isOptional: true,
+      required: false,
       description: "Additional options for the `generate` method.",
       properties: [
         {
-          name: "structuredOutput",
-          type: "object | Zod schema",
-          isOptional: true,
-          description: "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
-        },
-        {
-          name: "onStepFinish",
-          type: "(step: string) => void",
-          isOptional: true,
-          description: "Callback function called after each execution step. Receives step details as a JSON string.",
-        },
-        {
-          name: "maxSteps",
-          type: "number",
-          isOptional: true,
-          default: 5,
-          description: "Maximum number of execution steps allowed.",
-        },
-        {
-          name: "threadId",
-          type: "string",
-          isOptional: true,
-          description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions.",
-        },
-        {
-          name: "resourceId",
-          type: "string",
-          isOptional: true,
-          description: "Identifier for the user or resource interacting with the agent.",
-        },
-        {
-          name: "context",
-          type: "Array<Message>",
-          isOptional: true,
-          description: "Additional context messages to provide to the agent.",
-        },
-      ],
-    },
+          type: "object",
+          parameters: [
+            {
+              name: "output",
+              type: "Zod schema | JsonSchema7",
+              isOptional: true,
+              description: "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
+            },
+            {
+              name: "experimental_output",
+              type: "Zod schema | JsonSchema7",
+              isOptional: true,
+              description: "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
+            },
+            {
+              name: "onStepFinish",
+              type: "(step: string) => void",
+              isOptional: true,
+              description: "Callback function called after each execution step. Receives step details as a JSON string.",
+            },
+            {
+              name: "maxSteps",
+              type: "number",
+              isOptional: true,
+              defaultValue: "5",
+              description: "Maximum number of execution steps allowed.",
+            },
+            {
+              name: "threadId",
+              type: "string",
+              isOptional: true,
+              description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions.",
+            },
+            {
+              name: "resourceId",
+              type: "string",
+              isOptional: true,
+              description: "Identifier for the user or resource interacting with the agent.",
+            },
+            {
+              name: "temperature",
+              type: "number",
+              isOptional: true,
+              description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
+            },
+            {
+              name: "context",
+              type: "Array<Message>",
+              isOptional: true,
+              description: "Additional context messages to provide to the agent.",
+            }
+          ]
+        }
+      ]
+    }
   ]}
 />
 
@@ -3878,27 +4055,27 @@ The return value of the `generate()` method depends on the options provided, spe
     {
       name: "text",
       type: "string",
-      isOptional: true,
+      required: false,
       description: "The generated text response. Present if `structuredOutput` is not provided.",
     },
     {
       name: "object",
       type: "object",
-      isOptional: true,
+      required: false,
       description: "The generated structured response based on the provided schema. Present if `structuredOutput` is provided.",
     },
     {
       name: "toolCalls",
       type: "Array<ToolCall>",
-      isOptional: true,
+      required: false,
       description: "The tool calls made during the generation process.",
     },
     {
       name: "error",
       type: "string",
-      isOptional: true,
+      required: false,
       description: "Error message if the generation fails.",
-    },
+    }
   ]}
 />
 
@@ -3909,13 +4086,15 @@ The return value of the `generate()` method depends on the options provided, spe
     {
       name: "toolName",
       type: "string",
+      required: true,
       description: "The name of the tool invoked.",
     },
     {
       name: "args",
       type: "any",
+      required: true,
       description: "The arguments passed to the tool.",
-    },
+    }
   ]}
 />
 
@@ -4017,81 +4196,107 @@ An optional object that can include:
 <PropertiesTable
   content={[
     {
-      name: 'output',
-      type: 'string | JSONSchema7 | ZodSchema',
-      isOptional: true,
-      default: "'text'",
-      description: 'Defines the output format. Can be "text" or a schema for structured output.',
-    },
-    {
-      name: 'context',
-      type: 'CoreMessage[]',
-      isOptional: true,
-      description: 'Additional context messages to provide to the agent.',
-    },
-    {
-      name: 'threadId',
-      type: 'string',
-      isOptional: true,
-      description: 'Identifier for the conversation thread. Allows for maintaining context across multiple interactions.',
-    },
-    {
-      name: 'resourceId',
-      type: 'string',
-      isOptional: true,
-      description: 'Identifier for the user or resource interacting with the agent.',
-    },
-    {
-      name: 'onFinish',
-      type: '(result: string) => Promise<void> | void',
-      isOptional: true,
-      description: 'Callback function called when streaming is complete.',
-    },
-    {
-      name: 'onStepFinish',
-      type: '(step: string) => void',
-      isOptional: true,
-      description: 'Callback function called after each step during streaming.',
-    },
-    {
-      name: 'maxSteps',
-      type: 'number',
-      isOptional: true,
-      default: '5',
-      description: 'Maximum number of steps allowed during streaming.',
-    },
-    {
-      name: 'toolsets',
-      type: 'ToolsetsInput',
-      isOptional: true,
-      description: 'Additional toolsets to make available to the agent during this stream.',
+      name: "options",
+      type: "object",
+      required: false,
+      description: "Additional options for the `stream` method.",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "output",
+              type: "Zod schema | JsonSchema7",
+              isOptional: true,
+              description: "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
+            },
+            {
+              name: "experimental_output",
+              type: "Zod schema | JsonSchema7",
+              isOptional: true,
+              description: "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
+            },
+            {
+              name: "context",
+              type: "CoreMessage[]",
+              isOptional: true,
+              description: "Additional context messages to provide to the agent.",
+            },
+            {
+              name: "threadId",
+              type: "string",
+              isOptional: true,
+              description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions.",
+            },
+            {
+              name: "resourceId",
+              type: "string",
+              isOptional: true,
+              description: "Identifier for the user or resource interacting with the agent.",
+            },
+            {
+              name: "onFinish",
+              type: "(result: string) => Promise<void> | void",
+              isOptional: true,
+              description: "Callback function called when streaming is complete.",
+            },
+            {
+              name: "onStepFinish",
+              type: "(step: string) => void",
+              isOptional: true,
+              description: "Callback function called after each step during streaming.",
+            },
+            {
+              name: "maxSteps",
+              type: "number",
+              isOptional: true,
+              defaultValue: "5",
+              description: "Maximum number of steps allowed during streaming.",
+            },
+            {
+              name: "toolsets",
+              type: "ToolsetsInput",
+              isOptional: true,
+              description: "Additional toolsets to make available to the agent during this stream.",
+            },
+            {
+              name: "temperature",
+              type: "number",
+              isOptional: true,
+              description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
+            }
+          ]
+        }
+      ]
     }
   ]}
 />
 
 ## Returns
 
-The method returns a promise that resolves to an object containing one or more of the following properties:
+The return value of the `stream()` method depends on the options provided, specifically the `output` option.
+
+### PropertiesTable for Return Values
 
 <PropertiesTable
   content={[
     {
-      name: 'textStream',
-      type: 'AsyncIterable<string>',
-      isOptional: true,
-      description: 'An async iterable stream of text chunks. Present when output is "text".',
+      name: "textStream",
+      type: "AsyncIterable<string>",
+      required: false,
+      description: "An async iterable stream of text chunks. Present when output is 'text'.",
     },
     {
-      name: 'objectStream',
-      type: 'AsyncIterable<object>',
-      isOptional: true,
-      description: 'An async iterable stream of structured data. Present when a schema is provided.',
+      name: "objectStream",
+      type: "AsyncIterable<object>",
+      required: false,
+      description: "An async iterable stream of structured data. Present when a schema is provided.",
     },
     {
-      name: 'object',
-      type: 'Promise<object>',
-      isOptional: true,
-      description: 'A promise that resolves to the final structured output when using a schema.',
+      name: "object",
+      type: "Promise<object>",
+      required: false,
+      description: "A promise that resolves to the final structured output when using a schema.",
     }
   ]}
 />
@@ -4534,7 +4739,7 @@ yarn add @mastra/client-js
   </Tabs.Tab>
   <Tabs.Tab>
 ```bash copy
-pnpm add @mastra/client-js
+pnpm add @mastra/client-js 
 ```
 </Tabs.Tab>
 </Tabs>
@@ -4953,6 +5158,51 @@ const result = await workflow.execute({
     param2: "value2",
   },
 });
+```
+
+### Resume Workflow
+
+Resume a suspended workflow step:
+
+```typescript
+const result = await workflow.resume({
+  stepId: "step-id",
+  runId: "run-id",
+  contextData: { key: "value" },
+});
+```
+
+### Watch Workflow
+
+Watch workflow transitions in real-time:
+
+```typescript
+const response = await workflow.watch();
+
+// Read Transition Data from response body
+const reader = response.body.getReader();
+let buffer = "";
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  buffer += new TextDecoder().decode(value);
+
+  // Split the buffer into records
+  const records = buffer.split("\x1E");
+
+  buffer = records.pop() || "";
+
+  // Process each record
+  for (const record of records) {
+    // Handle each record
+    const { activePaths, context, timestamp } = record;
+    console.log({
+      activePaths,
+      context,
+      timestamp,
+    });
+  }
+}
 ```
 
 
@@ -5643,7 +5893,7 @@ const result = await metric.measure(
 
 - [Answer Relevancy Metric](./answer-relevancy)
 - [Content Similarity Metric](./content-similarity)
-- [Textual Difference Metric](./textual-difference)
+- [Textual Difference Metric](./textual-difference) 
 - [Keyword Coverage Metric](./keyword-coverage)
 
 ---
@@ -5827,7 +6077,7 @@ const result2 = await strictWhitespaceMetric.measure(
 ## Related
 
 - [Completeness Metric](./completeness)
-- [Textual Difference Metric](./textual-difference)
+- [Textual Difference Metric](./textual-difference) 
 - [Answer Relevancy Metric](./answer-relevancy)
 - [Keyword Coverage Metric](./keyword-coverage)
 
@@ -6392,7 +6642,7 @@ const result = await metric.measure(
 // {
 //   score: 60,
 //   info: {
-//     reason: "3 out of 5 statements are relevant to pricing plans. The statements about
+//     reason: "3 out of 5 statements are relevant to pricing plans. The statements about 
 //           company founding and office locations are not relevant to the pricing query."
 //   }
 // }
@@ -6402,7 +6652,7 @@ const result = await metric.measure(
 
 - [Contextual Recall Metric](./contextual-recall)
 - [Context Precision Metric](./context-precision)
-- [Context Position Metric](./context-position)
+- [Context Position Metric](./context-position) 
 
 ---
 title: "Reference: Contextual Recall | Metrics | Evals | Mastra Docs"
@@ -6584,8 +6834,8 @@ const result = await metric.measure(
 // {
 //   score: 50, // Only half of the security measures were mentioned
 //   info: {
-//     reason: "The score is 50 because only half of the security measures were mentioned
-//           in the response. The response missed the regular security audits and incident
+//     reason: "The score is 50 because only half of the security measures were mentioned 
+//           in the response. The response missed the regular security audits and incident 
 //           response team information."
 //   }
 // }
@@ -6593,7 +6843,7 @@ const result = await metric.measure(
 
 ## Related
 
-+ [Context Relevancy Metric](./context-relevancy)
++ [Context Relevancy Metric](./context-relevancy) 
 + [Completeness Metric](./completeness)
 + [Summarization Metric](./summarization)
 
@@ -8152,6 +8402,194 @@ const result = await metric.measure(
 - [Bias Metric](./bias)
 
 
+# Memory Class Reference
+Source: https://mastra.ai/docs/reference/memory/Memory
+
+The `Memory` class provides a robust system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval. By default, it uses LibSQL for storage and vector search, and FastEmbed for embeddings.
+
+## Basic Usage
+
+```typescript copy showLineNumbers
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  memory: new Memory(),
+  ...otherOptions,
+});
+```
+
+## Custom Configuration
+
+```typescript copy showLineNumbers
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/core/storage/libsql";
+import { LibSQLVector } from "@mastra/core/vector/libsql";
+import { Agent } from "@mastra/core/agent";
+
+const memory = new Memory({
+  // Custom storage configuration
+  storage: new LibSQLStore({
+    url: "file:memory.db",
+  }),
+
+  // Custom vector database for semantic search
+  vector: new LibSQLVector({
+    url: "file:vector.db",
+  }),
+
+  // Memory configuration options
+  options: {
+    // Number of recent messages to include
+    lastMessages: 20,
+
+    // Semantic search configuration
+    semanticRecall: {
+      topK: 3, // Number of similar messages to retrieve
+      messageRange: {
+        // Messages to include around each result
+        before: 2,
+        after: 1,
+      },
+    },
+
+    // Working memory configuration
+    workingMemory: {
+      enabled: true,
+      template: "<user><first_name></first_name><last_name></last_name></user>",
+    },
+  },
+});
+
+const agent = new Agent({
+  memory,
+  ...otherOptions,
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "storage",
+      type: "MastraStorage",
+      description: "Storage implementation for persisting memory data",
+      isOptional: false,
+    },
+    {
+      name: "vector",
+      type: "MastraVector",
+      description: "Vector store for semantic search capabilities",
+      isOptional: true,
+    },
+    {
+      name: "embedder",
+      type: "EmbeddingModel",
+      description:
+        "Embedder instance for vector embeddings. Uses FastEmbed (bge-small-en-v1.5) by default",
+      isOptional: true,
+    },
+    {
+      name: "options",
+      type: "MemoryConfig",
+      description: "General memory configuration options",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### options
+
+<PropertiesTable
+  content={[
+    {
+      name: "lastMessages",
+      type: "number | false",
+      description:
+        "Number of most recent messages to retrieve. Set to false to disable.",
+      isOptional: true,
+      defaultValue: "40",
+    },
+    {
+      name: "semanticRecall",
+      type: "boolean | SemanticRecallConfig",
+      description:
+        "Enable semantic search in message history. Automatically enabled when vector store is provided.",
+      isOptional: true,
+      defaultValue: "false (true if vector store provided)",
+    },
+    {
+      name: "topK",
+      type: "number",
+      description:
+        "Number of similar messages to retrieve when using semantic search",
+      isOptional: true,
+      defaultValue: "2",
+    },
+    {
+      name: "messageRange",
+      type: "number | { before: number; after: number }",
+      description:
+        "Range of messages to include around semantic search results",
+      isOptional: true,
+      defaultValue: "2",
+    },
+    {
+      name: "workingMemory",
+      type: "{ enabled: boolean; template: string }",
+      description:
+        "Configuration for working memory feature that allows persistent storage of user information across conversations",
+      isOptional: true,
+      defaultValue:
+        "{ enabled: false, template: '<user><first_name></first_name><last_name></last_name>...</user>' }",
+    },
+  ]}
+/>
+
+### Working Memory
+
+The working memory feature allows agents to maintain persistent information across conversations. When enabled, the Memory class will automatically manage XML-based working memory updates through the conversation stream.
+
+If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information. See the [Agent Memory Guide](/docs/agents/agent-memory#working-memory) for detailed usage examples and best practices.
+
+### embedder
+
+By default, Memory uses FastEmbed with the `bge-small-en-v1.5` model, which provides a good balance of performance and model size (~130MB). You only need to specify an embedder if you want to use a different model or provider.
+
+## Additional Notes
+
+### Vector Search Configuration
+
+When using vector search capabilities with custom configuration, ensure you configure both the vector store and appropriate search options. Here's an example:
+
+```typescript copy showLineNumbers
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/core/storage/libsql";
+import { LibSQLVector } from "@mastra/core/vector/libsql";
+
+const memory = new Memory({
+  storage: new LibSQLStore({
+    url: ":memory:",
+  }),
+  vector: new LibSQLVector({
+    url: ":memory:",
+  }),
+  options: {
+    semanticRecall: {
+      topK: 5,
+      messageRange: 2,
+    },
+  },
+});
+```
+
+### Related
+
+- [createThread](/docs/reference/memory/createThread.mdx)
+- [query](/docs/reference/memory/query.mdx)
+
+
 # createThread
 Source: https://mastra.ai/docs/reference/memory/createThread
 
@@ -8340,192 +8778,6 @@ const threads = await memory.getThreadsByResourceId({
 ### Related
 
 - [Memory](/docs/reference/memory/Memory.mdx)
-
-
-# Memory Class Reference
-Source: https://mastra.ai/docs/reference/memory/Memory
-
-The `Memory` class provides a robust system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval. By default, it uses LibSQL for storage and vector search, and FastEmbed for embeddings.
-
-## Basic Usage
-
-```typescript copy showLineNumbers
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-
-const agent = new Agent({
-  memory: new Memory(),
-  ...otherOptions,
-});
-```
-
-## Custom Configuration
-
-```typescript copy showLineNumbers
-import { Memory } from "@mastra/memory";
-import { DefaultStorage, DefaultVectorDB } from "@mastra/core/storage";
-import { Agent } from "@mastra/core/agent";
-
-const memory = new Memory({
-  // Custom storage configuration
-  storage: new DefaultStorage({
-    url: "file:memory.db",
-  }),
-
-  // Custom vector database for semantic search
-  vector: new DefaultVectorDB({
-    url: "file:vector.db",
-  }),
-
-  // Memory configuration options
-  options: {
-    // Number of recent messages to include
-    lastMessages: 20,
-
-    // Semantic search configuration
-    semanticRecall: {
-      topK: 3, // Number of similar messages to retrieve
-      messageRange: {
-        // Messages to include around each result
-        before: 2,
-        after: 1,
-      },
-    },
-
-    // Working memory configuration
-    workingMemory: {
-      enabled: true,
-      template: "<user><first_name></first_name><last_name></last_name></user>",
-    },
-  },
-});
-
-const agent = new Agent({
-  memory,
-  ...otherOptions,
-});
-```
-
-## Parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "storage",
-      type: "MastraStorage",
-      description: "Storage implementation for persisting memory data",
-      isOptional: false,
-    },
-    {
-      name: "vector",
-      type: "MastraVector",
-      description: "Vector store for semantic search capabilities",
-      isOptional: true,
-    },
-    {
-      name: "embedder",
-      type: "EmbeddingModel",
-      description:
-        "Embedder instance for vector embeddings. Uses FastEmbed (bge-small-en-v1.5) by default",
-      isOptional: true,
-    },
-    {
-      name: "options",
-      type: "MemoryConfig",
-      description: "General memory configuration options",
-      isOptional: true,
-    },
-  ]}
-/>
-
-### options
-
-<PropertiesTable
-  content={[
-    {
-      name: "lastMessages",
-      type: "number | false",
-      description:
-        "Number of most recent messages to retrieve. Set to false to disable.",
-      isOptional: true,
-      defaultValue: "40",
-    },
-    {
-      name: "semanticRecall",
-      type: "boolean | SemanticRecallConfig",
-      description:
-        "Enable semantic search in message history. Automatically enabled when vector store is provided.",
-      isOptional: true,
-      defaultValue: "false (true if vector store provided)",
-    },
-    {
-      name: "topK",
-      type: "number",
-      description:
-        "Number of similar messages to retrieve when using semantic search",
-      isOptional: true,
-      defaultValue: "2",
-    },
-    {
-      name: "messageRange",
-      type: "number | { before: number; after: number }",
-      description:
-        "Range of messages to include around semantic search results",
-      isOptional: true,
-      defaultValue: "2",
-    },
-    {
-      name: "workingMemory",
-      type: "{ enabled: boolean; template: string }",
-      description:
-        "Configuration for working memory feature that allows persistent storage of user information across conversations",
-      isOptional: true,
-      defaultValue:
-        "{ enabled: false, template: '<user><first_name></first_name><last_name></last_name>...</user>' }",
-    },
-  ]}
-/>
-
-### Working Memory
-
-The working memory feature allows agents to maintain persistent information across conversations. When enabled, the Memory class will automatically manage XML-based working memory updates through the conversation stream.
-
-If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information. See the [Agent Memory Guide](/docs/agents/agent-memory#working-memory) for detailed usage examples and best practices.
-
-### embedder
-
-By default, Memory uses FastEmbed with the `bge-small-en-v1.5` model, which provides a good balance of performance and model size (~130MB). You only need to specify an embedder if you want to use a different model or provider.
-
-## Additional Notes
-
-### Vector Search Configuration
-
-When using vector search capabilities with custom configuration, ensure you configure both the vector store and appropriate search options. Here's an example:
-
-```typescript copy showLineNumbers
-import { Memory } from "@mastra/memory";
-import { DefaultStorage, DefaultVectorDB } from "@mastra/core/storage";
-
-const memory = new Memory({
-  storage: new DefaultStorage({
-    url: ":memory:",
-  }),
-  vector: new DefaultVectorDB({
-    url: ":memory:",
-  }),
-  options: {
-    semanticRecall: {
-      topK: 5,
-      messageRange: 2,
-    },
-  },
-});
-```
-
-### Related
-
-- [createThread](/docs/reference/memory/createThread.mdx)
-- [query](/docs/reference/memory/query.mdx)
 
 
 # query
@@ -8863,7 +9115,7 @@ description: Documentation for the OtelConfig object, which configures OpenTelem
 # `OtelConfig`
 Source: https://mastra.ai/docs/reference/observability/otel-config
 
-The `OtelConfig` object is used to configure OpenTelemetry instrumentation, tracing, and exporting behavior within your application. By adjusting its properties, you can control how telemetry data (such as traces) is collected, sampled, and exported.
+The `OtelConfig` object is used to configure OpenTelemetry instrumentation, tracing, and exporting behavior within your application. By adjusting its properties, you can control how telemetry data (such as traces) is collected, sampled, and exported. 
 
 To use the `OtelConfig` within Mastra, pass it as the value of the `telemetry` key when initializing Mastra. This will configure Mastra to use your custom OpenTelemetry settings for tracing and instrumentation.
 
@@ -9113,11 +9365,10 @@ import { LangfuseExporter } from "langfuse-vercel";
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: "your-service-name",
+    serviceName: "ai", // this must be set to "ai" so that the LangfuseExporter thinks it's an AI SDK trace
     enabled: true,
     export: {
       type: "custom",
-      traceName: "ai",
       exporter: new LangfuseExporter({
         publicKey: process.env.LANGFUSE_PUBLIC_KEY,
         secretKey: process.env.LANGFUSE_SECRET_KEY,
@@ -9552,7 +9803,7 @@ Required environment variables:
 - `ASTRA_DB_ENDPOINT`: Your Astra DB API endpoint
 
 ### Related
-- [Metadata Filters](./metadata-filters)
+- [Metadata Filters](./metadata-filters) 
 
 ---
 title: "Reference: Chroma Vector Store | Vector Databases | RAG | Mastra Docs"
@@ -9562,7 +9813,7 @@ description: Documentation for the ChromaVector class in Mastra, which provides 
 # Chroma Vector Store
 Source: https://mastra.ai/docs/reference/rag/chroma
 
-The ChromaVector class provides vector search using [ChromaDB](https://www.trychroma.com/), an open-source embedding database.
+The ChromaVector class provides vector search using [ChromaDB](https://www.trychroma.com/), an open-source embedding database. 
 It offers efficient vector search with metadata filtering and hybrid search capabilities.
 
 ## Constructor Options
@@ -9758,7 +10009,7 @@ try {
 ```
 
 ### Related
-- [Metadata Filters](./metadata-filters)
+- [Metadata Filters](./metadata-filters) 
 
 ---
 title: "Reference: .chunk() | Document Processing | RAG | Mastra Docs"
@@ -9782,7 +10033,7 @@ This is a sample document that we want to split into chunks.
 ## Section 1
 Here is the first section with some content.
 
-## Section 2
+## Section 2 
 Here is another section with different content.
 `);
 
@@ -10000,301 +10251,6 @@ interface DocumentNode {
 ```
 
 ---
-title: "Default Vector Store | Vector Databases | RAG | Mastra Docs"
-description: Documentation for the DefaultVectorDB class in Mastra, which provides vector search using LibSQL with vector extensions.
----
-
-# DefaultVectorDB Store
-Source: https://mastra.ai/docs/reference/rag/default
-
-The DefaultVectorDB class provides vector search using [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
-It's part of the `@mastra/core` package and offers efficient vector similarity search with metadata filtering.
-
-## Installation
-
-Default vector store is included in the core package:
-
-```bash copy
-npm install @mastra/core
-```
-
-## Usage
-
-```typescript copy showLineNumbers
-import { DefaultVectorDB } from '@mastra/core/storage';
-
-// Create a new vector store instance
-const store = new DefaultVectorDB({
-  connectionUrl: process.env.DATABASE_URL,
-  // Optional: for Turso cloud databases
-  authToken: process.env.DATABASE_AUTH_TOKEN,
-});
-
-// Create an index
-await store.createIndex("my-collection", 1536);
-
-// Add vectors with metadata
-const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
-const metadata = [
-  { text: "first document", category: "A" },
-  { text: "second document", category: "B" }
-];
-await store.upsert("my-collection", vectors, metadata);
-
-// Query similar vectors
-const queryVector = [0.1, 0.2, ...];
-const results = await store.query(
-  "my-collection",
-  queryVector,
-  10, // top K results
-  { category: "A" } // optional metadata filter
-);
-```
-
-## Constructor Options
-
-<PropertiesTable
-  content={[
-    {
-      name: "connectionUrl",
-      type: "string",
-      description:
-        "LibSQL database URL. Use ':memory:' for in-memory database, 'file:local.db' for local file, or a LibSQL-compatible connection string like 'libsql://your-database.turso.io'.",
-    },
-    {
-      name: "authToken",
-      type: "string",
-      isOptional: true,
-      description: "Authentication token for Turso cloud databases",
-    },
-    {
-      name: "syncUrl",
-      type: "string",
-      isOptional: true,
-      description: "URL for database replication (Turso specific)",
-    },
-    {
-      name: "syncInterval",
-      type: "number",
-      isOptional: true,
-      description:
-        "Interval in milliseconds for database sync (Turso specific)",
-    },
-  ]}
-/>
-
-## Methods
-
-### createIndex()
-
-Creates a new vector collection. The index name must start with a letter or underscore and can only contain letters, numbers, and underscores. The dimension must be a positive integer.
-
-<PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to create",
-    },
-    {
-      name: "dimension",
-      type: "number",
-      description: "Vector dimension size (must match your embedding model)",
-    },
-    {
-      name: "metric",
-      type: "'cosine' | 'euclidean' | 'dotproduct'",
-      isOptional: true,
-      defaultValue: "cosine",
-      description:
-        "Distance metric for similarity search. Note: Currently only cosine similarity is supported by LibSQL.",
-    },
-  ]}
-/>
-
-### upsert()
-
-Adds or updates vectors and their metadata in the index. Uses a transaction to ensure all vectors are inserted atomically - if any insert fails, the entire operation is rolled back.
-
-<PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to insert into",
-    },
-    {
-      name: "vectors",
-      type: "number[][]",
-      description: "Array of embedding vectors",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>[]",
-      isOptional: true,
-      description: "Metadata for each vector",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Optional vector IDs (auto-generated if not provided)",
-    },
-  ]}
-/>
-
-### query()
-
-Searches for similar vectors with optional metadata filtering.
-
-<PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to search in",
-    },
-    {
-      name: "queryVector",
-      type: "number[]",
-      description: "Query vector to find similar vectors for",
-    },
-    {
-      name: "topK",
-      type: "number",
-      isOptional: true,
-      defaultValue: "10",
-      description: "Number of results to return",
-    },
-    {
-      name: "filter",
-      type: "Filter",
-      isOptional: true,
-      description: "Metadata filters",
-    },
-    {
-      name: "includeVector",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether to include vector data in results",
-    },
-    {
-      name: "minScore",
-      type: "number",
-      isOptional: true,
-      defaultValue: "0",
-      description: "Minimum similarity score threshold",
-    },
-  ]}
-/>
-
-### describeIndex()
-
-Gets information about an index.
-
-<PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to describe",
-    },
-  ]}
-/>
-
-Returns:
-
-```typescript copy
-interface IndexStats {
-  dimension: number;
-  count: number;
-  metric: "cosine" | "euclidean" | "dotproduct";
-}
-```
-
-### deleteIndex()
-
-Deletes an index and all its data.
-
-<PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to delete",
-    },
-  ]}
-/>
-
-### listIndexes()
-
-Lists all vector indexes in the database.
-
-Returns: `Promise<string[]>`
-
-### truncateIndex()
-
-Removes all vectors from an index while keeping the index structure.
-
-<PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to truncate",
-    },
-  ]}
-/>
-
-## Response Types
-
-Query results are returned in this format:
-
-```typescript copy
-interface QueryResult {
-  id: string;
-  score: number;
-  metadata: Record<string, any>;
-  vector?: number[]; // Only included if includeVector is true
-}
-```
-
-## Error Handling
-
-The store throws specific errors for different failure cases:
-
-```typescript copy
-try {
-  await store.query("my-collection", queryVector);
-} catch (error) {
-  // Handle specific error cases
-  if (error.message.includes("Invalid index name format")) {
-    console.error(
-      "Index name must start with a letter/underscore and contain only alphanumeric characters",
-    );
-  } else if (error.message.includes("Table not found")) {
-    console.error("The specified index does not exist");
-  } else {
-    console.error("Vector store error:", error.message);
-  }
-}
-```
-
-Common error cases include:
-
-- Invalid index name format
-- Invalid vector dimensions
-- Table/index not found
-- Database connection issues
-- Transaction failures during upsert
-
-### Related
-
-- [Metadata Filters](./metadata-filters)
-
-
----
 title: "Reference: MDocument | Document Processing | RAG | Mastra Docs"
 description: Documentation for the MDocument class in Mastra, which handles document processing and chunking.
 ---
@@ -10339,7 +10295,7 @@ Creates a document from HTML content.
 static fromHTML(html: string, metadata?: Record<string, any>): MDocument
 ```
 
-### fromMarkdown()
+### fromMarkdown() 
 
 Creates a document from Markdown content.
 
@@ -10609,13 +10565,13 @@ const doc = new Document(text);
 const chunks = await doc.chunk({
   extract: {
     fields: [
-      {
-        name: 'summary',
-        description: 'A 1-2 sentence summary of the main points'
+      { 
+        name: 'summary', 
+        description: 'A 1-2 sentence summary of the main points' 
       },
-      {
-        name: 'entities',
-        description: 'List of companies, people, and locations mentioned'
+      { 
+        name: 'entities', 
+        description: 'List of companies, people, and locations mentioned' 
       },
       {
         name: 'custom_field',
@@ -10645,7 +10601,7 @@ const chunks = await doc.chunk({
       isOptional: true
     }
   ]}
-/>
+/> 
 
 ## Field Types
 
@@ -10846,6 +10802,301 @@ const results = await graphRag.query({
 ## Related
 
 - [createGraphRAGTool](../tools/graph-rag-tool)
+
+
+---
+title: "Default Vector Store | Vector Databases | RAG | Mastra Docs"
+description: Documentation for the LibSQLVector class in Mastra, which provides vector search using LibSQL with vector extensions.
+---
+
+# LibSQLVector Store
+Source: https://mastra.ai/docs/reference/rag/libsql
+
+The LibSQL storage implementation provides a SQLite-compatible vector search  [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
+It's part of the `@mastra/core` package and offers efficient vector similarity search with metadata filtering.
+
+## Installation
+
+Default vector store is included in the core package:
+
+```bash copy
+npm install @mastra/core
+```
+
+## Usage
+
+```typescript copy showLineNumbers
+import { LibSQLVector } from "@mastra/core/vector/libsql";
+
+// Create a new vector store instance
+const store = new LibSQLVector({
+  connectionUrl: process.env.DATABASE_URL,
+  // Optional: for Turso cloud databases
+  authToken: process.env.DATABASE_AUTH_TOKEN,
+});
+
+// Create an index
+await store.createIndex("my-collection", 1536);
+
+// Add vectors with metadata
+const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
+const metadata = [
+  { text: "first document", category: "A" },
+  { text: "second document", category: "B" }
+];
+await store.upsert("my-collection", vectors, metadata);
+
+// Query similar vectors
+const queryVector = [0.1, 0.2, ...];
+const results = await store.query(
+  "my-collection",
+  queryVector,
+  10, // top K results
+  { category: "A" } // optional metadata filter
+);
+```
+
+## Constructor Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "connectionUrl",
+      type: "string",
+      description:
+        "LibSQL database URL. Use ':memory:' for in-memory database, 'file:local.db' for local file, or a LibSQL-compatible connection string like 'libsql://your-database.turso.io'.",
+    },
+    {
+      name: "authToken",
+      type: "string",
+      isOptional: true,
+      description: "Authentication token for Turso cloud databases",
+    },
+    {
+      name: "syncUrl",
+      type: "string",
+      isOptional: true,
+      description: "URL for database replication (Turso specific)",
+    },
+    {
+      name: "syncInterval",
+      type: "number",
+      isOptional: true,
+      description:
+        "Interval in milliseconds for database sync (Turso specific)",
+    },
+  ]}
+/>
+
+## Methods
+
+### createIndex()
+
+Creates a new vector collection. The index name must start with a letter or underscore and can only contain letters, numbers, and underscores. The dimension must be a positive integer.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to create",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "Vector dimension size (must match your embedding model)",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description:
+        "Distance metric for similarity search. Note: Currently only cosine similarity is supported by LibSQL.",
+    },
+  ]}
+/>
+
+### upsert()
+
+Adds or updates vectors and their metadata in the index. Uses a transaction to ensure all vectors are inserted atomically - if any insert fails, the entire operation is rolled back.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to insert into",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "Array of embedding vectors",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "Metadata for each vector",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "Optional vector IDs (auto-generated if not provided)",
+    },
+  ]}
+/>
+
+### query()
+
+Searches for similar vectors with optional metadata filtering.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to search in",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "Query vector to find similar vectors for",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "Number of results to return",
+    },
+    {
+      name: "filter",
+      type: "Filter",
+      isOptional: true,
+      description: "Metadata filters",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include vector data in results",
+    },
+    {
+      name: "minScore",
+      type: "number",
+      isOptional: true,
+      defaultValue: "0",
+      description: "Minimum similarity score threshold",
+    },
+  ]}
+/>
+
+### describeIndex()
+
+Gets information about an index.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to describe",
+    },
+  ]}
+/>
+
+Returns:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+Deletes an index and all its data.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to delete",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+Lists all vector indexes in the database.
+
+Returns: `Promise<string[]>`
+
+### truncateIndex()
+
+Removes all vectors from an index while keeping the index structure.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to truncate",
+    },
+  ]}
+/>
+
+## Response Types
+
+Query results are returned in this format:
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // Only included if includeVector is true
+}
+```
+
+## Error Handling
+
+The store throws specific errors for different failure cases:
+
+```typescript copy
+try {
+  await store.query("my-collection", queryVector);
+} catch (error) {
+  // Handle specific error cases
+  if (error.message.includes("Invalid index name format")) {
+    console.error(
+      "Index name must start with a letter/underscore and contain only alphanumeric characters",
+    );
+  } else if (error.message.includes("Table not found")) {
+    console.error("The specified index does not exist");
+  } else {
+    console.error("Vector store error:", error.message);
+  }
+}
+```
+
+Common error cases include:
+
+- Invalid index name format
+- Invalid vector dimensions
+- Table/index not found
+- Database connection issues
+- Transaction failures during upsert
+
+### Related
+
+- [Metadata Filters](./metadata-filters)
 
 
 ---
@@ -11158,7 +11409,7 @@ description: Documentation for the PgVector class in Mastra, which provides vect
 Source: https://mastra.ai/docs/reference/rag/pg
 
 The PgVector class provides vector search using [PostgreSQL](https://www.postgresql.org/) with [pgvector](https://github.com/pgvector/pgvector) extension.
-It provides robust vector similarity search capabilities within your existing PostgreSQL database.
+It provides robust vector similarity search capabilities within your existing PostgreSQL database. 
 
 ## Constructor Options
 
@@ -11195,8 +11446,110 @@ It provides robust vector similarity search capabilities within your existing Po
       defaultValue: "cosine",
       description: "Distance metric for similarity search",
     },
+    {
+      name: "indexConfig",
+      type: "IndexConfig",
+      isOptional: true,
+      defaultValue: "{ type: 'ivfflat' }",
+      description: "Index configuration",
+    },
+    {
+      name: "defineIndex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "Whether to define the index",
+    },
   ]}
 />
+
+#### IndexConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: "'flat' | 'hnsw' | 'ivfflat'",
+      description: "Index type",
+      defaultValue: "ivfflat",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "flat",
+              type: "flat",
+              description: "Sequential scan (no index) that performs exhaustive search.",
+            },
+            {
+              name: "ivfflat",
+              type: "ivfflat",
+              description: "Clusters vectors into lists for approximate search.",
+            },
+            {
+              name: "hnsw",
+              type: "hnsw",
+              description: "Graph-based index offering fast search times and high recall.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "ivf",
+      type: "IVFConfig",
+      isOptional: true,
+      description: "IVF configuration",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "lists",
+              type: "number",
+              description: "Number of lists. If not specified, automatically calculated based on dataset size. (Minimum 100, Maximum 4000)",
+              isOptional: true,
+            }
+          ],
+        },
+      ],
+    },
+    {
+      name: "hnsw",
+      type: "HNSWConfig",
+      isOptional: true,
+      description: "HNSW configuration",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "m",
+              type: "number",
+              description: "Maximum number of connections per node (default: 8)",
+              isOptional: true,
+            },
+            {
+              name: "efConstruction",
+              type: "number",
+              description: "Build-time complexity (default: 32)",
+              isOptional: true,
+            },
+          ],
+        },
+      ]
+    },
+  ]}
+/>
+
+#### Memory Requirements
+
+HNSW indexes require significant shared memory during construction. For 100K vectors:
+- Small dimensions (64d): ~60MB with default settings
+- Medium dimensions (256d): ~180MB with default settings
+- Large dimensions (384d+): ~250MB+ with default settings
+
+Higher M values or efConstruction values will increase memory requirements significantly. Adjust your system's shared memory limits if needed.
 
 ### upsert()
 
@@ -11268,6 +11621,31 @@ It provides robust vector similarity search capabilities within your existing Po
       defaultValue: "0",
       description: "Minimum similarity score threshold",
     },
+    {
+      name: "options",
+      type: "{ ef?: number; probes?: number }",
+      isOptional: true,
+      description: "Additional options for HNSW and IVF indexes",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "ef",
+              type: "number",
+              description: "HNSW search parameter",
+              isOptional: true,
+            },
+            {
+              name: "probes",
+              type: "number",
+              description: "IVF search parameter",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
@@ -11290,10 +11668,17 @@ Returns an array of index names as strings.
 Returns:
 
 ```typescript copy
-interface IndexStats {
+interface PGIndexStats {
   dimension: number;
   count: number;
   metric: "cosine" | "euclidean" | "dotproduct";
+  type: "flat" | "hnsw" | "ivfflat";
+  config: {
+    m?: number;
+    efConstruction?: number;
+    lists?: number;
+    probes?: number;
+  };
 }
 ```
 
@@ -11312,6 +11697,56 @@ interface IndexStats {
 ### disconnect()
 
 Closes the database connection pool. Should be called when done using the store.
+
+### defineIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to define",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "Distance metric for similarity search",
+    },
+    {
+      name: "indexConfig",
+      type: "IndexConfig",
+      description: "Configuration for the index type and parameters",
+    },
+  ]}
+/>
+
+Defines or redefines an index with specified metric and configuration. Will drop any existing index before creating the new one.
+
+```typescript copy
+// Define HNSW index
+await pgVector.defineIndex("my_vectors", "cosine", {
+  type: "hnsw",
+  hnsw: {
+    m: 8,
+    efConstruction: 32
+  }
+});
+
+// Define IVF index
+await pgVector.defineIndex("my_vectors", "cosine", {
+  type: "ivfflat",
+  ivf: {
+    lists: 100, 
+  }
+});
+
+// Define flat index
+await pgVector.defineIndex("my_vectors", "cosine", {
+  type: "flat" 
+});
+```
 
 ## Response Types
 
@@ -11339,6 +11774,12 @@ try {
   }
 }
 ```
+
+## Best Practices
+
+- Regularly evaluate your index configuration to ensure optimal performance.
+- Adjust parameters like `lists` and `m` based on dataset size and query requirements.
+- Rebuild indexes periodically to maintain efficiency, especially after significant data changes.
 
 ### Related
 - [Metadata Filters](./metadata-filters)
@@ -11546,7 +11987,7 @@ description: Documentation for integrating Qdrant with Mastra, a vector similari
 # Qdrant Vector Store
 Source: https://mastra.ai/docs/reference/rag/qdrant
 
-The QdrantVector class provides vector search using [Qdrant](https://qdrant.tech/), a vector similarity search engine.
+The QdrantVector class provides vector search using [Qdrant](https://qdrant.tech/), a vector similarity search engine. 
 It provides a production-ready service with a convenient API to store, search, and manage vectors with additional payload and extended filtering support.
 
 ## Constructor Options
@@ -11654,7 +12095,7 @@ It provides a production-ready service with a convenient API to store, search, a
       name: "includeVector",
       type: "boolean",
       isOptional: true,
-      defaultValue: "false",
+      defaultValue: "false", 
       description: "Whether to include vectors in the results",
     },
   ]}
@@ -11735,7 +12176,7 @@ description: Documentation for the rerank function in Mastra, which provides adv
 # rerank()
 Source: https://mastra.ai/docs/reference/rag/rerank
 
-The `rerank()` function provides advanced reranking capabilities for vector search results by combining semantic relevance, vector similarity, and position-based scoring.
+The `rerank()` function provides advanced reranking capabilities for vector search results by combining semantic relevance, vector similarity, and position-based scoring. 
 
 ```typescript
 function rerank(
@@ -12134,7 +12575,7 @@ Required environment variables:
 - `UPSTASH_VECTOR_TOKEN`: Your Upstash Vector API token
 
 ### Related
-- [Metadata Filters](./metadata-filters)
+- [Metadata Filters](./metadata-filters) 
 
 ---
 title: "Reference: Cloudflare Vector Store | Vector Databases | RAG | Mastra Docs"
@@ -12301,7 +12742,7 @@ Creates an index on a metadata field to enable filtering.
   content={[
     {
       name: "indexName",
-      type: "string",
+      type: "string", 
       description: "Name of the index containing the metadata field",
     },
     {
@@ -12385,7 +12826,7 @@ Required environment variables:
 - `CLOUDFLARE_API_TOKEN`: Your Cloudflare API token with Vectorize permissions
 
 ### Related
-- [Metadata Filters](./metadata-filters)
+- [Metadata Filters](./metadata-filters) 
 
 ---
 title: "LibSQL Storage | Storage System | Mastra Core"
@@ -12406,15 +12847,15 @@ npm install @mastra/storage-libsql
 ## Usage
 
 ```typescript copy showLineNumbers
-import { DefaultStorage } from "@mastra/core/storage";
+import { LibSQLStore } from "@mastra/core/storage/libsql";
 
 // In-memory database (development)
-const storage = new DefaultStorage({
+const storage = new LibSQLStore({
   url: ":memory:",
 });
 
 // Persistent database (production)
-const storage = new DefaultStorage({
+const storage = new LibSQLStore({
   url: process.env.DATABASE_URL,
 });
 ```
@@ -12625,7 +13066,7 @@ constructor({
     capabilities = {},
 }: {
     name: string;
-    server: StdioServerParameters;
+    server: StdioServerParameters | SSEClientParameters;
     capabilities?: ClientCapabilities;
     version?: string;
 })
@@ -12649,8 +13090,8 @@ constructor({
     },
     {
       name: 'server',
-      type: 'StdioServerParameters',
-      description: 'Configuration parameters for the stdio server connection.',
+      type: 'StdioServerParameters | SSEClientParameters',
+      description: 'Configuration parameters for either a stdio server connection or an SSE server connection.',
     },
     {
       name: 'capabilities',
@@ -12701,6 +13142,8 @@ Returns an object mapping tool names to their corresponding Mastra tool implemen
 ## Examples
 
 ### Using with Mastra Agent
+
+#### Example with Stdio Server
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -12754,6 +13197,26 @@ try {
   // Always disconnect when done
   await fetchClient.disconnect();
 }
+```
+
+#### Example with SSE Server
+
+```typescript
+// Initialize the MCP client using an SSE server
+const sseClient = new MastraMCPClient({
+  name: "sse-client",
+  server: {
+    url: new URL("https://your-mcp-server.com/sse"),
+    // Optional fetch request configuration
+    requestInit: {
+      headers: {
+        "Authorization": "Bearer your-token"
+      }
+    }
+  },
+});
+
+// The rest of the usage is identical to the stdio example
 ```
 
 ## Related Information
@@ -12901,7 +13364,7 @@ The chunker is created as a Mastra tool with the following properties:
 ## Related
 
 - [MDocument](../rag/document.mdx)
-- [createVectorQueryTool](./vector-query-tool)
+- [createVectorQueryTool](./vector-query-tool) 
 
 
 ---
@@ -13032,7 +13495,7 @@ const graphTool = createGraphRAGTool({
 ## Related
 
 - [createVectorQueryTool](./vector-query-tool)
-- [GraphRAG](../rag/graph-rag)
+- [GraphRAG](../rag/graph-rag) 
 
 ---
 title: "Reference: createVectorQueryTool() | RAG | Mastra Tools Docs"
@@ -13231,674 +13694,1595 @@ The tool is created with:
 
 ## Related
 
-- [rerank()](../rag/rerank)
-- [createGraphRAGTool](./graph-rag-tool)
+- [rerank()](../rag/rerank) 
+- [createGraphRAGTool](./graph-rag-tool) 
 
 ---
-title: "Reference: TTS.generate() | Text to Speech (TTS) | Mastra Docs"
-description: "Documentation for the `.generate()` method in TTS, which produces an audio response."
+title: "Reference: CompositeVoice | Voice Providers | Mastra Docs"
+description: "Documentation for the CompositeVoice class, which enables combining multiple voice providers for flexible text-to-speech and speech-to-text operations."
 ---
 
-# TTS.generate()
-Source: https://mastra.ai/docs/reference/tts/generate
+# CompositeVoice
+Source: https://mastra.ai/docs/reference/voice/composite-voice
 
-The `.generate()` method is used to interact with the TTS model to produce an audio response. This method accepts `text` and `voice` as parameters.
+The CompositeVoice class allows you to combine different voice providers for text-to-speech and speech-to-text operations. This is particularly useful when you want to use the best provider for each operation - for example, using OpenAI for speech-to-text and PlayAI for text-to-speech.
 
-## Parameters
+CompositeVoice is used internally by the Agent class to provide flexible voice capabilities.
+
+## Usage Example
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
+
+// Create voice providers
+const openai = new OpenAIVoice();
+const playai = new PlayAIVoice();
+
+// Use OpenAI for listening (speech-to-text) and PlayAI for speaking (text-to-speech)
+const voice = new CompositeVoice({
+  listeningProvider: openai,
+  speakingProvider: playai
+});
+
+// Convert speech to text using OpenAI
+const text = await voice.listen(audioStream);
+
+// Convert text to speech using PlayAI
+const audio = await voice.speak("Hello, world!");
+```
+
+## Constructor Parameters
 
 <PropertiesTable
   content={[
     {
-      name: "text",
-      type: "string",
-      description: "The messages to be processed by TTS.",
+      name: "config",
+      type: "object",
+      description: "Configuration object for the composite voice service",
+      isOptional: false,
     },
     {
-      name: "voice",
-      type: "string",
-      description: "Voice ID to be used with generation.",
-    },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "audioResult",
-      type: "Readable",
+      name: "config.listeningProvider",
+      type: "MastraVoice",
+      description: "Voice provider to use for speech-to-text operations",
       isOptional: true,
-      description: "The generated audio stream",
+    },
+    {
+      name: "config.speakingProvider",
+      type: "MastraVoice",
+      description: "Voice provider to use for text-to-speech operations",
+      isOptional: true,
     },
   ]}
 />
 
-## Examples
+## Methods
 
-### Basic Audio Generation (ElevenLabs)
+### speak()
 
-```typescript
-import { ElevenLabsTTS } from "@mastra/speech-elevenlabs";
+Converts text to speech using the configured speaking provider.
 
-const tts = new ElevenLabsTTS({
-  model: {
-    name: "eleven_multilingual_v2",
-    apiKey: process.env.ELEVENLABS_API_KEY!,
-  },
-});
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text to convert to speech",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Provider-specific options passed to the speaking provider",
+      isOptional: true,
+    },
+  ]}
+/>
 
-const voices = await tts.voices();
-const voiceId = voices?.[0]?.voice_id!;
+#### Notes
+- If no speaking provider is configured, this method will throw an error
+- Options are passed through to the configured speaking provider
+- Returns a stream of audio data
 
-const { audioResult } = await tts.generate({
-  text: "What is AI?",
-  voice: voiceId,
-});
+### listen()
 
-await writeFile(
-  path.join(process.cwd(), "/test-outputs/generate-output.mp3"),
-  audioBuffer,
-);
-```
+Converts speech to text using the configured listening provider.
 
-### Basic Audio Generation (OpenAI)
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "Audio stream to convert to text",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Provider-specific options passed to the listening provider",
+      isOptional: true,
+    },
+  ]}
+/>
 
-```typescript
-import { OpenAITTS } from "@mastra/speech-openai";
+#### Notes
+- If no listening provider is configured, this method will throw an error
+- Options are passed through to the configured listening provider
+- Returns either a string or a stream of transcribed text, depending on the provider
 
-const tts = new OpenAITTS({
-  model: {
-    name: "tts-1",
-    apiKey: process.env.OPENAI_API_KEY!,
-  },
-});
+### getSpeakers()
 
-const voices = await tts.voices();
-const voiceId = voices?.[0]?.voice_id!;
+Returns a list of available voices from the speaking provider, where each node contains:
 
-const { audioResult } = await tts.generate({
-  text: "What is AI?",
-  voice: voiceId,
-});
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+      isOptional: false,
+    },
+    {
+      name: "key",
+      type: "value",
+      description: "Additional voice properties that vary by provider (e.g., name, language)",
+      isOptional: true,
+    },
+  ]}
+/>
 
-const outputPath = path.join(
-  process.cwd(),
-  "test-outputs/open-aigenerate-test.mp3",
-);
-writeFileSync(outputPath, audioResult);
-```
+#### Notes
+- Returns voices from the speaking provider only
+- If no speaking provider is configured, returns an empty array
+- Each voice object will have at least a voiceId property
+- Additional voice properties depend on the speaking provider
 
-### Basic Audio Generation (PlayAI)
+## Notes
 
-```typescript
-import { PlayAITTS } from "@mastra/speech-playai";
-
-const tts = new PlayAITTS({
-  model: {
-    name: "PlayDialog",
-    apiKey: process.env.PLAYAI_API_KEY!,
-  },
-  userId: process.env.PLAYAI_USER_ID!,
-});
-
-const voices = await tts.voices();
-const voiceId = voices?.[0]?.voice_id!;
-
-const { audioResult } = await tts.generate({
-  text: "What is AI?",
-  voice: voiceId,
-});
-
-const outputPath = path.join(
-  process.cwd(),
-  "test-outputs/open-aigenerate-test.mp3",
-);
-writeFileSync(outputPath, audioResult);
-```
-
-### Azure Generation
-
-```typescript
-import { AzureTTS } from "@mastra/speech-azure";
-
-const tts = new AzureTTS({
-  model: {
-    name: "en-US-JennyNeural",
-    apiKey: process.env.AZURE_API_KEY,
-    region: process.env.AZURE_REGION,
-  },
-});
-
-const { audioResult } = await tts.generate({ text: "What is AI?" });
-await writeFile(
-  path.join(process.cwd(), "/test-outputs/azure-output.mp3"),
-  audioResult,
-);
-```
-
-### Deepgram Generation
-
-```typescript
-import { DeepgramTTS } from "@mastra/speech-deepgram";
-
-const tts = new DeepgramTTS({
-  model: {
-    name: "aura",
-    voice: "asteria-en",
-    apiKey: process.env.DEEPGRAM_API_KEY,
-  },
-});
-
-const { audioResult } = await tts.generate({ text: "What is AI?" });
-await writeFile(
-  path.join(process.cwd(), "/test-outputs/deepgram-output.mp3"),
-  audioResult,
-);
-```
-
-### Google Generation
-
-```typescript
-import { GoogleTTS } from "@mastra/speech-google";
-
-const tts = new GoogleTTS({
-  model: {
-    name: "en-US-Standard-A",
-    credentials: process.env.GOOGLE_CREDENTIALS,
-  },
-});
-
-const { audioResult } = await tts.generate({ text: "What is AI?" });
-await writeFile(
-  path.join(process.cwd(), "/test-outputs/google-output.mp3"),
-  audioResult,
-);
-```
-
-### IBM Generation
-
-```typescript
-import { IbmTTS } from "@mastra/speech-ibm";
-
-const tts = new IbmTTS({
-  model: {
-    voice: "en-US_AllisonV3Voice",
-    apiKey: process.env.IBM_API_KEY,
-  },
-});
-
-const { audioResult } = await tts.generate({ text: "What is AI?" });
-await writeFile(
-  path.join(process.cwd(), "/test-outputs/ibm-output.mp3"),
-  audioResult,
-);
-```
-
-### Murf Generation
-
-```typescript
-import { MurfTTS } from "@mastra/speech-murf";
-
-const tts = new MurfTTS({
-  model: {
-    name: "GEN2",
-    voice: "en-US-natalie",
-    apiKey: process.env.MURF_API_KEY,
-  },
-});
-
-const { audioResult } = await tts.generate({ text: "What is AI?" });
-await writeFile(
-  path.join(process.cwd(), "/test-outputs/murf-output.mp3"),
-  audioResult,
-);
-```
-
-## Related Methods
-
-For streaming audio responses, see the [`stream()`](./stream.mdx) method documentation.
+- CompositeVoice implements the MastraVoice interface
+- Each provider maintains its own configuration and state
+- Error handling should consider both providers' potential failure modes
+- Ideal for scenarios where different providers excel at different operations
 
 
 ---
-title: "Reference: Providers and Models | TTS | Mastra Docs"
-description: Overview of supported TTS providers and their models.
+title: "Reference: Deepgram Voice | Voice Providers | Mastra Docs"
+description: "Documentation for the Deepgram voice implementation, providing text-to-speech and speech-to-text capabilities with multiple voice models and languages."
 ---
 
-# Providers and Models
-Source: https://mastra.ai/docs/reference/tts/providers-and-models
+# Deepgram
+Source: https://mastra.ai/docs/reference/voice/deepgram
 
-## Most popular providers
+The Deepgram voice implementation in Mastra provides text-to-speech (TTS) and speech-to-text (STT) capabilities using Deepgram's API. It supports multiple voice models and languages, with configurable options for both speech synthesis and transcription.
 
-| Provider   | Supported Models                                                                                                        |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------- |
-| ElevenLabs | `eleven_multilingual_v2`, `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_multilingual_sts_v2`, `eleven_english_sts_v2` |
-| OpenAI     | `tts-1`, `tts-1-hd`                                                                                                     |
-| PlayAI     | `PlayDialog`, `Play3.0-mini`                                                                                            |
-| Azure      | Various voices available through Azure Cognitive Services                                                               |
-| Deepgram   | `aura` and other models with voice options like `asteria-en`                                                            |
-| Google     | Various voices through Google Cloud Text-to-Speech                                                                      |
-| IBM        | Various voices including `en-US_AllisonV3Voice`                                                                         |
-| Murf       | `GEN1`, `GEN2` with various voices like `en-US-natalie`                                                                 |
+## Usage Example
+
+```typescript
+import { DeepgramVoice } from "@mastra/voice-deepgram";
+
+// Initialize with default configuration (uses DEEPGRAM_API_KEY environment variable)
+const voice = new DeepgramVoice();
+
+// Initialize with custom configuration
+const voice = new DeepgramVoice({
+  speechModel: {
+    name: 'aura',
+    apiKey: 'your-api-key',
+  },
+  listeningModel: {
+    name: 'nova-2',
+    apiKey: 'your-api-key',
+  },
+  speaker: 'asteria-en',
+});
+
+// Text-to-Speech
+const audioStream = await voice.speak("Hello, world!");
+
+// Speech-to-Text
+const transcript = await voice.listen(audioStream);
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "DeepgramVoiceConfig",
+      description: "Configuration for text-to-speech functionality.",
+      isOptional: true,
+      defaultValue: "{ name: 'aura' }"
+    },
+    {
+      name: "listeningModel",
+      type: "DeepgramVoiceConfig",
+      description: "Configuration for speech-to-text functionality.",
+      isOptional: true,
+      defaultValue: "{ name: 'nova' }"
+    },
+    {
+      name: "speaker",
+      type: "DeepgramVoiceId",
+      description: "Default voice to use for text-to-speech",
+      isOptional: true,
+      defaultValue: "'asteria-en'",
+    },
+  ]}
+/>
+
+### DeepgramVoiceConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "DeepgramModel",
+      description: "The Deepgram model to use",
+      isOptional: true,
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Deepgram API key. Falls back to DEEPGRAM_API_KEY environment variable",
+      isOptional: true,
+    },
+    {
+      name: "properties",
+      type: "Record<string, any>",
+      description: "Additional properties to pass to the Deepgram API",
+      isOptional: true,
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "Language code for the model",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Methods
+
+### speak()
+
+Converts text to speech using the configured speech model and voice.
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Additional options for speech synthesis",
+      isOptional: true,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "Override the default speaker for this request",
+      isOptional: true,
+    },
+  ]}
+/>
+
+Returns: `Promise<NodeJS.ReadableStream>`
+
+### listen()
+
+Converts speech to text using the configured listening model.
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "Audio stream to transcribe",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Additional options to pass to the Deepgram API",
+      isOptional: true,
+    },
+  ]}
+/>
+
+Returns: `Promise<string>`
+
+### getSpeakers()
+
+Returns a list of available voice options.
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+      isOptional: false,
+    }
+  ]}
+/>
+
+---
+title: "Reference: ElevenLabs Voice | Voice Providers | Mastra Docs"
+description: "Documentation for the ElevenLabs voice implementation, offering high-quality text-to-speech capabilities with multiple voice models and natural-sounding synthesis."
+---
+
+# ElevenLabs
+Source: https://mastra.ai/docs/reference/voice/elevenlabs
+
+The ElevenLabs voice implementation in Mastra provides high-quality text-to-speech (TTS) capabilities using the ElevenLabs API. It supports multiple voice models and speakers, with a focus on natural-sounding speech synthesis.
+
+## Usage Example
+
+```typescript
+import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+
+// Initialize with default configuration (uses ELEVENLABS_API_KEY environment variable)
+const voice = new ElevenLabsVoice();
+
+// Initialize with custom configuration
+const voice = new ElevenLabsVoice({
+  speechModel: {
+    name: 'eleven_multilingual_v2',
+    apiKey: 'your-api-key',
+  },
+  speaker: 'custom-speaker-id',
+});
+
+// Text-to-Speech
+const audioStream = await voice.speak("Hello, world!");
+
+// Get available speakers
+const speakers = await voice.getSpeakers();
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "ElevenLabsVoiceConfig",
+      description: "Configuration for text-to-speech functionality.",
+      isOptional: true,
+      defaultValue: "{ name: 'eleven_multilingual_v2' }"
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "ID of the speaker to use for text-to-speech",
+      isOptional: true,
+      defaultValue: "'9BWtsMINqrJLrRacOk9x' (Aria voice)",
+    },
+  ]}
+/>
+
+### ElevenLabsVoiceConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "ElevenLabsModel",
+      description: "The ElevenLabs model to use",
+      isOptional: true,
+      defaultValue: "'eleven_multilingual_v2'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "ElevenLabs API key. Falls back to ELEVENLABS_API_KEY environment variable",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Methods
+
+### speak()
+
+Converts text to speech using the configured speech model and voice.
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Additional options for speech synthesis",
+      isOptional: true,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "Override the default speaker ID for this request",
+      isOptional: true,
+    },
+  ]}
+/>
+
+Returns: `Promise<NodeJS.ReadableStream>`
+
+### getSpeakers()
+
+Returns an array of available voice options, where each node contains:
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Display name of the voice",
+      isOptional: false,
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "Language code for the voice",
+      isOptional: false,
+    },
+    {
+      name: "gender",
+      type: "string",
+      description: "Gender of the voice",
+      isOptional: false,
+    }
+  ]}
+/>
+
+### listen()
+
+This method is not supported by ElevenLabs and will throw an error. ElevenLabs does not provide speech-to-text functionality.
+
+## Important Notes
+
+1. An ElevenLabs API key is required. Set it via the `ELEVENLABS_API_KEY` environment variable or pass it in the constructor.
+2. The default speaker is set to Aria (ID: '9BWtsMINqrJLrRacOk9x').
+3. Speech-to-text functionality is not supported by ElevenLabs.
+4. Available speakers can be retrieved using the `getSpeakers()` method, which returns detailed information about each voice including language and gender.
+
+
+---
+title: "Reference: Google Voice | Voice Providers | Mastra Docs"
+description: "Documentation for the Google Voice implementation, providing text-to-speech and speech-to-text capabilities."
+---
+
+# Google
+Source: https://mastra.ai/docs/reference/voice/google
+
+The Google Voice implementation in Mastra provides both text-to-speech (TTS) and speech-to-text (STT) capabilities using Google Cloud services. It supports multiple voices, languages, and advanced audio configuration options.
+
+## Usage Example
+
+```typescript
+import { GoogleVoice } from "@mastra/voice-google";
+
+// Initialize with default configuration (uses GOOGLE_API_KEY environment variable)
+const voice = new GoogleVoice();
+
+// Initialize with custom configuration
+const voice = new GoogleVoice({
+  speechModel: {
+    apiKey: 'your-speech-api-key',
+  },
+  listeningModel: {
+    apiKey: 'your-listening-api-key',
+  },
+  speaker: 'en-US-Casual-K',
+});
+
+// Text-to-Speech
+const audioStream = await voice.speak("Hello, world!", {
+  languageCode: 'en-US',
+  audioConfig: {
+    audioEncoding: 'LINEAR16',
+  },
+});
+
+// Speech-to-Text
+const transcript = await voice.listen(audioStream, {
+  config: {
+    encoding: 'LINEAR16',
+    languageCode: 'en-US',
+  },
+});
+
+// Get available voices for a specific language
+const voices = await voice.getSpeakers({ languageCode: 'en-US' });
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "GoogleModelConfig",
+      description: "Configuration for text-to-speech functionality",
+      isOptional: true,
+      defaultValue: "{ apiKey: process.env.GOOGLE_API_KEY }",
+    },
+    {
+      name: "listeningModel",
+      type: "GoogleModelConfig",
+      description: "Configuration for speech-to-text functionality",
+      isOptional: true,
+      defaultValue: "{ apiKey: process.env.GOOGLE_API_KEY }",
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "Default voice ID to use for text-to-speech",
+      isOptional: true,
+      defaultValue: "'en-US-Casual-K'",
+    },
+  ]}
+/>
+
+### GoogleModelConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Google Cloud API key. Falls back to GOOGLE_API_KEY environment variable",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Methods
+
+### speak()
+
+Converts text to speech using Google Cloud Text-to-Speech service.
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Speech synthesis options",
+      isOptional: true,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "Voice ID to use for this request",
+      isOptional: true,
+    },
+    {
+      name: "options.languageCode",
+      type: "string",
+      description: "Language code for the voice (e.g., 'en-US'). Defaults to the language code from the speaker ID or 'en-US'",
+      isOptional: true,
+    },
+    {
+      name: "options.audioConfig",
+      type: "ISynthesizeSpeechRequest['audioConfig']",
+      description: "Audio configuration options from Google Cloud Text-to-Speech API",
+      isOptional: true,
+      defaultValue: "{ audioEncoding: 'LINEAR16' }",
+    },
+  ]}
+/>
+
+Returns: `Promise<NodeJS.ReadableStream>`
+
+### listen()
+
+Converts speech to text using Google Cloud Speech-to-Text service.
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "Audio stream to transcribe",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Recognition options",
+      isOptional: true,
+    },
+    {
+      name: "options.stream",
+      type: "boolean",
+      description: "Whether to use streaming recognition",
+      isOptional: true,
+    },
+    {
+      name: "options.config",
+      type: "IRecognitionConfig",
+      description: "Recognition configuration from Google Cloud Speech-to-Text API",
+      isOptional: true,
+      defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
+    },
+  ]}
+/>
+
+Returns: `Promise<string>`
+
+### getSpeakers()
+
+Returns an array of available voice options, where each node contains:
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+      isOptional: false,
+    },
+    {
+      name: "languageCodes",
+      type: "string[]",
+      description: "List of language codes supported by this voice",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## Important Notes
+
+1. A Google Cloud API key is required. Set it via the `GOOGLE_API_KEY` environment variable or pass it in the constructor.
+2. The default voice is set to 'en-US-Casual-K'.
+3. Both text-to-speech and speech-to-text services use LINEAR16 as the default audio encoding.
+4. The `speak()` method supports advanced audio configuration through the Google Cloud Text-to-Speech API.
+5. The `listen()` method supports various recognition configurations through the Google Cloud Speech-to-Text API.
+6. Available voices can be filtered by language code using the `getSpeakers()` method.
+
+
+---
+title: "Reference: MastraVoice | Voice Providers | Mastra Docs"
+description: "Documentation for the MastraVoice abstract base class, which defines the core interface for all voice services in Mastra."
+---
+
+# MastraVoice
+Source: https://mastra.ai/docs/reference/voice/mastra-voice
+
+The MastraVoice class is an abstract base class that defines the core interface for voice services in Mastra. All voice provider implementations (like OpenAI, Deepgram, PlayAI, Speechify) extend this class to provide their specific functionality.
+
+## Usage Example
+
+```typescript
+import { MastraVoice } from "@mastra/core/voice";
+
+// Create a voice provider implementation
+class MyVoiceProvider extends MastraVoice {
+  constructor(config: { speechModel?: ModelConfig; listeningModel?: ModelConfig; speaker?: string }) {
+    super({
+      speechModel: config.speechModel,
+      listeningModel: config.listeningModel,
+      speaker: config.speaker
+    });
+  }
+
+  // Implement required abstract methods
+  async speak(input: string | NodeJS.ReadableStream, options?: { speaker?: string }): Promise<NodeJS.ReadableStream> {
+    // Implement text-to-speech conversion
+  }
+
+  async listen(audioStream: NodeJS.ReadableStream, options?: any): Promise<string | NodeJS.ReadableStream> {
+    // Implement speech-to-text conversion
+  }
+
+  async getSpeakers(): Promise<Array<{ voiceId: string }>> {
+    // Return list of available voices
+  }
+}
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "config",
+      type: "object",
+      description: "Configuration object for the voice service",
+      isOptional: false,
+    },
+    {
+      name: "config.speechModel",
+      type: "BuiltInModelConfig",
+      description: "Configuration for the text-to-speech model",
+      isOptional: true,
+    },
+    {
+      name: "config.listeningModel",
+      type: "BuiltInModelConfig",
+      description: "Configuration for the speech-to-text model",
+      isOptional: true,
+    },
+    {
+      name: "config.speaker",
+      type: "string",
+      description: "Default speaker/voice ID to use",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### BuiltInModelConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "Name of the model to use",
+      isOptional: false,
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "API key for the model service",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Abstract Methods
+
+These methods must be implemented by any class extending MastraVoice.
+
+### speak()
+
+Converts text to speech using the configured speech model.
+
+```typescript
+abstract speak(
+  input: string | NodeJS.ReadableStream,
+  options?: {
+    speaker?: string;
+    [key: string]: any;
+  }
+): Promise<NodeJS.ReadableStream>
+```
+
+#### Purpose
+- Takes text input and converts it to speech using the provider's text-to-speech service
+- Supports both string and stream input for flexibility
+- Allows overriding the default speaker/voice through options
+- Returns a stream of audio data that can be played or saved
+
+### listen()
+
+Converts speech to text using the configured listening model.
+
+```typescript
+abstract listen(
+  audioStream: NodeJS.ReadableStream,
+  options?: {
+    [key: string]: any;
+  }
+): Promise<string | NodeJS.ReadableStream>
+```
+
+#### Purpose
+- Takes an audio stream and converts it to text using the provider's speech-to-text service
+- Supports provider-specific options for transcription configuration
+- Can return either a complete text transcription or a stream of transcribed text
+- Not all providers support this functionality (e.g., PlayAI, Speechify)
+
+### getSpeakers()
+
+Returns a list of available voices supported by the provider.
+
+```typescript
+abstract getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: any }>>
+```
+
+#### Purpose
+- Retrieves the list of available voices/speakers from the provider
+- Each voice must have at least a voiceId property
+- Providers can include additional metadata about each voice
+- Used to discover available voices for text-to-speech conversion
+
+## Protected Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "BuiltInModelConfig | undefined",
+      description: "Configuration for the text-to-speech model",
+      isOptional: true,
+    },
+    {
+      name: "listeningModel",
+      type: "BuiltInModelConfig | undefined",
+      description: "Configuration for the speech-to-text model",
+      isOptional: true,
+    },
+    {
+      name: "speaker",
+      type: "string | undefined",
+      description: "Default speaker/voice ID",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Telemetry Support
+
+MastraVoice includes built-in telemetry support through the `traced` method, which wraps method calls with performance tracking and error monitoring.
+
+## Notes
+
+- MastraVoice is an abstract class and cannot be instantiated directly
+- Implementations must provide concrete implementations for all abstract methods
+- The class provides a consistent interface across different voice service providers
+- Configuration and authentication details are provider-specific
+- Telemetry is automatically handled for all method calls
+
+
+---
+title: "Reference: Murf Voice | Voice Providers | Mastra Docs"
+description: "Documentation for the Murf voice implementation, providing text-to-speech capabilities."
+---
+
+# Murf
+Source: https://mastra.ai/docs/reference/voice/murf
+
+The Murf voice implementation in Mastra provides text-to-speech (TTS) capabilities using Murf's AI voice service. It supports multiple voices across different languages.
+
+## Usage Example
+
+```typescript
+import { MurfVoice } from "@mastra/voice-murf";
+
+// Initialize with default configuration (uses MURF_API_KEY environment variable)
+const voice = new MurfVoice();
+
+// Initialize with custom configuration
+const voice = new MurfVoice({
+  speechModel: {
+    name: 'GEN2',
+    apiKey: 'your-api-key',
+    properties: {
+      format: 'MP3',
+      rate: 1.0,
+      pitch: 1.0,
+      sampleRate: 48000,
+      channelType: 'STEREO',
+    },
+  },
+  speaker: 'en-US-cooper',
+});
+
+// Text-to-Speech with default settings
+const audioStream = await voice.speak("Hello, world!");
+
+// Text-to-Speech with custom properties
+const audioStream = await voice.speak("Hello, world!", {
+  speaker: 'en-UK-hazel',
+  properties: {
+    format: 'WAV',
+    rate: 1.2,
+    style: 'casual',
+  },
+});
+
+// Get available voices
+const voices = await voice.getSpeakers();
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "MurfConfig",
+      description: "Configuration for text-to-speech functionality",
+      isOptional: true,
+      defaultValue: "{ name: 'GEN2' }",
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "Default voice ID to use for text-to-speech",
+      isOptional: true,
+      defaultValue: "'en-UK-hazel'",
+    },
+  ]}
+/>
+
+### MurfConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "'GEN1' | 'GEN2'",
+      description: "The Murf model generation to use",
+      isOptional: false,
+      defaultValue: "'GEN2'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Murf API key. Falls back to MURF_API_KEY environment variable",
+      isOptional: true,
+    },
+    {
+      name: "properties",
+      type: "object",
+      description: "Default properties for all speech synthesis requests",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Speech Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: "style",
+      type: "string",
+      description: "Speaking style for the voice",
+      isOptional: true,
+    },
+    {
+      name: "rate",
+      type: "number",
+      description: "Speech rate multiplier",
+      isOptional: true,
+    },
+    {
+      name: "pitch",
+      type: "number",
+      description: "Voice pitch adjustment",
+      isOptional: true,
+    },
+    {
+      name: "sampleRate",
+      type: "8000 | 24000 | 44100 | 48000",
+      description: "Audio sample rate in Hz",
+      isOptional: true,
+    },
+    {
+      name: "format",
+      type: "'MP3' | 'WAV' | 'FLAC' | 'ALAW' | 'ULAW'",
+      description: "Output audio format",
+      isOptional: true,
+    },
+    {
+      name: "channelType",
+      type: "'STEREO' | 'MONO'",
+      description: "Audio channel configuration",
+      isOptional: true,
+    },
+    {
+      name: "pronunciationDictionary",
+      type: "Record<string, string>",
+      description: "Custom pronunciation mappings",
+      isOptional: true,
+    },
+    {
+      name: "encodeAsBase64",
+      type: "boolean",
+      description: "Whether to encode the audio as base64",
+      isOptional: true,
+    },
+    {
+      name: "variation",
+      type: "number",
+      description: "Voice variation parameter",
+      isOptional: true,
+    },
+    {
+      name: "audioDuration",
+      type: "number",
+      description: "Target audio duration in seconds",
+      isOptional: true,
+    },
+    {
+      name: "multiNativeLocale",
+      type: "string",
+      description: "Locale for multilingual support",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Methods
+
+### speak()
+
+Converts text to speech using Murf's API.
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Speech synthesis options",
+      isOptional: true,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "Override the default speaker for this request",
+      isOptional: true,
+    },
+    {
+      name: "options.properties",
+      type: "object",
+      description: "Override default speech properties for this request",
+      isOptional: true,
+    },
+  ]}
+/>
+
+Returns: `Promise<NodeJS.ReadableStream>`
+
+### getSpeakers()
+
+Returns an array of available voice options, where each node contains:
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Display name of the voice",
+      isOptional: false,
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "Language code for the voice",
+      isOptional: false,
+    },
+    {
+      name: "gender",
+      type: "string",
+      description: "Gender of the voice",
+      isOptional: false,
+    }
+  ]}
+/>
+
+### listen()
+
+This method is not supported by Murf and will throw an error. Murf does not provide speech-to-text functionality.
+
+## Important Notes
+
+1. A Murf API key is required. Set it via the `MURF_API_KEY` environment variable or pass it in the constructor.
+2. The service uses GEN2 as the default model version.
+3. Speech properties can be set at the constructor level and overridden per request.
+4. The service supports extensive audio customization through properties like format, sample rate, and channel type.
+5. Speech-to-text functionality is not supported.
+
+
+---
+title: "Reference: OpenAI Voice | Voice Providers | Mastra Docs"
+description: "Documentation for the OpenAIVoice class, providing text-to-speech and speech-to-text capabilities."
+---
+
+# OpenAI
+Source: https://mastra.ai/docs/reference/voice/openai
+
+The OpenAIVoice class in Mastra provides text-to-speech and speech-to-text capabilities using OpenAI's models.
+
+## Usage Example
+
+```typescript
+import { OpenAIVoice } from '@mastra/voice-openai';
+
+// Initialize with default configuration using environment variables
+const voice = new OpenAIVoice();
+
+// Or initialize with specific configuration
+const voiceWithConfig = new OpenAIVoice({
+  speechModel: {
+    name: 'tts-1-hd',
+    apiKey: 'your-openai-api-key'
+  },
+  listeningModel: {
+    name: 'whisper-1',
+    apiKey: 'your-openai-api-key'
+  },
+  speaker: 'alloy'  // Default voice
+});
+
+// Convert text to speech
+const audioStream = await voice.speak('Hello, how can I help you?', {
+  speaker: 'nova',  // Override default voice
+  speed: 1.2  // Adjust speech speed
+});
+
+// Convert speech to text
+const text = await voice.listen(audioStream, {
+  filetype: 'mp3'
+});
+```
 
 ## Configuration
 
-Each provider requires specific configuration. Here are examples for each provider:
-
-### ElevenLabs Configuration
-
-```typescript
-import { ElevenLabsTTS } from "@mastra/speech-elevenlabs";
-
-const tts = new ElevenLabsTTS({
-  model: {
-    name: "eleven_multilingual_v2",
-    apiKey: process.env.ELEVENLABS_API_KEY,
-  },
-});
-```
-
-### OpenAI Configuration
-
-```typescript
-import { OpenAITTS } from "@mastra/speech-openai";
-
-const tts = new OpenAITTS({
-  model: {
-    name: "tts-1", // or 'tts-1-hd' for higher quality
-    apiKey: process.env.OPENAI_API_KEY,
-  },
-});
-```
-
-### PlayAI Configuration
-
-```typescript
-import { PlayAITTS } from "@mastra/speech-playai";
-
-const tts = new PlayAITTS({
-  model: {
-    name: "PlayDialog", // or 'Play3.0-mini'
-    apiKey: process.env.PLAYAI_API_KEY,
-  },
-  userId: process.env.PLAYAI_USER_ID,
-});
-```
-
-### Azure Configuration
-
-```typescript
-import { AzureTTS } from "@mastra/speech-azure";
-
-const tts = new AzureTTS({
-  model: {
-    name: "en-US-JennyNeural",
-    apiKey: process.env.AZURE_API_KEY,
-    region: process.env.AZURE_REGION,
-  },
-});
-```
-
-### Deepgram Configuration
-
-```typescript
-import { DeepgramTTS } from "@mastra/speech-deepgram";
-
-const tts = new DeepgramTTS({
-  model: {
-    name: "aura",
-    voice: "asteria-en",
-    apiKey: process.env.DEEPGRAM_API_KEY,
-  },
-});
-```
-
-### Google Configuration
-
-```typescript
-const tts = new GoogleTTS({
-  model: {
-    name: "en-US-Standard-A",
-    credentials: process.env.GOOGLE_CREDENTIALS,
-  },
-});
-```
-
-### IBM Configuration
-
-```typescript
-const tts = new IbmTTS({
-  model: {
-    voice: "en-US_AllisonV3Voice",
-    apiKey: process.env.IBM_API_KEY,
-  },
-});
-```
-
-### Murf Configuration
-
-```typescript
-const tts = new MurfTTS({
-  model: {
-    name: "GEN2",
-    voice: "en-US-natalie",
-    apiKey: process.env.MURF_API_KEY,
-  },
-});
-```
-
-
----
-title: "Reference: TTS.stream() | Text to Speech (TTS) | Mastra Docs"
-description: "Documentation for the `.stream()` method in TTS, which produces an audio response stream."
----
-
-# TTS.stream()
-Source: https://mastra.ai/docs/reference/tts/stream
-
-The `stream()` method is used to interact with the TTS model to produce an audio response stream. This method accepts `text` and `voice` as parameters.
-
-## Parameters
+### Constructor Options
 
 <PropertiesTable
   content={[
     {
-      name: "text",
-      type: "string",
-      description: "The messages to be processed by TTS.",
-    },
-    {
-      name: "voice",
-      type: "string",
-      description: "Voice ID to be used with generation.",
-    },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "audioResult",
-      type: "Readable",
+      name: "speechModel",
+      type: "OpenAIConfig",
+      description: "Configuration for text-to-speech synthesis.",
       isOptional: true,
-      description: "The generated audio stream",
+      defaultValue: "{ name: 'tts-1' }",
+    },
+    {
+      name: "listeningModel",
+      type: "OpenAIConfig",
+      description: "Configuration for speech-to-text recognition.",
+      isOptional: true,
+      defaultValue: "{ name: 'whisper-1' }",
+    },
+    {
+      name: "speaker",
+      type: "OpenAIVoiceId",
+      description: "Default voice ID for speech synthesis.",
+      isOptional: true,
+      defaultValue: "'alloy'",
     },
   ]}
 />
 
-## Examples
+### OpenAIConfig
 
-### ElevenLabs Streaming
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "'tts-1' | 'tts-1-hd' | 'whisper-1'",
+      description: "Model name. Use 'tts-1-hd' for higher quality audio.",
+      isOptional: true,
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "OpenAI API key. Falls back to OPENAI_API_KEY environment variable.",
+      isOptional: true,
+    },
+  ]}
+/>
 
-```typescript
-import { ElevenLabsTTS } from "@mastra/speech-elevenlabs";
+## Methods
 
-const tts = new ElevenLabsTTS({
-  model: {
-    name: "eleven_multilingual_v2",
-    apiKey: process.env.ELEVENLABS_API_KEY!,
-  },
-});
+### speak()
 
-const voices = await tts.voices();
-const voiceId = voices?.[0]?.voice_id!;
+Converts text to speech using OpenAI's text-to-speech models.
 
-const { audioResult } = await tts.stream({
-  text: "What is AI?",
-  voice: voiceId,
-});
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text or text stream to convert to speech.",
+      isOptional: false,
+    },
+    {
+      name: "options.speaker",
+      type: "OpenAIVoiceId",
+      description: "Voice ID to use for speech synthesis.",
+      isOptional: true,
+      defaultValue: "Constructor's speaker value",
+    },
+    {
+      name: "options.speed",
+      type: "number",
+      description: "Speech speed multiplier.",
+      isOptional: true,
+      defaultValue: "1.0",
+    },
+  ]}
+/>
 
-// Create a write stream to simulate real-time playback
-const outputPath = path.join(
-  process.cwd(),
-  "/test-outputs/streaming-output.mp3",
-);
-const writeStream = createWriteStream(outputPath);
+Returns: `Promise<NodeJS.ReadableStream>`
 
-let firstChunkTime: number | null = null;
-let lastChunkTime: number | null = null;
-let totalChunks = 0;
+### listen()
 
-// Process chunks as they arrive
-for await (const chunk of audioResult) {
-  if (!firstChunkTime) {
-    firstChunkTime = Date.now();
-  }
-  lastChunkTime = Date.now();
-  totalChunks++;
+Transcribes audio using OpenAI's Whisper model.
 
-  // Write chunk immediately as it arrives
-  writeStream.write(chunk);
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "Audio stream to transcribe.",
+      isOptional: false,
+    },
+    {
+      name: "options.filetype",
+      type: "string",
+      description: "Audio format of the input stream.",
+      isOptional: true,
+      defaultValue: "'mp3'",
+    },
+  ]}
+/>
 
-  // Log timing of chunk arrival
-  console.log(
-    `Received chunk ${totalChunks} at ${lastChunkTime - firstChunkTime!}ms`,
-  );
-}
+Returns: `Promise<string>`
 
-writeStream.end();
-```
+### getSpeakers()
 
-### OpenAI Streaming
+Returns an array of available voice options, where each node contains:
 
-```typescript
-import { OpenAITTS } from "@mastra/speech-openai";
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+      isOptional: false,
+    },
+  ]}
+/>
 
-const tts = new OpenAITTS({
-  model: {
-    name: "tts-1",
-    apiKey: process.env.OPENAI_API_KEY!,
-  },
-});
+## Notes
 
-const voices = await tts.voices();
-const voiceId = voices?.[0]?.voice_id!;
+- API keys can be provided via constructor options or the `OPENAI_API_KEY` environment variable
+- The `tts-1-hd` model provides higher quality audio but may have slower processing times
+- Speech recognition supports multiple audio formats including mp3, wav, and webm
 
-const { audioResult } = await tts.stream({
-  text: "What is AI?",
-  voice: voiceId,
-});
 
-// Create a write stream to simulate real-time playback
-const outputPath = path.join(
-  process.cwd(),
-  "/test-outputs/streaming-output.mp3",
-);
-const writeStream = createWriteStream(outputPath);
+---
+title: "Reference: PlayAI Voice | Voice Providers | Mastra Docs"
+description: "Documentation for the PlayAI voice implementation, providing text-to-speech capabilities."
+---
 
-let firstChunkTime: number | null = null;
-let lastChunkTime: number | null = null;
-let totalChunks = 0;
+# PlayAI
+Source: https://mastra.ai/docs/reference/voice/playai
 
-// Process chunks as they arrive
-for await (const chunk of audioResult) {
-  if (!firstChunkTime) {
-    firstChunkTime = Date.now();
-  }
-  lastChunkTime = Date.now();
-  totalChunks++;
+The PlayAI voice implementation in Mastra provides text-to-speech capabilities using PlayAI's API.
 
-  // Write chunk immediately as it arrives
-  writeStream.write(chunk);
-
-  // Log timing of chunk arrival
-  console.log(
-    `Received chunk ${totalChunks} at ${lastChunkTime - firstChunkTime!}ms`,
-  );
-}
-
-writeStream.end();
-```
-
-### PlayAI Streaming
-
-```typescript
-import { PlayAITTS } from "@mastra/speech-playai";
-
-const tts = new PlayAITTS({
-  model: {
-    name: "PlayDialog",
-    apiKey: process.env.PLAYAI_API_KEY!,
-  },
-  userId: process.env.PLAYAI_USER_ID!,
-});
-
-const voices = await tts.voices();
-const voiceId = voices?.[0]?.voice_id!;
-
-const { audioResult } = await tts.stream({
-  text: "What is AI?",
-  voice: voiceId,
-});
-
-// Create a write stream to simulate real-time playback
-const outputPath = path.join(
-  process.cwd(),
-  "/test-outputs/streaming-output.mp3",
-);
-const writeStream = createWriteStream(outputPath);
-
-let firstChunkTime: number | null = null;
-let lastChunkTime: number | null = null;
-let totalChunks = 0;
-
-// Process chunks as they arrive
-for await (const chunk of audioResult) {
-  if (!firstChunkTime) {
-    firstChunkTime = Date.now();
-  }
-  lastChunkTime = Date.now();
-  totalChunks++;
-
-  // Write chunk immediately as it arrives
-  writeStream.write(chunk);
-
-  // Log timing of chunk arrival
-  console.log(
-    `Received chunk ${totalChunks} at ${lastChunkTime - firstChunkTime!}ms`,
-  );
-}
-
-writeStream.end();
-```
-
-### Azure Streaming
+## Usage Example
 
 ```typescript
-import { AzureTTS } from "@mastra/speech-azure";
+import { PlayAIVoice } from "@mastra/voice-playai";
 
-const tts = new AzureTTS({
-  model: {
-    name: "en-US-JennyNeural",
-    apiKey: process.env.AZURE_API_KEY,
-    region: process.env.AZURE_REGION,
+// Initialize with default configuration (uses PLAYAI_API_KEY environment variable and PLAYAI_USER_ID environment variable)
+const voice = new PlayAIVoice();
+
+// Initialize with default configuration
+const voice = new PlayAIVoice({
+  speechModel: {
+    name: 'PlayDialog',
+    apiKey: process.env.PLAYAI_API_KEY,
+    userId: process.env.PLAYAI_USER_ID
   },
+  speaker: 'Angelo'  // Default voice
 });
 
-const { audioResult } = await tts.stream({ text: "What is AI?" });
-
-// Create a write stream
-const outputPath = path.join(process.cwd(), "/test-outputs/azure-stream.mp3");
-const writeStream = createWriteStream(outputPath);
-
-// Pipe the audio stream to the file
-audioResult.pipe(writeStream);
+// Convert text to speech with a specific voice
+const audioStream = await voice.speak("Hello, world!", {
+  speaker: 's3://voice-cloning-zero-shot/b27bc13e-996f-4841-b584-4d35801aea98/original/manifest.json' // Dexter voice
+});
 ```
 
-### Deepgram Streaming
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "PlayAIConfig",
+      description: "Configuration for text-to-speech functionality",
+      isOptional: true,
+      defaultValue: "{ name: 'PlayDialog' }",
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "Default voice ID to use for speech synthesis",
+      isOptional: true,
+      defaultValue: "First available voice ID",
+    },
+  ]}
+/>
+
+### PlayAIConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "'PlayDialog' | 'Play3.0-mini'",
+      description: "The PlayAI model to use",
+      isOptional: true,
+      defaultValue: "'PlayDialog'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "PlayAI API key. Falls back to PLAYAI_API_KEY environment variable",
+      isOptional: true,
+    },
+    {
+      name: "userId",
+      type: "string",
+      description: "PlayAI user ID. Falls back to PLAYAI_USER_ID environment variable",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Methods
+
+### speak()
+
+Converts text to speech using the configured speech model and voice.
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      isOptional: false,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "Override the default speaker for this request",
+      isOptional: true,
+      defaultValue: "Constructor's speaker value",
+    },
+  ]}
+/>
+
+Returns: `Promise<NodeJS.ReadableStream>`.
+
+### getSpeakers()
+
+Returns an array of available voice options, where each node contains:
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "Name of the voice",
+      isOptional: false,
+    },
+    {
+      name: "accent",
+      type: "string",
+      description: "Accent of the voice (e.g., 'US', 'British', 'Australian')",
+      isOptional: false,
+    },
+    {
+      name: "gender",
+      type: "'M' | 'F'",
+      description: "Gender of the voice",
+      isOptional: false,
+    },
+    {
+      name: "age",
+      type: "'Young' | 'Middle' | 'Old'",
+      description: "Age category of the voice",
+      isOptional: false,
+    },
+    {
+      name: "style",
+      type: "'Conversational' | 'Narrative'",
+      description: "Speaking style of the voice",
+      isOptional: false,
+    },
+    {
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+      isOptional: false,
+    },
+  ]}
+/>
+### listen()
+
+This method is not supported by PlayAI and will throw an error. PlayAI does not provide speech-to-text functionality.
+
+## Notes
+
+- PlayAI requires both an API key and a user ID for authentication
+- The service offers two models: 'PlayDialog' and 'Play3.0-mini'
+- Each voice has a unique S3 manifest ID that must be used when making API calls
+
+
+---
+title: "Reference: Speechify Voice | Voice Providers | Mastra Docs"
+description: "Documentation for the Speechify voice implementation, providing text-to-speech capabilities."
+---
+
+# Speechify
+Source: https://mastra.ai/docs/reference/voice/speechify
+
+The Speechify voice implementation in Mastra provides text-to-speech capabilities using Speechify's API.
+
+## Usage Example
 
 ```typescript
-import { DeepgramTTS } from "@mastra/speech-deepgram";
+import { SpeechifyVoice } from "@mastra/voice-speechify";
 
-const tts = new DeepgramTTS({
-  model: {
-    name: "aura",
-    voice: "asteria-en",
-    apiKey: process.env.DEEPGRAM_API_KEY,
+// Initialize with default configuration (uses SPEECHIFY_API_KEY environment variable)
+const voice = new SpeechifyVoice();
+
+// Initialize with custom configuration
+const voice = new SpeechifyVoice({
+  speechModel: {
+    name: 'simba-english',
+    apiKey: 'your-api-key'
   },
+  speaker: 'george'  // Default voice
 });
 
-const { audioResult } = await tts.stream({ text: "What is AI?" });
-
-// Create a write stream
-const outputPath = path.join(
-  process.cwd(),
-  "/test-outputs/deepgram-stream.mp3",
-);
-const writeStream = createWriteStream(outputPath);
-
-// Pipe the audio stream to the file
-audioResult.pipe(writeStream);
-```
-
-### Google Streaming
-
-```typescript
-import { GoogleTTS } from "@mastra/speech-google";
-
-const tts = new GoogleTTS({
-  model: {
-    name: "en-US-Standard-A",
-    credentials: process.env.GOOGLE_CREDENTIALS,
-  },
+// Convert text to speech
+const audioStream = await voice.speak("Hello, world!", {
+  speaker: 'henry',  // Override default voice
 });
-
-const { audioResult } = await tts.stream({ text: "What is AI?" });
-
-// Create a write stream
-const outputPath = path.join(process.cwd(), "/test-outputs/google-stream.mp3");
-const writeStream = createWriteStream(outputPath);
-
-// Pipe the audio stream to the file
-audioResult.pipe(writeStream);
 ```
 
-### IBM Streaming
+## Constructor Parameters
 
-```typescript
-import { IbmTTS } from "@mastra/speech-ibm";
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "SpeechifyConfig",
+      description: "Configuration for text-to-speech functionality",
+      isOptional: true,
+      defaultValue: "{ name: 'simba-english' }",
+    },
+    {
+      name: "speaker",
+      type: "SpeechifyVoiceId",
+      description: "Default voice ID to use for speech synthesis",
+      isOptional: true,
+      defaultValue: "'george'",
+    },
+  ]}
+/>
 
-const tts = new IbmTTS({
-  model: {
-    voice: "en-US_AllisonV3Voice",
-    apiKey: process.env.IBM_API_KEY,
-  },
-});
+### SpeechifyConfig
 
-const { audioResult } = await tts.stream({ text: "What is AI?" });
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "VoiceModelName",
+      description: "The Speechify model to use",
+      isOptional: true,
+      defaultValue: "'simba-english'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Speechify API key. Falls back to SPEECHIFY_API_KEY environment variable",
+      isOptional: true,
+    },
+  ]}
+/>
 
-// Create a write stream
-const outputPath = path.join(process.cwd(), "/test-outputs/ibm-stream.mp3");
-const writeStream = createWriteStream(outputPath);
+## Methods
 
-// Pipe the audio stream to the file
-audioResult.pipe(writeStream);
-```
+### speak()
 
-### Murf Streaming
+Converts text to speech using the configured speech model and voice.
 
-```typescript
-import { MurfTTS } from "@mastra/speech-murf";
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      isOptional: false,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "Override the default speaker for this request",
+      isOptional: true,
+      defaultValue: "Constructor's speaker value",
+    },
+    {
+      name: "options.model",
+      type: "VoiceModelName",
+      description: "Override the default model for this request",
+      isOptional: true,
+      defaultValue: "Constructor's model value",
+    },
+  ]}
+/>
 
-const tts = new MurfTTS({
-  model: {
-    name: "GEN2",
-    voice: "en-US-natalie",
-    apiKey: process.env.MURF_API_KEY,
-  },
-});
+Returns: `Promise<NodeJS.ReadableStream>`
 
-const { audioResult } = await tts.stream({ text: "What is AI?" });
+### getSpeakers()
 
-// Create a write stream
-const outputPath = path.join(process.cwd(), "/test-outputs/murf-stream.mp3");
-const writeStream = createWriteStream(outputPath);
+Returns an array of available voice options, where each node contains:
 
-// Pipe the audio stream to the file
-audioResult.pipe(writeStream);
-```
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Display name of the voice",
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "Language code for the voice",
+    },
+    {
+      name: "gender",
+      type: "string",
+      description: "Gender of the voice",
+    },
+  ]}
+/>
+
+### listen()
+
+This method is not supported by Speechify and will throw an error. Speechify does not provide speech-to-text functionality.
+
+## Notes
+
+- Speechify requires an API key for authentication
+- The default model is 'simba-english'
+- Speech-to-text functionality is not supported
+- Additional audio stream options can be passed through the speak() method's options parameter
 
 
 ---
@@ -13927,7 +15311,7 @@ workflow
   content={[
     {
       name: "stepId",
-      type: "string | string[]",
+      type: "string",
       description: "ID(s) of step(s) that must complete before continuing",
       isOptional: false
     }
@@ -13956,19 +15340,13 @@ workflow
 
 ---
 title: "Reference: Workflow.commit() | Running Workflows | Mastra Docs"
-description: Documentation for the `.commit()` method in workflows, which finalizes and validates workflow definitions.
+description: Documentation for the `.commit()` method in workflows, which re-initializes the workflow machine with the current step configuration.
 ---
 
 # Workflow.commit()
 Source: https://mastra.ai/docs/reference/workflows/commit
 
-The `.commit()` method finalizes a workflow definition, validating its structure and making it ready for execution. When calling `.commit()`, the workflow validates:
-
-- No circular dependencies between steps
-- All paths must have an end point
-- No unreachable steps
-- No duplicate step IDs
-- Variable references to non-existent steps
+The `.commit()` method re-initializes the workflow's state machine with the current step configuration.
 
 ## Usage
 
@@ -13986,51 +15364,7 @@ workflow
     {
       name: "workflow",
       type: "Workflow",
-      description: "The validated workflow instance"
-    }
-  ]}
-/>
-
-## Error Handling
-
-```typescript
-try {
-  workflow
-    .step(stepA)
-    .after(['stepB', 'stepC'])
-    .step(stepD)
-    .commit();
-} catch (error) {
-  if (error instanceof ValidationError) {
-    console.log(error.type); // 'circular_dependency' | 'no_terminal_path' | 'unreachable_step'
-    console.log(error.details);
-  }
-}
-```
-
-### Validation Error Types
-
-<PropertiesTable
-  content={[
-    {
-      name: "circular_dependency",
-      type: "string",
-      description: "Steps form a circular reference"
-    },
-    {
-      name: "no_terminal_path",
-      type: "string",
-      description: "Path has no end point"
-    },
-    {
-      name: "unreachable_step",
-      type: "string",
-      description: "Step cannot be reached from workflow start"
-    },
-    {
-      name: "duplicate_step_id",
-      type: "string",
-      description: "Multiple steps share the same ID"
+      description: "The workflow instance"
     }
   ]}
 />
@@ -14110,7 +15444,7 @@ try {
 
 
 ---
-title: "Reference: Workflow.execute() | Workflows | Mastra Docs"
+title: "Reference: Workflow.execute() | Workflows | Mastra Docs" 
 description: "Documentation for the `.execute()` method in Mastra workflows, which runs workflow steps and returns results."
 ---
 
@@ -14136,7 +15470,7 @@ const result = await workflow.execute({
 });
 ```
 
-## Parameters
+## Parameters 
 
 <PropertiesTable
   content={[
@@ -14153,7 +15487,7 @@ const result = await workflow.execute({
           isOptional: false
         },
         {
-          name: "runId",
+          name: "runId", 
           type: "string",
           description: "Optional ID to track this execution run",
           isOptional: true
@@ -14174,7 +15508,7 @@ const result = await workflow.execute({
       properties: [
         {
           name: "runId",
-          type: "string",
+          type: "string", 
           description: "Unique identifier for this execution run"
         },
         {
@@ -14236,7 +15570,7 @@ The `.resume()` method continues execution of a suspended workflow step, optiona
 ```typescript copy showLineNumbers
 await workflow.resume({
   runId: "abc-123",
-  stepId: "stepTwo",
+  stepId: "stepTwo", 
   context: {
     secondValue: 100
   }
@@ -14262,7 +15596,7 @@ await workflow.resume({
   content={[
     {
       name: "runId",
-      type: "string",
+      type: "string", 
       description: "Unique identifier of the workflow run to resume",
       isOptional: false
     },
@@ -14337,8 +15671,8 @@ The start function begins execution of a workflow run. It processes all steps in
 
 ```typescript copy showLineNumbers
 const { runId, start } = workflow.createRun();
-const result = await start({
-  triggerData: { inputValue: 42 }
+const result = await start({ 
+  triggerData: { inputValue: 42 } 
 });
 ```
 
@@ -14458,7 +15792,7 @@ const processOrder = new Step({
       required: false
     },
     {
-      name: "outputSchema",
+      name: "outputSchema", 
       type: "z.ZodSchema",
       description: "Zod schema to validate step output data",
       required: false
@@ -15230,7 +16564,7 @@ A workflow's status indicates its current execution state. The possible values a
     },
     {
       name: "RUNNING",
-      type: "string",
+      type: "string", 
       description: "Workflow is actively executing steps"
     },
     {
@@ -15440,9 +16774,7 @@ Or use the API (requires running `mastra dev`):
 curl --location 'http://localhost:4111/api/workflows/myWorkflow/execute' \
      --header 'Content-Type: application/json' \
      --data '{
-       "triggerData": {
-         "inputValue": 45
-       }
+       "inputValue": 45
      }'
 ```
 
@@ -15522,15 +16854,16 @@ myWorkflow
   .after(stepA)
     .step(stepC)
     .then(stepE)
-  .after([stepD, stepE])
+  .after(stepD)
     .step(stepF);
+    .step(stepE)
 ```
 
 In this example:
 
 - stepA leads to stepB, then to stepD.
 - Separately, stepA also triggers stepC, which in turn leads to stepE.
-- The workflow waits for both stepD and stepE to finish before proceeding to stepF.
+- Separately, stepD also triggers stepF and stepE in parallel.
 
 See the [Branching Paths](../../examples/workflows/branching-paths.mdx) example for more details.
 
@@ -15652,7 +16985,7 @@ workflow.step(
   new Step({
     id: "sendEmail",
     execute: async ({ context }) => {
-      const orderStatus = context.steps.processOrder.payload.status;
+      const orderStatus = context.steps.processOrder.output.status;
       console.log(orderStatus);
     },
   })
@@ -15848,6 +17181,136 @@ await start({ triggerData: { inputValue: 45 } });
 - Check the [Step Class Reference](../reference/workflows/step-class.mdx) for suspend/resume API details
 - Review [Workflow Observability](../reference/observability/otel-config.mdx) for monitoring suspended workflows
 
+
+---
+title: "Example: Adding Voice Capabilities | Agents | Mastra"
+description: "Example of adding voice capabilities to Mastra agents, enabling them to speak and listen using different voice providers."
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Giving your Agent a Voice
+Source: https://mastra.ai/examples/agents/adding-voice-capabilities
+
+This example demonstrates how to add voice capabilities to Mastra agents, enabling them to speak and listen using different voice providers. We'll create two agents with different voice configurations and show how they can interact using speech.
+
+The example showcases:
+1. Using CompositeVoice to combine different providers for speaking and listening
+2. Using a single provider for both capabilities
+3. Basic voice interactions between agents
+
+First, let's import the required dependencies and set up our agents:
+
+```ts showLineNumbers copy
+// Import required dependencies
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { CompositeVoice } from '@mastra/core/voice';
+import { OpenAIVoice } from '@mastra/voice-openai';
+import { createReadStream, createWriteStream } from 'fs';
+import { PlayAIVoice } from '@mastra/voice-playai';
+import path from 'path';
+
+// Initialize Agent 1 with both listening and speaking capabilities
+const agent1 = new Agent({
+  name: 'Agent1',
+  instructions: `You are an agent with both STT and TTS capabilities.`,
+  model: openai('gpt-4o'),
+  voice: new CompositeVoice({
+    listenProvider: new OpenAIVoice(), // For converting speech to text
+    speakProvider: new PlayAIVoice(), // For converting text to speech
+  }),
+});
+
+// Initialize Agent 2 with just OpenAI for both listening and speaking capabilities
+const agent2 = new Agent({
+  name: 'Agent2',
+  instructions: `You are an agent with both STT and TTS capabilities.`,
+  model: openai('gpt-4o'),
+  voice: new OpenAIVoice(),
+});
+```
+
+In this setup:
+- Agent1 uses a CompositeVoice that combines OpenAI for speech-to-text and PlayAI for text-to-speech
+- Agent2 uses OpenAI's voice capabilities for both functions
+
+Now let's demonstrate a basic interaction between the agents:
+
+```ts showLineNumbers copy
+// Step 1: Agent 1 speaks a question and saves it to a file
+const audio1 = await agent1.speak('What is the meaning of life in one sentence?');
+await saveAudioToFile(audio1, 'agent1-question.mp3');
+
+// Step 2: Agent 2 listens to Agent 1's question
+const audioFilePath = path.join(process.cwd(), 'agent1-question.mp3');
+const audioStream = createReadStream(audioFilePath);
+const audio2 = await agent2.listen(audioStream);
+const text = await convertToText(audio2);
+
+// Step 3: Agent 2 generates and speaks a response
+const agent2Response = await agent2.generate(text);
+const agent2ResponseAudio = await agent2.speak(agent2Response.text);
+await saveAudioToFile(agent2ResponseAudio, 'agent2-response.mp3');
+```
+
+Here's what's happening in the interaction:
+1. Agent1 converts text to speech using PlayAI and saves it to a file (we save the audio so you can hear the interaction)
+2. Agent2 listens to the audio file using OpenAI's speech-to-text
+3. Agent2 generates a response and converts it to speech
+
+The example includes helper functions for handling audio files:
+
+```ts showLineNumbers copy
+/**
+ * Saves an audio stream to a file
+ */
+async function saveAudioToFile(audio: NodeJS.ReadableStream, filename: string): Promise<void> {
+  const filePath = path.join(process.cwd(), filename);
+  const writer = createWriteStream(filePath);
+  audio.pipe(writer);
+  return new Promise<void>((resolve, reject) => {
+    writer.on('finish', resolve);
+    writer.on('error', reject);
+  });
+}
+
+/**
+ * Converts either a string or a readable stream to text
+ */
+async function convertToText(input: string | NodeJS.ReadableStream): Promise<string> {
+  if (typeof input === 'string') {
+    return input;
+  }
+
+  const chunks: Buffer[] = [];
+  return new Promise<string>((resolve, reject) => {
+    input.on('data', chunk => chunks.push(Buffer.from(chunk)));
+    input.on('error', err => reject(err));
+    input.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+  });
+}
+```
+
+## Key Points
+
+1. The `voice` property in the Agent configuration accepts any implementation of MastraVoice
+2. CompositeVoice allows using different providers for speaking and listening
+3. Audio can be handled as streams, making it efficient for real-time processing
+4. Voice capabilities can be combined with the agent's natural language processing
+
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/voice-capabilities"
+  }
+/>
 
 ---
 title: "Example: Calling Agentic Workflows | Agents | Mastra Docs"
@@ -16143,7 +17606,7 @@ const getRandomImage = async ({
 };
 
 const instructions = `
-  You can view an image and figure out if it is a bird or not.
+  You can view an image and figure out if it is a bird or not. 
   You can also figure out the species of the bird and where the picture was taken.
 `;
 
@@ -18707,7 +20170,7 @@ The metric provides:
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/keyword-coverage"
   }
-/>
+/> 
 
 ---
 title: "Example: Prompt Alignment | Evals | Mastra Docs"
@@ -18942,11 +20405,11 @@ const metric = new SummarizationMetric(openai('gpt-4o-mini'));
 Evaluate a summary that maintains both factual accuracy and complete coverage:
 
 ```typescript copy showLineNumbers{7} filename="src/index.ts"
-const input1 = `The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning.
-Elon Musk joined in 2004 as the largest investor and became CEO in 2008. The company's first car,
+const input1 = `The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning. 
+Elon Musk joined in 2004 as the largest investor and became CEO in 2008. The company's first car, 
 the Roadster, was launched in 2008.`;
 
-const output1 = `Tesla, founded by Martin Eberhard and Marc Tarpenning in 2003, launched its first car,
+const output1 = `Tesla, founded by Martin Eberhard and Marc Tarpenning in 2003, launched its first car, 
 the Roadster, in 2008. Elon Musk joined as the largest investor in 2004 and became CEO in 2008.`;
 
 console.log('Example 1 - High-quality Summary:');
@@ -18978,12 +20441,12 @@ console.log('Metric Result:', {
 Evaluate a summary that is factually accurate but omits important information:
 
 ```typescript copy showLineNumbers{24} filename="src/index.ts"
-const input2 = `The Python programming language was created by Guido van Rossum and was first released
-in 1991. It emphasizes code readability with its notable use of significant whitespace. Python is
-dynamically typed and garbage-collected. It supports multiple programming paradigms, including
+const input2 = `The Python programming language was created by Guido van Rossum and was first released 
+in 1991. It emphasizes code readability with its notable use of significant whitespace. Python is 
+dynamically typed and garbage-collected. It supports multiple programming paradigms, including 
 structured, object-oriented, and functional programming.`;
 
-const output2 = `Python, created by Guido van Rossum, is a programming language known for its readable
+const output2 = `Python, created by Guido van Rossum, is a programming language known for its readable 
 code and use of whitespace. It was released in 1991.`;
 
 console.log('Example 2 - Partial Coverage:');
@@ -19015,11 +20478,11 @@ console.log('Metric Result:', {
 Evaluate a summary that contains factual errors and misrepresentations:
 
 ```typescript copy showLineNumbers{41} filename="src/index.ts"
-const input3 = `The World Wide Web was invented by Tim Berners-Lee in 1989 while working at CERN.
-He published the first website in 1991. Berners-Lee made the Web freely available, with no patent
+const input3 = `The World Wide Web was invented by Tim Berners-Lee in 1989 while working at CERN. 
+He published the first website in 1991. Berners-Lee made the Web freely available, with no patent 
 and no royalties due.`;
 
-const output3 = `The Internet was created by Tim Berners-Lee at MIT in the early 1990s, and he went
+const output3 = `The Internet was created by Tim Berners-Lee at MIT in the early 1990s, and he went 
 on to commercialize the technology through patents.`;
 
 console.log('Example 3 - Inaccurate Summary:');
@@ -19075,7 +20538,7 @@ Final score is determined by the minimum of these two scores, ensuring that both
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/summarization"
   }
-/>
+/> 
 
 ---
 title: "Example: Textual Difference | Evals | Mastra Docs"
@@ -19247,7 +20710,7 @@ The metric provides:
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/textual-difference"
   }
-/>
+/> 
 
 ---
 title: "Example: Tone Consistency | Evals | Mastra Docs"
@@ -19409,7 +20872,7 @@ The metric provides different outputs based on the mode:
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/tone-consistency"
   }
-/>
+/> 
 
 ---
 title: "Example: Toxicity | Evals | Mastra Docs"
@@ -19555,7 +21018,7 @@ The metric provides:
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/toxicity"
   }
-/>
+/> 
 
 ---
 title: "Examples List: Workflows, Agents, RAG | Mastra Docs"
@@ -19718,7 +21181,7 @@ The Examples section is a short list of example projects demonstrating basic AI 
       { title: "Chain of Thought Prompting", href: "/examples/rag/cot-rag" },
       {
         title: "Chain of Thought Prompting w/Workflow",
-        href: "/examples/rag/cot-rag",
+        href: "/examples/rag/cot-workflow-rag",
       },
       { title: "Graph RAG", href: "/examples/rag/graph-rag" },
     ],
@@ -19784,7 +21247,7 @@ The Examples section is a short list of example projects demonstrating basic AI 
       href: "/examples/evals/textual-difference",
     },
     {
-      title: "Tone Consistency",
+      title: "Tone Consistency", 
       href: "/examples/evals/tone-consistency",
     },
     {
@@ -19828,13 +21291,14 @@ If you need more control, you can explicitly configure the storage, vector datab
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
-import { DefaultStorage, DefaultVectorDB } from "@mastra/core/storage";
+import { LibSQLStore } from "@mastra/core/storage/libsql";
+import { LibSQLVector } from "@mastra/core/vector/libsql";
 
 const customMemory = new Memory({
-  storage: new DefaultStorage({
+  storage: new LibSQLStore({
     url: process.env.DATABASE_URL || "file:local.db",
   }),
-  vector: new DefaultVectorDB({
+  vector: new LibSQLVector({
     connectionUrl: process.env.DATABASE_URL || "file:local.db",
   }),
   options: {
@@ -20508,7 +21972,7 @@ const agent = mastra.getAgent('ragAgent');
 ```typescript copy showLineNumbers{32} filename="src/index.ts"
 const prompt = `
 [Insert query based on document here]
-Please base your answer only on the context provided in the tool.
+Please base your answer only on the context provided in the tool. 
 If the context doesn't contain enough information to fully answer the question, please state that explicitly.
 `;
 
@@ -20891,9 +22355,9 @@ async function generateResponse(query: string, agent: Agent) {
       Please answer the following question:
       ${query}
 
-      Please base your answer only on the context provided in the tool with this index ${index}.
-      If the context doesn't contain enough information to fully answer the question,
-      please state that explicitly.
+      Please base your answer only on the context provided in the tool with this index ${index}. 
+      If the context doesn't contain enough information to fully answer the question, 
+      please state that explicitly. 
       `;
   // Call the agent to generate a response
   const completion = await agent.generate(prompt);
@@ -21090,7 +22554,7 @@ async function generateResponse(query: string) {
     Please answer the following question using chain-of-thought reasoning:
     ${query}
 
-    Please base your answer only on the context provided in the tool. If the context doesn't
+    Please base your answer only on the context provided in the tool. If the context doesn't 
     contain enough information to fully answer the question, please state that explicitly.
     Remember: Explain how you're using the retrieved information to reach your conclusions.
     `;
@@ -21730,7 +23194,7 @@ export const ragAgent = new Agent({
   You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
 
   Use the vectorQueryTool to filter the context by searching the metadata.
-
+  
   The metadata is structured as follows:
 
   {
@@ -22074,7 +23538,7 @@ The system implements filtered vector search using Mastra and PGVector. Here's w
 3. Demonstrates combining vector similarity with metadata filtering
 
 > **Note**: For examples of how to extract metadata from your documents, see the [Metadata Extraction](./metadata-extraction) guide.
->
+> 
 > To learn how to create and store embeddings in PGVector, see the [Insert Embeddings in PGVector](./insert-embedding-in-pgvector) guide.
 
 ## Setup
@@ -22228,7 +23692,7 @@ await chroma.upsert(
   chunks?.map(chunk => ({ text: chunk.text })),
 );
 ```
-{/*
+{/* 
 <br />
 <br />
 <hr className="dark:border-[#404040] border-gray-300" />
@@ -22247,11 +23711,11 @@ import { GithubLink } from "../../../components/github-link";
 # Insert Embedding in LibSQL
 Source: https://mastra.ai/examples/rag/insert-embedding-in-libsql
 
-After generating embeddings, you need to store them in a vector database for similarity search. The `DefaultVectorDB` class provides methods to create collections and insert embeddings into LibSQL, a fork of SQLite with vector extensions. This example shows how to store embeddings in LibSQL for later retrieval.
+After generating embeddings, you need to store them in a vector database for similarity search. The `LibSQLVector` class provides methods to create collections and insert embeddings into LibSQL, a fork of SQLite with vector extensions. This example shows how to store embeddings in LibSQL for later retrieval.
 
 ```tsx copy
 import { openai } from "@ai-sdk/openai";
-import { DefaultVectorDB } from "@mastra/core/storage";
+import { LibSQLVector } from "@mastra/core/vector/libsql";
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
 
@@ -22264,7 +23728,10 @@ const { embeddings } = await embedMany({
   model: openai.embedding("text-embedding-3-small"),
 });
 
-const libsql = new DefaultVectorDB(process.env.DATABASE_URL);
+const libsql = new LibSQLVector({
+  connectionUrl: process.env.DATABASE_URL,
+  authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
+});
 
 await libsql.createIndex("test_collection", 1536);
 
@@ -22315,7 +23782,7 @@ const { embeddings } = await embedMany({
   model: openai.embedding("text-embedding-3-small"),
  });
 
-const pgVector = new PgVector("postgresql://localhost:5432/mydb");
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 await pgVector.createIndex("test_index", 1536);
 
@@ -22365,12 +23832,12 @@ const { embeddings } = await embedMany({
   model: openai.embedding('text-embedding-3-small'),
 });
 
-const pinecone = new PineconeVector('your-api-key');
+const pinecone = new PineconeVector(process.env.PINECONE_API_KEY!);
 
-await pinecone.createIndex('test_index', 1536);
+await pinecone.createIndex('testindex', 1536);
 
 await pinecone.upsert(
-  'test_index',
+  'testindex',
   embeddings,
   chunks?.map(chunk => ({ text: chunk.text })),
 );
@@ -22412,9 +23879,9 @@ const { embeddings } = await embedMany({
   maxRetries: 3,
 });
 
-const qdrant = new QdrantVector({
-  url: process.env.QDRANT_URL,
-  apiKey: process.env.QDRANT_API_KEY,
+const qdrant = new QdrantVector(
+  process.env.QDRANT_URL,
+  process.env.QDRANT_API_KEY,
 });
 
 await qdrant.createIndex('test_collection', 1536);
@@ -22523,7 +23990,7 @@ await vectorize.upsert(
   chunks?.map(chunk => ({ text: chunk.text })),
 );
 ```
-{/*
+{/* 
 <br />
 <br />
 <hr className="dark:border-[#404040] border-gray-300" />
@@ -22569,7 +24036,7 @@ Create a document from text content:
 ```typescript copy showLineNumbers{3} filename="src/index.ts"
 const doc = MDocument.fromText(`Title: The Benefits of Regular Exercise
 
-Regular exercise has numerous health benefits. It improves cardiovascular health,
+Regular exercise has numerous health benefits. It improves cardiovascular health, 
 strengthens muscles, and boosts mental wellbeing.
 
 Key Benefits:
@@ -22578,7 +24045,7 @@ Key Benefits:
 • Helps maintain healthy weight
 • Increases energy levels
 
-For optimal results, experts recommend at least 150 minutes of moderate exercise
+For optimal results, experts recommend at least 150 minutes of moderate exercise 
 per week.`);
 ```
 
@@ -22653,7 +24120,7 @@ console.log('Chunk Metadata:', metaTwo);
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/metadata-extraction"
   }
-/>
+/> 
 
 ---
 title: "Example: Re-ranking Results with Tools | Retrieval | RAG | Mastra Docs"
@@ -22815,7 +24282,7 @@ async function generateResponse(query: string) {
       Please answer the following question:
       ${query}
 
-      Please base your answer only on the context provided in the tool. If the context doesn't
+      Please base your answer only on the context provided in the tool. If the context doesn't 
       contain enough information to fully answer the question, please state that explicitly.
       `;
 
@@ -22856,7 +24323,7 @@ await answerQueries(queries);
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank-rag"
   }
-/>
+/> 
 
 ---
 title: "Example: Re-ranking Results | Retrieval | RAG | Mastra Docs"
@@ -23014,7 +24481,7 @@ The re-ranked results show how combining vector similarity with semantic underst
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank"
   }
-/>
+/> 
 
 ---
 title: "Example: Reranking with Cohere | RAG | Mastra Docs"
@@ -23024,11 +24491,11 @@ description: Example of using Mastra to improve document retrieval relevance wit
 # Reranking with Cohere
 Source: https://mastra.ai/examples/rag/reranking-with-cohere
 
-When retrieving documents for RAG, initial vector similarity search may miss important semantic matches.
+When retrieving documents for RAG, initial vector similarity search may miss important semantic matches. 
 
 Cohere's reranking service helps improve result relevance by reordering documents using multiple scoring factors.
 
-```typescript
+```typescript 
 import { rerank } from "@mastra/rag";
 
 const results = rerank(
@@ -23062,7 +24529,7 @@ import { GithubLink } from "../../../components/github-link";
 # Retrieving Top-K Results
 Source: https://mastra.ai/examples/rag/retrieve-results
 
-After storing embeddings in a vector database, you need to query them to find similar content.
+After storing embeddings in a vector database, you need to query them to find similar content. 
 
 The `query` method returns the most semantically similar chunks to your input embedding, ranked by relevance. The `topK` parameter allows you to specify the number of results to return.
 
@@ -23425,10 +24892,6 @@ async function main() {
     .then(incrementByOne)
     .after(doubleValue)
     .step(doubleValue, {
-      when: {
-        ref: { step: doubleValue, path: 'doubledValue' },
-        query: { $eq: 12 },
-      },
       variables: {
         inputValue: {
           step: doubleValue,
@@ -23738,7 +25201,7 @@ export const mastra = new Mastra({
 // Get registered workflow from Mastra
 const registeredWorkflow = mastra.getWorkflow('registeredWorkflow');
 const { runId, start } = registeredWorkflow.createRun();
-
+ 
 // Start watching the workflow before executing it
 myWorkflow.watch(async ({ context, activePaths }) => {
   for (const _path of activePaths) {

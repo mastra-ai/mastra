@@ -160,7 +160,7 @@ export class LibSQLStore extends MastraStorage {
     const values = Object.values(keys);
 
     const result = await this.client.execute({
-      sql: `SELECT * FROM ${tableName} WHERE ${conditions} LIMIT 1`,
+      sql: `SELECT * FROM ${tableName} WHERE ${conditions} ORDER BY createdAt DESC LIMIT 1`,
       args: values,
     });
 

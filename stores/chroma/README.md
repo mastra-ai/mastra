@@ -1,6 +1,6 @@
 # @mastra/chroma
 
-Vector store implementation for ChromaDB using the official chromadb client with added dimension validation and collection management.
+Vector store implementation for ChromaDB using the official chromadb client with added dimension validation, collection management, and document storage capabilities.
 
 ## Installation
 
@@ -24,18 +24,26 @@ const vectorStore = new ChromaVector({
 // Create a new collection
 await vectorStore.createIndex('my-collection', 1536, 'cosine');
 
-// Add vectors
+// Add vectors with documents
 const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
 const metadata = [{ text: 'doc1' }, { text: 'doc2' }];
-const ids = await vectorStore.upsert('my-collection', vectors, metadata);
+const documents = ['full text 1', 'full text 2'];
+const ids = await vectorStore.upsert(
+  'my-collection',
+  vectors,
+  metadata,
+  undefined, // auto-generate IDs
+  documents  // store original text
+);
 
-// Query vectors
+// Query vectors with document filtering
 const results = await vectorStore.query(
   'my-collection',
   [0.1, 0.2, ...],
   10, // topK
-  { text: { $eq: 'doc1' } }, // optional filter
-  false // includeVector
+  { text: { $eq: 'doc1' } }, // metadata filter
+  false, // includeVector
+  { $contains: 'specific text' } // document content filter
 );
 ```
 
@@ -54,6 +62,8 @@ Optional:
 ## Features
 
 - Vector similarity search with cosine, euclidean, and dot product metrics
+- Document storage and retrieval
+- Document content filtering
 - Strict vector dimension validation
 - Collection-based organization
 - Metadata filtering support
@@ -65,8 +75,8 @@ Optional:
 ## Methods
 
 - `createIndex(indexName, dimension, metric?)`: Create a new collection
-- `upsert(indexName, vectors, metadata?, ids?)`: Add or update vectors
-- `query(indexName, queryVector, topK?, filter?, includeVector?)`: Search for similar vectors
+- `upsert(indexName, vectors, metadata?, ids?, documents?)`: Add or update vectors with optional document storage
+- `query(indexName, queryVector, topK?, filter?, includeVector?, documentFilter?)`: Search for similar vectors with optional document filtering
 - `listIndexes()`: List all collections
 - `describeIndex(indexName)`: Get collection statistics
 - `deleteIndex(indexName)`: Delete a collection
@@ -78,6 +88,7 @@ Query results include:
 - `id`: Vector ID
 - `score`: Distance/similarity score
 - `metadata`: Associated metadata
+- `document`: Original document text (if stored)
 - `vector`: Original vector (if includeVector is true)
 
 ## Related Links

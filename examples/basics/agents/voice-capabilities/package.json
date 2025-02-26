@@ -1,0 +1,29 @@
+{
+  "name": "voice-agent",
+  "version": "1.0.1-alpha.0",
+  "description": "",
+  "main": "index.js",
+  "private": true,
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@ai-sdk/openai": "^1.1.14",
+    "@mastra/core": "workspace:*",
+    "mastra": "workspace:*",
+    "zod": "^3.24.2",
+    "@mastra/voice-openai": "workspace:*",
+    "@mastra/voice-elevenlabs": "workspace:*",
+    "@mastra/voice-playai": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  }
+}

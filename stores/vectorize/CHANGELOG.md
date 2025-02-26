@@ -1,5 +1,13 @@
 # @mastra/vectorize
 
+## 0.1.6-alpha.0
+
+### Patch Changes
+
+- 0f7bd01: Fixed upsert for vectorize by adding \_\_binaryRequest
+- Updated dependencies [06aa827]
+  - @mastra/core@0.4.3-alpha.0
+
 ## 0.1.5
 
 ### Patch Changes
