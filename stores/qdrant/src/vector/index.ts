@@ -1,6 +1,8 @@
-import { type Filter } from '@mastra/core/filter';
-import { MastraVector, type QueryResult, type IndexStats } from '@mastra/core/vector';
-import { QdrantClient, type Schemas } from '@qdrant/js-client-rest';
+import type { Filter } from '@mastra/core/filter';
+import { MastraVector } from '@mastra/core/vector';
+import type { QueryResult, IndexStats } from '@mastra/core/vector';
+import { QdrantClient } from '@qdrant/js-client-rest';
+import type { Schemas } from '@qdrant/js-client-rest';
 
 import { QdrantFilterTranslator } from './filter';
 

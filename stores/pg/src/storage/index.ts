@@ -1,12 +1,7 @@
-import { type MessageType, type StorageThreadType } from '@mastra/core/memory';
-import {
-  MastraStorage,
-  type EvalRow,
-  type StorageColumn,
-  type StorageGetMessagesArg,
-  type TABLE_NAMES,
-} from '@mastra/core/storage';
-import { type WorkflowRunState } from '@mastra/core/workflows';
+import type { MessageType, StorageThreadType } from '@mastra/core/memory';
+import { MastraStorage } from '@mastra/core/storage';
+import type { EvalRow, StorageColumn, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 
 function safelyParseJSON(json: string): any {

@@ -1,4 +1,4 @@
-import { QueryResult, IndexStats } from '@mastra/core/vector';
+import type { QueryResult, IndexStats } from '@mastra/core/vector';
 import { describe, expect, beforeEach, afterEach, it, beforeAll, afterAll } from 'vitest';
 
 import { ChromaVector } from './';
