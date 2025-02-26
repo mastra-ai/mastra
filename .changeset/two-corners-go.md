@@ -2,4 +2,4 @@
 '@mastra/pg': patch
 ---
 
-Renamed defineIndex to rebuildIndex
+Renamed defineIndex to buildIndex
