@@ -164,6 +164,7 @@ interface QueryResult {
   id: string;
   score: number;
   metadata: Record<string, any>;
+  vector?: number[]; // Only included if includeVector is true
 }
 ```
 
