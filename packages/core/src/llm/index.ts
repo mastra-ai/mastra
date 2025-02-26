@@ -11,6 +11,7 @@ import type {
   LanguageModelV1,
   StreamObjectResult,
   StreamTextResult,
+  TelemetrySettings,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
@@ -82,6 +83,7 @@ export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undef
   maxSteps?: number;
   temperature?: number;
   experimental_output?: Z;
+  telemetry?: TelemetrySettings;
 } & Run;
 
 export type LLMTextObjectOptions<T> = LLMTextOptions & {
@@ -98,6 +100,7 @@ export type LLMStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = und
   output?: OutputType | Z;
   temperature?: number;
   experimental_output?: Z;
+  telemetry?: TelemetrySettings;
 };
 
 export type LLMInnerStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
@@ -110,6 +113,7 @@ export type LLMInnerStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined 
   temperature?: number;
   toolChoice?: 'auto' | 'required';
   experimental_output?: Z;
+  telemetry?: TelemetrySettings;
 } & Run;
 
 export type LLMStreamObjectOptions<T> = LLMInnerStreamOptions & {
