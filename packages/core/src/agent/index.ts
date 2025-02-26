@@ -646,7 +646,15 @@ export class Agent<
         let coreMessages = messages;
         let threadIdToUse = threadId;
 
-        if (this.getMemory() && resourceId) {
+        const memory = this.getMemory();
+
+        if (threadId && memory && !resourceId) {
+          throw new Error(
+            `A resourceId must be provided when passing a threadId and using Memory. Saw threadId ${threadId} but resourceId is ${resourceId}`,
+          );
+        }
+
+        if (memory && resourceId) {
           this.logger.debug(
             `[Agent:${this.name}] - Memory persistence enabled: store=${this.getMemory()?.constructor.name}, resourceId=${resourceId}`,
             {
