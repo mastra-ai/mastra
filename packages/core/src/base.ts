@@ -1,5 +1,5 @@
-import { createLogger, RegisteredLogger } from './logger';
 import type { Logger } from './logger';
+import { createLogger, RegisteredLogger } from './logger';
 import type { Telemetry } from './telemetry';
 
 export class MastraBase {
