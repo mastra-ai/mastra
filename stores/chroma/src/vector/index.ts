@@ -101,6 +101,10 @@ export class ChromaVector extends MastraVector {
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new Error('Dimension must be a positive integer');
     }
+    const hnswSpace = this.HnswSpaceMap[metric];
+    if (!['cosine', 'l2', 'ip'].includes(hnswSpace)) {
+      throw new Error(`Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`);
+    }
     await this.client.createCollection({
       name: indexName,
       metadata: {
@@ -128,7 +132,6 @@ export class ChromaVector extends MastraVector {
     const defaultInclude = ['documents', 'metadatas', 'distances'];
 
     const translatedFilter = this.transformFilter(filter);
-    // const translatedDocumentFilter = this.transformDocumentFilter(documentFilter);
     const results = await collection.query({
       queryEmbeddings: [queryVector],
       nResults: topK,
