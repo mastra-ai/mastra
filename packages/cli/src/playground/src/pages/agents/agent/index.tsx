@@ -15,7 +15,6 @@ import { useAgent } from '@/hooks/use-agents';
 import { useMemory, useMessages } from '@/hooks/use-memory';
 import type { Message } from '@/types';
 
-
 function Agent() {
   const { agentId, threadId } = useParams();
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
