@@ -3,7 +3,7 @@ title: "Reference: CompositeVoice | Voice Providers | Mastra Docs"
 description: "Documentation for the CompositeVoice class, which enables combining multiple voice providers for flexible text-to-speech and speech-to-text operations."
 ---
 
-# CompositeVoice Reference
+# CompositeVoice
 
 The CompositeVoice class allows you to combine different voice providers for text-to-speech and speech-to-text operations. This is particularly useful when you want to use the best provider for each operation - for example, using OpenAI for speech-to-text and PlayAI for text-to-speech.
 
@@ -64,18 +64,6 @@ const audio = await voice.speak("Hello, world!");
 
 Converts text to speech using the configured speaking provider.
 
-```typescript
-async speak(
-  input: string | NodeJS.ReadableStream,
-  options?: {
-    speaker?: string;
-    [key: string]: any;
-  }
-): Promise<NodeJS.ReadableStream>
-```
-
-#### Parameters
-
 <PropertiesTable
   content={[
     {
@@ -102,17 +90,6 @@ async speak(
 
 Converts speech to text using the configured listening provider.
 
-```typescript
-async listen(
-  audioStream: NodeJS.ReadableStream,
-  options?: {
-    [key: string]: any;
-  }
-): Promise<string | NodeJS.ReadableStream>
-```
-
-#### Parameters
-
 <PropertiesTable
   content={[
     {
@@ -137,11 +114,24 @@ async listen(
 
 ### getSpeakers()
 
-Returns a list of available voices from the speaking provider.
+Returns a list of available voices from the speaking provider, where each node contains:
 
-```typescript
-async getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: any }>>
-```
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+      isOptional: false,
+    },
+    {
+      name: "key",
+      type: "value",
+      description: "Additional voice properties that vary by provider (e.g., name, language)",
+      isOptional: true,
+    },
+  ]}
+/>
 
 #### Notes
 - Returns voices from the speaking provider only
@@ -155,11 +145,3 @@ async getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: any }>>
 - Each provider maintains its own configuration and state
 - Error handling should consider both providers' potential failure modes
 - Ideal for scenarios where different providers excel at different operations
-
-## Related
-
-- [MastraVoice Reference](/reference/voice/voice.mdx)
-- [OpenAI Voice Reference](/reference/voice/openai.mdx)
-- [Deepgram Voice Reference](/reference/voice/deepgram.mdx)
-- [PlayAI Voice Reference](/reference/voice/playai.mdx)
-- [Speechify Voice Reference](/reference/voice/speechify.mdx)

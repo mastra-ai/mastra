@@ -3,15 +3,9 @@ title: "Reference: OpenAI Voice | Voice Providers | Mastra Docs"
 description: "Documentation for the OpenAIVoice class, providing text-to-speech and speech-to-text capabilities."
 ---
 
-# OpenAIVoice Reference
+# OpenAI
 
 The OpenAIVoice class in Mastra provides text-to-speech and speech-to-text capabilities using OpenAI's models.
-
-## Installation
-
-```bash
-npm install @mastra/voice-openai openai
-```
 
 ## Usage Example
 
@@ -57,14 +51,14 @@ const text = await voice.listen(audioStream, {
       type: "OpenAIConfig",
       description: "Configuration for text-to-speech synthesis.",
       isOptional: true,
-      defaultValue: "{ name: 'tts-1', apiKey: process.env.OPENAI_API_KEY }",
+      defaultValue: "{ name: 'tts-1' }",
     },
     {
       name: "listeningModel",
       type: "OpenAIConfig",
       description: "Configuration for speech-to-text recognition.",
       isOptional: true,
-      defaultValue: "{ name: 'whisper-1', apiKey: process.env.OPENAI_API_KEY }",
+      defaultValue: "{ name: 'whisper-1' }",
     },
     {
       name: "speaker",
@@ -101,18 +95,6 @@ const text = await voice.listen(audioStream, {
 
 Converts text to speech using OpenAI's text-to-speech models.
 
-```typescript
-async speak(
-  input: string | NodeJS.ReadableStream,
-  options?: {
-    speaker?: OpenAIVoiceId;
-    speed?: number;
-  }
-): Promise<NodeJS.ReadableStream>
-```
-
-#### Parameters
-
 <PropertiesTable
   content={[
     {
@@ -138,24 +120,11 @@ async speak(
   ]}
 />
 
-#### Returns
-
-A `Promise<NodeJS.ReadableStream>` containing the generated audio.
+Returns: `Promise<NodeJS.ReadableStream>`
 
 ### listen()
 
 Transcribes audio using OpenAI's Whisper model.
-
-```typescript
-async listen(
-  audioStream: NodeJS.ReadableStream,
-  options?: {
-    filetype?: 'mp3' | 'mp4' | 'mpeg' | 'mpga' | 'm4a' | 'wav' | 'webm';
-  }
-): Promise<string>
-```
-
-#### Parameters
 
 <PropertiesTable
   content={[
@@ -175,60 +144,25 @@ async listen(
   ]}
 />
 
-#### Returns
-
-A `Promise<string>` containing the transcribed text.
+Returns: `Promise<string>`
 
 ### getSpeakers()
 
-Returns a list of available OpenAI voices.
+Returns an array of available voice options, where each node contains:
 
-```typescript
-async getSpeakers(): Promise<Array<{ voiceId: OpenAIVoiceId }>>
-```
-
-#### Returns
-
-A `Promise<Array<{ voiceId: OpenAIVoiceId }>>` containing available voice IDs.
-
-## Types
-
-### OpenAIVoiceId
-
-Available voices for speech synthesis:
-
-```typescript
-type OpenAIVoiceId =
-  | 'alloy'    // Neutral, versatile voice
-  | 'echo'     // Balanced, clear voice
-  | 'fable'    // British-accented voice
-  | 'onyx'     // Deep, authoritative voice
-  | 'nova'     // Warm, engaging voice
-  | 'shimmer'  // Clear, energetic voice
-  | 'ash'      // Mature, refined voice
-  | 'coral'    // Expressive, dynamic voice
-  | 'sage';    // Gentle, measured voice
-```
-
-### OpenAIModel
-
-Available models for speech synthesis and recognition:
-
-```typescript
-type OpenAIModel =
-  | 'tts-1'     // Standard quality speech synthesis
-  | 'tts-1-hd'  // High-quality speech synthesis
-  | 'whisper-1'; // Speech recognition
-```
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+      isOptional: false,
+    },
+  ]}
+/>
 
 ## Notes
 
 - API keys can be provided via constructor options or the `OPENAI_API_KEY` environment variable
 - The `tts-1-hd` model provides higher quality audio but may have slower processing times
 - Speech recognition supports multiple audio formats including mp3, wav, and webm
-
-## Related
-
-- [Voice API Reference](/reference/voice/voice.mdx)
-- [Deepgram Voice Reference](/reference/voice/deepgram.mdx)
-- [Google Voice Reference](/reference/voice/google.mdx)

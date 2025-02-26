@@ -3,7 +3,7 @@ title: "Reference: MastraVoice | Voice Providers | Mastra Docs"
 description: "Documentation for the MastraVoice abstract base class, which defines the core interface for all voice services in Mastra."
 ---
 
-# MastraVoice Reference
+# MastraVoice
 
 The MastraVoice class is an abstract base class that defines the core interface for voice services in Mastra. All voice provider implementations (like OpenAI, Deepgram, PlayAI, Speechify) extend this class to provide their specific functionality.
 
@@ -173,10 +173,6 @@ abstract getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: any }>>
 
 MastraVoice includes built-in telemetry support through the `traced` method, which wraps method calls with performance tracking and error monitoring.
 
-```typescript
-protected traced<T extends Function>(method: T, methodName: string): T
-```
-
 ## Notes
 
 - MastraVoice is an abstract class and cannot be instantiated directly
@@ -184,10 +180,3 @@ protected traced<T extends Function>(method: T, methodName: string): T
 - The class provides a consistent interface across different voice service providers
 - Configuration and authentication details are provider-specific
 - Telemetry is automatically handled for all method calls
-
-## Related
-
-- [OpenAI Voice Reference](/reference/voice/openai.mdx)
-- [Deepgram Voice Reference](/reference/voice/deepgram.mdx)
-- [PlayAI Voice Reference](/reference/voice/playai.mdx)
-- [Speechify Voice Reference](/reference/voice/speechify.mdx)
