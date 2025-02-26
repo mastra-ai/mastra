@@ -21,7 +21,7 @@
     "analyze": "size-limit --why",
     "build": "cross-env NODE_OPTIONS='--max-old-space-size=8192' tsup src/index.ts --format esm --dts --clean --treeshake",
     "build:watch": "pnpm build --watch",
-    "lint": "dts lint",
+    "lint": "eslint .",
     "size": "size-limit",
     "start": "dts watch",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
