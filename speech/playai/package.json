@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "eslint": "^9.20.1",
     "@microsoft/api-extractor": "^7.49.2",
     "@types/node": "^22.13.1",
     "tsup": "^8.0.1",
