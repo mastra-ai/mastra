@@ -1,9 +1,8 @@
 import { createWriteStream, mkdirSync } from 'fs';
+import { writeFile } from 'fs/promises';
 import path from 'path';
 import { Readable } from 'stream';
 import { describe, it, expect, beforeEach } from 'vitest';
-
-import { writeFile } from 'fs/promises';
 
 import { PlayAIVoice, PLAYAI_VOICES } from './index.js';
 
@@ -22,7 +21,7 @@ describe('PlayAI Voice Integration Tests', () => {
     // Create output directory if it doesn't exist
     try {
       mkdirSync(outputDir, { recursive: true });
-    } catch (err) {
+    } catch {
       // Ignore if directory already exists
     }
 
