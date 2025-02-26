@@ -262,7 +262,7 @@ cyclicalWorkflow
   })
   .after(stepOne)
   .step(stepThree, {
-    when: { ref: { step: stepOne, path: 'doubledValue' }, query: { $eq: 10 } },
+    when: { ref: { step: stepOne, path: 'doubledValue' }, query: { $lte: 6 } },
     variables: {
       valueToSquare: {
         step: stepOne,
@@ -273,7 +273,7 @@ cyclicalWorkflow
   .step(stepOne, {
     when: {
       ref: { step: stepOne, path: 'doubledValue' },
-      query: { $eq: 12 },
+      query: { $lte: 120000 },
     },
     variables: {
       inputValue: {
