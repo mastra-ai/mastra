@@ -27,9 +27,7 @@ async function main() {
       incrementedValue: z.number(),
     }),
     execute: async ({ context }) => {
-      const valueToIncrement = context?.getStepResult<{ doubledValue: number }>(
-        'stepOne',
-      )?.doubledValue;
+      const valueToIncrement = context?.getStepResult<{ doubledValue: number }>('stepOne')?.doubledValue;
       if (!valueToIncrement) throw new Error('No value to increment provided');
       const incrementedValue = valueToIncrement + 1;
       return { incrementedValue };

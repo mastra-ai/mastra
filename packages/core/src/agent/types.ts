@@ -1,4 +1,4 @@
-import type { LanguageModelV1 } from 'ai';
+import type { LanguageModelV1, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
@@ -45,6 +45,7 @@ export interface AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefi
   temperature?: number;
   toolChoice?: 'auto' | 'required';
   experimental_output?: Z;
+  telemetry?: TelemetrySettings;
 }
 
 export interface AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> {
@@ -61,4 +62,5 @@ export interface AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefine
   temperature?: number;
   toolChoice?: 'auto' | 'required';
   experimental_output?: Z;
+  telemetry?: TelemetrySettings;
 }

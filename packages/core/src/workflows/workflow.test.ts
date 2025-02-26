@@ -1,14 +1,33 @@
-import { describe, expect, it, vi } from 'vitest';
+import fs from 'fs';
+import { after } from 'node:test';
+import path from 'path';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { createLogger } from '../logger';
+import { Mastra } from '../mastra';
+import { DefaultStorage } from '../storage/libsql';
 import { createTool } from '../tools';
 
 import { Step } from './step';
-import type { WorkflowContext } from './types';
+import type { WorkflowContext, WorkflowResumeResult } from './types';
 import { Workflow } from './workflow';
 
-describe('Workflow', () => {
+const storage = new DefaultStorage({
+  config: {
+    url: 'file:mastra.db',
+  },
+});
+
+const logger = createLogger({
+  level: 'info',
+});
+
+describe('Workflow', async () => {
+  beforeEach(async () => {
+    await storage.init();
+  });
+
   describe('Basic Workflow Execution', () => {
     it('should execute a single step workflow successfully', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
@@ -20,7 +39,8 @@ describe('Workflow', () => {
 
       workflow.step(step1).commit();
 
-      const result = await workflow.execute();
+      const run = workflow.createRun();
+      const result = await run.start();
 
       expect(execute).toHaveBeenCalled();
       expect(result.results['step1']).toEqual({
@@ -46,7 +66,8 @@ describe('Workflow', () => {
 
       workflow.step(step1).step(step2).commit();
 
-      const result = await workflow.execute();
+      const run = workflow.createRun();
+      const result = await run.start();
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
@@ -77,7 +98,8 @@ describe('Workflow', () => {
 
       workflow.step(step1).then(step2).commit();
 
-      const result = await workflow.execute();
+      const run = workflow.createRun();
+      const result = await run.start();
 
       expect(executionOrder).toEqual(['step1', 'step2']);
       expect(result.results).toEqual({
@@ -137,7 +159,8 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.execute({ triggerData: { status: 'pending' } });
+      const run = workflow.createRun();
+      const result = await run.start({ triggerData: { status: 'pending' } });
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
@@ -162,11 +185,17 @@ describe('Workflow', () => {
 
       workflow.step(step1).then(step2).commit();
 
-      const result = await workflow.execute().catch(err => err);
+      const run = workflow.createRun();
+      let result: Awaited<ReturnType<typeof run.start>> | undefined = undefined;
+      try {
+        result = await run.start();
+      } catch (err) {
+        // do nothing
+      }
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).not.toHaveBeenCalled();
-      expect(result.results).toEqual({
+      expect(result?.results).toEqual({
         step1: { status: 'failed', error: 'Failed' },
       });
     });
@@ -194,7 +223,8 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.execute();
+      const run = workflow.createRun();
+      const result = await run.start();
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
@@ -231,7 +261,8 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.execute();
+      const run = workflow.createRun();
+      const result = await run.start();
 
       expect(step2Action).toHaveBeenCalled();
       expect(result.results.step1).toEqual({
@@ -269,7 +300,8 @@ describe('Workflow', () => {
         .then(step2)
         .commit();
 
-      const result = await workflow.execute({ triggerData: { inputData: 'test-input' } });
+      const run = workflow.createRun();
+      const result = await run.start({ triggerData: { inputData: 'test-input' } });
 
       expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success' } });
       expect(result.results.step2).toEqual({ status: 'success', output: { result: 'success' } });
@@ -314,9 +346,8 @@ describe('Workflow', () => {
 
       workflow.step(step1).then(step2).commit();
 
-      const result = await workflow.execute({
-        triggerData: { inputValue: 'test-input' },
-      });
+      const run = workflow.createRun();
+      const result = await run.start({ triggerData: { inputValue: 'test-input' } });
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
@@ -341,9 +372,8 @@ describe('Workflow', () => {
 
       workflow.step(step1).commit();
 
-      const results = await workflow.execute({
-        triggerData: { inputData: 'test-input' },
-      });
+      const run = workflow.createRun();
+      const results = await run.start({ triggerData: { inputData: 'test-input' } });
 
       const baseContext = {
         attempts: { step1: 3 },
@@ -392,7 +422,8 @@ describe('Workflow', () => {
         getStepResult: expect.any(Function),
       };
 
-      await workflow.execute({ triggerData: { inputData: { nested: { value: 'test' } } } });
+      const run = workflow.createRun();
+      const result = await run.start({ triggerData: { inputData: { nested: { value: 'test' } } } });
 
       expect(execute).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -436,7 +467,8 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const results = await workflow.execute();
+      const run = workflow.createRun();
+      const results = await run.start();
 
       const baseContext = {
         attempts: { step1: 3, step2: 3 },
@@ -480,7 +512,9 @@ describe('Workflow', () => {
 
       workflow.step(step1).commit();
 
-      await expect(workflow.execute()).resolves.toEqual({
+      const run = workflow.createRun();
+
+      await expect(run.start()).resolves.toEqual({
         results: {
           step1: {
             error: 'Step execution failed',
@@ -513,7 +547,8 @@ describe('Workflow', () => {
         })
         .commit();
 
-      await expect(workflow.execute()).resolves.toEqual({
+      const run = workflow.createRun();
+      await expect(run.start()).resolves.toEqual({
         results: {
           step1: {
             status: 'success',
@@ -610,7 +645,8 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.execute();
+      const run = workflow.createRun();
+      const result = await run.start();
 
       expect(step2Action).toHaveBeenCalled();
       expect(step3Action).not.toHaveBeenCalled();
@@ -651,7 +687,8 @@ describe('Workflow', () => {
       // ).rejects.toThrow();
 
       // Should pass validation
-      await workflow.execute({
+      const run = workflow.createRun();
+      await run.start({
         triggerData: {
           required: 'test',
           nested: { value: 42 },
@@ -687,7 +724,8 @@ describe('Workflow', () => {
 
       workflow.step(step1).then(step2).then(step3).step(step4).then(step5).commit();
 
-      await workflow.execute();
+      const run = workflow.createRun();
+      await run.start();
 
       expect(action1).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -756,7 +794,8 @@ describe('Workflow', () => {
       const workflow = new Workflow({ name: 'test-workflow' });
       workflow.step(step1).then(step2).then(step3).step(step4).then(step5).commit();
 
-      const result = await workflow.execute();
+      const run = workflow.createRun();
+      const result = await run.start();
 
       expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success1' } });
       expect(result.results.step2).toEqual({ status: 'success', output: { result: 'success2' } });
@@ -773,7 +812,8 @@ describe('Workflow', () => {
 
       const workflow = new Workflow({
         name: 'test-workflow',
-        retryConfig: { attempts: 3, delay: 500 },
+
+        retryConfig: { attempts: 3, delay: 10 },
         mastra: {
           logger: createLogger({
             name: 'Workflow',
@@ -795,7 +835,8 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.execute();
+      const run = workflow.createRun();
+      const result = await run.start();
 
       expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success' } });
       expect(result.results.step2).toEqual({ status: 'suspended' });
@@ -818,7 +859,8 @@ describe('Workflow', () => {
       const workflow = new Workflow({ name: 'test-workflow' });
       workflow.step(step1).then(step2).then(step5).after(step1).step(step3).then(step4).then(step5).commit();
 
-      const result = await workflow.execute();
+      const run = workflow.createRun();
+      const result = await run.start();
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
@@ -860,7 +902,8 @@ describe('Workflow', () => {
         .then(step5)
         .commit();
 
-      const result = await workflow.execute();
+      const run = workflow.createRun();
+      const result = await run.start();
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
@@ -883,7 +926,8 @@ describe('Workflow', () => {
       const workflow = new Workflow({ name: 'test-workflow' });
       workflow.step(step1).step(step3).after(step1).step(step3).after(step3).step(step1).commit();
 
-      const result = await workflow.execute();
+      const run = workflow.createRun();
+      const result = await run.start();
 
       expect(step1Action).toHaveBeenCalled();
 
@@ -1046,6 +1090,442 @@ describe('Workflow', () => {
           ],
         }),
       );
+    });
+  });
+
+  describe('Suspend and Resume', () => {
+    afterAll(async () => {
+      const pathToDb = path.join(process.cwd(), 'mastra.db');
+
+      if (fs.existsSync(pathToDb)) {
+        fs.rmSync(pathToDb);
+      }
+    });
+    it('should handle basic suspend and resume flow', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend();
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
+      const evaluateToneAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.8 },
+        completenessScore: { score: 0.7 },
+      });
+      const improveResponseAction = vi.fn().mockResolvedValue({ improvedOutput: 'improved output' });
+      const evaluateImprovedAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.9 },
+        completenessScore: { score: 0.8 },
+      });
+
+      const getUserInput = new Step({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = new Step({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        outputSchema: z.object({ modelOutput: z.string() }),
+      });
+      const evaluateTone = new Step({
+        id: 'evaluateToneConsistency',
+        execute: evaluateToneAction,
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+      const improveResponse = new Step({
+        id: 'improveResponse',
+        execute: improveResponseAction,
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+      const evaluateImproved = new Step({
+        id: 'evaluateImprovedResponse',
+        execute: evaluateImprovedAction,
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+
+      const promptEvalWorkflow = new Workflow({
+        name: 'test-workflow',
+        triggerSchema: z.object({ input: z.string() }),
+      });
+
+      promptEvalWorkflow
+        .step(getUserInput)
+        .then(promptAgent)
+        .then(evaluateTone)
+        .then(improveResponse)
+        .then(evaluateImproved)
+        .commit();
+
+      // Create a new storage instance for initial run
+      const initialStorage = new DefaultStorage({
+        config: {
+          url: 'file:mastra.db',
+        },
+      });
+      await initialStorage.init();
+
+      const mastra = new Mastra({
+        logger,
+        storage: initialStorage,
+        workflows: { 'test-workflow': promptEvalWorkflow },
+      });
+
+      const wf = mastra.getWorkflow('test-workflow');
+      const run = wf.createRun();
+
+      // Create a promise to track when the workflow is ready to resume
+      let resolveWorkflowSuspended: (value: unknown) => void;
+      const workflowSuspended = new Promise(resolve => {
+        resolveWorkflowSuspended = resolve;
+      });
+
+      wf.watch(data => {
+        const suspended = data.activePaths.find(p => p.status === 'suspended');
+        if (suspended?.stepId === 'promptAgent') {
+          const newCtx = {
+            ...data.context,
+          };
+          // @ts-ignore
+          newCtx.steps.getUserInput.output = {
+            userInput: 'test input for resumption',
+          };
+          resolveWorkflowSuspended({ runId: run.runId, stepId: suspended.stepId, context: newCtx });
+        }
+      });
+
+      const initialResult = await run.start({ triggerData: { input: 'test' } });
+      expect(initialResult.results.promptAgent.status).toBe('suspended');
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+
+      // Wait for the workflow to be ready to resume
+      const resumeData = await workflowSuspended;
+      const resumeWf = mastra.getWorkflow('test-workflow');
+      const resumeResult = await resumeWf.resume(resumeData as any);
+
+      if (!resumeResult) {
+        throw new Error('Resume failed to return a result');
+      }
+
+      expect(resumeResult.results).toEqual({
+        getUserInput: { status: 'success', output: { userInput: 'test input for resumption' } },
+        promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+        },
+        improveResponse: { status: 'success', output: { improvedOutput: 'improved output' } },
+        evaluateImprovedResponse: {
+          status: 'success',
+          output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
+        },
+      });
+    });
+
+    it('should handle parallel steps with conditional suspend', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi.fn().mockResolvedValue({ modelOutput: 'test output' });
+      const evaluateToneAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.8 },
+        completenessScore: { score: 0.7 },
+      });
+      const humanInterventionAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend, context }) => {
+          const { humanPrompt } = context.getStepResult('humanIntervention') ?? {};
+
+          if (!humanPrompt) {
+            await suspend();
+          }
+        })
+        .mockImplementationOnce(() => ({ improvedOutput: 'human intervention output' }));
+      const explainResponseAction = vi.fn().mockResolvedValue({
+        improvedOutput: 'explanation output',
+      });
+
+      const getUserInput = new Step({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = new Step({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        outputSchema: z.object({ modelOutput: z.string() }),
+      });
+      const evaluateTone = new Step({
+        id: 'evaluateToneConsistency',
+        execute: evaluateToneAction,
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+      const humanIntervention = new Step({
+        id: 'humanIntervention',
+        execute: humanInterventionAction,
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+      const explainResponse = new Step({
+        id: 'explainResponse',
+        execute: explainResponseAction,
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        triggerSchema: z.object({ input: z.string() }),
+      });
+
+      workflow
+        .step(getUserInput)
+        .then(promptAgent)
+        .then(evaluateTone)
+        .after(evaluateTone)
+        .step(humanIntervention, {
+          when: () => Promise.resolve(true),
+        })
+        .step(explainResponse, {
+          when: () => Promise.resolve(false),
+        })
+        .commit();
+
+      const mastra = new Mastra({
+        logger,
+        workflows: { 'test-workflow': workflow },
+      });
+
+      const wf = mastra.getWorkflow('test-workflow');
+      const run = wf.createRun();
+
+      const started = run.start({ triggerData: { input: 'test' } });
+
+      const result = await new Promise<WorkflowResumeResult<any>>((resolve, reject) => {
+        let hasResumed = false;
+        wf.watch(async data => {
+          const suspended = data.activePaths.find(p => p.status === 'suspended');
+          if (suspended?.stepId === 'humanIntervention') {
+            const newCtx = {
+              ...data.context,
+              humanPrompt: 'What improvements would you suggest?',
+            };
+            if (!hasResumed) {
+              hasResumed = true;
+
+              try {
+                const resumed = await wf.resume({
+                  runId: run.runId,
+                  stepId: suspended.stepId,
+                  context: newCtx,
+                });
+                resolve(resumed as any);
+              } catch (error) {
+                reject(error);
+              }
+            }
+          }
+        });
+      });
+
+      const initialResult = await started;
+      expect(initialResult.results.humanIntervention.status).toBe('suspended');
+      expect(initialResult.results.explainResponse.status).toBe('failed');
+      expect(humanInterventionAction).toHaveBeenCalledTimes(2);
+      expect(explainResponseAction).not.toHaveBeenCalled();
+
+      if (!result) {
+        throw new Error('Resume failed to return a result');
+      }
+
+      expect(result.results).toEqual({
+        getUserInput: { status: 'success', output: { userInput: 'test input' } },
+        promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+        },
+        humanIntervention: { status: 'success', output: { improvedOutput: 'human intervention output' } },
+        explainResponse: { status: 'failed', error: 'Step:explainResponse condition check failed' },
+      });
+    });
+
+    it('should handle complex workflow with multiple suspends', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi.fn().mockResolvedValue({ modelOutput: 'test output' });
+
+      const evaluateToneAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.8 },
+        completenessScore: { score: 0.7 },
+      });
+      const improveResponseAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend();
+        })
+        .mockImplementationOnce(() => ({ improvedOutput: 'improved output' }));
+      const evaluateImprovedAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.9 },
+        completenessScore: { score: 0.8 },
+      });
+      const humanInterventionAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend();
+        })
+        .mockImplementationOnce(() => ({ improvedOutput: 'human intervention output' }));
+      const explainResponseAction = vi.fn().mockResolvedValue({
+        improvedOutput: 'explanation output',
+      });
+
+      const getUserInput = new Step({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = new Step({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        outputSchema: z.object({ modelOutput: z.string() }),
+      });
+      const evaluateTone = new Step({
+        id: 'evaluateToneConsistency',
+        execute: evaluateToneAction,
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+      const improveResponse = new Step({
+        id: 'improveResponse',
+        execute: improveResponseAction,
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+      const evaluateImproved = new Step({
+        id: 'evaluateImprovedResponse',
+        execute: evaluateImprovedAction,
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+      const humanIntervention = new Step({
+        id: 'humanIntervention',
+        execute: humanInterventionAction,
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+      const explainResponse = new Step({
+        id: 'explainResponse',
+        execute: explainResponseAction,
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        triggerSchema: z.object({ input: z.string() }),
+      });
+
+      workflow
+        .step(getUserInput)
+        .then(promptAgent)
+        .then(evaluateTone)
+        .then(improveResponse)
+        .then(evaluateImproved)
+        .after(evaluateImproved)
+        .step(humanIntervention, {
+          when: () => Promise.resolve(true),
+        })
+        .step(explainResponse, {
+          when: () => Promise.resolve(false),
+        })
+        .commit();
+
+      const mastra = new Mastra({
+        logger,
+        workflows: { 'test-workflow': workflow },
+      });
+
+      const wf = mastra.getWorkflow('test-workflow');
+      const run = wf.createRun();
+      const started = run.start({ triggerData: { input: 'test' } });
+      let improvedResponseResultPromise: Promise<WorkflowResumeResult<any> | undefined>;
+
+      const result = await new Promise<WorkflowResumeResult<any>>((resolve, reject) => {
+        let hasResumed = false;
+        wf.watch(async data => {
+          const suspended = data.activePaths.find(p => p.status === 'suspended');
+
+          if (suspended?.stepId === 'humanIntervention') {
+            const newCtx = {
+              ...data.context,
+              humanPrompt: 'What improvements would you suggest?',
+            };
+            if (!hasResumed) {
+              hasResumed = true;
+
+              try {
+                const resumed = await wf.resume({
+                  runId: run.runId,
+                  stepId: suspended.stepId,
+                  context: newCtx,
+                });
+                resolve(resumed as any);
+              } catch (error) {
+                reject(error);
+              }
+            }
+          } else if (suspended?.stepId === 'improveResponse') {
+            const resumed = wf.resume({
+              runId: run.runId,
+              stepId: suspended.stepId,
+              context: {
+                ...data.context,
+              },
+            });
+            improvedResponseResultPromise = resumed;
+          }
+        });
+      });
+
+      const initialResult = await started;
+
+      // @ts-ignore
+      const improvedResponseResult = await improvedResponseResultPromise;
+      expect(initialResult?.results.improveResponse.status).toBe('suspended');
+
+      expect(improvedResponseResult?.results.humanIntervention.status).toBe('suspended');
+      expect(improvedResponseResult?.results.improveResponse.status).toBe('success');
+      expect(improvedResponseResult?.results.evaluateImprovedResponse.status).toBe('success');
+      expect(improvedResponseResult?.results.explainResponse.status).toBe('failed');
+      expect(humanInterventionAction).toHaveBeenCalledTimes(2);
+      expect(explainResponseAction).not.toHaveBeenCalled();
+
+      if (!result) {
+        throw new Error('Resume failed to return a result');
+      }
+
+      expect(result.results).toEqual({
+        getUserInput: { status: 'success', output: { userInput: 'test input' } },
+        promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+        },
+        improveResponse: { status: 'success', output: { improvedOutput: 'improved output' } },
+        evaluateImprovedResponse: {
+          status: 'success',
+          output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
+        },
+        humanIntervention: { status: 'success', output: { improvedOutput: 'human intervention output' } },
+        explainResponse: { status: 'failed', error: 'Step:explainResponse condition check failed' },
+      });
     });
   });
 });

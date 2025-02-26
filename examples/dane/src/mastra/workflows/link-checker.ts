@@ -60,9 +60,7 @@ const reportBrokenLinks = new Step({
     message: z.string(),
   }),
   execute: async ({ context, mastra }) => {
-    const brokenLinks = context?.getStepResult<{ brokenLinks: z.infer<typeof linkSchema>[] }>(
-      'get-broken-links',
-    );
+    const brokenLinks = context?.getStepResult<{ brokenLinks: z.infer<typeof linkSchema>[] }>('get-broken-links');
 
     if (!brokenLinks) {
       return {

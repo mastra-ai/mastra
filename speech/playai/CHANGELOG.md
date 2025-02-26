@@ -1,5 +1,29 @@
 # @mastra/speech-playai
 
+## 0.1.4
+
+### Patch Changes
+
+- 41d0166: deprecate @mastra/speech-playai for @mastra/voice-playai
+- Updated dependencies [7fceae1]
+- Updated dependencies [8d94c3e]
+- Updated dependencies [99dcdb5]
+- Updated dependencies [6cb63e0]
+- Updated dependencies [f626fbb]
+- Updated dependencies [e752340]
+- Updated dependencies [eb91535]
+  - @mastra/core@0.4.2
+
+## 0.1.4-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [8d94c3e]
+- Updated dependencies [99dcdb5]
+- Updated dependencies [e752340]
+- Updated dependencies [eb91535]
+  - @mastra/core@0.4.2-alpha.2
+
 ## 0.1.4-alpha.3
 
 ### Patch Changes

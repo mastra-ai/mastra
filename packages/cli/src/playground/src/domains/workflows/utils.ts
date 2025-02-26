@@ -1,3 +1,4 @@
+import { v4 as uuid } from '@lukeed/uuid';
 import Dagre from '@dagrejs/dagre';
 import type { StepCondition } from '@mastra/core/workflows';
 import type { Node, Edge } from '@xyflow/react';
@@ -129,7 +130,7 @@ export const contructNodesAndEdges = ({
       if (step.config?.when) {
         const conditions = extractConditions(step.config.when);
         const conditionStep = {
-          id: crypto.randomUUID(),
+          id: uuid(),
           conditions,
           type: 'condition-node',
         };
@@ -193,7 +194,7 @@ export const contructNodesAndEdges = ({
           if (step.config?.when) {
             const conditions = extractConditions(step.config.when);
             const conditionStep = {
-              id: crypto.randomUUID(),
+              id: uuid(),
               conditions,
               type: 'condition-node',
             };

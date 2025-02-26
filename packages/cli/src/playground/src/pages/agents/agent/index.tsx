@@ -1,6 +1,7 @@
 import { PanelLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { v4 as uuid } from '@lukeed/uuid';
 
 import { Chat } from '@/components/Chat';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,7 @@ import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { useAgent } from '@/hooks/use-agents';
 import { useMemory, useMessages } from '@/hooks/use-memory';
 import type { Message } from '@/types';
+
 
 function Agent() {
   const { agentId, threadId } = useParams();
@@ -28,7 +30,9 @@ function Agent() {
 
   useEffect(() => {
     if (memory?.result && !threadId) {
-      navigate(`/agents/${agentId}/chat/${crypto.randomUUID()}`);
+      // use @lukeed/uuid because we don't need a cryptographically secure uuid (this is a debugging local uuid)
+      // using crypto.randomUUID() on a domain without https (ex a local domain like local.lan:4111) will cause a TypeError
+      navigate(`/agents/${agentId}/chat/${uuid()}`);
     }
   }, [memory?.result, threadId]);
 

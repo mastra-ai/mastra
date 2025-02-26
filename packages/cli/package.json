@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.2.6-alpha.2",
+  "version": "0.2.6",
   "license": "MIT",
   "description": "cli for mastra",
   "type": "module",
@@ -50,6 +50,7 @@
   "dependencies": {
     "@clack/prompts": "^0.8.2",
     "@dagrejs/dagre": "^1.1.4",
+    "@lukeed/uuid": "^2.0.1",
     "@mastra/core": "workspace:^",
     "@mastra/deployer": "workspace:^",
     "@opentelemetry/instrumentation": "^0.57.2",
