@@ -110,5 +110,32 @@ describe('ElevenLabsVoice Integration Tests', () => {
       expect(typeof result).toBe('string');
       expect(result.length).toBeGreaterThan(0);
     });
+
+    it('should handle API errors gracefully', async () => {
+      // Create a voice instance with an invalid API key to force an error
+      const invalidVoice = new ElevenLabsVoice({
+        listeningModel: {
+          name: 'eleven_multilingual_v2',
+          apiKey: 'invalid-api-key',
+        },
+      });
+
+      const outputPath = path.join(outputDir, 'elevenlabs-speech-test-params.mp3');
+      const audio = createReadStream(outputPath);
+
+      // The API call should fail with an authentication error
+      await expect(invalidVoice.listen(audio)).rejects.toThrow();
+    });
+
+    it('should handle invalid audio input', async () => {
+      // Create a path to a non-existent file
+      const nonExistentPath = path.join(outputDir, 'non-existent-file.mp3');
+
+      // Attempting to create a read stream from a non-existent file should throw
+      await expect(async () => {
+        const audio = createReadStream(nonExistentPath);
+        await voice.listen(audio);
+      }).rejects.toThrow();
+    });
   });
 });
