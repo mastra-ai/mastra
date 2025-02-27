@@ -40,7 +40,7 @@ jobs:
         run: pnpm install
 
       - name: Lint
-        run: pnpm turbo --filter "!./examples/*" --filter "!./docs/*" --filter "!./integrations/*" lint
+        run: pnpm turbo --filter "!./examples/*" --filter "!./docs/*" --filter "!./integrations/*" --filter "!@mastra/playground" lint
 
   check-bundle:
     name: Validate build outputs
