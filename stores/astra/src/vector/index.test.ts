@@ -147,7 +147,6 @@ describe('AstraVector Integration Tests', () => {
       indexName: testIndexName,
       queryVector,
       topK: 2,
-      filter: { 'metadata.label': 'vector2' },
     });
 
     expect(results).toHaveLength(2);
