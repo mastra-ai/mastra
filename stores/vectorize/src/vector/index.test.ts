@@ -791,7 +791,7 @@ describe('CloudflareVector', () => {
 
     beforeEach(async () => {
       warnSpy = vi.spyOn(vectorDB['logger'], 'warn');
-      await vectorDB.createIndex({ indexName: indexName, dimension: 3 });
+      await vectorDB.createIndex({ indexName: indexName, dimension: VECTOR_DIMENSION });
     });
 
     afterEach(async () => {
@@ -801,7 +801,7 @@ describe('CloudflareVector', () => {
     });
 
     it('should show deprecation warning when using individual args for createIndex', async () => {
-      await vectorDB.createIndex(indexName2, 3, 'cosine');
+      await vectorDB.createIndex(indexName2, VECTOR_DIMENSION, 'cosine');
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Deprecation Warning: Passing individual arguments to createIndex() is deprecated'),
@@ -837,7 +837,7 @@ describe('CloudflareVector', () => {
     it('should not show deprecation warning when using object param for createIndex', async () => {
       await vectorDB.createIndex({
         indexName: indexName2,
-        dimension: 3,
+        dimension: VECTOR_DIMENSION,
         metric: 'cosine',
       });
 
@@ -860,7 +860,7 @@ describe('CloudflareVector', () => {
       expect(Array.isArray(queryResults)).toBe(true);
 
       // CreateIndex
-      await expect(vectorDB.createIndex(indexName2, 3, 'cosine')).resolves.not.toThrow();
+      await expect(vectorDB.createIndex(indexName2, VECTOR_DIMENSION, 'cosine')).resolves.not.toThrow();
 
       // Upsert
       const upsertResults = await vectorDB.upsert({
