@@ -1,5 +1,16 @@
 # @mastra/core
 
+## 0.4.3-alpha.1
+
+### Patch Changes
+
+- 0d185b1: Ensure proper message sort order for tool calls and results when using Memory semanticRecall feature
+- ed55f1d: Fixes to watch payload in workloads with nested branching
+- 8d13b14: Fixes early exits in workflows with branching
+- 3ee4831: Fixed agent.generate() so it properly infers the return type based on output: schema | string and experimental_output: schema
+- 108793c: Throw error when resourceId is not provided but Memory is configured and a threadId was passed
+- 5f28f44: Updated Chroma Vector to allow for document storage
+
 ## 0.4.3-alpha.0
 
 ### Patch Changes

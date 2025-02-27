@@ -328,56 +328,58 @@ export class Agent<
 
           await memory.saveMessages({
             memoryConfig,
-            messages: responseMessagesWithoutIncompleteToolCalls.map((message: CoreMessage | CoreAssistantMessage) => {
-              const messageId = randomUUID();
-              let toolCallIds: string[] | undefined;
-              let toolCallArgs: Record<string, unknown>[] | undefined;
-              let toolNames: string[] | undefined;
-              let type: 'text' | 'tool-call' | 'tool-result' = 'text';
+            messages: responseMessagesWithoutIncompleteToolCalls.map(
+              (message: CoreMessage | CoreAssistantMessage, index) => {
+                const messageId = randomUUID();
+                let toolCallIds: string[] | undefined;
+                let toolCallArgs: Record<string, unknown>[] | undefined;
+                let toolNames: string[] | undefined;
+                let type: 'text' | 'tool-call' | 'tool-result' = 'text';
 
-              if (message.role === 'tool') {
-                toolCallIds = (message as CoreToolMessage).content.map(content => content.toolCallId);
-                type = 'tool-result';
-              }
-              if (message.role === 'assistant') {
-                const assistantContent = (message as CoreAssistantMessage).content as Array<TextPart | ToolCallPart>;
+                if (message.role === 'tool') {
+                  toolCallIds = (message as CoreToolMessage).content.map(content => content.toolCallId);
+                  type = 'tool-result';
+                }
+                if (message.role === 'assistant') {
+                  const assistantContent = (message as CoreAssistantMessage).content as Array<TextPart | ToolCallPart>;
 
-                const assistantToolCalls = assistantContent
-                  .map(content => {
-                    if (content.type === 'tool-call') {
-                      return {
-                        toolCallId: content.toolCallId,
-                        toolArgs: content.args,
-                        toolName: content.toolName,
-                      };
-                    }
-                    return undefined;
-                  })
-                  ?.filter(Boolean) as Array<{
-                  toolCallId: string;
-                  toolArgs: Record<string, unknown>;
-                  toolName: string;
-                }>;
+                  const assistantToolCalls = assistantContent
+                    .map(content => {
+                      if (content.type === 'tool-call') {
+                        return {
+                          toolCallId: content.toolCallId,
+                          toolArgs: content.args,
+                          toolName: content.toolName,
+                        };
+                      }
+                      return undefined;
+                    })
+                    ?.filter(Boolean) as Array<{
+                    toolCallId: string;
+                    toolArgs: Record<string, unknown>;
+                    toolName: string;
+                  }>;
 
-                toolCallIds = assistantToolCalls?.map(toolCall => toolCall.toolCallId);
+                  toolCallIds = assistantToolCalls?.map(toolCall => toolCall.toolCallId);
 
-                toolCallArgs = assistantToolCalls?.map(toolCall => toolCall.toolArgs);
-                toolNames = assistantToolCalls?.map(toolCall => toolCall.toolName);
-                type = assistantContent?.[0]?.type as 'text' | 'tool-call' | 'tool-result';
-              }
+                  toolCallArgs = assistantToolCalls?.map(toolCall => toolCall.toolArgs);
+                  toolNames = assistantToolCalls?.map(toolCall => toolCall.toolName);
+                  type = assistantContent?.[0]?.type as 'text' | 'tool-call' | 'tool-result';
+                }
 
-              return {
-                id: messageId,
-                threadId: threadId,
-                role: message.role as any,
-                content: message.content as any,
-                createdAt: new Date(),
-                toolCallIds: toolCallIds?.length ? toolCallIds : undefined,
-                toolCallArgs: toolCallArgs?.length ? toolCallArgs : undefined,
-                toolNames: toolNames?.length ? toolNames : undefined,
-                type,
-              };
-            }),
+                return {
+                  id: messageId,
+                  threadId: threadId,
+                  role: message.role as any,
+                  content: message.content as any,
+                  createdAt: new Date(Date.now() + index), // use Date.now() + index to make sure every message is atleast one millisecond apart
+                  toolCallIds: toolCallIds?.length ? toolCallIds : undefined,
+                  toolCallArgs: toolCallArgs?.length ? toolCallArgs : undefined,
+                  toolNames: toolNames?.length ? toolNames : undefined,
+                  type,
+                };
+              },
+            ),
           });
         }
       }
@@ -400,8 +402,7 @@ export class Agent<
             toolResultIds.push(content.toolCallId);
           }
         }
-      }
-      if (message.role === 'assistant' || message.role === 'user') {
+      } else if (message.role === 'assistant' || message.role === 'user') {
         for (const content of message.content) {
           if (typeof content !== `string`) {
             if (content.type === `tool-call`) {
@@ -476,48 +477,35 @@ export class Agent<
           memo[k] = {
             description: tool.description,
             parameters: tool.inputSchema,
-            execute: async args => {
-              // TODO: tool call cache should be on storage classes, not memory
-              // if (threadId && tool.enableCache && this.#mastra?.memory) {
-              //   const cachedResult = await this.#mastra.memory.getToolResult({
-              //     threadId,
-              //     toolArgs: args,
-              //     toolName: k as string,
-              //   });
-              //   if (cachedResult) {
-              //     this.logger.debug(`Cached Result ${k as string} runId: ${runId}`, {
-              //       cachedResult: JSON.stringify(cachedResult, null, 2),
-              //       runId,
-              //     });
-              //     return cachedResult;
-              //   }
-              // }
-              // this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, {
-              //   runId,
-              // });
-
-              try {
-                this.logger.debug(`[Agent:${this.name}] - Executing tool ${k}`, {
-                  name: k,
-                  description: tool.description,
-                  args,
-                  runId,
-                });
-                return (
-                  tool?.execute?.({
-                    context: args,
-                    mastra: this.#mastra,
-                    runId,
-                  }) ?? undefined
-                );
-              } catch (err) {
-                this.logger.error(`[Agent:${this.name}] - Failed execution`, {
-                  error: err,
-                  runId: runId,
-                });
-                throw err;
-              }
-            },
+            execute:
+              typeof tool?.execute === 'function'
+                ? async (args, options) => {
+                    try {
+                      this.logger.debug(`[Agent:${this.name}] - Executing tool ${k}`, {
+                        name: k,
+                        description: tool.description,
+                        args,
+                        runId,
+                      });
+                      return (
+                        tool?.execute?.(
+                          {
+                            context: args,
+                            mastra: this.#mastra,
+                            runId,
+                          },
+                          options,
+                        ) ?? undefined
+                      );
+                    } catch (err) {
+                      this.logger.error(`[Agent:${this.name}] - Failed execution`, {
+                        error: err,
+                        runId: runId,
+                      });
+                      throw err;
+                    }
+                  }
+                : undefined,
           };
         }
         return memo;
@@ -541,45 +529,34 @@ export class Agent<
           toolsFromToolsetsConverted[toolName] = {
             description: toolObj.description || '',
             parameters: toolObj.inputSchema,
-            execute: async args => {
-              // TODO: tool call cache should be on storage classes, not memory
-              // if (threadId && toolObj.enableCache && this.#mastra?.memory) {
-              //   const cachedResult = await this.#mastra.memory.getToolResult({
-              //     threadId,
-              //     toolArgs: args,
-              //     toolName,
-              //   });
-              //   if (cachedResult) {
-              //     this.logger.debug(`Cached Result ${toolName as string} runId: ${runId}`, {
-              //       cachedResult: JSON.stringify(cachedResult, null, 2),
-              //       runId,
-              //     });
-              //     return cachedResult;
-              //   }
-              // }
-              // this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, {
-              //   runId,
-              // });
-
-              try {
-                this.logger.debug(`[Agent:${this.name}] - Executing tool ${toolName}`, {
-                  name: toolName,
-                  description: toolObj.description,
-                  args,
-                  runId,
-                });
-                return toolObj.execute!({
-                  context: args,
-                  runId,
-                });
-              } catch (err) {
-                this.logger.error(`[Agent:${this.name}] - Failed toolset execution`, {
-                  error: err,
-                  runId: runId,
-                });
-                throw err;
-              }
-            },
+            execute:
+              typeof toolObj?.execute === 'function'
+                ? async (args, options) => {
+                    try {
+                      this.logger.debug(`[Agent:${this.name}] - Executing tool ${toolName}`, {
+                        name: toolName,
+                        description: toolObj.description,
+                        args,
+                        runId,
+                      });
+                      return (
+                        toolObj?.execute?.(
+                          {
+                            context: args,
+                            runId,
+                          },
+                          options,
+                        ) ?? undefined
+                      );
+                    } catch (err) {
+                      this.logger.error(`[Agent:${this.name}] - Failed toolset execution`, {
+                        error: err,
+                        runId: runId,
+                      });
+                      throw err;
+                    }
+                  }
+                : undefined,
           };
         });
       });
@@ -780,7 +757,7 @@ export class Agent<
 
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
-    args?: AgentGenerateOptions<Z> & { output?: 'text'; experimental_output?: never },
+    args?: AgentGenerateOptions<Z> & { output?: never; experimental_output?: never },
   ): Promise<GenerateTextResult<any, any>>;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
@@ -797,12 +774,13 @@ export class Agent<
       maxSteps = 5,
       onStepFinish,
       runId,
+      output,
       toolsets,
-      output = 'text',
       temperature,
       toolChoice = 'auto',
       experimental_output,
       telemetry,
+      ...rest
     }: AgentGenerateOptions<Z> = {},
   ): Promise<GenerateTextResult<any, any> | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>> {
     let messagesToUse: CoreMessage[] = [];
@@ -840,17 +818,18 @@ export class Agent<
 
     const { threadId, messageObjects, convertedTools } = await before();
 
-    if (output === 'text' && experimental_output) {
+    if (!output && experimental_output) {
       const result = await this.llm.__text({
         messages: messageObjects,
         tools: this.tools,
         convertedTools,
         onStepFinish,
-        maxSteps,
+        maxSteps: maxSteps || 5,
         runId: runIdToUse,
         temperature,
-        toolChoice,
+        toolChoice: toolChoice || 'auto',
         experimental_output,
+        ...rest,
       });
 
       const outputText = result.text;
@@ -864,7 +843,7 @@ export class Agent<
       return newResult as unknown as GenerateReturn<Z>;
     }
 
-    if (output === 'text') {
+    if (!output) {
       const result = await this.llm.__text({
         messages: messageObjects,
         tools: this.tools,
@@ -875,6 +854,7 @@ export class Agent<
         temperature,
         toolChoice,
         telemetry,
+        ...rest,
       });
 
       const outputText = result.text;
@@ -895,6 +875,7 @@ export class Agent<
       temperature,
       toolChoice,
       telemetry,
+      ...rest,
     });
 
     const outputText = JSON.stringify(result.object);
@@ -904,6 +885,15 @@ export class Agent<
     return result as unknown as GenerateReturn<Z>;
   }
 
+  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    messages: string | string[] | CoreMessage[],
+    args?: AgentStreamOptions<Z> & { output?: never; experimental_output?: never },
+  ): Promise<StreamReturn<any>>;
+  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    messages: string | string[] | CoreMessage[],
+    args?: AgentStreamOptions<Z> &
+      ({ output: Z; experimental_output?: never } | { experimental_output: Z; output?: never }),
+  ): Promise<StreamReturn<Z extends ZodSchema ? z.infer<Z> : unknown>>;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     {
@@ -916,11 +906,12 @@ export class Agent<
       onStepFinish,
       runId,
       toolsets,
-      output = 'text',
+      output,
       temperature,
       toolChoice = 'auto',
       experimental_output,
       telemetry,
+      ...rest
     }: AgentStreamOptions<Z> = {},
   ): Promise<StreamReturn<Z>> {
     const runIdToUse = runId || randomUUID();
@@ -958,7 +949,7 @@ export class Agent<
 
     const { threadId, messageObjects, convertedTools } = await before();
 
-    if (output === 'text' && experimental_output) {
+    if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
       });
@@ -986,12 +977,13 @@ export class Agent<
         runId: runIdToUse,
         toolChoice,
         experimental_output,
+        ...rest,
       });
 
       const newStreamResult = streamResult as any;
       newStreamResult.partialObjectStream = streamResult.experimental_partialOutputStream;
       return newStreamResult as unknown as StreamReturn<Z>;
-    } else if (output === 'text') {
+    } else if (!output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
       });
@@ -1018,6 +1010,7 @@ export class Agent<
         runId: runIdToUse,
         toolChoice,
         telemetry,
+        ...rest,
       }) as unknown as StreamReturn<Z>;
     }
 
@@ -1045,10 +1038,10 @@ export class Agent<
         }
         onFinish?.(result);
       },
-      maxSteps,
       runId: runIdToUse,
       toolChoice,
       telemetry,
+      ...rest,
     }) as unknown as StreamReturn<Z>;
   }
 
