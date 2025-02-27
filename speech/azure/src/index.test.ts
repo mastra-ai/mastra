@@ -2,7 +2,6 @@ import { writeFile } from 'fs/promises';
 import { join } from 'path';
 import { describe, expect, it } from 'vitest';
 
-
 import type { VoiceId } from './index';
 import { AzureTTS } from './index';
 

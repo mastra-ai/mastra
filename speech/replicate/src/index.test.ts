@@ -3,7 +3,6 @@ import { join } from 'path';
 import { PassThrough } from 'stream';
 import { describe, expect, it } from 'vitest';
 
-
 import { ReplicateTTS } from './index';
 
 describe('ReplicateTTS', () => {

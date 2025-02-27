@@ -72,31 +72,36 @@ export class MastraLLM extends MastraLLMBase {
           memo[k] = {
             description: tool.description!,
             parameters: tool.inputSchema,
-            execute: async (props: any) => {
-              try {
-                this.logger.debug('Executing tool', {
-                  tool: k,
-                  props,
-                });
-                return (
-                  tool?.execute?.({
-                    context: props,
-                    mastra: this.#mastra,
-                    runId,
-                  }) ?? undefined
-                );
-              } catch (error) {
-                this.logger.error('Error executing tool', {
-                  tool: k,
-                  props,
-                  error,
-                });
-                throw error;
-              }
-            },
+            execute:
+              typeof tool?.execute === 'function'
+                ? async (props, options) => {
+                    try {
+                      this.logger.debug('Executing tool', {
+                        tool: k,
+                        props,
+                      });
+                      return (
+                        tool?.execute?.(
+                          {
+                            context: props,
+                            mastra: this.#mastra,
+                            runId,
+                          },
+                          options,
+                        ) ?? undefined
+                      );
+                    } catch (error) {
+                      this.logger.error('Error executing tool', {
+                        tool: k,
+                        props,
+                        error,
+                      });
+                      throw error;
+                    }
+                  }
+                : undefined,
           };
         }
-
         return memo;
       },
       {} as Record<string, CoreTool>,
