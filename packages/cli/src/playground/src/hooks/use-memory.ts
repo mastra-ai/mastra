@@ -17,14 +17,22 @@ export const useMemory = (agentId?: string) => {
   return { memory, isLoading, mutate };
 };
 
-export const useThreads = ({ resourceid, agentId }: { resourceid: string; agentId: string }) => {
+export const useThreads = ({
+  resourceid,
+  agentId,
+  isMemoryEnabled,
+}: {
+  resourceid: string;
+  agentId: string;
+  isMemoryEnabled: boolean;
+}) => {
   const {
     data: threads,
     isLoading,
     mutate,
   } = useSWR<Array<ThreadType>>(`/api/memory/threads?resourceid=${resourceid}&agentId=${agentId}`, fetcher, {
     fallbackData: [],
-    isPaused: () => !resourceid,
+    isPaused: () => !resourceid || !agentId || !isMemoryEnabled,
     revalidateOnFocus: false,
   });
 
@@ -44,7 +52,7 @@ export const useMessages = ({ threadId, memory, agentId }: { threadId: string; m
     {
       fallbackData: { uiMessages: [], messages: [] },
       revalidateOnFocus: false,
-      isPaused: () => !threadId,
+      isPaused: () => !threadId || !agentId,
       shouldRetryOnError: false,
     },
   );

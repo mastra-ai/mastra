@@ -27,7 +27,7 @@ function Agent() {
     threads,
     isLoading: isThreadsLoading,
     mutate: refreshThreads,
-  } = useThreads({ resourceid: agentId!, agentId: agentId! });
+  } = useThreads({ resourceid: agentId!, agentId: agentId!, isMemoryEnabled: !!memory?.result });
 
   useEffect(() => {
     if (memory?.result && !threadId) {
