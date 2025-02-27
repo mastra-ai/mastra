@@ -1,17 +1,15 @@
-import { MastraStorage, TABLE_NAMES } from '@mastra/core/storage';
+import { MastraStorage } from '@mastra/core/storage';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
 import { UpstashStore } from './index';
 
-const SECONDS = 1000;
-vi.setConfig({
-  testTimeout: 30 * SECONDS,
-});
+// Increase timeout for all tests in this file to 30 seconds
+vi.setConfig({ testTimeout: 30_000 });
 
 describe('UpstashStore', () => {
   let store: UpstashStore;
-  const testTableName = 'test_table' as TABLE_NAMES;
-  const testTableName2 = 'test_table2' as TABLE_NAMES;
+  const testTableName = 'test_table';
+  const testTableName2 = 'test_table2';
 
   beforeAll(async () => {
     store = new UpstashStore({
@@ -299,7 +297,7 @@ describe('UpstashStore', () => {
         },
       ];
 
-      await store.saveMessages({ messages: messages });
+      await store.saveMessages({ messages });
 
       const retrievedMessages = await store.getMessages({ threadId });
       expect(retrievedMessages).toHaveLength(3);
