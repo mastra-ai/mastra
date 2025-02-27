@@ -118,6 +118,7 @@ export class MastraLLM extends MastraLLMBase {
     onStepFinish,
     experimental_output,
     telemetry,
+    ...rest
   }: LLMTextOptions<Z>) {
     const model = this.#model;
 
@@ -158,6 +159,7 @@ export class MastraLLM extends MastraLLMBase {
           await delay(10 * 1000);
         }
       },
+      ...rest,
     };
 
     let schema: z.ZodType<Z> | Schema<Z> | undefined;
@@ -191,7 +193,7 @@ export class MastraLLM extends MastraLLMBase {
     });
   }
 
-  async __textObject<T>({
+  async __textObject<T extends ZodSchema | JSONSchema7 | undefined>({
     messages,
     onStepFinish,
     maxSteps = 5,
@@ -202,6 +204,7 @@ export class MastraLLM extends MastraLLMBase {
     temperature,
     toolChoice = 'auto',
     telemetry,
+    ...rest
   }: LLMTextObjectOptions<T>) {
     const model = this.#model;
 
@@ -237,6 +240,7 @@ export class MastraLLM extends MastraLLMBase {
           await delay(10 * 1000);
         }
       },
+      ...rest,
     };
 
     let schema: z.ZodType<T> | Schema<T>;
@@ -276,6 +280,7 @@ export class MastraLLM extends MastraLLMBase {
     toolChoice = 'auto',
     experimental_output,
     telemetry,
+    ...rest
   }: LLMInnerStreamOptions<Z>) {
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {
@@ -316,7 +321,7 @@ export class MastraLLM extends MastraLLMBase {
         }
       },
       onFinish: async (props: any) => {
-        onFinish?.(JSON.stringify(props, null, 2));
+        void onFinish?.(JSON.stringify(props, null, 2));
 
         this.logger.debug('[LLM] - Stream Finished:', {
           text: props?.text,
@@ -327,6 +332,7 @@ export class MastraLLM extends MastraLLMBase {
           runId,
         });
       },
+      ...rest,
     };
 
     let schema: z.ZodType<Z> | Schema<Z> | undefined;
@@ -360,7 +366,7 @@ export class MastraLLM extends MastraLLMBase {
     });
   }
 
-  async __streamObject<T>({
+  async __streamObject<T extends ZodSchema | JSONSchema7 | undefined>({
     messages,
     onStepFinish,
     onFinish,
@@ -372,6 +378,7 @@ export class MastraLLM extends MastraLLMBase {
     temperature,
     toolChoice = 'auto',
     telemetry,
+    ...rest
   }: LLMStreamObjectOptions<T>) {
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming structured output`, {
@@ -412,7 +419,7 @@ export class MastraLLM extends MastraLLMBase {
         }
       },
       onFinish: async (props: any) => {
-        onFinish?.(JSON.stringify(props, null, 2));
+        void onFinish?.(JSON.stringify(props, null, 2));
 
         this.logger.debug('[LLM] - Stream Finished:', {
           text: props?.text,
@@ -423,6 +430,7 @@ export class MastraLLM extends MastraLLMBase {
           runId,
         });
       },
+      ...rest,
     };
 
     let schema: z.ZodType<T> | Schema<T>;
@@ -458,14 +466,15 @@ export class MastraLLM extends MastraLLMBase {
       tools,
       convertedTools,
       runId,
-      output = 'text',
+      output,
       temperature,
       telemetry,
+      ...rest
     }: LLMStreamOptions<Z> = {},
   ): Promise<GenerateReturn<Z>> {
     const msgs = this.convertToMessages(messages);
 
-    if (output === 'text') {
+    if (!output) {
       return (await this.__text({
         messages: msgs,
         onStepFinish,
@@ -474,6 +483,7 @@ export class MastraLLM extends MastraLLMBase {
         convertedTools,
         runId,
         temperature,
+        ...rest,
       })) as unknown as GenerateReturn<Z>;
     }
 
@@ -486,6 +496,7 @@ export class MastraLLM extends MastraLLMBase {
       convertedTools,
       runId,
       telemetry,
+      ...rest,
     })) as unknown as GenerateReturn<Z>;
   }
 
@@ -498,14 +509,15 @@ export class MastraLLM extends MastraLLMBase {
       tools,
       convertedTools,
       runId,
-      output = 'text',
+      output,
       temperature,
       telemetry,
+      ...rest
     }: LLMStreamOptions<Z> = {},
   ) {
     const msgs = this.convertToMessages(messages);
 
-    if (output === 'text') {
+    if (!output) {
       return (await this.__stream({
         messages: msgs as CoreMessage[],
         onStepFinish,
@@ -516,6 +528,7 @@ export class MastraLLM extends MastraLLMBase {
         runId,
         temperature,
         telemetry,
+        ...rest,
       })) as unknown as StreamReturn<Z>;
     }
 
@@ -530,6 +543,7 @@ export class MastraLLM extends MastraLLMBase {
       runId,
       temperature,
       telemetry,
+      ...rest,
     })) as unknown as StreamReturn<Z>;
   }
 }
