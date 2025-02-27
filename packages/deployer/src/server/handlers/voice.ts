@@ -1,7 +1,7 @@
+import { Readable } from 'stream';
 import type { Mastra } from '@mastra/core';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { Readable } from 'stream';
 
 import { handleError } from './error.js';
 import { validateBody } from './utils.js';

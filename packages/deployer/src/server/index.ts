@@ -39,7 +39,6 @@ import { generateSystemPromptHandler } from './handlers/prompt.js';
 import { rootHandler } from './handlers/root.js';
 import { getTelemetryHandler } from './handlers/telemetry.js';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools.js';
-import { getSpeakersHandler, speakHandler, listenHandler } from './handlers/voice.js';
 import {
   upsertVectors,
   createIndex,
@@ -48,6 +47,7 @@ import {
   describeIndex,
   deleteIndex,
 } from './handlers/vector.js';
+import { getSpeakersHandler, speakHandler, listenHandler } from './handlers/voice.js';
 import {
   executeWorkflowHandler,
   getWorkflowByIdHandler,
