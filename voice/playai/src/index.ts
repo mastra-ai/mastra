@@ -1,5 +1,6 @@
-import { MastraVoice } from '@mastra/core/voice';
 import { PassThrough } from 'stream';
+
+import { MastraVoice } from '@mastra/core/voice';
 
 interface PlayAIVoiceInfo {
   name: string;
@@ -209,7 +210,7 @@ export class PlayAIVoice extends MastraVoice {
 
       // Process the stream
       const reader = response.body.getReader();
-      (async () => {
+      void (async () => {
         try {
           while (true) {
             const { done, value } = await reader.read();

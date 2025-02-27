@@ -1,9 +1,8 @@
 import { mkdirSync } from 'fs';
+import { writeFile, stat as fsStat } from 'fs/promises';
 import path, { join } from 'path';
 import { Readable } from 'stream';
 import { describe, expect, it, beforeAll } from 'vitest';
-
-import { writeFile, stat as fsStat } from 'fs/promises';
 
 import { MurfVoice } from './index';
 

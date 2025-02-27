@@ -1,6 +1,6 @@
+import type { PassThrough } from 'stream';
 import { MastraTTS } from '@mastra/core/tts';
 import OpenAI from 'openai';
-import { PassThrough } from 'stream';
 
 interface OpenAITTSConfig {
   name: 'tts-1' | 'tts-1-hd';

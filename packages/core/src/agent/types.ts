@@ -32,11 +32,9 @@ export interface AgentConfig<
   voice?: CompositeVoice;
 }
 
-export interface AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> {
+export type AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
   toolsets?: ToolsetsInput;
-  resourceId?: string;
   context?: CoreMessage[];
-  threadId?: string;
   memoryOptions?: MemoryConfig;
   runId?: string;
   onStepFinish?: (step: string) => void;
@@ -46,13 +44,11 @@ export interface AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefi
   toolChoice?: 'auto' | 'required';
   experimental_output?: Z;
   telemetry?: TelemetrySettings;
-}
+} & ({ resourceId?: undefined; threadId?: undefined } | { resourceId: string; threadId: string });
 
-export interface AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> {
+export type AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
   toolsets?: ToolsetsInput;
-  resourceId?: string;
   context?: CoreMessage[];
-  threadId?: string;
   memoryOptions?: MemoryConfig;
   runId?: string;
   onFinish?: (result: string) => unknown;
@@ -63,4 +59,4 @@ export interface AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefine
   toolChoice?: 'auto' | 'required';
   experimental_output?: Z;
   telemetry?: TelemetrySettings;
-}
+} & ({ resourceId?: undefined; threadId?: undefined } | { resourceId: string; threadId: string });

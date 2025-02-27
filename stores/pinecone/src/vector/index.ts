@@ -1,5 +1,6 @@
-import { type Filter } from '@mastra/core/filter';
-import { MastraVector, type QueryResult, type IndexStats } from '@mastra/core/vector';
+import type { Filter } from '@mastra/core/filter';
+import { MastraVector } from '@mastra/core/vector';
+import type { QueryResult, IndexStats } from '@mastra/core/vector';
 import { Pinecone } from '@pinecone-database/pinecone';
 
 import { PineconeFilterTranslator } from './filter';

@@ -1,10 +1,11 @@
 import type { Filter } from '@mastra/core/filter';
-import { type IndexStats, type QueryResult, MastraVector } from '@mastra/core/vector';
+import { MastraVector } from '@mastra/core/vector';
+import type { IndexStats, QueryResult } from '@mastra/core/vector';
 import pg from 'pg';
 
 import { PGFilterTranslator } from './filter';
 import { buildFilterQuery } from './sql-builder';
-import { type IndexConfig, type IndexType } from './types';
+import type { IndexConfig, IndexType } from './types';
 
 export interface PGIndexStats extends IndexStats {
   type: IndexType;
@@ -203,7 +204,18 @@ export class PgVector extends MastraVector {
     }
   }
 
+  /**
+   * @deprecated This function is deprecated. Use buildIndex instead
+   */
   async defineIndex(
+    indexName: string,
+    metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
+    indexConfig: IndexConfig,
+  ): Promise<void> {
+    return this.buildIndex(indexName, metric, indexConfig);
+  }
+
+  async buildIndex(
     indexName: string,
     metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
     indexConfig: IndexConfig,
