@@ -780,12 +780,13 @@ export class Agent<
 
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
-    args?: AgentGenerateOptions<Z> & { output?: 'text'; experimental_output?: undefined },
+    args?: AgentGenerateOptions<Z> & { output?: 'text'; experimental_output?: never },
   ): Promise<GenerateTextResult<any, any>>;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
-    args?: AgentGenerateOptions<Z> & ({ output: Z } | { experimental_output: Z; output?: undefined }),
-  ): Promise<GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : any>>;
+    args?: AgentGenerateOptions<Z> &
+      ({ output: Z; experimental_output?: never } | { experimental_output: Z; output?: never }),
+  ): Promise<GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>>;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     {
@@ -803,7 +804,7 @@ export class Agent<
       experimental_output,
       telemetry,
     }: AgentGenerateOptions<Z> = {},
-  ): Promise<GenerateTextResult<any, any> | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : any>> {
+  ): Promise<GenerateTextResult<any, any> | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>> {
     let messagesToUse: CoreMessage[] = [];
 
     if (typeof messages === `string`) {
