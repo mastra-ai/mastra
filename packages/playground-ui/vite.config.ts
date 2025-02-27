@@ -5,6 +5,7 @@ import tailwindcss from 'tailwindcss';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import { libInjectCss } from 'vite-plugin-lib-inject-css';
+import nodeExternals from 'rollup-plugin-node-externals';
 
 export default defineConfig({
   plugins: [
@@ -13,6 +14,7 @@ export default defineConfig({
       insertTypesEntry: true,
     }),
     libInjectCss(),
+    nodeExternals(),
   ],
   resolve: {
     alias: {
@@ -28,20 +30,8 @@ export default defineConfig({
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
       name: 'MastraPlayground',
-      formats: ['es', 'umd'],
+      formats: ['es'],
       fileName: format => `index.${format}.js`,
-    },
-    rollupOptions: {
-      external: ['react', 'react-dom', 'react/jsx-runtime', 'lucide-react', 'tailwindcss'],
-      output: {
-        globals: {
-          react: 'React',
-          'react-dom': 'ReactDOM',
-          'react/jsx-runtime': 'ReactJsxRuntime',
-          'lucide-react': 'LucideReact',
-          tailwindcss: 'tailwindcss',
-        },
-      },
     },
     sourcemap: true,
     // Reduce bloat from legacy polyfills.
