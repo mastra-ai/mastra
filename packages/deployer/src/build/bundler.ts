@@ -1,4 +1,5 @@
 import alias from '@rollup/plugin-alias';
+import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import { fileURLToPath } from 'node:url';
@@ -29,11 +30,12 @@ export async function getInputOptions(
           browser: true,
         });
 
+  const externals = Array.from(analyzedBundleInfo.externalDependencies).concat(['@mastra/core/hooks']);
   return {
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     treeshake: true,
     preserveSymlinks: true,
-    external: Array.from(analyzedBundleInfo.externalDependencies).concat(['@mastra/core/hooks']),
+    external: externals,
     plugins: [
       telemetryFix(),
       libSqlFix(),
@@ -68,6 +70,21 @@ export async function getInputOptions(
           { find: /^\#mastra$/, replacement: entryFile.replaceAll('\\', '/') },
         ],
       }),
+      esbuild({
+        target: 'node20',
+        platform,
+        minify: false,
+        define: {
+          'process.env.NODE_ENV': JSON.stringify('production'),
+        },
+      }),
+      commonjs({
+        extensions: ['.js', '.ts'],
+        transformMixedEsModules: true,
+        esmExternals(id) {
+          return externals.includes(id);
+        },
+      }),
       nodeResolvePlugin,
       // for debugging
       // {
@@ -77,21 +94,13 @@ export async function getInputOptions(
       //     console.log({ id, args });
       //   },
       //   // @ts-ignore
-      //   transform(code, id) {
-      //     if (code.includes('class Duplexify ')) {
-      //       console.log({ duplex: id });
-      //     }
-      //   },
+      // transform(code, id) {
+      //   if (code.includes('class Duplexify ')) {
+      //     console.log({ duplex: id });
+      //   }
+      // },
       // },
       json(),
-      esbuild({
-        target: 'node20',
-        platform,
-        minify: false,
-        define: {
-          'process.env.NODE_ENV': JSON.stringify('production'),
-        },
-      }),
       removeDeployer(entryFile),
       // treeshake unused imports
       esbuild({
