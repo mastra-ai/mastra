@@ -4,8 +4,8 @@
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "type": "module",
-  "types": "dist/index.d.mts",
-  "main": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "main": "dist/index.js",
   "exports": {
     ".": {
       "import": {
