@@ -89,7 +89,9 @@ export class MastraLLMBase extends MastraBase {
     throw new Error('Method not implemented.');
   }
 
-  async __textObject<T>(input: LLMTextObjectOptions<T>): Promise<GenerateObjectResult<T>> {
+  async __textObject<T extends ZodSchema | JSONSchema7 | undefined>(
+    input: LLMTextObjectOptions<T>,
+  ): Promise<GenerateObjectResult<T>> {
     this.logger.debug(`[LLMs:${this.name}] Generating object.`, { input });
     throw new Error('Method not implemented.');
   }
@@ -109,7 +111,9 @@ export class MastraLLMBase extends MastraBase {
     throw new Error('Method not implemented.');
   }
 
-  async __streamObject<T>(input: LLMStreamObjectOptions<T>): Promise<StreamObjectResult<DeepPartial<T>, T, never>> {
+  async __streamObject<T extends ZodSchema | JSONSchema7 | undefined>(
+    input: LLMStreamObjectOptions<T>,
+  ): Promise<StreamObjectResult<DeepPartial<T>, T, never>> {
     this.logger.debug(`[LLMs:${this.name}] Streaming object.`, { input });
     throw new Error('Method not implemented.');
   }

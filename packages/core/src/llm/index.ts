@@ -8,10 +8,15 @@ import type {
   EmbedResult as AiEmbedResult,
   GenerateObjectResult,
   GenerateTextResult,
+  JSONValue,
   LanguageModelV1,
   StreamObjectResult,
   StreamTextResult,
   TelemetrySettings,
+  streamText,
+  streamObject,
+  generateText,
+  generateObject,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
@@ -74,48 +79,57 @@ export type StreamReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefin
 
 export type OutputType = 'text' | StructuredOutput | ZodSchema | JSONSchema7 | undefined;
 
-export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+type GenerateTextOptions = Parameters<typeof generateText>[0];
+type StreamTextOptions = Parameters<typeof streamText>[0];
+type GenerateObjectOptions = Parameters<typeof generateObject>[0];
+type StreamObjectOptions = Parameters<typeof streamObject>[0];
+
+type MastraCustomLLMOptionsKeys =
+  | 'messages'
+  | 'tools'
+  | 'model'
+  | 'onStepFinish'
+  | 'experimental_output'
+  | 'experimental_telemetry'
+  | 'messages'
+  | 'onFinish'
+  | 'output';
+
+type DefaultLLMTextOptions = Omit<GenerateTextOptions, MastraCustomLLMOptionsKeys>;
+type DefaultLLMTextObjectOptions = Omit<GenerateObjectOptions, MastraCustomLLMOptionsKeys>;
+type DefaultLLMStreamOptions = Omit<StreamTextOptions, MastraCustomLLMOptionsKeys>;
+type DefaultLLMStreamObjectOptions = Omit<StreamObjectOptions, MastraCustomLLMOptionsKeys>;
+
+type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
   tools?: ToolsInput;
   convertedTools?: Record<string, CoreTool>;
-  messages: CoreMessage[];
   onStepFinish?: (step: string) => void;
-  toolChoice?: 'auto' | 'required';
-  maxSteps?: number;
-  temperature?: number;
   experimental_output?: Z;
   telemetry?: TelemetrySettings;
+  onFinish?: (result: string) => Promise<void> | void;
 } & Run;
 
-export type LLMTextObjectOptions<T> = LLMTextOptions & {
-  structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
-};
+export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+  messages: CoreMessage[];
+} & MastraCustomLLMOptions<Z> &
+  DefaultLLMTextOptions;
+
+export type LLMTextObjectOptions<T extends ZodSchema | JSONSchema7 | undefined = undefined> = LLMTextOptions<T> &
+  DefaultLLMTextObjectOptions & {
+    structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
+  };
 
 export type LLMStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
-  runId?: string;
-  onFinish?: (result: string) => Promise<void> | void;
-  onStepFinish?: (step: string) => void;
-  maxSteps?: number;
-  tools?: ToolsInput;
-  convertedTools?: Record<string, CoreTool>;
   output?: OutputType | Z;
-  temperature?: number;
-  experimental_output?: Z;
-  telemetry?: TelemetrySettings;
-};
+} & MastraCustomLLMOptions<Z> &
+  DefaultLLMStreamOptions;
 
 export type LLMInnerStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
-  tools?: ToolsInput;
-  convertedTools?: Record<string, CoreTool>;
   messages: CoreMessage[];
-  onStepFinish?: (step: string) => unknown;
-  onFinish?: (result: string) => unknown;
-  maxSteps?: number;
-  temperature?: number;
-  toolChoice?: 'auto' | 'required';
-  experimental_output?: Z;
-  telemetry?: TelemetrySettings;
-} & Run;
+} & MastraCustomLLMOptions<Z> &
+  DefaultLLMStreamOptions;
 
-export type LLMStreamObjectOptions<T> = LLMInnerStreamOptions & {
+export type LLMStreamObjectOptions<T extends ZodSchema | JSONSchema7 | undefined = undefined> = {
   structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
-};
+} & LLMInnerStreamOptions<T> &
+  DefaultLLMStreamObjectOptions;
