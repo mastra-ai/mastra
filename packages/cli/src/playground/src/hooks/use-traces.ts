@@ -35,6 +35,7 @@ export const useTraces = (componentName: string, isWorkflow: boolean = false) =>
   }, []);
 
   const shouldContinue = useCallback(() => {
+    //this prevents too many frequent calls in the usePolling
     return true;
   }, []);
 
