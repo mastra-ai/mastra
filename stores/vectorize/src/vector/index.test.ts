@@ -809,7 +809,7 @@ describe('CloudflareVector', () => {
     });
 
     it('should show deprecation warning when using individual args for upsert', async () => {
-      await vectorDB.upsert(indexName, [[1, 2, 3]], [{ test: 'data' }]);
+      await vectorDB.upsert(indexName, createVector(0, 1.0), [{ test: 'data' }]);
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Deprecation Warning: Passing individual arguments to upsert() is deprecated'),
@@ -817,7 +817,7 @@ describe('CloudflareVector', () => {
     });
 
     it('should show deprecation warning when using individual args for query', async () => {
-      await vectorDB.query(indexName, [1, 2, 3], 5);
+      await vectorDB.query(indexName, createVector(0, 1.0), 5);
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Deprecation Warning: Passing individual arguments to query() is deprecated'),
@@ -827,7 +827,7 @@ describe('CloudflareVector', () => {
     it('should not show deprecation warning when using object param for query', async () => {
       await vectorDB.query({
         indexName,
-        queryVector: [1, 2, 3],
+        queryVector: createVector(0, 1.0),
         topK: 5,
       });
 
@@ -847,7 +847,7 @@ describe('CloudflareVector', () => {
     it('should not show deprecation warning when using object param for upsert', async () => {
       await vectorDB.upsert({
         indexName,
-        vectors: [[1, 2, 3]],
+        vectors: createVector(0, 1.0),
         metadata: [{ test: 'data' }],
       });
 
@@ -856,7 +856,7 @@ describe('CloudflareVector', () => {
 
     it('should maintain backward compatibility with individual args', async () => {
       // Query
-      const queryResults = await vectorDB.query(indexName, [1, 2, 3], 5);
+      const queryResults = await vectorDB.query(indexName, createVector(0, 1.0), 5);
       expect(Array.isArray(queryResults)).toBe(true);
 
       // CreateIndex
@@ -865,7 +865,7 @@ describe('CloudflareVector', () => {
       // Upsert
       const upsertResults = await vectorDB.upsert({
         indexName,
-        vectors: [[1, 2, 3]],
+        vectors: createVector(0, 1.0),
         metadata: [{ test: 'data' }],
       });
       expect(Array.isArray(upsertResults)).toBe(true);
