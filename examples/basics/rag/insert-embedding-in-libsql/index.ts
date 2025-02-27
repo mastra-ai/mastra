@@ -17,10 +17,13 @@ const libsql = new LibSQLVector({
   authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
 });
 
-await libsql.createIndex('test_collection', 1536);
+await libsql.createIndex({
+  indexName: 'test_collection',
+  dimension: 1536,
+});
 
-await libsql.upsert(
-  'test_collection',
-  embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text })),
-);
+await libsql.upsert({
+  indexName: 'test_collection',
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});

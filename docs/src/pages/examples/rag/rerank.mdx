@@ -73,12 +73,15 @@ const { embeddings } = await embedMany({
 });
 
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
-await pgVector.createIndex('embeddings', 1536);
-await pgVector.upsert(
-  'embeddings',
-  embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text })),
-);
+await pgVector.createIndex({
+  indexName: 'embeddings',
+  dimension: 1536,
+});
+await pgVector.upsert({
+  indexName: 'embeddings',
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
 ```
 
 ## Vector Search and Re-ranking
@@ -95,7 +98,11 @@ const { embedding: queryEmbedding } = await embed({
 });
 
 // Get initial results
-const initialResults = await pgVector.query('embeddings', queryEmbedding, 3);
+const initialResults = await pgVector.query({
+  indexName: 'embeddings',
+  queryVector: queryEmbedding,
+  topK: 3,
+});
 
 // Re-rank results
 const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'), {

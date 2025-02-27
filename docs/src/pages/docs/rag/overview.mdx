@@ -43,10 +43,17 @@ const { embeddings } = await embedMany({
 
 // 4. Store in vector database
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING);
-await pgVector.upsert("embeddings", embeddings); // using an index name of 'embeddings'
+await pgVector.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+}); // using an index name of 'embeddings'
 
 // 5. Query similar chunks
-const results = await pgVector.query("embeddings", queryVector, 3); // queryVector is the embedding of the query
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: queryVector,
+  topK: 3,
+}); // queryVector is the embedding of the query
 
 console.log("Similar chunks:", results);
 ```

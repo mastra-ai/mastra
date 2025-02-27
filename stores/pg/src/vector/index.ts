@@ -1,6 +1,14 @@
 import type { Filter } from '@mastra/core/filter';
 import { MastraVector } from '@mastra/core/vector';
-import type { IndexStats, QueryResult } from '@mastra/core/vector';
+import type {
+  IndexStats,
+  QueryResult,
+  QueryVectorParams,
+  CreateIndexParams,
+  UpsertVectorParams,
+  VectorFilter,
+  ParamsToArgs,
+} from '@mastra/core/vector';
 import pg from 'pg';
 
 import { PGFilterTranslator } from './filter';
@@ -15,6 +23,31 @@ export interface PGIndexStats extends IndexStats {
     lists?: number;
     probes?: number;
   };
+}
+
+interface PgQueryVectorParams extends QueryVectorParams {
+  minScore?: number;
+  /**
+   * HNSW search parameter. Controls the size of the dynamic candidate
+   * list during search. Higher values improve accuracy at the cost of speed.
+   */
+  ef?: number;
+  /**
+   * IVFFlat probe parameter. Number of cells to visit during search.
+   * Higher values improve accuracy at the cost of speed.
+   */
+  probes?: number;
+}
+
+interface PgCreateIndexParams extends CreateIndexParams {
+  indexConfig?: IndexConfig;
+  buildIndex?: boolean;
+}
+
+interface PgDefineIndexParams {
+  indexName: string;
+  metric: 'cosine' | 'euclidean' | 'dotproduct';
+  indexConfig: IndexConfig;
 }
 
 export class PgVector extends MastraVector {
@@ -42,10 +75,9 @@ export class PgVector extends MastraVector {
       }) ?? basePool;
   }
 
-  transformFilter(filter?: Filter) {
-    const pgFilter = new PGFilterTranslator();
-    const translatedFilter = pgFilter.translate(filter ?? {});
-    return translatedFilter;
+  transformFilter(filter?: VectorFilter) {
+    const translator = new PGFilterTranslator();
+    return translator.translate(filter);
   }
 
   async getIndexInfo(indexName: string): Promise<PGIndexStats> {
@@ -55,18 +87,10 @@ export class PgVector extends MastraVector {
     return this.indexCache.get(indexName)!;
   }
 
-  async query(
-    indexName: string,
-    queryVector: number[],
-    topK: number = 10,
-    filter?: Filter,
-    includeVector: boolean = false,
-    minScore: number = 0, // Optional minimum score threshold
-    options?: {
-      ef?: number; // For HNSW
-      probes?: number; // For IVF
-    },
-  ): Promise<QueryResult[]> {
+  async query(...args: ParamsToArgs<PgQueryVectorParams>): Promise<QueryResult[]> {
+    const params = this.normalizeArgs<PgQueryVectorParams>('query', args, ['minScore', 'ef', 'probes']);
+    const { indexName, queryVector, topK = 10, filter, includeVector = false, minScore = 0, ef, probes } = params;
+
     const client = await this.pool.connect();
     try {
       const vectorStr = `[${queryVector.join(',')}]`;
@@ -79,13 +103,13 @@ export class PgVector extends MastraVector {
       // Set HNSW search parameter if applicable
       if (indexInfo.type === 'hnsw') {
         // Calculate ef and clamp between 1 and 1000
-        const calculatedEf = options?.ef ?? Math.max(topK, (indexInfo?.config?.m ?? 16) * topK);
+        const calculatedEf = ef ?? Math.max(topK, (indexInfo?.config?.m ?? 16) * topK);
         const searchEf = Math.min(1000, Math.max(1, calculatedEf));
         await client.query(`SET LOCAL hnsw.ef_search = ${searchEf}`);
       }
 
-      if (indexInfo.type === 'ivfflat' && options?.probes) {
-        await client.query(`SET LOCAL ivfflat.probes = ${options.probes}`);
+      if (indexInfo.type === 'ivfflat' && probes) {
+        await client.query(`SET LOCAL ivfflat.probes = ${probes}`);
       }
 
       const query = `
@@ -116,12 +140,11 @@ export class PgVector extends MastraVector {
     }
   }
 
-  async upsert(
-    indexName: string,
-    vectors: number[][],
-    metadata?: Record<string, any>[],
-    ids?: string[],
-  ): Promise<string[]> {
+  async upsert(...args: ParamsToArgs<UpsertVectorParams>): Promise<string[]> {
+    const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
+
+    const { indexName, vectors, metadata, ids } = params;
+
     // Start a transaction
     const client = await this.pool.connect();
     try {
@@ -152,13 +175,11 @@ export class PgVector extends MastraVector {
     }
   }
 
-  async createIndex(
-    indexName: string,
-    dimension: number,
-    metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
-    indexConfig: IndexConfig = {},
-    defineIndex: boolean = true,
-  ): Promise<void> {
+  async createIndex(...args: ParamsToArgs<PgCreateIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<PgCreateIndexParams>('createIndex', args, ['indexConfig', 'buildIndex']);
+
+    const { indexName, dimension, metric = 'cosine', indexConfig = {}, buildIndex = true } = params;
+
     const client = await this.pool.connect();
     try {
       // Validate inputs
@@ -193,8 +214,8 @@ export class PgVector extends MastraVector {
         );
       `);
 
-      if (defineIndex) {
-        await this.defineIndex(indexName, metric, indexConfig);
+      if (buildIndex) {
+        await this.buildIndex({ indexName, metric, indexConfig });
       }
     } catch (error: any) {
       console.error('Failed to create vector table:', error);
@@ -212,14 +233,14 @@ export class PgVector extends MastraVector {
     metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
     indexConfig: IndexConfig,
   ): Promise<void> {
-    return this.buildIndex(indexName, metric, indexConfig);
+    return this.buildIndex({ indexName, metric, indexConfig });
   }
 
-  async buildIndex(
-    indexName: string,
-    metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
-    indexConfig: IndexConfig,
-  ): Promise<void> {
+  async buildIndex(...args: ParamsToArgs<PgDefineIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<PgDefineIndexParams>('buildIndex', args, ['metric', 'indexConfig']);
+
+    const { indexName, metric = 'cosine', indexConfig } = params;
+
     const client = await this.pool.connect();
     try {
       await client.query(`DROP INDEX IF EXISTS ${indexName}_vector_idx`);

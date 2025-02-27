@@ -1,5 +1,6 @@
 import { BaseFilterTranslator } from '@mastra/core/filter';
 import type { FieldCondition, Filter, OperatorSupport, QueryOperator } from '@mastra/core/filter';
+import type { VectorFilter } from '@mastra/core/vector';
 
 /**
  * Translator for Astra DB filter queries.
@@ -17,9 +18,9 @@ export class AstraFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter: Filter): Filter {
+  translate(filter?: VectorFilter): VectorFilter {
     if (this.isEmpty(filter)) return filter;
-    this.validateFilter(filter);
+    this.validateFilter(filter as Filter);
 
     return this.translateNode(filter);
   }

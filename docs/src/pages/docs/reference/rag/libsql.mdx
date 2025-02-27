@@ -29,7 +29,10 @@ const store = new LibSQLVector({
 });
 
 // Create an index
-await store.createIndex("my-collection", 1536);
+await store.createIndex({
+  indexName: "my-collection",
+  dimension: 1536,
+});
 
 // Add vectors with metadata
 const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
@@ -37,16 +40,20 @@ const metadata = [
   { text: "first document", category: "A" },
   { text: "second document", category: "B" }
 ];
-await store.upsert("my-collection", vectors, metadata);
+await store.upsert({
+  indexName: "my-collection",
+  vectors,
+  metadata,
+});
 
 // Query similar vectors
 const queryVector = [0.1, 0.2, ...];
-const results = await store.query(
-  "my-collection",
+const results = await store.query({
+  indexName: "my-collection",
   queryVector,
-  10, // top K results
-  { category: "A" } // optional metadata filter
-);
+  topK: 10, // top K results
+  filter: { category: "A" } // optional metadata filter
+});
 ```
 
 ## Constructor Options
@@ -264,7 +271,10 @@ The store throws specific errors for different failure cases:
 
 ```typescript copy
 try {
-  await store.query("my-collection", queryVector);
+  await store.query({
+    indexName: "my-collection",
+    queryVector: queryVector,
+  });
 } catch (error) {
   // Handle specific error cases
   if (error.message.includes("Invalid index name format")) {

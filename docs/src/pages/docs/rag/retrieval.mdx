@@ -37,7 +37,11 @@ const { embedding } = await embed({
 
 // Query vector store
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING);
-const results = await pgVector.query("embeddings", embedding, 10);
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+});
 ```
 
 Results include both the text content and a similarity score:
@@ -72,37 +76,62 @@ Basic filtering examples:
 
 ```ts showLineNumbers copy
 // Simple equality filter
-const results = await pgVector.query("embeddings", embedding, 10, {
-  source: "article1.txt"
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    source: "article1.txt"
+  }
 });
 
 // Numeric comparison
-const results = await pgVector.query("embeddings", embedding, 10, {
-  price: { $gt: 100 }
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    price: { $gt: 100 }
+  }
 });
 
 // Multiple conditions
-const results = await pgVector.query("embeddings", embedding, 10, {
-  category: "electronics",
-  price: { $lt: 1000 },
-  inStock: true
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    category: "electronics",
+    price: { $lt: 1000 },
+    inStock: true
+  }
 });
 
 // Array operations
-const results = await pgVector.query("embeddings", embedding, 10, {
-  tags: { $in: ["sale", "new"] }
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    tags: { $in: ["sale", "new"] }
+  }
 });
 
 // Logical operators
-const results = await pgVector.query("embeddings", embedding, 10, {
-  $or: [
-    { category: "electronics" },
-    { category: "accessories" }
-  ],
-  $and: [
-    { price: { $gt: 50 } },
-    { price: { $lt: 200 } }
-  ]
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    $or: [
+      { category: "electronics" },
+      { category: "accessories" }
+    ],
+    $and: [
+      { price: { $gt: 50 } },
+      { price: { $lt: 200 } }
+    ]
+  }
 });
 ``` 
 
@@ -289,7 +318,11 @@ import { openai } from "@ai-sdk/openai";
 import { rerank } from "@mastra/rag";
 
 // Get initial results from vector search
-const initialResults = await pgVector.query("embeddings", queryEmbedding, 10);
+const initialResults = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: queryEmbedding,
+  topK: 10,
+});
 
 // Re-rank the results
 const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'));

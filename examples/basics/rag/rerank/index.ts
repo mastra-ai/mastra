@@ -40,12 +40,15 @@ const { embeddings } = await embedMany({
 
 // Store embeddings in PgVector
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
-await pgVector.createIndex('embeddings', 1536);
-await pgVector.upsert(
-  'embeddings',
-  embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text })),
-);
+await pgVector.createIndex({
+  indexName: 'embeddings',
+  dimension: 1536,
+});
+await pgVector.upsert({
+  indexName: 'embeddings',
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
 
 // Example usage
 const query = 'explain technical trading analysis';
@@ -57,7 +60,11 @@ const { embedding: queryEmbedding } = await embed({
 });
 
 // Get initial results
-const initialResults = await pgVector.query('embeddings', queryEmbedding, 3);
+const initialResults = await pgVector.query({
+  indexName: 'embeddings',
+  queryVector: queryEmbedding,
+  topK: 3,
+});
 
 // Re-rank results
 const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'), {
@@ -72,7 +79,7 @@ const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'
 console.log('Initial Results:');
 initialResults.forEach((result, index) => {
   console.log(`Result ${index + 1}:`, {
-    text: result.metadata.text,
+    text: result.metadata?.text,
     score: result.score,
   });
 });
@@ -80,7 +87,7 @@ initialResults.forEach((result, index) => {
 console.log('Re-ranked Results:');
 rerankedResults.forEach(({ result, score, details }, index) => {
   console.log(`Result ${index + 1}:`, {
-    text: result.metadata.text,
+    text: result.metadata?.text,
     score: score,
     semantic: details.semantic,
     vector: details.vector,

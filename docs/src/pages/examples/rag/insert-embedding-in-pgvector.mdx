@@ -26,13 +26,16 @@ const { embeddings } = await embedMany({
 
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
-await pgVector.createIndex("test_index", 1536);
+await pgVector.createIndex({
+  indexName: "test_index",
+  dimension: 1536,
+});
 
-await pgVector.upsert(
-  "test_index",
-  embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text })),
-);
+await pgVector.upsert({
+  indexName: "test_index",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
 ```
 
 <br />

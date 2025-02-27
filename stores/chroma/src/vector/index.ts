@@ -1,13 +1,23 @@
-import type { Filter } from '@mastra/core/filter';
 import { MastraVector } from '@mastra/core/vector';
-import type { QueryResult, IndexStats } from '@mastra/core/vector';
+import type {
+  QueryResult,
+  IndexStats,
+  CreateIndexParams,
+  UpsertVectorParams,
+  QueryVectorParams,
+  VectorFilter,
+  ParamsToArgs,
+} from '@mastra/core/vector';
 import { ChromaClient } from 'chromadb';
 
 import { ChromaFilterTranslator } from './filter';
 
-export interface DocumentMetadata {
-  content?: string;
-  metadata?: Record<string, any>;
+interface ChromaUpsertVectorParams extends UpsertVectorParams {
+  documents?: string[];
+}
+
+interface ChromaQueryVectorParams extends QueryVectorParams {
+  documentFilter?: VectorFilter;
 }
 
 export class ChromaVector extends MastraVector {
@@ -55,13 +65,11 @@ export class ChromaVector extends MastraVector {
     }
   }
 
-  async upsert(
-    indexName: string,
-    vectors: number[][],
-    metadata?: Record<string, any>[],
-    ids?: string[],
-    documents?: string[],
-  ): Promise<string[]> {
+  async upsert(...args: ParamsToArgs<ChromaUpsertVectorParams>): Promise<string[]> {
+    const params = this.normalizeArgs<ChromaUpsertVectorParams>('upsert', args, ['documents']);
+
+    const { indexName, vectors, metadata, ids, documents } = params;
+
     const collection = await this.getCollection(indexName);
 
     // Get index stats to check dimension
@@ -94,11 +102,11 @@ export class ChromaVector extends MastraVector {
     ip: 'dotproduct',
   };
 
-  async createIndex(
-    indexName: string,
-    dimension: number,
-    metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
-  ): Promise<void> {
+  async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
+
+    const { indexName, dimension, metric = 'cosine' } = params;
+
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new Error('Dimension must be a positive integer');
     }
@@ -115,19 +123,15 @@ export class ChromaVector extends MastraVector {
     });
   }
 
-  transformFilter(filter?: Filter) {
-    const chromaFilter = new ChromaFilterTranslator();
-    const translatedFilter = chromaFilter.translate(filter);
-    return translatedFilter;
+  transformFilter(filter?: VectorFilter) {
+    const translator = new ChromaFilterTranslator();
+    return translator.translate(filter);
   }
-  async query(
-    indexName: string,
-    queryVector: number[],
-    topK: number = 10,
-    filter?: Filter,
-    includeVector: boolean = false,
-    documentFilter?: Filter,
-  ): Promise<QueryResult[]> {
+  async query(...args: ParamsToArgs<ChromaQueryVectorParams>): Promise<QueryResult[]> {
+    const params = this.normalizeArgs<ChromaQueryVectorParams>('query', args, ['documentFilter']);
+
+    const { indexName, queryVector, topK = 10, filter, includeVector = false, documentFilter } = params;
+
     const collection = await this.getCollection(indexName, true);
 
     const defaultInclude = ['documents', 'metadatas', 'distances'];

@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
+import { vi, describe, it, expect, beforeAll, afterAll, test, beforeEach, afterEach } from 'vitest';
 
 import { AstraVector } from './';
 
@@ -52,8 +52,8 @@ describe('AstraVector Integration Tests', () => {
       console.error('Failed to delete test collections:', error);
     }
 
-    await vectorDB.createIndex(testIndexName, 4, 'cosine');
-    await vectorDB.createIndex(testIndexName2, 4, 'cosine');
+    await vectorDB.createIndex({ indexName: testIndexName, dimension: 4, metric: 'cosine' });
+    await vectorDB.createIndex({ indexName: testIndexName2, dimension: 4, metric: 'cosine' });
   }, 500000);
 
   afterAll(async () => {
@@ -93,7 +93,7 @@ describe('AstraVector Integration Tests', () => {
 
     const metadata = [{ label: 'vector1' }, { label: 'vector2' }, { label: 'vector3' }, { label: 'vector4' }];
 
-    const ids = await vectorDB.upsert(testIndexName, vectors, metadata);
+    const ids = await vectorDB.upsert({ indexName: testIndexName, vectors, metadata });
     expect(ids).toHaveLength(4);
 
     // Wait for document count to update (with timeout)
@@ -113,14 +113,19 @@ describe('AstraVector Integration Tests', () => {
 
     // 4. Query vectors
     const queryVector = [1, 0, 0, 0];
-    const results = await vectorDB.query(testIndexName, queryVector, 2);
+    const results = await vectorDB.query({ indexName: testIndexName, queryVector, topK: 2 });
 
     expect(results).toHaveLength(2);
     expect(results?.[0]?.metadata).toEqual({ label: 'vector1' });
     expect(results?.[0]?.score).toBeCloseTo(1, 4);
 
     // 5. Query with filter
-    const filteredResults = await vectorDB.query(testIndexName, queryVector, 2, { 'metadata.label': 'vector2' });
+    const filteredResults = await vectorDB.query({
+      indexName: testIndexName,
+      queryVector,
+      topK: 2,
+      filter: { 'metadata.label': 'vector2' },
+    });
 
     expect(filteredResults).toHaveLength(1);
     expect(filteredResults?.[0]?.metadata).toEqual({ label: 'vector2' });
@@ -138,7 +143,11 @@ describe('AstraVector Integration Tests', () => {
 
   test('gets vector results back from query', async () => {
     const queryVector = [1, 0, 0, 0];
-    const results = await vectorDB.query(testIndexName, queryVector, 2, undefined, true);
+    const results = await vectorDB.query({
+      indexName: testIndexName,
+      queryVector,
+      topK: 2,
+    });
 
     expect(results).toHaveLength(2);
     expect(results?.[0]?.metadata).toEqual({ label: 'vector1' });
@@ -151,7 +160,11 @@ describe('AstraVector Integration Tests', () => {
 
     try {
       // Create index with higher dimensions
-      await vectorDB.createIndex(highDimIndexName, 1536, 'cosine');
+      await vectorDB.createIndex({
+        indexName: highDimIndexName,
+        dimension: 1536,
+        metric: 'cosine',
+      });
 
       // Insert high-dimensional vectors
       const vectors = [
@@ -165,7 +178,11 @@ describe('AstraVector Integration Tests', () => {
 
       const metadata = [{ label: 'even' }, { label: 'odd' }];
 
-      const ids = await vectorDB.upsert(highDimIndexName, vectors, metadata);
+      const ids = await vectorDB.upsert({
+        indexName: highDimIndexName,
+        vectors,
+        metadata,
+      });
       expect(ids).toHaveLength(2);
 
       // Wait for indexing with more generous timeout
@@ -175,7 +192,11 @@ describe('AstraVector Integration Tests', () => {
       const queryVector = Array(1536)
         .fill(0)
         .map((_, i) => i % 2);
-      const results = await vectorDB.query(highDimIndexName, queryVector, 2);
+      const results = await vectorDB.query({
+        indexName: highDimIndexName,
+        queryVector,
+        topK: 2,
+      });
 
       expect(results).toHaveLength(2);
       expect(results?.[0]?.metadata).toEqual({ label: 'even' });
@@ -194,7 +215,11 @@ describe('AstraVector Integration Tests', () => {
 
       try {
         // Create index with different metric
-        await vectorDB.createIndex(metricIndexName, 4, metric);
+        await vectorDB.createIndex({
+          indexName: metricIndexName,
+          dimension: 4,
+          metric,
+        });
 
         // Insert same vectors
         const vectors = [
@@ -202,13 +227,20 @@ describe('AstraVector Integration Tests', () => {
           [0.7071, 0.7071, 0, 0], // 45-degree angle from first vector
         ];
 
-        await vectorDB.upsert(metricIndexName, vectors);
+        await vectorDB.upsert({
+          indexName: metricIndexName,
+          vectors,
+        });
 
         // Wait for indexing with more generous timeout
         await new Promise(resolve => setTimeout(resolve, 2000));
 
         // Query
-        const results = await vectorDB.query(metricIndexName, [1, 0, 0, 0], 2);
+        const results = await vectorDB.query({
+          indexName: metricIndexName,
+          queryVector: [1, 0, 0, 0],
+          topK: 2,
+        });
 
         expect(results).toHaveLength(2);
 
@@ -224,22 +256,28 @@ describe('AstraVector Integration Tests', () => {
   describe('Filter Validation in Queries', () => {
     it('rejects invalid operator values', async () => {
       await expect(
-        vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          tags: { $all: 'not-an-array' },
+        vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: { tags: { $all: 'not-an-array' } },
         }),
       ).rejects.toThrow();
     });
 
     it('validates array operator values', async () => {
       await expect(
-        vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          tags: { $in: null },
+        vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: { tags: { $in: null } },
         }),
       ).rejects.toThrow();
 
       await expect(
-        vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          tags: { $all: 'not-an-array' },
+        vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: { tags: { $all: 'not-an-array' } },
         }),
       ).rejects.toThrow();
     });
@@ -249,8 +287,10 @@ describe('AstraVector Integration Tests', () => {
       for (const val of invalidValues) {
         console.log('val:', val);
         await expect(
-          vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-            field: { $in: val },
+          vectorDB.query({
+            indexName: testIndexName2,
+            queryVector: [1, 0, 0, 0],
+            filter: { field: { $in: val } },
           }),
         ).rejects.toThrow();
       }
@@ -261,8 +301,10 @@ describe('AstraVector Integration Tests', () => {
       for (const val of invalidValues) {
         console.log('val:', val);
         await expect(
-          vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-            field: { $nin: val },
+          vectorDB.query({
+            indexName: testIndexName2,
+            queryVector: [1, 0, 0, 0],
+            filter: { field: { $nin: val } },
           }),
         ).rejects.toThrow();
       }
@@ -272,8 +314,10 @@ describe('AstraVector Integration Tests', () => {
       const invalidValues = [123, 'string', true, { key: 'value' }, {}, [], null];
       for (const val of invalidValues) {
         await expect(
-          vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-            field: { $all: val },
+          vectorDB.query({
+            indexName: testIndexName2,
+            queryVector: [1, 0, 0, 0],
+            filter: { field: { $all: val } },
           }),
         ).rejects.toThrow();
       }
@@ -283,8 +327,10 @@ describe('AstraVector Integration Tests', () => {
       const invalidValues = [123, 'string', { key: 'value' }, {}, [], null];
       for (const val of invalidValues) {
         await expect(
-          vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-            field: { $exists: val },
+          vectorDB.query({
+            indexName: testIndexName2,
+            queryVector: [1, 0, 0, 0],
+            filter: { field: { $exists: val } },
           }),
         ).rejects.toThrow();
       }
@@ -299,8 +345,10 @@ describe('AstraVector Integration Tests', () => {
           console.log('op:', op);
           console.log('val:', val);
           await expect(
-            vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-              field: { [op]: val },
+            vectorDB.query({
+              indexName: testIndexName2,
+              queryVector: [1, 0, 0, 0],
+              filter: { field: { [op]: val } },
             }),
           ).rejects.toThrow();
         }
@@ -309,10 +357,14 @@ describe('AstraVector Integration Tests', () => {
 
     it('validates multiple invalid values', async () => {
       await expect(
-        vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          field1: { $in: 'not-array' },
-          field2: { $exists: 'not-boolean' },
-          field3: { $gt: 'not-number' },
+        vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            field1: { $in: 'not-array' },
+            field2: { $exists: 'not-boolean' },
+            field3: { $gt: 'not-number' },
+          },
         }),
       ).rejects.toThrow();
     });
@@ -375,15 +427,23 @@ describe('AstraVector Integration Tests', () => {
         },
       ];
 
-      await vectorDB.upsert(testIndexName2, vectors, metadata);
+      await vectorDB.upsert({
+        indexName: testIndexName2,
+        vectors,
+        metadata,
+      });
       // Wait for indexing
       await new Promise(resolve => setTimeout(resolve, 2000));
     });
 
     describe('Basic Comparison Operators', () => {
       it('filters with $eq operator', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          'metadata.category': { $eq: 'electronics' },
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            'metadata.category': { $eq: 'electronics' },
+          },
         });
         expect(results.length).toBe(2);
         results.forEach(result => {
@@ -392,8 +452,12 @@ describe('AstraVector Integration Tests', () => {
       });
 
       it('filters with $gt operator', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          'metadata.price': { $gt: 500 },
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            'metadata.price': { $gt: 500 },
+          },
         });
         expect(results.length).toBe(1);
         results.forEach(result => {
@@ -402,8 +466,12 @@ describe('AstraVector Integration Tests', () => {
       });
 
       it('filters with $gte, $lt, $lte operators', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          'metadata.price': { $gte: 25, $lte: 500 },
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            'metadata.price': { $gte: 25, $lte: 500 },
+          },
         });
         expect(results.length).toBe(2);
         results.forEach(result => {
@@ -413,8 +481,12 @@ describe('AstraVector Integration Tests', () => {
       });
 
       it('filters with $ne operator', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          'metadata.category': { $ne: 'books' },
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            'metadata.category': { $ne: 'books' },
+          },
         });
         expect(results.length).toBe(2);
         results.forEach(result => {
@@ -425,22 +497,43 @@ describe('AstraVector Integration Tests', () => {
 
     describe('Null/Undefined/Empty FIlters', () => {
       it('should handle undefined filter', async () => {
-        const results1 = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, undefined);
-        const results2 = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10);
+        const results1 = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: undefined,
+        });
+        const results2 = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+        });
         expect(results1).toEqual(results2);
         expect(results1.length).toBeGreaterThan(0);
       });
 
       it('should handle empty object filter', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {});
-        const results2 = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10);
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {},
+        });
+        const results2 = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+        });
         expect(results).toEqual(results2);
         expect(results.length).toBeGreaterThan(0);
       });
 
       it('should handle null filter', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, null as any);
-        const results2 = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10);
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: null,
+        });
+        const results2 = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+        });
         expect(results).toEqual(results2);
         expect(results.length).toBeGreaterThan(0);
       });
@@ -448,8 +541,12 @@ describe('AstraVector Integration Tests', () => {
 
     describe('Array Operators', () => {
       it('filters with $in operator', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          'metadata.tags': { $in: ['premium'] },
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            'metadata.tags': { $in: ['premium'] },
+          },
         });
         expect(results.length).toBe(2);
         results.forEach(result => {
@@ -458,8 +555,12 @@ describe('AstraVector Integration Tests', () => {
       });
 
       it('filters with $nin operator', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          'metadata.tags': { $nin: ['bestseller'] },
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            'metadata.tags': { $nin: ['bestseller'] },
+          },
         });
         expect(results.length).toBe(2);
         results.forEach(result => {
@@ -468,8 +569,12 @@ describe('AstraVector Integration Tests', () => {
       });
 
       it('filters with $all operator', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          'metadata.tags': { $all: ['premium', 'new'] },
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            'metadata.tags': { $all: ['premium', 'new'] },
+          },
         });
         expect(results.length).toBe(1);
         results.forEach(result => {
@@ -481,8 +586,12 @@ describe('AstraVector Integration Tests', () => {
 
     describe('Logical Operators', () => {
       it('filters with $and operator', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          $and: [{ 'metadata.category': 'electronics' }, { 'metadata.price': { $gt: 500 } }],
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            $and: [{ 'metadata.category': 'electronics' }, { 'metadata.price': { $gt: 500 } }],
+          },
         });
         expect(results.length).toBe(1);
         expect(results[0]?.metadata?.category).toBe('electronics');
@@ -490,8 +599,12 @@ describe('AstraVector Integration Tests', () => {
       });
 
       it('filters with $or operator', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          $or: [{ 'metadata.price': { $gt: 900 } }, { 'metadata.rating': { $gt: 4.8 } }],
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            $or: [{ 'metadata.price': { $gt: 900 } }, { 'metadata.rating': { $gt: 4.8 } }],
+          },
         });
         expect(results.length).toBe(2);
         results.forEach(result => {
@@ -500,8 +613,12 @@ describe('AstraVector Integration Tests', () => {
       });
 
       it('filters with direct field comparison', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          $not: { 'metadata.category': 'electronics' }, // Simple field equality
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            $not: { 'metadata.category': 'electronics' }, // Simple field equality
+          },
         });
         expect(results.length).toBe(2);
         results.forEach(result => {
@@ -510,8 +627,12 @@ describe('AstraVector Integration Tests', () => {
       });
 
       it('filters with $eq operator', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          $not: { 'metadata.category': { $eq: 'electronics' } },
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            $not: { 'metadata.category': { $eq: 'electronics' } },
+          },
         });
         expect(results.length).toBe(2);
         results.forEach(result => {
@@ -520,18 +641,26 @@ describe('AstraVector Integration Tests', () => {
       });
 
       it('filters with multiple conditions on same field using implicit $and', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          'metadata.category': 'electronics',
-          'metadata.price': 1000,
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            'metadata.category': 'electronics',
+            'metadata.price': 1000,
+          },
         });
         expect(results.length).toBe(1);
       });
 
       it('filters with multiple fields', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          $not: {
-            'metadata.category': 'electronics',
-            'metadata.price': 100,
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            $not: {
+              'metadata.category': 'electronics',
+              'metadata.price': 100,
+            },
           },
         });
         expect(results.length).toBeGreaterThan(0);
@@ -541,28 +670,40 @@ describe('AstraVector Integration Tests', () => {
       });
 
       it('uses $not within $or', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          $or: [{ $not: { 'metadata.category': 'electronics' } }, { 'metadata.price': { $gt: 100 } }],
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            $or: [{ $not: { 'metadata.category': 'electronics' } }, { 'metadata.price': { $gt: 100 } }],
+          },
         });
         expect(results.length).toBeGreaterThan(0);
       });
 
       // Test $not with $exists
       it('filters with $exists', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          $not: { 'metadata.optional_field': { $exists: true } },
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            $not: { 'metadata.optional_field': { $exists: true } },
+          },
         });
         expect(results.length).toBeGreaterThan(0);
       });
 
       it('filters with nested logical operators', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          $and: [
-            { 'metadata.category': 'electronics' },
-            {
-              $or: [{ 'metadata.price': { $gt: 900 } }, { 'metadata.tags': { $all: ['refurbished'] } }],
-            },
-          ],
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            $and: [
+              { 'metadata.category': 'electronics' },
+              {
+                $or: [{ 'metadata.price': { $gt: 900 } }, { 'metadata.tags': { $all: ['refurbished'] } }],
+              },
+            ],
+          },
         });
         expect(results.length).toBe(2);
         results.forEach(result => {
@@ -574,16 +715,24 @@ describe('AstraVector Integration Tests', () => {
 
     describe('Nested Field Queries', () => {
       it('filters on nested object fields', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          'metadata.specs.color': 'black',
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            'metadata.specs.color': 'black',
+          },
         });
         expect(results.length).toBe(1);
         expect(results[0]?.metadata?.specs?.color).toBe('black');
       });
 
       it('combines nested field queries with logical operators', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          $or: [{ 'metadata.specs.weight': { $lt: 2.0 } }, { 'metadata.author.country': 'UK' }],
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            $or: [{ 'metadata.specs.weight': { $lt: 2.0 } }, { 'metadata.author.country': 'UK' }],
+          },
         });
         expect(results.length).toBe(2);
         results.forEach(result => {
@@ -594,14 +743,18 @@ describe('AstraVector Integration Tests', () => {
 
     describe('Complex Filter Combinations', () => {
       it('combines multiple operators and conditions', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          $and: [
-            { 'metadata.price': { $gt: 20 } },
-            { 'metadata.inStock': true },
-            {
-              $or: [{ 'metadata.tags': { $in: ['premium'] } }, { 'metadata.rating': { $gt: 4.5 } }],
-            },
-          ],
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            $and: [
+              { 'metadata.price': { $gt: 20 } },
+              { 'metadata.inStock': true },
+              {
+                $or: [{ 'metadata.tags': { $in: ['premium'] } }, { 'metadata.rating': { $gt: 4.5 } }],
+              },
+            ],
+          },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
@@ -612,23 +765,27 @@ describe('AstraVector Integration Tests', () => {
       });
 
       it('handles complex nested conditions', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          $or: [
-            {
-              $and: [
-                { 'metadata.category': 'electronics' },
-                { 'metadata.specs.weight': { $lt: 2.0 } },
-                { 'metadata.tags': { $in: ['premium'] } },
-              ],
-            },
-            {
-              $and: [
-                { 'metadata.category': 'books' },
-                { 'metadata.price': { $lt: 20 } },
-                { 'metadata.author.country': 'UK' },
-              ],
-            },
-          ],
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            $or: [
+              {
+                $and: [
+                  { 'metadata.category': 'electronics' },
+                  { 'metadata.specs.weight': { $lt: 2.0 } },
+                  { 'metadata.tags': { $in: ['premium'] } },
+                ],
+              },
+              {
+                $and: [
+                  { 'metadata.category': 'books' },
+                  { 'metadata.price': { $lt: 20 } },
+                  { 'metadata.author.country': 'UK' },
+                ],
+              },
+            ],
+          },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
@@ -672,29 +829,45 @@ describe('AstraVector Integration Tests', () => {
           },
         ];
 
-        await vectorDB.upsert(testIndexName2, vectors, metadata);
+        await vectorDB.upsert({
+          indexName: testIndexName2,
+          vectors,
+          metadata,
+        });
         await new Promise(resolve => setTimeout(resolve, 2000));
       });
 
       it('filters based on field existence', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          'metadata.optionalField': { $exists: true },
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            'metadata.optionalField': { $exists: true },
+          },
         });
         expect(results.length).toBe(1);
         expect('optionalField' in results[0]!.metadata!).toBe(true);
       });
 
       it('filters for null values', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          'metadata.nested.nullField': null,
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            'metadata.nested.nullField': null,
+          },
         });
         expect(results.length).toBe(1);
         expect(results[0]!.metadata!.nested.nullField).toBeNull();
       });
 
       it('combines existence checks with other operators', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          $and: [{ 'metadata.category': 'special' }, { 'metadata.optionalField': { $exists: false } }],
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            $and: [{ 'metadata.category': 'special' }, { 'metadata.optionalField': { $exists: false } }],
+          },
         });
         expect(results.length).toBe(1);
         expect(results[0]!.metadata!.category).toBe('special');
@@ -702,8 +875,12 @@ describe('AstraVector Integration Tests', () => {
       });
 
       it('handles empty array edge cases', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          'metadata.emptyArray': { $size: 0 },
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            'metadata.emptyArray': { $size: 0 },
+          },
         });
         expect(results.length).toBe(1);
         expect(results[0]!.metadata!.emptyArray).toHaveLength(0);
@@ -747,13 +924,21 @@ describe('AstraVector Integration Tests', () => {
           },
         ];
 
-        await vectorDB.upsert(testIndexName2, vectors, metadata);
+        await vectorDB.upsert({
+          indexName: testIndexName2,
+          vectors,
+          metadata,
+        });
         await new Promise(resolve => setTimeout(resolve, 2000));
       });
 
       it('handles special numeric values', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          $or: [{ 'metadata.numericFields.zero': 0 }, { 'metadata.numericFields.negativeZero': 0 }],
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            $or: [{ 'metadata.numericFields.zero': 0 }, { 'metadata.numericFields.negativeZero': 0 }],
+          },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
@@ -764,21 +949,29 @@ describe('AstraVector Integration Tests', () => {
 
       it('compares dates correctly', async () => {
         const now = new Date().toISOString();
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          $and: [
-            { 'metadata.dateFields.current': { $lte: now } },
-            { 'metadata.dateFields.current': { $gt: new Date(0).toISOString() } },
-          ],
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            $and: [
+              { 'metadata.dateFields.current': { $lte: now } },
+              { 'metadata.dateFields.current': { $gt: new Date(0).toISOString() } },
+            ],
+          },
         });
         expect(results.length).toBeGreaterThan(0);
       });
 
       it('handles extreme numeric values', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          $or: [
-            { 'metadata.numericFields.maxInt': { $gte: Number.MAX_SAFE_INTEGER } },
-            { 'metadata.numericFields.minInt': { $lte: Number.MIN_SAFE_INTEGER } },
-          ],
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            $or: [
+              { 'metadata.numericFields.maxInt': { $gte: Number.MAX_SAFE_INTEGER } },
+              { 'metadata.numericFields.minInt': { $lte: Number.MIN_SAFE_INTEGER } },
+            ],
+          },
         });
         expect(results.length).toBe(1);
       });
@@ -818,20 +1011,32 @@ describe('AstraVector Integration Tests', () => {
           },
         ];
 
-        await vectorDB.upsert(testIndexName2, vectors, metadata);
+        await vectorDB.upsert({
+          indexName: testIndexName2,
+          vectors,
+          metadata,
+        });
         await new Promise(resolve => setTimeout(resolve, 2000));
       });
 
       it('handles $in with empty array input', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          'metadata.arrays.single': { $in: [] },
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            'metadata.arrays.single': { $in: [] },
+          },
         });
         expect(results.length).toBe(0);
       });
 
       it('combines $size with $exists for array fields', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          $and: [{ 'metadata.arrays.empty': { $exists: true } }, { 'metadata.arrays.empty': { $size: 0 } }],
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            $and: [{ 'metadata.arrays.empty': { $exists: true } }, { 'metadata.arrays.empty': { $size: 0 } }],
+          },
         });
         expect(results.length).toBe(2);
         results.forEach(result => {
@@ -841,13 +1046,107 @@ describe('AstraVector Integration Tests', () => {
       });
 
       it('filters arrays by exact size matching', async () => {
-        const results = await vectorDB.query(testIndexName2, [1, 0, 0, 0], 10, {
-          $and: [{ 'metadata.arrays.multiple': { $size: 3 } }, { 'metadata.arrays.multiple': { $in: ['two'] } }],
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0, 0],
+          filter: {
+            $and: [{ 'metadata.arrays.multiple': { $size: 3 } }, { 'metadata.arrays.multiple': { $in: ['two'] } }],
+          },
         });
         expect(results.length).toBe(1);
         expect(results[0]?.metadata?.arrays?.multiple).toContain('two');
         expect(results[0]?.metadata?.arrays?.multiple).toHaveLength(3);
       });
+    });
+  });
+  describe('Deprecation Warnings', () => {
+    const indexName = 'test_deprecation_warnings';
+
+    const indexName2 = 'test_deprecation_warnings2';
+
+    let warnSpy;
+
+    beforeEach(async () => {
+      warnSpy = vi.spyOn(vectorDB['logger'], 'warn');
+      await vectorDB.createIndex({ indexName: indexName, dimension: 3 });
+    });
+
+    afterEach(async () => {
+      warnSpy.mockRestore();
+      await vectorDB.deleteIndex(indexName);
+      await vectorDB.deleteIndex(indexName2);
+    });
+
+    it('should show deprecation warning when using individual args for createIndex', async () => {
+      await vectorDB.createIndex(indexName2, 3, 'cosine');
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Deprecation Warning: Passing individual arguments to createIndex() is deprecated'),
+      );
+    });
+
+    it('should show deprecation warning when using individual args for upsert', async () => {
+      await vectorDB.upsert(indexName, [[1, 2, 3]], [{ test: 'data' }]);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Deprecation Warning: Passing individual arguments to upsert() is deprecated'),
+      );
+    });
+
+    it('should show deprecation warning when using individual args for query', async () => {
+      await vectorDB.query(indexName, [1, 2, 3], 5);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Deprecation Warning: Passing individual arguments to query() is deprecated'),
+      );
+    });
+
+    it('should not show deprecation warning when using object param for query', async () => {
+      await vectorDB.query({
+        indexName,
+        queryVector: [1, 2, 3],
+        topK: 5,
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not show deprecation warning when using object param for createIndex', async () => {
+      await vectorDB.createIndex({
+        indexName: indexName2,
+        dimension: 3,
+        metric: 'cosine',
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not show deprecation warning when using object param for upsert', async () => {
+      await vectorDB.upsert({
+        indexName,
+        vectors: [[1, 2, 3]],
+        metadata: [{ test: 'data' }],
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('should maintain backward compatibility with individual args', async () => {
+      // Query
+      const queryResults = await vectorDB.query(indexName, [1, 2, 3], 5);
+      expect(Array.isArray(queryResults)).toBe(true);
+
+      // CreateIndex
+      await expect(vectorDB.createIndex(indexName2, 3, 'cosine')).resolves.not.toThrow();
+
+      // Upsert
+      const upsertResults = await vectorDB.upsert({
+        indexName,
+        vectors: [[1, 2, 3]],
+        metadata: [{ test: 'data' }],
+      });
+      expect(Array.isArray(upsertResults)).toBe(true);
+      expect(upsertResults).toHaveLength(1);
     });
   });
 });

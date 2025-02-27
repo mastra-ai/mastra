@@ -113,7 +113,10 @@ const { embeddings: cohereEmbeddings } = await embedMany({
 });
 
 // Store embeddings in your vector database
-await vectorStore.upsert("embeddings", embeddings);
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+});
 ```
 
 This example demonstrates how to process a document, split it into chunks, generate embeddings with both OpenAI and Cohere, and store the results in a vector database.

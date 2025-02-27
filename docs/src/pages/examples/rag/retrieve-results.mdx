@@ -30,17 +30,24 @@ const { embeddings } = await embedMany({
 
 const pinecone = new PineconeVector("your-api-key");
 
-await pinecone.createIndex("test_index", 1536);
+await pinecone.createIndex({
+  indexName: "test_index",
+  dimension: 1536,
+});
 
-await pinecone.upsert(
-  "test_index",
-  embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text })),
-);
+await pinecone.upsert({
+  indexName: "test_index",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
 
 const topK = 10;
 
-const results = await pinecone.query("test_index", embeddings[0], topK);
+const results = await pinecone.query({
+  indexName: "test_index",
+  queryVector: embeddings[0],
+  topK,
+});
 
 console.log(results);
 ```

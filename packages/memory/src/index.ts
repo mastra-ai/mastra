@@ -64,8 +64,13 @@ export class Memory extends MastraMemory {
 
       const { indexName } = await this.createEmbeddingIndex();
 
-      vectorResults = await this.vector.query(indexName, embedding, vectorConfig.topK, {
-        thread_id: threadId,
+      vectorResults = await this.vector.query({
+        indexName,
+        queryVector: embedding,
+        topK: vectorConfig.topK,
+        filter: {
+          thread_id: threadId,
+        },
       });
     }
 
@@ -208,17 +213,17 @@ export class Memory extends MastraMemory {
       for (const message of messages) {
         if (typeof message.content !== `string`) continue;
         const { embedding } = await embed({ value: message.content, model: this.embedder, maxRetries: 3 });
-        await this.vector.upsert(
+        await this.vector.upsert({
           indexName,
-          [embedding],
-          [
+          vectors: [embedding],
+          metadata: [
             {
               text: message.content,
               message_id: message.id,
               thread_id: message.threadId,
             },
           ],
-        );
+        });
       }
     }
 

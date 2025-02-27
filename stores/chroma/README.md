@@ -22,29 +22,28 @@ const vectorStore = new ChromaVector({
 });
 
 // Create a new collection
-await vectorStore.createIndex('my-collection', 1536, 'cosine');
+await vectorStore.createIndex({ indexName: 'my-collection', dimension: 1536, metric: 'cosine' });
 
 // Add vectors with documents
 const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
 const metadata = [{ text: 'doc1' }, { text: 'doc2' }];
 const documents = ['full text 1', 'full text 2'];
-const ids = await vectorStore.upsert(
-  'my-collection',
+const ids = await vectorStore.upsert({
+  indexName: 'my-collection',
   vectors,
   metadata,
-  undefined, // auto-generate IDs
-  documents  // store original text
-);
+  documents, // store original text
+});
 
 // Query vectors with document filtering
-const results = await vectorStore.query(
-  'my-collection',
-  [0.1, 0.2, ...],
-  10, // topK
-  { text: { $eq: 'doc1' } }, // metadata filter
-  false, // includeVector
-  { $contains: 'specific text' } // document content filter
-);
+const results = await vectorStore.query({
+  indexName: 'my-collection',
+  queryVector: [0.1, 0.2, ...],
+  topK: 10, // topK
+  filter: { text: { $eq: 'doc1' } }, // metadata filter
+  includeVector: false, // includeVector
+  documentFilter: { $contains: 'specific text' } // document content filter
+});
 ```
 
 ## Configuration
@@ -74,9 +73,9 @@ Optional:
 
 ## Methods
 
-- `createIndex(indexName, dimension, metric?)`: Create a new collection
-- `upsert(indexName, vectors, metadata?, ids?, documents?)`: Add or update vectors with optional document storage
-- `query(indexName, queryVector, topK?, filter?, includeVector?, documentFilter?)`: Search for similar vectors with optional document filtering
+- `createIndex({ indexName, dimension, metric? })`: Create a new collection
+- `upsert({ indexName, vectors, metadata?, ids?, documents? })`: Add or update vectors with optional document storage
+- `query({ indexName, queryVector, topK?, filter?, includeVector?, documentFilter? })`: Search for similar vectors with optional document filtering
 - `listIndexes()`: List all collections
 - `describeIndex(indexName)`: Get collection statistics
 - `deleteIndex(indexName)`: Delete a collection

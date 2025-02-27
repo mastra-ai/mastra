@@ -98,7 +98,7 @@ export abstract class MastraMemory extends MastraBase {
     const isDefault = dimensions === defaultDimensions;
     const indexName = isDefault ? 'memory_messages' : `memory_messages_${dimensions}`;
 
-    await this.vector.createIndex(indexName, dimensions);
+    await this.vector.createIndex({ indexName, dimension: dimensions });
     return { indexName };
   }
 

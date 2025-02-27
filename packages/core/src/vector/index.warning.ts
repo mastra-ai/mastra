@@ -1,4 +1,4 @@
-import { MastraVector as BaseMastraVector } from './index';
+import { MastraVector as BaseMastraVector } from './vector';
 
 export * from './index';
 
