@@ -1,6 +1,5 @@
-import { createWriteStream, writeFileSync, mkdirSync } from 'fs';
+import { createWriteStream, writeFileSync, mkdirSync, createReadStream } from 'fs';
 import path from 'path';
-import { Readable } from 'stream';
 import { describe, expect, it, beforeAll } from 'vitest';
 
 import { ElevenLabsVoice } from './index.js';
@@ -10,7 +9,6 @@ describe('ElevenLabsVoice Integration Tests', () => {
   const outputDir = path.join(process.cwd(), 'test-outputs');
 
   beforeAll(() => {
-    // Create output directory if it doesn't exist
     try {
       mkdirSync(outputDir, { recursive: true });
     } catch (err) {
@@ -100,14 +98,44 @@ describe('ElevenLabsVoice Integration Tests', () => {
   });
 
   describe('listen', () => {
-    it('should throw error as transcription is not supported', async () => {
-      const dummyStream = new Readable({
-        read() {
-          this.push(null);
+    it('should convert audio to text', async () => {
+      const outputPath = path.join(outputDir, 'elevenlabs-speech-test-params.mp3');
+      const audio = createReadStream(outputPath);
+      const result = await voice.listen(audio);
+
+      if (typeof result !== 'string') {
+        return expect(result).toBeInstanceOf(String);
+      }
+
+      expect(typeof result).toBe('string');
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('should handle API errors gracefully', async () => {
+      // Create a voice instance with an invalid API key to force an error
+      const invalidVoice = new ElevenLabsVoice({
+        listeningModel: {
+          name: 'eleven_multilingual_v2',
+          apiKey: 'invalid-api-key',
         },
       });
 
-      await expect(voice.listen(dummyStream)).rejects.toThrow('ElevenLabs does not support transcription');
+      const outputPath = path.join(outputDir, 'elevenlabs-speech-test-params.mp3');
+      const audio = createReadStream(outputPath);
+
+      // The API call should fail with an authentication error
+      await expect(invalidVoice.listen(audio)).rejects.toThrow();
+    });
+
+    it('should handle invalid audio input', async () => {
+      // Create a path to a non-existent file
+      const nonExistentPath = path.join(outputDir, 'non-existent-file.mp3');
+
+      // Attempting to create a read stream from a non-existent file should throw
+      await expect(async () => {
+        const audio = createReadStream(nonExistentPath);
+        await voice.listen(audio);
+      }).rejects.toThrow();
     });
   });
 });
