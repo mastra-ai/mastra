@@ -16,6 +16,10 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_REMOTE_ONLY: true
 
     steps:
       - name: Checkout repo
@@ -36,4 +40,41 @@ jobs:
         run: pnpm install
 
       - name: Lint
-        run: pnpm turbo lint --filter="./packages/*" --filter="./deployers/*" --filter="./integrations/*" --filter="!./integrations/ragie" --filter="./speech/*" --filter="./stores/*" --filter="./voice/*"
+        run: pnpm turbo --filter "!./examples/*" --filter "!./docs/*" lint
+
+check-bundle:
+  name: Validate build outputs
+  runs-on: ubuntu-latest
+  env:
+    TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+    TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+    TURBO_REMOTE_ONLY: true
+
+  steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - uses: pnpm/action-setup@v4
+      name: Install pnpm
+      with:
+        run_install: false
+
+    - name: Setup Node.js 20.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+        cache: 'pnpm'
+
+    - name: Install dependencies
+      run: pnpm install
+
+    - name: Build
+      run: pnpm turbo --filter "!./examples/*" --filter "!./docs" build
+
+    - name: Install test dependencies
+      working-directory: ./e2e-tests/pkg-outputs
+      run: pnpm install
+
+    - name: Check bundles
+      working-directory: ./e2e-tests/pkg-outputs
+      run: pnpm test
