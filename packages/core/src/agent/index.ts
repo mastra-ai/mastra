@@ -780,7 +780,7 @@ export class Agent<
 
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
-    args?: AgentGenerateOptions<Z> & { output?: 'text'; experimental_output?: never },
+    args?: AgentGenerateOptions<Z> & { output?: never; experimental_output?: never },
   ): Promise<GenerateTextResult<any, any>>;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
@@ -908,6 +908,15 @@ export class Agent<
     return result as unknown as GenerateReturn<Z>;
   }
 
+  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    messages: string | string[] | CoreMessage[],
+    args?: AgentStreamOptions<Z> & { output?: never; experimental_output?: never },
+  ): Promise<StreamReturn<any>>;
+  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    messages: string | string[] | CoreMessage[],
+    args?: AgentStreamOptions<Z> &
+      ({ output: Z; experimental_output?: never } | { experimental_output: Z; output?: never }),
+  ): Promise<StreamReturn<Z extends ZodSchema ? z.infer<Z> : unknown>>;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     {
