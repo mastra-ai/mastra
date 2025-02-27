@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 
 import { PgVector } from '.';
 
@@ -135,6 +135,43 @@ describe('PgVector', () => {
         await expect(vectorDB.describeIndex('non_existent')).rejects.toThrow();
       });
     });
+
+    describe('buildIndex', () => {
+      const indexName = 'test_build_index';
+      beforeAll(async () => {
+        await vectorDB.createIndex({ indexName, dimension: 3 });
+      });
+
+      afterAll(async () => {
+        await vectorDB.deleteIndex(indexName);
+      });
+
+      it('should build index with specified metric and config', async () => {
+        await vectorDB.buildIndex({
+          indexName,
+          metric: 'cosine',
+          indexConfig: { type: 'hnsw', hnsw: { m: 16, efConstruction: 64 } },
+        });
+
+        const stats = await vectorDB.describeIndex(indexName);
+        expect(stats.type).toBe('hnsw');
+        expect(stats.metric).toBe('cosine');
+        expect(stats.config.m).toBe(16);
+      });
+
+      it('should build ivfflat index with specified lists', async () => {
+        await vectorDB.buildIndex({
+          indexName,
+          metric: 'euclidean',
+          indexConfig: { type: 'ivfflat', ivf: { lists: 100 } },
+        });
+
+        const stats = await vectorDB.describeIndex(indexName);
+        expect(stats.type).toBe('ivfflat');
+        expect(stats.metric).toBe('euclidean');
+        expect(stats.config.lists).toBe(100);
+      });
+    });
   });
 
   // Vector Operations Tests
@@ -245,7 +282,12 @@ describe('PgVector', () => {
         });
 
         it('should handle filters correctly', async () => {
-          const results = await vectorDB.query({ indexName, queryVector: [1, 0, 0], topK: 10, filter: { type: 'a' } });
+          const results = await vectorDB.query({
+            indexName,
+            queryVector: [1, 0, 0],
+            topK: 10,
+            filter: { type: 'a' },
+          });
 
           expect(results).toHaveLength(1);
           results.forEach(result => {
@@ -1519,6 +1561,117 @@ describe('PgVector', () => {
         expect(results[0]?.score).toBeCloseTo(1, 5);
         expect(results[1]?.score).toBeGreaterThan(0.9);
       });
+    });
+  });
+  describe('Deprecation Warnings', () => {
+    const indexName = 'test_deprecation_warnings';
+
+    const indexName2 = 'test_deprecation_warnings2';
+
+    let warnSpy;
+
+    beforeEach(async () => {
+      warnSpy = vi.spyOn(vectorDB['logger'], 'warn');
+      await vectorDB.createIndex({ indexName: indexName, dimension: 3 });
+    });
+
+    afterEach(async () => {
+      warnSpy.mockRestore();
+      await vectorDB.deleteIndex(indexName);
+      await vectorDB.deleteIndex(indexName2);
+    });
+
+    it('should show deprecation warning when using individual args for createIndex', async () => {
+      await vectorDB.createIndex(indexName2, 3, 'cosine');
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Deprecation Warning: Passing individual arguments to createIndex() is deprecated'),
+      );
+    });
+
+    it('should show deprecation warning when using individual args for upsert', async () => {
+      await vectorDB.upsert(indexName, [[1, 2, 3]], [{ test: 'data' }]);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Deprecation Warning: Passing individual arguments to upsert() is deprecated'),
+      );
+    });
+
+    it('should show deprecation warning when using individual args for query', async () => {
+      await vectorDB.query(indexName, [1, 2, 3], 5);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Deprecation Warning: Passing individual arguments to query() is deprecated'),
+      );
+    });
+
+    it('should show deprecation warning when using individual args for buildIndex', async () => {
+      await vectorDB.buildIndex(indexName, 'cosine', { type: 'flat' });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Deprecation Warning: Passing individual arguments to buildIndex() is deprecated'),
+      );
+    });
+
+    it('should not show deprecation warning when using object param for buildIndex', async () => {
+      await vectorDB.buildIndex({
+        indexName: indexName,
+        metric: 'cosine',
+        indexConfig: { type: 'flat' },
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not show deprecation warning when using object param for query', async () => {
+      await vectorDB.query({
+        indexName,
+        queryVector: [1, 2, 3],
+        topK: 5,
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not show deprecation warning when using object param for createIndex', async () => {
+      await vectorDB.createIndex({
+        indexName: indexName2,
+        dimension: 3,
+        metric: 'cosine',
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not show deprecation warning when using object param for upsert', async () => {
+      await vectorDB.upsert({
+        indexName,
+        vectors: [[1, 2, 3]],
+        metadata: [{ test: 'data' }],
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('should maintain backward compatibility with individual args', async () => {
+      // Query
+      const queryResults = await vectorDB.query(indexName, [1, 2, 3], 5);
+      expect(Array.isArray(queryResults)).toBe(true);
+
+      // CreateIndex
+      await expect(vectorDB.createIndex(indexName2, 3, 'cosine')).resolves.not.toThrow();
+
+      // Upsert
+      const upsertResults = await vectorDB.upsert({
+        indexName,
+        vectors: [[1, 2, 3]],
+        metadata: [{ test: 'data' }],
+      });
+      expect(Array.isArray(upsertResults)).toBe(true);
+      expect(upsertResults).toHaveLength(1);
+
+      // BuildIndex
+      await expect(vectorDB.buildIndex(indexName, 'cosine', { type: 'flat' })).resolves.not.toThrow();
     });
   });
 });

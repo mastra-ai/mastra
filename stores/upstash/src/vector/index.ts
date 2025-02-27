@@ -1,6 +1,7 @@
 import { MastraVector } from '@mastra/core/vector';
 import type {
   CreateIndexParams,
+  ParamsToArgs,
   QueryResult,
   QueryVectorParams,
   UpsertVectorParams,
@@ -21,7 +22,11 @@ export class UpstashVector extends MastraVector {
     });
   }
 
-  async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
+  async upsert(...args: ParamsToArgs<UpsertVectorParams>): Promise<string[]> {
+    const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
+
+    const { indexName, vectors, metadata, ids } = params;
+
     const generatedIds = ids || vectors.map(() => crypto.randomUUID());
 
     const points = vectors.map((vector, index) => ({
@@ -41,17 +46,15 @@ export class UpstashVector extends MastraVector {
     return translator.translate(filter);
   }
 
-  async createIndex(_params: CreateIndexParams): Promise<void> {
+  async createIndex(..._args: ParamsToArgs<CreateIndexParams>): Promise<void> {
     console.log('No need to call createIndex for Upstash');
   }
 
-  async query({
-    indexName,
-    queryVector,
-    topK = 10,
-    filter,
-    includeVector = false,
-  }: QueryVectorParams): Promise<QueryResult[]> {
+  async query(...args: ParamsToArgs<QueryVectorParams>): Promise<QueryResult[]> {
+    const params = this.normalizeArgs<QueryVectorParams>('query', args);
+
+    const { indexName, queryVector, topK = 10, filter, includeVector = false } = params;
+
     const ns = this.client.namespace(indexName);
 
     const filterString = this.transformFilter(filter);

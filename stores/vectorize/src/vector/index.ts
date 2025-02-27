@@ -5,6 +5,7 @@ import type {
   UpsertVectorParams,
   QueryVectorParams,
   VectorFilter,
+  ParamsToArgs,
 } from '@mastra/core/vector';
 import Cloudflare from 'cloudflare';
 
@@ -23,7 +24,11 @@ export class CloudflareVector extends MastraVector {
     });
   }
 
-  async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
+  async upsert(...args: ParamsToArgs<UpsertVectorParams>): Promise<string[]> {
+    const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
+
+    const { indexName, vectors, metadata, ids } = params;
+
     const generatedIds = ids || vectors.map(() => crypto.randomUUID());
 
     // Create NDJSON string - each line is a JSON object
@@ -57,7 +62,11 @@ export class CloudflareVector extends MastraVector {
     return translator.translate(filter);
   }
 
-  async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
+  async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
+
+    const { indexName, dimension, metric = 'cosine' } = params;
+
     await this.client.vectorize.indexes.create({
       account_id: this.accountId,
       config: {
@@ -68,13 +77,11 @@ export class CloudflareVector extends MastraVector {
     });
   }
 
-  async query({
-    indexName,
-    queryVector,
-    topK = 10,
-    filter,
-    includeVector = false,
-  }: QueryVectorParams): Promise<QueryResult[]> {
+  async query(...args: ParamsToArgs<QueryVectorParams>): Promise<QueryResult[]> {
+    const params = this.normalizeArgs<QueryVectorParams>('query', args);
+
+    const { indexName, queryVector, topK = 10, filter, includeVector = false } = params;
+
     const translatedFilter = this.transformFilter(filter) ?? {};
     const response = await this.client.vectorize.indexes.query(indexName, {
       account_id: this.accountId,

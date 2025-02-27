@@ -6,6 +6,7 @@ import type {
   UpsertVectorParams,
   QueryVectorParams,
   VectorFilter,
+  ParamsToArgs,
 } from '@mastra/core/vector';
 import { QdrantClient } from '@qdrant/js-client-rest';
 import type { Schemas } from '@qdrant/js-client-rest';
@@ -41,7 +42,11 @@ export class QdrantVector extends MastraVector {
       }) ?? baseClient;
   }
 
-  async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
+  async upsert(...args: ParamsToArgs<UpsertVectorParams>): Promise<string[]> {
+    const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
+
+    const { indexName, vectors, metadata, ids } = params;
+
     const pointIds = ids || vectors.map(() => crypto.randomUUID());
 
     const records = vectors.map((vector, i) => ({
@@ -62,7 +67,11 @@ export class QdrantVector extends MastraVector {
     return pointIds;
   }
 
-  async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
+  async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
+
+    const { indexName, dimension, metric = 'cosine' } = params;
+
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new Error('Dimension must be a positive integer');
     }
@@ -81,13 +90,11 @@ export class QdrantVector extends MastraVector {
     return translator.translate(filter);
   }
 
-  async query({
-    indexName,
-    queryVector,
-    topK = 10,
-    filter,
-    includeVector = false,
-  }: QueryVectorParams): Promise<QueryResult[]> {
+  async query(...args: ParamsToArgs<QueryVectorParams>): Promise<QueryResult[]> {
+    const params = this.normalizeArgs<QueryVectorParams>('query', args);
+
+    const { indexName, queryVector, topK = 10, filter, includeVector = false } = params;
+
     const translatedFilter = this.transformFilter(filter) ?? {};
 
     const results = (

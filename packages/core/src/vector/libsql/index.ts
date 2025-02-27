@@ -10,6 +10,7 @@ import type {
   QueryResult,
   UpsertVectorParams,
   VectorFilter,
+  ParamsToArgs,
 } from '../index';
 
 import { LibSQLFilterTranslator } from './filter';
@@ -74,15 +75,12 @@ export class LibSQLVector extends MastraVector {
     return translator.translate(filter);
   }
 
-  async query({
-    indexName,
-    queryVector,
-    topK = 10,
-    filter,
-    includeVector = false,
-    minScore = 0, // Optional minimum score threshold
-  }: LibSQLQueryParams): Promise<QueryResult[]> {
+  async query(...args: ParamsToArgs<LibSQLQueryParams>): Promise<QueryResult[]> {
+    const params = this.normalizeArgs<LibSQLQueryParams>('query', args, ['minScore']);
+
     try {
+      const { indexName, queryVector, topK = 10, filter, includeVector = false, minScore = 0 } = params;
+
       const vectorStr = `[${queryVector.join(',')}]`;
 
       const translatedFilter = this.transformFilter(filter);
@@ -121,7 +119,10 @@ export class LibSQLVector extends MastraVector {
     }
   }
 
-  async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
+  async upsert(...args: ParamsToArgs<UpsertVectorParams>): Promise<string[]> {
+    const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
+
+    const { indexName, vectors, metadata, ids } = params;
     const tx = await this.turso.transaction('write');
 
     try {
@@ -164,7 +165,10 @@ export class LibSQLVector extends MastraVector {
     }
   }
 
-  async createIndex({ indexName, dimension }: CreateIndexParams): Promise<void> {
+  async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
+
+    const { indexName, dimension } = params;
     try {
       // Validate inputs
       if (!indexName.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {

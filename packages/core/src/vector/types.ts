@@ -41,3 +41,5 @@ export interface QueryVectorParams {
   filter?: VectorFilter;
   includeVector?: boolean;
 }
+
+export type ParamsToArgs<T> = [string | T, ...Array<T[Exclude<keyof T, 'indexName'>]>];
