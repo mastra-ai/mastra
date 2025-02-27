@@ -411,11 +411,11 @@ export class PostgresStore extends MastraStorage {
           WITH ordered_messages AS (
             SELECT 
               *,
-              ROW_NUMBER() OVER (ORDER BY "createdAt") as row_num
+              ROW_NUMBER() OVER (ORDER BY "createdAt" DESC) as row_num
             FROM "${MastraStorage.TABLE_MESSAGES}"
             WHERE thread_id = $1
           )
-          SELECT DISTINCT ON (m.id)
+          SELECT
             m.id, 
             m.content, 
             m.role, 
@@ -435,7 +435,7 @@ export class PostgresStore extends MastraStorage {
               (m.row_num <= target.row_num + $4 AND m.row_num > target.row_num)
             )
           )
-          ORDER BY m.id, m."createdAt"
+          ORDER BY m."createdAt" DESC
           `,
           [
             threadId,

@@ -328,56 +328,58 @@ export class Agent<
 
           await memory.saveMessages({
             memoryConfig,
-            messages: responseMessagesWithoutIncompleteToolCalls.map((message: CoreMessage | CoreAssistantMessage) => {
-              const messageId = randomUUID();
-              let toolCallIds: string[] | undefined;
-              let toolCallArgs: Record<string, unknown>[] | undefined;
-              let toolNames: string[] | undefined;
-              let type: 'text' | 'tool-call' | 'tool-result' = 'text';
+            messages: responseMessagesWithoutIncompleteToolCalls.map(
+              (message: CoreMessage | CoreAssistantMessage, index) => {
+                const messageId = randomUUID();
+                let toolCallIds: string[] | undefined;
+                let toolCallArgs: Record<string, unknown>[] | undefined;
+                let toolNames: string[] | undefined;
+                let type: 'text' | 'tool-call' | 'tool-result' = 'text';
 
-              if (message.role === 'tool') {
-                toolCallIds = (message as CoreToolMessage).content.map(content => content.toolCallId);
-                type = 'tool-result';
-              }
-              if (message.role === 'assistant') {
-                const assistantContent = (message as CoreAssistantMessage).content as Array<TextPart | ToolCallPart>;
+                if (message.role === 'tool') {
+                  toolCallIds = (message as CoreToolMessage).content.map(content => content.toolCallId);
+                  type = 'tool-result';
+                }
+                if (message.role === 'assistant') {
+                  const assistantContent = (message as CoreAssistantMessage).content as Array<TextPart | ToolCallPart>;
 
-                const assistantToolCalls = assistantContent
-                  .map(content => {
-                    if (content.type === 'tool-call') {
-                      return {
-                        toolCallId: content.toolCallId,
-                        toolArgs: content.args,
-                        toolName: content.toolName,
-                      };
-                    }
-                    return undefined;
-                  })
-                  ?.filter(Boolean) as Array<{
-                  toolCallId: string;
-                  toolArgs: Record<string, unknown>;
-                  toolName: string;
-                }>;
+                  const assistantToolCalls = assistantContent
+                    .map(content => {
+                      if (content.type === 'tool-call') {
+                        return {
+                          toolCallId: content.toolCallId,
+                          toolArgs: content.args,
+                          toolName: content.toolName,
+                        };
+                      }
+                      return undefined;
+                    })
+                    ?.filter(Boolean) as Array<{
+                    toolCallId: string;
+                    toolArgs: Record<string, unknown>;
+                    toolName: string;
+                  }>;
 
-                toolCallIds = assistantToolCalls?.map(toolCall => toolCall.toolCallId);
+                  toolCallIds = assistantToolCalls?.map(toolCall => toolCall.toolCallId);
 
-                toolCallArgs = assistantToolCalls?.map(toolCall => toolCall.toolArgs);
-                toolNames = assistantToolCalls?.map(toolCall => toolCall.toolName);
-                type = assistantContent?.[0]?.type as 'text' | 'tool-call' | 'tool-result';
-              }
+                  toolCallArgs = assistantToolCalls?.map(toolCall => toolCall.toolArgs);
+                  toolNames = assistantToolCalls?.map(toolCall => toolCall.toolName);
+                  type = assistantContent?.[0]?.type as 'text' | 'tool-call' | 'tool-result';
+                }
 
-              return {
-                id: messageId,
-                threadId: threadId,
-                role: message.role as any,
-                content: message.content as any,
-                createdAt: new Date(),
-                toolCallIds: toolCallIds?.length ? toolCallIds : undefined,
-                toolCallArgs: toolCallArgs?.length ? toolCallArgs : undefined,
-                toolNames: toolNames?.length ? toolNames : undefined,
-                type,
-              };
-            }),
+                return {
+                  id: messageId,
+                  threadId: threadId,
+                  role: message.role as any,
+                  content: message.content as any,
+                  createdAt: new Date(Date.now() + index), // use Date.now() + index to make sure every message is atleast one millisecond apart
+                  toolCallIds: toolCallIds?.length ? toolCallIds : undefined,
+                  toolCallArgs: toolCallArgs?.length ? toolCallArgs : undefined,
+                  toolNames: toolNames?.length ? toolNames : undefined,
+                  type,
+                };
+              },
+            ),
           });
         }
       }
@@ -400,8 +402,7 @@ export class Agent<
             toolResultIds.push(content.toolCallId);
           }
         }
-      }
-      if (message.role === 'assistant' || message.role === 'user') {
+      } else if (message.role === 'assistant' || message.role === 'user') {
         for (const content of message.content) {
           if (typeof content !== `string`) {
             if (content.type === `tool-call`) {
