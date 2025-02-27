@@ -6,6 +6,7 @@ import type {
   UpsertVectorParams,
   QueryVectorParams,
   VectorFilter,
+  ParamsToArgs,
 } from '@mastra/core/vector';
 import { ChromaClient } from 'chromadb';
 
@@ -64,7 +65,11 @@ export class ChromaVector extends MastraVector {
     }
   }
 
-  async upsert({ indexName, vectors, metadata, ids, documents }: ChromaUpsertVectorParams): Promise<string[]> {
+  async upsert(...args: ParamsToArgs<ChromaUpsertVectorParams>): Promise<string[]> {
+    const params = this.normalizeArgs<ChromaUpsertVectorParams>('upsert', args);
+
+    const { indexName, vectors, metadata, ids, documents } = params;
+
     const collection = await this.getCollection(indexName);
 
     // Get index stats to check dimension
@@ -97,7 +102,11 @@ export class ChromaVector extends MastraVector {
     ip: 'dotproduct',
   };
 
-  async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
+  async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
+
+    const { indexName, dimension, metric = 'cosine' } = params;
+
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new Error('Dimension must be a positive integer');
     }
@@ -118,14 +127,11 @@ export class ChromaVector extends MastraVector {
     const translator = new ChromaFilterTranslator();
     return translator.translate(filter);
   }
-  async query({
-    indexName,
-    queryVector,
-    topK = 10,
-    filter,
-    includeVector = false,
-    documentFilter,
-  }: ChromaQueryVectorParams): Promise<QueryResult[]> {
+  async query(...args: ParamsToArgs<ChromaQueryVectorParams>): Promise<QueryResult[]> {
+    const params = this.normalizeArgs<ChromaQueryVectorParams>('query', args);
+
+    const { indexName, queryVector, topK = 10, filter, includeVector = false, documentFilter } = params;
+
     const collection = await this.getCollection(indexName, true);
 
     const defaultInclude = ['documents', 'metadatas', 'distances'];

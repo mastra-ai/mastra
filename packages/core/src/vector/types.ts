@@ -42,22 +42,4 @@ export interface QueryVectorParams {
   includeVector?: boolean;
 }
 
-export type ParamTypes = {
-  query: QueryVectorParams;
-  upsert: UpsertVectorParams;
-  createIndex: CreateIndexParams;
-};
-
 export type ParamsToArgs<T> = [string | T, ...Array<T[Exclude<keyof T, 'indexName'>]>];
-
-export type ParamArgs = {
-  query: ParamsToArgs<QueryVectorParams>;
-  upsert: ParamsToArgs<UpsertVectorParams>;
-  createIndex: ParamsToArgs<CreateIndexParams>;
-};
-
-export const PARAM_KEYS = {
-  query: Object.keys({} as QueryVectorParams) as (keyof QueryVectorParams)[],
-  upsert: Object.keys({} as UpsertVectorParams) as (keyof UpsertVectorParams)[],
-  createIndex: Object.keys({} as CreateIndexParams) as (keyof CreateIndexParams)[],
-} as const;
