@@ -152,7 +152,7 @@ export function AppSidebar() {
   const pathname = location.pathname;
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" className="px-2">
       <SidebarHeader className="w-full pb-4 pl-1 pt-4">
         <span className="flex shrink-0">
           {state === 'collapsed' ? (

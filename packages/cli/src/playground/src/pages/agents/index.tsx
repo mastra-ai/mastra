@@ -61,7 +61,7 @@ function Agents() {
                       }}
                     >
                       <span className="text-mastra-el-5 text-sm flex items-center gap-2">
-                        <span>powered by {row.original.modelId}</span> <Barcode className="w-4 h-4" />
+                        <span>{row.original.modelId}</span> <Barcode className="w-4 h-4" />
                       </span>
                     </button>
                   ),
