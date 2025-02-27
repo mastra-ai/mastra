@@ -28,18 +28,23 @@ export function MastraRuntimeProvider({
   memory,
   threadId,
   baseUrl,
+  refreshThreadList,
 }: Readonly<{
   children: ReactNode;
 }> &
   ChatProps) {
   const [isRunning, setIsRunning] = useState(false);
   const [messages, setMessages] = useState<ThreadMessageLike[]>([]);
+  const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
 
   useEffect(() => {
-    if (initialMessages && threadId && memory) {
-      setMessages(initialMessages);
+    if (messages.length === 0 || currentThreadId !== threadId) {
+      if (initialMessages && threadId && memory) {
+        setMessages(initialMessages);
+        setCurrentThreadId(threadId);
+      }
     }
-  }, [initialMessages, threadId, memory]);
+  }, [initialMessages, threadId, memory, messages]);
 
   const mastra = createMastraClient(baseUrl);
 
@@ -120,6 +125,7 @@ export function MastraRuntimeProvider({
       } finally {
         reader.releaseLock();
         setIsRunning(false);
+        refreshThreadList?.();
       }
     } catch (error) {
       console.error('Error occured in MastraRuntimeProvider', error);

@@ -11,10 +11,20 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 import { cn } from '@/lib/utils';
 
-import { useDeleteThread, useThreads } from '@/hooks/use-memory';
+import { useDeleteThread } from '@/hooks/use-memory';
+import { StorageThreadType } from '@mastra/core';
 
-export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId: string }) {
-  const { threads, isLoading } = useThreads({ resourceid: agentId, agentId });
+export function AgentSidebar({
+  agentId,
+  threadId,
+  threads,
+  isLoading,
+}: {
+  agentId: string;
+  threadId: string;
+  threads?: StorageThreadType[];
+  isLoading: boolean;
+}) {
   const { deleteThread } = useDeleteThread();
   const navigate = useNavigate();
 

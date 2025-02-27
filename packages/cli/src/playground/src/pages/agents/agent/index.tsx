@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import { AgentInformation } from '@/domains/agents/agent-information';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { useAgent } from '@/hooks/use-agents';
-import { useMemory, useMessages } from '@/hooks/use-memory';
+import { useMemory, useMessages, useThreads } from '@/hooks/use-memory';
 import type { Message } from '@/types';
 
 function Agent() {
@@ -23,6 +23,11 @@ function Agent() {
     memory: !!memory?.result,
   });
   const [sidebar, setSidebar] = useState(true);
+  const {
+    threads,
+    isLoading: isThreadsLoading,
+    mutate: refreshThreads,
+  } = useThreads({ resourceid: agentId!, agentId: agentId! });
 
   useEffect(() => {
     if (memory?.result && !threadId) {
@@ -49,7 +54,9 @@ function Agent() {
         sidebar && memory?.result ? 'grid-cols-[256px_1fr_400px]' : 'grid-cols-[1fr_400px]',
       )}
     >
-      {sidebar && memory?.result ? <AgentSidebar agentId={agentId!} threadId={threadId!} /> : null}
+      {sidebar && memory?.result ? (
+        <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
+      ) : null}
       <div className="relative overflow-y-hidden">
         <Chat
           agentId={agentId!}
@@ -57,6 +64,9 @@ function Agent() {
           threadId={threadId!}
           initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
           memory={memory?.result}
+          refreshThreadList={() => {
+            refreshThreads();
+          }}
         />
       </div>
       <div className="flex flex-col">

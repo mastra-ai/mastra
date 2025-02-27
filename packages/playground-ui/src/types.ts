@@ -12,6 +12,7 @@ export interface ChatProps {
   initialMessages?: Message[];
   memory?: boolean;
   baseUrl?: string;
+  refreshThreadList?: () => void;
 }
 
 export type SpanStatus = {
