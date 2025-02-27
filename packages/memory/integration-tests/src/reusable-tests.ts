@@ -143,6 +143,45 @@ export function getResuableTests(memory: Memory) {
           expect.objectContaining({ content: "What's the capital of France?" }),
           expect.objectContaining({ content: 'The capital of France is Paris' }),
         ]);
+
+        // Search for location-related messages
+        const locationQuery2 = await memory.rememberMessages({
+          threadId: thread.id,
+          vectorMessageSearch: 'Tell me about cities in France',
+          config: {
+            semanticRecall: {
+              topK: 1,
+              messageRange: { after: 0, before: 1 },
+            },
+            lastMessages: 0,
+          },
+        });
+
+        // Should find the Paris-related messages
+        expect(locationQuery2.messages).toEqual([
+          expect.objectContaining({ content: "Yes, it's sunny and warm" }),
+          expect.objectContaining({ content: "What's the capital of France?" }),
+        ]);
+
+        // Search for location-related messages
+        const locationQuery3 = await memory.rememberMessages({
+          threadId: thread.id,
+          vectorMessageSearch: 'Tell me about cities in France',
+          config: {
+            semanticRecall: {
+              topK: 1,
+              messageRange: { after: 1, before: 1 },
+            },
+            lastMessages: 0,
+          },
+        });
+
+        // Should find the Paris-related messages
+        expect(locationQuery3.messages).toEqual([
+          expect.objectContaining({ content: "Yes, it's sunny and warm" }),
+          expect.objectContaining({ content: "What's the capital of France?" }),
+          expect.objectContaining({ content: 'The capital of France is Paris' }),
+        ]);
       });
 
       it('should respect semantic search configuration', async () => {
