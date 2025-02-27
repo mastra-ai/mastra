@@ -1,4 +1,4 @@
-import { createWriteStream, writeFileSync, mkdirSync } from 'fs';
+import { createWriteStream, writeFileSync, mkdirSync, createReadStream } from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
 import { describe, expect, it, beforeAll } from 'vitest';
@@ -10,7 +10,6 @@ describe('ElevenLabsVoice Integration Tests', () => {
   const outputDir = path.join(process.cwd(), 'test-outputs');
 
   beforeAll(() => {
-    // Create output directory if it doesn't exist
     try {
       mkdirSync(outputDir, { recursive: true });
     } catch (err) {
@@ -100,14 +99,17 @@ describe('ElevenLabsVoice Integration Tests', () => {
   });
 
   describe('listen', () => {
-    it('should throw error as transcription is not supported', async () => {
-      const dummyStream = new Readable({
-        read() {
-          this.push(null);
-        },
-      });
+    it('should convert audio to text', async () => {
+      const outputPath = path.join(outputDir, 'elevenlabs-speech-test-params.mp3');
+      const audio = createReadStream(outputPath);
+      const result = await voice.listen(audio);
 
-      await expect(voice.listen(dummyStream)).rejects.toThrow('ElevenLabs does not support transcription');
+      if (typeof result !== 'string') {
+        return expect(result).toBeInstanceOf(String);
+      }
+
+      expect(typeof result).toBe('string');
+      expect(result.length).toBeGreaterThan(0);
     });
   });
 });
