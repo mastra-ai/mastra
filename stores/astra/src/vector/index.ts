@@ -43,7 +43,6 @@ export class AstraVector extends MastraVector {
    * @param {'cosine' | 'euclidean' | 'dotproduct'} [metric=cosine] - The metric to use to sort vectors in the collection.
    * @returns {Promise<void>} A promise that resolves when the collection is created.
    */
-  // async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
   async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
     const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
 
