@@ -33,7 +33,7 @@ export const Thread: FC = () => {
           paddingBottom: '108px',
         }}
       >
-        <div className="w-full">
+        <div style={{ width: '100%', maxWidth: '48rem' }}>
           <ThreadWelcome />
           <ThreadPrimitive.Messages
             components={{
