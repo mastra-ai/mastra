@@ -106,7 +106,6 @@ type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = unde
   onStepFinish?: (step: string) => void;
   experimental_output?: Z;
   telemetry?: TelemetrySettings;
-  onFinish?: (result: string) => Promise<void> | void;
 } & Run;
 
 export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
@@ -121,11 +120,13 @@ export type LLMTextObjectOptions<T extends ZodSchema | JSONSchema7 | undefined =
 
 export type LLMStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
   output?: OutputType | Z;
+  onFinish?: (result: string) => Promise<void> | void;
 } & MastraCustomLLMOptions<Z> &
   DefaultLLMStreamOptions;
 
 export type LLMInnerStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
   messages: CoreMessage[];
+  onFinish?: (result: string) => Promise<void> | void;
 } & MastraCustomLLMOptions<Z> &
   DefaultLLMStreamOptions;
 
