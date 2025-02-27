@@ -797,12 +797,13 @@ export class Agent<
       maxSteps = 5,
       onStepFinish,
       runId,
+      output,
       toolsets,
-      output = 'text',
       temperature,
       toolChoice = 'auto',
       experimental_output,
       telemetry,
+      ...rest
     }: AgentGenerateOptions<Z> = {},
   ): Promise<GenerateTextResult<any, any> | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>> {
     let messagesToUse: CoreMessage[] = [];
@@ -840,17 +841,18 @@ export class Agent<
 
     const { threadId, messageObjects, convertedTools } = await before();
 
-    if (output === 'text' && experimental_output) {
+    if (!output && experimental_output) {
       const result = await this.llm.__text({
         messages: messageObjects,
         tools: this.tools,
         convertedTools,
         onStepFinish,
-        maxSteps,
+        maxSteps: maxSteps || 5,
         runId: runIdToUse,
         temperature,
-        toolChoice,
+        toolChoice: toolChoice || 'auto',
         experimental_output,
+        ...rest,
       });
 
       const outputText = result.text;
@@ -864,7 +866,7 @@ export class Agent<
       return newResult as unknown as GenerateReturn<Z>;
     }
 
-    if (output === 'text') {
+    if (!output) {
       const result = await this.llm.__text({
         messages: messageObjects,
         tools: this.tools,
@@ -875,6 +877,7 @@ export class Agent<
         temperature,
         toolChoice,
         telemetry,
+        ...rest,
       });
 
       const outputText = result.text;
@@ -895,6 +898,7 @@ export class Agent<
       temperature,
       toolChoice,
       telemetry,
+      ...rest,
     });
 
     const outputText = JSON.stringify(result.object);
@@ -916,11 +920,12 @@ export class Agent<
       onStepFinish,
       runId,
       toolsets,
-      output = 'text',
+      output,
       temperature,
       toolChoice = 'auto',
       experimental_output,
       telemetry,
+      ...rest
     }: AgentStreamOptions<Z> = {},
   ): Promise<StreamReturn<Z>> {
     const runIdToUse = runId || randomUUID();
@@ -958,7 +963,7 @@ export class Agent<
 
     const { threadId, messageObjects, convertedTools } = await before();
 
-    if (output === 'text' && experimental_output) {
+    if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
       });
@@ -986,12 +991,13 @@ export class Agent<
         runId: runIdToUse,
         toolChoice,
         experimental_output,
+        ...rest,
       });
 
       const newStreamResult = streamResult as any;
       newStreamResult.partialObjectStream = streamResult.experimental_partialOutputStream;
       return newStreamResult as unknown as StreamReturn<Z>;
-    } else if (output === 'text') {
+    } else if (!output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
       });
@@ -1018,6 +1024,7 @@ export class Agent<
         runId: runIdToUse,
         toolChoice,
         telemetry,
+        ...rest,
       }) as unknown as StreamReturn<Z>;
     }
 
@@ -1045,10 +1052,10 @@ export class Agent<
         }
         onFinish?.(result);
       },
-      maxSteps,
       runId: runIdToUse,
       toolChoice,
       telemetry,
+      ...rest,
     }) as unknown as StreamReturn<Z>;
   }
 

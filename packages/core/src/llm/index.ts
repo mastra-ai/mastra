@@ -77,7 +77,7 @@ export type StreamReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefin
   ? StreamTextResult<any, any>
   : StreamObjectResult<any, any, any>;
 
-export type OutputType = 'text' | StructuredOutput | ZodSchema | JSONSchema7 | undefined;
+export type OutputType = StructuredOutput | ZodSchema | JSONSchema7 | undefined;
 
 type GenerateTextOptions = Parameters<typeof generateText>[0];
 type StreamTextOptions = Parameters<typeof streamText>[0];
@@ -95,10 +95,10 @@ type MastraCustomLLMOptionsKeys =
   | 'onFinish'
   | 'output';
 
-type DefaultLLMTextOptions = Omit<GenerateTextOptions, MastraCustomLLMOptionsKeys>;
-type DefaultLLMTextObjectOptions = Omit<GenerateObjectOptions, MastraCustomLLMOptionsKeys>;
-type DefaultLLMStreamOptions = Omit<StreamTextOptions, MastraCustomLLMOptionsKeys>;
-type DefaultLLMStreamObjectOptions = Omit<StreamObjectOptions, MastraCustomLLMOptionsKeys>;
+export type DefaultLLMTextOptions = Omit<GenerateTextOptions, MastraCustomLLMOptionsKeys>;
+export type DefaultLLMTextObjectOptions = Omit<GenerateObjectOptions, MastraCustomLLMOptionsKeys>;
+export type DefaultLLMStreamOptions = Omit<StreamTextOptions, MastraCustomLLMOptionsKeys>;
+export type DefaultLLMStreamObjectOptions = Omit<StreamObjectOptions, MastraCustomLLMOptionsKeys>;
 
 type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
   tools?: ToolsInput;

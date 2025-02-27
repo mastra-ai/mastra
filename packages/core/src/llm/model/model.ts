@@ -466,7 +466,7 @@ export class MastraLLM extends MastraLLMBase {
       tools,
       convertedTools,
       runId,
-      output = 'text',
+      output,
       temperature,
       telemetry,
       ...rest
@@ -474,7 +474,7 @@ export class MastraLLM extends MastraLLMBase {
   ): Promise<GenerateReturn<Z>> {
     const msgs = this.convertToMessages(messages);
 
-    if (output === 'text') {
+    if (!output) {
       return (await this.__text({
         messages: msgs,
         onStepFinish,
@@ -509,7 +509,7 @@ export class MastraLLM extends MastraLLMBase {
       tools,
       convertedTools,
       runId,
-      output = 'text',
+      output,
       temperature,
       telemetry,
       ...rest
@@ -517,7 +517,7 @@ export class MastraLLM extends MastraLLMBase {
   ) {
     const msgs = this.convertToMessages(messages);
 
-    if (output === 'text') {
+    if (!output) {
       return (await this.__stream({
         messages: msgs as CoreMessage[],
         onStepFinish,
