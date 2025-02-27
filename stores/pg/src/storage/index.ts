@@ -429,10 +429,10 @@ export class PostgresStore extends MastraStorage {
             WHERE target.id = ANY($2)
             AND (
               -- Get previous messages based on the max withPreviousMessages
-              (m.row_num >= target.row_num - $3 AND m.row_num < target.row_num)
+              (m.row_num <= target.row_num + $3 AND m.row_num > target.row_num)
               OR
               -- Get next messages based on the max withNextMessages
-              (m.row_num <= target.row_num + $4 AND m.row_num > target.row_num)
+              (m.row_num >= target.row_num - $4 AND m.row_num < target.row_num)
             )
           )
           ORDER BY m."createdAt" DESC
