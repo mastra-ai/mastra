@@ -1,0 +1,12 @@
+{
+  "name": "pkg-outputs",
+  "version": "0.0.1",
+  "private": true,
+  "devDependencies": {
+    "resolve.exports": "^2.0.3",
+    "vitest": "^3.0.7"
+  },
+  "scripts": {
+    "test": "vitest"
+  }
+}
