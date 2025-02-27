@@ -34,11 +34,16 @@ export const useTraces = (componentName: string, isWorkflow: boolean = false) =>
     toast.error(error.message);
   }, []);
 
+  const shouldContinue = useCallback(() => {
+    return true;
+  }, []);
+
   const { firstCallLoading, error } = usePolling<RefinedTrace[], { message: string }>({
     fetchFn,
     interval: 3000,
     onSuccess,
     onError,
+    shouldContinue,
     enabled: true,
   });
 
