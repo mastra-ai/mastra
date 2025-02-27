@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } from 'vitest';
 
 import { UpstashVector } from './';
 
@@ -1059,6 +1059,96 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
         });
         expect(results.length).toBeGreaterThan(0);
       });
+    });
+  });
+  describe('Deprecation Warnings', () => {
+    const indexName = 'test_deprecation_warnings';
+
+    const indexName2 = 'test_deprecation_warnings2';
+
+    let warnSpy;
+
+    beforeEach(async () => {
+      warnSpy = vi.spyOn(vectorStore['logger'], 'warn');
+      await vectorStore.createIndex({ indexName: indexName, dimension: 3 });
+    });
+
+    afterEach(async () => {
+      warnSpy.mockRestore();
+      await vectorStore.deleteIndex(indexName);
+      await vectorStore.deleteIndex(indexName2);
+    });
+
+    it('should show deprecation warning when using individual args for createIndex', async () => {
+      await vectorStore.createIndex(indexName2, 3, 'cosine');
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Deprecation Warning: Passing individual arguments to createIndex() is deprecated'),
+      );
+    });
+
+    it('should show deprecation warning when using individual args for upsert', async () => {
+      await vectorStore.upsert(indexName, [[1, 2, 3]], [{ test: 'data' }]);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Deprecation Warning: Passing individual arguments to upsert() is deprecated'),
+      );
+    });
+
+    it('should show deprecation warning when using individual args for query', async () => {
+      await vectorStore.query(indexName, [1, 2, 3], 5);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Deprecation Warning: Passing individual arguments to query() is deprecated'),
+      );
+    });
+
+    it('should not show deprecation warning when using object param for query', async () => {
+      await vectorStore.query({
+        indexName,
+        queryVector: [1, 2, 3],
+        topK: 5,
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not show deprecation warning when using object param for createIndex', async () => {
+      await vectorStore.createIndex({
+        indexName: indexName2,
+        dimension: 3,
+        metric: 'cosine',
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not show deprecation warning when using object param for upsert', async () => {
+      await vectorStore.upsert({
+        indexName,
+        vectors: [[1, 2, 3]],
+        metadata: [{ test: 'data' }],
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('should maintain backward compatibility with individual args', async () => {
+      // Query
+      const queryResults = await vectorStore.query(indexName, [1, 2, 3], 5);
+      expect(Array.isArray(queryResults)).toBe(true);
+
+      // CreateIndex
+      await expect(vectorStore.createIndex(indexName2, 3, 'cosine')).resolves.not.toThrow();
+
+      // Upsert
+      const upsertResults = await vectorStore.upsert({
+        indexName,
+        vectors: [[1, 2, 3]],
+        metadata: [{ test: 'data' }],
+      });
+      expect(Array.isArray(upsertResults)).toBe(true);
+      expect(upsertResults).toHaveLength(1);
     });
   });
 });
