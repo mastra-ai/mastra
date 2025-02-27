@@ -1,9 +1,9 @@
+import { writeFile } from 'fs/promises';
 import { join } from 'path';
 import { describe, expect, it } from 'vitest';
 
-import { writeFile } from 'fs/promises';
-
-import { AzureTTS, VoiceId } from './index';
+import type { VoiceId } from './index';
+import { AzureTTS } from './index';
 
 describe('AzureTTS', () => {
   it('should return a list of available voices', async () => {

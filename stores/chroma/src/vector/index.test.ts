@@ -1,4 +1,4 @@
-import { QueryResult, IndexStats } from '@mastra/core/vector';
+import type { QueryResult, IndexStats } from '@mastra/core/vector';
 import { describe, expect, beforeEach, afterEach, it, beforeAll, afterAll } from 'vitest';
 
 import { ChromaVector } from './';
@@ -17,7 +17,7 @@ describe('ChromaVector Integration Tests', () => {
     // Clean up any existing test index
     try {
       await vectorDB.deleteIndex(testIndexName);
-    } catch (error) {
+    } catch {
       // Ignore errors if index doesn't exist
     }
     await vectorDB.createIndex(testIndexName, dimension);
@@ -27,7 +27,7 @@ describe('ChromaVector Integration Tests', () => {
     // Cleanup after tests
     try {
       await vectorDB.deleteIndex(testIndexName);
-    } catch (error) {
+    } catch {
       // Ignore cleanup errors
     }
   }, 5000);
@@ -310,7 +310,7 @@ describe('ChromaVector Integration Tests', () => {
     beforeAll(async () => {
       try {
         await vectorDB.deleteIndex(testIndexName2);
-      } catch (error) {
+      } catch {
         // Ignore errors if index doesn't exist
       }
       await vectorDB.createIndex(testIndexName2, dimension);
@@ -358,7 +358,7 @@ describe('ChromaVector Integration Tests', () => {
       // Cleanup after tests
       try {
         await vectorDB.deleteIndex(testIndexName2);
-      } catch (error) {
+      } catch {
         // Ignore cleanup errors
       }
     });
@@ -898,7 +898,7 @@ describe('ChromaVector Integration Tests', () => {
     beforeAll(async () => {
       try {
         await vectorDB.deleteIndex(testIndexName3);
-      } catch (error) {
+      } catch {
         // Ignore errors if index doesn't exist
       }
       await vectorDB.createIndex(testIndexName3, dimension);
@@ -926,7 +926,7 @@ describe('ChromaVector Integration Tests', () => {
       // Cleanup after tests
       try {
         await vectorDB.deleteIndex(testIndexName3);
-      } catch (error) {
+      } catch {
         // Ignore cleanup errors
       }
     });

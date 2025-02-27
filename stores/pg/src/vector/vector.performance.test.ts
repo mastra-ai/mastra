@@ -1,10 +1,9 @@
 import pg from 'pg';
 import { describe, it, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 
+import type { TestConfig, TestResult } from './performance.helpers';
 import {
   baseTestConfigs,
-  TestConfig,
-  TestResult,
   calculateTimeout,
   generateRandomVectors,
   findNearestBruteForce,
@@ -19,7 +18,7 @@ import {
   getHNSWConfig,
   getIndexDescription,
 } from './performance.helpers';
-import { IndexConfig, IndexType } from './types';
+import type { IndexConfig, IndexType } from './types';
 
 import { PgVector } from '.';
 
@@ -178,7 +177,7 @@ describe('PostgreSQL Index Performance', () => {
               await batchedBulkUpsert(vectorDB, testIndexName, testVectors, batchSizes);
               if (indexType === 'hnsw' || rebuild) {
                 console.log('rebuilding index');
-                await vectorDB.defineIndex(testIndexName, 'cosine', indexConfig);
+                await vectorDB.buildIndex(testIndexName, 'cosine', indexConfig);
                 console.log('index rebuilt');
               }
               await smartWarmup(vectorDB, testIndexName, indexType, testConfig.dimension, testConfig.k);

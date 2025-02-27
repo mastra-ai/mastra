@@ -1,12 +1,12 @@
 import { OpenAPIToolset } from '@mastra/core/integration';
-import { type ToolAction } from '@mastra/core/tools';
+import type { ToolAction } from '@mastra/core/tools';
 
 // @ts-ignore
 // import GithubLogo from './assets/github.png';
 import { comments } from './client/service-comments';
 import * as integrationClient from './client/services.gen';
 import * as zodSchema from './client/zodSchema';
-import { type GithubConfig } from './types';
+import type { GithubConfig } from './types';
 
 export class GithubToolset extends OpenAPIToolset {
   readonly name = 'GITHUB';

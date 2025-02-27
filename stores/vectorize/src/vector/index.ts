@@ -1,5 +1,6 @@
-import { type Filter } from '@mastra/core/filter';
-import { MastraVector, type QueryResult } from '@mastra/core/vector';
+import type { Filter } from '@mastra/core/filter';
+import { MastraVector } from '@mastra/core/vector';
+import type { QueryResult } from '@mastra/core/vector';
 import Cloudflare from 'cloudflare';
 
 import { VectorizeFilterTranslator } from './filter';

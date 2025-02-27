@@ -1,15 +1,17 @@
+import { randomUUID } from 'crypto';
 import type {
   AssistantContent,
   CoreAssistantMessage,
   CoreMessage,
   CoreToolMessage,
   CoreUserMessage,
+  GenerateObjectResult,
+  GenerateTextResult,
   LanguageModelV1,
   TextPart,
   ToolCallPart,
   UserContent,
 } from 'ai';
-import { randomUUID } from 'crypto';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import { z } from 'zod';
@@ -326,56 +328,58 @@ export class Agent<
 
           await memory.saveMessages({
             memoryConfig,
-            messages: responseMessagesWithoutIncompleteToolCalls.map((message: CoreMessage | CoreAssistantMessage) => {
-              const messageId = randomUUID();
-              let toolCallIds: string[] | undefined;
-              let toolCallArgs: Record<string, unknown>[] | undefined;
-              let toolNames: string[] | undefined;
-              let type: 'text' | 'tool-call' | 'tool-result' = 'text';
+            messages: responseMessagesWithoutIncompleteToolCalls.map(
+              (message: CoreMessage | CoreAssistantMessage, index) => {
+                const messageId = randomUUID();
+                let toolCallIds: string[] | undefined;
+                let toolCallArgs: Record<string, unknown>[] | undefined;
+                let toolNames: string[] | undefined;
+                let type: 'text' | 'tool-call' | 'tool-result' = 'text';
 
-              if (message.role === 'tool') {
-                toolCallIds = (message as CoreToolMessage).content.map(content => content.toolCallId);
-                type = 'tool-result';
-              }
-              if (message.role === 'assistant') {
-                const assistantContent = (message as CoreAssistantMessage).content as Array<TextPart | ToolCallPart>;
+                if (message.role === 'tool') {
+                  toolCallIds = (message as CoreToolMessage).content.map(content => content.toolCallId);
+                  type = 'tool-result';
+                }
+                if (message.role === 'assistant') {
+                  const assistantContent = (message as CoreAssistantMessage).content as Array<TextPart | ToolCallPart>;
 
-                const assistantToolCalls = assistantContent
-                  .map(content => {
-                    if (content.type === 'tool-call') {
-                      return {
-                        toolCallId: content.toolCallId,
-                        toolArgs: content.args,
-                        toolName: content.toolName,
-                      };
-                    }
-                    return undefined;
-                  })
-                  ?.filter(Boolean) as Array<{
-                  toolCallId: string;
-                  toolArgs: Record<string, unknown>;
-                  toolName: string;
-                }>;
+                  const assistantToolCalls = assistantContent
+                    .map(content => {
+                      if (content.type === 'tool-call') {
+                        return {
+                          toolCallId: content.toolCallId,
+                          toolArgs: content.args,
+                          toolName: content.toolName,
+                        };
+                      }
+                      return undefined;
+                    })
+                    ?.filter(Boolean) as Array<{
+                    toolCallId: string;
+                    toolArgs: Record<string, unknown>;
+                    toolName: string;
+                  }>;
 
-                toolCallIds = assistantToolCalls?.map(toolCall => toolCall.toolCallId);
+                  toolCallIds = assistantToolCalls?.map(toolCall => toolCall.toolCallId);
 
-                toolCallArgs = assistantToolCalls?.map(toolCall => toolCall.toolArgs);
-                toolNames = assistantToolCalls?.map(toolCall => toolCall.toolName);
-                type = assistantContent?.[0]?.type as 'text' | 'tool-call' | 'tool-result';
-              }
+                  toolCallArgs = assistantToolCalls?.map(toolCall => toolCall.toolArgs);
+                  toolNames = assistantToolCalls?.map(toolCall => toolCall.toolName);
+                  type = assistantContent?.[0]?.type as 'text' | 'tool-call' | 'tool-result';
+                }
 
-              return {
-                id: messageId,
-                threadId: threadId,
-                role: message.role as any,
-                content: message.content as any,
-                createdAt: new Date(),
-                toolCallIds: toolCallIds?.length ? toolCallIds : undefined,
-                toolCallArgs: toolCallArgs?.length ? toolCallArgs : undefined,
-                toolNames: toolNames?.length ? toolNames : undefined,
-                type,
-              };
-            }),
+                return {
+                  id: messageId,
+                  threadId: threadId,
+                  role: message.role as any,
+                  content: message.content as any,
+                  createdAt: new Date(Date.now() + index), // use Date.now() + index to make sure every message is atleast one millisecond apart
+                  toolCallIds: toolCallIds?.length ? toolCallIds : undefined,
+                  toolCallArgs: toolCallArgs?.length ? toolCallArgs : undefined,
+                  toolNames: toolNames?.length ? toolNames : undefined,
+                  type,
+                };
+              },
+            ),
           });
         }
       }
@@ -398,8 +402,7 @@ export class Agent<
             toolResultIds.push(content.toolCallId);
           }
         }
-      }
-      if (message.role === 'assistant' || message.role === 'user') {
+      } else if (message.role === 'assistant' || message.role === 'user') {
         for (const content of message.content) {
           if (typeof content !== `string`) {
             if (content.type === `tool-call`) {
@@ -622,7 +625,15 @@ export class Agent<
         let coreMessages = messages;
         let threadIdToUse = threadId;
 
-        if (this.getMemory() && resourceId) {
+        const memory = this.getMemory();
+
+        if (threadId && memory && !resourceId) {
+          throw new Error(
+            `A resourceId must be provided when passing a threadId and using Memory. Saw threadId ${threadId} but resourceId is ${resourceId}`,
+          );
+        }
+
+        if (memory && resourceId) {
           this.logger.debug(
             `[Agent:${this.name}] - Memory persistence enabled: store=${this.getMemory()?.constructor.name}, resourceId=${resourceId}`,
             {
@@ -746,6 +757,15 @@ export class Agent<
 
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
+    args?: AgentGenerateOptions<Z> & { output?: never; experimental_output?: never },
+  ): Promise<GenerateTextResult<any, any>>;
+  async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    messages: string | string[] | CoreMessage[],
+    args?: AgentGenerateOptions<Z> &
+      ({ output: Z; experimental_output?: never } | { experimental_output: Z; output?: never }),
+  ): Promise<GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>>;
+  async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    messages: string | string[] | CoreMessage[],
     {
       context,
       threadId: threadIdInFn,
@@ -754,14 +774,15 @@ export class Agent<
       maxSteps = 5,
       onStepFinish,
       runId,
+      output,
       toolsets,
-      output = 'text' as const,
       temperature,
       toolChoice = 'auto',
       experimental_output,
       telemetry,
+      ...rest
     }: AgentGenerateOptions<Z> = {},
-  ): Promise<GenerateReturn<Z>> {
+  ): Promise<GenerateTextResult<any, any> | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>> {
     let messagesToUse: CoreMessage[] = [];
 
     if (typeof messages === `string`) {
@@ -797,17 +818,18 @@ export class Agent<
 
     const { threadId, messageObjects, convertedTools } = await before();
 
-    if (output === 'text' && experimental_output) {
+    if (!output && experimental_output) {
       const result = await this.llm.__text({
         messages: messageObjects,
         tools: this.tools,
         convertedTools,
         onStepFinish,
-        maxSteps,
+        maxSteps: maxSteps || 5,
         runId: runIdToUse,
         temperature,
-        toolChoice,
+        toolChoice: toolChoice || 'auto',
         experimental_output,
+        ...rest,
       });
 
       const outputText = result.text;
@@ -821,7 +843,7 @@ export class Agent<
       return newResult as unknown as GenerateReturn<Z>;
     }
 
-    if (output === 'text') {
+    if (!output) {
       const result = await this.llm.__text({
         messages: messageObjects,
         tools: this.tools,
@@ -832,6 +854,7 @@ export class Agent<
         temperature,
         toolChoice,
         telemetry,
+        ...rest,
       });
 
       const outputText = result.text;
@@ -852,6 +875,7 @@ export class Agent<
       temperature,
       toolChoice,
       telemetry,
+      ...rest,
     });
 
     const outputText = JSON.stringify(result.object);
@@ -861,6 +885,15 @@ export class Agent<
     return result as unknown as GenerateReturn<Z>;
   }
 
+  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    messages: string | string[] | CoreMessage[],
+    args?: AgentStreamOptions<Z> & { output?: never; experimental_output?: never },
+  ): Promise<StreamReturn<any>>;
+  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    messages: string | string[] | CoreMessage[],
+    args?: AgentStreamOptions<Z> &
+      ({ output: Z; experimental_output?: never } | { experimental_output: Z; output?: never }),
+  ): Promise<StreamReturn<Z extends ZodSchema ? z.infer<Z> : unknown>>;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     {
@@ -873,11 +906,12 @@ export class Agent<
       onStepFinish,
       runId,
       toolsets,
-      output = 'text',
+      output,
       temperature,
       toolChoice = 'auto',
       experimental_output,
       telemetry,
+      ...rest
     }: AgentStreamOptions<Z> = {},
   ): Promise<StreamReturn<Z>> {
     const runIdToUse = runId || randomUUID();
@@ -915,7 +949,7 @@ export class Agent<
 
     const { threadId, messageObjects, convertedTools } = await before();
 
-    if (output === 'text' && experimental_output) {
+    if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
       });
@@ -943,12 +977,13 @@ export class Agent<
         runId: runIdToUse,
         toolChoice,
         experimental_output,
+        ...rest,
       });
 
       const newStreamResult = streamResult as any;
       newStreamResult.partialObjectStream = streamResult.experimental_partialOutputStream;
       return newStreamResult as unknown as StreamReturn<Z>;
-    } else if (output === 'text') {
+    } else if (!output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
       });
@@ -975,6 +1010,7 @@ export class Agent<
         runId: runIdToUse,
         toolChoice,
         telemetry,
+        ...rest,
       }) as unknown as StreamReturn<Z>;
     }
 
@@ -1002,10 +1038,10 @@ export class Agent<
         }
         onFinish?.(result);
       },
-      maxSteps,
       runId: runIdToUse,
       toolChoice,
       telemetry,
+      ...rest,
     }) as unknown as StreamReturn<Z>;
   }
 

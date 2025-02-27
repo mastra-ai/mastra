@@ -1,5 +1,6 @@
-import { type Filter } from '@mastra/core/filter';
-import { MastraVector, type QueryResult, type IndexStats } from '@mastra/core/vector';
+import type { Filter } from '@mastra/core/filter';
+import { MastraVector } from '@mastra/core/vector';
+import type { QueryResult, IndexStats } from '@mastra/core/vector';
 import { ChromaClient } from 'chromadb';
 
 import { ChromaFilterTranslator } from './filter';
@@ -35,7 +36,7 @@ export class ChromaVector extends MastraVector {
     try {
       const collection = await this.client.getCollection({ name: indexName, embeddingFunction: undefined as any });
       this.collections.set(indexName, collection);
-    } catch (error) {
+    } catch {
       if (throwIfNotExists) {
         throw new Error(`Index ${indexName} does not exist`);
       }

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-murf",
-  "version": "0.1.6-alpha.0",
+  "version": "0.1.6-alpha.1",
   "description": "Mastra Murf speech integration (DEPRECATED - use @mastra/voice-murf instead)",
   "type": "module",
   "main": "dist/index.js",
@@ -15,6 +15,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
+    "lint": "eslint .",
     "build": "tsup src/index.ts --format esm --experimental-dts --clean --treeshake",
     "test": "echo deprecated"
   },
@@ -24,6 +25,8 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "eslint": "^9.20.1",
     "@microsoft/api-extractor": "^7.49.2",
     "@types/node": "^22.13.1",
     "tsup": "^8.0.1",

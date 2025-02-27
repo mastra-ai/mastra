@@ -1,6 +1,7 @@
+import { PassThrough } from 'stream';
+
 import { createClient } from '@deepgram/sdk';
 import { MastraVoice } from '@mastra/core/voice';
-import { PassThrough } from 'stream';
 
 import { DEEPGRAM_VOICES } from './voices';
 import type { DeepgramVoiceId, DeepgramModel } from './voices';
