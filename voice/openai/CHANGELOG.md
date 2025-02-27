@@ -1,5 +1,13 @@
 # @mastra/voice-openai
 
+## 0.1.2-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [2512a93]
+- Updated dependencies [e62de74]
+  - @mastra/core@0.4.3-alpha.2
+
 ## 0.1.2-alpha.1
 
 ### Patch Changes
