@@ -82,7 +82,7 @@ export function AgentSidebar({
           return (
             <div
               className={cn(
-                'flex cursor-pointer w-full px-2 items-center focus-visible:outline-none transition-colors  focus-visible:ring-1 focus-visible:ring-mastra-border-4 gap-3 rounded-sm group text-small hover:bg-mastra-el-6/5',
+                'flex cursor-pointer w-full px-2 items-center focus-visible:outline-none transition-colors  focus-visible:ring-1 focus-visible:ring-mastra-border-4 gap-3 rounded-sm group text-sm hover:bg-mastra-el-6/5',
                 isActive ? 'bg-mastra-el-6/5' : '',
               )}
               key={thread.id}
