@@ -1,3 +1,4 @@
+import { File } from 'node:buffer';
 import { MastraVoice } from '@mastra/core/voice';
 import { ElevenLabsClient } from 'elevenlabs';
 
@@ -6,12 +7,31 @@ type ElevenLabsModel =
   | 'eleven_flash_v2_5'
   | 'eleven_flash_v2'
   | 'eleven_multilingual_sts_v2'
-  | 'eleven_english_sts_v2';
+  | 'eleven_english_sts_v2'
+  | 'scribe_v1';
 
 interface ElevenLabsVoiceConfig {
   name?: ElevenLabsModel;
   apiKey?: string;
 }
+
+interface SpeechToTextOptions {
+  language_code?: string;
+  tag_audio_events?: boolean;
+  num_speakers?: number;
+  filetype?: string;
+}
+
+interface RequestOptions {
+  timeoutInSeconds?: number;
+  maxRetries?: number;
+  abortSignal?: AbortSignal;
+  apiKey?: string | undefined;
+  headers?: Record<string, string>;
+}
+
+// Combined options type
+type ElevenLabsListenOptions = SpeechToTextOptions & RequestOptions;
 
 export class ElevenLabsVoice extends MastraVoice {
   private client: ElevenLabsClient;
@@ -25,12 +45,20 @@ export class ElevenLabsVoice extends MastraVoice {
    *
    * @throws {Error} If the ELEVENLABS_API_KEY is not set in the environment variables.
    */
-  constructor({ speechModel, speaker }: { speechModel?: ElevenLabsVoiceConfig; speaker?: string } = {}) {
+  constructor({
+    speechModel,
+    listeningModel,
+    speaker,
+  }: { speechModel?: ElevenLabsVoiceConfig; listeningModel?: ElevenLabsVoiceConfig; speaker?: string } = {}) {
     const apiKey = speechModel?.apiKey ?? process.env.ELEVENLABS_API_KEY;
     super({
       speechModel: {
         name: speechModel?.name ?? 'eleven_multilingual_v2',
         apiKey: speechModel?.apiKey,
+      },
+      listeningModel: {
+        name: listeningModel?.name ?? 'scribe_v1',
+        apiKey: listeningModel?.apiKey,
       },
       speaker,
     });
@@ -110,7 +138,48 @@ export class ElevenLabsVoice extends MastraVoice {
     return res;
   }
 
-  async listen(_input: NodeJS.ReadableStream | Buffer, _options?: Record<string, unknown>): Promise<string> {
-    throw new Error('ElevenLabs does not support transcription');
+  /**
+   * Converts audio input to text using ElevenLabs Speech-to-Text API.
+   *
+   * @param input - A readable stream containing the audio data to transcribe
+   * @param options - Configuration options for the transcription
+   * @param options.language_code - ISO language code (e.g., 'en', 'fr', 'es')
+   * @param options.tag_audio_events - Whether to tag audio events like [MUSIC], [LAUGHTER], etc.
+   * @param options.num_speakers - Number of speakers to detect in the audio
+   * @param options.filetype - Audio file format (e.g., 'mp3', 'wav', 'ogg')
+   * @param options.timeoutInSeconds - Request timeout in seconds
+   * @param options.maxRetries - Maximum number of retry attempts
+   * @param options.abortSignal - Signal to abort the request
+   *
+   * @returns A Promise that resolves to the transcribed text
+   *
+   */
+  async listen(input: NodeJS.ReadableStream, options?: ElevenLabsListenOptions): Promise<string> {
+    const res = await this.traced(async () => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of input) {
+        chunks.push(Buffer.from(chunk));
+      }
+      const buffer = Buffer.concat(chunks);
+
+      const { language_code, tag_audio_events, num_speakers, filetype, ...requestOptions } = options || {};
+
+      const file = new File([buffer], `audio.${filetype || 'mp3'}`);
+
+      const transcription = await this.client.speechToText.convert(
+        {
+          file: file,
+          model_id: this.listeningModel?.name as ElevenLabsModel,
+          language_code,
+          tag_audio_events,
+          num_speakers,
+        },
+        requestOptions,
+      );
+
+      return transcription.text;
+    }, 'voice.elevenlabs.listen')();
+
+    return res;
   }
 }
