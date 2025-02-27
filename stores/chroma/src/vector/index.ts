@@ -66,7 +66,7 @@ export class ChromaVector extends MastraVector {
   }
 
   async upsert(...args: ParamsToArgs<ChromaUpsertVectorParams>): Promise<string[]> {
-    const params = this.normalizeArgs<ChromaUpsertVectorParams>('upsert', args);
+    const params = this.normalizeArgs<ChromaUpsertVectorParams>('upsert', args, ['documents']);
 
     const { indexName, vectors, metadata, ids, documents } = params;
 
@@ -128,7 +128,7 @@ export class ChromaVector extends MastraVector {
     return translator.translate(filter);
   }
   async query(...args: ParamsToArgs<ChromaQueryVectorParams>): Promise<QueryResult[]> {
-    const params = this.normalizeArgs<ChromaQueryVectorParams>('query', args);
+    const params = this.normalizeArgs<ChromaQueryVectorParams>('query', args, ['documentFilter']);
 
     const { indexName, queryVector, topK = 10, filter, includeVector = false, documentFilter } = params;
 

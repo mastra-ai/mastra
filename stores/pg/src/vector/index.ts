@@ -26,7 +26,6 @@ export interface PGIndexStats extends IndexStats {
 }
 
 interface PgQueryVectorParams extends QueryVectorParams {
-  includeVector?: boolean;
   minScore?: number;
   /**
    * HNSW search parameter. Controls the size of the dynamic candidate
@@ -89,8 +88,7 @@ export class PgVector extends MastraVector {
   }
 
   async query(...args: ParamsToArgs<PgQueryVectorParams>): Promise<QueryResult[]> {
-    const params = this.normalizeArgs<PgQueryVectorParams>('query', args);
-
+    const params = this.normalizeArgs<PgQueryVectorParams>('query', args, ['minScore', 'ef', 'probes']);
     const { indexName, queryVector, topK = 10, filter, includeVector = false, minScore = 0, ef, probes } = params;
 
     const client = await this.pool.connect();
@@ -178,7 +176,7 @@ export class PgVector extends MastraVector {
   }
 
   async createIndex(...args: ParamsToArgs<PgCreateIndexParams>): Promise<void> {
-    const params = this.normalizeArgs<PgCreateIndexParams>('createIndex', args);
+    const params = this.normalizeArgs<PgCreateIndexParams>('createIndex', args, ['indexConfig', 'buildIndex']);
 
     const { indexName, dimension, metric = 'cosine', indexConfig = {}, buildIndex = true } = params;
 
@@ -239,7 +237,7 @@ export class PgVector extends MastraVector {
   }
 
   async buildIndex(...args: ParamsToArgs<PgDefineIndexParams>): Promise<void> {
-    const params = this.normalizeArgs<PgDefineIndexParams>('buildIndex', args);
+    const params = this.normalizeArgs<PgDefineIndexParams>('buildIndex', args, ['metric', 'indexConfig']);
 
     const { indexName, metric = 'cosine', indexConfig } = params;
 

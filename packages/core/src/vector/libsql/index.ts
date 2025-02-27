@@ -76,7 +76,7 @@ export class LibSQLVector extends MastraVector {
   }
 
   async query(...args: ParamsToArgs<LibSQLQueryParams>): Promise<QueryResult[]> {
-    const params = this.normalizeArgs<LibSQLQueryParams>('query', args);
+    const params = this.normalizeArgs<LibSQLQueryParams>('query', args, ['minScore']);
 
     try {
       const { indexName, queryVector, topK = 10, filter, includeVector = false, minScore = 0 } = params;

@@ -13,19 +13,24 @@ export abstract class MastraVector extends MastraBase {
     super({ name: 'MastraVector', component: 'VECTOR' });
   }
 
-  protected normalizeArgs<T extends { indexName: string }>(method: string, args: ParamsToArgs<T>): T {
-    const [first, ...rest] = args;
+  private readonly baseKeys = {
+    query: ['queryVector', 'topK', 'filter', 'includeVector'],
+    upsert: ['vectors', 'metadata', 'ids'],
+    createIndex: ['dimension', 'metric'],
+  } as const;
 
+  protected normalizeArgs<T>(method: string, [first, ...rest]: ParamsToArgs<T>, extendedKeys: string[] = []): T {
     if (typeof first === 'object') {
       return first as T;
     }
 
-    console.warn(
+    this.logger.warn(
       `Deprecation Warning: Passing individual arguments to ${method}() is deprecated. ` +
         'Please use an object parameter instead.',
     );
 
-    const paramKeys = Object.keys({} as T).filter(k => k !== 'indexName');
+    const baseKeys = this.baseKeys[method as keyof typeof this.baseKeys] || [];
+    const paramKeys = [...baseKeys, ...extendedKeys].slice(0, rest.length);
 
     return {
       indexName: first as string,
