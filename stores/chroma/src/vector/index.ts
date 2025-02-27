@@ -116,7 +116,7 @@ export class ChromaVector extends MastraVector {
 
   transformFilter(filter?: VectorFilter) {
     const translator = new ChromaFilterTranslator();
-    return translator.translate(filter ?? {});
+    return translator.translate(filter);
   }
   async query({
     indexName,

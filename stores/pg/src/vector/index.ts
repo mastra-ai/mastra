@@ -77,7 +77,7 @@ export class PgVector extends MastraVector {
 
   transformFilter(filter?: VectorFilter) {
     const translator = new PGFilterTranslator();
-    return translator.translate(filter ?? {});
+    return translator.translate(filter);
   }
 
   async getIndexInfo(indexName: string): Promise<PGIndexStats> {

@@ -1,6 +1,6 @@
 import { BaseFilterTranslator } from '@mastra/core/filter';
 import type { Filter, FieldCondition, OperatorSupport } from '@mastra/core/filter';
-
+import type { VectorFilter } from '@mastra/core/vector';
 export class UpstashFilterTranslator extends BaseFilterTranslator {
   protected override getSupportedOperators(): OperatorSupport {
     return {
@@ -11,7 +11,7 @@ export class UpstashFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter?: Filter): string | undefined {
+  translate(filter?: VectorFilter): string | undefined {
     if (this.isEmpty(filter)) return undefined;
     this.validateFilter(filter as Filter);
     return this.translateNode(filter);

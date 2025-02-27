@@ -1,5 +1,6 @@
 import { BaseFilterTranslator } from '../../filter';
 import type { FieldCondition, Filter, OperatorSupport } from '../../filter';
+import type { VectorFilter } from '../index.warning';
 
 /**
  * Translates MongoDB-style filters to LibSQL compatible filters.
@@ -20,11 +21,11 @@ export class LibSQLFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter: Filter): Filter {
+  translate(filter: VectorFilter): VectorFilter {
     if (this.isEmpty(filter)) {
       return filter;
     }
-    this.validateFilter(filter);
+    this.validateFilter(filter as Filter);
     return this.translateNode(filter);
   }
 

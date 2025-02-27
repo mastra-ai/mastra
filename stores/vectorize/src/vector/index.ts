@@ -54,8 +54,7 @@ export class CloudflareVector extends MastraVector {
 
   transformFilter(filter?: VectorFilter) {
     const translator = new VectorizeFilterTranslator();
-    const translatedFilter = translator.translate(filter ?? {});
-    return translatedFilter;
+    return translator.translate(filter);
   }
 
   async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
@@ -76,7 +75,7 @@ export class CloudflareVector extends MastraVector {
     filter,
     includeVector = false,
   }: QueryVectorParams): Promise<QueryResult[]> {
-    const translatedFilter = this.transformFilter(filter);
+    const translatedFilter = this.transformFilter(filter) ?? {};
     const response = await this.client.vectorize.indexes.query(indexName, {
       account_id: this.accountId,
       vector: queryVector,

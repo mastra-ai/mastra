@@ -38,7 +38,7 @@ export class UpstashVector extends MastraVector {
 
   transformFilter(filter?: VectorFilter) {
     const translator = new UpstashFilterTranslator();
-    return translator.translate(filter ?? {});
+    return translator.translate(filter);
   }
 
   async createIndex(_params: CreateIndexParams): Promise<void> {

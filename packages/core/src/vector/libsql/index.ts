@@ -70,9 +70,8 @@ export class LibSQLVector extends MastraVector {
   }
 
   transformFilter(filter?: VectorFilter) {
-    const libsqlFilter = new LibSQLFilterTranslator();
-    const translatedFilter = libsqlFilter.translate(filter ?? {});
-    return translatedFilter;
+    const translator = new LibSQLFilterTranslator();
+    return translator.translate(filter);
   }
 
   async query({

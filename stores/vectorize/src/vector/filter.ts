@@ -1,5 +1,6 @@
 import { BaseFilterTranslator } from '@mastra/core/filter';
 import type { Filter, FieldCondition, OperatorSupport } from '@mastra/core/filter';
+import type { VectorFilter } from '@mastra/core/vector';
 
 export class VectorizeFilterTranslator extends BaseFilterTranslator {
   protected override getSupportedOperators(): OperatorSupport {
@@ -13,7 +14,7 @@ export class VectorizeFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter?: Filter): Filter | undefined {
+  translate(filter?: VectorFilter): VectorFilter {
     if (this.isEmpty(filter)) return filter;
     this.validateFilter(filter as Filter);
     return this.translateNode(filter);

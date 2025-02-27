@@ -82,7 +82,7 @@ export class AstraVector extends MastraVector {
 
   transformFilter(filter?: VectorFilter) {
     const translator = new AstraFilterTranslator();
-    return translator.translate(filter ?? {});
+    return translator.translate(filter);
   }
 
   /**

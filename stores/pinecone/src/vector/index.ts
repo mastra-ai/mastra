@@ -75,7 +75,7 @@ export class PineconeVector extends MastraVector {
 
   transformFilter(filter?: VectorFilter) {
     const translator = new PineconeFilterTranslator();
-    return translator.translate(filter ?? {});
+    return translator.translate(filter);
   }
 
   async query({
@@ -87,7 +87,7 @@ export class PineconeVector extends MastraVector {
   }: QueryVectorParams): Promise<QueryResult[]> {
     const index = this.client.Index(indexName);
 
-    const translatedFilter = this.transformFilter(filter);
+    const translatedFilter = this.transformFilter(filter) ?? {};
 
     const results = await index.query({
       vector: queryVector,
