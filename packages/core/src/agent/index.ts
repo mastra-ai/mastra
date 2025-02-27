@@ -476,7 +476,7 @@ export class Agent<
             parameters: tool.inputSchema,
             execute:
               typeof tool?.execute === 'function'
-                ? async args => {
+                ? async (args, options) => {
                     try {
                       this.logger.debug(`[Agent:${this.name}] - Executing tool ${k}`, {
                         name: k,
@@ -485,11 +485,14 @@ export class Agent<
                         runId,
                       });
                       return (
-                        tool?.execute?.({
-                          context: args,
-                          mastra: this.#mastra,
-                          runId,
-                        }) ?? undefined
+                        tool?.execute?.(
+                          {
+                            context: args,
+                            mastra: this.#mastra,
+                            runId,
+                          },
+                          options,
+                        ) ?? undefined
                       );
                     } catch (err) {
                       this.logger.error(`[Agent:${this.name}] - Failed execution`, {
@@ -523,26 +526,34 @@ export class Agent<
           toolsFromToolsetsConverted[toolName] = {
             description: toolObj.description || '',
             parameters: toolObj.inputSchema,
-            execute: async args => {
-              try {
-                this.logger.debug(`[Agent:${this.name}] - Executing tool ${toolName}`, {
-                  name: toolName,
-                  description: toolObj.description,
-                  args,
-                  runId,
-                });
-                return toolObj.execute!({
-                  context: args,
-                  runId,
-                });
-              } catch (err) {
-                this.logger.error(`[Agent:${this.name}] - Failed toolset execution`, {
-                  error: err,
-                  runId: runId,
-                });
-                throw err;
-              }
-            },
+            execute:
+              typeof toolObj?.execute === 'function'
+                ? async (args, options) => {
+                    try {
+                      this.logger.debug(`[Agent:${this.name}] - Executing tool ${toolName}`, {
+                        name: toolName,
+                        description: toolObj.description,
+                        args,
+                        runId,
+                      });
+                      return (
+                        toolObj?.execute?.(
+                          {
+                            context: args,
+                            runId,
+                          },
+                          options,
+                        ) ?? undefined
+                      );
+                    } catch (err) {
+                      this.logger.error(`[Agent:${this.name}] - Failed toolset execution`, {
+                        error: err,
+                        runId: runId,
+                      });
+                      throw err;
+                    }
+                  }
+                : undefined,
           };
         });
       });

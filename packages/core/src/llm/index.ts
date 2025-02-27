@@ -79,7 +79,7 @@ export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undef
   convertedTools?: Record<string, CoreTool>;
   messages: CoreMessage[];
   onStepFinish?: (step: string) => void;
-  toolChoice?: 'auto' | 'required';
+  toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   maxSteps?: number;
   temperature?: number;
   experimental_output?: Z;
@@ -111,7 +111,7 @@ export type LLMInnerStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined 
   onFinish?: (result: string) => unknown;
   maxSteps?: number;
   temperature?: number;
-  toolChoice?: 'auto' | 'required';
+  toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   experimental_output?: Z;
   telemetry?: TelemetrySettings;
 } & Run;
