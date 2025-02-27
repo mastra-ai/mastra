@@ -20,7 +20,7 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "build": "tsup src/index.ts --format esm --experimental-dts --clean --treeshake",
+    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake",
     "test": "echo \"deprecated\""
   },
   "dependencies": {

@@ -33,6 +33,10 @@
       "import": {
         "types": "./dist/storage/libsql/index.d.ts",
         "default": "./dist/storage/libsql/index.js"
+      },
+      "require": {
+        "types": "./dist/storage/libsql/index.d.cts",
+        "default": "./dist/storage/libsql/index.cjs"
       }
     },
     "./vector/libsql": {
