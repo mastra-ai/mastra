@@ -39,6 +39,7 @@ import { generateSystemPromptHandler } from './handlers/prompt.js';
 import { rootHandler } from './handlers/root.js';
 import { getTelemetryHandler } from './handlers/telemetry.js';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools.js';
+import { getSpeakersHandler, speakHandler, listenHandler } from './handlers/voice.js';
 import {
   upsertVectors,
   createIndex,
@@ -439,6 +440,178 @@ export async function createHonoServer(
       },
     }),
     generateSystemPromptHandler,
+  );
+
+  app.get(
+    '/api/agents/:agentId/speakers',
+    describeRoute({
+      description: 'Get available speakers for an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'List of available speakers',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  description: 'Speaker information depending on the voice provider',
+                  properties: {
+                    voiceId: { type: 'string' },
+                  },
+                  additionalProperties: true,
+                },
+              },
+            },
+          },
+        },
+        400: {
+          description: 'Agent does not have voice capabilities',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    getSpeakersHandler,
+  );
+
+  app.post(
+    '/api/agents/:agentId/speak',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: "Convert text to speech using the agent's voice provider",
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                text: {
+                  type: 'string',
+                  description: 'Text to convert to speech',
+                },
+                options: {
+                  type: 'object',
+                  description: 'Provider-specific options for speech generation',
+                  properties: {
+                    speaker: {
+                      type: 'string',
+                      description: 'Speaker ID to use for speech generation',
+                    },
+                  },
+                  additionalProperties: true,
+                },
+              },
+              required: ['text'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Audio stream',
+          content: {
+            'audio/mpeg': {
+              schema: {
+                format: 'binary',
+                description: 'Audio stream containing the generated speech',
+              },
+            },
+            'audio/*': {
+              schema: {
+                format: 'binary',
+                description: 'Audio stream depending on the provider',
+              },
+            },
+          },
+        },
+        400: {
+          description: 'Agent does not have voice capabilities or invalid request',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    speakHandler,
+  );
+
+  app.post(
+    '/api/agents/:agentId/listen',
+    bodyLimit({
+      ...bodyLimitOptions,
+      maxSize: 10 * 1024 * 1024, // 10 MB for audio files
+    }),
+    describeRoute({
+      description:
+        "Convert speech to text using the agent's voice provider. Additional provider-specific options can be passed as query parameters.",
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'audio/mpeg': {
+            schema: {
+              format: 'binary',
+              description:
+                'Audio data stream to transcribe (supports various formats depending on provider like mp3, wav, webm, flac)',
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Transcription result',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  text: {
+                    type: 'string',
+                    description: 'Transcribed text',
+                  },
+                },
+              },
+            },
+          },
+        },
+        400: {
+          description: 'Agent does not have voice capabilities or invalid request',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    listenHandler,
   );
 
   app.post(
