@@ -1,6 +1,6 @@
 import { BaseFilterTranslator } from '../../filter';
 import type { FieldCondition, Filter, OperatorSupport } from '../../filter';
-import type { VectorFilter } from '../index.warning';
+import type { VectorFilter } from '../types';
 
 /**
  * Translates MongoDB-style filters to LibSQL compatible filters.
