@@ -1287,11 +1287,11 @@ describe('ChromaVector Integration Tests', () => {
     afterEach(async () => {
       warnSpy.mockRestore();
       await vectorDB.deleteIndex(indexName);
-      await vectorDB.deleteIndex(indexName2);
     });
 
     it('should show deprecation warning when using individual args for createIndex', async () => {
       await vectorDB.createIndex(indexName2, 3, 'cosine');
+      await vectorDB.deleteIndex(indexName2);
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Deprecation Warning: Passing individual arguments to createIndex() is deprecated'),
@@ -1340,6 +1340,7 @@ describe('ChromaVector Integration Tests', () => {
         vectors: [[1, 2, 3]],
         metadata: [{ test: 'data' }],
       });
+      await vectorDB.deleteIndex(indexName2);
 
       expect(warnSpy).not.toHaveBeenCalled();
     });
@@ -1351,6 +1352,7 @@ describe('ChromaVector Integration Tests', () => {
 
       // CreateIndex
       await expect(vectorDB.createIndex(indexName2, 3, 'cosine')).resolves.not.toThrow();
+      await vectorDB.deleteIndex(indexName2);
 
       // Upsert
       const upsertResults = await vectorDB.upsert({
