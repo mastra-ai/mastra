@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 import { PineconeVector } from './';
 

@@ -3,7 +3,7 @@ title: "Reference: Murf Voice | Voice Providers | Mastra Docs"
 description: "Documentation for the Murf voice implementation, providing text-to-speech capabilities."
 ---
 
-# Murf Voice Reference
+# Murf
 
 The Murf voice implementation in Mastra provides text-to-speech (TTS) capabilities using Murf's AI voice service. It supports multiple voices across different languages.
 
@@ -57,14 +57,14 @@ const voices = await voice.getSpeakers();
       type: "MurfConfig",
       description: "Configuration for text-to-speech functionality",
       isOptional: true,
-      defaultValue: "{ name: 'GEN2', apiKey: process.env.MURF_API_KEY }",
+      defaultValue: "{ name: 'GEN2' }",
     },
     {
       name: "speaker",
       type: "string",
       description: "Default voice ID to use for text-to-speech",
       isOptional: true,
-      defaultValue: "First voice from MURF_VOICES",
+      defaultValue: "'en-UK-hazel'",
     },
   ]}
 />
@@ -207,9 +207,36 @@ Returns: `Promise<NodeJS.ReadableStream>`
 
 ### getSpeakers()
 
-Returns a list of available voices with their properties.
+Returns an array of available voice options, where each node contains:
 
-Returns: `Promise<Array<{ voiceId: string, name: string, language: string, gender: string }>>`
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Display name of the voice",
+      isOptional: false,
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "Language code for the voice",
+      isOptional: false,
+    },
+    {
+      name: "gender",
+      type: "string",
+      description: "Gender of the voice",
+      isOptional: false,
+    }
+  ]}
+/>
 
 ### listen()
 

@@ -1,5 +1,5 @@
-import type { Span } from '@opentelemetry/api';
 import EventEmitter from 'node:events';
+import type { Span } from '@opentelemetry/api';
 import { get } from 'radash';
 import sift from 'sift';
 import { assign, createActor, fromPromise, setup } from 'xstate';
@@ -425,8 +425,8 @@ export class Machine<
           };
         }) => {
           const { parentStepId, context } = input;
-          this.emit('spawn-subscriber', { parentStepId, context });
-          return Promise.resolve({ steps: context.steps });
+          const result = await this.#workflowInstance.runMachine(parentStepId, context);
+          return Promise.resolve({ steps: result?.results });
         },
       ),
     };

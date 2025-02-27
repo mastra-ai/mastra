@@ -1,10 +1,10 @@
 import { Integration } from '@mastra/core/integration';
 
-import * as integrationClient from './client/services.gen';
+import type * as integrationClient from './client/services.gen';
 import { GithubToolset } from './toolset';
 // @ts-ignore
 // import GithubLogo from './assets/github.png';
-import { GithubConfig } from './types';
+import type { GithubConfig } from './types';
 
 export class GithubIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'GITHUB';

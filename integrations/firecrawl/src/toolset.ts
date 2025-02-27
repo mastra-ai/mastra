@@ -1,10 +1,10 @@
 import { OpenAPIToolset } from '@mastra/core/integration';
-import { type ToolAction } from '@mastra/core/tools';
+import type { ToolAction } from '@mastra/core/tools';
 
 import * as integrationClient from './client/sdk.gen';
 import { comments } from './client/service-comments';
 import * as zodSchema from './client/zodSchema';
-import { type FirecrawlConfig } from './types';
+import type { FirecrawlConfig } from './types';
 
 export class FirecrawlToolset extends OpenAPIToolset {
   readonly name = 'FIRECRAWL';
@@ -53,4 +53,3 @@ export class FirecrawlToolset extends OpenAPIToolset {
     return integrationClient;
   };
 }
-

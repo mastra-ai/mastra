@@ -1,6 +1,6 @@
 {
   "name": "@mastra/pg",
-  "version": "0.1.5",
+  "version": "0.1.6-alpha.0",
   "description": "Postgres provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -25,7 +25,8 @@
     "posttest:perf": "docker compose -f docker-compose.perf.yaml down -v",
     "pretest:watch": "docker compose up -d",
     "test:watch": "vitest watch",
-    "posttest:watch": "docker compose down -v"
+    "posttest:watch": "docker compose down -v",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
@@ -38,6 +39,8 @@
     "@types/pg": "^8.11.10",
     "tsup": "^8.0.1",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.4"
+    "vitest": "^3.0.4",
+    "@internal/lint": "workspace:*",
+    "eslint": "^9.20.1"
   }
 }

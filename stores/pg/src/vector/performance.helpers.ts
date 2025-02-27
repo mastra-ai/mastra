@@ -1,6 +1,6 @@
-import { type IndexConfig, type IndexType } from './types';
+import type { IndexConfig, IndexType } from './types';
 
-import { PgVector } from '.';
+import type { PgVector } from '.';
 
 export interface TestResult {
   distribution: string;

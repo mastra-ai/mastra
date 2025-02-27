@@ -51,11 +51,11 @@ It provides robust vector similarity search capabilities within your existing Po
       description: "Index configuration",
     },
     {
-      name: "defineIndex",
+      name: "buildIndex",
       type: "boolean",
       isOptional: true,
       defaultValue: "true",
-      description: "Whether to define the index",
+      description: "Whether to build the index",
     },
   ]}
 />
@@ -295,7 +295,7 @@ interface PGIndexStats {
 
 Closes the database connection pool. Should be called when done using the store.
 
-### defineIndex()
+### buildIndex()
 
 <PropertiesTable
   content={[
@@ -319,11 +319,11 @@ Closes the database connection pool. Should be called when done using the store.
   ]}
 />
 
-Defines or redefines an index with specified metric and configuration. Will drop any existing index before creating the new one.
+Builds or rebuilds an index with specified metric and configuration. Will drop any existing index before creating the new one.
 
 ```typescript copy
 // Define HNSW index
-await pgVector.defineIndex("my_vectors", "cosine", {
+await pgVector.buildIndex("my_vectors", "cosine", {
   type: "hnsw",
   hnsw: {
     m: 8,
@@ -332,7 +332,7 @@ await pgVector.defineIndex("my_vectors", "cosine", {
 });
 
 // Define IVF index
-await pgVector.defineIndex("my_vectors", "cosine", {
+await pgVector.buildIndex("my_vectors", "cosine", {
   type: "ivfflat",
   ivf: {
     lists: 100, 
@@ -340,7 +340,7 @@ await pgVector.defineIndex("my_vectors", "cosine", {
 });
 
 // Define flat index
-await pgVector.defineIndex("my_vectors", "cosine", {
+await pgVector.buildIndex("my_vectors", "cosine", {
   type: "flat" 
 });
 ```
@@ -354,6 +354,7 @@ interface QueryResult {
   id: string;
   score: number;
   metadata: Record<string, any>;
+  vector?: number[]; // Only included if includeVector is true
 }
 ```
 

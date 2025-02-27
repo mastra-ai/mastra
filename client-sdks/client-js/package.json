@@ -1,6 +1,6 @@
 {
   "name": "@mastra/client-js",
-  "version": "0.1.4",
+  "version": "0.1.5-alpha.0",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "types": "dist/index.d.mts",

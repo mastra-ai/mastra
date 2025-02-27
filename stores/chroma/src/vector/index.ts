@@ -1,8 +1,14 @@
-import { type Filter } from '@mastra/core/filter';
-import { MastraVector, type QueryResult, type IndexStats } from '@mastra/core/vector';
+import type { Filter } from '@mastra/core/filter';
+import { MastraVector } from '@mastra/core/vector';
+import type { QueryResult, IndexStats } from '@mastra/core/vector';
 import { ChromaClient } from 'chromadb';
 
 import { ChromaFilterTranslator } from './filter';
+
+export interface DocumentMetadata {
+  content?: string;
+  metadata?: Record<string, any>;
+}
 
 export class ChromaVector extends MastraVector {
   private client: ChromaClient;
@@ -26,11 +32,11 @@ export class ChromaVector extends MastraVector {
     this.collections = new Map();
   }
 
-  private async getCollection(indexName: string, throwIfNotExists: boolean = true) {
+  async getCollection(indexName: string, throwIfNotExists: boolean = true) {
     try {
       const collection = await this.client.getCollection({ name: indexName, embeddingFunction: undefined as any });
       this.collections.set(indexName, collection);
-    } catch (error) {
+    } catch {
       if (throwIfNotExists) {
         throw new Error(`Index ${indexName} does not exist`);
       }
@@ -54,6 +60,7 @@ export class ChromaVector extends MastraVector {
     vectors: number[][],
     metadata?: Record<string, any>[],
     ids?: string[],
+    documents?: string[],
   ): Promise<string[]> {
     const collection = await this.getCollection(indexName);
 
@@ -73,10 +80,19 @@ export class ChromaVector extends MastraVector {
       ids: generatedIds,
       embeddings: vectors,
       metadatas: normalizedMetadata,
+      documents: documents,
     });
 
     return generatedIds;
   }
+
+  private HnswSpaceMap = {
+    cosine: 'cosine',
+    euclidean: 'l2',
+    dotproduct: 'ip',
+    l2: 'euclidean',
+    ip: 'dotproduct',
+  };
 
   async createIndex(
     indexName: string,
@@ -86,11 +102,15 @@ export class ChromaVector extends MastraVector {
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new Error('Dimension must be a positive integer');
     }
+    const hnswSpace = this.HnswSpaceMap[metric];
+    if (!['cosine', 'l2', 'ip'].includes(hnswSpace)) {
+      throw new Error(`Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`);
+    }
     await this.client.createCollection({
       name: indexName,
       metadata: {
         dimension,
-        metric,
+        'hnsw:space': this.HnswSpaceMap[metric],
       },
     });
   }
@@ -106,17 +126,18 @@ export class ChromaVector extends MastraVector {
     topK: number = 10,
     filter?: Filter,
     includeVector: boolean = false,
+    documentFilter?: Filter,
   ): Promise<QueryResult[]> {
     const collection = await this.getCollection(indexName, true);
 
     const defaultInclude = ['documents', 'metadatas', 'distances'];
 
     const translatedFilter = this.transformFilter(filter);
-
     const results = await collection.query({
       queryEmbeddings: [queryVector],
       nResults: topK,
       where: translatedFilter,
+      whereDocument: documentFilter,
       include: includeVector ? [...defaultInclude, 'embeddings'] : defaultInclude,
     });
 
@@ -125,6 +146,7 @@ export class ChromaVector extends MastraVector {
       id,
       score: results.distances?.[0]?.[index] || 0,
       metadata: results.metadatas?.[0]?.[index] || {},
+      document: results.documents?.[0]?.[index],
       ...(includeVector && { vector: results.embeddings?.[0]?.[index] || [] }),
     }));
   }
@@ -139,10 +161,12 @@ export class ChromaVector extends MastraVector {
     const count = await collection.count();
     const metadata = collection.metadata;
 
+    const hnswSpace = metadata?.['hnsw:space'] as 'cosine' | 'l2' | 'ip';
+
     return {
       dimension: metadata?.dimension || 0,
       count,
-      metric: metadata?.metric as 'cosine' | 'euclidean' | 'dotproduct',
+      metric: this.HnswSpaceMap[hnswSpace] as 'cosine' | 'euclidean' | 'dotproduct',
     };
   }
 

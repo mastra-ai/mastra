@@ -3,7 +3,7 @@ title: "Reference: Deepgram Voice | Voice Providers | Mastra Docs"
 description: "Documentation for the Deepgram voice implementation, providing text-to-speech and speech-to-text capabilities with multiple voice models and languages."
 ---
 
-# Deepgram Voice Reference
+# Deepgram
 
 The Deepgram voice implementation in Mastra provides text-to-speech (TTS) and speech-to-text (STT) capabilities using Deepgram's API. It supports multiple voice models and languages, with configurable options for both speech synthesis and transcription.
 
@@ -42,16 +42,16 @@ const transcript = await voice.listen(audioStream);
     {
       name: "speechModel",
       type: "DeepgramVoiceConfig",
-      description: "Configuration for text-to-speech functionality",
+      description: "Configuration for text-to-speech functionality.",
       isOptional: true,
-      defaultValue: "{ name: 'aura', apiKey: process.env.DEEPGRAM_API_KEY }",
+      defaultValue: "{ name: 'aura' }"
     },
     {
       name: "listeningModel",
       type: "DeepgramVoiceConfig",
-      description: "Configuration for speech-to-text functionality",
+      description: "Configuration for speech-to-text functionality.",
       isOptional: true,
-      defaultValue: "{ name: 'nova', apiKey: process.env.DEEPGRAM_API_KEY }",
+      defaultValue: "{ name: 'nova' }"
     },
     {
       name: "speaker",
@@ -152,28 +152,13 @@ Returns: `Promise<string>`
 
 Returns a list of available voice options.
 
-Returns: `Promise<Array<{ voiceId: DeepgramVoiceId }>>`
-
-## Available Models and Voices
-
-### Speech Models (DeepgramModel)
-- `aura`: Default model for text-to-speech
-- `base`: Base model for speech recognition
-- `enhanced`: Enhanced speech recognition model
-- `nova`: Nova model for speech recognition (default for listening)
-- `nova-2`: Improved Nova model
-- `nova-3`: Latest Nova model
-
-### Voice Options (DeepgramVoiceId)
-- `asteria-en`: Default English voice
-- `luna-en`: English voice
-- `stella-en`: English voice
-- `athena-en`: English voice
-- `hera-en`: English voice
-- `orion-en`: English voice
-- `arcas-en`: English voice
-- `perseus-en`: English voice
-- `angus-en`: English voice
-- `orpheus-en`: English voice
-- `helios-en`: English voice
-- `zeus-en`: English voice
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "Unique identifier for the voice",
+      isOptional: false,
+    }
+  ]}
+/>

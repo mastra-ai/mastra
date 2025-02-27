@@ -1,6 +1,6 @@
 {
   "name": "@mastra/astra",
-  "version": "0.1.5",
+  "version": "0.1.6-alpha.0",
   "description": "Astra DB provider for Mastra - includes vector store capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -17,7 +17,8 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --experimental-dts --clean --treeshake",
     "build:watch": "pnpm build --watch",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@datastax/astra-db-ts": "^1.5.0",
@@ -28,6 +29,8 @@
     "@types/node": "^22.13.1",
     "tsup": "^8.0.1",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.4"
+    "vitest": "^3.0.4",
+    "@internal/lint": "workspace:*",
+    "eslint": "^9.20.1"
   }
 }

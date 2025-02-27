@@ -1,8 +1,9 @@
+import { PassThrough } from 'stream';
 import { MastraTTS } from '@mastra/core/tts';
 import ky from 'ky';
-import { PassThrough } from 'stream';
 
-import { MURF_VOICES, type MurfVoice } from './voices';
+import { MURF_VOICES } from './voices';
+import type { MurfVoice } from './voices';
 
 type MurfConfig = {
   name: 'GEN1' | 'GEN2';
@@ -147,7 +148,7 @@ export class MurfTTS extends MastraTTS {
 
       // Process the stream
       const reader = audioResponse.body.getReader();
-      (async () => {
+      void (async () => {
         try {
           while (true) {
             const { done, value } = await reader.read();

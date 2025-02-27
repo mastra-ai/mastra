@@ -1,8 +1,6 @@
 packages:
   - "packages/*"
   - "deployers/*"
-  - "storage/*"
-  - "vector-stores/*"
   - "stores/*"
   - "speech/*"
   - "voice/*"

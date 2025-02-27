@@ -19,9 +19,6 @@ export const packagePublisher = new Workflow({
 //   integrations: z.array(z.string()),
 //   deployers: z.array(z.string()),
 //   speech: z.array(z.string()),
-//   // deprecated
-//   vector_stores: z.array(z.string()),
-//   stores: z.array(z.string()),
 //   // combined deprecated stores
 //   combined_stores: z.array(z.string()),
 // });
@@ -31,10 +28,6 @@ export const packagePublisher = new Workflow({
 //   deployers: [],
 //   integrations: [],
 //   speech: [],
-//   // deprecated
-//   vector_stores: [],
-//   stores: [],
-//   // combined vector + storage
 //   combined_stores: [],
 // };
 
@@ -64,7 +57,7 @@ export const packagePublisher = new Workflow({
 //          - Group parallel builds by directory type
 
 //       2. Output Format:
-//          - Group into: packages[], integrations[], deployers[], vector_stores[], stores[], combined_stores[]
+//          - Group into: packages[], integrations[], deployers[], combined_stores[]
 //          - Place create-mastra in packages[] array
 //          - Maintain correct order within each group
 
@@ -78,8 +71,6 @@ export const packagePublisher = new Workflow({
 //           packages: z.array(z.string()),
 //           integrations: z.array(z.string()),
 //           deployers: z.array(z.string()),
-//           vector_stores: z.array(z.string()),
-//           stores: z.array(z.string()),
 //           combined_stores: z.array(z.string()),
 //           speech: z.array(z.string()),
 //         }),
@@ -90,8 +81,6 @@ export const packagePublisher = new Workflow({
 //       packages: resultObj?.object?.packages!,
 //       integrations: resultObj?.object?.integrations!,
 //       deployers: resultObj?.object?.deployers!,
-//       vector_stores: resultObj?.object?.vector_stores!,
-//       stores: resultObj?.object?.stores!,
 //       combined_stores: resultObj?.object?.stores!,
 //       speech: resultObj?.object?.speech!,
 //     };
@@ -107,8 +96,6 @@ export const packagePublisher = new Workflow({
 //         packages: [],
 //         integrations: [],
 //         deployers: [],
-//         vector_stores: [],
-//         stores: [],
 //         combined_stores: [],
 //         speech: [],
 //       };
@@ -118,8 +105,6 @@ export const packagePublisher = new Workflow({
 //     const packagesToBuild: Set<string> = new Set();
 //     const deployersToBuild: Set<string> = new Set();
 //     const integrationsToBuild: Set<string> = new Set();
-//     const vector_storesToBuild: Set<string> = new Set();
-//     const storesToBuild: Set<string> = new Set();
 //     const combined_storesToBuild: Set<string> = new Set();
 //     const speechToBuild: Set<string> = new Set();
 
@@ -146,24 +131,6 @@ export const packagePublisher = new Workflow({
 
 //         const pkgPath = path.join(process.cwd(), 'deployers', pkgName);
 //         deployersToBuild.add(pkgPath);
-//       });
-//     }
-
-//     if (payload?.vector_stores) {
-//       payload.vector_stores.forEach((pkg: string) => {
-//         let pkgName = pkg.replace('@mastra/vector-', '');
-
-//         const pkgPath = path.join(process.cwd(), 'vector-stores', pkgName);
-//         vector_storesToBuild.add(pkgPath);
-//       });
-//     }
-
-//     if (payload?.stores) {
-//       payload.stores.forEach((pkg: string) => {
-//         let pkgName = pkg.replace('@mastra/store-', '');
-
-//         const pkgPath = path.join(process.cwd(), 'storage', pkgName);
-//         storesToBuild.add(pkgPath);
 //       });
 //     }
 
@@ -198,8 +165,6 @@ export const packagePublisher = new Workflow({
 //     const pkgSet = Array.from(packagesToBuild.keys());
 //     const deploySet = Array.from(deployersToBuild.keys());
 //     const integrationSet = Array.from(integrationsToBuild.keys());
-//     const vectorStoreSet = Array.from(vector_storesToBuild.keys());
-//     const storeSet = Array.from(storesToBuild.keys());
 //     const combinedStoreSet = Array.from(combined_storesToBuild.keys());
 //     const speechSet = Array.from(speechToBuild.keys());
 
@@ -207,8 +172,6 @@ export const packagePublisher = new Workflow({
 //       !packagesToBuild.size &&
 //       !deployersToBuild.size &&
 //       !integrationsToBuild.size &&
-//       !vector_storesToBuild.size &&
-//       !storesToBuild.size &&
 //       !combined_storesToBuild.size
 //     ) {
 //       console.error(chalk.red('No packages to build.'));
@@ -234,20 +197,6 @@ export const packagePublisher = new Workflow({
 //       });
 //     }
 
-//     if (vectorStoreSet.length > 0) {
-//       console.log(chalk.green(`\nBuilding vector stores:\n`));
-//       vectorStoreSet.forEach((pkg: string) => {
-//         console.log(chalk.green(pkg));
-//       });
-//     }
-
-//     if (storeSet.length > 0) {
-//       console.log(chalk.green(`\nBuilding storage packages:\n`));
-//       storeSet.forEach((pkg: string) => {
-//         console.log(chalk.green(pkg));
-//       });
-//     }
-
 //     if (combinedStoreSet.length > 0) {
 //       console.log(chalk.green(`\nBuilding store packages:\n`));
 //       combinedStoreSet.forEach((pkg: string) => {
@@ -266,8 +215,6 @@ export const packagePublisher = new Workflow({
 //       packages: pkgSet!,
 //       deployers: deploySet!,
 //       integrations: integrationSet!,
-//       vector_stores: vectorStoreSet!,
-//       stores: storeSet!,
 //       combined_stores: combinedStoreSet!,
 //       speech: speechSet!,
 //     };

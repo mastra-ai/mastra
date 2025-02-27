@@ -1,6 +1,6 @@
+import { setTimeout } from 'node:timers/promises';
 import { trace, context as otlpContext } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
-import { setTimeout } from 'node:timers/promises';
 import type { z } from 'zod';
 
 import type { IAction, MastraPrimitives } from '../action';
@@ -430,6 +430,7 @@ export class Workflow<
       throw new Error('Failed to parse workflow snapshot');
     }
 
+    const origSnapshot = parsedSnapshot;
     const startStepId = parsedSnapshot.suspendedSteps?.[stepId];
     if (!startStepId) {
       return;
@@ -505,6 +506,7 @@ export class Workflow<
         },
       });
 
+    run.setState(origSnapshot?.value);
     this.#runs.set(run.runId, run);
     return run?.execute({
       snapshot: parsedSnapshot,
