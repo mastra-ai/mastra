@@ -1,5 +1,14 @@
 # @mastra/pg
 
+## 0.1.6-alpha.2
+
+### Patch Changes
+
+- 5325d6a: A bug fix earlier today unmasked that the next/prev settings for PG semantic recall were swapped
+- Updated dependencies [2512a93]
+- Updated dependencies [e62de74]
+  - @mastra/core@0.4.3-alpha.2
+
 ## 0.1.6-alpha.1
 
 ### Patch Changes

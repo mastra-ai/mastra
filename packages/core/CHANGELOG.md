@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.4.3-alpha.2
+
+### Patch Changes
+
+- 2512a93: Support all aisdk options for agent stream,generate
+- e62de74: Fix optional tool llm
+  execute
+
 ## 0.4.3-alpha.1
 
 ### Patch Changes
