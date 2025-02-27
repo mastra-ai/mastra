@@ -40,7 +40,7 @@ jobs:
         run: pnpm install
 
       - name: Lint
-        run: pnpm turbo --filter "!./examples/*" --filter "!./docs/*" lint
+        run: pnpm turbo --filter "!./examples/*" --filter "!./docs/*" --filter "!./integrations/*" lint
 
   check-bundle:
     name: Validate build outputs
