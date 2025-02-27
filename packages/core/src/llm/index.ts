@@ -8,7 +8,6 @@ import type {
   EmbedResult as AiEmbedResult,
   GenerateObjectResult,
   GenerateTextResult,
-  JSONValue,
   LanguageModelV1,
   StreamObjectResult,
   StreamTextResult,
