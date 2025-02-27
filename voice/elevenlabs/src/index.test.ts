@@ -1,6 +1,5 @@
 import { createWriteStream, writeFileSync, mkdirSync, createReadStream } from 'fs';
 import path from 'path';
-import { Readable } from 'stream';
 import { describe, expect, it, beforeAll } from 'vitest';
 
 import { ElevenLabsVoice } from './index.js';
