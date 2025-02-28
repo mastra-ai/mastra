@@ -13,25 +13,32 @@ describe('UpstashStore', () => {
 
   beforeAll(async () => {
     console.log('Initializing UpstashStore...');
+
+    console.log('Creating UpstashStore instance...');
     store = new UpstashStore({
       url: 'http://localhost:8079',
       token: 'test_token',
     });
+    console.log('UpstashStore instance created');
 
     // Add retry logic for initialization
     const maxRetries = 3;
     let attempts = 0;
 
+    console.log('Beginning initialization attempts...');
     while (attempts < maxRetries) {
       try {
+        console.log('Calling store.init()...');
         await store.init();
+        console.log('store.init() completed successfully');
         break;
       } catch (error) {
+        console.log(`Initialization attempt ${attempts + 1} failed:`, error);
         attempts++;
         if (attempts === maxRetries) {
           throw new Error(`Failed to initialize store after ${maxRetries} attempts: ${error}`);
         }
-        // Wait 2 seconds before retrying
+        console.log(`Waiting 2 seconds before retry...`);
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
