@@ -781,7 +781,7 @@ describe('CloudflareVector', () => {
         expect(results.length).toBeGreaterThan(0);
       });
     });
-  }, 3000000);
+  }, 300000);
   describe('Deprecation Warnings', () => {
     const indexName = 'testdeprecationwarnings';
 

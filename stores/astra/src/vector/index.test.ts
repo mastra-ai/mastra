@@ -3,7 +3,7 @@ import { vi, describe, it, expect, beforeAll, afterAll, test, beforeEach, afterE
 import { AstraVector } from './';
 
 // Give tests enough time to complete database operations
-vi.setConfig({ testTimeout: 3000000, hookTimeout: 3000000 });
+vi.setConfig({ testTimeout: 300000, hookTimeout: 300000 });
 
 // Helper function to wait for condition with timeout
 async function waitForCondition(
