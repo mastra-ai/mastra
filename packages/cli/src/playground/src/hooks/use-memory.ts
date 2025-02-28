@@ -37,10 +37,10 @@ export const useThreads = ({
   });
 
   useEffect(() => {
-    if (resourceid) {
+    if (resourceid && agentId && isMemoryEnabled) {
       mutate();
     }
-  }, [resourceid]);
+  }, [resourceid, agentId, isMemoryEnabled]);
 
   return { threads, isLoading, mutate };
 };

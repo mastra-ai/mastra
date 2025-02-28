@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useSWRConfig } from 'swr';
 
-import { mastraClient } from '../lib/mastra-client';
+import { MastraClient } from '@mastra/client-js';
 
 import { ChatContainer, ChatForm, ChatMessages } from './chat-items';
 import { useAutoScroll } from './hooks/use-auto-scroll';
@@ -52,13 +52,15 @@ export function Chat({ agentId, initialMessages = [], agentName, threadId, memor
       const newThreadId = threadId ? threadId : crypto.randomUUID();
 
       try {
-        const response = await mastraClient(buildUrl!)
-          .getAgent(agentId)
-          .stream({
-            messages: [userMessage],
-            threadId: newThreadId,
-            resourceid: agentId,
-          });
+        const client = new MastraClient({
+          baseUrl: buildUrl || '',
+        });
+
+        const response = await client.getAgent(agentId).stream({
+          messages: [userMessage],
+          threadId: newThreadId,
+          resourceid: agentId,
+        });
 
         if (!response.body) return;
 

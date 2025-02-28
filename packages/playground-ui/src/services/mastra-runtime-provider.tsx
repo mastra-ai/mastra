@@ -15,11 +15,6 @@ const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
 };
 
-const createMastraClient = (url?: string) =>
-  new MastraClient({
-    baseUrl: url || 'http://localhost:4111',
-  });
-
 export function MastraRuntimeProvider({
   children,
   agentId,
@@ -46,7 +41,9 @@ export function MastraRuntimeProvider({
     }
   }, [initialMessages, threadId, memory, messages]);
 
-  const mastra = createMastraClient(baseUrl);
+  const mastra = new MastraClient({
+    baseUrl: baseUrl || '',
+  });
 
   const onNew = async (message: AppendMessage) => {
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');

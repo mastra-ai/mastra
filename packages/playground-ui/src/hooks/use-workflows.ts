@@ -1,12 +1,15 @@
 import type { Workflow } from '@mastra/core/workflows';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-
-import { mastraClient } from '@/lib/mastra-client';
+import { MastraClient } from '@mastra/client-js';
 
 export const useWorkflow = (workflowId: string, baseUrl: string) => {
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const client = new MastraClient({
+    baseUrl: baseUrl || '',
+  });
 
   useEffect(() => {
     const fetchWorkflow = async () => {
@@ -17,7 +20,7 @@ export const useWorkflow = (workflowId: string, baseUrl: string) => {
           setIsLoading(false);
           return;
         }
-        const res = await mastraClient(baseUrl).getWorkflow(workflowId).details();
+        const res = await client.getWorkflow(workflowId).details();
         if (!res) {
           setWorkflow(null);
           console.error('Error fetching workflow');
