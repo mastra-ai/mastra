@@ -787,16 +787,58 @@ describe('CloudflareVector', () => {
 
     const indexName2 = 'testdeprecationwarnings2';
 
+    const indexName3 = 'testdeprecationwarnings3';
+
+    const indexName4 = 'testdeprecationwarnings4';
+
     let warnSpy;
 
     beforeAll(async () => {
+      try {
+        await vectorDB.deleteIndex(indexName);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      try {
+        await vectorDB.deleteIndex(indexName2);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      try {
+        await vectorDB.deleteIndex(indexName3);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      try {
+        await vectorDB.deleteIndex(indexName4);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
       await vectorDB.createIndex({ indexName: indexName, dimension: VECTOR_DIMENSION });
       await waitUntilReady(vectorDB, indexName);
     });
 
     afterAll(async () => {
-      await vectorDB.deleteIndex(indexName);
-      await vectorDB.deleteIndex(indexName2);
+      try {
+        await vectorDB.deleteIndex(indexName);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      try {
+        await vectorDB.deleteIndex(indexName2);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      try {
+        await vectorDB.deleteIndex(indexName3);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      try {
+        await vectorDB.deleteIndex(indexName4);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
     });
 
     beforeEach(async () => {
@@ -805,7 +847,11 @@ describe('CloudflareVector', () => {
 
     afterEach(async () => {
       warnSpy.mockRestore();
-      await vectorDB.deleteIndex(indexName2);
+      try {
+        await vectorDB.deleteIndex(indexName2);
+      } catch (error) {
+        console.warn('Failed to delete test index:', error);
+      }
     });
 
     it('should show deprecation warning when using individual args for createIndex', async () => {
@@ -844,7 +890,7 @@ describe('CloudflareVector', () => {
 
     it('should not show deprecation warning when using object param for createIndex', async () => {
       await vectorDB.createIndex({
-        indexName: indexName2,
+        indexName: indexName3,
         dimension: VECTOR_DIMENSION,
         metric: 'cosine',
       });
@@ -868,8 +914,8 @@ describe('CloudflareVector', () => {
       expect(Array.isArray(queryResults)).toBe(true);
 
       // CreateIndex
-      await expect(vectorDB.createIndex(indexName2, VECTOR_DIMENSION, 'cosine')).resolves.not.toThrow();
-      await waitUntilReady(vectorDB, indexName2);
+      await expect(vectorDB.createIndex(indexName4, VECTOR_DIMENSION, 'cosine')).resolves.not.toThrow();
+      await waitUntilReady(vectorDB, indexName4);
       // Upsert
       const upsertResults = await vectorDB.upsert({
         indexName,
