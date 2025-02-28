@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.1.7
+
+### Patch Changes
+
+- 7a64aff: playground-ui lib package to enhance dev/cloud ui unification
+- bb4f447: Add support for commonjs
+
 ## 0.1.7-alpha.0
 
 ### Patch Changes
