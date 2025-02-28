@@ -165,6 +165,7 @@ jobs:
 
       - name: Enter prerelease mode
         run: |
+          git pull
           pnpm changeset pre enter alpha
           git add -A
           git commit -m 'chore: version - enter prerelease mode'
