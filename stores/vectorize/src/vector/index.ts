@@ -4,9 +4,9 @@ import type {
   CreateIndexParams,
   UpsertVectorParams,
   QueryVectorParams,
-  VectorFilter,
   ParamsToArgs,
 } from '@mastra/core/vector';
+import type { VectorFilter } from '@mastra/core/vector/filter';
 import Cloudflare from 'cloudflare';
 
 import { VectorizeFilterTranslator } from './filter';

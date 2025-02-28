@@ -2,6 +2,7 @@ import { join } from 'path';
 import { createClient } from '@libsql/client';
 import type { Client as TursoClient, InValue } from '@libsql/client';
 
+import type { VectorFilter } from '../filter';
 import { MastraVector } from '../index';
 import type {
   CreateIndexParams,
@@ -9,7 +10,6 @@ import type {
   QueryVectorParams,
   QueryResult,
   UpsertVectorParams,
-  VectorFilter,
   ParamsToArgs,
 } from '../index';
 

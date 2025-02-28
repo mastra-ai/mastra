@@ -1,6 +1,5 @@
-import { BaseFilterTranslator } from '@mastra/core/filter';
-import type { FieldCondition, Filter, LogicalOperator, OperatorSupport } from '@mastra/core/filter';
-import type { VectorFilter } from '@mastra/core/vector';
+import { BaseFilterTranslator } from '@mastra/core/vector/filter';
+import type { FieldCondition, VectorFilter, LogicalOperator, OperatorSupport } from '@mastra/core/vector/filter';
 
 /**
  * Translates MongoDB-style filters to Qdrant compatible filters.
@@ -38,7 +37,7 @@ export class QdrantFilterTranslator extends BaseFilterTranslator {
 
   translate(filter?: VectorFilter): VectorFilter {
     if (this.isEmpty(filter)) return filter;
-    this.validateFilter(filter as Filter);
+    this.validateFilter(filter);
     return this.translateNode(filter);
   }
 
@@ -47,7 +46,7 @@ export class QdrantFilterTranslator extends BaseFilterTranslator {
     return fieldKey ? { key: fieldKey, ...condition } : condition;
   }
 
-  private translateNode(node: Filter | FieldCondition, isNested: boolean = false, fieldKey?: string): any {
+  private translateNode(node: VectorFilter | FieldCondition, isNested: boolean = false, fieldKey?: string): any {
     if (!this.isEmpty(node) && typeof node === 'object' && 'must' in node) {
       return node;
     }
