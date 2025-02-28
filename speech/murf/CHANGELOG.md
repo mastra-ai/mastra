@@ -1,5 +1,18 @@
 # @mastra/speech-murf
 
+## 0.1.6-alpha.3
+
+### Patch Changes
+
+- bb4f447: Add support for commonjs
+- Updated dependencies [0fd78ac]
+- Updated dependencies [0d25b75]
+- Updated dependencies [fd14a3f]
+- Updated dependencies [3f369a2]
+- Updated dependencies [4d4e1e1]
+- Updated dependencies [bb4f447]
+  - @mastra/core@0.4.3-alpha.3
+
 ## 0.1.6-alpha.2
 
 ### Patch Changes
