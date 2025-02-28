@@ -876,7 +876,7 @@ describe.skip('PineconeVector Integration Tests', () => {
       expect(results.length).toBeGreaterThan(0);
     });
   });
-  describe.only('Deprecation Warnings', () => {
+  describe('Deprecation Warnings', () => {
     const indexName = 'testdeprecationwarnings';
 
     const indexName2 = 'testdeprecationwarnings2';
