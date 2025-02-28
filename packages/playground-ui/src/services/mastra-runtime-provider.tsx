@@ -61,6 +61,7 @@ export function MastraRuntimeProvider({
             content: input,
           },
         ],
+        runId: agentId,
         ...(memory ? { threadId, resourceid: agentId } : {}),
       });
 

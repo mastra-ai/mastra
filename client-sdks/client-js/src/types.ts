@@ -45,6 +45,7 @@ export interface GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = 
   threadId?: string;
   resourceid?: string;
   output?: OutputType | T;
+  runId?: string;
 }
 
 export interface StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> {
@@ -52,6 +53,7 @@ export interface StreamParams<T extends JSONSchema7 | ZodSchema | undefined = un
   threadId?: string;
   resourceid?: string;
   output?: OutputType | T;
+  runId?: string;
 }
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
