@@ -1060,20 +1060,27 @@ describe('AstraVector Integration Tests', () => {
     });
   });
   describe('Deprecation Warnings', () => {
-    const indexName = 'test_deprecation_warnings';
+    const indexName = 'testdeprecationwarnings';
 
-    const indexName2 = 'test_deprecation_warnings2';
+    const indexName2 = 'testdeprecationwarnings2';
 
     let warnSpy;
 
+    beforeAll(async () => {
+      await vectorDB.createIndex({ indexName: indexName, dimension: 3 });
+    });
+
+    afterAll(async () => {
+      await vectorDB.deleteIndex(indexName);
+      await vectorDB.deleteIndex(indexName2);
+    });
+
     beforeEach(async () => {
       warnSpy = vi.spyOn(vectorDB['logger'], 'warn');
-      await vectorDB.createIndex({ indexName: indexName, dimension: 3 });
     });
 
     afterEach(async () => {
       warnSpy.mockRestore();
-      await vectorDB.deleteIndex(indexName);
       await vectorDB.deleteIndex(indexName2);
     });
 
