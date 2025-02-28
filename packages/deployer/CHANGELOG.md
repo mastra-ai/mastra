@@ -1,5 +1,14 @@
 # @mastra/deployer
 
+## 0.1.7-alpha.0
+
+### Patch Changes
+
+- 30a4c29: fix mastra build errors related to esbuild not removing types
+- e1e2705: Added --ignore-workspace when installing dependencies in mastra build with pnpm package manager
+- Updated dependencies [1da20e7]
+  - @mastra/core@0.4.4-alpha.0
+
 ## 0.1.6
 
 ### Patch Changes
