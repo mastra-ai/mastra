@@ -9,6 +9,8 @@ import type {
   BaseLogMessage,
   OutputType,
 } from '@mastra/core';
+
+import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
 import type { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
 
@@ -40,21 +42,13 @@ export interface GetAgentResponse {
   modelId: string;
 }
 
-export interface GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> {
+export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[];
-  threadId?: string;
-  resourceid?: string;
-  output?: OutputType | T;
-  runId?: string;
-}
+} & Partial<AgentGenerateOptions<T>>;
 
-export interface StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> {
+export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[];
-  threadId?: string;
-  resourceid?: string;
-  output?: OutputType | T;
-  runId?: string;
-}
+} & Partial<AgentStreamOptions<T>>;
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];

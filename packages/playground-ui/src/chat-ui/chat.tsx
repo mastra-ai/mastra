@@ -59,7 +59,7 @@ export function Chat({ agentId, initialMessages = [], agentName, threadId, memor
         const response = await client.getAgent(agentId).stream({
           messages: [userMessage],
           threadId: newThreadId,
-          resourceid: agentId,
+          resourceId: agentId,
         });
 
         if (!response.body) return;
