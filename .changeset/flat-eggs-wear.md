@@ -1,6 +1,4 @@
 ---
-'examples-insert-embedding-in-chroma': patch
-'examples-insert-embedding-in-libsql': patch
 '@mastra/deployer': patch
 '@mastra/vectorize': patch
 '@mastra/memory': patch
