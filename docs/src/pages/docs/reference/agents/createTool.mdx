@@ -42,13 +42,14 @@ export const threadInfo = createTool({
   execute: async ({ context, threadId, resourceId }) => {
     console.log("Current thread:", threadId);
     console.log("Current resource:", resourceId);
-    
+
     return {
       threadId,
       resourceId: context.includeResource ? resourceId : undefined,
     };
   },
 });
+```
 
 ## API Signature
 
@@ -103,13 +104,15 @@ export const threadInfo = createTool({
               name: "threadId",
               type: "string",
               isOptional: true,
-              description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions.",
+              description:
+                "Identifier for the conversation thread. Allows for maintaining context across multiple interactions.",
             },
             {
               name: "resourceId",
               type: "string",
               isOptional: true,
-              description: "Identifier for the user or resource interacting with the tool.",
+              description:
+                "Identifier for the user or resource interacting with the tool.",
             },
             {
               name: "agents",
