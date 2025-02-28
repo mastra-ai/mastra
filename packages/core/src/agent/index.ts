@@ -472,6 +472,11 @@ export class Agent<
     runId?: string;
   }): Record<string, CoreTool> {
     this.logger.debug(`[Agents:${this.name}] - Assigning tools`, { runId, threadId, resourceId });
+
+    // Get memory tools if available
+    const memory = this.getMemory();
+    const memoryTools = memory?.getTools();
+
     const converted = Object.entries(this.tools || {}).reduce(
       (memo, value) => {
         const k = value[0];
@@ -498,6 +503,7 @@ export class Agent<
                           {
                             context: args,
                             mastra: this.#mastra,
+                            memory,
                             runId,
                             threadId,
                             resourceId,
@@ -523,8 +529,59 @@ export class Agent<
       {} as Record<string, CoreTool>,
     );
 
+    // Convert memory tools with proper context
+    const convertedMemoryTools = memoryTools
+      ? Object.entries(memoryTools).reduce(
+          (memo, [k, tool]) => {
+            memo[k] = {
+              description: tool.description,
+              parameters: tool.parameters,
+              execute:
+                typeof tool?.execute === 'function'
+                  ? async (args, options) => {
+                      try {
+                        this.logger.debug(`[Agent:${this.name}] - Executing memory tool ${k}`, {
+                          name: k,
+                          description: tool.description,
+                          args,
+                          runId,
+                          threadId,
+                          resourceId,
+                        });
+                        return (
+                          tool?.execute?.(
+                            {
+                              context: args,
+                              mastra: this.#mastra,
+                              memory,
+                              runId,
+                              threadId,
+                              resourceId,
+                            },
+                            options,
+                          ) ?? undefined
+                        );
+                      } catch (err) {
+                        this.logger.error(`[Agent:${this.name}] - Failed memory tool execution`, {
+                          error: err,
+                          runId,
+                          threadId,
+                          resourceId,
+                        });
+                        throw err;
+                      }
+                    }
+                  : undefined,
+            };
+            return memo;
+          },
+          {} as Record<string, CoreTool>,
+        )
+      : {};
+
     const toolsFromToolsetsConverted: Record<string, CoreTool> = {
       ...converted,
+      ...convertedMemoryTools,
     };
 
     const toolsFromToolsets = Object.values(toolsets || {});
@@ -848,6 +905,7 @@ export class Agent<
         experimental_output,
         threadId,
         resourceId,
+        memory: this.getMemory(),
         ...rest,
       });
 
@@ -875,6 +933,7 @@ export class Agent<
         telemetry,
         threadId,
         resourceId,
+        memory: this.getMemory(),
         ...rest,
       });
 
@@ -896,6 +955,7 @@ export class Agent<
       temperature,
       toolChoice,
       telemetry,
+      memory: this.getMemory(),
       ...rest,
     });
 
@@ -998,6 +1058,7 @@ export class Agent<
         runId: runIdToUse,
         toolChoice,
         experimental_output,
+        memory: this.getMemory(),
         ...rest,
       });
 
@@ -1031,6 +1092,7 @@ export class Agent<
         runId: runIdToUse,
         toolChoice,
         telemetry,
+        memory: this.getMemory(),
         ...rest,
       }) as unknown as StreamReturn<Z>;
     }
@@ -1062,6 +1124,7 @@ export class Agent<
       runId: runIdToUse,
       toolChoice,
       telemetry,
+      memory: this.getMemory(),
       ...rest,
     }) as unknown as StreamReturn<Z>;
   }

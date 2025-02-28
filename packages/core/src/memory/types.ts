@@ -43,6 +43,7 @@ export type MemoryConfig = {
   workingMemory?: {
     enabled: boolean;
     template?: string;
+    use?: 'text-stream' | 'tool-call';
   };
 };
 
