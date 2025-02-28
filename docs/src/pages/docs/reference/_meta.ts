@@ -1,4 +1,10 @@
-const meta = {
+import { Meta } from "nextra";
+
+const meta: Meta = {
+  index: {
+    title: "Overview",
+    
+  },
   core: "Core",
   cli: "CLI",
   memory: "Memory",
@@ -11,6 +17,6 @@ const meta = {
   evals: "Evals",
   "client-js": "Client SDK - JS",
   voice: "Voice",
-};
+  };
 
 export default meta;

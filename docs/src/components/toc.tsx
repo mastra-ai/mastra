@@ -70,7 +70,7 @@ export function TableOfContents(props: TOCProps) {
                       item.depth === 2,
                     "dark:text-gray-400 dark:hover:text-white text-gray-500 ml-3 hover:text-gray-900":
                       item.depth > 2,
-                    "dark:text-[#1aa3ff] dark:hover:text-blue-[#1aa3ff]":
+                    "dark:text-[#1aa3ff] text-[#004ca3] dark:hover:text-blue-[#1aa3ff]":
                       item.id === activeId,
                   })}
                 >
