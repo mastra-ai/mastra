@@ -141,6 +141,7 @@ type StepSuccess<T> = {
 
 type StepSuspended = {
   status: 'suspended';
+  suspendPayload?: any;
 };
 type StepWaiting = {
   status: 'waiting';
@@ -173,7 +174,7 @@ export type WorkflowEvent =
   | { type: 'RESET_TO_PENDING'; stepId: string }
   | { type: 'CONDITIONS_MET'; stepId: string }
   | { type: 'CONDITION_FAILED'; stepId: string; error: string }
-  | { type: 'SUSPENDED'; stepId: string }
+  | { type: 'SUSPENDED'; stepId: string; suspendPayload?: any }
   | { type: 'WAITING'; stepId: string }
   | { type: `xstate.error.actor.${string}`; error: Error }
   | { type: `xstate.done.actor.${string}`; output: ResolverFunctionOutput };
