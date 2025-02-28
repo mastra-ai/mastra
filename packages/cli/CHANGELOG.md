@@ -1,5 +1,21 @@
 # mastra
 
+## 0.2.7-alpha.3
+
+### Patch Changes
+
+- 8d4e0d0: build playground-ui with cli
+- 7a64aff: playground-ui lib package to enhance dev/cloud ui unification
+- bb4f447: Add support for commonjs
+- Updated dependencies [0fd78ac]
+- Updated dependencies [0d25b75]
+- Updated dependencies [fd14a3f]
+- Updated dependencies [3f369a2]
+- Updated dependencies [4d4e1e1]
+- Updated dependencies [bb4f447]
+  - @mastra/deployer@0.1.6-alpha.3
+  - @mastra/core@0.4.3-alpha.3
+
 ## 0.2.7-alpha.2
 
 ### Patch Changes

@@ -1,5 +1,16 @@
 # @mastra/core
 
+## 0.4.3-alpha.3
+
+### Patch Changes
+
+- 0fd78ac: Update vector store functions to use object params
+- 0d25b75: Add all agent stream,generate option to cliend-js sdk
+- fd14a3f: Updating filter location from @mastra/core/filter to @mastra/core/vector/filter
+- 3f369a2: A better async/await based interface for suspend/resume tracking
+- 4d4e1e1: Updated vector tests and pinecone
+- bb4f447: Add support for commonjs
+
 ## 0.4.3-alpha.2
 
 ### Patch Changes
