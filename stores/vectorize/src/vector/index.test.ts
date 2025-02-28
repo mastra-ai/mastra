@@ -3,6 +3,8 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } 
 
 import { CloudflareVector } from './';
 
+vi.setConfig({ testTimeout: 80_000, hookTimeout: 80_000 });
+
 function waitUntilReady(vector: CloudflareVector, indexName: string) {
   return new Promise(resolve => {
     const interval = setInterval(async () => {
@@ -355,7 +357,7 @@ describe('CloudflareVector', () => {
 
       const stats = await vectorDB.describeIndex(testIndexName2);
       expect(stats.count).toBe(vectors.length);
-    }, 300000);
+    }, 800000);
 
     afterAll(async () => {
       const currentMetadata = await vectorDB.listMetadataIndexes(testIndexName2);
@@ -363,7 +365,7 @@ describe('CloudflareVector', () => {
         await vectorDB.deleteMetadataIndex(testIndexName2, propertyName as string);
       }
       await vectorDB.deleteIndex(testIndexName2);
-    }, 300000);
+    }, 800000);
 
     describe('Basic Equality Operators', () => {
       it('filters with $eq operator', async () => {
@@ -781,22 +783,64 @@ describe('CloudflareVector', () => {
         expect(results.length).toBeGreaterThan(0);
       });
     });
-  }, 3000000);
+  }, 800000);
   describe('Deprecation Warnings', () => {
     const indexName = 'testdeprecationwarnings';
 
     const indexName2 = 'testdeprecationwarnings2';
 
+    const indexName3 = 'testdeprecationwarnings3';
+
+    const indexName4 = 'testdeprecationwarnings4';
+
     let warnSpy;
 
     beforeAll(async () => {
+      try {
+        await vectorDB.deleteIndex(indexName);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      try {
+        await vectorDB.deleteIndex(indexName2);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      try {
+        await vectorDB.deleteIndex(indexName3);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      try {
+        await vectorDB.deleteIndex(indexName4);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
       await vectorDB.createIndex({ indexName: indexName, dimension: VECTOR_DIMENSION });
       await waitUntilReady(vectorDB, indexName);
     });
 
     afterAll(async () => {
-      await vectorDB.deleteIndex(indexName);
-      await vectorDB.deleteIndex(indexName2);
+      try {
+        await vectorDB.deleteIndex(indexName);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      try {
+        await vectorDB.deleteIndex(indexName2);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      try {
+        await vectorDB.deleteIndex(indexName3);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      try {
+        await vectorDB.deleteIndex(indexName4);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
     });
 
     beforeEach(async () => {
@@ -805,7 +849,11 @@ describe('CloudflareVector', () => {
 
     afterEach(async () => {
       warnSpy.mockRestore();
-      await vectorDB.deleteIndex(indexName2);
+      try {
+        await vectorDB.deleteIndex(indexName2);
+      } catch (error) {
+        console.warn('Failed to delete test index:', error);
+      }
     });
 
     it('should show deprecation warning when using individual args for createIndex', async () => {
@@ -844,7 +892,7 @@ describe('CloudflareVector', () => {
 
     it('should not show deprecation warning when using object param for createIndex', async () => {
       await vectorDB.createIndex({
-        indexName: indexName2,
+        indexName: indexName3,
         dimension: VECTOR_DIMENSION,
         metric: 'cosine',
       });
@@ -868,8 +916,8 @@ describe('CloudflareVector', () => {
       expect(Array.isArray(queryResults)).toBe(true);
 
       // CreateIndex
-      await expect(vectorDB.createIndex(indexName2, VECTOR_DIMENSION, 'cosine')).resolves.not.toThrow();
-      await waitUntilReady(vectorDB, indexName2);
+      await expect(vectorDB.createIndex(indexName4, VECTOR_DIMENSION, 'cosine')).resolves.not.toThrow();
+      await waitUntilReady(vectorDB, indexName4);
       // Upsert
       const upsertResults = await vectorDB.upsert({
         indexName,
@@ -879,5 +927,5 @@ describe('CloudflareVector', () => {
       expect(Array.isArray(upsertResults)).toBe(true);
       expect(upsertResults).toHaveLength(1);
     });
-  }, 30000);
+  }, 80000);
 });
