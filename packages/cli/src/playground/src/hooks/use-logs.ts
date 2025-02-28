@@ -16,9 +16,14 @@ export const useLogsByRunId = (runId: string) => {
   });
 
   const fetchLogs = async (_runId?: string) => {
+    const runIdToUse = _runId ?? runId;
+    if (!runIdToUse) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
-      const res = await client.getLogForRun({ transportId, runId: _runId ?? runId });
+      const res = await client.getLogForRun({ transportId, runId: runIdToUse });
       setLogs(
         res.map(log => ({
           level: log.level,
