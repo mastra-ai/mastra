@@ -29,6 +29,7 @@ import type {
   WorkflowState,
 } from './types';
 import {
+  getResultActivePaths,
   getStepResult,
   getSuspendedPaths,
   isErrorEvent,
@@ -110,6 +111,7 @@ export class Machine<
     snapshot?: Snapshot<any>;
   } = {}): Promise<{
     results: Record<string, StepResult<any>>;
+    activePaths: Map<string, { status: string; suspendPayload?: any }>;
   }> {
     if (snapshot) {
       // First, let's log the incoming snapshot for debugging
@@ -195,6 +197,9 @@ export class Machine<
           this.#executionSpan?.end();
           resolve({
             results: state.context.steps,
+            activePaths: getResultActivePaths(
+              state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
+            ),
           });
         } catch (error) {
           // If snapshot persistence fails, we should still resolve
@@ -205,6 +210,9 @@ export class Machine<
           this.#executionSpan?.end();
           resolve({
             results: state.context.steps,
+            activePaths: getResultActivePaths(
+              state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
+            ),
           });
         }
       });
@@ -313,15 +321,16 @@ export class Machine<
 
         const result = await stepNode.config.handler({
           context: resolvedData,
-          suspend: async () => {
+          suspend: async (payload?: any) => {
             await this.#workflowInstance.suspend(stepNode.step.id, this);
             if (this.#actor) {
               // Update context with current result
               context.steps[stepNode.step.id] = {
                 status: 'suspended',
+                suspendPayload: payload,
               };
               this.logger.debug(`Sending SUSPENDED event for step ${stepNode.step.id}`);
-              this.#actor?.send({ type: 'SUSPENDED', stepId: stepNode.step.id });
+              this.#actor?.send({ type: 'SUSPENDED', suspendPayload: payload, stepId: stepNode.step.id });
             } else {
               this.logger.debug(`Actor not available for step ${stepNode.step.id}`);
             }
@@ -679,13 +688,16 @@ export class Machine<
               });
             },
             assign({
-              steps: ({ context }: { context: WorkflowContext }) => ({
-                ...context.steps,
-                [stepNode.step.id]: {
-                  ...(context?.steps?.[stepNode.step.id] || {}),
-                  status: 'suspended',
-                },
-              }),
+              steps: ({ context, event }: { context: WorkflowContext; event: WorkflowEvent }) => {
+                return {
+                  ...context.steps,
+                  [stepNode.step.id]: {
+                    ...(context?.steps?.[stepNode.step.id] || {}),
+                    status: 'suspended',
+                    suspendPayload: event.type === 'SUSPENDED' ? event.suspendPayload : undefined,
+                  },
+                };
+              },
             }),
           ],
         },
@@ -701,12 +713,15 @@ export class Machine<
               target: 'suspended',
               actions: [
                 assign({
-                  steps: ({ context }: { context: WorkflowContext }) => ({
-                    ...context.steps,
-                    [stepNode.step.id]: {
-                      status: 'suspended',
-                    },
-                  }),
+                  steps: ({ context, event }: { context: WorkflowContext; event: WorkflowEvent }) => {
+                    return {
+                      ...context.steps,
+                      [stepNode.step.id]: {
+                        status: 'suspended',
+                        suspendPayload: event.type === 'SUSPENDED' ? event.suspendPayload : undefined,
+                      },
+                    };
+                  },
                 }),
               ],
             },

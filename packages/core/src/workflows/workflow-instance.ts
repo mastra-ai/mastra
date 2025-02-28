@@ -16,6 +16,7 @@ export interface WorkflowResultReturn<T extends z.ZodType<any>> {
     triggerData?: z.infer<T>;
     results: Record<string, StepResult<any>>;
     runId: string;
+    activePaths: Map<string, { status: string; suspendPayload?: any }>;
   }>;
 }
 
@@ -118,6 +119,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
   } = {}): Promise<{
     triggerData?: z.infer<TTriggerSchema>;
     results: Record<string, StepResult<any>>;
+    activePaths: Map<string, { status: string; suspendPayload?: any }>;
   }> {
     this.#executionSpan = this.#mastra?.telemetry?.tracer.startSpan(`workflow.${this.name}.execute`, {
       attributes: { componentName: this.name, runId: this.runId },
@@ -184,11 +186,11 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
 
     defaultMachine.on('state-update', stateUpdateHandler);
 
-    const { results } = await defaultMachine.execute({ snapshot, stepId, input: machineInput });
+    const { results, activePaths } = await defaultMachine.execute({ snapshot, stepId, input: machineInput });
 
     await this.persistWorkflowSnapshot();
 
-    return { results };
+    return { results, activePaths };
   }
 
   async runMachine(parentStepId: string, input: any) {

@@ -13,13 +13,17 @@
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
       }
     },
     "./package.json": "./package.json"
   },
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "cross-env NODE_OPTIONS='--max-old-space-size=8192' tsup src/index.ts --format esm --dts --clean --treeshake",
+    "build": "cross-env NODE_OPTIONS='--max-old-space-size=8192' tsup src/index.ts --format esm,cjs --dts --clean --treeshake",
     "build:watch": "pnpm build --watch",
     "lint": "eslint .",
     "size": "size-limit",

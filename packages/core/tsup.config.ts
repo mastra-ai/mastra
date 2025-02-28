@@ -49,7 +49,7 @@ export default defineConfig({
     'src/vector/filter/index.ts',
     'src/telemetry/otel-vendor.ts',
   ],
-  format: 'esm',
+  format: ['esm', 'cjs'],
   clean: true,
   dts: true,
   treeshake: {

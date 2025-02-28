@@ -7,27 +7,20 @@ export function removeDeployer() {
   return {
     name: 'remove-deployer',
     visitor: {
-      ImportDeclaration(path) {
-        if (
-          (path.node.source.value === '@mastra/core' || path.node.source.value === '@mastra/core/mastra') &&
-          path.node.specifiers
-        ) {
-          const mastraObj = path.node.specifiers.find(
-            p => t.isImportSpecifier(p) && t.isIdentifier(p.imported) && p.imported.name === 'Mastra',
-          );
-
-          if (mastraObj?.local?.name) {
-            mastraClass = mastraObj.local.name;
-          }
-        }
-      },
       NewExpression(path, state) {
-        if (
-          mastraClass &&
-          t.isIdentifier(path.node.callee) &&
-          path.node.callee.name === mastraClass &&
-          !state.hasReplaced
-        ) {
+        // is a variable declaration
+        const varDeclaratorPath = path.findParent(path => t.isVariableDeclarator(path.node));
+        if (!varDeclaratorPath) {
+          return;
+        }
+
+        const parentNode = path.parentPath.node;
+        // check if it's a const of mastra
+        if (!t.isVariableDeclarator(parentNode) || !t.isIdentifier(parentNode.id) || parentNode.id.name !== 'mastra') {
+          return;
+        }
+
+        if (!state.hasReplaced) {
           state.hasReplaced = true;
           const newMastraObj = t.cloneNode(path.node);
           if (t.isObjectExpression(newMastraObj.arguments[0]) && newMastraObj.arguments[0].properties?.[0]) {
