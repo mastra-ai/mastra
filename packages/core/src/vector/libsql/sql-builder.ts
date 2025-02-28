@@ -1,6 +1,5 @@
 import type { InValue } from '@libsql/client';
 
-import type { VectorFilter } from '..';
 import type {
   BasicOperator,
   NumericOperator,
@@ -8,8 +7,8 @@ import type {
   ElementOperator,
   LogicalOperator,
   RegexOperator,
-  Filter,
-} from '../../filter';
+  VectorFilter,
+} from '../filter';
 
 export type OperatorType =
   | BasicOperator
@@ -362,7 +361,7 @@ function buildCondition(key: string, value: any, parentPath: string): FilterResu
 
 function handleLogicalOperator(
   key: '$and' | '$or' | '$not' | '$nor',
-  value: Filter[] | Filter,
+  value: VectorFilter[] | VectorFilter,
   parentPath: string,
 ): FilterResult {
   // Handle empty conditions

@@ -1,4 +1,4 @@
-import type { Filter } from '../filter';
+import type { VectorFilter } from './filter';
 
 export interface QueryResult {
   id: string;
@@ -31,8 +31,6 @@ export interface CreateIndexParams {
   dimension: number;
   metric?: 'cosine' | 'euclidean' | 'dotproduct';
 }
-
-export type VectorFilter = Filter | null | undefined;
 
 export interface QueryVectorParams {
   indexName: string;

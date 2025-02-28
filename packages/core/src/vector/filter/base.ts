@@ -42,9 +42,12 @@ type OperatorCondition = {
 type FieldCondition = OperatorCondition | any;
 
 // Type for the overall filter structure
-type Filter = {
-  [field: string]: FieldCondition | Filter;
-};
+type VectorFilter =
+  | {
+      [field: string]: FieldCondition | VectorFilter;
+    }
+  | null
+  | undefined;
 
 type OperatorSupport = {
   logical?: LogicalOperator[];
@@ -58,7 +61,7 @@ type OperatorSupport = {
 
 // Base abstract class for filter translators
 abstract class BaseFilterTranslator {
-  abstract translate(filter: Filter): unknown;
+  abstract translate(filter: VectorFilter): unknown;
 
   /**
    * Operator type checks
@@ -145,7 +148,7 @@ abstract class BaseFilterTranslator {
    * Helper method to simulate $all operator using $and + $eq when needed.
    * Some vector stores don't support $all natively.
    */
-  protected simulateAllOperator(field: string, values: any[]): Filter {
+  protected simulateAllOperator(field: string, values: any[]): VectorFilter {
     return {
       $and: values.map(value => ({
         [field]: { $in: [this.normalizeComparisonValue(value)] },
@@ -193,7 +196,7 @@ abstract class BaseFilterTranslator {
     return values.map(value => this.normalizeComparisonValue(value));
   }
 
-  protected validateFilter(filter: Filter): void {
+  protected validateFilter(filter: VectorFilter): void {
     const validation = this.validateFilterSupport(filter);
     if (!validation.supported) {
       throw new Error(validation.messages.join(', '));
@@ -205,7 +208,7 @@ abstract class BaseFilterTranslator {
    * and returns detailed validation information.
    */
   private validateFilterSupport(
-    node: Filter | FieldCondition,
+    node: VectorFilter | FieldCondition,
     path: string = '',
   ): {
     supported: boolean;
@@ -317,7 +320,7 @@ export {
   type ArrayOperator,
   type RegexOperator,
   type ElementOperator,
-  type Filter,
+  type VectorFilter,
   type FieldCondition,
   type OperatorCondition,
   type OperatorSupport,

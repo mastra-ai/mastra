@@ -33,6 +33,12 @@
         "default": "./dist/vector/libsql/index.js"
       }
     },
+    "./vector/filter": {
+      "import": {
+        "types": "./dist/vector/filter/index.d.ts",
+        "default": "./dist/vector/filter/index.js"
+      }
+    },
     "./utils": {
       "import": {
         "types": "./dist/utils.d.ts",

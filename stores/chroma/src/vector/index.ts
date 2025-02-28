@@ -5,9 +5,9 @@ import type {
   CreateIndexParams,
   UpsertVectorParams,
   QueryVectorParams,
-  VectorFilter,
   ParamsToArgs,
 } from '@mastra/core/vector';
+import type { VectorFilter } from '@mastra/core/vector/filter';
 import { ChromaClient } from 'chromadb';
 
 import { ChromaFilterTranslator } from './filter';

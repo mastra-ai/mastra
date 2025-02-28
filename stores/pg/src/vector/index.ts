@@ -1,4 +1,3 @@
-import type { Filter } from '@mastra/core/filter';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   IndexStats,
@@ -6,9 +5,9 @@ import type {
   QueryVectorParams,
   CreateIndexParams,
   UpsertVectorParams,
-  VectorFilter,
   ParamsToArgs,
 } from '@mastra/core/vector';
+import type { VectorFilter } from '@mastra/core/vector/filter';
 import pg from 'pg';
 
 import { PGFilterTranslator } from './filter';
