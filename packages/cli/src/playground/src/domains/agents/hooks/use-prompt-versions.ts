@@ -119,7 +119,7 @@ export function usePromptVersions(agentId: string, instructions?: string) {
   const setVersionActive = async (version: PromptVersion, index: number) => {
     setIsUpdating(true);
     try {
-      const response = await fetch(`http://localhost:4111/api/agents/${agentId}/instructions`, {
+      const response = await fetch(`/api/agents/${agentId}/instructions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

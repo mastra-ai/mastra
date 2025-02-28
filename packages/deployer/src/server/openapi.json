@@ -62,7 +62,11 @@
                   "messages": { "type": "array", "items": { "type": "object" } },
                   "threadId": { "type": "string" },
                   "resourceId": { "type": "string", "description": "The resource ID for the conversation" },
-                  "resourceid": { "type": "string", "description": "The resource ID for the conversation (deprecated, use resourceId instead)", "deprecated": true },
+                  "resourceid": {
+                    "type": "string",
+                    "description": "The resource ID for the conversation (deprecated, use resourceId instead)",
+                    "deprecated": true
+                  },
                   "output": { "type": "object" }
                 },
                 "required": ["messages"]
@@ -89,7 +93,11 @@
                   "messages": { "type": "array", "items": { "type": "object" } },
                   "threadId": { "type": "string" },
                   "resourceId": { "type": "string", "description": "The resource ID for the conversation" },
-                  "resourceid": { "type": "string", "description": "The resource ID for the conversation (deprecated, use resourceId instead)", "deprecated": true },
+                  "resourceid": {
+                    "type": "string",
+                    "description": "The resource ID for the conversation (deprecated, use resourceId instead)",
+                    "deprecated": true
+                  },
                   "output": { "type": "object" }
                 },
                 "required": ["messages"]

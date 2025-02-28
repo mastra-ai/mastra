@@ -23,14 +23,14 @@ export function WorkflowHeader({ workflowName, workflowId }: { workflowName: str
   return (
     <Header title={<Breadcrumb items={breadcrumbItems} />}>
       <Button
-        variant={isGraphPage ? 'primary' : 'outline'}
+        variant={isGraphPage ? 'secondary' : 'outline'}
         size="slim"
         onClick={() => navigate(`/workflows/${workflowId}/graph`)}
       >
         Graph
       </Button>
       <Button
-        variant={isTracesPage ? 'primary' : 'outline'}
+        variant={isTracesPage ? 'secondary' : 'outline'}
         size="slim"
         onClick={() => navigate(`/workflows/${workflowId}/traces`)}
       >

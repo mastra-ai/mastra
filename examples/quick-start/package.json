@@ -14,7 +14,7 @@
     "@types/node": "^22.10.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
-    "zod": "^3.24.0"
+    "zod": "^3.24.2"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.1.9",

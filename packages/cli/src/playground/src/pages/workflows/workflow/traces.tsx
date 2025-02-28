@@ -1,10 +1,9 @@
+import { WorkflowTraces } from '@mastra/playground-ui';
 import { useParams } from 'react-router';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { TraceProvider } from '@/domains/traces/context/trace-context';
 import { WorkflowInformation } from '@/domains/workflows/workflow-information';
-import { WorkflowTraces } from '@/domains/workflows/workflow-traces';
 import { useWorkflow } from '@/hooks/use-workflows';
 
 function WorkflowTracesPage() {
@@ -25,9 +24,11 @@ function WorkflowTracesPage() {
   }
 
   return (
-    <TraceProvider>
-      <WorkflowTraces workflowId={workflowId!} workflowName={workflow?.name!} />
-    </TraceProvider>
+    <WorkflowTraces
+      workflowName={workflow?.name!}
+      baseUrl=""
+      sidebarChild={<WorkflowInformation workflowId={workflowId!} />}
+    />
   );
 }
 
