@@ -48,7 +48,7 @@ export default defineConfig({
     'src/vector/libsql/index.ts',
     'src/telemetry/otel-vendor.ts',
   ],
-  format: 'esm',
+  format: ['esm', 'cjs'],
   clean: true,
   dts: true,
   treeshake: {

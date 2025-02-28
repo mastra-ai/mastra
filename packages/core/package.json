@@ -1,7 +1,7 @@
 {
   "name": "@mastra/core",
   "version": "0.4.3-alpha.2",
-  "license": "MIT",
+  "license": "ISC",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -13,42 +13,70 @@
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
       }
     },
     "./*": {
       "import": {
         "types": "./dist/*/index.d.ts",
         "default": "./dist/*/index.js"
+      },
+      "require": {
+        "types": "./dist/*/index.d.cts",
+        "default": "./dist/*/index.cjs"
       }
     },
     "./storage/libsql": {
       "import": {
         "types": "./dist/storage/libsql/index.d.ts",
         "default": "./dist/storage/libsql/index.js"
+      },
+      "require": {
+        "types": "./dist/storage/libsql/index.d.cts",
+        "default": "./dist/storage/libsql/index.cjs"
       }
     },
     "./vector/libsql": {
       "import": {
         "types": "./dist/vector/libsql/index.d.ts",
         "default": "./dist/vector/libsql/index.js"
+      },
+      "require": {
+        "types": "./dist/vector/libsql/index.d.cts",
+        "default": "./dist/vector/libsql/index.cjs"
       }
     },
     "./utils": {
       "import": {
         "types": "./dist/utils.d.ts",
         "default": "./dist/utils.js"
+      },
+      "require": {
+        "types": "./dist/utils.d.cts",
+        "default": "./dist/utils.cjs"
       }
     },
     "./base": {
       "import": {
         "types": "./dist/base.d.ts",
         "default": "./dist/base.js"
+      },
+      "require": {
+        "types": "./dist/base.d.cts",
+        "default": "./dist/base.cjs"
       }
     },
     "./telemetry/otel-vendor": {
       "import": {
         "types": "./dist/telemetry/otel-vendor.d.ts",
         "default": "./dist/telemetry/otel-vendor.js"
+      },
+      "require": {
+        "types": "./dist/telemetry/otel-vendor.d.cts",
+        "default": "./dist/telemetry/otel-vendor.cjs"
       }
     },
     "./package.json": "./package.json"
@@ -58,7 +86,7 @@
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
     "lint": "eslint .",
-    "build": "tsup --config tsup.config.ts",
+    "build": "tsup --config tsup.config.ts --format esm,cjs",
     "build:watch": "pnpm build --watch",
     "size": "size-limit",
     "test": "vitest run"
