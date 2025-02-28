@@ -6,6 +6,8 @@ import type {
   CreateIndexParams,
   UpsertVectorParams,
   ParamsToArgs,
+  QueryVectorArgs,
+  CreateIndexArgs,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import pg from 'pg';
@@ -38,16 +40,22 @@ interface PgQueryVectorParams extends QueryVectorParams {
   probes?: number;
 }
 
+type PgQueryVectorArgs = [...QueryVectorArgs, number?, number?, number?];
+
 interface PgCreateIndexParams extends CreateIndexParams {
   indexConfig?: IndexConfig;
   buildIndex?: boolean;
 }
+
+type PgCreateIndexArgs = [...CreateIndexArgs, IndexConfig?, boolean?];
 
 interface PgDefineIndexParams {
   indexName: string;
   metric: 'cosine' | 'euclidean' | 'dotproduct';
   indexConfig: IndexConfig;
 }
+
+type PgDefineIndexArgs = [string, 'cosine' | 'euclidean' | 'dotproduct', IndexConfig];
 
 export class PgVector extends MastraVector {
   private pool: pg.Pool;
@@ -86,8 +94,12 @@ export class PgVector extends MastraVector {
     return this.indexCache.get(indexName)!;
   }
 
-  async query(...args: ParamsToArgs<PgQueryVectorParams>): Promise<QueryResult[]> {
-    const params = this.normalizeArgs<PgQueryVectorParams>('query', args, ['minScore', 'ef', 'probes']);
+  async query(...args: ParamsToArgs<PgQueryVectorParams> | PgQueryVectorArgs): Promise<QueryResult[]> {
+    const params = this.normalizeArgs<PgQueryVectorParams, PgQueryVectorArgs>('query', args, [
+      'minScore',
+      'ef',
+      'probes',
+    ]);
     const { indexName, queryVector, topK = 10, filter, includeVector = false, minScore = 0, ef, probes } = params;
 
     const client = await this.pool.connect();
@@ -174,8 +186,11 @@ export class PgVector extends MastraVector {
     }
   }
 
-  async createIndex(...args: ParamsToArgs<PgCreateIndexParams>): Promise<void> {
-    const params = this.normalizeArgs<PgCreateIndexParams>('createIndex', args, ['indexConfig', 'buildIndex']);
+  async createIndex(...args: ParamsToArgs<PgCreateIndexParams> | PgCreateIndexArgs): Promise<void> {
+    const params = this.normalizeArgs<PgCreateIndexParams, PgCreateIndexArgs>('createIndex', args, [
+      'indexConfig',
+      'buildIndex',
+    ]);
 
     const { indexName, dimension, metric = 'cosine', indexConfig = {}, buildIndex = true } = params;
 
@@ -235,8 +250,11 @@ export class PgVector extends MastraVector {
     return this.buildIndex({ indexName, metric, indexConfig });
   }
 
-  async buildIndex(...args: ParamsToArgs<PgDefineIndexParams>): Promise<void> {
-    const params = this.normalizeArgs<PgDefineIndexParams>('buildIndex', args, ['metric', 'indexConfig']);
+  async buildIndex(...args: ParamsToArgs<PgDefineIndexParams> | PgDefineIndexArgs): Promise<void> {
+    const params = this.normalizeArgs<PgDefineIndexParams, PgDefineIndexArgs>('buildIndex', args, [
+      'metric',
+      'indexConfig',
+    ]);
 
     const { indexName, metric = 'cosine', indexConfig } = params;
 

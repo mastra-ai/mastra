@@ -6,6 +6,9 @@ import type {
   IndexStats,
   ParamsToArgs,
   QueryResult,
+  CreateIndexArgs,
+  UpsertVectorArgs,
+  QueryVectorArgs,
 } from './types';
 
 export abstract class MastraVector extends MastraBase {
@@ -19,7 +22,11 @@ export abstract class MastraVector extends MastraBase {
     createIndex: ['dimension', 'metric'],
   } as const;
 
-  protected normalizeArgs<T>(method: string, [first, ...rest]: ParamsToArgs<T>, extendedKeys: string[] = []): T {
+  protected normalizeArgs<T, E extends any[] = never>(
+    method: string,
+    [first, ...rest]: ParamsToArgs<T> | E,
+    extendedKeys: string[] = [],
+  ): T {
     if (typeof first === 'object') {
       return first as T;
     }
@@ -37,11 +44,18 @@ export abstract class MastraVector extends MastraBase {
       ...Object.fromEntries(paramKeys.map((key, i) => [key, rest[i]])),
     } as T;
   }
-  abstract query(...args: ParamsToArgs<QueryVectorParams>): Promise<QueryResult[]>;
-
-  abstract upsert(...args: ParamsToArgs<UpsertVectorParams>): Promise<string[]>;
-
-  abstract createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void>;
+  // Adds type checks for positional arguments if used
+  abstract query<E extends QueryVectorArgs = QueryVectorArgs>(
+    ...args: ParamsToArgs<QueryVectorParams> | E
+  ): Promise<QueryResult[]>;
+  // Adds type checks for positional arguments if used
+  abstract upsert<E extends UpsertVectorArgs = UpsertVectorArgs>(
+    ...args: ParamsToArgs<UpsertVectorParams> | E
+  ): Promise<string[]>;
+  // Adds type checks for positional arguments if used
+  abstract createIndex<E extends CreateIndexArgs = CreateIndexArgs>(
+    ...args: ParamsToArgs<CreateIndexParams> | E
+  ): Promise<void>;
 
   abstract listIndexes(): Promise<string[]>;
 
