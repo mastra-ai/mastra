@@ -23,7 +23,7 @@ export function Traces({ traces }: { traces: RefinedTrace[] }) {
 
   return (
     <div className="h-full w-[calc(100%_-_400px)]">
-      <ScrollArea className="rounded-lg h-full">
+      <ScrollArea className="h-full">
         <Table>
           <TableHeader className="bg-mastra-bg-2 sticky top-0 z-10">
             <TableRow className="border-gray-6 border-b-[0.1px] text-[0.8125rem]">
