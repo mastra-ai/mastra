@@ -726,20 +726,27 @@ describe('QdrantVector', () => {
     }, 50000);
   });
   describe('Deprecation Warnings', () => {
-    const indexName = 'test_deprecation_warnings';
+    const indexName = 'testdeprecationwarnings';
 
-    const indexName2 = 'test_deprecation_warnings2';
+    const indexName2 = 'testdeprecationwarnings2';
 
     let warnSpy;
 
+    beforeAll(async () => {
+      await qdrant.createIndex({ indexName: indexName, dimension: 3 });
+    });
+
+    afterAll(async () => {
+      await qdrant.deleteIndex(indexName);
+      await qdrant.deleteIndex(indexName2);
+    });
+
     beforeEach(async () => {
       warnSpy = vi.spyOn(qdrant['logger'], 'warn');
-      await qdrant.createIndex({ indexName: indexName, dimension: 3 });
     });
 
     afterEach(async () => {
       warnSpy.mockRestore();
-      await qdrant.deleteIndex(indexName);
       await qdrant.deleteIndex(indexName2);
     });
 

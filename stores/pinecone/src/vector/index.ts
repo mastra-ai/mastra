@@ -94,7 +94,7 @@ export class PineconeVector extends MastraVector {
 
     const index = this.client.Index(indexName);
 
-    const translatedFilter = this.transformFilter(filter) ?? {};
+    const translatedFilter = this.transformFilter(filter) ?? undefined;
 
     const results = await index.query({
       vector: queryVector,
