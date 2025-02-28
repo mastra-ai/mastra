@@ -42,13 +42,13 @@ export interface GetAgentResponse {
   modelId: string;
 }
 
-export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = AgentGenerateOptions<T> & {
+export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[];
-};
+} & Partial<AgentGenerateOptions<T>>;
 
-export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = AgentStreamOptions<T> & {
+export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[];
-};
+} & Partial<AgentStreamOptions<T>>;
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];

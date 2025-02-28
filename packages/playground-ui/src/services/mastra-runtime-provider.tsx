@@ -62,7 +62,7 @@ export function MastraRuntimeProvider({
           },
         ],
         runId: agentId,
-        ...(memory ? { threadId, resourceid: agentId } : {}),
+        ...(memory ? { threadId, resourceId: agentId } : {}),
       });
 
       const reader = response.body?.getReader();
