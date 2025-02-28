@@ -6,6 +6,10 @@
 https://nextra.site/docs/docs-theme/theme-configuration#theme-color
 */
 
+:root{
+  --nextra-navbar-height: 60px;
+}
+
 body:is(html[class~="dark"] *),
 html:is(html[class~="dark"] *) {
   background: #0a0a0a !important;
