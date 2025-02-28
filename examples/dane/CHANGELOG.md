@@ -1,5 +1,18 @@
 # @mastra/dane
 
+## 0.0.2-alpha.121
+
+### Patch Changes
+
+- Updated dependencies [dabecf4]
+  - @mastra/core@0.4.3-alpha.4
+  - @mastra/github@1.1.6-alpha.4
+  - @mastra/stabilityai@1.1.6-alpha.4
+  - @mastra/mcp@0.2.5-alpha.4
+  - @mastra/memory@0.1.6-alpha.4
+  - @mastra/rag@0.1.6-alpha.4
+  - @mastra/upstash@0.1.6-alpha.4
+
 ## 0.0.2-alpha.120
 
 ### Patch Changes
