@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.4.3-alpha.4
+
+### Patch Changes
+
+- dabecf4: Pass threadId and resourceId into tool execute functions so that tools are able to query memory
+
 ## 0.4.3-alpha.3
 
 ### Patch Changes
