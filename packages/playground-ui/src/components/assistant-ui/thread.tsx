@@ -11,7 +11,7 @@ import { UserMessage } from './user-message';
 
 const suggestions = ['What capabilities do you have?', 'How can you help me?', 'Tell me about yourself'];
 
-export const Thread: FC = () => {
+export const Thread: FC<{ memory?: boolean }> = ({ memory }) => {
   return (
     <ThreadPrimitive.Root
       style={{
@@ -67,6 +67,37 @@ export const Thread: FC = () => {
             <ThreadWelcomeSuggestions />
           </ThreadPrimitive.Empty>
           <Composer />
+          {!memory && (
+            <div className="flex items-center gap-1 text-sm text-mastra-el-5">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-purple-400"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4" />
+                <path d="M12 8h.01" />
+              </svg>
+              <span className="text-xs text-gray-300/60">
+                Agent will not remember previous messages. To enable memory for agent see{' '}
+                <a
+                  href="https://mastra.ai/docs/agents/01-agent-memory"
+                  target="_blank"
+                  rel="noopener"
+                  className="text-gray-300/60 hover:text-gray-100 underline"
+                >
+                  docs.
+                </a>
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </ThreadPrimitive.Root>

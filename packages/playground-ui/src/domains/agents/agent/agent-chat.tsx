@@ -22,7 +22,7 @@ export const AgentChat = ({
       baseUrl={baseUrl}
       refreshThreadList={refreshThreadList}
     >
-      <Thread />
+      <Thread memory={memory} />
     </MastraRuntimeProvider>
   );
 };
