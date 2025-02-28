@@ -1,5 +1,6 @@
 import { BaseFilterTranslator } from '@mastra/core/filter';
 import type { FieldCondition, Filter, OperatorSupport } from '@mastra/core/filter';
+import type { VectorFilter } from '@mastra/core/vector';
 
 /**
  * Translates MongoDB-style filters to PG compatible filters.
@@ -19,11 +20,11 @@ export class PGFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter: Filter): Filter {
+  translate(filter: VectorFilter): VectorFilter {
     if (this.isEmpty(filter)) {
       return filter;
     }
-    this.validateFilter(filter);
+    this.validateFilter(filter as Filter);
     return this.translateNode(filter);
   }
 

@@ -513,7 +513,7 @@ describe('Workflow', async () => {
 
       const run = workflow.createRun();
 
-      await expect(run.start()).resolves.toEqual({
+      await expect(run.start()).resolves.toMatchObject({
         results: {
           step1: {
             error: 'Step execution failed',
@@ -521,7 +521,6 @@ describe('Workflow', async () => {
           },
         },
         runId: expect.any(String),
-        triggerData: undefined,
       });
     });
 
@@ -547,7 +546,7 @@ describe('Workflow', async () => {
         .commit();
 
       const run = workflow.createRun();
-      await expect(run.start()).resolves.toEqual({
+      await expect(run.start()).resolves.toMatchObject({
         results: {
           step1: {
             status: 'success',
@@ -561,7 +560,6 @@ describe('Workflow', async () => {
           },
         },
         runId: expect.any(String),
-        triggerData: undefined,
       });
     });
   });
@@ -1524,6 +1522,143 @@ describe('Workflow', async () => {
         },
         humanIntervention: { status: 'success', output: { improvedOutput: 'human intervention output' } },
         explainResponse: { status: 'failed', error: 'Step:explainResponse condition check failed' },
+      });
+    });
+
+    it('should handle basic suspend and resume flow with async await syntax', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend();
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
+      const evaluateToneAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.8 },
+        completenessScore: { score: 0.7 },
+      });
+      const improveResponseAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend();
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ improvedOutput: 'improved output' }));
+      const evaluateImprovedAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.9 },
+        completenessScore: { score: 0.8 },
+      });
+
+      const getUserInput = new Step({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = new Step({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        outputSchema: z.object({ modelOutput: z.string() }),
+      });
+      const evaluateTone = new Step({
+        id: 'evaluateToneConsistency',
+        execute: evaluateToneAction,
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+      const improveResponse = new Step({
+        id: 'improveResponse',
+        execute: improveResponseAction,
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+      const evaluateImproved = new Step({
+        id: 'evaluateImprovedResponse',
+        execute: evaluateImprovedAction,
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+
+      const promptEvalWorkflow = new Workflow({
+        name: 'test-workflow',
+        triggerSchema: z.object({ input: z.string() }),
+      });
+
+      promptEvalWorkflow
+        .step(getUserInput)
+        .then(promptAgent)
+        .then(evaluateTone)
+        .then(improveResponse)
+        .then(evaluateImproved)
+        .commit();
+
+      const mastra = new Mastra({
+        logger,
+        workflows: { 'test-workflow': promptEvalWorkflow },
+      });
+
+      const wf = mastra.getWorkflow('test-workflow');
+      const run = wf.createRun();
+
+      const initialResult = await run.start({ triggerData: { input: 'test' } });
+      expect(initialResult.results.promptAgent.status).toBe('suspended');
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+      expect(initialResult.activePaths.size).toBe(1);
+      expect(initialResult.activePaths.get('promptAgent')?.status).toBe('suspended');
+
+      expect(initialResult.results).toEqual({
+        getUserInput: { status: 'success', output: { userInput: 'test input' } },
+        promptAgent: { status: 'suspended' },
+      });
+
+      const newCtx = {
+        userInput: 'test input for resumption',
+      };
+
+      expect(initialResult.results.promptAgent.status).toBe('suspended');
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+
+      const firstResumeResult = await wf.resume({ runId: run.runId, stepId: 'promptAgent', context: newCtx });
+
+      if (!firstResumeResult) {
+        throw new Error('Resume failed to return a result');
+      }
+
+      expect(firstResumeResult.activePaths.size).toBe(1);
+      expect(firstResumeResult.activePaths.get('improveResponse')?.status).toBe('suspended');
+      expect(firstResumeResult.results).toEqual({
+        getUserInput: { status: 'success', output: { userInput: 'test input' } },
+        promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: {
+            toneScore: { score: 0.8 },
+            completenessScore: { score: 0.7 },
+          },
+        },
+        improveResponse: { status: 'suspended' },
+      });
+
+      const secondResumeResult = await wf.resume({ runId: run.runId, stepId: 'improveResponse', context: newCtx });
+      if (!secondResumeResult) {
+        throw new Error('Resume failed to return a result');
+      }
+
+      expect(secondResumeResult.results).toEqual({
+        getUserInput: { status: 'success', output: { userInput: 'test input' } },
+        promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+        },
+        improveResponse: { status: 'success', output: { improvedOutput: 'improved output' } },
+        evaluateImprovedResponse: {
+          status: 'success',
+          output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
+        },
       });
     });
   });

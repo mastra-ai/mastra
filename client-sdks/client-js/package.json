@@ -1,15 +1,20 @@
 {
   "name": "@mastra/client-js",
-  "version": "0.1.5-alpha.0",
+  "version": "0.1.5-alpha.2",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
-  "types": "dist/index.d.mts",
-  "main": "dist/index.mjs",
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "main": "dist/index.js",
   "exports": {
     ".": {
       "import": {
-        "types": "./dist/index.d.mts",
-        "default": "./dist/index.mjs"
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
       }
     },
     "./package.json": "./package.json"
@@ -17,8 +22,8 @@
   "repository": "github:mastra-ai/client-js",
   "license": "ISC",
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
-    "dev": "tsup src/index.ts --format esm --dts --clean --treeshake --watch",
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean --treeshake",
+    "dev": "pnpm build --watch",
     "test": "vitest run"
   },
   "dependencies": {

@@ -54,11 +54,17 @@ async function analyze(
             return fileURLToPath(import.meta.resolve('@mastra/deployer/server')).replaceAll('\\', '/');
           }
           if (id === '#mastra') {
-            return mastraEntry;
+            return mastraEntry.replaceAll('\\', '/');
           }
         },
       } satisfies Plugin,
       json(),
+      commonjs({
+        strictRequires: 'debug',
+        ignoreTryCatch: false,
+        transformMixedEsModules: true,
+        extensions: ['.js', '.ts'],
+      }),
       esbuild({
         target: 'node20',
         platform,
@@ -117,6 +123,8 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
     let exportStringBuilder = [];
     for (const local of exports) {
       if (local === '*') {
+        virtualFile.push(`export * from '${dep}';`);
+      } else if (local === 'default') {
         virtualFile.push(`export * from '${dep}';`);
       } else {
         exportStringBuilder.push(local);
@@ -229,7 +237,7 @@ async function validateOutput(
       }
 
       // we might need this on other projects but not sure so let's keep it commented out for now
-      console.log(file.fileName, file.isEntry, file.isDynamicEntry, err);
+      // console.log(file.fileName, file.isEntry, file.isDynamicEntry, err);
       // result.invalidChunks.add(file.fileName);
       // const externalImports = excludeInternalDeps(file.imports.filter(file => !internalFiles.has(file)));
       // externalImports.push(...excludeInternalDeps(file.dynamicImports.filter(file => !internalFiles.has(file))));

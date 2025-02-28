@@ -1,7 +1,7 @@
 {
   "name": "mastra",
-  "version": "0.2.7-alpha.0",
-  "license": "MIT",
+  "version": "0.2.7-alpha.2",
+  "license": "ISC",
   "description": "cli for mastra",
   "type": "module",
   "main": "dist/index.js",

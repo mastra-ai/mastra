@@ -171,10 +171,17 @@ const { embeddings } = await embedMany({
 });
 
 const vectorStore = mastra.getVector('pgVector');
-await vectorStore.createIndex('embeddings', 1536);
+await vectorStore.createIndex({
+  indexName: 'embeddings',
+  dimension: 1536,
+});
 
 // Store both embeddings and metadata together
-await vectorStore.upsert('embeddings', embeddings, chunkMetadata);
+await vectorStore.upsert({
+  indexName: 'embeddings',
+  vectors: embeddings,
+  metadata: chunkMetadata,
+});
 ```
 
 The `upsert` operation stores both the vector embeddings and their associated metadata, enabling combined semantic search and metadata filtering capabilities.

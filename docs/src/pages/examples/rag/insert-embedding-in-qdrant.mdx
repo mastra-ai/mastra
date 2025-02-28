@@ -28,15 +28,18 @@ const { embeddings } = await embedMany({
 const qdrant = new QdrantVector(
   process.env.QDRANT_URL,
   process.env.QDRANT_API_KEY,
+);
+
+await qdrant.createIndex({
+  indexName: 'test_collection',
+  dimension: 1536,
 });
 
-await qdrant.createIndex('test_collection', 1536);
-
-await qdrant.upsert(
-  'test_collection',
-  embeddings,
-  chunks?.map(chunk => ({ text: chunk.text })),
-);
+await qdrant.upsert({
+  indexName: 'test_collection',
+  vectors: embeddings,
+  metadata: chunks?.map(chunk => ({ text: chunk.text })),
+});
 ```
 
 {/* <br />

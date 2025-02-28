@@ -14,16 +14,16 @@ import { PgVector } from '@mastra/pg';
 
 const store = new PgVector(connectionString);
 
-const results = await store.query(
-  "my_index",
-  queryVector,
-  10,
-  {
+const results = await store.query({
+  indexName: "my_index",
+  queryVector: queryVector,
+  topK: 10,
+  filter: {
     category: "electronics",  // Simple equality
     price: { $gt: 100 },     // Numeric comparison
     tags: { $in: ["sale", "new"] }  // Array membership
   }
-);
+});
 ```
 
 ## Supported Operators

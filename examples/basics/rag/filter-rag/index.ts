@@ -93,8 +93,15 @@ const { embeddings } = await embedMany({
 });
 
 const vectorStore = mastra.getVector('pgVector');
-await vectorStore.createIndex('embeddings', 1536);
-await vectorStore.upsert('embeddings', embeddings, chunkMetadata);
+await vectorStore.createIndex({
+  indexName: 'embeddings',
+  dimension: 1536,
+});
+await vectorStore.upsert({
+  indexName: 'embeddings',
+  vectors: embeddings,
+  metadata: chunkMetadata,
+});
 
 async function generateResponse(query: string) {
   const prompt = `

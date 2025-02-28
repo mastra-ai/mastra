@@ -29,6 +29,7 @@ import type {
   WorkflowState,
 } from './types';
 import {
+  getActivePathsAndStatus,
   getStepResult,
   getSuspendedPaths,
   isErrorEvent,
@@ -110,6 +111,7 @@ export class Machine<
     snapshot?: Snapshot<any>;
   } = {}): Promise<{
     results: Record<string, StepResult<any>>;
+    activePaths: Map<string, { status: string }>;
   }> {
     if (snapshot) {
       // First, let's log the incoming snapshot for debugging
@@ -195,6 +197,10 @@ export class Machine<
           this.#executionSpan?.end();
           resolve({
             results: state.context.steps,
+            activePaths: getActivePathsAndStatus(state.value as Record<string, string>).reduce((acc, curr) => {
+              acc.set(curr.stepId, { status: curr.status });
+              return acc;
+            }, new Map<string, { status: string }>()),
           });
         } catch (error) {
           // If snapshot persistence fails, we should still resolve
@@ -205,6 +211,10 @@ export class Machine<
           this.#executionSpan?.end();
           resolve({
             results: state.context.steps,
+            activePaths: getActivePathsAndStatus(state.value as Record<string, string>).reduce((acc, curr) => {
+              acc.set(curr.stepId, { status: curr.status });
+              return acc;
+            }, new Map<string, { status: string }>()),
           });
         }
       });

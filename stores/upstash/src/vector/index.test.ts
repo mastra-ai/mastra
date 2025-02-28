@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } from 'vitest';
 
 import { UpstashVector } from './';
 
@@ -84,12 +84,12 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       const testMetadata = [{ label: 'first-dimension' }, { label: 'second-dimension' }, { label: 'third-dimension' }];
 
       // Upsert vectors
-      vectorIds = await vectorStore.upsert('default', testVectors, testMetadata);
+      vectorIds = await vectorStore.upsert({ indexName: testIndexName, vectors: testVectors, metadata: testMetadata });
 
       expect(vectorIds).toHaveLength(3);
       await waitUntilVectorsIndexed(vectorStore, testIndexName, 3);
 
-      const results = await vectorStore.query(testIndexName, createVector(0, 0.9), 3);
+      const results = await vectorStore.query({ indexName: testIndexName, queryVector: createVector(0, 0.9), topK: 3 });
 
       expect(results).toHaveLength(3);
       if (results.length > 0) {
@@ -98,7 +98,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
     }, 5000000);
 
     it('should query vectors and return vector in results', async () => {
-      const results = await vectorStore.query(testIndexName, createVector(0, 0.9), 3, undefined, true);
+      const results = await vectorStore.query({ indexName: testIndexName, queryVector: createVector(0, 0.9), topK: 3 });
       expect(results).toHaveLength(3);
       expect(results?.[0]?.vector).toBeDefined();
       expect(results?.[0]?.vector).toHaveLength(VECTOR_DIMENSION);
@@ -110,7 +110,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
   });
   describe('Index Operations', () => {
     it('should create and list an index', async () => {
-      await vectorStore.createIndex(testIndexName, 3, 'cosine');
+      await vectorStore.createIndex({ indexName: testIndexName, dimension: 3, metric: 'cosine' });
       const indexes = await vectorStore.listIndexes();
       expect(indexes).toEqual([testIndexName]);
     });
@@ -128,13 +128,13 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
   describe('Error Handling', () => {
     it('should handle invalid dimension vectors', async () => {
       await expect(
-        vectorStore.upsert(testIndexName, [[1.0, 0.0]]), // Wrong dimensions
+        vectorStore.upsert({ indexName: testIndexName, vectors: [[1.0, 0.0]] }), // Wrong dimensions
       ).rejects.toThrow();
     });
 
     it('should handle querying with wrong dimensions', async () => {
       await expect(
-        vectorStore.query(testIndexName, [1.0, 0.0]), // Wrong dimensions
+        vectorStore.query({ indexName: testIndexName, queryVector: [1.0, 0.0] }), // Wrong dimensions
       ).rejects.toThrow();
     });
   });
@@ -219,26 +219,34 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
     ];
 
     beforeAll(async () => {
-      await vectorStore.createIndex(filterIndexName, VECTOR_DIMENSION);
-      await vectorStore.upsert(
-        filterIndexName,
-        testData.map(d => d.vector),
-        testData.map(d => d.metadata),
-        testData.map(d => d.id),
-      );
+      await vectorStore.createIndex({ indexName: filterIndexName, dimension: VECTOR_DIMENSION });
+      await vectorStore.upsert({
+        indexName: filterIndexName,
+        vectors: testData.map(d => d.vector),
+        metadata: testData.map(d => d.metadata),
+        ids: testData.map(d => d.id),
+      });
       // Wait for indexing
       await waitUntilVectorsIndexed(vectorStore, filterIndexName, testData.length);
     }, 50000);
 
     describe('Basic Operators', () => {
       it('should filter by exact match', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, { name: 'Istanbul' });
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { name: 'Istanbul' },
+        });
         expect(results).toHaveLength(1);
         expect(results[0]?.metadata?.name).toBe('Istanbul');
       });
 
       it('should filter by not equal', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, { name: { $ne: 'Berlin' } });
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { name: { $ne: 'Berlin' } },
+        });
         expect(results).toHaveLength(3);
         results.forEach(result => {
           expect(result.metadata?.name).not.toBe('Berlin');
@@ -246,7 +254,11 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should filter by greater than', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, { population: { $gt: 1000000 } });
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { population: { $gt: 1000000 } },
+        });
         expect(results).toHaveLength(2);
         results.forEach(result => {
           expect(result.metadata?.population).toBeGreaterThan(1000000);
@@ -254,7 +266,11 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should filter by less than or equal', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, { founded: { $lte: 1500 } });
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { founded: { $lte: 1500 } },
+        });
         expect(results).toHaveLength(2);
         results.forEach(result => {
           expect(result.metadata?.founded).toBeLessThanOrEqual(1500);
@@ -264,8 +280,11 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
     describe('Array Operations', () => {
       it('should filter by array contains', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          tags: { $contains: 'historic' },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          topK: 10,
+          filter: { tags: { $contains: 'historic' } },
         });
         expect(results).toHaveLength(2);
         results.forEach(result => {
@@ -274,8 +293,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should filter by array not contains', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          tags: { $not: { $contains: 'tech' } },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { tags: { $not: { $contains: 'tech' } } },
         });
         expect(results).toHaveLength(3);
         results.forEach(result => {
@@ -284,8 +305,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should filter by in array', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          'location.continent': { $in: ['Asia', 'Europe'] },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { 'location.continent': { $in: ['Asia', 'Europe'] } },
         });
         expect(results).toHaveLength(2);
         results.forEach(result => {
@@ -294,8 +317,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should filter by not in array', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          name: { $nin: ['Berlin', 'Istanbul'] },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { name: { $nin: ['Berlin', 'Istanbul'] } },
         });
         expect(results).toHaveLength(2);
         results.forEach(result => {
@@ -306,23 +331,30 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
     describe('Array Indexing', () => {
       it('should filter by first array element', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, { 'industries[0]': 'Tourism' });
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { 'industries[0]': 'Tourism' },
+        });
         expect(results).toHaveLength(1);
         expect(results[0]?.metadata?.industries?.[0]).toBe('Tourism');
       });
 
       it('should filter by last array element', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          'industries[#-1]': 'Technology',
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { 'industries[#-1]': 'Technology' },
         });
         expect(results).toHaveLength(1);
         expect(results[0]?.metadata?.industries?.slice(-1)[0]).toBe('Technology');
       });
 
       it('should combine first and last element filters', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          'industries[0]': 'Tourism',
-          'tags[#-1]': 'metropolitan',
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { 'industries[0]': 'Tourism', 'tags[#-1]': 'metropolitan' },
         });
         expect(results).toHaveLength(1);
         const result = results[0]?.metadata;
@@ -333,14 +365,20 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
     describe('Nested Fields', () => {
       it('should filter by nested field', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, { 'location.continent': 'Asia' });
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { 'location.continent': 'Asia' },
+        });
         expect(results).toHaveLength(1);
         expect(results[0]?.metadata?.location?.continent).toBe('Asia');
       });
 
       it('should filter by deeply nested field with comparison', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          'location.coordinates.latitude': { $gt: 40 },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { 'location.coordinates.latitude': { $gt: 40 } },
         });
         expect(results).toHaveLength(2);
         results.forEach(result => {
@@ -349,9 +387,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should combine nested and array filters', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          'location.coordinates.latitude': { $gt: 40 },
-          'industries[0]': 'Tourism',
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { 'location.coordinates.latitude': { $gt: 40 }, 'industries[0]': 'Tourism' },
         });
         expect(results).toHaveLength(1);
         const result = results[0]?.metadata;
@@ -362,8 +401,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
     describe('Logical Operators', () => {
       it('should combine conditions with AND', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          $and: [{ population: { $gt: 1000000 } }, { isCapital: true }],
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { $and: [{ population: { $gt: 1000000 } }, { isCapital: true }] },
         });
         expect(results).toHaveLength(1);
         const result = results[0]?.metadata;
@@ -372,8 +413,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should combine conditions with OR', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          $or: [{ 'location.continent': 'Asia' }, { 'location.continent': 'Europe' }],
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { $or: [{ 'location.continent': 'Asia' }, { 'location.continent': 'Europe' }] },
         });
         expect(results).toHaveLength(2);
         results.forEach(result => {
@@ -382,8 +425,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should handle NOT operator', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          $not: { isCapital: true },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { $not: { isCapital: true } },
         });
         expect(results).toHaveLength(3);
         results.forEach(result => {
@@ -392,8 +437,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should handle NOT with comparison operators', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          population: { $not: { $lt: 1000000 } },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { population: { $not: { $lt: 1000000 } } },
         });
         expect(results).toHaveLength(2);
         results.forEach(result => {
@@ -402,8 +449,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should handle NOT with contains operator', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          tags: { $not: { $contains: 'tech' } },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { tags: { $not: { $contains: 'tech' } } },
         });
         expect(results).toHaveLength(3);
         results.forEach(result => {
@@ -412,8 +461,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should handle NOT with regex operator', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          name: { $not: { $regex: '*bul' } },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { name: { $not: { $regex: '*bul' } } },
         });
         expect(results).toHaveLength(3);
         results.forEach(result => {
@@ -422,8 +473,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should handle NOR operator', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          $nor: [{ 'location.continent': 'Asia' }, { 'location.continent': 'Europe' }],
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { $nor: [{ 'location.continent': 'Asia' }, { 'location.continent': 'Europe' }] },
         });
         expect(results).toHaveLength(1);
         results.forEach(result => {
@@ -432,8 +485,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should handle NOR with multiple conditions', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          $nor: [{ population: { $gt: 10000000 } }, { isCapital: true }, { tags: { $contains: 'tech' } }],
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { $nor: [{ population: { $gt: 10000000 } }, { isCapital: true }, { tags: { $contains: 'tech' } }] },
         });
         expect(results).toHaveLength(1);
         const result = results[0]?.metadata;
@@ -443,8 +498,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should handle ALL operator with simple values', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          industries: { $all: ['Tourism', 'Finance'] },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { industries: { $all: ['Tourism', 'Finance'] } },
         });
         expect(results).toHaveLength(2);
         results.forEach(result => {
@@ -454,17 +511,19 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should handle ALL operator with empty array', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          tags: { $all: [] },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { tags: { $all: [] } },
         });
         expect(results.length).toBeGreaterThan(0);
       });
 
       it('should handle NOT with nested logical operators', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          $not: {
-            $and: [{ population: { $lt: 1000000 } }, { isCapital: true }],
-          },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { $not: { $and: [{ population: { $lt: 1000000 } }, { isCapital: true }] } },
         });
         expect(results).toHaveLength(4);
         results.forEach(result => {
@@ -474,8 +533,15 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should handle NOR with nested path conditions', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          $nor: [{ 'location.coordinates.latitude': { $lt: 40 } }, { 'location.coordinates.longitude': { $gt: 100 } }],
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: {
+            $nor: [
+              { 'location.coordinates.latitude': { $lt: 40 } },
+              { 'location.coordinates.longitude': { $gt: 100 } },
+            ],
+          },
         });
         expect(results).toHaveLength(2);
         results.forEach(result => {
@@ -485,11 +551,15 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should handle exists with nested paths', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          $and: [
-            { 'location.coordinates.latitude': { $exists: true } },
-            { 'location.coordinates.longitude': { $exists: true } },
-          ],
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: {
+            $and: [
+              { 'location.coordinates.latitude': { $exists: true } },
+              { 'location.coordinates.longitude': { $exists: true } },
+            ],
+          },
         });
         expect(results).toHaveLength(3);
         results.forEach(result => {
@@ -499,9 +569,17 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should handle complex NOT combinations', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          $not: {
-            $or: [{ 'location.continent': 'Asia' }, { population: { $lt: 1000000 } }, { tags: { $contains: 'tech' } }],
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: {
+            $not: {
+              $or: [
+                { 'location.continent': 'Asia' },
+                { population: { $lt: 1000000 } },
+                { tags: { $contains: 'tech' } },
+              ],
+            },
           },
         });
         expect(results).toHaveLength(1);
@@ -512,20 +590,28 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should handle NOR with regex patterns', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          $nor: [{ name: { $regex: '*bul' } }, { name: { $regex: '*lin' } }, { name: { $regex: '*cisco' } }],
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: {
+            $nor: [{ name: { $regex: '*bul' } }, { name: { $regex: '*lin' } }, { name: { $regex: '*cisco' } }],
+          },
         });
         expect(results).toHaveLength(1);
         expect(results[0]?.metadata?.name).toBe("City's Name");
       });
 
       it('should handle NOR with mixed operator types', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          $nor: [
-            { population: { $gt: 5000000 } },
-            { tags: { $contains: 'tech' } },
-            { 'location.coordinates.latitude': { $lt: 38 } },
-          ],
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: {
+            $nor: [
+              { population: { $gt: 5000000 } },
+              { tags: { $contains: 'tech' } },
+              { 'location.coordinates.latitude': { $lt: 38 } },
+            ],
+          },
         });
         expect(results).toHaveLength(1);
         const result = results[0]?.metadata;
@@ -535,8 +621,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should handle NOR with exists operator', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          $nor: [{ lastCensus: { $exists: true } }, { population: { $exists: false } }],
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { $nor: [{ lastCensus: { $exists: true } }, { population: { $exists: false } }] },
         });
         expect(results).toHaveLength(1);
         const result = results[0]?.metadata;
@@ -545,8 +633,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should handle ALL with mixed value types', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          $and: [{ tags: { $contains: 'coastal' } }, { tags: { $contains: 'metropolitan' } }],
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { $and: [{ tags: { $contains: 'coastal' } }, { tags: { $contains: 'metropolitan' } }] },
         });
         expect(results).toHaveLength(2);
         results.forEach(result => {
@@ -557,8 +647,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should handle ALL with nested array conditions', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          $and: [{ industries: { $all: ['Tourism', 'Finance'] } }, { tags: { $all: ['metropolitan'] } }],
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { $and: [{ industries: { $all: ['Tourism', 'Finance'] } }, { tags: { $all: ['metropolitan'] } }] },
         });
         expect(results).toHaveLength(2);
         results.forEach(result => {
@@ -569,8 +661,12 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should handle ALL with complex conditions', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          $or: [{ industries: { $all: ['Tourism', 'Finance'] } }, { tags: { $all: ['tech', 'metropolitan'] } }],
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: {
+            $or: [{ industries: { $all: ['Tourism', 'Finance'] } }, { tags: { $all: ['tech', 'metropolitan'] } }],
+          },
         });
         expect(results).toHaveLength(2);
         results.forEach(result => {
@@ -582,8 +678,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should handle ALL with single item array', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          industries: { $all: ['Technology'] },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { industries: { $all: ['Technology'] } },
         });
         expect(results).toHaveLength(3);
         results.forEach(result => {
@@ -592,13 +690,17 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should handle complex nested conditions', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          $and: [
-            { population: { $gt: 1000000 } },
-            {
-              $or: [{ 'location.continent': 'Asia' }, { industries: { $contains: 'Technology' } }],
-            },
-          ],
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: {
+            $and: [
+              { population: { $gt: 1000000 } },
+              {
+                $or: [{ 'location.continent': 'Asia' }, { industries: { $contains: 'Technology' } }],
+              },
+            ],
+          },
         });
         expect(results).toHaveLength(2);
         results.forEach(result => {
@@ -612,34 +714,58 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
     describe('Edge Cases', () => {
       describe('Empty Conditions', () => {
         it('should handle empty AND array', async () => {
-          const results = await vectorStore.query(filterIndexName, createVector(0), 10, { $and: [] });
+          const results = await vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: { $and: [] },
+          });
           expect(results.length).toBeGreaterThan(0);
         });
 
         it('should handle empty OR array', async () => {
-          const results = await vectorStore.query(filterIndexName, createVector(0), 10, { $or: [] });
+          const results = await vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: { $or: [] },
+          });
           expect(results.length).toBe(0);
         });
 
         it('should handle empty IN array', async () => {
-          const results = await vectorStore.query(filterIndexName, createVector(0), 10, { tags: { $in: [] } });
+          const results = await vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: { tags: { $in: [] } },
+          });
           expect(results.length).toBe(0);
         });
         it('should handle empty IN array', async () => {
-          const results = await vectorStore.query(filterIndexName, createVector(0), 10, { tags: [] });
+          const results = await vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: { tags: [] },
+          });
           expect(results.length).toBe(0);
         });
       });
 
       describe('Null/Undefined Values', () => {
         it('should handle null values', async () => {
-          await expect(vectorStore.query(filterIndexName, createVector(0), 10, { lastCensus: null })).rejects.toThrow();
+          await expect(
+            vectorStore.query({
+              indexName: filterIndexName,
+              queryVector: createVector(0),
+              filter: { lastCensus: null },
+            }),
+          ).rejects.toThrow();
         });
 
         it('should handle null in arrays', async () => {
           await expect(
-            vectorStore.query(filterIndexName, createVector(0), 10, {
-              tags: { $in: [null, 'historic'] },
+            vectorStore.query({
+              indexName: filterIndexName,
+              queryVector: createVector(0),
+              filter: { tags: { $in: [null, 'historic'] } },
             }),
           ).rejects.toThrow();
         });
@@ -647,16 +773,20 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
       describe('Special Characters', () => {
         it('should handle strings with quotes', async () => {
-          const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-            name: "City's Name",
+          const results = await vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: { name: "City's Name" },
           });
           expect(results).toHaveLength(1);
           expect(results[0]?.metadata?.name).toBe("City's Name");
         });
 
         it('should handle strings with double quotes', async () => {
-          const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-            description: 'Contains "quotes"',
+          const results = await vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: { description: 'Contains "quotes"' },
           });
           expect(results).toHaveLength(1);
           expect(results[0]?.metadata?.description).toBe('Contains "quotes"');
@@ -665,61 +795,92 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
       describe('Number Formats', () => {
         it('should handle zero', async () => {
-          const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-            population: 0,
+          const results = await vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: { population: 0 },
           });
           expect(results).toHaveLength(1);
           expect(results[0]?.metadata?.population).toBe(0);
         });
 
         it('should handle negative numbers', async () => {
-          const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-            temperature: -10,
+          const results = await vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: { temperature: -10 },
           });
           expect(results).toHaveLength(1);
           expect(results[0]?.metadata?.temperature).toBe(-10);
         });
 
         it('should handle decimal numbers', async () => {
-          const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-            'location.coordinates.latitude': 41.0082,
+          const results = await vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: { 'location.coordinates.latitude': 41.0082 },
           });
           expect(results).toHaveLength(1);
           expect(results[0]?.metadata?.location?.coordinates?.latitude).toBe(41.0082);
         });
 
         it('should handle scientific notation', async () => {
-          const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-            microscopicDetail: 1e-10,
+          const results = await vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: { microscopicDetail: 1e-10 },
           });
           expect(results).toHaveLength(1);
           expect(results[0]?.metadata?.microscopicDetail).toBe(1e-10);
         });
 
         it('should handle escaped quotes in strings', async () => {
-          const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-            description: { $regex: '*"quotes"*' },
+          const results = await vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: { description: { $regex: '*"quotes"*' } },
           });
           expect(results).toHaveLength(1);
           expect(results[0]?.metadata?.description).toBe('Contains "quotes"');
         });
         it('should handle undefined filter', async () => {
-          const results1 = await vectorStore.query(filterIndexName, createVector(0), 10, undefined);
-          const results2 = await vectorStore.query(filterIndexName, createVector(0), 10);
+          const results1 = await vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: undefined,
+          });
+          const results2 = await vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+          });
           expect(results1).toEqual(results2);
           expect(results1.length).toBeGreaterThan(0);
         });
 
         it('should handle empty object filter', async () => {
-          const results = await vectorStore.query(filterIndexName, createVector(0), 10, {});
-          const results2 = await vectorStore.query(filterIndexName, createVector(0), 10);
+          const results = await vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: {},
+          });
+          const results2 = await vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+          });
           expect(results).toEqual(results2);
           expect(results.length).toBeGreaterThan(0);
         });
 
         it('should handle null filter', async () => {
-          const results = await vectorStore.query(filterIndexName, createVector(0), 10, null as any);
-          const results2 = await vectorStore.query(filterIndexName, createVector(0), 10);
+          const results = await vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: null,
+          });
+          const results2 = await vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+          });
           expect(results).toEqual(results2);
           expect(results.length).toBeGreaterThan(0);
         });
@@ -728,24 +889,30 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
     describe('Pattern Matching', () => {
       it('should match start of string', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          name: { $regex: 'San*' },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { name: { $regex: 'San*' } },
         });
         expect(results).toHaveLength(1);
         expect(results[0]?.metadata?.name).toBe('San Francisco');
       });
 
       it('should match end of string', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          name: { $regex: '*in' },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { name: { $regex: '*in' } },
         });
         expect(results).toHaveLength(1);
         expect(results[0]?.metadata?.name).toBe('Berlin');
       });
 
       it('should handle negated pattern', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          name: { $not: { $regex: 'A*' } },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { name: { $not: { $regex: 'A*' } } },
         });
         expect(results).toHaveLength(4);
       });
@@ -753,15 +920,19 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
     describe('Field Existence', () => {
       it('should check field exists', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          'location.coordinates': { $exists: true },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { 'location.coordinates': { $exists: true } },
         });
         expect(results).toHaveLength(3);
       });
 
       it('should check field does not exist', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          unknownField: { $exists: false },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { unknownField: { $exists: false } },
         });
         expect(results).toHaveLength(4);
       });
@@ -771,8 +942,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       it('should reject large arrays', async () => {
         const largeArray = Array.from({ length: 1000 }, (_, i) => `value${i}`);
         await expect(
-          vectorStore.query(filterIndexName, createVector(0), 10, {
-            tags: { $in: largeArray },
+          vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: { tags: { $in: largeArray } },
           }),
         ).rejects.toThrow();
       });
@@ -792,7 +965,11 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
           ],
         };
         const start = Date.now();
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, deepFilter);
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: deepFilter,
+        });
         const duration = Date.now() - start;
         expect(duration).toBeLessThan(1000);
         expect(Array.isArray(results)).toBe(true);
@@ -811,7 +988,11 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
             })),
         };
         const start = Date.now();
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, complexFilter);
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: complexFilter,
+        });
         const duration = Date.now() - start;
         expect(duration).toBeLessThan(1000);
         expect(Array.isArray(results)).toBe(true);
@@ -821,39 +1002,49 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
     describe('Error Cases', () => {
       it('should reject invalid operators', async () => {
         await expect(
-          vectorStore.query(filterIndexName, createVector(0), 10, {
-            field: { $invalidOp: 'value' },
+          vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: { field: { $invalidOp: 'value' } },
           }),
         ).rejects.toThrow();
       });
 
       it('should reject empty brackets', async () => {
         await expect(
-          vectorStore.query(filterIndexName, createVector(0), 10, {
-            'industries[]': 'Tourism',
+          vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: { 'industries[]': 'Tourism' },
           }),
         ).rejects.toThrow();
       });
 
       it('should reject unclosed brackets', async () => {
         await expect(
-          vectorStore.query(filterIndexName, createVector(0), 10, {
-            'industries[': 'Tourism',
+          vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: { 'industries[': 'Tourism' },
           }),
         ).rejects.toThrow();
       });
 
       it('should handle invalid array syntax by returning empty results', async () => {
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          'industries#-1]': 'Tourism',
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { 'industries#-1]': 'Tourism' },
         });
         expect(results).toHaveLength(0);
       });
 
       it('should reject invalid field paths', async () => {
         await expect(
-          vectorStore.query(filterIndexName, createVector(0), 10, {
-            '.invalidPath': 'value',
+          vectorStore.query({
+            indexName: filterIndexName,
+            queryVector: createVector(0),
+            filter: { '.invalidPath': 'value' },
           }),
         ).rejects.toThrow();
       });
@@ -861,11 +1052,110 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       it('should handle malformed complex queries by returning all results', async () => {
         // Upstash treats malformed logical operators as non-filtering conditions
         // rather than throwing errors
-        const results = await vectorStore.query(filterIndexName, createVector(0), 10, {
-          $and: { not: 'an array' },
+        const results = await vectorStore.query({
+          indexName: filterIndexName,
+          queryVector: createVector(0),
+          filter: { $and: { not: 'an array' } },
         });
         expect(results.length).toBeGreaterThan(0);
       });
+    });
+  });
+  describe('Deprecation Warnings', () => {
+    const indexName = 'testdeprecationwarnings';
+
+    const indexName2 = 'testdeprecationwarnings2';
+
+    let warnSpy;
+
+    beforeAll(async () => {
+      await vectorStore.createIndex({ indexName: indexName, dimension: 3 });
+    });
+
+    afterAll(async () => {
+      await vectorStore.deleteIndex(indexName);
+      await vectorStore.deleteIndex(indexName2);
+    });
+
+    beforeEach(async () => {
+      warnSpy = vi.spyOn(vectorStore['logger'], 'warn');
+    });
+
+    afterEach(async () => {
+      warnSpy.mockRestore();
+      await vectorStore.deleteIndex(indexName2);
+    });
+
+    it('should show deprecation warning when using individual args for createIndex', async () => {
+      await vectorStore.createIndex(indexName2, 3, 'cosine');
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Deprecation Warning: Passing individual arguments to createIndex() is deprecated'),
+      );
+    });
+
+    it('should show deprecation warning when using individual args for upsert', async () => {
+      await vectorStore.upsert(indexName, [[1, 2, 3]], [{ test: 'data' }]);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Deprecation Warning: Passing individual arguments to upsert() is deprecated'),
+      );
+    });
+
+    it('should show deprecation warning when using individual args for query', async () => {
+      await vectorStore.query(indexName, [1, 2, 3], 5);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Deprecation Warning: Passing individual arguments to query() is deprecated'),
+      );
+    });
+
+    it('should not show deprecation warning when using object param for query', async () => {
+      await vectorStore.query({
+        indexName,
+        queryVector: [1, 2, 3],
+        topK: 5,
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not show deprecation warning when using object param for createIndex', async () => {
+      await vectorStore.createIndex({
+        indexName: indexName2,
+        dimension: 3,
+        metric: 'cosine',
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not show deprecation warning when using object param for upsert', async () => {
+      await vectorStore.upsert({
+        indexName,
+        vectors: [[1, 2, 3]],
+        metadata: [{ test: 'data' }],
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('should maintain backward compatibility with individual args', async () => {
+      // Query
+      const queryResults = await vectorStore.query(indexName, [1, 2, 3], 5);
+      expect(Array.isArray(queryResults)).toBe(true);
+
+      // CreateIndex
+      await expect(vectorStore.createIndex(indexName2, 3, 'cosine')).resolves.not.toThrow();
+
+      // Upsert
+      const upsertResults = await vectorStore.upsert({
+        indexName,
+        vectors: [[1, 2, 3]],
+        metadata: [{ test: 'data' }],
+      });
+      expect(Array.isArray(upsertResults)).toBe(true);
+      expect(upsertResults).toHaveLength(1);
     });
   });
 });

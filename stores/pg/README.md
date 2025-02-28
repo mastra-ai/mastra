@@ -23,24 +23,28 @@ import { PgVector } from '@mastra/pg';
 const vectorStore = new PgVector('postgresql://user:pass@localhost:5432/db');
 
 // Create a new table with vector support
-await vectorStore.createIndex('my_vectors', 1536, 'cosine');
+await vectorStore.createIndex({
+  indexName: 'my_vectors',
+  dimension: 1536,
+  metric: 'cosine',
+});
 
 // Add vectors
-const ids = await vectorStore.upsert(
-  'my_vectors',
-  [[0.1, 0.2, ...], [0.3, 0.4, ...]],
-  [{ text: 'doc1' }, { text: 'doc2' }]
-);
+const ids = await vectorStore.upsert({
+  indexName: 'my_vectors',
+  vectors: [[0.1, 0.2, ...], [0.3, 0.4, ...]],
+  metadata: [{ text: 'doc1' }, { text: 'doc2' }],
+});
 
 // Query vectors
-const results = await vectorStore.query(
-  'my_vectors',
-  [0.1, 0.2, ...],
-  10,              // topK
-  { text: 'doc1' }, // filter
-  false,           // includeVector
-  0.5              // minScore
-);
+const results = await vectorStore.query({
+  indexName: 'my_vectors',
+  queryVector: [0.1, 0.2, ...],
+  topK: 10, // topK
+  filter: { text: 'doc1' }, // filter
+  includeVector: false, // includeVector
+  minScore: 0.5, // minScore
+});
 
 // Clean up
 await vectorStore.disconnect();
@@ -137,9 +141,10 @@ Example filter:
 
 ## Vector Store Methods
 
-- `createIndex(indexName, dimension, metric?)`: Create a new table with vector support
-- `upsert(indexName, vectors, metadata?, ids?)`: Add or update vectors
-- `query(indexName, queryVector, topK?, filter?, includeVector?, minScore?)`: Search for similar vectors
+- `createIndex({indexName, dimension, metric?, indexConfig?, defineIndex?})`: Create a new table with vector support
+- `upsert({indexName, vectors, metadata?, ids?})`: Add or update vectors
+- `query({indexName, queryVector, topK?, filter?, includeVector?, minScore?})`: Search for similar vectors
+- `defineIndex({indexName, metric?, indexConfig?})`: Define an index
 - `listIndexes()`: List all vector-enabled tables
 - `describeIndex(indexName)`: Get table statistics
 - `deleteIndex(indexName)`: Delete a table

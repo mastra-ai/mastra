@@ -4,14 +4,21 @@ import { rollup } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
 
 import { removeAllExceptDeployer } from './babel/get-deployer';
+import commonjs from '@rollup/plugin-commonjs';
 
 export async function getDeployer(entryFile: string, outputDir: string) {
   const bundle = await rollup({
     input: {
       deployer: entryFile,
     },
-    treeshake: true,
+    treeshake: 'smallest',
     plugins: [
+      commonjs({
+        extensions: ['.js', '.ts'],
+        strictRequires: 'strict',
+        transformMixedEsModules: true,
+        ignoreTryCatch: false,
+      }),
       // transpile typescript to something we understand
       esbuild({
         target: 'node20',
@@ -21,7 +28,7 @@ export async function getDeployer(entryFile: string, outputDir: string) {
       {
         name: 'get-deployer',
         transform(code, id) {
-          if (!this.getModuleInfo(id)?.isEntry) {
+          if (id !== entryFile) {
             return;
           }
 

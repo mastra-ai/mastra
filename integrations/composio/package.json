@@ -1,6 +1,6 @@
 {
   "name": "@mastra/composio",
-  "version": "0.1.6-alpha.0",
+  "version": "0.1.6-alpha.2",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -13,13 +13,17 @@
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
       }
     },
     "./package.json": "./package.json"
   },
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean --treeshake",
     "build:watch": "pnpm build --watch",
     "lint": "dts lint",
     "size": "size-limit",

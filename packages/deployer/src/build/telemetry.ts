@@ -1,9 +1,9 @@
 import * as babel from '@babel/core';
-import type { MastraDeployer } from '@mastra/core';
 import { rollup } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
 
 import { removeAllExceptTelemetryConfig } from './babel/get-telemetry-config';
+import commonjs from '@rollup/plugin-commonjs';
 
 export async function writeTelemetryConfig(
   entryFile: string,
@@ -19,8 +19,14 @@ export async function writeTelemetryConfig(
     input: {
       'telemetry-config': entryFile,
     },
-    treeshake: true,
+    treeshake: 'smallest',
     plugins: [
+      commonjs({
+        extensions: ['.js', '.ts'],
+        strictRequires: 'strict',
+        transformMixedEsModules: true,
+        ignoreTryCatch: false,
+      }),
       // transpile typescript to something we understand
       esbuild({
         target: 'node20',
@@ -30,7 +36,7 @@ export async function writeTelemetryConfig(
       {
         name: 'get-telemetry-config',
         transform(code, id) {
-          if (!this.getModuleInfo(id)?.isEntry) {
+          if (id !== entryFile) {
             return;
           }
 

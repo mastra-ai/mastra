@@ -20,15 +20,18 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { PgVector } from '@mastra/pg';
 
-const store = new PgVector(process.env.POSTGRES_CONNECTION_STRING)
-await store.createIndex("my-collection", 1536);
-await store.upsert(
-"my-collection",
-embeddings,
-chunks.map(chunk => ({ text: chunk.text }))
-)
+  const store = new PgVector(process.env.POSTGRES_CONNECTION_STRING)
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
 
-````
+  ```
 
 </Tabs.Tab>
 <Tabs.Tab>
@@ -36,12 +39,15 @@ chunks.map(chunk => ({ text: chunk.text }))
   import { PineconeVector } from '@mastra/pinecone'
 
   const store = new PineconeVector(process.env.PINECONE_API_KEY)
-  await store.createIndex("my-collection", 1536);
-  await store.upsert(
-    "my-collection",
-    embeddings,
-    chunks.map(chunk => ({ text: chunk.text }))
-  )
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
   ```
 </Tabs.Tab>
 <Tabs.Tab>
@@ -52,12 +58,15 @@ chunks.map(chunk => ({ text: chunk.text }))
     url: process.env.QDRANT_URL,
     apiKey: process.env.QDRANT_API_KEY
   })
-  await store.createIndex("my-collection", 1536);
-  await store.upsert(
-    "my-collection",
-    embeddings,
-    chunks.map(chunk => ({ text: chunk.text }))
-  )
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
   ```
 </Tabs.Tab>
 <Tabs.Tab>
@@ -65,12 +74,15 @@ chunks.map(chunk => ({ text: chunk.text }))
   import { ChromaVector } from '@mastra/chroma'
 
   const store = new ChromaVector()
-  await store.createIndex("my-collection", 1536);
-  await store.upsert(
-    "my-collection",
-    embeddings,
-    chunks.map(chunk => ({ text: chunk.text }))
-  )
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
   ```
 </Tabs.Tab>
 <Tabs.Tab>
@@ -82,12 +94,15 @@ chunks.map(chunk => ({ text: chunk.text }))
     endpoint: process.env.ASTRA_DB_ENDPOINT,
     keyspace: process.env.ASTRA_DB_KEYSPACE
   })
-  await store.createIndex("my-collection", 1536);
-  await store.upsert(
-    "my-collection",
-    embeddings,
-    chunks.map(chunk => ({ text: chunk.text }))
-  )
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
   ```
 </Tabs.Tab>
 <Tabs.Tab>
@@ -98,12 +113,15 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
     connectionUrl: process.env.DATABASE_URL,
     authToken: process.env.DATABASE_AUTH_TOKEN // Optional: for Turso cloud databases
   })
-  await store.createIndex("my-collection", 1536);
-  await store.upsert(
-    "my-collection",
-    embeddings,
-    chunks.map(chunk => ({ text: chunk.text }))
-  )
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
   ```
 </Tabs.Tab>
 <Tabs.Tab>
@@ -114,12 +132,15 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
     url: process.env.UPSTASH_URL,
     token: process.env.UPSTASH_TOKEN
   })
-  await store.createIndex("my-collection", 1536);
-  await store.upsert(
-    "my-collection",
-    embeddings,
-    chunks.map(chunk => ({ text: chunk.text }))
-  )
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
   ```
 </Tabs.Tab>
 <Tabs.Tab>
@@ -130,12 +151,15 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
     accountId: process.env.CF_ACCOUNT_ID,
     apiToken: process.env.CF_API_TOKEN
   })
-  await store.createIndex("my-collection", 1536);
-  await store.upsert(
-    "my-collection",
-    embeddings,
-    chunks.map(chunk => ({ text: chunk.text }))
-  )
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
   ```
 </Tabs.Tab>
 </Tabs>
@@ -150,7 +174,10 @@ Before storing embeddings, you need to create an index with the appropriate dime
 
 ```ts filename="store-embeddings.ts" showLineNumbers copy
 // Create an index with dimension 1536 (for text-embedding-3-small)
-await store.createIndex('my-collection', 1536);
+await store.createIndex({
+  indexName: 'my-collection',
+  dimension: 1536,
+});
 
 // For other models, use their corresponding dimensions:
 // - text-embedding-3-large: 3072
@@ -169,14 +196,14 @@ After creating an index, you can store embeddings along with their basic metadat
 
 ```ts filename="store-embeddings.ts" showLineNumbers copy
 // Store embeddings with their corresponding metadata
-await store.upsert(
-  'my-collection',  // index name
-  embeddings,       // array of embedding vectors
-  chunks.map(chunk => ({
+await store.upsert({
+  indexName: 'my-collection',  // index name
+  vectors: embeddings,       // array of embedding vectors
+  metadata: chunks.map(chunk => ({
     text: chunk.text,  // The original text content
     id: chunk.id       // Optional unique identifier
   }))
-);
+});
 ```
 
 The upsert operation:
@@ -193,10 +220,10 @@ Vector stores support rich metadata for advanced filtering and organization. You
 
 ```ts showLineNumbers copy
 // Store embeddings with rich metadata for better organization and filtering
-await vectorStore.upsert(
-  "embeddings",
-  embeddings,
-  chunks.map((chunk) => ({
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+  metadata: chunks.map((chunk) => ({
     // Basic content
     text: chunk.text,
     id: chunk.id,
@@ -214,7 +241,7 @@ await vectorStore.upsert(
     author: chunk.author,
     confidenceScore: chunk.score,
   })),
-);
+});
 ```
 
 Key metadata considerations:

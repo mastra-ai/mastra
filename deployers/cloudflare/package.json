@@ -1,23 +1,35 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "0.1.6-alpha.0",
+  "version": "0.1.6-alpha.2",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./secrets-manager": {
-      "types": "./dist/secrets-manager/index.d.ts",
-      "default": "./dist/secrets-manager/index.js"
+      "import": {
+        "types": "./dist/secrets-manager/index.d.ts",
+        "default": "./dist/secrets-manager/index.js"
+      },
+      "require": {
+        "types": "./dist/secrets-manager/index.d.cts",
+        "default": "./dist/secrets-manager/index.cjs"
+      }
     },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup src/index.ts src/secrets-manager/index.ts --format esm --experimental-dts --clean --treeshake",
+    "build": "tsup src/index.ts src/secrets-manager/index.ts --format esm,cjs --experimental-dts --clean --treeshake",
     "build:watch": "pnpm build --watch",
     "test": "vitest run",
     "lint": "eslint ."

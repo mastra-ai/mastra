@@ -1,3 +1,4 @@
+import type { VectorFilter } from '@mastra/core';
 import type {
   BasicOperator,
   NumericOperator,
@@ -180,7 +181,7 @@ export const handleKey = (key: string) => {
   return key.replace(/\./g, ',');
 };
 
-export function buildFilterQuery(filter: Filter, minScore: number): FilterResult {
+export function buildFilterQuery(filter: VectorFilter, minScore: number): FilterResult {
   const values = [minScore];
 
   function buildCondition(key: string, value: any, parentPath: string): string {

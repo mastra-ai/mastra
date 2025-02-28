@@ -1,5 +1,6 @@
 import type { InValue } from '@libsql/client';
 
+import type { VectorFilter } from '..';
 import type {
   BasicOperator,
   NumericOperator,
@@ -305,7 +306,7 @@ export const handleKey = (key: string) => {
   return key.replace(/\./g, '"."');
 };
 
-export function buildFilterQuery(filter: Filter): FilterResult {
+export function buildFilterQuery(filter: VectorFilter): FilterResult {
   if (!filter) {
     return { sql: '', values: [] };
   }

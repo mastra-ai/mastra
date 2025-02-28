@@ -411,11 +411,11 @@ export class PostgresStore extends MastraStorage {
           WITH ordered_messages AS (
             SELECT 
               *,
-              ROW_NUMBER() OVER (ORDER BY "createdAt") as row_num
+              ROW_NUMBER() OVER (ORDER BY "createdAt" DESC) as row_num
             FROM "${MastraStorage.TABLE_MESSAGES}"
             WHERE thread_id = $1
           )
-          SELECT DISTINCT ON (m.id)
+          SELECT
             m.id, 
             m.content, 
             m.role, 
@@ -429,13 +429,13 @@ export class PostgresStore extends MastraStorage {
             WHERE target.id = ANY($2)
             AND (
               -- Get previous messages based on the max withPreviousMessages
-              (m.row_num >= target.row_num - $3 AND m.row_num < target.row_num)
+              (m.row_num <= target.row_num + $3 AND m.row_num > target.row_num)
               OR
               -- Get next messages based on the max withNextMessages
-              (m.row_num <= target.row_num + $4 AND m.row_num > target.row_num)
+              (m.row_num >= target.row_num - $4 AND m.row_num < target.row_num)
             )
           )
-          ORDER BY m.id, m."createdAt"
+          ORDER BY m."createdAt" DESC
           `,
           [
             threadId,

@@ -14,7 +14,26 @@ npm install @mastra/upstash
 import { UpstashVector } from '@mastra/upstash';
 
 const vectorStore = new UpstashVector({
-  // configuration options
+  url: process.env.UPSTASH_VECTOR_REST_URL,
+  token: process.env.UPSTASH_VECTOR_TOKEN
+});
+
+// Add vectors
+const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
+const metadata = [{ text: 'doc1' }, { text: 'doc2' }];
+const ids = await vectorStore.upsert({
+  indexName: 'my-namespace',
+  vectors,
+  metadata
+});
+
+// Query vectors
+const results = await vectorStore.query({
+  indexName: 'my-namespace',
+  queryVector: [0.1, 0.2, ...],
+  topK: 10,
+  filter: { text: { $eq: 'doc1' } },
+  includeVector: false
 });
 ```
 

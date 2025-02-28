@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "0.1.6-alpha.0",
+  "version": "0.1.6-alpha.2",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -10,25 +10,37 @@
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
       }
     },
     "./kv-upstash": {
       "import": {
         "types": "./dist/kv/upstash.d.ts",
         "default": "./dist/kv/upstash.js"
+      },
+      "require": {
+        "types": "./dist/kv/upstash.d.cts",
+        "default": "./dist/kv/upstash.cjs"
       }
     },
     "./postgres": {
       "import": {
         "types": "./dist/postgres/index.d.ts",
         "default": "./dist/postgres/index.js"
+      },
+      "require": {
+        "types": "./dist/postgres/index.d.cts",
+        "default": "./dist/postgres/index.cjs"
       }
     },
     "./package.json": "./package.json"
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "pnpm run check && tsup src/index.ts --format esm --experimental-dts --clean --treeshake",
+    "build": "pnpm run check && tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake",
     "build:watch": "pnpm build --watch",
     "test:integration": "cd integration-tests && pnpm run test",
     "test": "pnpm test:integration",

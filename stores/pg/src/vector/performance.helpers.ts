@@ -236,7 +236,7 @@ export interface TestConfig {
 
 export async function warmupQuery(vectorDB: PgVector, indexName: string, dimension: number, k: number) {
   const warmupVector = generateRandomVectors(1, dimension)[0] as number[];
-  await vectorDB.query(indexName, warmupVector, k);
+  await vectorDB.query({ indexName, queryVector: warmupVector, topK: k });
 }
 
 export async function measureLatency<T>(fn: () => Promise<T>): Promise<[number, T]> {

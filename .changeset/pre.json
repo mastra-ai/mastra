@@ -134,13 +134,27 @@
     "@mastra/voice-openai": "0.1.1",
     "@mastra/voice-playai": "0.1.0",
     "@mastra/voice-speechify": "0.1.0",
-    "voice-agent": "1.0.0"
+    "voice-agent": "1.0.0",
+    "insert-embedding-in-chroma": "0.0.2"
   },
   "changesets": [
+    "chatty-jobs-speak",
+    "chubby-llamas-smash",
     "clear-seals-tease",
     "cool-papers-check",
+    "fancy-eyes-tease",
     "five-hands-bet",
+    "huge-vans-battle",
+    "new-garlics-judge",
     "open-ideas-kick",
-    "tasty-words-exist"
+    "public-hoops-go",
+    "sixty-webs-attend",
+    "strong-keys-pump",
+    "swift-shrimps-follow",
+    "tasty-words-exist",
+    "tiny-birds-swim",
+    "two-corners-go",
+    "violet-regions-eat",
+    "wet-streets-rule"
   ]
 }
