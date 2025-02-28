@@ -877,26 +877,59 @@ describe.skip('PineconeVector Integration Tests', () => {
     });
   });
   describe('Deprecation Warnings', () => {
-    const indexName = 'test_deprecation_warnings';
+    const indexName = 'testdeprecationwarnings';
 
-    const indexName2 = 'test_deprecation_warnings2';
+    const indexName2 = 'testdeprecationwarnings2';
+
+    const indexName3 = 'testdeprecationwarnings3';
+
+    const indexName4 = 'testdeprecationwarnings4';
 
     let warnSpy;
 
+    beforeAll(async () => {
+      try {
+        await vectorDB.deleteIndex(indexName);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      try {
+        await vectorDB.deleteIndex(indexName2);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      try {
+        await vectorDB.deleteIndex(indexName3);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      try {
+        await vectorDB.deleteIndex(indexName4);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      await vectorDB.createIndex({ indexName: indexName, dimension: 3 });
+      await waitUntilReady(vectorDB, indexName);
+    });
+
+    afterAll(async () => {
+      await vectorDB.deleteIndex(indexName);
+      await vectorDB.deleteIndex(indexName2);
+      await vectorDB.deleteIndex(indexName3);
+      await vectorDB.deleteIndex(indexName4);
+    });
+
     beforeEach(async () => {
       warnSpy = vi.spyOn(vectorDB['logger'], 'warn');
-      await vectorDB.createIndex({ indexName: indexName, dimension: 3 });
     });
 
     afterEach(async () => {
       warnSpy.mockRestore();
-      await vectorDB.deleteIndex(indexName);
-      await vectorDB.deleteIndex(indexName2);
     });
 
     it('should show deprecation warning when using individual args for createIndex', async () => {
       await vectorDB.createIndex(indexName2, 3, 'cosine');
-
+      await waitUntilReady(vectorDB, indexName2);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Deprecation Warning: Passing individual arguments to createIndex() is deprecated'),
       );
@@ -930,7 +963,7 @@ describe.skip('PineconeVector Integration Tests', () => {
 
     it('should not show deprecation warning when using object param for createIndex', async () => {
       await vectorDB.createIndex({
-        indexName: indexName2,
+        indexName: indexName3,
         dimension: 3,
         metric: 'cosine',
       });
@@ -954,8 +987,8 @@ describe.skip('PineconeVector Integration Tests', () => {
       expect(Array.isArray(queryResults)).toBe(true);
 
       // CreateIndex
-      await expect(vectorDB.createIndex(indexName2, 3, 'cosine')).resolves.not.toThrow();
-
+      await expect(vectorDB.createIndex(indexName4, 3, 'cosine')).resolves.not.toThrow();
+      await waitUntilReady(vectorDB, indexName4);
       // Upsert
       const upsertResults = await vectorDB.upsert({
         indexName,

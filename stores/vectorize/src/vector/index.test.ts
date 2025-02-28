@@ -783,33 +783,41 @@ describe('CloudflareVector', () => {
     });
   }, 3000000);
   describe('Deprecation Warnings', () => {
-    const indexName = 'test_deprecation_warnings';
+    const indexName = 'testdeprecationwarnings';
 
-    const indexName2 = 'test_deprecation_warnings2';
+    const indexName2 = 'testdeprecationwarnings2';
 
     let warnSpy;
 
+    beforeAll(async () => {
+      await vectorDB.createIndex({ indexName: indexName, dimension: VECTOR_DIMENSION });
+      await waitUntilReady(vectorDB, indexName);
+    });
+
+    afterAll(async () => {
+      await vectorDB.deleteIndex(indexName);
+      await vectorDB.deleteIndex(indexName2);
+    });
+
     beforeEach(async () => {
       warnSpy = vi.spyOn(vectorDB['logger'], 'warn');
-      await vectorDB.createIndex({ indexName: indexName, dimension: VECTOR_DIMENSION });
     });
 
     afterEach(async () => {
       warnSpy.mockRestore();
-      await vectorDB.deleteIndex(indexName);
       await vectorDB.deleteIndex(indexName2);
     });
 
     it('should show deprecation warning when using individual args for createIndex', async () => {
       await vectorDB.createIndex(indexName2, VECTOR_DIMENSION, 'cosine');
-
+      await waitUntilReady(vectorDB, indexName2);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Deprecation Warning: Passing individual arguments to createIndex() is deprecated'),
       );
     });
 
     it('should show deprecation warning when using individual args for upsert', async () => {
-      await vectorDB.upsert(indexName, createVector(0, 1.0), [{ test: 'data' }]);
+      await vectorDB.upsert(indexName, [createVector(0, 1.0)], [{ test: 'data' }]);
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Deprecation Warning: Passing individual arguments to upsert() is deprecated'),
@@ -847,7 +855,7 @@ describe('CloudflareVector', () => {
     it('should not show deprecation warning when using object param for upsert', async () => {
       await vectorDB.upsert({
         indexName,
-        vectors: createVector(0, 1.0),
+        vectors: [createVector(0, 1.0)],
         metadata: [{ test: 'data' }],
       });
 
@@ -861,11 +869,11 @@ describe('CloudflareVector', () => {
 
       // CreateIndex
       await expect(vectorDB.createIndex(indexName2, VECTOR_DIMENSION, 'cosine')).resolves.not.toThrow();
-
+      await waitUntilReady(vectorDB, indexName2);
       // Upsert
       const upsertResults = await vectorDB.upsert({
         indexName,
-        vectors: createVector(0, 1.0),
+        vectors: [createVector(0, 1.0)],
         metadata: [{ test: 'data' }],
       });
       expect(Array.isArray(upsertResults)).toBe(true);

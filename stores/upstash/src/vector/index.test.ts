@@ -1062,20 +1062,27 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
     });
   });
   describe('Deprecation Warnings', () => {
-    const indexName = 'test_deprecation_warnings';
+    const indexName = 'testdeprecationwarnings';
 
-    const indexName2 = 'test_deprecation_warnings2';
+    const indexName2 = 'testdeprecationwarnings2';
 
     let warnSpy;
 
+    beforeAll(async () => {
+      await vectorStore.createIndex({ indexName: indexName, dimension: 3 });
+    });
+
+    afterAll(async () => {
+      await vectorStore.deleteIndex(indexName);
+      await vectorStore.deleteIndex(indexName2);
+    });
+
     beforeEach(async () => {
       warnSpy = vi.spyOn(vectorStore['logger'], 'warn');
-      await vectorStore.createIndex({ indexName: indexName, dimension: 3 });
     });
 
     afterEach(async () => {
       warnSpy.mockRestore();
-      await vectorStore.deleteIndex(indexName);
       await vectorStore.deleteIndex(indexName2);
     });
 
