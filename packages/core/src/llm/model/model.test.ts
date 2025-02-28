@@ -23,8 +23,8 @@ describe('MastraLLM', () => {
       id: 'testTool',
       inputSchema: z.object({ test: z.string() }),
       description: 'Test tool description',
-      execute: async ({ context }) => {
-        return mockToolExecute(context);
+      execute: async ({ context, threadId, resourceId }, options) => {
+        return mockToolExecute({ ...context, threadId, resourceId }, options);
       },
     }),
   };
@@ -98,10 +98,43 @@ describe('MastraLLM', () => {
       expect(converted).toBeDefined();
       expect(converted.testTool).toBeDefined();
       if (converted.testTool.execute) {
-        await converted.testTool.execute({ test: 'value' });
+        await converted.testTool.execute({ test: 'value' }, { toolCallId: '1', messages: [] });
       }
 
-      expect(mockToolExecute).toHaveBeenCalledWith({ test: 'value' });
+      expect(mockToolExecute).toHaveBeenCalledWith({ test: 'value' }, { toolCallId: '1', messages: [] });
+    });
+
+    it('should pass threadId and resourceId to tool execution context', async () => {
+      const threadId = 'test-thread-123';
+      const resourceId = 'test-resource-456';
+      const converted = aisdkText.convertTools({ tools: mockTools, threadId, resourceId });
+
+      expect(converted).toBeDefined();
+      expect(converted.testTool).toBeDefined();
+      if (converted.testTool.execute) {
+        await converted.testTool.execute({ test: 'value' }, { toolCallId: '1', messages: [] });
+      }
+
+      expect(mockToolExecute).toHaveBeenCalledWith(
+        {
+          test: 'value',
+          threadId,
+          resourceId,
+        },
+        { toolCallId: '1', messages: [] },
+      );
+    });
+
+    it('should handle undefined threadId and resourceId', async () => {
+      const converted = aisdkText.convertTools({ tools: mockTools });
+
+      expect(converted).toBeDefined();
+      expect(converted.testTool).toBeDefined();
+      if (converted.testTool.execute) {
+        await converted.testTool.execute({ test: 'value' }, { toolCallId: '1', messages: [] });
+      }
+
+      expect(mockToolExecute).toHaveBeenCalledWith({ test: 'value' }, { toolCallId: '1', messages: [] });
     });
   });
 

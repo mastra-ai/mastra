@@ -61,7 +61,12 @@ export class MastraLLM extends MastraLLMBase {
     return this.#model;
   }
 
-  convertTools({ tools, runId }: { tools?: ToolsInput; runId?: string } = {}): Record<string, CoreTool> {
+  convertTools({
+    tools,
+    runId,
+    threadId,
+    resourceId,
+  }: { tools?: ToolsInput; runId?: string; threadId?: string; resourceId?: string } = {}): Record<string, CoreTool> {
     this.logger.debug('Starting tool conversion for LLM');
     const converted = Object.entries(tools || {}).reduce(
       (memo, value) => {
@@ -84,6 +89,8 @@ export class MastraLLM extends MastraLLMBase {
                         tool?.execute?.(
                           {
                             context: props,
+                            threadId,
+                            resourceId,
                             mastra: this.#mastra,
                             runId,
                           },
@@ -95,6 +102,9 @@ export class MastraLLM extends MastraLLMBase {
                         tool: k,
                         props,
                         error,
+                        runId,
+                        threadId,
+                        resourceId,
                       });
                       throw error;
                     }
@@ -123,6 +133,8 @@ export class MastraLLM extends MastraLLMBase {
     onStepFinish,
     experimental_output,
     telemetry,
+    threadId,
+    resourceId,
     ...rest
   }: LLMTextOptions<Z>) {
     const model = this.#model;
@@ -131,10 +143,12 @@ export class MastraLLM extends MastraLLMBase {
       runId,
       messages,
       maxSteps,
+      threadId,
+      resourceId,
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools({ tools, runId });
+    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId });
 
     const argsForExecute = {
       model,
@@ -209,13 +223,15 @@ export class MastraLLM extends MastraLLMBase {
     temperature,
     toolChoice = 'auto',
     telemetry,
+    threadId,
+    resourceId,
     ...rest
   }: LLMTextObjectOptions<T>) {
     const model = this.#model;
 
     this.logger.debug(`[LLM] - Generating a text object`, { runId });
 
-    const finalTools = convertedTools || this.convertTools({ tools, runId });
+    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId });
 
     const argsForExecute = {
       model,
@@ -285,17 +301,21 @@ export class MastraLLM extends MastraLLMBase {
     toolChoice = 'auto',
     experimental_output,
     telemetry,
+    threadId,
+    resourceId,
     ...rest
   }: LLMInnerStreamOptions<Z>) {
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {
       runId,
+      threadId,
+      resourceId,
       messages,
       maxSteps,
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools({ tools, runId });
+    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId });
 
     const argsForExecute = {
       model,
@@ -335,6 +355,8 @@ export class MastraLLM extends MastraLLMBase {
           finishReason: props?.finishReason,
           usage: props?.usage,
           runId,
+          threadId,
+          resourceId,
         });
       },
       ...rest,
@@ -383,6 +405,8 @@ export class MastraLLM extends MastraLLMBase {
     temperature,
     toolChoice = 'auto',
     telemetry,
+    threadId,
+    resourceId,
     ...rest
   }: LLMStreamObjectOptions<T>) {
     const model = this.#model;
@@ -393,7 +417,7 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools({ tools, runId });
+    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId });
 
     const argsForExecute = {
       model,
@@ -413,6 +437,8 @@ export class MastraLLM extends MastraLLMBase {
           finishReason: props?.finishReason,
           usage: props?.usage,
           runId,
+          threadId,
+          resourceId,
         });
 
         if (
@@ -433,6 +459,8 @@ export class MastraLLM extends MastraLLMBase {
           finishReason: props?.finishReason,
           usage: props?.usage,
           runId,
+          threadId,
+          resourceId,
         });
       },
       ...rest,
