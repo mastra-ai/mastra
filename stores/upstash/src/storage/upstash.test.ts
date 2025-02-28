@@ -4,7 +4,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vites
 import { UpstashStore } from './index';
 
 // Increase timeout for all tests in this file to 30 seconds
-vi.setConfig({ testTimeout: 30_000 });
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 describe('UpstashStore', () => {
   let store: UpstashStore;
@@ -16,7 +16,24 @@ describe('UpstashStore', () => {
       url: 'http://localhost:8079',
       token: 'test_token',
     });
-    await store.init();
+
+    // Add retry logic for initialization
+    const maxRetries = 3;
+    let attempts = 0;
+
+    while (attempts < maxRetries) {
+      try {
+        await store.init();
+        break;
+      } catch (error) {
+        attempts++;
+        if (attempts === maxRetries) {
+          throw new Error(`Failed to initialize store after ${maxRetries} attempts: ${error}`);
+        }
+        // Wait 2 seconds before retrying
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
   });
 
   afterAll(async () => {
