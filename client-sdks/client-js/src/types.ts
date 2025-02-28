@@ -37,6 +37,7 @@ export interface GetAgentResponse {
   instructions: string;
   tools: Record<string, GetToolResponse>;
   provider: string;
+  modelId: string;
 }
 
 export interface GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> {

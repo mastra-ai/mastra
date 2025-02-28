@@ -12,7 +12,7 @@ export const useLogsByRunId = (runId: string) => {
   const transportId = transports[0];
 
   const client = new MastraClient({
-    baseUrl: 'http://localhost:4111',
+    baseUrl: '',
   });
 
   const fetchLogs = async (_runId?: string) => {
@@ -55,7 +55,7 @@ export const useLogTransports = () => {
 
   const fetchLogTransports = async () => {
     const client = new MastraClient({
-      baseUrl: 'http://localhost:4111',
+      baseUrl: '',
     });
 
     try {

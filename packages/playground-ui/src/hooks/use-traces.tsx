@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
-import { mastraClient } from '@/lib/mastra-client';
 import usePolling from '@/lib/polls';
+import { MastraClient } from '@mastra/client-js';
 
 import type { RefinedTrace } from '@/domains/traces/types';
 import { refineTraces } from '@/domains/traces/utils';
@@ -10,9 +10,13 @@ import { refineTraces } from '@/domains/traces/utils';
 export const useTraces = (componentName: string, baseUrl: string, isWorkflow: boolean = false) => {
   const [traces, setTraces] = useState<RefinedTrace[] | null>(null);
 
+  const client = new MastraClient({
+    baseUrl: baseUrl || '',
+  });
+
   const fetchFn = useCallback(async () => {
     try {
-      const res = await mastraClient(baseUrl).getTelemetry({
+      const res = await client.getTelemetry({
         attribute: {
           componentName,
         },
