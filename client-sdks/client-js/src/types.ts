@@ -178,3 +178,21 @@ export interface GetTelemetryParams {
   perPage?: number;
   attribute?: Record<string, string>;
 }
+
+export interface GetWorkflowWatchResponse {
+  activePaths: Array<{
+    stepId: string;
+    stepPath: string[];
+    status: 'completed' | 'suspended' | 'pending';
+  }>;
+  context: {
+    steps: Record<
+      string,
+      {
+        status: 'completed' | 'suspended' | 'running';
+        [key: string]: any;
+      }
+    >;
+  };
+  timestamp: number;
+}

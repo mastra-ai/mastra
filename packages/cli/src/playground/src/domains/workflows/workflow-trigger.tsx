@@ -29,7 +29,7 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
   const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
   const { isLoading, workflow } = useWorkflow(workflowId);
   const { executeWorkflow, isExecutingWorkflow } = useExecuteWorkflow();
-  const { watchWorkflow, watchResult } = useWatchWorkflow();
+  const { watchWorkflow, watchResult, isWatchingWorkflow } = useWatchWorkflow();
   const { resumeWorkflow, isResumingWorkflow } = useResumeWorkflow();
   const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
 
@@ -62,6 +62,8 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
 
     setResult(result);
   };
+
+  const workflowActivePaths = watchResult?.activePaths ?? [];
 
   useEffect(() => {
     if (!watchResult?.activePaths || !result?.runId) return;
@@ -173,8 +175,28 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
             }}
           />
         </div>
-
-        <div>
+        <div className="flex flex-col gap-2">
+          {workflowActivePaths.length > 0 &&
+            workflowActivePaths?.map((activePath: any, idx: number) => {
+              return (
+                <div key={idx} className="flex flex-col gap-1">
+                  {activePath?.stepPath?.map((sp: any, idx: number) => {
+                    return (
+                      <div key={idx} className="flex items-center gap-1">
+                        <Text variant="secondary" className="text-mastra-el-3  px-4" size="xs">
+                          {sp}{' '}
+                          {activePath?.status === 'completed'
+                            ? `completed 🟢`
+                            : sp === activePath?.stepId
+                              ? `${activePath?.status} 🟡`
+                              : `completed 🟢`}
+                        </Text>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
           <Text variant="secondary" className="text-mastra-el-3  px-4" size="xs">
             Output
           </Text>
