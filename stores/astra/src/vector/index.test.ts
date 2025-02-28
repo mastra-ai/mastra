@@ -3,7 +3,7 @@ import { vi, describe, it, expect, beforeAll, afterAll, test, beforeEach, afterE
 import { AstraVector } from './';
 
 // Give tests enough time to complete database operations
-vi.setConfig({ testTimeout: 3000000 });
+vi.setConfig({ testTimeout: 3000000, hookTimeout: 3000000 });
 
 // Helper function to wait for condition with timeout
 async function waitForCondition(
@@ -147,6 +147,7 @@ describe('AstraVector Integration Tests', () => {
       indexName: testIndexName,
       queryVector,
       topK: 2,
+      includeVector: true,
     });
 
     expect(results).toHaveLength(2);
@@ -285,7 +286,6 @@ describe('AstraVector Integration Tests', () => {
     it('validates $in operators', async () => {
       const invalidValues = [123, 'string', true, { key: 'value' }, {}, null];
       for (const val of invalidValues) {
-        console.log('val:', val);
         await expect(
           vectorDB.query({
             indexName: testIndexName2,
@@ -299,7 +299,6 @@ describe('AstraVector Integration Tests', () => {
     it('validates $nin operators', async () => {
       const invalidValues = [123, 'string', true, { key: 'value' }, {}, null];
       for (const val of invalidValues) {
-        console.log('val:', val);
         await expect(
           vectorDB.query({
             indexName: testIndexName2,
@@ -342,8 +341,6 @@ describe('AstraVector Integration Tests', () => {
       const invalidNumericValues = [[], {}, null];
       for (const op of numOps) {
         for (const val of invalidNumericValues) {
-          console.log('op:', op);
-          console.log('val:', val);
           await expect(
             vectorDB.query({
               indexName: testIndexName2,
