@@ -1,5 +1,13 @@
 # @mastra/pg
 
+## 0.1.7
+
+### Patch Changes
+
+- 1da20e7: Update typechecks for positional args
+- Updated dependencies [1da20e7]
+  - @mastra/core@0.4.4
+
 ## 0.1.7-alpha.0
 
 ### Patch Changes

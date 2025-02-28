@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.4.4
+
+### Patch Changes
+
+- 1da20e7: Update typechecks for positional args
+
 ## 0.4.4-alpha.0
 
 ### Patch Changes
