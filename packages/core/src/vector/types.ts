@@ -26,11 +26,15 @@ export interface UpsertVectorParams {
   ids?: string[];
 }
 
+export type UpsertVectorArgs = [string, number[][], Record<string, any>[], string[]?];
+
 export interface CreateIndexParams {
   indexName: string;
   dimension: number;
   metric?: 'cosine' | 'euclidean' | 'dotproduct';
 }
+
+export type CreateIndexArgs = [string, number, 'cosine' | 'euclidean' | 'dotproduct'];
 
 export interface QueryVectorParams {
   indexName: string;
@@ -40,4 +44,11 @@ export interface QueryVectorParams {
   includeVector?: boolean;
 }
 
-export type ParamsToArgs<T> = [string | T, ...Array<T[Exclude<keyof T, 'indexName'>]>];
+export type QueryVectorArgs = [string, number[], number, VectorFilter?, boolean?];
+
+// Checks for object format, then checks for query vector args, then upsert vector args, then create index args
+export type ParamsToArgs<T> =
+  | [T] // object format
+  | (T extends QueryVectorParams ? QueryVectorArgs : never)
+  | (T extends UpsertVectorParams ? UpsertVectorArgs : never)
+  | (T extends CreateIndexParams ? CreateIndexArgs : never);
