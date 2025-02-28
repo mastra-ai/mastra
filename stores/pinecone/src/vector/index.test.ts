@@ -913,10 +913,26 @@ describe.skip('PineconeVector Integration Tests', () => {
     });
 
     afterAll(async () => {
-      await vectorDB.deleteIndex(indexName);
-      await vectorDB.deleteIndex(indexName2);
-      await vectorDB.deleteIndex(indexName3);
-      await vectorDB.deleteIndex(indexName4);
+      try {
+        await vectorDB.deleteIndex(indexName);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      try {
+        await vectorDB.deleteIndex(indexName2);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      try {
+        await vectorDB.deleteIndex(indexName3);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      try {
+        await vectorDB.deleteIndex(indexName4);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
     });
 
     beforeEach(async () => {
