@@ -1,10 +1,9 @@
+import { AgentTraces } from '@mastra/playground-ui';
 import { useParams } from 'react-router';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { AgentInformation } from '@/domains/agents/agent-information';
-import { AgentTraces } from '@/domains/agents/agent-traces';
-import { TraceProvider } from '@/domains/traces/context/trace-context';
 import { useAgent } from '@/hooks/use-agents';
 
 function AgentTracesPage() {
@@ -24,11 +23,7 @@ function AgentTracesPage() {
     );
   }
 
-  return (
-    <TraceProvider>
-      <AgentTraces agentId={agentId!} agentName={agent?.name!} />
-    </TraceProvider>
-  );
+  return <AgentTraces agentName={agent?.name!} baseUrl="" sidebarChild={<AgentInformation agentId={agentId!} />} />;
 }
 
 export default AgentTracesPage;

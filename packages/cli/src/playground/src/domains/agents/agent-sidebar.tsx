@@ -11,10 +11,20 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 import { cn } from '@/lib/utils';
 
-import { useDeleteThread, useThreads } from '@/hooks/use-memory';
+import { useDeleteThread } from '@/hooks/use-memory';
+import { StorageThreadType } from '@mastra/core';
 
-export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId: string }) {
-  const { threads, isLoading } = useThreads({ resourceid: agentId, agentId });
+export function AgentSidebar({
+  agentId,
+  threadId,
+  threads,
+  isLoading,
+}: {
+  agentId: string;
+  threadId: string;
+  threads?: StorageThreadType[];
+  isLoading: boolean;
+}) {
   const { deleteThread } = useDeleteThread();
   const navigate = useNavigate();
 
@@ -53,7 +63,7 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
             <Plus />
           </Button>
         </div>
-        <div className="text-small text-mastra-el-3">Your conversations will appear here once you start chatting!</div>
+        <div className="text-sm text-mastra-el-3">Your conversations will appear here once you start chatting!</div>
       </div>
     );
   }
@@ -61,7 +71,7 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
   return (
     <ScrollArea className="h-full px-4 pb-4 w-[256px]">
       <div className="space-y-2">
-        <div className="flex justify-between items-center pl-2 sticky top-0 bg-mastra-bg-2 pt-4">
+        <div className="flex justify-between items-center pl-2 sticky top-0 pt-4">
           <div className="text-sm text-mastra-el-5">Chat history</div>
           <Button variant="primary" size="icon" onClick={() => navigate(`/agents/${agentId}/chat/${uuid()}`)}>
             <Plus />
@@ -72,7 +82,7 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
           return (
             <div
               className={cn(
-                'flex cursor-pointer w-full px-2 items-center focus-visible:outline-none transition-colors focus-visible:ring-1 focus-visible:ring-mastra-border-4 gap-3 rounded-xs group text-small hover:bg-mastra-el-6/5',
+                'flex cursor-pointer w-full px-2 items-center focus-visible:outline-none transition-colors  focus-visible:ring-1 focus-visible:ring-mastra-border-4 gap-3 rounded-sm group text-sm hover:bg-mastra-el-6/5',
                 isActive ? 'bg-mastra-el-6/5' : '',
               )}
               key={thread.id}
@@ -80,7 +90,7 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
               <Link to={`/agents/${agentId}/chat/${thread.id}`} className="flex-1">
                 <p
                   className={cn(
-                    'py-[0.38rem] text-mastra-el-6/60 group-hover:text-mastra-el-6 transition-all  capitalize ',
+                    'py-[0.38rem] text-mastra-el-6/60 group-hover:text-mastra-el-6 transition-all text-sm  capitalize ',
                     isActive ? 'text-mastra-el-6' : '',
                   )}
                 >

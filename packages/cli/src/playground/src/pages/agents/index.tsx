@@ -1,84 +1,76 @@
-import { Bot, BotMessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router';
-
-import { Button } from '@/components/ui/button';
 import { Header } from '@/components/ui/header';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
+import { AgentsTable } from '@mastra/playground-ui';
 
 import { useAgents } from '@/hooks/use-agents';
+import { Barcode } from 'lucide-react';
 
 function Agents() {
   const { agents, isLoading } = useAgents();
   const navigate = useNavigate();
 
+  const agentListData = Object.entries(agents).map(([key, agent]) => ({
+    id: key,
+    name: agent.name,
+    description: agent.instructions,
+    provider: agent?.provider,
+    modelId: agent?.modelId,
+  }));
+
   return (
-    <div className="flex flex-col h-full relative overflow-hidden">
-      <Header title="Agents" />
-      <main className="flex-1 relative overflow-hidden">
-        <ScrollArea className="rounded-lg h-full">
-          <Table>
-            <TableHeader className="bg-[#171717] sticky top-0 z-10">
-              <TableRow className="border-gray-6 border-b-[0.1px] text-[0.8125rem]">
-                <TableHead className="w-[50px]"></TableHead>
-                <TableHead className="text-mastra-el-3">Name</TableHead>
-                <TableHead className="text-mastra-el-3 w-1/2">Instruction</TableHead>
-                <TableHead className="text-mastra-el-3">Provider</TableHead>
-                <TableHead className="text-mastra-el-3">Model</TableHead>
-                <TableHead className="text-mastra-el-3">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody className="border-b border-gray-6">
-              {isLoading ? (
-                <TableRow className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem]">
-                  <TableCell>
-                    <Skeleton className="h-8 w-8" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-8 w-full" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-8 w-full" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-8 w-full" />
-                  </TableCell>
-                </TableRow>
-              ) : (
-                Object.entries(agents).map(([key, agent]) => (
-                  <TableRow key={key} className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem]">
-                    <TableCell>
-                      <div className="h-8 w-full flex items-center justify-center">
-                        <Bot className="h-4 w-4 text-mastra-el-5" />
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-medium text-mastra-el-5">{agent.name}</TableCell>
-                    <TableCell className="truncate w-1/2 max-w-[500px] text-mastra-el-5">
-                      {agent.instructions}
-                    </TableCell>
-                    <TableCell className="text-mastra-el-5 text-sm">{agent.provider?.toUpperCase()}</TableCell>
-                    <TableCell className="text-mastra-el-5 text-sm">{agent.modelId}</TableCell>
-                    <TableCell className="text-mastra-el-5 text-sm">
+    <div className="flex flex-col relative overflow-hidden">
+      <section className="flex-1 relative overflow-hidden">
+        <ScrollArea className="h-full">
+          <section className="">
+            <AgentsTable
+              isLoading={isLoading}
+              title={<Header title="Agents" className="border-0" />}
+              agentsList={agentListData}
+              columns={[
+                {
+                  id: 'name',
+                  header: 'Name',
+                  cell: ({ row }) => (
+                    <button
+                      className="w-full h-full flex justify-start py-4"
+                      onClick={() => {
+                        navigate(`/agents/${row.original.id}/chat`);
+                      }}
+                    >
                       <span
                         onClick={() => {
-                          navigate(`/agents/${key}/chat`);
+                          navigate(`/agents/${row.original.id}/chat`);
                         }}
-                        className="hover:no-underline"
+                        className="text-mastra-el-5 text-sm  truncate"
                       >
-                        <Button size="sm" variant="outline">
-                          <BotMessageSquare className="h-4 w-4 text-inherit" />
-                          Chat with agent
-                        </Button>
+                        {row.original.name}
                       </span>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                    </button>
+                  ),
+                },
+
+                {
+                  id: 'model',
+                  header: 'Model',
+                  cell: ({ row }) => (
+                    <button
+                      className="w-full h-full flex justify-end p-4"
+                      onClick={() => {
+                        navigate(`/agents/${row.original.id}/chat`);
+                      }}
+                    >
+                      <span className="text-mastra-el-5 text-sm flex items-center gap-2">
+                        <span>{row.original.modelId}</span> <Barcode className="w-4 h-4" />
+                      </span>
+                    </button>
+                  ),
+                },
+              ]}
+            />
+          </section>
         </ScrollArea>
-      </main>
+      </section>
     </div>
   );
 }

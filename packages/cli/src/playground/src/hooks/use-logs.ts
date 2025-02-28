@@ -12,13 +12,18 @@ export const useLogsByRunId = (runId: string) => {
   const transportId = transports[0];
 
   const client = new MastraClient({
-    baseUrl: 'http://localhost:4111',
+    baseUrl: '',
   });
 
   const fetchLogs = async (_runId?: string) => {
+    const runIdToUse = _runId ?? runId;
+    if (!runIdToUse) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
-      const res = await client.getLogForRun({ transportId, runId: _runId ?? runId });
+      const res = await client.getLogForRun({ transportId, runId: runIdToUse });
       setLogs(
         res.map(log => ({
           level: log.level,
@@ -55,7 +60,7 @@ export const useLogTransports = () => {
 
   const fetchLogTransports = async () => {
     const client = new MastraClient({
-      baseUrl: 'http://localhost:4111',
+      baseUrl: '',
     });
 
     try {

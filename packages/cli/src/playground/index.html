@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/mastra.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Mastra Tools Playground</title>
+    <title>Mastra Playground</title>
     <script>
       function connectSSE() {
         const events = new EventSource('/refresh-events');
@@ -29,7 +29,7 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root" class="dark"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

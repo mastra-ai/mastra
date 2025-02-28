@@ -11,4 +11,5 @@ export interface ChatProps {
   threadId?: string;
   initialMessages?: Message[];
   memory?: boolean;
+  url?: string;
 }

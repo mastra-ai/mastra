@@ -1,30 +1,21 @@
-import type { Agent } from '@mastra/core/agent';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-
-interface PlaygroundAgent extends Agent {
-  provider: string;
-  modelId?: string;
-}
+import { GetAgentResponse, MastraClient } from '@mastra/client-js';
 
 export const useAgents = () => {
-  const [agents, setAgents] = useState<Record<string, PlaygroundAgent>>({});
+  const [agents, setAgents] = useState<Record<string, GetAgentResponse>>({});
   const [isLoading, setIsLoading] = useState(true);
+
+  const client = new MastraClient({
+    baseUrl: '',
+  });
 
   useEffect(() => {
     const fetchAgents = async () => {
       setIsLoading(true);
       try {
-        const res = await fetch('/api/agents');
-        if (!res.ok) {
-          const error = await res.json();
-          setAgents({});
-          console.error('Error fetching agents', error);
-          toast.error(error?.error || 'Error fetching agents');
-          return;
-        }
-        const data = await res.json();
-        setAgents(data);
+        const res = await client.getAgents();
+        setAgents(res);
       } catch (error) {
         setAgents({});
         console.error('Error fetching agents', error);
@@ -41,8 +32,12 @@ export const useAgents = () => {
 };
 
 export const useAgent = (agentId: string) => {
-  const [agent, setAgent] = useState<PlaygroundAgent | null>(null);
+  const [agent, setAgent] = useState<GetAgentResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const client = new MastraClient({
+    baseUrl: '',
+  });
 
   useEffect(() => {
     const fetchAgent = async () => {
@@ -53,16 +48,9 @@ export const useAgent = (agentId: string) => {
           setIsLoading(false);
           return;
         }
-        const res = await fetch(`/api/agents/${agentId}`);
-        if (!res.ok) {
-          const error = await res.json();
-          setAgent(null);
-          console.error('Error fetching agent', error);
-          toast.error(error?.error || 'Error fetching agent');
-          return;
-        }
-        const agent = await res.json();
-        setAgent(agent);
+        const res = await client.getAgent(agentId).details();
+
+        setAgent(res);
       } catch (error) {
         setAgent(null);
         console.error('Error fetching agent', error);
