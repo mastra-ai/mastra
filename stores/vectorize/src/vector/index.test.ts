@@ -3,6 +3,8 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } 
 
 import { CloudflareVector } from './';
 
+vi.setConfig({ testTimeout: 80_000, hookTimeout: 80_000 });
+
 function waitUntilReady(vector: CloudflareVector, indexName: string) {
   return new Promise(resolve => {
     const interval = setInterval(async () => {
@@ -355,7 +357,7 @@ describe('CloudflareVector', () => {
 
       const stats = await vectorDB.describeIndex(testIndexName2);
       expect(stats.count).toBe(vectors.length);
-    }, 300000);
+    }, 800000);
 
     afterAll(async () => {
       const currentMetadata = await vectorDB.listMetadataIndexes(testIndexName2);
@@ -363,7 +365,7 @@ describe('CloudflareVector', () => {
         await vectorDB.deleteMetadataIndex(testIndexName2, propertyName as string);
       }
       await vectorDB.deleteIndex(testIndexName2);
-    }, 300000);
+    }, 800000);
 
     describe('Basic Equality Operators', () => {
       it('filters with $eq operator', async () => {
@@ -781,7 +783,7 @@ describe('CloudflareVector', () => {
         expect(results.length).toBeGreaterThan(0);
       });
     });
-  }, 300000);
+  }, 800000);
   describe('Deprecation Warnings', () => {
     const indexName = 'testdeprecationwarnings';
 
@@ -925,5 +927,5 @@ describe('CloudflareVector', () => {
       expect(Array.isArray(upsertResults)).toBe(true);
       expect(upsertResults).toHaveLength(1);
     });
-  }, 30000);
+  }, 80000);
 });
