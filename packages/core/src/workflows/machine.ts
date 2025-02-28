@@ -5,7 +5,6 @@ import sift from 'sift';
 import { assign, createActor, fromPromise, setup } from 'xstate';
 import type { MachineContext, Snapshot } from 'xstate';
 import type { z } from 'zod';
-import type { AnyEventObject } from 'xstate';
 
 import type { IAction, MastraPrimitives } from '../action';
 import type { Logger } from '../logger';
@@ -30,7 +29,7 @@ import type {
   WorkflowState,
 } from './types';
 import {
-  getActivePathsAndStatus,
+  getResultActivePaths,
   getStepResult,
   getSuspendedPaths,
   isErrorEvent,
@@ -38,11 +37,6 @@ import {
   recursivelyCheckForFinalState,
 } from './utils';
 import type { WorkflowInstance } from './workflow-instance';
-
-type SuspendEvent = {
-  type: 'SUSPENDED';
-  suspendPayload?: any;
-};
 
 export class Machine<
   TSteps extends Step<any, any, any>[] = any,
@@ -203,15 +197,9 @@ export class Machine<
           this.#executionSpan?.end();
           resolve({
             results: state.context.steps,
-            activePaths: getActivePathsAndStatus(state.value as Record<string, string>).reduce((acc, curr) => {
-              const entry: { status: string; suspendPayload?: any } = { status: curr.status };
-              if (curr.status === 'suspended') {
-                // @ts-ignore
-                entry.suspendPayload = state?.context?.steps?.[curr.stepId]?.suspendPayload;
-              }
-              acc.set(curr.stepId, entry);
-              return acc;
-            }, new Map<string, { status: string; suspendPayload?: any }>()),
+            activePaths: getResultActivePaths(
+              state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
+            ),
           });
         } catch (error) {
           // If snapshot persistence fails, we should still resolve
@@ -222,15 +210,9 @@ export class Machine<
           this.#executionSpan?.end();
           resolve({
             results: state.context.steps,
-            activePaths: getActivePathsAndStatus(state.value as Record<string, string>).reduce((acc, curr) => {
-              const entry: { status: string; suspendPayload?: any } = { status: curr.status };
-              if (curr.status === 'suspended') {
-                // @ts-ignore
-                entry.suspendPayload = state.context.steps[curr.stepId].suspendPayload;
-              }
-              acc.set(curr.stepId, entry);
-              return acc;
-            }, new Map<string, { status: string; suspendPayload?: any }>()),
+            activePaths: getResultActivePaths(
+              state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
+            ),
           });
         }
       });

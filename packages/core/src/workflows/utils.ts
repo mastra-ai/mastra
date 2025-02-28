@@ -144,3 +144,18 @@ export const updateStepInHierarchy = (value: Record<string, any>, targetStepId: 
 
   return result;
 };
+
+export function getResultActivePaths(state: {
+  value: Record<string, string>;
+  context: { steps: Record<string, any> };
+}) {
+  return getActivePathsAndStatus(state.value).reduce((acc, curr) => {
+    const entry: { status: string; suspendPayload?: any } = { status: curr.status };
+    if (curr.status === 'suspended') {
+      // @ts-ignore
+      entry.suspendPayload = state.context.steps[curr.stepId].suspendPayload;
+    }
+    acc.set(curr.stepId, entry);
+    return acc;
+  }, new Map<string, { status: string; suspendPayload?: any }>());
+}
