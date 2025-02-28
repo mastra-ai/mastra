@@ -12,6 +12,7 @@ describe('UpstashStore', () => {
   const testTableName2 = 'test_table2';
 
   beforeAll(async () => {
+    console.log('Initializing UpstashStore...');
     store = new UpstashStore({
       url: 'http://localhost:8079',
       token: 'test_token',
@@ -34,6 +35,7 @@ describe('UpstashStore', () => {
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
+    console.log('UpstashStore initialized');
   });
 
   afterAll(async () => {
