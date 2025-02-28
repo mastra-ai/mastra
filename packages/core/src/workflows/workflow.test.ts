@@ -1538,7 +1538,13 @@ describe('Workflow', async () => {
         toneScore: { score: 0.8 },
         completenessScore: { score: 0.7 },
       });
-      const improveResponseAction = vi.fn().mockResolvedValue({ improvedOutput: 'improved output' });
+      const improveResponseAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend();
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ improvedOutput: 'improved output' }));
       const evaluateImprovedAction = vi.fn().mockResolvedValue({
         toneScore: { score: 0.9 },
         completenessScore: { score: 0.8 },
@@ -1615,13 +1621,33 @@ describe('Workflow', async () => {
       expect(initialResult.results.promptAgent.status).toBe('suspended');
       expect(promptAgentAction).toHaveBeenCalledTimes(1);
 
-      const resumeResult = await wf.resume({ runId: run.runId, stepId: 'promptAgent', context: newCtx });
+      const firstResumeResult = await wf.resume({ runId: run.runId, stepId: 'promptAgent', context: newCtx });
 
-      if (!resumeResult) {
+      if (!firstResumeResult) {
         throw new Error('Resume failed to return a result');
       }
 
-      expect(resumeResult.results).toEqual({
+      expect(firstResumeResult.activePaths.size).toBe(1);
+      expect(firstResumeResult.activePaths.get('improveResponse')?.status).toBe('suspended');
+      expect(firstResumeResult.results).toEqual({
+        getUserInput: { status: 'success', output: { userInput: 'test input' } },
+        promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: {
+            toneScore: { score: 0.8 },
+            completenessScore: { score: 0.7 },
+          },
+        },
+        improveResponse: { status: 'suspended' },
+      });
+
+      const secondResumeResult = await wf.resume({ runId: run.runId, stepId: 'improveResponse', context: newCtx });
+      if (!secondResumeResult) {
+        throw new Error('Resume failed to return a result');
+      }
+
+      expect(secondResumeResult.results).toEqual({
         getUserInput: { status: 'success', output: { userInput: 'test input' } },
         promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
         evaluateToneConsistency: {
