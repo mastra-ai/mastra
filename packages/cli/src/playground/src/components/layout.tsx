@@ -11,7 +11,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <ThemeProvider defaultTheme="dark" attribute="class">
         <SidebarProvider>
           <AppSidebar />
-          <section className="py-3 pr-3 w-full">
+          <section className="py-3 pr-3 w-full h-full">
             <div className="w-full h-full overflow-hidden rounded-sm border-[0.5px] border-[#303030] bg-[#0F0F0F]">
               {children}
             </div>

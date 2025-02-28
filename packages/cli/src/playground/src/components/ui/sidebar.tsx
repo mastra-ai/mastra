@@ -137,7 +137,7 @@ const SidebarProvider = React.forwardRef<
             } as React.CSSProperties
           }
           className={cn(
-            'group/sidebar-wrapper has-[[data-variant=inset]]:bg-sidebar flex min-h-svh w-full bg-black',
+            'group/sidebar-wrapper has-[[data-variant=inset]]:bg-sidebar flex h-svh w-full bg-black',
             className,
           )}
           ref={ref}
