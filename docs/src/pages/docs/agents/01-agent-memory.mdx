@@ -21,7 +21,8 @@ import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   name: "Project Manager",
-  instructions: "You are a project manager. You are responsible for managing the project and the team.",
+  instructions:
+    "You are a project manager. You are responsible for managing the project and the team.",
   model: openai("gpt-4o-mini"),
 });
 
@@ -35,7 +36,7 @@ await agent.stream("When will the project be completed?", {
 
 The key to getting good responses from LLMs is feeding them the right context.
 
-Mastra has a Memory API that stores and manages conversation history and contextual information. The Memory API uses a storage backend to persist conversation history and contextual information (more on this later). 
+Mastra has a Memory API that stores and manages conversation history and contextual information. The Memory API uses a storage backend to persist conversation history and contextual information (more on this later).
 
 The Memory API uses two main mechanisms to maintain context in conversations, recent message history and semantic search.
 
@@ -87,6 +88,7 @@ await agent.stream("What did we decide about the search feature last week?", {
 ```
 
 When semantic search is used:
+
 1. The message is converted to a vector embedding
 2. Similar messages are found using vector similarity search
 3. Surrounding context is included based on `messageRange`
@@ -95,8 +97,8 @@ When semantic search is used:
 You can also customize the vector database and embedder:
 
 ```typescript copy showLineNumbers
-import { openai } from '@ai-sdk/openai';
-import { PgVector } from '@mastra/pg';
+import { openai } from "@ai-sdk/openai";
+import { PgVector } from "@mastra/pg";
 
 const memory = new Memory({
   // Use a different vector database (libsql is default)
@@ -104,7 +106,7 @@ const memory = new Memory({
     connectionString: "postgresql://user:pass@localhost:5432/db",
   }),
   // Or a different embedder (fastembed is default)
-  embedder: openai.embedding('text-embedding-3-small'),
+  embedder: openai.embedding("text-embedding-3-small"),
 });
 ```
 
@@ -525,3 +527,46 @@ The `maskStreamTags` utility:
 - Removes content between specified XML tags in a streaming response
 - Optionally provides lifecycle callbacks for memory updates
 - Handles tags that might be split across stream chunks
+
+### Accessing Thread and Resource IDs in Tools
+
+When creating custom tools, you can access the `threadId` and `resourceId` directly in the tool's execute function. These parameters are automatically provided by the Mastra runtime:
+
+```typescript copy showLineNumbers
+import { Memory } from "@mastra/memory";
+const memory = new Memory();
+
+const myTool = createTool({
+  id: "Thread Info Tool",
+  inputSchema: z.object({
+    fetchMessages: z.boolean().optional(),
+  }),
+  description: "A tool that demonstrates accessing thread and resource IDs",
+  execute: async ({ threadId, resourceId, context }) => {
+    // threadId and resourceId are directly available in the execute parameters
+    console.log(`Executing in thread ${threadId}`);
+
+    if (!context.fetchMessages) {
+      return { threadId, resourceId };
+    }
+
+    const recentMessages = await memory.query({
+      threadId,
+      selectBy: { last: 5 },
+    });
+
+    return {
+      threadId,
+      resourceId,
+      messageCount: recentMessages.length,
+    };
+  },
+});
+```
+
+This allows tools to:
+
+- Access the current conversation context
+- Store or retrieve thread-specific data
+- Associate tool actions with specific users/resources
+- Maintain state across multiple tool invocations
