@@ -128,5 +128,10 @@
     "@mastra/voice-playai": "0.1.1",
     "@mastra/voice-speechify": "0.1.1"
   },
-  "changesets": []
+  "changesets": [
+    "cool-papers-check",
+    "lucky-eels-post",
+    "nasty-poems-shave",
+    "seven-cows-draw"
+  ]
 }
