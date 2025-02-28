@@ -1530,7 +1530,7 @@ describe('Workflow', async () => {
       const promptAgentAction = vi
         .fn()
         .mockImplementationOnce(async ({ suspend }) => {
-          await suspend();
+          await suspend({ testPayload: 'hello' });
           return undefined;
         })
         .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
@@ -1608,10 +1608,10 @@ describe('Workflow', async () => {
       expect(promptAgentAction).toHaveBeenCalledTimes(1);
       expect(initialResult.activePaths.size).toBe(1);
       expect(initialResult.activePaths.get('promptAgent')?.status).toBe('suspended');
-
+      expect(initialResult.activePaths.get('promptAgent')?.suspendPayload).toEqual({ testPayload: 'hello' });
       expect(initialResult.results).toEqual({
         getUserInput: { status: 'success', output: { userInput: 'test input' } },
-        promptAgent: { status: 'suspended' },
+        promptAgent: { status: 'suspended', suspendPayload: { testPayload: 'hello' } },
       });
 
       const newCtx = {

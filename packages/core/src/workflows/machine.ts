@@ -5,6 +5,7 @@ import sift from 'sift';
 import { assign, createActor, fromPromise, setup } from 'xstate';
 import type { MachineContext, Snapshot } from 'xstate';
 import type { z } from 'zod';
+import type { AnyEventObject } from 'xstate';
 
 import type { IAction, MastraPrimitives } from '../action';
 import type { Logger } from '../logger';
@@ -37,6 +38,11 @@ import {
   recursivelyCheckForFinalState,
 } from './utils';
 import type { WorkflowInstance } from './workflow-instance';
+
+type SuspendEvent = {
+  type: 'SUSPENDED';
+  suspendPayload?: any;
+};
 
 export class Machine<
   TSteps extends Step<any, any, any>[] = any,
@@ -111,7 +117,7 @@ export class Machine<
     snapshot?: Snapshot<any>;
   } = {}): Promise<{
     results: Record<string, StepResult<any>>;
-    activePaths: Map<string, { status: string }>;
+    activePaths: Map<string, { status: string; suspendPayload?: any }>;
   }> {
     if (snapshot) {
       // First, let's log the incoming snapshot for debugging
@@ -198,9 +204,14 @@ export class Machine<
           resolve({
             results: state.context.steps,
             activePaths: getActivePathsAndStatus(state.value as Record<string, string>).reduce((acc, curr) => {
-              acc.set(curr.stepId, { status: curr.status });
+              const entry: { status: string; suspendPayload?: any } = { status: curr.status };
+              if (curr.status === 'suspended') {
+                // @ts-ignore
+                entry.suspendPayload = state?.context?.steps?.[curr.stepId]?.suspendPayload;
+              }
+              acc.set(curr.stepId, entry);
               return acc;
-            }, new Map<string, { status: string }>()),
+            }, new Map<string, { status: string; suspendPayload?: any }>()),
           });
         } catch (error) {
           // If snapshot persistence fails, we should still resolve
@@ -212,9 +223,14 @@ export class Machine<
           resolve({
             results: state.context.steps,
             activePaths: getActivePathsAndStatus(state.value as Record<string, string>).reduce((acc, curr) => {
-              acc.set(curr.stepId, { status: curr.status });
+              const entry: { status: string; suspendPayload?: any } = { status: curr.status };
+              if (curr.status === 'suspended') {
+                // @ts-ignore
+                entry.suspendPayload = state.context.steps[curr.stepId].suspendPayload;
+              }
+              acc.set(curr.stepId, entry);
               return acc;
-            }, new Map<string, { status: string }>()),
+            }, new Map<string, { status: string; suspendPayload?: any }>()),
           });
         }
       });
@@ -323,15 +339,16 @@ export class Machine<
 
         const result = await stepNode.config.handler({
           context: resolvedData,
-          suspend: async () => {
+          suspend: async (payload?: any) => {
             await this.#workflowInstance.suspend(stepNode.step.id, this);
             if (this.#actor) {
               // Update context with current result
               context.steps[stepNode.step.id] = {
                 status: 'suspended',
+                suspendPayload: payload,
               };
               this.logger.debug(`Sending SUSPENDED event for step ${stepNode.step.id}`);
-              this.#actor?.send({ type: 'SUSPENDED', stepId: stepNode.step.id });
+              this.#actor?.send({ type: 'SUSPENDED', suspendPayload: payload, stepId: stepNode.step.id });
             } else {
               this.logger.debug(`Actor not available for step ${stepNode.step.id}`);
             }
@@ -689,13 +706,16 @@ export class Machine<
               });
             },
             assign({
-              steps: ({ context }: { context: WorkflowContext }) => ({
-                ...context.steps,
-                [stepNode.step.id]: {
-                  ...(context?.steps?.[stepNode.step.id] || {}),
-                  status: 'suspended',
-                },
-              }),
+              steps: ({ context, event }: { context: WorkflowContext; event: WorkflowEvent }) => {
+                return {
+                  ...context.steps,
+                  [stepNode.step.id]: {
+                    ...(context?.steps?.[stepNode.step.id] || {}),
+                    status: 'suspended',
+                    suspendPayload: event.type === 'SUSPENDED' ? event.suspendPayload : undefined,
+                  },
+                };
+              },
             }),
           ],
         },
@@ -711,12 +731,15 @@ export class Machine<
               target: 'suspended',
               actions: [
                 assign({
-                  steps: ({ context }: { context: WorkflowContext }) => ({
-                    ...context.steps,
-                    [stepNode.step.id]: {
-                      status: 'suspended',
-                    },
-                  }),
+                  steps: ({ context, event }: { context: WorkflowContext; event: WorkflowEvent }) => {
+                    return {
+                      ...context.steps,
+                      [stepNode.step.id]: {
+                        status: 'suspended',
+                        suspendPayload: event.type === 'SUSPENDED' ? event.suspendPayload : undefined,
+                      },
+                    };
+                  },
                 }),
               ],
             },
