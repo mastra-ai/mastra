@@ -1,4 +1,5 @@
 export type GithubConfig = {
-    PERSONAL_ACCESS_TOKEN: string;
-    [key: string]: any;
+  PERSONAL_ACCESS_TOKEN: string;
+  [key: string]: any;
 };
+

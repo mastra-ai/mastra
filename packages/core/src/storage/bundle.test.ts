@@ -1,7 +1,7 @@
 import { spawn as spwn } from 'child_process';
 import type { RollupOutput } from 'rollup';
 import { rollup } from 'rollup';
-import { expect, beforeAll, describe, it } from 'vitest';
+import { expect, beforeAll, it } from 'vitest';
 
 const spawn = (cmd: string, args: ReadonlyArray<string>) =>
   new Promise((resolve, reject) => {

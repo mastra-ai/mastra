@@ -1,5 +1,13 @@
-import { type Filter } from '@mastra/core/filter';
-import { MastraVector, type QueryResult, type IndexStats } from '@mastra/core/vector';
+import { MastraVector } from '@mastra/core/vector';
+import type {
+  QueryResult,
+  IndexStats,
+  CreateIndexParams,
+  UpsertVectorParams,
+  QueryVectorParams,
+  VectorFilter,
+  ParamsToArgs,
+} from '@mastra/core/vector';
 import { Pinecone } from '@pinecone-database/pinecone';
 
 import { PineconeFilterTranslator } from './filter';
@@ -27,11 +35,11 @@ export class PineconeVector extends MastraVector {
       }) ?? baseClient;
   }
 
-  async createIndex(
-    indexName: string,
-    dimension: number,
-    metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
-  ): Promise<void> {
+  async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
+
+    const { indexName, dimension, metric = 'cosine' } = params;
+
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new Error('Dimension must be a positive integer');
     }
@@ -48,12 +56,11 @@ export class PineconeVector extends MastraVector {
     });
   }
 
-  async upsert(
-    indexName: string,
-    vectors: number[][],
-    metadata?: Record<string, any>[],
-    ids?: string[],
-  ): Promise<string[]> {
+  async upsert(...args: ParamsToArgs<UpsertVectorParams>): Promise<string[]> {
+    const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
+
+    const { indexName, vectors, metadata, ids } = params;
+
     const index = this.client.Index(indexName);
 
     // Generate IDs if not provided
@@ -75,22 +82,19 @@ export class PineconeVector extends MastraVector {
     return vectorIds;
   }
 
-  transformFilter(filter?: Filter) {
-    const pineconeFilter = new PineconeFilterTranslator();
-    const translatedFilter = pineconeFilter.translate(filter);
-    return translatedFilter;
+  transformFilter(filter?: VectorFilter) {
+    const translator = new PineconeFilterTranslator();
+    return translator.translate(filter);
   }
 
-  async query(
-    indexName: string,
-    queryVector: number[],
-    topK: number = 10,
-    filter?: Filter,
-    includeVector: boolean = false,
-  ): Promise<QueryResult[]> {
+  async query(...args: ParamsToArgs<QueryVectorParams>): Promise<QueryResult[]> {
+    const params = this.normalizeArgs<QueryVectorParams>('query', args);
+
+    const { indexName, queryVector, topK = 10, filter, includeVector = false } = params;
+
     const index = this.client.Index(indexName);
 
-    const translatedFilter = this.transformFilter(filter);
+    const translatedFilter = this.transformFilter(filter) ?? undefined;
 
     const results = await index.query({
       vector: queryVector,

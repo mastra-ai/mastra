@@ -29,13 +29,16 @@ const vectorize = new CloudflareVector({
   apiToken: process.env.CF_API_TOKEN,
 });
 
-await vectorize.createIndex('test_collection', 1536);
+await vectorize.createIndex({
+  indexName: 'test_collection',
+  dimension: 1536,
+});
 
-await vectorize.upsert(
-  'test_collection',
-  embeddings,
-  chunks?.map(chunk => ({ text: chunk.text })),
-);
+await vectorize.upsert({
+  indexName: 'test_collection',
+  vectors: embeddings,
+  metadata: chunks?.map(chunk => ({ text: chunk.text })),
+});
 ```
 {/* 
 <br />

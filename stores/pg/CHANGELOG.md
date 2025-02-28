@@ -1,5 +1,28 @@
 # @mastra/pg
 
+## 0.1.6-alpha.2
+
+### Patch Changes
+
+- 5325d6a: A bug fix earlier today unmasked that the next/prev settings for PG semantic recall were swapped
+- Updated dependencies [2512a93]
+- Updated dependencies [e62de74]
+  - @mastra/core@0.4.3-alpha.2
+
+## 0.1.6-alpha.1
+
+### Patch Changes
+
+- 0d185b1: Ensure proper message sort order for tool calls and results when using Memory semanticRecall feature
+- f6a1de3: Renamed defineIndex to buildIndex
+- Updated dependencies [0d185b1]
+- Updated dependencies [ed55f1d]
+- Updated dependencies [8d13b14]
+- Updated dependencies [3ee4831]
+- Updated dependencies [108793c]
+- Updated dependencies [5f28f44]
+  - @mastra/core@0.4.3-alpha.1
+
 ## 0.1.6-alpha.0
 
 ### Patch Changes

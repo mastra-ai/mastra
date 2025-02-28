@@ -19,21 +19,21 @@ const vectorStore = new PineconeVector(
 );
 
 // Create a new index
-await vectorStore.createIndex('my-index', 1536, 'cosine');
+await vectorStore.createIndex({ indexName: 'my-index', dimension: 1536, metric: 'cosine' });
 
 // Add vectors
 const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
 const metadata = [{ text: 'doc1' }, { text: 'doc2' }];
-const ids = await vectorStore.upsert('my-index', vectors, metadata);
+const ids = await vectorStore.upsert({ indexName: 'my-index', vectors, metadata });
 
 // Query vectors
-const results = await vectorStore.query(
-  'my-index',
-  [0.1, 0.2, ...],
-  10, // topK
-  { text: { $eq: 'doc1' } }, // optional filter
-  false // includeValues
-);
+const results = await vectorStore.query({
+  indexName: 'my-index',
+  queryVector: [0.1, 0.2, ...],
+  topK: 10, // topK
+  filter: { text: { $eq: 'doc1' } }, // optional filter
+  includeVector: false, // includeValues
+});
 ```
 
 ## Configuration
@@ -59,9 +59,9 @@ Optional:
 
 ## Methods
 
-- `createIndex(indexName, dimension, metric?)`: Create a new index
-- `upsert(indexName, vectors, metadata?, ids?)`: Add or update vectors
-- `query(indexName, queryVector, topK?, filter?, includeVector?)`: Search for similar vectors
+- `createIndex({indexName, dimension, metric?})`: Create a new index
+- `upsert({indexName, vectors, metadata?, ids?})`: Add or update vectors
+- `query({indexName, queryVector, topK?, filter?, includeVector?})`: Search for similar vectors
 - `listIndexes()`: List all indexes
 - `describeIndex(indexName)`: Get index statistics
 - `deleteIndex(indexName)`: Delete an index

@@ -16,13 +16,15 @@ const chroma = new ChromaVector({
   path: process.env.CHROMA_DB_PATH!,
 });
 
-await chroma.createIndex('test_collection', 1536);
+await chroma.createIndex({
+  indexName: 'test_collection',
+  dimension: 1536,
+});
 
 // Store both metadata and original documents in Chroma
-await chroma.upsert(
-  'test_collection',
-  embeddings,
-  chunks.map(chunk => ({ text: chunk.text })), // metadata
-  undefined, // let Chroma auto-generate IDs
-  chunks.map(chunk => chunk.text), // store original documents
-);
+await chroma.upsert({
+  indexName: 'test_collection',
+  vectors: embeddings,
+  metadata: chunks.map(chunk => ({ text: chunk.text })), // metadata
+  documents: chunks.map(chunk => chunk.text), // store original documents
+});

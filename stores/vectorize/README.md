@@ -14,7 +14,33 @@ npm install @mastra/vectorize
 import { VectorizeStore } from '@mastra/vectorize';
 
 const vectorStore = new VectorizeStore({
-  // configuration options
+  apiKey: process.env.VECTORIZE_API_KEY,
+  projectId: process.env.VECTORIZE_PROJECT_ID
+});
+
+// Create a new index
+await vectorStore.createIndex({
+  indexName: 'my-index',
+  dimension: 1536,
+  metric: 'cosine'
+});
+
+// Add vectors
+const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
+const metadata = [{ text: 'doc1' }, { text: 'doc2' }];
+const ids = await vectorStore.upsert({
+  indexName: 'my-index',
+  vectors,
+  metadata
+});
+
+// Query vectors
+const results = await vectorStore.query({
+  indexName: 'my-index',
+  queryVector: [0.1, 0.2, ...],
+  topK: 10,
+  filter: { text: { $eq: 'doc1' } },
+  includeVector: false
 });
 ```
 
@@ -33,6 +59,15 @@ The Vectorize vector store requires the following configuration:
 - Automatic index optimization
 - Scalable architecture
 - Real-time updates and queries
+
+## Methods
+
+- `createIndex({ indexName, dimension, metric? })`: Create a new index
+- `upsert({ indexName, vectors, metadata?, ids? })`: Add or update vectors
+- `query({ indexName, queryVector, topK?, filter?, includeVector? })`: Search for similar vectors
+- `listIndexes()`: List all indexes
+- `describeIndex(indexName)`: Get index statistics
+- `deleteIndex(indexName)`: Delete an index
 
 ## Related Links
 

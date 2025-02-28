@@ -14,14 +14,21 @@ const { embeddings } = await embedMany({
 
 const pinecone = new PineconeVector(process.env.PINECONE_API_KEY!);
 
-await pinecone.createIndex('test_index', 1536);
+await pinecone.createIndex({
+  indexName: 'test_index',
+  dimension: 1536,
+});
 
-await pinecone.upsert(
-  'test_index',
-  embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text })),
-);
+await pinecone.upsert({
+  indexName: 'test_index',
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
 
-const results = await pinecone.query('test_index', embeddings[0], 10);
+const results = await pinecone.query({
+  indexName: 'test_index',
+  queryVector: embeddings[0],
+  topK: 10,
+});
 
 console.log(results);

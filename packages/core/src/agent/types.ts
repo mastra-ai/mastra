@@ -4,7 +4,14 @@ import type { ZodSchema } from 'zod';
 
 import type { MastraPrimitives } from '../action';
 import type { Metric } from '../eval';
-import type { CoreMessage, OutputType } from '../llm';
+import type {
+  CoreMessage,
+  DefaultLLMStreamOptions,
+  DefaultLLMStreamObjectOptions,
+  DefaultLLMTextObjectOptions,
+  DefaultLLMTextOptions,
+  OutputType,
+} from '../llm';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { ToolAction } from '../tools';
@@ -32,27 +39,23 @@ export interface AgentConfig<
   voice?: CompositeVoice;
 }
 
-export interface AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> {
+export type AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
   toolsets?: ToolsetsInput;
-  resourceId?: string;
   context?: CoreMessage[];
-  threadId?: string;
   memoryOptions?: MemoryConfig;
   runId?: string;
   onStepFinish?: (step: string) => void;
   maxSteps?: number;
   output?: OutputType | Z;
-  temperature?: number;
-  toolChoice?: 'auto' | 'required';
   experimental_output?: Z;
+  toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   telemetry?: TelemetrySettings;
-}
+} & ({ resourceId?: undefined; threadId?: undefined } | { resourceId: string; threadId: string }) &
+  (Z extends undefined ? DefaultLLMTextOptions : DefaultLLMTextObjectOptions);
 
-export interface AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> {
+export type AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
   toolsets?: ToolsetsInput;
-  resourceId?: string;
   context?: CoreMessage[];
-  threadId?: string;
   memoryOptions?: MemoryConfig;
   runId?: string;
   onFinish?: (result: string) => unknown;
@@ -60,7 +63,8 @@ export interface AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefine
   maxSteps?: number;
   output?: OutputType | Z;
   temperature?: number;
-  toolChoice?: 'auto' | 'required';
+  toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   experimental_output?: Z;
   telemetry?: TelemetrySettings;
-}
+} & ({ resourceId?: undefined; threadId?: undefined } | { resourceId: string; threadId: string }) &
+  (Z extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);

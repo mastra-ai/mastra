@@ -1,6 +1,6 @@
 {
   "name": "@mastra/vectorize",
-  "version": "0.1.6-alpha.0",
+  "version": "0.1.6-alpha.2",
   "description": "Cloudflare Vectorize store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -17,7 +17,8 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --experimental-dts --clean --treeshake",
     "build:watch": "pnpm build --watch",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
@@ -28,6 +29,8 @@
     "@types/node": "^22.13.1",
     "tsup": "^8.0.1",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.5"
+    "vitest": "^3.0.5",
+    "@internal/lint": "workspace:*",
+    "eslint": "^9.20.1"
   }
 }

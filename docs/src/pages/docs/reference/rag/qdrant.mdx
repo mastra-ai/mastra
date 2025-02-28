@@ -176,7 +176,10 @@ The store throws typed errors that can be caught:
 
 ```typescript copy
 try {
-  await store.query("index_name", queryVector);
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
 } catch (error) {
   if (error instanceof VectorStoreError) {
     console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc

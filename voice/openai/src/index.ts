@@ -1,6 +1,7 @@
+import { PassThrough } from 'stream';
+
 import { MastraVoice } from '@mastra/core/voice';
 import OpenAI from 'openai';
-import { PassThrough } from 'stream';
 
 type OpenAIVoiceId = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer' | 'ash' | 'coral' | 'sage';
 type OpenAIModel = 'tts-1' | 'tts-1-hd' | 'whisper-1';

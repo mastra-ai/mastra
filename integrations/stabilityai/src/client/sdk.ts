@@ -1,5 +1,7 @@
-import axios, { type AxiosInstance } from 'axios';
-import { type GenerationRequest, generationRequestSchema } from './zodSchema'
+import axios from 'axios';
+import type { AxiosInstance } from 'axios';
+import { generationRequestSchema } from './zodSchema'
+import type { GenerationRequest } from './zodSchema';
 
 export class StabilityAIClient {
   private client: AxiosInstance;

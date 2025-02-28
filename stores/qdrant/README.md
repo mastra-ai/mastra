@@ -20,21 +20,21 @@ const vectorStore = new QdrantVector(
 );
 
 // Create a new collection
-await vectorStore.createIndex('my-collection', 1536, 'cosine');
+await vectorStore.createIndex({ indexName: 'my-collection', dimension: 1536, metric: 'cosine' });
 
 // Add vectors
 const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
 const metadata = [{ text: 'doc1' }, { text: 'doc2' }];
-const ids = await vectorStore.upsert('my-collection', vectors, metadata);
+const ids = await vectorStore.upsert({ indexName: 'my-collection', vectors, metadata });
 
 // Query vectors
-const results = await vectorStore.query(
-  'my-collection',
-  [0.1, 0.2, ...],
-  10, // topK
-  { text: { $eq: 'doc1' } }, // optional filter
-  false // includeVector
-);
+const results = await vectorStore.query({
+  indexName: 'my-collection',
+  queryVector: [0.1, 0.2, ...],
+  topK: 10, // topK
+  filter: { text: { $eq: 'doc1' } }, // optional filter
+  includeVector: false // includeVector
+});
 ```
 
 ## Configuration
@@ -69,9 +69,9 @@ The following distance metrics are supported:
 
 ## Methods
 
-- `createIndex(indexName, dimension, metric?)`: Create a new collection
-- `upsert(indexName, vectors, metadata?, ids?)`: Add or update vectors
-- `query(indexName, queryVector, topK?, filter?, includeVector?)`: Search for similar vectors
+- `createIndex({ indexName, dimension, metric? })`: Create a new collection
+- `upsert({ indexName, vectors, metadata?, ids? })`: Add or update vectors
+- `query({ indexName, queryVector, topK?, filter?, includeVector? })`: Search for similar vectors
 - `listIndexes()`: List all collections
 - `describeIndex(indexName)`: Get collection statistics
 - `deleteIndex(indexName)`: Delete a collection

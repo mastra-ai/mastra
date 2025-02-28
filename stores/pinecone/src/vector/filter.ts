@@ -1,10 +1,6 @@
-import {
-  BaseFilterTranslator,
-  type FieldCondition,
-  type Filter,
-  type OperatorSupport,
-  type QueryOperator,
-} from '@mastra/core/filter';
+import type { VectorFilter } from '@mastra/core/vector';
+import { BaseFilterTranslator } from '@mastra/core/filter';
+import type { FieldCondition, Filter, OperatorSupport, QueryOperator } from '@mastra/core/filter';
 
 export class PineconeFilterTranslator extends BaseFilterTranslator {
   protected override getSupportedOperators(): OperatorSupport {
@@ -18,7 +14,7 @@ export class PineconeFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter?: Filter): Filter | undefined {
+  translate(filter?: VectorFilter): VectorFilter {
     if (this.isEmpty(filter)) return filter;
     this.validateFilter(filter as Filter);
     return this.translateNode(filter);

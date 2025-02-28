@@ -12,9 +12,14 @@ const { embedding } = await embed({
   model: openai.embedding('text-embedding-3-small'),
 });
 
-const result = await pgVector.query('embeddings', embedding, 3, {
-  'path.to.metadata': {
-    eq: 'value',
+const result = await pgVector.query({
+  indexName: 'embeddings',
+  queryVector: embedding,
+  topK: 3,
+  filter: {
+    'path.to.metadata': {
+      eq: 'value',
+    },
   },
 });
 

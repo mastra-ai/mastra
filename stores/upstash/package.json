@@ -1,6 +1,6 @@
 {
   "name": "@mastra/upstash",
-  "version": "0.1.6-alpha.0",
+  "version": "0.1.6-alpha.2",
   "description": "Upstash provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -19,7 +19,8 @@
     "test": "vitest run",
     "posttest": "docker compose down",
     "build": "tsup src/index.ts --format esm --experimental-dts --clean --treeshake",
-    "build:watch": "pnpm build --watch"
+    "build:watch": "pnpm build --watch",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
@@ -31,6 +32,8 @@
     "@types/node": "^22.13.1",
     "tsup": "^8.0.1",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.4"
+    "vitest": "^3.0.4",
+    "@internal/lint": "workspace:*",
+    "eslint": "^9.20.1"
   }
 }

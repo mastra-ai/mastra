@@ -1,10 +1,9 @@
 import pg from 'pg';
 import { describe, it, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 
+import type { TestConfig, TestResult } from './performance.helpers';
 import {
   baseTestConfigs,
-  TestConfig,
-  TestResult,
   calculateTimeout,
   generateRandomVectors,
   findNearestBruteForce,
@@ -18,8 +17,9 @@ import {
   generateSkewedVectors,
   getHNSWConfig,
   getIndexDescription,
+  warmupQuery,
 } from './performance.helpers';
-import { IndexConfig, IndexType } from './types';
+import type { IndexConfig, IndexType } from './types';
 
 import { PgVector } from '.';
 
@@ -93,8 +93,7 @@ async function smartWarmup(
   const cacheKey = `${dimension}-${k}-${indexType}`;
   if (!warmupCache.has(cacheKey)) {
     console.log(`Warming up ${indexType} index for ${dimension}d vectors, k=${k}`);
-    const warmupVector = generateRandomVectors(1, dimension)[0] as number[];
-    await vectorDB.query(testIndexName, warmupVector, k);
+    await warmupQuery(vectorDB, testIndexName, dimension, k);
     warmupCache.set(cacheKey, true);
   }
 }
@@ -163,13 +162,13 @@ describe('PostgreSQL Index Performance', () => {
               // Create index and insert vectors
               const lists = getListCount(indexConfig, testConfig.size);
 
-              await vectorDB.createIndex(
-                testIndexName,
-                testConfig.dimension,
-                'cosine',
+              await vectorDB.createIndex({
+                indexName: testIndexName,
+                dimension: testConfig.dimension,
+                metric: 'cosine',
                 indexConfig,
-                indexType === 'ivfflat',
-              );
+                buildIndex: indexType === 'ivfflat',
+              });
 
               console.log(
                 `Batched bulk upserting ${testVectors.length} ${distType} vectors into index ${testIndexName}`,
@@ -178,7 +177,7 @@ describe('PostgreSQL Index Performance', () => {
               await batchedBulkUpsert(vectorDB, testIndexName, testVectors, batchSizes);
               if (indexType === 'hnsw' || rebuild) {
                 console.log('rebuilding index');
-                await vectorDB.defineIndex(testIndexName, 'cosine', indexConfig);
+                await vectorDB.buildIndex({ indexName: testIndexName, metric: 'cosine', indexConfig });
                 console.log('index rebuilt');
               }
               await smartWarmup(vectorDB, testIndexName, indexType, testConfig.dimension, testConfig.k);
@@ -194,15 +193,12 @@ describe('PostgreSQL Index Performance', () => {
                   const expectedNeighbors = findNearestBruteForce(queryVector, testVectors, testConfig.k);
 
                   const [latency, actualResults] = await measureLatency(async () =>
-                    vectorDB.query(
-                      testIndexName,
+                    vectorDB.query({
+                      indexName: testIndexName,
                       queryVector,
-                      testConfig.k,
-                      undefined,
-                      false,
-                      0,
-                      { ef }, // For HNSW
-                    ),
+                      topK: testConfig.k,
+                      ef, // For HNSW
+                    }),
                   );
 
                   const actualNeighbors = actualResults.map(r => r.metadata?.index);

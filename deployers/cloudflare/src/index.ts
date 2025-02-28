@@ -1,9 +1,8 @@
-import { Deployer, createChildProcessLogger } from '@mastra/deployer';
-import { getBundler } from '@mastra/deployer/build';
-import virtual from '@rollup/plugin-virtual';
-import { Cloudflare } from 'cloudflare';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
+
+import { Deployer, createChildProcessLogger } from '@mastra/deployer';
+import { Cloudflare } from 'cloudflare';
 
 interface CFRoute {
   pattern: string;

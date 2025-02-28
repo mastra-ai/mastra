@@ -35,7 +35,13 @@ export const vectorQuerySearch = async ({
     maxRetries,
   });
   // Get relevant chunks from the vector database
-  const results = await vectorStore.query(indexName, embedding, topK, queryFilter, includeVectors);
+  const results = await vectorStore.query({
+    indexName,
+    queryVector: embedding,
+    topK,
+    filter: queryFilter,
+    includeVector: includeVectors,
+  });
 
   return { results, queryEmbedding: embedding };
 };

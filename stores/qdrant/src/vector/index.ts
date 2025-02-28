@@ -1,6 +1,15 @@
-import { type Filter } from '@mastra/core/filter';
-import { MastraVector, type QueryResult, type IndexStats } from '@mastra/core/vector';
-import { QdrantClient, type Schemas } from '@qdrant/js-client-rest';
+import { MastraVector } from '@mastra/core/vector';
+import type {
+  QueryResult,
+  IndexStats,
+  CreateIndexParams,
+  UpsertVectorParams,
+  QueryVectorParams,
+  VectorFilter,
+  ParamsToArgs,
+} from '@mastra/core/vector';
+import { QdrantClient } from '@qdrant/js-client-rest';
+import type { Schemas } from '@qdrant/js-client-rest';
 
 import { QdrantFilterTranslator } from './filter';
 
@@ -33,12 +42,11 @@ export class QdrantVector extends MastraVector {
       }) ?? baseClient;
   }
 
-  async upsert(
-    indexName: string,
-    vectors: number[][],
-    metadata?: Record<string, any>[],
-    ids?: string[],
-  ): Promise<string[]> {
+  async upsert(...args: ParamsToArgs<UpsertVectorParams>): Promise<string[]> {
+    const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
+
+    const { indexName, vectors, metadata, ids } = params;
+
     const pointIds = ids || vectors.map(() => crypto.randomUUID());
 
     const records = vectors.map((vector, i) => ({
@@ -59,11 +67,11 @@ export class QdrantVector extends MastraVector {
     return pointIds;
   }
 
-  async createIndex(
-    indexName: string,
-    dimension: number,
-    metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
-  ): Promise<void> {
+  async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
+
+    const { indexName, dimension, metric = 'cosine' } = params;
+
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new Error('Dimension must be a positive integer');
     }
@@ -77,19 +85,17 @@ export class QdrantVector extends MastraVector {
     });
   }
 
-  transformFilter(filter?: Filter) {
+  transformFilter(filter?: VectorFilter) {
     const translator = new QdrantFilterTranslator();
     return translator.translate(filter);
   }
 
-  async query(
-    indexName: string,
-    queryVector: number[],
-    topK: number = 10,
-    filter?: Filter,
-    includeVector: boolean = false,
-  ): Promise<QueryResult[]> {
-    const translatedFilter = this.transformFilter(filter);
+  async query(...args: ParamsToArgs<QueryVectorParams>): Promise<QueryResult[]> {
+    const params = this.normalizeArgs<QueryVectorParams>('query', args);
+
+    const { indexName, queryVector, topK = 10, filter, includeVector = false } = params;
+
+    const translatedFilter = this.transformFilter(filter) ?? {};
 
     const results = (
       await this.client.query(indexName, {

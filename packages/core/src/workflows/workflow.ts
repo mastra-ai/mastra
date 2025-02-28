@@ -1,6 +1,6 @@
+import { setTimeout } from 'node:timers/promises';
 import { trace, context as otlpContext } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
-import { setTimeout } from 'node:timers/promises';
 import type { z } from 'zod';
 
 import type { IAction, MastraPrimitives } from '../action';

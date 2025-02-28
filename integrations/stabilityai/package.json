@@ -1,6 +1,6 @@
 {
   "name": "@mastra/stabilityai",
-  "version": "1.1.6-alpha.0",
+  "version": "1.1.6-alpha.2",
   "description": "",
   "main": "dist/index.js",
   "type": "module",
@@ -46,6 +46,8 @@
     }
   ],
   "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "eslint": "^9.20.1",
     "@jest/globals": "^29.7.0",
     "@microsoft/api-extractor": "^7.49.2",
     "@rollup/plugin-image": "^3.0.3",

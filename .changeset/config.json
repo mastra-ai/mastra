@@ -8,13 +8,12 @@
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
   "ignore": [
+    "*",
     "!mastra",
     "!create-mastra",
     "!@mastra/*",
-    "@mastra/playground",
-    "examples-*",
-    "*-with-*",
-    "@mastra/dane",
-    "@mastra/memory-integration-tests"
+    "!docs",
+    "@mastra/memory-integration-tests",
+    "@mastra/playground"
   ]
 }

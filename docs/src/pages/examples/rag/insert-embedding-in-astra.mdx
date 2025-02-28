@@ -30,13 +30,16 @@ const astra = new AstraVector({
   keyspace: process.env.ASTRA_DB_KEYSPACE,
 });
 
-await astra.createIndex('test_collection', 1536);
+await astra.createIndex({
+  indexName: 'test_collection',
+  dimension: 1536,
+});
 
-await astra.upsert(
-  'test_collection',
-  embeddings,
-  chunks?.map(chunk => ({ text: chunk.text })),
-);
+await astra.upsert({
+  indexName: 'test_collection',
+  vectors: embeddings,
+  metadata: chunks?.map(chunk => ({ text: chunk.text })),
+});
 ```
 
 {/* <br />

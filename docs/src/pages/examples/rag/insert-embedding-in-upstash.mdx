@@ -29,13 +29,16 @@ const upstash = new UpstashVector({
   token: process.env.UPSTASH_TOKEN,
 });
 
-await upstash.createIndex('test_collection', 1536);
+await upstash.createIndex({
+  indexName: 'test_collection',
+  dimension: 1536,
+});
 
-await upstash.upsert(
-  'test_collection',
-  embeddings,
-  chunks?.map(chunk => ({ text: chunk.text })),
-);
+await upstash.upsert({
+  indexName: 'test_collection',
+  vectors: embeddings,
+  metadata: chunks?.map(chunk => ({ text: chunk.text })),
+});
 ```
 
 {/* <br />

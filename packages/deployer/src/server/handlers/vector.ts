@@ -45,7 +45,7 @@ export async function upsertVectors(c: Context) {
     }
 
     const vector = getVector(c, vectorName);
-    const result = await vector.upsert(indexName, vectors, metadata, ids);
+    const result = await vector.upsert({ indexName, vectors, metadata, ids });
     return c.json({ ids: result });
   } catch (error) {
     return handleError(error, 'Error upserting vectors');
@@ -69,7 +69,7 @@ export async function createIndex(c: Context) {
     }
 
     const vector = getVector(c, vectorName);
-    await vector.createIndex(indexName, dimension, metric);
+    await vector.createIndex({ indexName, dimension, metric });
     return c.json({ success: true });
   } catch (error) {
     return handleError(error, 'Error creating index');
@@ -87,7 +87,7 @@ export async function queryVectors(c: Context) {
     }
 
     const vector = getVector(c, vectorName);
-    const results: QueryResult[] = await vector.query(indexName, queryVector, topK, filter, includeVector);
+    const results: QueryResult[] = await vector.query({ indexName, queryVector, topK, filter, includeVector });
     return c.json({ results });
   } catch (error) {
     return handleError(error, 'Error querying vectors');

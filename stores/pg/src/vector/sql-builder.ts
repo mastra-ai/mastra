@@ -1,11 +1,12 @@
-import {
-  type BasicOperator,
-  type NumericOperator,
-  type ArrayOperator,
-  type ElementOperator,
-  type LogicalOperator,
-  type RegexOperator,
-  type Filter,
+import type { VectorFilter } from '@mastra/core';
+import type {
+  BasicOperator,
+  NumericOperator,
+  ArrayOperator,
+  ElementOperator,
+  LogicalOperator,
+  RegexOperator,
+  Filter,
 } from '@mastra/core/filter';
 
 export type OperatorType =
@@ -180,7 +181,7 @@ export const handleKey = (key: string) => {
   return key.replace(/\./g, ',');
 };
 
-export function buildFilterQuery(filter: Filter, minScore: number): FilterResult {
+export function buildFilterQuery(filter: VectorFilter, minScore: number): FilterResult {
   const values = [minScore];
 
   function buildCondition(key: string, value: any, parentPath: string): string {

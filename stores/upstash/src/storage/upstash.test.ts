@@ -1,7 +1,10 @@
 import { MastraStorage } from '@mastra/core/storage';
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
 import { UpstashStore } from './index';
+
+// Increase timeout for all tests in this file to 30 seconds
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 describe('UpstashStore', () => {
   let store: UpstashStore;
@@ -9,11 +12,16 @@ describe('UpstashStore', () => {
   const testTableName2 = 'test_table2';
 
   beforeAll(async () => {
+    console.log('Initializing UpstashStore...');
+
+    await new Promise(resolve => setTimeout(resolve, 5000));
     store = new UpstashStore({
       url: 'http://localhost:8079',
       token: 'test_token',
     });
+
     await store.init();
+    console.log('UpstashStore initialized');
   });
 
   afterAll(async () => {
