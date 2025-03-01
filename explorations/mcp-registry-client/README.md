@@ -77,6 +77,8 @@ const mcp = new MCPConfiguration({
 })
 ```
 
+We might also want to think about the class being called something like `ToolsConfiguration` instead because it could be used to persist configs for other kinds of registries. We could also make the class work with our storage adapters
+
 ## Example Servers
 
 The mock registry includes several reference implementations:
