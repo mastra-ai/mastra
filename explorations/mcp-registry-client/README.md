@@ -66,6 +66,17 @@ Features:
 - Configure server settings
 - Manage existing configurations
 
+## Note
+
+When we actually ship this as a feature we can simplify the API:
+
+```ts
+const mcp = new MCPConfiguration({
+	registry: "https://mcp.run/.well-known/mcp",
+	servers: {}, // <- allow hardcoding server configs. do something like what gql.tada does to magically add type definitions for available servers.
+})
+```
+
 ## Example Servers
 
 The mock registry includes several reference implementations:
