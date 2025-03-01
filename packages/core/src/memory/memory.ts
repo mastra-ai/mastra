@@ -41,7 +41,7 @@ export abstract class MastraMemory extends MastraBase {
       config.storage ||
       new DefaultStorage({
         config: {
-          url: 'file:memory.db',
+          url: 'file:../mastra.db',
         },
       });
 
@@ -49,7 +49,7 @@ export abstract class MastraMemory extends MastraBase {
       this.vector = config.vector;
     } else {
       this.vector = new DefaultVectorDB({
-        connectionUrl: 'file:memory-vector.db', // file name needs to be different than default storage or it wont work properly
+        connectionUrl: 'file:../mastra.db',
       });
     }
 
