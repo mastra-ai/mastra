@@ -48,12 +48,14 @@ const getPullRequest = new Step({
 const generateMessage = new Step({
   id: 'message-generator',
   outputSchema: z.object({
-    message: z.array(z.string()),
+    intro: z.string(),
+    checklist: z.string().array(),
+    outro: z.string(),
   }),
   execute: async ({ context, mastra }) => {
     const parentStep = context?.steps?.getPullRequest;
     if (!parentStep || parentStep.status !== 'success') {
-      return { message: [] };
+      return { intro: '', checklist: [], outro: '' };
     }
 
     const mastraDocsRes = await fetch('https://mastra.ai/llms.txt');
