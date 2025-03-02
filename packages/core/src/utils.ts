@@ -89,7 +89,7 @@ export function jsonSchemaToModel(jsonSchema: Record<string, any>): ZodObject<an
     if (requiredFields.includes(key)) {
       zodSchema[key] = zodType;
     } else {
-      zodSchema[key] = zodType.nullable();
+      zodSchema[key] = zodType.nullable().optional();
     }
   }
 
