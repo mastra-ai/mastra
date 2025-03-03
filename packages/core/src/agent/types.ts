@@ -23,6 +23,7 @@ export interface AgentConfig<
   name: string;
   instructions: string;
   model: LanguageModelV1;
+  maxContextLength?: number;
   tools?: TTools;
   mastra?: MastraPrimitives;
   /** @deprecated This property is deprecated. Use evals instead to add evaluation metrics. */
