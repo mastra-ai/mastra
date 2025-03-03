@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-openai",
-  "version": "0.1.4-alpha.2",
+  "version": "0.1.4-alpha.3",
   "description": "Mastra OpenAI speech integration",
   "type": "module",
   "main": "dist/index.js",
