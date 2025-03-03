@@ -1,0 +1,39 @@
+{
+	"name": "mcp-configuration-client",
+	"version": "1.0.0",
+	"private": true,
+	"description": "Model Context Protocol (MCP) Configuration Client",
+	"type": "module",
+	"scripts": {
+		"build": "pnpm -r build",
+		"test": "pnpm build && pnpm -F @mcp/registry -F @mastra/mcp-configuration test",
+		"ex:discovery": "pnpm build && npx tsx ./examples/basic-usage/src/01-discovery.ts",
+		"ex:config": "pnpm build && npx tsx ./examples/basic-usage/src/02-configuration.ts",
+		"ex:validate": "pnpm build && npx tsx ./examples/basic-usage/src/03-validation.ts",
+		"ex:tool-use": "pnpm build && npx tsx ./examples/basic-usage/src/04-tool-use.ts",
+		"ex:tui": "npx tsx ./examples/tui/src/cli.tsx"
+	},
+	"keywords": [
+		"mcp",
+		"configuration",
+		"client"
+	],
+	"author": "",
+	"license": "ISC",
+	"workspaces": [
+		"packages/*",
+		"examples/*"
+	],
+	"pnpm": {
+		"peerDependencyRules": {
+			"ignoreMissing": [
+				"@types/react"
+			]
+		}
+	},
+	"devDependencies": {
+		"@types/node": "^22.13.5",
+		"tsx": "^4.19.3",
+		"typescript": "^5.3.3"
+	}
+}
