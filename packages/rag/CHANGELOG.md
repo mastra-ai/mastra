@@ -1,5 +1,13 @@
 # @mastra/rag
 
+## 0.1.8-alpha.3
+
+### Patch Changes
+
+- f2e8e5f: Updated descriptions and input schema for vector and graph rag tools
+- Updated dependencies [3d0e290]
+  - @mastra/core@0.5.0-alpha.3
+
 ## 0.1.8-alpha.2
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.5.0-alpha.3
+
+### Patch Changes
+
+- 3d0e290: Fixed an issue where messages that were numbers weren't being stored as strings. Fixed incorrect array access when retrieving memory messages
+
 ## 0.5.0-alpha.2
 
 ### Minor Changes
