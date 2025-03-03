@@ -12,7 +12,7 @@ export type MockRegistry = {
 
 // Infer the type from the mock data
 export const MOCK_REGISTRIES = {
-	"https://opentools.com/.well-known/mcp": {
+	"https://opentools.com/.well-known/mcp.json": {
 		registry: {
 			name: "OpenTools Registry",
 			description: "Discover and use MCP servers for your AI applications",

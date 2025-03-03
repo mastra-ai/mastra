@@ -10,7 +10,7 @@ import { RegistryClient } from "@mcp/registry"
 
 // Connect to OpenTools registry
 const registry = new RegistryClient({
-	url: "https://opentools.com/.well-known/mcp",
+	url: "https://opentools.com/.well-known/mcp.json",
 })
 
 // Connect to the registry

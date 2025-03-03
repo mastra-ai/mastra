@@ -5,13 +5,13 @@ This project provides tools for discovering, configuring, and managing MCP serve
 
 ## Proposal 1: RegistryClient
 
-Following the discussions in the MCP github around an [official registry](https://github.com/orgs/modelcontextprotocol/discussions/159) and the [`.well-known/mcp` directory](https://github.com/orgs/modelcontextprotocol/discussions/84) we prototyped what a registry client might look like.
+Following the discussions in the MCP github around an [official registry](https://github.com/orgs/modelcontextprotocol/discussions/159) and the [`.well-known/mcp.json` directory](https://github.com/orgs/modelcontextprotocol/discussions/84) we prototyped what a registry client might look like.
 
 ```ts
 import { RegistryClient } from "@mcp/registry"
 
 const registry = new RegistryClient({
-	url: "https://example-tools.com/.well-known/mcp",
+	url: "https://example-tools.com/.well-known/mcp.json",
 })
 ```
 
@@ -72,7 +72,7 @@ import { RegistryClient } from "@mcp/registry"
 import { McpConfiguration } from "@mastra/mcp"
 
 const registry = new RegistryClient({
-	url: "https://example-tools.com/.well-known/mcp",
+	url: "https://example-tools.com/.well-known/mcp.json",
 })
 
 const configuration = new McpConfiguration({
@@ -137,7 +137,7 @@ For this example I broke out the registry, server definitions, and configuration
 
 ```ts
 const mcp = new MCPConfiguration({
-	registry: "https://mcp.run/.well-known/mcp",
+	registry: "https://mcp.run/.well-known/mcp.json",
 	servers: {
 		...serverConfigs,
 	},

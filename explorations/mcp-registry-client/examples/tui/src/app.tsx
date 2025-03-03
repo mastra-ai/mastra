@@ -9,7 +9,7 @@ import {
 import { Form } from "ink-form"
 
 const registry = new RegistryClient({
-	url: `https://opentools.com/.well-known/mcp`,
+	url: `https://opentools.com/.well-known/mcp.json`,
 })
 
 const configuration = new McpConfiguration({
