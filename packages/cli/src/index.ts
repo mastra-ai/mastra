@@ -44,18 +44,19 @@ program
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, or groq))')
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
-  .option('-nt, --no-timeout', 'Disable Package Installation timeout')
+  .option('-t, --timeout [timeout]', 'Configurable timeout for package installation, defaults to 60000 ms')
   .action(async args => {
     await analytics.trackCommandExecution({
       command: 'create',
       args,
       execution: async () => {
+        const timeout = args?.timeout ? (args?.timeout === true ? 60000 : parseInt(args?.timeout, 10)) : undefined;
         if (args.default) {
           await create({
             components: ['agents', 'tools', 'workflows'],
             llmProvider: 'openai',
             addExample: false,
-            noTimeout: args['no-timeout'],
+            timeout,
           });
           return;
         }
@@ -64,7 +65,7 @@ program
           llmProvider: args.llm,
           addExample: args.example,
           llmApiKey: args['llm-api-key'],
-          noTimeout: args['no-timeout'],
+          timeout,
         });
       },
     });
