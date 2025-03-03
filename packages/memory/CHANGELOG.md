@@ -1,5 +1,12 @@
 # @mastra/memory
 
+## 0.2.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [dab255b]
+  - @mastra/core@0.5.0-alpha.1
+
 ## 0.2.0-alpha.0
 
 ### Minor Changes

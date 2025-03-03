@@ -1,5 +1,13 @@
 # @mastra/firecrawl
 
+## 1.1.8-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [dab255b]
+  - @mastra/core@0.5.0-alpha.1
+  - @mastra/rag@0.1.8-alpha.1
+
 ## 1.1.8-alpha.0
 
 ### Patch Changes
