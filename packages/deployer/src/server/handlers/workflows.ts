@@ -4,14 +4,30 @@ import { streamText } from 'hono/streaming';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 
-
 import { handleError } from './error';
 
 export async function getWorkflowsHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const workflows = mastra.getWorkflows({ serialized: true });
-    return c.json(workflows);
+    const workflows = mastra.getWorkflows({ serialized: false });
+    const _workflows = Object.entries(workflows).reduce<any>((acc, [key, workflow]) => {
+      acc[key] = {
+        ...workflow,
+        name: workflow.name,
+        triggerSchema: workflow.triggerSchema ? stringify(zodToJsonSchema(workflow.triggerSchema)) : undefined,
+        steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
+          const _step = step as any;
+          acc[key] = {
+            ..._step,
+            inputSchema: _step.inputSchema ? stringify(zodToJsonSchema(_step.inputSchema)) : undefined,
+            outputSchema: _step.outputSchema ? stringify(zodToJsonSchema(_step.outputSchema)) : undefined,
+          };
+          return acc;
+        }, {}),
+      };
+      return acc;
+    }, {});
+    return c.json(_workflows);
   } catch (error) {
     return handleError(error, 'Error getting workflows');
   }
@@ -79,8 +95,8 @@ export async function watchWorkflowHandler(c: Context) {
         // NOTE: looks like the UI is closing the watch request, so as long as that is the case
         // this promise doesn't need to be resolved or rejected
         return new Promise((_resolve, _reject) => {
-          let unwatch: () => void = workflow.watch(({ activePaths, context }) => {
-            void stream.write(JSON.stringify({ activePaths, context }) + '\x1E');
+          let unwatch: () => void = workflow.watch(({ activePaths, context, runId, timestamp, suspendedSteps }) => {
+            void stream.write(JSON.stringify({ activePaths, context, runId, timestamp, suspendedSteps }) + '\x1E');
           });
 
           stream.onAbort(() => {

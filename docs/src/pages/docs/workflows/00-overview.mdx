@@ -11,7 +11,7 @@ Workflows in Mastra help you orchestrate complex sequences of operations with fe
 
 Most AI applications need more than a single call to a language model. You may want to run multiple steps, conditionally skip certain paths, or even pause execution altogether until you receive user input. Sometimes your agent tool calling is not accurate enough.
 
-Mastra’s workflow system provides:
+Mastra's workflow system provides:
 
 - A standardized way to define steps and link them together.
 - Support for both simple (linear) and advanced (branching, parallel) paths.
@@ -125,6 +125,10 @@ The basic building block of a workflow [is a step](./steps.mdx). Steps are defin
 
 Workflows let you define a [control flow](./control-flow.mdx) to chain steps together in with parallel steps, branching paths, and more.
 
+## Workflow Variables
+
+When you need to map data between steps or create dynamic data flows, [workflow variables](./variables.mdx) provide a powerful mechanism for passing information from one step to another and accessing nested properties within step outputs.
+
 ## Suspend and Resume
 
 When you need to pause execution for external data, user input, or asynchronous events, Mastra [supports suspension at any step](./suspend-and-resume.mdx), persisting the state of the workflow so you can resume it later.
@@ -145,5 +149,6 @@ You can:
 - [Sequential Steps workflow example](../../examples/workflows/sequential-steps.mdx)
 - [Parallel Steps workflow example](../../examples/workflows/parallel-steps.mdx)
 - [Branching Paths workflow example](../../examples/workflows/branching-paths.mdx)
+- [Workflow Variables example](../../examples/workflows/workflow-variables.mdx)
 - [Cyclical Dependencies workflow example](../../examples/workflows/cyclical-dependencies.mdx)
 - [Suspend and Resume workflow example](../../examples/workflows/suspend-and-resume.mdx)

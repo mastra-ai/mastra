@@ -1,5 +1,27 @@
 # @mastra/memory
 
+## 0.2.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [dab255b]
+  - @mastra/core@0.5.0-alpha.1
+
+## 0.2.0-alpha.0
+
+### Minor Changes
+
+- 59df7b6: Added a new option to use tool-calls for saving working memory: new Memory({ workingMemory: { enabled: true, use: "tool-call" } }). This is to support response methods like toDataStream where masking working memory chunks would be more resource intensive and complex.
+  To support this `memory` is now passed into tool execute args.
+
+### Patch Changes
+
+- Updated dependencies [59df7b6]
+- Updated dependencies [29f3a82]
+- Updated dependencies [59df7b6]
+- Updated dependencies [c139344]
+  - @mastra/core@0.5.0-alpha.0
+
 ## 0.1.7
 
 ### Patch Changes

@@ -1,5 +1,25 @@
 # @mastra/deployer
 
+## 0.1.8-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [dab255b]
+  - @mastra/core@0.5.0-alpha.1
+
+## 0.1.8-alpha.0
+
+### Patch Changes
+
+- c2dde91: Return full workflow details in api/workflows endpoint
+- 731dd8a: Removed useless logging that showed up when user selected log drains tab on the playground
+- 960690d: return runId from server on workflow watch
+- Updated dependencies [59df7b6]
+- Updated dependencies [29f3a82]
+- Updated dependencies [59df7b6]
+- Updated dependencies [c139344]
+  - @mastra/core@0.5.0-alpha.0
+
 ## 0.1.7
 
 ### Patch Changes

@@ -285,6 +285,68 @@ export class LibSQLVector extends MastraVector {
     }
   }
 
+  /**
+   * Updates an index entry by its ID with the provided vector and/or metadata.
+   *
+   * @param indexName - The name of the index to update.
+   * @param id - The ID of the index entry to update.
+   * @param update - An object containing the vector and/or metadata to update.
+   * @param update.vector - An optional array of numbers representing the new vector.
+   * @param update.metadata - An optional record containing the new metadata.
+   * @returns A promise that resolves when the update is complete.
+   * @throws Will throw an error if no updates are provided or if the update operation fails.
+   */
+  async updateIndexById(
+    indexName: string,
+    id: string,
+    update: { vector?: number[]; metadata?: Record<string, any> },
+  ): Promise<void> {
+    try {
+      const updates = [];
+      const args: InValue[] = [];
+
+      if (update.vector) {
+        updates.push('embedding = vector32(?)');
+        args.push(JSON.stringify(update.vector));
+      }
+
+      if (update.metadata) {
+        updates.push('metadata = ?');
+        args.push(JSON.stringify(update.metadata));
+      }
+
+      if (updates.length === 0) {
+        throw new Error('No updates provided');
+      }
+
+      args.push(id);
+
+      const query = `
+        UPDATE ${indexName}
+        SET ${updates.join(', ')}
+        WHERE vector_id = ?;
+      `;
+
+      await this.turso.execute({
+        sql: query,
+        args,
+      });
+    } catch (error: any) {
+      throw new Error(`Failed to update index by id: ${id} for index: ${indexName}: ${error.message}`);
+    }
+  }
+
+  async deleteIndexById(indexName: string, id: string): Promise<void> {
+    try {
+      await this.turso.execute({
+        sql: `DELETE FROM ${indexName} WHERE vector_id = ?`,
+        args: [id],
+      });
+    } catch (error: any) {
+      throw new Error(`Failed to delete index by id: ${id} for index: ${indexName}: ${error.message}`);
+    }
+  }
+
   async truncateIndex(indexName: string) {
     await this.turso.execute({
       sql: `DELETE FROM ${indexName}`,

@@ -156,6 +156,79 @@ describe('DefaultVectorDB', () => {
         const vectors = [[1, 2, 3, 4]]; // 4D vector for 3D index
         await expect(vectorDB.upsert({ indexName: testIndexName, vectors })).rejects.toThrow();
       });
+
+      it('should delete the vector by id', async () => {
+        const vectors = [
+          [1, 2, 3],
+          [4, 5, 6],
+        ];
+        const ids = await vectorDB.upsert(testIndexName, vectors);
+        expect(ids).toHaveLength(2);
+        const id = ids[1];
+
+        await vectorDB.deleteIndexById(testIndexName, ids[0]);
+
+        const results = await vectorDB.query(testIndexName, [1, 2, 3]);
+        expect(results).toHaveLength(1);
+        expect(results[0]?.id).toBe(id);
+      });
+
+      it('should update the vector by id', async () => {
+        const vectors = [[1, 2, 3]];
+        const metadata = [{ test: 'initial' }];
+        const [id] = await vectorDB.upsert(testIndexName, vectors, metadata);
+
+        const update = {
+          vector: [4, 5, 6],
+          metadata: { test: 'updated' },
+        };
+        await vectorDB.updateIndexById(testIndexName, id, update);
+
+        const results = await vectorDB.query(testIndexName, [4, 5, 6], 1, [], true);
+        expect(results[0]?.id).toBe(id);
+        expect(results[0]?.metadata).toEqual({ test: 'updated' });
+        expect(results[0]?.vector).toEqual([4, 5, 6]);
+      });
+
+      it('should update only metadata by id', async () => {
+        const vectors = [[1, 2, 3]];
+        const metadata = [{ test: 'initial' }];
+        const [id] = await vectorDB.upsert(testIndexName, vectors, metadata);
+
+        const update = {
+          metadata: { test: 'updated' },
+        };
+        await vectorDB.updateIndexById(testIndexName, id, update);
+
+        const results = await vectorDB.query(testIndexName, [1, 2, 3], 1);
+        expect(results[0]?.id).toBe(id);
+        expect(results[0]?.metadata).toEqual({ test: 'updated' });
+        expect(results[0]?.vector).toBeUndefined();
+      });
+
+      it('should update only vector by id', async () => {
+        const vectors = [[1, 2, 3]];
+        const metadata = [{ test: 'initial' }];
+        const [id] = await vectorDB.upsert(testIndexName, vectors, metadata);
+
+        const update = {
+          vector: [4, 5, 6],
+        };
+        await vectorDB.updateIndexById(testIndexName, id, update);
+
+        const results = await vectorDB.query(testIndexName, [4, 5, 6], 1, [], true);
+        expect(results[0]?.id).toBe(id);
+        expect(results[0]?.metadata).toEqual({ test: 'initial' });
+        expect(results[0]?.vector).toEqual([4, 5, 6]);
+      });
+
+      it('should throw error if no updates are provided', async () => {
+        const vectors = [[1, 2, 3]];
+        const metadata = [{ test: 'initial' }];
+        const [id] = await vectorDB.upsert(testIndexName, vectors, metadata);
+
+        await expect(vectorDB.updateIndexById(testIndexName, id, {})).rejects.toThrow('No updates provided');
+      });
     });
 
     describe('Basic Query Operations', () => {

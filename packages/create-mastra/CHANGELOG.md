@@ -1,5 +1,19 @@
 # create-mastra
 
+## 0.1.8-alpha.1
+
+### Patch Changes
+
+- e5149bb: Fix playground-ui agent-evals tab-content
+
+## 0.1.8-alpha.0
+
+### Patch Changes
+
+- 5fae49e: Configurable timeout on npm create mastra
+- 960690d: Improve client-js workflow watch dx
+- 62565c1: --no-timeout npm create mastra flag
+
 ## 0.1.7
 
 ### Patch Changes

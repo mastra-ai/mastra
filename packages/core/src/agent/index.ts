@@ -8,6 +8,8 @@ import type {
   GenerateObjectResult,
   GenerateTextResult,
   LanguageModelV1,
+  StreamObjectResult,
+  StreamTextResult,
   TextPart,
   ToolCallPart,
   UserContent,
@@ -472,6 +474,11 @@ export class Agent<
     runId?: string;
   }): Record<string, CoreTool> {
     this.logger.debug(`[Agents:${this.name}] - Assigning tools`, { runId, threadId, resourceId });
+
+    // Get memory tools if available
+    const memory = this.getMemory();
+    const memoryTools = memory?.getTools();
+
     const converted = Object.entries(this.tools || {}).reduce(
       (memo, value) => {
         const k = value[0];
@@ -498,6 +505,7 @@ export class Agent<
                           {
                             context: args,
                             mastra: this.#mastra,
+                            memory,
                             runId,
                             threadId,
                             resourceId,
@@ -523,8 +531,59 @@ export class Agent<
       {} as Record<string, CoreTool>,
     );
 
+    // Convert memory tools with proper context
+    const convertedMemoryTools = memoryTools
+      ? Object.entries(memoryTools).reduce(
+          (memo, [k, tool]) => {
+            memo[k] = {
+              description: tool.description,
+              parameters: tool.parameters,
+              execute:
+                typeof tool?.execute === 'function'
+                  ? async (args, options) => {
+                      try {
+                        this.logger.debug(`[Agent:${this.name}] - Executing memory tool ${k}`, {
+                          name: k,
+                          description: tool.description,
+                          args,
+                          runId,
+                          threadId,
+                          resourceId,
+                        });
+                        return (
+                          tool?.execute?.(
+                            {
+                              context: args,
+                              mastra: this.#mastra,
+                              memory,
+                              runId,
+                              threadId,
+                              resourceId,
+                            },
+                            options,
+                          ) ?? undefined
+                        );
+                      } catch (err) {
+                        this.logger.error(`[Agent:${this.name}] - Failed memory tool execution`, {
+                          error: err,
+                          runId,
+                          threadId,
+                          resourceId,
+                        });
+                        throw err;
+                      }
+                    }
+                  : undefined,
+            };
+            return memo;
+          },
+          {} as Record<string, CoreTool>,
+        )
+      : {};
+
     const toolsFromToolsetsConverted: Record<string, CoreTool> = {
       ...converted,
+      ...convertedMemoryTools,
     };
 
     const toolsFromToolsets = Object.values(toolsets || {});
@@ -775,7 +834,7 @@ export class Agent<
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     args?: AgentGenerateOptions<Z> & { output?: never; experimental_output?: never },
-  ): Promise<GenerateTextResult<any, any>>;
+  ): Promise<GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     args?: AgentGenerateOptions<Z> &
@@ -799,7 +858,10 @@ export class Agent<
       telemetry,
       ...rest
     }: AgentGenerateOptions<Z> = {},
-  ): Promise<GenerateTextResult<any, any> | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>> {
+  ): Promise<
+    | GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
+    | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>
+  > {
     let messagesToUse: CoreMessage[] = [];
 
     if (typeof messages === `string`) {
@@ -848,6 +910,7 @@ export class Agent<
         experimental_output,
         threadId,
         resourceId,
+        memory: this.getMemory(),
         ...rest,
       });
 
@@ -875,6 +938,7 @@ export class Agent<
         telemetry,
         threadId,
         resourceId,
+        memory: this.getMemory(),
         ...rest,
       });
 
@@ -896,6 +960,7 @@ export class Agent<
       temperature,
       toolChoice,
       telemetry,
+      memory: this.getMemory(),
       ...rest,
     });
 
@@ -909,12 +974,12 @@ export class Agent<
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     args?: AgentStreamOptions<Z> & { output?: never; experimental_output?: never },
-  ): Promise<StreamReturn<any>>;
+  ): Promise<StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     args?: AgentStreamOptions<Z> &
       ({ output: Z; experimental_output?: never } | { experimental_output: Z; output?: never }),
-  ): Promise<StreamReturn<Z extends ZodSchema ? z.infer<Z> : unknown>>;
+  ): Promise<StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>>;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     {
@@ -934,7 +999,10 @@ export class Agent<
       telemetry,
       ...rest
     }: AgentStreamOptions<Z> = {},
-  ): Promise<StreamReturn<Z>> {
+  ): Promise<
+    | StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
+    | StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>
+  > {
     const runIdToUse = runId || randomUUID();
 
     let messagesToUse: CoreMessage[] = [];
@@ -998,6 +1066,7 @@ export class Agent<
         runId: runIdToUse,
         toolChoice,
         experimental_output,
+        memory: this.getMemory(),
         ...rest,
       });
 
@@ -1031,6 +1100,7 @@ export class Agent<
         runId: runIdToUse,
         toolChoice,
         telemetry,
+        memory: this.getMemory(),
         ...rest,
       }) as unknown as StreamReturn<Z>;
     }
@@ -1062,6 +1132,7 @@ export class Agent<
       runId: runIdToUse,
       toolChoice,
       telemetry,
+      memory: this.getMemory(),
       ...rest,
     }) as unknown as StreamReturn<Z>;
   }

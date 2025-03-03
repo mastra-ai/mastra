@@ -46,31 +46,37 @@ const ShowcaseCard = ({
 
 export const ShowcaseGrid = () => {
   const showcaseItems: ShowcaseCardProps[] = [
-    {
-      title: "Audiofeed",
-      description: "Audiofeed repurposes your content into audio and video.",
-      image: "/showcase/audio-feed.png",
-      link: "https://audiofeed.ai",
+     {
+      title: "NotebookLM-Mastra",
+      description: "NotebookLM is an AI-powered assistant that creates podcasts from the sources you upload",
+      image: "/showcase/notebook-lm.png",
+      link: "https://notebooklm-mastra.vercel.app/",
     },
-    {
-      title: "Bird Checker",
-      description: "Bird Checker is a bird identification app.",
-      image: "/showcase/bird-checker.png",
-      link: "https://bird-checker.vercel.app",
-    },
-    {
-      title: "OpenAPI Spec Writer",
-      description: "Generate an open api spec from your documentation url.",
-      image: "/showcase/open-api-spec-writer.png",
-      link: "https://openapi-spec-writer.vercel.app",
-    },
-    {
-      title: "Crypto Chatbot",
-      description:
-        "You can ask about current crypto prices and trends in the cryptocurrency market.",
-      image: "/showcase/crypto-chatbot.png",
-      link: "https://crypto-chatbot-xi.vercel.app/",
-    },
+    // {
+    //   title: "Audiofeed",
+    //   description: "Audiofeed repurposes your content into audio and video.",
+    //   image: "/showcase/audio-feed.png",
+    //   link: "https://audiofeed.ai",
+    // },
+    // {
+    //   title: "Bird Checker",
+    //   description: "Bird Checker is a bird identification app.",
+    //   image: "/showcase/bird-checker.png",
+    //   link: "https://bird-checker.vercel.app",
+    // },
+    // {
+    //   title: "OpenAPI Spec Writer",
+    //   description: "Generate an open api spec from your documentation url.",
+    //   image: "/showcase/open-api-spec-writer.png",
+    //   link: "https://openapi-spec-writer.vercel.app",
+    // },
+    // {
+    //   title: "Crypto Chatbot",
+    //   description:
+    //     "You can ask about current crypto prices and trends in the cryptocurrency market.",
+    //   image: "/showcase/crypto-chatbot.png",
+    //   link: "https://crypto-chatbot-xi.vercel.app/",
+    // },
   ];
 
   return (
