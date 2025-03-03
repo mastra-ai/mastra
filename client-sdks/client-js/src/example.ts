@@ -46,21 +46,21 @@ import { MastraClient } from './client';
 
 // Workflow
 
-(async () => {
-  const client = new MastraClient({
-    baseUrl: 'http://localhost:4111',
-  });
+// (async () => {
+//   const client = new MastraClient({
+//     baseUrl: 'http://localhost:4111',
+//   });
 
-  const workflowId = 'weatherWorkflow';
+//   const workflowId = 'weatherWorkflow';
 
-  const workflow = client.getWorkflow(workflowId);
-  const response = workflow.watch();
+//   const workflow = client.getWorkflow(workflowId);
+//   const response = workflow.watch();
 
-  workflow.execute({
-    city: 'New York',
-  });
+//   workflow.execute({
+//     city: 'New York',
+//   });
 
-  for await (const record of response) {
-    console.log(new Date().toTimeString(), record);
-  }
-})();
+//   for await (const record of response) {
+//     console.log(new Date().toTimeString(), record);
+//   }
+// })();
