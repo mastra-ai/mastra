@@ -3,7 +3,7 @@ import type { EmbeddingModel } from 'ai';
 import { z } from 'zod';
 
 import { GraphRAG } from '../graph-rag';
-import { vectorQuerySearch, defaultGraphRagDescription } from '../utils';
+import { vectorQuerySearch, defaultGraphRagDescription, filterDescription, topKDescription } from '../utils';
 
 export const createGraphRAGTool = ({
   vectorStoreName,
@@ -33,8 +33,7 @@ export const createGraphRAGTool = ({
   description?: string;
 }): ReturnType<typeof createTool> => {
   const toolId = id || `GraphRAG ${vectorStoreName} ${indexName} Tool`;
-  const toolDescription = description || defaultGraphRagDescription(vectorStoreName, indexName);
-
+  const toolDescription = description || defaultGraphRagDescription();
   // Initialize GraphRAG
   const graphRag = new GraphRAG(graphOptions.dimension, graphOptions.threshold);
   let isInitialized = false;
@@ -42,9 +41,9 @@ export const createGraphRAGTool = ({
   return createTool({
     id: toolId,
     inputSchema: z.object({
-      queryText: z.string(),
-      topK: z.number(),
-      filter: z.string(),
+      queryText: z.string().describe('The text query to search for in the vector database'),
+      topK: z.number().default(10).describe(topKDescription),
+      filter: z.string().default('{}').describe(filterDescription),
     }),
     outputSchema: z.object({
       relevantContext: z.any(),
