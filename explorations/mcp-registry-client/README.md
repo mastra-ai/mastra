@@ -60,6 +60,7 @@ const clientServer = new ServerDefinition(json)
 ```
 
 It's our opinion that APIs like this (doesn't have to be these exact ones!) should be part of the MCP spec.
+These two primitives could be used to build registry UIs, configuration UIs, CLIs, framework abstractions, verdaccio-like servers, etc.
 
 ## How we would use this downstream in a framework - Mastra for example :)
 
