@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.5.0-alpha.1
+
+### Patch Changes
+
+- dab255b: Fixed bug where using an in memory libsql db (config.url = ":memory:) for memory would throw errors about missing tables
+
 ## 0.5.0-alpha.0
 
 ### Minor Changes

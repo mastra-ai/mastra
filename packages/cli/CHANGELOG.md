@@ -1,5 +1,14 @@
 # mastra
 
+## 0.2.9-alpha.1
+
+### Patch Changes
+
+- e5149bb: Fix playground-ui agent-evals tab-content
+- Updated dependencies [dab255b]
+  - @mastra/core@0.5.0-alpha.1
+  - @mastra/deployer@0.1.8-alpha.1
+
 ## 0.2.9-alpha.0
 
 ### Patch Changes

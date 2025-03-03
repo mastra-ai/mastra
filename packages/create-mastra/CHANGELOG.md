@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.8-alpha.1
+
+### Patch Changes
+
+- e5149bb: Fix playground-ui agent-evals tab-content
+
 ## 0.1.8-alpha.0
 
 ### Patch Changes
