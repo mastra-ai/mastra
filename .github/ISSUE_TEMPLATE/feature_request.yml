@@ -12,7 +12,7 @@ body:
     attributes:
       label: Problem Statement
       description: Is your feature request related to a problem? Please describe.
-      placeholder: I'm always frustrated when trying to [...]
+      placeholder: "I'm always frustrated when trying to [...]"
     validations:
       required: true
 
@@ -23,7 +23,7 @@ body:
       placeholder: |
         A clear and concise description of what you want to happen.
         
-        For example: "I would like to see a new integration with [service] that allows users to..."
+        For example, I would like to see a new integration with [service] that allows users to...
     validations:
       required: true
 
@@ -61,7 +61,7 @@ body:
       label: Example Use Case
       description: Provide an example of how you would use this feature.
       placeholder: |
-        "As a developer, I want to be able to [do something] so that I can [achieve some goal]."
+        As a developer, I want to be able to [do something] so that I can [achieve some goal].
     validations:
       required: true
 
@@ -77,7 +77,7 @@ body:
   - type: checkboxes
     attributes:
       label: Verification
-      description: Before submitting, please make sure you've completed the following:
+      description: Before submitting, please make sure you've completed the following
       options:
         - label: I have searched the existing issues to make sure this is not a duplicate
           required: true

@@ -23,8 +23,7 @@ body:
     attributes:
       label: Use Case
       description: Describe how you would use this integration with Mastra.
-      placeholder: |
-        For example: "I want to use this integration to allow my Mastra agents to fetch data from this service and use it in workflows."
+      placeholder: "I want to use this integration to allow my Mastra agents to fetch data from this service and use it in workflows."
     validations:
       required: true
 
@@ -58,15 +57,14 @@ body:
     attributes:
       label: Additional Context
       description: Add any other context or screenshots about the integration request here.
-      placeholder: |
-        Any additional information that might help us understand the request better.
+      placeholder: "Any additional information that might help us understand the request better."
     validations:
       required: false
 
   - type: checkboxes
     attributes:
       label: Verification
-      description: Before submitting, please make sure you've completed the following:
+      description: Before submitting, please make sure you've completed the following
       options:
         - label: I have searched the existing issues to make sure this integration hasn't already been requested
           required: true

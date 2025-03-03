@@ -13,7 +13,7 @@ body:
       label: Documentation Issue
       description: Is this issue related to an existing part of the documentation? If so, please provide a link or describe where it is located.
       placeholder: |
-        For example: "The RAG documentation at https://mastra.ai/docs/rag/overview is missing information about..."
+        For example, the RAG documentation at https://mastra.ai/docs/rag/overview is missing information about...
     validations:
       required: true
 
@@ -59,7 +59,7 @@ body:
       label: Describe the Improvement Needed
       description: A clear and concise description of what needs to be improved.
       placeholder: |
-        For example: "The documentation should include more examples of how to use the RAG feature with custom data sources."
+        For example, the documentation should include more examples of how to use the RAG feature with custom data sources.
     validations:
       required: true
 
@@ -68,7 +68,7 @@ body:
       label: Suggested Solution
       description: If you have a specific suggestion for how to improve the documentation, please share it here.
       placeholder: |
-        For example: "Add a new section titled 'Custom Data Sources' with examples of how to integrate with MongoDB, Postgres, etc."
+        For example, add a new section titled 'Custom Data Sources' with examples of how to integrate with MongoDB, Postgres, etc.
     validations:
       required: false
 
@@ -84,7 +84,7 @@ body:
   - type: checkboxes
     attributes:
       label: Verification
-      description: Before submitting, please make sure you've completed the following:
+      description: Before submitting, please make sure you've completed the following
       options:
         - label: I have searched the existing issues to make sure this is not a duplicate
           required: true

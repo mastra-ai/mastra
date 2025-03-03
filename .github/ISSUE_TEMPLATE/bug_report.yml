@@ -12,7 +12,7 @@ body:
     attributes:
       label: Describe the Bug
       description: A clear and concise description of what the bug is.
-      placeholder: When trying to use the workflow feature with an agent, the execution fails with an error message...
+      placeholder: "When trying to use the workflow feature with an agent, the execution fails with an error message..."
     validations:
       required: true
 
@@ -22,9 +22,9 @@ body:
       description: Steps to reproduce the behavior
       placeholder: |
         1. Create a new project with `npx create-mastra@latest`
-        2. Add the following code to `src/workflows/example.ts`: ...
+        2. Add the following code to `src/workflows/example.ts`
         3. Run `npm run dev`
-        4. Try to execute the workflow with...
+        4. Try to execute the workflow
         5. See error
     validations:
       required: true
@@ -33,7 +33,7 @@ body:
     attributes:
       label: Expected Behavior
       description: A clear and concise description of what you expected to happen.
-      placeholder: The workflow should execute successfully and return the expected result.
+      placeholder: "The workflow should execute successfully and return the expected result."
     validations:
       required: true
 
@@ -87,8 +87,7 @@ body:
       label: Error Logs
       description: If applicable, include any error messages or logs.
       render: shell
-      placeholder: |
-        Error: Failed to execute workflow...
+      placeholder: "Error: Failed to execute workflow..."
     validations:
       required: false
 
@@ -96,14 +95,14 @@ body:
     attributes:
       label: Additional Context
       description: Add any other context about the problem here.
-      placeholder: Any other information that might be relevant to the issue.
+      placeholder: "Any other information that might be relevant to the issue."
     validations:
       required: false
 
   - type: checkboxes
     attributes:
       label: Verification
-      description: Before submitting, please make sure you've completed the following:
+      description: Before submitting, please make sure you've completed the following
       options:
         - label: I have searched the existing issues to make sure this is not a duplicate
           required: true
