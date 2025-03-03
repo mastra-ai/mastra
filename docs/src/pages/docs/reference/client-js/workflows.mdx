@@ -73,6 +73,7 @@ for await (const record of workflowWatch) {
     activePaths: record.activePaths,
     context: record.context,
     timestamp: record.timestamp
+    runId: record.runId
   });
 }
 
@@ -83,5 +84,6 @@ The `watch()` method returns an AsyncGenerator that yields workflow transition r
 - `activePaths`: Currently active paths in the workflow
 - `context`: Current workflow context data
 - `timestamp`: Timestamp of the transition
+- `runId`: Uniqe Identifier for workflow run
 
 This makes it easy to process workflow transitions in real-time using a simple for-await loop.
