@@ -45,7 +45,7 @@ const validConfig = stripeServer.parseConfig(userInput) // will throw if config 
 
 ## Proposal 2: ServerDefinition class
 
-In this scenario the MCP server registry and the registry client would use the same class `ServerDefinition` for serializing and deserializing definitions.
+In this scenario the MCP server registry and the registry client would use the same class `ServerDefinition` for introspection, validation and serializing/deserializing definitions.
 
 ```ts
 const server = new ServerDefinition({
