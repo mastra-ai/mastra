@@ -400,6 +400,8 @@ export class Agent<
     let toolCallIds: Array<string> = [];
 
     for (const message of messages) {
+      if (!Array.isArray(message.content)) continue;
+
       if (message.role === 'tool') {
         for (const content of message.content) {
           if (content.type === 'tool-result') {
@@ -420,7 +422,9 @@ export class Agent<
     const messagesBySanitizedContent = messages.map(message => {
       if (message.role !== 'assistant' && message.role !== `tool` && message.role !== `user`) return message;
 
-      if (typeof message.content === 'string') return message;
+      if (!message.content || typeof message.content === 'string' || typeof message.content === 'number') {
+        return message;
+      }
 
       const sanitizedContent = message.content.filter(content => {
         if (content.type === `tool-call`) {
