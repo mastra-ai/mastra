@@ -32,5 +32,5 @@ console.log("\nStripe server details:", {
 	name: stripeServer.name,
 	version: stripeServer.version,
 	publisher: stripeServer.publisher,
-	config: stripeServer.config,
+	config: stripeServer.schemas,
 })

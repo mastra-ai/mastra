@@ -36,7 +36,7 @@ export const MOCK_REGISTRIES = {
 				distribution: { type: "npm", package: "@stripe/mcp" },
 				license: "MIT",
 				runtime: "node",
-				config: [
+				schemas: [
 					{
 						command: "npx",
 						args: ["-y", "@stripe/mcp", "--tools=all"],
@@ -74,7 +74,7 @@ export const MOCK_REGISTRIES = {
 				distribution: { type: "npm", package: "firecrawl-mcp" },
 				license: "MIT",
 				runtime: "node",
-				config: [
+				schemas: [
 					{
 						command: "npx",
 						args: ["-y", "firecrawl-mcp"],
@@ -113,7 +113,7 @@ export const MOCK_REGISTRIES = {
 				},
 				license: "MIT",
 				runtime: "node",
-				config: [
+				schemas: [
 					{
 						command: "docker",
 						args: ["run", "-i", "--rm", "-e", "BRAVE_API_KEY"],
@@ -164,7 +164,7 @@ export const MOCK_REGISTRIES = {
 				},
 				license: "MIT",
 				runtime: "node",
-				config: [
+				schemas: [
 					{
 						command: "npx",
 						args: ["-y", "@browserbasehq/mcp-browserbase"],
@@ -209,7 +209,7 @@ export const MOCK_REGISTRIES = {
 				},
 				license: "MIT",
 				runtime: "node",
-				config: [
+				schemas: [
 					{
 						command: "npx",
 						args: ["-y", "@modelcontextprotocol/server-filesystem"],
@@ -247,7 +247,7 @@ export const MOCK_REGISTRIES = {
 				distribution: { type: "pip", package: "mcp-server-fetch" },
 				license: "MIT",
 				runtime: "python",
-				config: [
+				schemas: [
 					{ command: "uvx", args: ["mcp-server-fetch"], env: {} },
 					{
 						command: "docker",
@@ -290,7 +290,7 @@ export const MOCK_REGISTRIES = {
 				},
 				license: "MIT",
 				runtime: "node",
-				config: [
+				schemas: [
 					{
 						command: "npx",
 						args: ["-y", "@modelcontextprotocol/server-git"],
@@ -330,7 +330,7 @@ export const MOCK_REGISTRIES = {
 				},
 				license: "MIT",
 				runtime: "node",
-				config: [
+				schemas: [
 					{
 						command: "npx",
 						args: ["-y", "@modelcontextprotocol/server-everything"],
