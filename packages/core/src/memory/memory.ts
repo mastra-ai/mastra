@@ -8,6 +8,8 @@ import type {
   EmbeddingModel,
   CoreTool,
 } from 'ai';
+import { existsSync } from 'fs';
+import { join } from 'path';
 
 import { MastraBase } from '../base';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
@@ -49,8 +51,22 @@ export abstract class MastraMemory extends MastraBase {
     if (config.vector) {
       this.vector = config.vector;
     } else {
+      // for backwards compat reasons, check if there's a memory-vector.db in cwd or in cwd/.mastra
+      // if it's there we need to use it, otherwise use the same file:memory.db
+      // We used to need two separate DBs because we would get schema errors
+      // Creating a new index for each vector dimension size fixed that, so we no longer need a separate sqlite db
+      const oldDb = 'memory-vector.db';
+      const hasOldDb = existsSync(join(process.cwd(), oldDb)) || existsSync(join(process.cwd(), '.mastra', oldDb));
+      const newDb = 'memory.db';
+
+      if (hasOldDb) {
+        this.logger.warn(
+          `Found deprecated Memory vector db file ${oldDb} this db is now merged with the default ${newDb} file. Delete the old one to use the new one. You will need to migrate any data if that's important to you. For now the deprecated path will be used but in a future breaking change we will only use the new db file path.`,
+        );
+      }
+
       this.vector = new DefaultVectorDB({
-        connectionUrl: 'file:memory-vector.db', // this no longer needs to be a different db than file:memory.db above, but it's a breaking change that could result in data loss or corruption to change it
+        connectionUrl: hasOldDb ? `file:${oldDb}` : `file:${newDb}`,
       });
     }
 

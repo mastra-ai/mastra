@@ -28,6 +28,11 @@ export class LibSQLStore extends MastraStorage {
   constructor({ config }: { config: LibSQLConfig }) {
     super({ name: `LibSQLStore` });
 
+    // need to re-init every time for in memory dbs or the tables might not exist
+    if (config.url === ':memory:') {
+      this.shouldCacheInit = false;
+    }
+
     this.client = createClient({
       url: this.rewriteDbUrl(config.url),
       authToken: config.authToken,

@@ -23,12 +23,12 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
 import { Agent } from "@mastra/core/agent";
 
 const memory = new Memory({
-  // Custom storage configuration
+  // Optional storage configuration - libsql will be used by default
   storage: new LibSQLStore({
     url: "file:memory.db",
   }),
 
-  // Custom vector database for semantic search
+  // Optional vector database for semantic search - libsql will be used by default
   vector: new LibSQLVector({
     url: "file:vector.db",
   }),
@@ -70,7 +70,7 @@ const agent = new Agent({
       name: "storage",
       type: "MastraStorage",
       description: "Storage implementation for persisting memory data",
-      isOptional: false,
+      isOptional: true,
     },
     {
       name: "vector",
@@ -159,8 +159,8 @@ const memory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
-      template: '<user><first_name></first_name><last_name></last_name></user>',
-      use: 'tool-call', // or 'text-stream'
+      template: "<user><first_name></first_name><last_name></last_name></user>",
+      use: "tool-call", // or 'text-stream'
     },
   },
 });
@@ -171,33 +171,6 @@ If no template is provided, the Memory class uses a default template that includ
 ### embedder
 
 By default, Memory uses FastEmbed with the `bge-small-en-v1.5` model, which provides a good balance of performance and model size (~130MB). You only need to specify an embedder if you want to use a different model or provider.
-
-## Additional Notes
-
-### Vector Search Configuration
-
-When using vector search capabilities with custom configuration, ensure you configure both the vector store and appropriate search options. Here's an example:
-
-```typescript copy showLineNumbers
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/core/storage/libsql";
-import { LibSQLVector } from "@mastra/core/vector/libsql";
-
-const memory = new Memory({
-  storage: new LibSQLStore({
-    url: ":memory:",
-  }),
-  vector: new LibSQLVector({
-    url: ":memory:",
-  }),
-  options: {
-    semanticRecall: {
-      topK: 5,
-      messageRange: 2,
-    },
-  },
-});
-```
 
 ### Related
 
