@@ -106,11 +106,10 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves all available workflows
-   * @param params - Parameters containing serialized flag, default for the serialized flag is true
    * @returns Promise containing map of workflow IDs to workflow details
    */
   public getWorkflows(): Promise<Record<string, GetWorkflowResponse>> {
-    return this.request(`/api/workflows`);
+    return this.request('/api/workflows');
   }
 
   /**
