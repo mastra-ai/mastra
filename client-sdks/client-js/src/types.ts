@@ -85,6 +85,8 @@ export type GetWorkflowWatchResponse = {
     >;
   };
   timestamp: number;
+  suspendedSteps: Record<string, any>;
+  runId: string;
 };
 
 export interface UpsertVectorParams {
