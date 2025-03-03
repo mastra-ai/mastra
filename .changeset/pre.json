@@ -128,5 +128,17 @@
     "@mastra/voice-playai": "0.1.2",
     "@mastra/voice-speechify": "0.1.2"
   },
-  "changesets": []
+  "changesets": [
+    "beige-buttons-cheat",
+    "brave-hounds-study",
+    "cool-papers-check",
+    "cuddly-jobs-vanish",
+    "easy-ants-serve",
+    "mean-eels-stick",
+    "pink-rings-laugh",
+    "quiet-signs-dress",
+    "spicy-gifts-worry",
+    "wet-clocks-return",
+    "witty-papayas-fall"
+  ]
 }

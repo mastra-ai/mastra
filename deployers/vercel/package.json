@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-vercel",
-  "version": "0.1.7",
+  "version": "0.1.8-alpha.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
