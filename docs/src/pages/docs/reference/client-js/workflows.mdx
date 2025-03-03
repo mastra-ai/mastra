@@ -64,7 +64,7 @@ const workflow = client.getWorkflow("workflow-id");
 const workflowWatch = workflow.watch()
 
 // Execute workflow
-await workflow.execute()
+workflow.execute()
 
 // Watch for workflow transitions
 for await (const record of workflowWatch) {
