@@ -104,10 +104,10 @@ When creating tools for your agents, following these guidelines will help ensure
 
 ### Tool Descriptions
 Your tool's main description should focus on its purpose and value:
-- Keep descriptions simple and focused on WHAT the tool does
+- Keep descriptions simple and focused on __what__ the tool does
 - Emphasize the tool's primary use case
 - Avoid implementation details in the main description
-- Focus on helping the agent understand WHEN to use the tool
+- Focus on helping the agent understand __when__ to use the tool
 
 ```typescript
 createTool({
@@ -127,11 +127,11 @@ Technical details belong in the parameter schemas, where they help the agent use
 ```typescript
 inputSchema: z.object({
   query: z.string().describe("The search query to find relevant information"),
-  limit: z.number().default(10).describe(
+  limit: z.number().describe(
     "Number of results to return. Higher values provide more context, lower values focus on best matches"
   ),
-  options: z.object({}).describe(
-    "Optional configuration. Example: {'filter': 'category=news'}"
+  options: z.string().describe(
+    "Optional configuration. Example: '{'filter': 'category=news'}'"
   ),
 }),
 ```
