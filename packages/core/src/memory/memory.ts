@@ -6,6 +6,7 @@ import type {
   ToolInvocation,
   CoreMessage,
   EmbeddingModel,
+  CoreTool,
 } from 'ai';
 
 import { MastraBase } from '../base';
@@ -49,7 +50,7 @@ export abstract class MastraMemory extends MastraBase {
       this.vector = config.vector;
     } else {
       this.vector = new DefaultVectorDB({
-        connectionUrl: 'file:memory-vector.db', // file name needs to be different than default storage or it wont work properly
+        connectionUrl: 'file:memory-vector.db', // this no longer needs to be a different db than file:memory.db above, but it's a breaking change that could result in data loss or corruption to change it
       });
     }
 
@@ -83,6 +84,15 @@ export abstract class MastraMemory extends MastraBase {
    */
   public async getSystemMessage(_input: { threadId: string; memoryConfig?: MemoryConfig }): Promise<string | null> {
     return null;
+  }
+
+  /**
+   * Get tools that should be available to the agent.
+   * This will be called when converting tools for the agent.
+   * Implementations can override this to provide additional tools.
+   */
+  public getTools(config?: MemoryConfig): Record<string, CoreTool> {
+    return {};
   }
 
   protected async createEmbeddingIndex(): Promise<{ indexName: string }> {

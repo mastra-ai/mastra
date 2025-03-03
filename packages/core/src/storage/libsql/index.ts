@@ -43,8 +43,8 @@ export class LibSQLStore extends MastraStorage {
       const relativePath = url.slice('file:'.length);
 
       // If we're in a .mastra directory, use the parent directory
-      if (cwd.endsWith('.mastra') || cwd.endsWith('.mastra/')) {
-        const baseDir = join(cwd, `..`);
+      if (cwd.includes('.mastra') && (cwd.endsWith(`output`) || cwd.endsWith(`output/`) || cwd.endsWith(`output\\`))) {
+        const baseDir = join(cwd, `..`, `..`);
 
         // Rewrite to be relative to the base directory
         const fullPath = join(baseDir, relativePath);
