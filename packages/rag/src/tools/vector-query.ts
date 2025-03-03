@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { rerank } from '../rerank';
 import type { RerankConfig } from '../rerank';
-import { vectorQuerySearch, defaultVectorQueryDescription } from '../utils';
+import { vectorQuerySearch, defaultVectorQueryDescription, filterDescription, topKDescription } from '../utils';
 
 export const createVectorQueryTool = ({
   vectorStoreName,
@@ -24,20 +24,23 @@ export const createVectorQueryTool = ({
   description?: string;
 }): ReturnType<typeof createTool> => {
   const toolId = id || `VectorQuery ${vectorStoreName} ${indexName} Tool`;
-  const toolDescription = description || defaultVectorQueryDescription(vectorStoreName, indexName);
-
+  const toolDescription = description || defaultVectorQueryDescription();
   return createTool({
     id: toolId,
     inputSchema: z.object({
-      queryText: z.string(),
-      topK: z.number(),
-      filter: z.string(),
+      queryText: z.string().describe('The text query to search for in the vector database'),
+      topK: z.number().describe(topKDescription),
+      filter: z.string().describe(filterDescription),
     }),
     outputSchema: z.object({
       relevantContext: z.any(),
     }),
     description: toolDescription,
     execute: async ({ context: { queryText, topK, filter }, mastra }) => {
+      console.log({
+        topK,
+        filter,
+      });
       const vectorStore = mastra?.vectors?.[vectorStoreName];
 
       // Get relevant chunks from the vector database

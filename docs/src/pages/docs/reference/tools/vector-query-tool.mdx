@@ -57,7 +57,7 @@ const queryTool = createVectorQueryTool({
     {
       name: "description",
       type: "string",
-      description: "Custom description for the tool (by default, provides instructions for querying the vector store with examples of filtering and reranking if enabled)",
+      description: "Custom description for the tool. By default: 'Access the knowledge base to find information needed to answer user questions'",
       isOptional: true,
     }
   ]}
@@ -118,9 +118,10 @@ The tool returns an object with:
 
 ## Default Tool Description
 
-The default tool description provides:
-- Instructions for querying the specified vector store
-- Examples of filter syntax when filtering is enabled
+The default description focuses on:
+- Finding relevant information in stored knowledge
+- Answering user questions
+- Retrieving factual content
 
 ## Result Handling
 
@@ -184,6 +185,19 @@ Reranking improves result quality by combining:
 - Query analysis: Adjustments based on query characteristics
 
 The reranker processes the initial vector search results and returns a reordered list optimized for relevance.
+
+## Example with Custom Description
+
+```typescript
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding('text-embedding-3-small'),
+  description: "Search through document archives to find relevant information for answering questions about company policies and procedures"
+});
+```
+
+This example shows how to customize the tool description for a specific use case while maintaining its core purpose of information retrieval.
 
 ## Tool Details
 
