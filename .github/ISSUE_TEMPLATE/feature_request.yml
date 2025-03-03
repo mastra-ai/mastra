@@ -1,0 +1,85 @@
+name: Feature Request
+description: Suggest an idea or enhancement for Mastra
+title: "[FEATURE] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to suggest a new feature! Please provide as much detail as possible to help us understand your idea.
+
+  - type: textarea
+    attributes:
+      label: Problem Statement
+      description: Is your feature request related to a problem? Please describe.
+      placeholder: I'm always frustrated when trying to [...]
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like to see implemented.
+      placeholder: |
+        A clear and concise description of what you want to happen.
+        
+        For example: "I would like to see a new integration with [service] that allows users to..."
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Component
+      description: Which component of Mastra would this feature affect?
+      multiple: true
+      options:
+        - Agents
+        - Tools
+        - Workflows
+        - RAG
+        - Integrations
+        - Evals
+        - CLI
+        - Playground UI
+        - Deployment
+        - Memory
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Alternatives Considered
+      description: Describe any alternative solutions or features you've considered.
+      placeholder: |
+        Are there any workarounds or alternative approaches you're currently using?
+    validations:
+      required: false
+
+  - type: textarea
+    attributes:
+      label: Example Use Case
+      description: Provide an example of how you would use this feature.
+      placeholder: |
+        "As a developer, I want to be able to [do something] so that I can [achieve some goal]."
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Additional Context
+      description: Add any other context, screenshots, or examples about the feature request here.
+      placeholder: |
+        Any additional information that might help us understand the request better.
+    validations:
+      required: false
+
+  - type: checkboxes
+    attributes:
+      label: Verification
+      description: Before submitting, please make sure you've completed the following:
+      options:
+        - label: I have searched the existing issues to make sure this is not a duplicate
+          required: true
+        - label: I have provided sufficient context for the team to understand the request
+          required: true
