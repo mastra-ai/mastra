@@ -12,7 +12,7 @@ import * as readline from "node:readline/promises"
 import { stdin as input, stdout as output } from "node:process"
 
 const registry = new RegistryClient({
-	url: `https://opentools.com/.well-known/mcp`,
+	url: `https://opentools.com/.well-known/mcp.json`,
 })
 
 const mcpConfiguration = new McpConfiguration({

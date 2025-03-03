@@ -10,7 +10,7 @@ import { RegistryClient } from "@mcp/registry"
 
 // Connect to OpenTools registry
 const registry = new RegistryClient({
-	url: "https://opentools.com/.well-known/mcp",
+	url: "https://opentools.com/.well-known/mcp.json",
 })
 
 // Connect to the registry
@@ -32,5 +32,5 @@ console.log("\nStripe server details:", {
 	name: stripeServer.name,
 	version: stripeServer.version,
 	publisher: stripeServer.publisher,
-	config: stripeServer.config,
+	config: stripeServer.schemas,
 })
