@@ -155,7 +155,9 @@ export abstract class MastraMemory extends MastraBase {
       content:
         typeof msg.content === 'string' && (msg.content.startsWith('[') || msg.content.startsWith('{'))
           ? JSON.parse((msg as MessageType).content as string)
-          : msg.content,
+          : typeof msg.content === 'number'
+            ? String(msg.content)
+            : msg.content,
     }));
   }
 
@@ -212,6 +214,8 @@ export abstract class MastraMemory extends MastraBase {
 
         if (typeof message.content === 'string') {
           textContent = message.content;
+        } else if (typeof message.content === 'number') {
+          textContent = String(message.content);
         } else if (Array.isArray(message.content)) {
           for (const content of message.content) {
             if (content.type === 'text') {
