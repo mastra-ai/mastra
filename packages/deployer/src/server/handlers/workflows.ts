@@ -12,9 +12,8 @@ export async function getWorkflowsHandler(c: Context) {
     const workflows = mastra.getWorkflows({ serialized: false });
     const _workflows = Object.entries(workflows).reduce<any>((acc, [key, workflow]) => {
       acc[key] = {
+        ...workflow,
         name: workflow.name,
-        stepGraph: workflow.stepGraph,
-        stepSubscriberGraph: workflow.stepSubscriberGraph,
         triggerSchema: workflow.triggerSchema ? stringify(zodToJsonSchema(workflow.triggerSchema)) : undefined,
         steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
           const _step = step as any;
