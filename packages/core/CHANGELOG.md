@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.5.0-alpha.2
+
+### Minor Changes
+
+- 02ffb7b: Added updateIndexById and deleteIndexById methods in the MastraVector inteface
+
 ## 0.5.0-alpha.1
 
 ### Patch Changes
