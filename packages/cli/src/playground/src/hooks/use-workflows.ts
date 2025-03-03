@@ -1,3 +1,4 @@
+import { MastraClient } from '@mastra/client-js';
 import type { Workflow } from '@mastra/core/workflows';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -112,40 +113,18 @@ export const useWatchWorkflow = () => {
   const watchWorkflow = async ({ workflowId }: { workflowId: string }) => {
     try {
       setIsWatchingWorkflow(true);
-      const response = await fetch(`/api/workflows/${workflowId}/watch`);
+      const client = new MastraClient({
+        baseUrl: 'http://localhost:4111',
+      });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error?.error || 'Error watching workflow');
+      const watchSubscription = client.getWorkflow(workflowId).watch();
+
+      if (!watchSubscription) {
+        throw new Error('Error watching workflow');
       }
 
-      const reader = response.body?.getReader();
-
-      if (!reader) {
-        throw new Error('No reader available');
-      }
-
-      let buffer = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += new TextDecoder().decode(value);
-
-        const records = buffer.split('\x1E');
-
-        buffer = records.pop() || '';
-
-        for (const record of records) {
-          if (record.trim()) {
-            const data = JSON.parse(record);
-            setWatchResult({
-              activePaths: data.activePaths,
-              context: data.context,
-              timestamp: data.timestamp,
-            });
-          }
-        }
+      for await (const record of watchSubscription) {
+        setWatchResult(record);
       }
     } catch (error) {
       console.error('Error watching workflow:', error);
