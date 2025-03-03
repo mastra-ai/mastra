@@ -13,11 +13,9 @@ import type {
   GetTelemetryResponse,
   GetToolResponse,
   GetWorkflowResponse,
-  GetSerializedWorkflowResponse,
   RequestOptions,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
-  GetWorkflowsParams,
 } from './types';
 
 export class MastraClient extends BaseResource {
@@ -111,13 +109,8 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing serialized flag, default for the serialized flag is true
    * @returns Promise containing map of workflow IDs to workflow details
    */
-  public getWorkflows(): Promise<Record<string, GetSerializedWorkflowResponse>>;
-  public getWorkflows(params: { serialized: true }): Promise<Record<string, GetSerializedWorkflowResponse>>;
-  public getWorkflows(params: { serialized: false }): Promise<Record<string, GetWorkflowResponse>>;
-  public getWorkflows(
-    params?: GetWorkflowsParams,
-  ): Promise<Record<string, GetWorkflowResponse | GetSerializedWorkflowResponse>> {
-    return this.request(`/api/workflows?serialized=${params?.serialized ?? true}`);
+  public getWorkflows(): Promise<Record<string, GetWorkflowResponse>> {
+    return this.request(`/api/workflows`);
   }
 
   /**

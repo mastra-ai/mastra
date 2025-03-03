@@ -941,15 +941,6 @@ export async function createHonoServer(
     describeRoute({
       description: 'Get all workflows',
       tags: ['workflows'],
-      parameters: [
-        {
-          name: 'serialized',
-          in: 'query',
-          required: false,
-          schema: { type: 'boolean' },
-          description: 'determines if the workflows returned are serialized or not, default is true',
-        },
-      ],
       responses: {
         200: {
           description: 'List of all workflows',

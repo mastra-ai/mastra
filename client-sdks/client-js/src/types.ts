@@ -61,20 +61,12 @@ export interface GetToolResponse {
   outputSchema: string;
 }
 
-export interface GetWorkflowsParams {
-  serialized: boolean;
-}
-
 export interface GetWorkflowResponse {
   name: string;
   triggerSchema: string;
   steps: Record<string, StepAction<any, any, any, any>>;
   stepGraph: StepGraph;
   stepSubscriberGraph: Record<string, StepGraph>;
-}
-
-export interface GetSerializedWorkflowResponse {
-  name: string;
 }
 
 export interface UpsertVectorParams {

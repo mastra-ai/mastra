@@ -9,31 +9,26 @@ import { handleError } from './error';
 export async function getWorkflowsHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const serialized = c.req.query('serialized') || 'true';
-    const workflows = mastra.getWorkflows({ serialized: serialized === 'true' });
-    if (serialized === 'true') {
-      return c.json(workflows);
-    } else {
-      const _workflows = Object.entries(workflows).reduce<any>((acc, [key, workflow]) => {
-        acc[key] = {
-          name: workflow.name,
-          stepGraph: workflow.stepGraph,
-          stepSubscriberGraph: workflow.stepSubscriberGraph,
-          triggerSchema: workflow.triggerSchema ? stringify(zodToJsonSchema(workflow.triggerSchema)) : undefined,
-          steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
-            const _step = step as any;
-            acc[key] = {
-              ..._step,
-              inputSchema: _step.inputSchema ? stringify(zodToJsonSchema(_step.inputSchema)) : undefined,
-              outputSchema: _step.outputSchema ? stringify(zodToJsonSchema(_step.outputSchema)) : undefined,
-            };
-            return acc;
-          }, {}),
-        };
-        return acc;
-      }, {});
-      return c.json(_workflows);
-    }
+    const workflows = mastra.getWorkflows({ serialized: false });
+    const _workflows = Object.entries(workflows).reduce<any>((acc, [key, workflow]) => {
+      acc[key] = {
+        name: workflow.name,
+        stepGraph: workflow.stepGraph,
+        stepSubscriberGraph: workflow.stepSubscriberGraph,
+        triggerSchema: workflow.triggerSchema ? stringify(zodToJsonSchema(workflow.triggerSchema)) : undefined,
+        steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
+          const _step = step as any;
+          acc[key] = {
+            ..._step,
+            inputSchema: _step.inputSchema ? stringify(zodToJsonSchema(_step.inputSchema)) : undefined,
+            outputSchema: _step.outputSchema ? stringify(zodToJsonSchema(_step.outputSchema)) : undefined,
+          };
+          return acc;
+        }, {}),
+      };
+      return acc;
+    }, {});
+    return c.json(_workflows);
   } catch (error) {
     return handleError(error, 'Error getting workflows');
   }
