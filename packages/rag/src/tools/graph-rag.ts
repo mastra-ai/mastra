@@ -42,8 +42,8 @@ export const createGraphRAGTool = ({
     id: toolId,
     inputSchema: z.object({
       queryText: z.string().describe('The text query to search for in the vector database'),
-      topK: z.number().default(10).describe(topKDescription),
-      filter: z.string().default('{}').describe(filterDescription),
+      topK: z.number().describe(topKDescription),
+      filter: z.string().describe(filterDescription),
     }),
     outputSchema: z.object({
       relevantContext: z.any(),
