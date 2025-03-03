@@ -8,6 +8,8 @@ import type {
   GenerateObjectResult,
   GenerateTextResult,
   LanguageModelV1,
+  StreamObjectResult,
+  StreamTextResult,
   TextPart,
   ToolCallPart,
   UserContent,
@@ -775,7 +777,7 @@ export class Agent<
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     args?: AgentGenerateOptions<Z> & { output?: never; experimental_output?: never },
-  ): Promise<GenerateTextResult<any, any>>;
+  ): Promise<GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     args?: AgentGenerateOptions<Z> &
@@ -799,7 +801,10 @@ export class Agent<
       telemetry,
       ...rest
     }: AgentGenerateOptions<Z> = {},
-  ): Promise<GenerateTextResult<any, any> | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>> {
+  ): Promise<
+    | GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
+    | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>
+  > {
     let messagesToUse: CoreMessage[] = [];
 
     if (typeof messages === `string`) {
@@ -909,12 +914,12 @@ export class Agent<
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     args?: AgentStreamOptions<Z> & { output?: never; experimental_output?: never },
-  ): Promise<StreamReturn<any>>;
+  ): Promise<StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     args?: AgentStreamOptions<Z> &
       ({ output: Z; experimental_output?: never } | { experimental_output: Z; output?: never }),
-  ): Promise<StreamReturn<Z extends ZodSchema ? z.infer<Z> : unknown>>;
+  ): Promise<StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>>;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     {
@@ -934,7 +939,10 @@ export class Agent<
       telemetry,
       ...rest
     }: AgentStreamOptions<Z> = {},
-  ): Promise<StreamReturn<Z>> {
+  ): Promise<
+    | StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
+    | StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>
+  > {
     const runIdToUse = runId || randomUUID();
 
     let messagesToUse: CoreMessage[] = [];
