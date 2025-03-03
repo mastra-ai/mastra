@@ -1,8 +1,6 @@
 import { vi, describe, it, expect, beforeAll, afterAll, test, beforeEach, afterEach } from 'vitest';
 
 import { AstraVector } from './';
-import dotenv from 'dotenv';
-dotenv.config();
 
 // Give tests enough time to complete database operations
 vi.setConfig({ testTimeout: 300000, hookTimeout: 300000 });
