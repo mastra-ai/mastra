@@ -69,6 +69,26 @@ export interface GetWorkflowResponse {
   stepSubscriberGraph: Record<string, StepGraph>;
 }
 
+export type GetWorkflowWatchResponse = {
+  activePaths: Array<{
+    stepId: string;
+    stepPath: string[];
+    status: 'completed' | 'suspended' | 'pending';
+  }>;
+  context: {
+    steps: Record<
+      string,
+      {
+        status: 'completed' | 'suspended' | 'running';
+        [key: string]: any;
+      }
+    >;
+  };
+  timestamp: number;
+  suspendedSteps: Record<string, any>;
+  runId: string;
+};
+
 export interface UpsertVectorParams {
   indexName: string;
   vectors: number[][];

@@ -55,33 +55,35 @@ const result = await workflow.resume({
 
 ### Watch Workflow
 
-Watch workflow transitions in real-time:
+Watch workflow transitions in real-time using an async iterator:
 
 ```typescript
-const response = await workflow.watch();
+// Get workflow instance
+const workflow = client.getWorkflow("workflow-id");
 
-// Read Transition Data from response body
-const reader = response.body.getReader();
-let buffer = "";
-while (true) {
-  const { done, value } = await reader.read();
-  if (done) break;
-  buffer += new TextDecoder().decode(value);
+const workflowWatch = workflow.watch()
 
-  // Split the buffer into records
-  const records = buffer.split("\x1E");
+// Execute workflow
+workflow.execute()
 
-  buffer = records.pop() || "";
-
-  // Process each record
-  for (const record of records) {
-    // Handle each record
-    const { activePaths, context, timestamp } = record;
-    console.log({
-      activePaths,
-      context,
-      timestamp,
-    });
-  }
+// Watch for workflow transitions
+for await (const record of workflowWatch) {
+  // Each record contains workflow transition data
+  console.log({
+    activePaths: record.activePaths,
+    context: record.context,
+    timestamp: record.timestamp
+    runId: record.runId
+  });
 }
+
+
 ```
+
+The `watch()` method returns an AsyncGenerator that yields workflow transition records. Each record contains:
+- `activePaths`: Currently active paths in the workflow
+- `context`: Current workflow context data
+- `timestamp`: Timestamp of the transition
+- `runId`: Uniqe Identifier for workflow run
+
+This makes it easy to process workflow transitions in real-time using a simple for-await loop.
