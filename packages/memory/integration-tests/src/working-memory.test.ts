@@ -278,4 +278,127 @@ describe('Working Memory Tests', () => {
     const updatedThread = await disabledMemory.getThreadById({ threadId: thread.id });
     expect(updatedThread?.metadata?.workingMemory).toBeUndefined();
   });
+
+  it('should respect working memory use setting', async () => {
+    // Create memory instance with working memory in tool-call mode
+    const toolCallMemory = new Memory({
+      storage: new DefaultStorage({
+        config: {
+          url: 'file:test.db',
+        },
+      }),
+      options: {
+        workingMemory: {
+          enabled: true,
+          template: `<user><first_name></first_name><location></location></user>`,
+          use: 'tool-call',
+        },
+        lastMessages: 10,
+      },
+    });
+
+    const toolCallThread = await toolCallMemory.saveThread({
+      thread: createTestThread('Tool Call Working Memory Thread'),
+    });
+
+    // Get the system message and verify instructions
+    const systemMessage = await toolCallMemory.getSystemMessage({ threadId: toolCallThread.id });
+    expect(systemMessage).not.toContain('<working_memory>text</working_memory>');
+    expect(systemMessage).toContain('updateWorkingMemory');
+
+    // Test tool-call mode saves working memory
+    const toolCallAgent = new Agent({
+      name: 'Tool Call Memory Agent',
+      instructions: 'You are a helpful AI agent. Always remember user information.',
+      model: openai('gpt-4o'),
+      memory: toolCallMemory,
+    });
+
+    await toolCallAgent.generate('Hi, my name is John and I live in New York', {
+      threadId: toolCallThread.id,
+      resourceId,
+    });
+
+    // Verify working memory was saved in tool-call mode
+    const toolCallWorkingMemory = await toolCallMemory.getThreadById({ threadId: toolCallThread.id });
+    expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('<first_name>John</first_name>');
+    expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('<location>New York</location>');
+
+    // Create memory instance with working memory in text-stream mode
+    const textStreamMemory = new Memory({
+      storage: new DefaultStorage({
+        config: {
+          url: 'file:test.db',
+        },
+      }),
+      options: {
+        workingMemory: {
+          enabled: true,
+          template: `<user><first_name></first_name><location></location></user>`,
+          use: 'text-stream',
+        },
+        lastMessages: 10,
+      },
+    });
+
+    const textStreamThread = await textStreamMemory.saveThread({
+      thread: createTestThread('Text Stream Working Memory Thread'),
+    });
+
+    // Get the system message and verify instructions
+    const textStreamSystemMessage = await textStreamMemory.getSystemMessage({ threadId: textStreamThread.id });
+    expect(textStreamSystemMessage).toContain('<working_memory>text</working_memory>');
+    expect(textStreamSystemMessage).not.toContain('updateWorkingMemory');
+
+    // Test text-stream mode saves working memory
+    const textStreamAgent = new Agent({
+      name: 'Text Stream Memory Agent',
+      instructions: 'You are a helpful AI agent. Always remember user information.',
+      model: openai('gpt-4o'),
+      memory: textStreamMemory,
+    });
+
+    await textStreamAgent.generate('Hi, my name is Tyler and I live in San Francisco', {
+      threadId: textStreamThread.id,
+      resourceId,
+    });
+
+    // Verify working memory was saved in text-stream mode
+    const textStreamWorkingMemory = await textStreamMemory.getThreadById({ threadId: textStreamThread.id });
+    expect(textStreamWorkingMemory?.metadata?.workingMemory).toContain('<first_name>Tyler</first_name>');
+    expect(textStreamWorkingMemory?.metadata?.workingMemory).toContain('<location>San Francisco</location>');
+  });
+
+  it('should handle LLM responses with working memory using tool calls', async () => {
+    const agent = new Agent({
+      name: 'Memory Test Agent',
+      instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
+      model: openai('gpt-4o'),
+      memory: new Memory({
+        storage: new DefaultStorage({
+          config: {
+            url: 'file:test.db',
+          },
+        }),
+        options: {
+          workingMemory: {
+            enabled: true,
+            use: 'tool-call',
+          },
+          lastMessages: 5,
+        },
+      }),
+    });
+
+    await agent.generate('Hi, my name is Tyler and I live in San Francisco', {
+      threadId: thread.id,
+      resourceId,
+    });
+
+    // Get working memory
+    // @ts-expect-error
+    const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+    expect(workingMemory).toContain('<first_name>Tyler</first_name>');
+    expect(workingMemory).toContain('<location>San Francisco</location>');
+  });
 });

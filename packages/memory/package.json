@@ -56,7 +56,8 @@
     "pg": "^8.13.1",
     "pg-pool": "^3.7.0",
     "postgres": "^3.4.5",
-    "redis": "^4.7.0"
+    "redis": "^4.7.0",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

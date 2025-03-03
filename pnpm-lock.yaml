@@ -3245,6 +3245,9 @@ importers:
       redis:
         specifier: ^4.7.0
         version: 4.7.0
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.2
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
