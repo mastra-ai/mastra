@@ -5,7 +5,7 @@ description: Documentation for the LibSQLVector class in Mastra, which provides 
 
 # LibSQLVector Store
 
-The LibSQL storage implementation provides a SQLite-compatible vector search  [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
+The LibSQL storage implementation provides a SQLite-compatible vector search [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
 It's part of the `@mastra/core` package and offers efficient vector similarity search with metadata filtering.
 
 ## Installation
@@ -64,7 +64,7 @@ const results = await store.query({
       name: "connectionUrl",
       type: "string",
       description:
-        "LibSQL database URL. Use ':memory:' for in-memory database, 'file:local.db' for local file, or a LibSQL-compatible connection string like 'libsql://your-database.turso.io'.",
+        "LibSQL database URL. Use ':memory:' for in-memory database, 'file:dbname.db' for local file, or a LibSQL-compatible connection string like 'libsql://your-database.turso.io'.",
     },
     {
       name: "authToken",
