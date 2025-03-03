@@ -53,6 +53,10 @@
       "import": {
         "types": "./dist/vector/filter/index.d.ts",
         "default": "./dist/vector/filter/index.js"
+      },
+      "require": {
+        "types": "./dist/vector/filter/index.d.cts",
+        "default": "./dist/vector/filter/index.cjs"
       }
     },
     "./utils": {
