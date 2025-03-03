@@ -2,6 +2,7 @@ import { join } from 'path';
 import { createClient } from '@libsql/client';
 import type { Client as TursoClient, InValue } from '@libsql/client';
 
+import type { VectorFilter } from '../filter';
 import { MastraVector } from '../index';
 import type {
   CreateIndexParams,
@@ -9,8 +10,8 @@ import type {
   QueryVectorParams,
   QueryResult,
   UpsertVectorParams,
-  VectorFilter,
   ParamsToArgs,
+  QueryVectorArgs,
 } from '../index';
 
 import { LibSQLFilterTranslator } from './filter';
@@ -19,6 +20,8 @@ import { buildFilterQuery } from './sql-builder';
 interface LibSQLQueryParams extends QueryVectorParams {
   minScore?: number;
 }
+
+type LibSQLQueryArgs = [...QueryVectorArgs, number?];
 
 export class LibSQLVector extends MastraVector {
   private turso: TursoClient;
@@ -75,8 +78,8 @@ export class LibSQLVector extends MastraVector {
     return translator.translate(filter);
   }
 
-  async query(...args: ParamsToArgs<LibSQLQueryParams>): Promise<QueryResult[]> {
-    const params = this.normalizeArgs<LibSQLQueryParams>('query', args, ['minScore']);
+  async query(...args: ParamsToArgs<LibSQLQueryParams> | LibSQLQueryArgs): Promise<QueryResult[]> {
+    const params = this.normalizeArgs<LibSQLQueryParams, LibSQLQueryArgs>('query', args, ['minScore']);
 
     try {
       const { indexName, queryVector, topK = 10, filter, includeVector = false, minScore = 0 } = params;

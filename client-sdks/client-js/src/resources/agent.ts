@@ -63,6 +63,10 @@ export class Agent extends BaseResource {
     const processedParams = {
       ...params,
       output: params.output instanceof ZodSchema ? zodToJsonSchema(params.output) : params.output,
+      experimental_output:
+        params.experimental_output instanceof ZodSchema
+          ? zodToJsonSchema(params.experimental_output)
+          : params.experimental_output,
     };
 
     return this.request(`/api/agents/${this.agentId}/generate`, {
@@ -80,6 +84,10 @@ export class Agent extends BaseResource {
     const processedParams = {
       ...params,
       output: params.output instanceof ZodSchema ? zodToJsonSchema(params.output) : params.output,
+      experimental_output:
+        params.experimental_output instanceof ZodSchema
+          ? zodToJsonSchema(params.experimental_output)
+          : params.experimental_output,
     };
 
     return this.request(`/api/agents/${this.agentId}/stream`, {

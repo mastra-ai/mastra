@@ -5,9 +5,11 @@ import type {
   CreateIndexParams,
   UpsertVectorParams,
   QueryVectorParams,
-  VectorFilter,
   ParamsToArgs,
+  QueryVectorArgs,
+  UpsertVectorArgs,
 } from '@mastra/core/vector';
+import type { VectorFilter } from '@mastra/core/vector/filter';
 import { ChromaClient } from 'chromadb';
 
 import { ChromaFilterTranslator } from './filter';
@@ -16,9 +18,13 @@ interface ChromaUpsertVectorParams extends UpsertVectorParams {
   documents?: string[];
 }
 
+type ChromaUpsertArgs = [...UpsertVectorArgs, string[]?];
+
 interface ChromaQueryVectorParams extends QueryVectorParams {
   documentFilter?: VectorFilter;
 }
+
+type ChromaQueryArgs = [...QueryVectorArgs, VectorFilter?];
 
 export class ChromaVector extends MastraVector {
   private client: ChromaClient;
@@ -65,8 +71,8 @@ export class ChromaVector extends MastraVector {
     }
   }
 
-  async upsert(...args: ParamsToArgs<ChromaUpsertVectorParams>): Promise<string[]> {
-    const params = this.normalizeArgs<ChromaUpsertVectorParams>('upsert', args, ['documents']);
+  async upsert(...args: ParamsToArgs<ChromaUpsertVectorParams> | ChromaUpsertArgs): Promise<string[]> {
+    const params = this.normalizeArgs<ChromaUpsertVectorParams, ChromaUpsertArgs>('upsert', args, ['documents']);
 
     const { indexName, vectors, metadata, ids, documents } = params;
 
@@ -127,8 +133,8 @@ export class ChromaVector extends MastraVector {
     const translator = new ChromaFilterTranslator();
     return translator.translate(filter);
   }
-  async query(...args: ParamsToArgs<ChromaQueryVectorParams>): Promise<QueryResult[]> {
-    const params = this.normalizeArgs<ChromaQueryVectorParams>('query', args, ['documentFilter']);
+  async query(...args: ParamsToArgs<ChromaQueryVectorParams> | ChromaQueryArgs): Promise<QueryResult[]> {
+    const params = this.normalizeArgs<ChromaQueryVectorParams, ChromaQueryArgs>('query', args, ['documentFilter']);
 
     const { indexName, queryVector, topK = 10, filter, includeVector = false, documentFilter } = params;
 

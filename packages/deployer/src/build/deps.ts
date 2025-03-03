@@ -52,10 +52,16 @@ export class Deps extends MastraBase {
 
   public async install({ dir = this.rootDir, packages = [] }: { dir?: string; packages?: string[] }) {
     let runCommand = this.packageManager;
-    if (this.packageManager === 'npm') {
-      runCommand = `${this.packageManager} i`;
-    } else {
-      runCommand = `${this.packageManager} ${packages?.length > 0 ? `add` : `install`}`;
+
+    switch (this.packageManager) {
+      case 'npm':
+        runCommand = `${this.packageManager} i`;
+        break;
+      case 'pnpm':
+        runCommand = `${this.packageManager} --ignore-workspace install`;
+        break;
+      default:
+        runCommand = `${this.packageManager} ${packages?.length > 0 ? `add` : `install`}`;
     }
 
     const cpLogger = createChildProcessLogger({

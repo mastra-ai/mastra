@@ -1,5 +1,56 @@
 # @mastra/core
 
+## 0.4.4
+
+### Patch Changes
+
+- 1da20e7: Update typechecks for positional args
+
+## 0.4.4-alpha.0
+
+### Patch Changes
+
+- 1da20e7: Update typechecks for positional args
+
+## 0.4.3
+
+### Patch Changes
+
+- 0d185b1: Ensure proper message sort order for tool calls and results when using Memory semanticRecall feature
+- ed55f1d: Fixes to watch payload in workloads with nested branching
+- 06aa827: add option for specifying telemetry settings at generation time
+- 0fd78ac: Update vector store functions to use object params
+- 2512a93: Support all aisdk options for agent stream,generate
+- e62de74: Fix optional tool llm
+  execute
+- 0d25b75: Add all agent stream,generate option to cliend-js sdk
+- fd14a3f: Updating filter location from @mastra/core/filter to @mastra/core/vector/filter
+- 8d13b14: Fixes early exits in workflows with branching
+- 3f369a2: A better async/await based interface for suspend/resume tracking
+- 3ee4831: Fixed agent.generate() so it properly infers the return type based on output: schema | string and experimental_output: schema
+- 4d4e1e1: Updated vector tests and pinecone
+- bb4f447: Add support for commonjs
+- 108793c: Throw error when resourceId is not provided but Memory is configured and a threadId was passed
+- 5f28f44: Updated Chroma Vector to allow for document storage
+- dabecf4: Pass threadId and resourceId into tool execute functions so that tools are able to query memory
+
+## 0.4.3-alpha.4
+
+### Patch Changes
+
+- dabecf4: Pass threadId and resourceId into tool execute functions so that tools are able to query memory
+
+## 0.4.3-alpha.3
+
+### Patch Changes
+
+- 0fd78ac: Update vector store functions to use object params
+- 0d25b75: Add all agent stream,generate option to cliend-js sdk
+- fd14a3f: Updating filter location from @mastra/core/filter to @mastra/core/vector/filter
+- 3f369a2: A better async/await based interface for suspend/resume tracking
+- 4d4e1e1: Updated vector tests and pinecone
+- bb4f447: Add support for commonjs
+
 ## 0.4.3-alpha.2
 
 ### Patch Changes

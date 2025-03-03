@@ -59,16 +59,16 @@ async function analyze(
         },
       } satisfies Plugin,
       json(),
+      esbuild({
+        target: 'node20',
+        platform,
+        minify: false,
+      }),
       commonjs({
         strictRequires: 'debug',
         ignoreTryCatch: false,
         transformMixedEsModules: true,
         extensions: ['.js', '.ts'],
-      }),
-      esbuild({
-        target: 'node20',
-        platform,
-        minify: false,
       }),
       removeDeployer(mastraEntry),
       esbuild({

@@ -32,6 +32,8 @@ import type { CompositeVoice } from '../voice';
 
 import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
 
+export * from './types';
+
 @InstrumentClass({
   prefix: 'agent',
   excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', 'log'],
@@ -460,14 +462,16 @@ export class Agent<
 
   convertTools({
     toolsets,
-    // threadId,
+    threadId,
+    resourceId,
     runId,
   }: {
     toolsets?: ToolsetsInput;
     threadId?: string;
+    resourceId?: string;
     runId?: string;
   }): Record<string, CoreTool> {
-    this.logger.debug(`[Agents:${this.name}] - Assigning tools`, { runId });
+    this.logger.debug(`[Agents:${this.name}] - Assigning tools`, { runId, threadId, resourceId });
     const converted = Object.entries(this.tools || {}).reduce(
       (memo, value) => {
         const k = value[0];
@@ -486,6 +490,8 @@ export class Agent<
                         description: tool.description,
                         args,
                         runId,
+                        threadId,
+                        resourceId,
                       });
                       return (
                         tool?.execute?.(
@@ -493,6 +499,8 @@ export class Agent<
                             context: args,
                             mastra: this.#mastra,
                             runId,
+                            threadId,
+                            resourceId,
                           },
                           options,
                         ) ?? undefined
@@ -500,7 +508,9 @@ export class Agent<
                     } catch (err) {
                       this.logger.error(`[Agent:${this.name}] - Failed execution`, {
                         error: err,
-                        runId: runId,
+                        runId,
+                        threadId,
+                        resourceId,
                       });
                       throw err;
                     }
@@ -538,22 +548,28 @@ export class Agent<
                         description: toolObj.description,
                         args,
                         runId,
+                        threadId,
+                        resourceId,
                       });
                       return (
                         toolObj?.execute?.(
                           {
                             context: args,
                             runId,
+                            threadId,
+                            resourceId,
                           },
                           options,
                         ) ?? undefined
                       );
-                    } catch (err) {
+                    } catch (error) {
                       this.logger.error(`[Agent:${this.name}] - Failed toolset execution`, {
-                        error: err,
-                        runId: runId,
+                        error,
+                        runId,
+                        threadId,
+                        resourceId,
                       });
-                      throw err;
+                      throw error;
                     }
                   }
                 : undefined,
@@ -675,6 +691,7 @@ export class Agent<
           convertedTools = this.convertTools({
             toolsets,
             threadId: threadIdToUse,
+            resourceId,
             runId,
           });
         }
@@ -829,6 +846,8 @@ export class Agent<
         temperature,
         toolChoice: toolChoice || 'auto',
         experimental_output,
+        threadId,
+        resourceId,
         ...rest,
       });
 
@@ -854,6 +873,8 @@ export class Agent<
         temperature,
         toolChoice,
         telemetry,
+        threadId,
+        resourceId,
         ...rest,
       });
 

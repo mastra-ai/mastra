@@ -1,6 +1,5 @@
-import { BaseFilterTranslator } from '../../filter';
-import type { FieldCondition, Filter, OperatorSupport } from '../../filter';
-import type { VectorFilter } from '../types';
+import { BaseFilterTranslator } from '../filter';
+import type { FieldCondition, VectorFilter, OperatorSupport } from '../filter';
 
 /**
  * Translates MongoDB-style filters to LibSQL compatible filters.
@@ -21,15 +20,15 @@ export class LibSQLFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter: VectorFilter): VectorFilter {
+  translate(filter?: VectorFilter): VectorFilter {
     if (this.isEmpty(filter)) {
       return filter;
     }
-    this.validateFilter(filter as Filter);
+    this.validateFilter(filter);
     return this.translateNode(filter);
   }
 
-  private translateNode(node: Filter | FieldCondition, currentPath: string = ''): any {
+  private translateNode(node: VectorFilter | FieldCondition, currentPath: string = ''): any {
     if (this.isRegex(node)) {
       throw new Error('Direct regex pattern format is not supported in LibSQL');
     }
@@ -75,7 +74,7 @@ export class LibSQLFilterTranslator extends BaseFilterTranslator {
 
       if (this.isLogicalOperator(key)) {
         result[key] = Array.isArray(value)
-          ? value.map((filter: Filter) => this.translateNode(filter))
+          ? value.map((filter: VectorFilter) => this.translateNode(filter))
           : this.translateNode(value);
       } else if (this.isOperator(key)) {
         if (this.isArrayOperator(key) && !Array.isArray(value) && key !== '$elemMatch') {

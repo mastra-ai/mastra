@@ -105,6 +105,8 @@ type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = unde
   onStepFinish?: (step: string) => void;
   experimental_output?: Z;
   telemetry?: TelemetrySettings;
+  threadId?: string;
+  resourceId?: string;
 } & Run;
 
 export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
