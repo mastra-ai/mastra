@@ -39,6 +39,7 @@ program
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, or groq)')
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
+  .option('-nt, --no-timeout', 'Disable Package Installation timeout')
   .action(async args => {
     if (args.default) {
       await create({
@@ -46,6 +47,7 @@ program
         llmProvider: 'openai',
         addExample: false,
         createVersionTag,
+        noTimeout: args['no-timeout'],
       });
       return;
     }
