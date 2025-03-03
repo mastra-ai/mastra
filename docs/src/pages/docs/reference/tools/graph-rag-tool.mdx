@@ -54,6 +54,12 @@ const graphTool = createGraphRAGTool({
       description: "Configuration for the graph-based retrieval",
       isOptional: true,
       defaultValue: "Default graph options",
+    },
+    {
+      name: "description",
+      type: "string",
+      description: "Custom description for the tool. By default: 'Access and analyze relationships between information in the knowledge base to answer complex questions about connections and patterns'",
+      isOptional: true,
     }
   ]}
 />
@@ -106,6 +112,13 @@ The tool returns an object with:
   ]}
 />
 
+## Default Tool Description
+
+The default description focuses on:
+- Analyzing relationships between documents
+- Finding patterns and connections
+- Answering complex queries
+
 ## Advanced Example
 
 ```typescript
@@ -122,7 +135,20 @@ const graphTool = createGraphRAGTool({
 });
 ```
 
+## Example with Custom Description
+
+```typescript
+const graphTool = createGraphRAGTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding('text-embedding-3-small'),
+  description: "Analyze document relationships to find complex patterns and connections in our company's historical data"
+});
+```
+
+This example shows how to customize the tool description for a specific use case while maintaining its core purpose of relationship analysis.
+
 ## Related
 
 - [createVectorQueryTool](./vector-query-tool)
-- [GraphRAG](../rag/graph-rag) 
+- [GraphRAG](../rag/graph-rag)

@@ -97,3 +97,55 @@ main();
 ```
 
 The agent will use the `weatherInfo` tool to get the current weather in New York City and respond accordingly.
+
+## Tool Design Best Practices
+
+When creating tools for your agents, following these guidelines will help ensure reliable and intuitive tool usage:
+
+### Tool Descriptions
+Your tool's main description should focus on its purpose and value:
+- Keep descriptions simple and focused on WHAT the tool does
+- Emphasize the tool's primary use case
+- Avoid implementation details in the main description
+- Focus on helping the agent understand WHEN to use the tool
+
+```typescript
+createTool({
+  id: "documentSearch",
+  description: "Access the knowledge base to find information needed to answer user questions",
+  // ... rest of tool configuration
+});
+```
+
+### Parameter Schemas
+Technical details belong in the parameter schemas, where they help the agent use the tool correctly:
+- Make parameters self-documenting with clear descriptions
+- Include default values and their implications
+- Provide examples where helpful
+- Describe the impact of different parameter choices
+
+```typescript
+inputSchema: z.object({
+  query: z.string().describe("The search query to find relevant information"),
+  limit: z.number().default(10).describe(
+    "Number of results to return. Higher values provide more context, lower values focus on best matches"
+  ),
+  options: z.object({}).describe(
+    "Optional configuration. Example: {'filter': 'category=news'}"
+  ),
+}),
+```
+
+### Agent Interaction Patterns
+Tools are more likely to be used effectively when:
+- Queries or tasks are complex enough to clearly require tool assistance
+- Agent instructions provide clear guidance on tool usage
+- Parameter requirements are well-documented in the schema
+- The tool's purpose aligns with the query's needs
+
+### Common Pitfalls
+- Overloading the main description with technical details
+- Mixing implementation details with usage guidance
+- Unclear parameter descriptions or missing examples
+
+Following these practices helps ensure your tools are discoverable and usable by agents while maintaining clean separation between purpose (main description) and implementation details (parameter schemas).
