@@ -1817,6 +1817,9 @@ importers:
       '@mastra/loggers':
         specifier: workspace:*
         version: link:../../packages/loggers
+      '@mastra/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
       ai:
         specifier: latest
         version: 4.1.46(react@19.0.0)(zod@3.24.2)
