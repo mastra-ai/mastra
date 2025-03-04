@@ -1367,7 +1367,6 @@ describe('DefaultVectorDB', () => {
         const results2 = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: undefined,
         });
         expect(results1).toEqual(results2);
         expect(results1.length).toBeGreaterThan(0);
@@ -1382,7 +1381,6 @@ describe('DefaultVectorDB', () => {
         const results2 = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: {},
         });
         expect(results).toEqual(results2);
         expect(results.length).toBeGreaterThan(0);
@@ -1397,7 +1395,6 @@ describe('DefaultVectorDB', () => {
         const results2 = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: null,
         });
         expect(results).toEqual(results2);
         expect(results.length).toBeGreaterThan(0);
