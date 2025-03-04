@@ -21,7 +21,7 @@ import type {
 import { isVariableReference, updateStepInHierarchy } from './utils';
 import { WorkflowInstance } from './workflow-instance';
 import type { WorkflowResultReturn } from './workflow-instance';
-
+import { WhenConditionReturnValue } from './types';
 export class Workflow<
   TSteps extends Step<any, any, any>[] = any,
   TTriggerSchema extends z.ZodType<any> = any,
@@ -159,6 +159,161 @@ export class Workflow<
     }
 
     return this;
+  }
+
+  private loop<
+    FallbackStep extends IAction<any, any, any, any>,
+    CondStep extends StepVariableType<any, any, any, any>,
+    VarStep extends StepVariableType<any, any, any, any>,
+  >(
+    applyOperator: (op: string, value: any, target: any) => { status: string },
+    condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'],
+    fallbackStep: FallbackStep,
+  ) {
+    const lastStepKey = this.#lastStepStack[this.#lastStepStack.length - 1];
+    // If no last step, we can't do anything
+    if (!lastStepKey) return this;
+
+    const fallbackStepKey = this.#makeStepKey(fallbackStep);
+
+    // Store the fallback step
+    this.#steps[fallbackStepKey] = fallbackStep;
+
+    // Create a check step that evaluates the condition
+    const checkStepKey = `__${fallbackStepKey}_check`;
+    const checkStep = {
+      id: checkStepKey,
+      execute: async ({ context }: any) => {
+        if (typeof condition === 'function') {
+          const result = await condition({ context });
+          return { status: result ? 'complete' : 'continue' };
+        }
+
+        // For query-based conditions, we need to:
+        // 1. Get the actual value from the reference
+        // 2. Compare it with the query
+        if (condition && 'ref' in condition) {
+          const { ref, query } = condition;
+          // Handle both string IDs and step objects with IDs
+          const stepId = typeof ref.step === 'string' ? ref.step : 'id' in ref.step ? ref.step.id : null;
+          if (!stepId) {
+            return { status: 'continue' }; // If we can't get the step ID, continue looping
+          }
+
+          const stepOutput = context.steps?.[stepId]?.output;
+          if (!stepOutput) {
+            return { status: 'continue' }; // If we can't find the value, continue looping
+          }
+
+          // Get the value at the specified path
+          const value = ref.path.split('.').reduce((obj, key) => obj?.[key], stepOutput);
+
+          // Compare the value with the query
+          const operator = Object.keys(query)[0] as keyof typeof query;
+          const target = query[operator];
+
+          return applyOperator(operator as string, value, target);
+        }
+
+        return { status: 'continue' };
+      },
+    };
+    this.#steps[checkStepKey] = checkStep;
+
+    // Loop finished step
+    const loopFinishedStepKey = `__${fallbackStepKey}_loop_finished`;
+    const loopFinishedStep = {
+      id: loopFinishedStepKey,
+      execute: async ({ context }: any) => {
+        return { success: true };
+      },
+    };
+    this.#steps[checkStepKey] = checkStep;
+
+    // First add the check step after the last step
+    this.then(checkStep);
+
+    // Then create a branch after the check step that loops back to the fallback step
+    this.after(checkStep)
+      .step(fallbackStep, {
+        when: async ({ context }) => {
+          const checkStepResult = context.steps?.[checkStepKey];
+          if (checkStepResult?.status !== 'success') {
+            return WhenConditionReturnValue.ABORT;
+          }
+
+          const status = checkStepResult?.output?.status;
+          return status === 'continue' ? WhenConditionReturnValue.CONTINUE : WhenConditionReturnValue.CONTINUE_FAILED;
+        },
+      })
+      .then(checkStep)
+      .step(loopFinishedStep, {
+        when: async ({ context }) => {
+          const checkStepResult = context.steps?.[checkStepKey];
+          if (checkStepResult?.status !== 'success') {
+            return WhenConditionReturnValue.CONTINUE_FAILED;
+          }
+
+          const status = checkStepResult?.output?.status;
+          return status === 'complete' ? WhenConditionReturnValue.CONTINUE : WhenConditionReturnValue.CONTINUE_FAILED;
+        },
+      });
+
+    return this;
+  }
+
+  while<
+    FallbackStep extends IAction<any, any, any, any>,
+    CondStep extends StepVariableType<any, any, any, any>,
+    VarStep extends StepVariableType<any, any, any, any>,
+  >(condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'], fallbackStep: FallbackStep) {
+    const applyOperator = (operator: string, value: any, target: any) => {
+      switch (operator) {
+        case '$eq':
+          return { status: value !== target ? 'complete' : 'continue' };
+        case '$ne':
+          return { status: value === target ? 'complete' : 'continue' };
+        case '$gt':
+          return { status: value <= target ? 'complete' : 'continue' };
+        case '$gte':
+          return { status: value < target ? 'complete' : 'continue' };
+        case '$lt':
+          return { status: value >= target ? 'complete' : 'continue' };
+        case '$lte':
+          return { status: value > target ? 'complete' : 'continue' };
+        default:
+          return { status: 'continue' };
+      }
+    };
+
+    return this.loop(applyOperator, condition, fallbackStep);
+  }
+
+  until<
+    FallbackStep extends IAction<any, any, any, any>,
+    CondStep extends StepVariableType<any, any, any, any>,
+    VarStep extends StepVariableType<any, any, any, any>,
+  >(condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'], fallbackStep: FallbackStep) {
+    const applyOperator = (operator: string, value: any, target: any) => {
+      switch (operator) {
+        case '$eq':
+          return { status: value === target ? 'complete' : 'continue' };
+        case '$ne':
+          return { status: value !== target ? 'complete' : 'continue' };
+        case '$gt':
+          return { status: value > target ? 'complete' : 'continue' };
+        case '$gte':
+          return { status: value >= target ? 'complete' : 'continue' };
+        case '$lt':
+          return { status: value < target ? 'complete' : 'continue' };
+        case '$lte':
+          return { status: value <= target ? 'complete' : 'continue' };
+        default:
+          return { status: 'continue' };
+      }
+    };
+
+    return this.loop(applyOperator, condition, fallbackStep);
   }
 
   after<TStep extends IAction<any, any, any, any>>(step: TStep) {

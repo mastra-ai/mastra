@@ -1,13 +1,12 @@
-import { useNavigate } from 'react-router';
 import { Header } from '@/components/ui/header';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AgentsTable } from '@mastra/playground-ui';
+import { useNavigate } from 'react-router';
 
 import { useAgents } from '@/hooks/use-agents';
-import { Barcode } from 'lucide-react';
 
 function Agents() {
-  const { agents, isLoading } = useAgents();
+  const { agents } = useAgents();
   const navigate = useNavigate();
 
   const agentListData = Object.entries(agents).map(([key, agent]) => ({
@@ -22,10 +21,10 @@ function Agents() {
     <div className="flex flex-col relative overflow-hidden">
       <section className="flex-1 relative overflow-hidden">
         <ScrollArea className="h-full">
-          <section className="">
+          <section>
             <AgentsTable
-              isLoading={isLoading}
-              title={<Header title="Agents" className="border-0" />}
+              isLoading={false}
+              title={<Header title="Agents" className="border-0 h-[var(--top-bar-height)] mx-0" />}
               agentsList={agentListData}
               columns={[
                 {
@@ -61,7 +60,7 @@ function Agents() {
                       }}
                     >
                       <span className="text-mastra-el-5 text-sm flex items-center gap-2">
-                        <span>{row.original.modelId}</span> <Barcode className="w-4 h-4" />
+                        <span>{row.original.modelId}</span> 
                       </span>
                     </button>
                   ),
