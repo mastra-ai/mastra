@@ -48,7 +48,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
         )}
       </PopoverTrigger>
       <PopoverContent
-        className="backdrop-blur-4xl w-auto p-0 bg-transparent"
+        className="backdrop-blur-4xl w-auto p-0 bg-[#171717]"
         align="start"
         data-testid="datepicker-calendar"
       >

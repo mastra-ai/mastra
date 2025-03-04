@@ -18,18 +18,6 @@ export const weatherTool = createTool({
   description: 'Get current weather for a location',
   inputSchema: z.object({
     location: z.string().describe('City name'),
-    // booleanType: z.boolean().describe('Boolean type'),
-    // dateType: z.date().describe('Date type'),
-    // numberType: z.number().describe('Number type'),
-    arrayType: z.array(z.string()).describe('Array type'),
-    // objectType: z.object({
-    //   name: z.string().describe('Name'),
-    //   age: z.number().describe('Age'),
-    // }),
-    // unionType: z.union([z.string(), z.number()]).describe('Union type'),
-    // enumType: z.enum(['foo', 'bar', 'baz']).describe('Enum type'),
-    // literalType: z.literal('foo').describe('Literal type'),
-    // optionalType: z.string().optional().describe('Optional type'),
   }),
   outputSchema: z.object({
     temperature: z.number(),
@@ -41,7 +29,6 @@ export const weatherTool = createTool({
     location: z.string(),
   }),
   execute: async ({ context }) => {
-    console.log('context', JSON.stringify(context, null, 2));
     return await getWeather(context.location);
   },
 });

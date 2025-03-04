@@ -39,7 +39,6 @@ export function getDefaultFieldMap() {
       return <EnumField {...props} options={options} />;
     },
     [FormConfigType.ARRAY]: (props: FieldProps) => {
-      console.log('array field config');
       const renderField = ({ fieldName, index: _index }: { fieldName: string; index: number }) => {
         return getDefaultFieldMap()[FormConfigType.STRING]({
           ...props,
