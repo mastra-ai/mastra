@@ -176,27 +176,47 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
           />
         </div>
         <div className="flex flex-col gap-2">
-          {workflowActivePaths.length > 0 &&
-            workflowActivePaths?.map((activePath: any, idx: number) => {
-              return (
-                <div key={idx} className="flex flex-col gap-1">
-                  {activePath?.stepPath?.map((sp: any, idx: number) => {
-                    return (
-                      <div key={idx} className="flex items-center gap-1">
-                        <Text variant="secondary" className="text-mastra-el-3  px-4" size="xs">
-                          {sp}{' '}
-                          {activePath?.status === 'completed'
-                            ? `completed 🟢`
-                            : sp === activePath?.stepId
-                              ? `${activePath?.status} 🟡`
-                              : `completed 🟢`}
-                        </Text>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
+          {workflowActivePaths.length > 0 && (
+            <div className="my-2">
+              {workflowActivePaths?.map((activePath: any, idx: number) => {
+                return (
+                  <div key={idx} className="flex flex-col mt-2 border  overflow-hidden">
+                    {activePath?.stepPath?.map((sp: any, idx: number) => {
+                      const status =
+                        activePath?.status === 'completed'
+                          ? 'Completed'
+                          : sp === activePath?.stepId
+                            ? activePath?.status.charAt(0).toUpperCase() + activePath?.status.slice(1)
+                            : 'Completed';
+
+                      const statusIcon = status === 'Completed' ? '🟢' : '🟡';
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`
+                            flex items-center justify-between p-3
+                            ${idx !== activePath.stepPath.length - 1 ? 'border-b' : ''}
+                            bg-white/5
+                          `}
+                        >
+                          <Text variant="secondary" className="text-mastra-el-3" size="xs">
+                            {sp.charAt(0).toUpperCase() + sp.slice(1)}
+                          </Text>
+                          <span className="flex items-center gap-2">
+                            <Text variant="secondary" className="text-mastra-el-3" size="xs">
+                              {status}
+                            </Text>
+                            {statusIcon}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <Text variant="secondary" className="text-mastra-el-3  px-4" size="xs">
             Output
           </Text>
