@@ -115,7 +115,10 @@ export async function rerank(
   const scoredResults = await Promise.all(
     results.map(async (result, index) => {
       // Get semantic score from chosen provider
-      const semanticScore = await semanticProvider.getRelevanceScore(query, result?.metadata?.text);
+      let semanticScore = 0;
+      if (result?.metadata?.text) {
+        semanticScore = await semanticProvider.getRelevanceScore(query, result?.metadata?.text);
+      }
 
       // Get existing vector score from result
       const vectorScore = result.score;

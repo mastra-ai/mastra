@@ -328,6 +328,8 @@ const initialResults = await pgVector.query({
 const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'));
 ```
 
+> **Note:** For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
+
 The re-ranked results combine vector similarity with semantic understanding to improve retrieval quality.
 
 For more details about re-ranking, see the [rerank()](/docs/reference/rag/rerank) method.

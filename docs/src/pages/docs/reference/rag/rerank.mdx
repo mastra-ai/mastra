@@ -72,6 +72,8 @@ const rerankedResults = await rerank(
 
 The rerank function accepts any LanguageModel from the Vercel AI SDK. When using the Cohere model `rerank-v3.5`, it will automatically use Cohere's reranking capabilities.
 
+> **Note:** For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
+
 ### RerankerFunctionOptions
 
 <PropertiesTable
