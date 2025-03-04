@@ -35,6 +35,7 @@ export class Workflow<
   // registers stepIds on `after` calls
   #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
+  #ifStack: { condition: StepConfig<any, any, any, TTriggerSchema>['when']; elseStepKey: string }[] = [];
   #stepGraph: StepGraph = { initial: [] };
   #stepSubscriberGraph: Record<string, StepGraph> = {};
   #steps: Record<string, IAction<any, any, any, any>> = {};
@@ -314,6 +315,61 @@ export class Workflow<
     };
 
     return this.loop(applyOperator, condition, fallbackStep);
+  }
+
+  if<TStep extends IAction<any, any, any, any>>(condition: StepConfig<TStep, any, any, TTriggerSchema>['when']) {
+    const lastStep = this.#steps[this.#lastStepStack[this.#lastStepStack.length - 1] ?? ''];
+    if (!lastStep) {
+      throw new Error('Condition requires a step to be executed after');
+    }
+
+    this.after(lastStep);
+
+    const ifStepKey = `__${lastStep.id}_if`;
+    this.step(
+      {
+        id: ifStepKey,
+        execute: async ({ context }) => {
+          return { executed: true };
+        },
+      },
+      {
+        when: condition,
+      },
+    );
+
+    const elseStepKey = `__${lastStep.id}_else`;
+    this.#ifStack.push({ condition, elseStepKey });
+
+    return this;
+  }
+
+  else() {
+    const activeCondition = this.#ifStack.pop();
+    if (!activeCondition) {
+      throw new Error('No active condition found');
+    }
+
+    this.step(
+      {
+        id: activeCondition.elseStepKey,
+        execute: async ({ context }) => {
+          return { executed: true };
+        },
+      },
+      {
+        when:
+          typeof activeCondition.condition === 'function'
+            ? async payload => {
+                // @ts-ignore
+                const result = await activeCondition.condition(payload);
+                return !result;
+              }
+            : () => Promise.resolve(false),
+      },
+    );
+
+    return this;
   }
 
   after<TStep extends IAction<any, any, any, any>>(step: TStep) {
