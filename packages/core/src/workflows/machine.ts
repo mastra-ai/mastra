@@ -10,23 +10,24 @@ import type { IAction, MastraPrimitives } from '../action';
 import type { Logger } from '../logger';
 
 import type { Step } from './step';
-import type {
-  DependencyCheckOutput,
-  ResolverFunctionInput,
-  ResolverFunctionOutput,
-  RetryConfig,
-  StepCondition,
-  StepDef,
-  StepGraph,
-  StepNode,
-  StepResult,
-  StepVariableType,
-  WorkflowActionParams,
-  WorkflowActions,
-  WorkflowActors,
-  WorkflowContext,
-  WorkflowEvent,
-  WorkflowState,
+import {
+  WhenConditionReturnValue,
+  type DependencyCheckOutput,
+  type ResolverFunctionInput,
+  type ResolverFunctionOutput,
+  type RetryConfig,
+  type StepCondition,
+  type StepDef,
+  type StepGraph,
+  type StepNode,
+  type StepResult,
+  type StepVariableType,
+  type WorkflowActionParams,
+  type WorkflowActions,
+  type WorkflowActors,
+  type WorkflowContext,
+  type WorkflowEvent,
+  type WorkflowState,
 } from './types';
 import {
   getResultActivePaths,
@@ -386,7 +387,7 @@ export class Machine<
         });
 
         if (typeof stepConfig?.when === 'function') {
-          const conditionMet = await stepConfig.when({
+          let conditionMet = await stepConfig.when({
             context: {
               ...context,
               getStepResult: ((stepId: string) => {
@@ -402,7 +403,12 @@ export class Machine<
             },
             mastra: this.#mastra,
           });
-          if (conditionMet) {
+          if (conditionMet === WhenConditionReturnValue.ABORT) {
+            conditionMet = false;
+          } else if (conditionMet === WhenConditionReturnValue.CONTINUE_FAILED) {
+            // TODO: send another kind of event instead
+            return { type: 'CONDITIONS_SKIPPED' as const };
+          } else if (conditionMet) {
             this.logger.debug(`Condition met for step ${stepNode.step.id}`, {
               stepId: stepNode.step.id,
               runId: this.#runId,
@@ -629,6 +635,12 @@ export class Machine<
                   return event.output.type === 'CONDITIONS_MET';
                 },
                 target: 'executing',
+              },
+              {
+                guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
+                  return event.output.type === 'CONDITIONS_SKIPPED';
+                },
+                target: 'completed',
               },
               {
                 guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {

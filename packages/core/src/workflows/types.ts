@@ -89,6 +89,11 @@ export interface BaseCondition<
 }
 
 export type ActionContext<TSchemaIn extends z.ZodType<any>> = IExecutionContext<z.infer<TSchemaIn>, WorkflowContext>;
+export enum WhenConditionReturnValue {
+  CONTINUE = 'continue',
+  CONTINUE_FAILED = 'continue_failed',
+  ABORT = 'abort',
+}
 
 export type StepDef<
   TStepId extends TSteps[number]['id'],
@@ -99,7 +104,12 @@ export type StepDef<
   TStepId,
   {
     snapshotOnTimeout?: boolean;
-    when?: Condition<any, any> | ((args: { context: WorkflowContext; mastra?: MastraPrimitives }) => Promise<boolean>);
+    when?:
+      | Condition<any, any>
+      | ((args: {
+          context: WorkflowContext;
+          mastra?: MastraPrimitives;
+        }) => Promise<boolean | WhenConditionReturnValue>);
     data: TSchemaIn;
     handler: (args: ActionContext<TSchemaIn>) => Promise<z.infer<TSchemaOut>>;
   }
@@ -126,7 +136,10 @@ export interface StepConfig<
   snapshotOnTimeout?: boolean;
   when?:
     | Condition<CondStep, TTriggerSchema>
-    | ((args: { context: WorkflowContext<TTriggerSchema>; mastra?: MastraPrimitives }) => Promise<boolean>);
+    | ((args: {
+        context: WorkflowContext<TTriggerSchema>;
+        mastra?: MastraPrimitives;
+      }) => Promise<boolean | WhenConditionReturnValue>);
   variables?: StepInputType<TStep, 'inputSchema'> extends never
     ? Record<string, VariableReference<VarStep, TTriggerSchema>>
     : {
@@ -196,6 +209,7 @@ export type SubscriberFunctionOutput = {
 
 export type DependencyCheckOutput =
   | { type: 'CONDITIONS_MET' }
+  | { type: 'CONDITIONS_SKIPPED' }
   | { type: 'CONDITION_FAILED'; error: string }
   | { type: 'SUSPENDED' }
   | { type: 'WAITING' };

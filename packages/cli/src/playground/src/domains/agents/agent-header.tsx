@@ -6,7 +6,7 @@ import { Header } from '@/components/ui/header';
 
 export function AgentHeader({ agentName, agentId }: { agentName: string; agentId: string }) {
   const isEvalsPage = useMatch(`/agents/${agentId}/evals`);
-  const isChatPage = useMatch(`/agents/${agentId}/chat`);
+  const isChatPage = useMatch(`/agents/${agentId}/chat`) || useMatch(`/agents/${agentId}/chat/*`);
   const isTracesPage = useMatch(`/agents/${agentId}/traces`);
   const navigate = useNavigate();
 
