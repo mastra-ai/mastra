@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.1.8-alpha.2
+
+### Patch Changes
+
+- 144b3d5: Update traces table UI, agent Chat UI
+  Fix get workflows breaking
+
 ## 0.1.8-alpha.1
 
 ### Patch Changes
