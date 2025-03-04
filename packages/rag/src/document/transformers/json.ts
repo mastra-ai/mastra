@@ -133,9 +133,7 @@ export class RecursiveJsonTransformer {
       const stringChunks = this.splitLongString(value);
       const newChunks = stringChunks
         .map(chunk => {
-          const newChunk = {};
-          RecursiveJsonTransformer.setNestedDict(newChunk, fullPath, chunk);
-          return newChunk;
+          return this.createChunk(chunk, fullPath);
         })
         .filter(chunk => RecursiveJsonTransformer.jsonSize(chunk) <= this.maxSize);
 
@@ -145,24 +143,24 @@ export class RecursiveJsonTransformer {
       };
     }
 
-    const newChunk = {};
-    RecursiveJsonTransformer.setNestedDict(newChunk, fullPath, value);
+    const newChunk = this.createChunk(value, fullPath);
     return {
       currentChunk,
       chunks: RecursiveJsonTransformer.jsonSize(newChunk) <= this.maxSize ? [...chunks, newChunk] : chunks,
     };
   }
 
-  private createArrayChunk(array: any[], path: string[]): Record<string, any> {
+  private createChunk(value: any, path: string[]): Record<string, any> {
     const chunk: Record<string, any> = {};
-    RecursiveJsonTransformer.setNestedDict(chunk, path, array);
+    RecursiveJsonTransformer.setNestedDict(chunk, path, value);
     return chunk.root ? chunk.root : chunk;
   }
 
-  private createObjectChunk(object: Record<string, any>, path: string[]): Record<string, any> {
-    const chunk: Record<string, any> = {};
-    RecursiveJsonTransformer.setNestedDict(chunk, path, object);
-    return chunk.root ? chunk.root : chunk;
+  private isWithinSizeLimit(value: any, currentSize: number = 0): boolean {
+    const size = RecursiveJsonTransformer.jsonSize(value);
+    // If this is a new chunk (currentSize = 0), allow items smaller than maxSize
+    // If adding to existing chunk, ensure we're above minSize before splitting
+    return currentSize === 0 ? size <= this.maxSize : size + currentSize <= this.maxSize || currentSize < this.minSize;
   }
 
   private handleArray(
@@ -175,8 +173,8 @@ export class RecursiveJsonTransformer {
     const path = currentPath.length ? [...currentPath, key] : ['root', key];
 
     // Try keeping array intact
-    const chunk = this.createArrayChunk(value, path);
-    if (RecursiveJsonTransformer.jsonSize(chunk) <= this.maxSize) {
+    const chunk = this.createChunk(value, path);
+    if (this.isWithinSizeLimit(chunk)) {
       return [chunk];
     }
 
@@ -185,17 +183,20 @@ export class RecursiveJsonTransformer {
 
     const saveCurrentGroup = () => {
       if (currentGroup.length > 0) {
-        chunks.push(this.createArrayChunk(currentGroup, path));
-        currentGroup = [];
+        const groupChunk = this.createChunk(currentGroup, path);
+        if (RecursiveJsonTransformer.jsonSize(groupChunk) >= this.minSize) {
+          chunks.push(groupChunk);
+          currentGroup = [];
+        }
       }
     };
 
     for (const item of value) {
       // Try adding item to current group
       const testGroup = [...currentGroup, item];
-      const testChunk = this.createArrayChunk(testGroup, path);
+      const testChunk = this.createChunk(testGroup, path);
 
-      if (RecursiveJsonTransformer.jsonSize(testChunk) <= this.maxSize) {
+      if (this.isWithinSizeLimit(testChunk)) {
         currentGroup = testGroup;
         continue;
       }
@@ -206,9 +207,9 @@ export class RecursiveJsonTransformer {
       // Handle the new item
       if (typeof item === 'object' && item !== null) {
         const singleItemArray = [item];
-        const singleItemChunk = this.createArrayChunk(singleItemArray, path);
+        const singleItemChunk = this.createChunk(singleItemArray, path);
 
-        if (RecursiveJsonTransformer.jsonSize(singleItemChunk) <= this.maxSize) {
+        if (this.isWithinSizeLimit(singleItemChunk)) {
           currentGroup = singleItemArray;
         } else {
           const itemPath = [...path, String(chunks.length)];
@@ -235,12 +236,12 @@ export class RecursiveJsonTransformer {
     // Handle max depth
     if (depth > maxDepth) {
       console.warn(`Maximum depth of ${maxDepth} exceeded, flattening remaining structure`);
-      return [this.createObjectChunk(value, path)];
+      return [this.createChunk(value, path)];
     }
 
     // Try keeping object intact
-    const wholeChunk = this.createObjectChunk(value, path);
-    if (RecursiveJsonTransformer.jsonSize(wholeChunk) <= this.maxSize) {
+    const wholeChunk = this.createChunk(value, path);
+    if (this.isWithinSizeLimit(wholeChunk)) {
       return [wholeChunk];
     }
 
@@ -249,8 +250,11 @@ export class RecursiveJsonTransformer {
 
     const saveCurrentChunk = () => {
       if (Object.keys(currentChunk).length > 0) {
-        chunks.push(this.createObjectChunk(currentChunk, path));
-        currentChunk = {};
+        const objChunk = this.createChunk(currentChunk, path);
+        if (RecursiveJsonTransformer.jsonSize(objChunk) >= this.minSize) {
+          chunks.push(objChunk);
+          currentChunk = {};
+        }
       }
     };
 
@@ -266,16 +270,16 @@ export class RecursiveJsonTransformer {
       }
 
       // Try adding to current chunk
-      const testChunk = this.createObjectChunk({ ...currentChunk, [key]: val }, path);
-      if (RecursiveJsonTransformer.jsonSize(testChunk) <= this.maxSize) {
+      const testChunk = this.createChunk({ ...currentChunk, [key]: val }, path);
+      if (this.isWithinSizeLimit(testChunk)) {
         currentChunk[key] = val;
         continue;
       }
 
-      // Current chunk is full, save it
+      // Current chunk is full
       saveCurrentChunk();
 
-      // Handle new value based on type
+      // Handle value that didn't fit
       if (typeof val === 'object' && val !== null) {
         const nestedChunks = this.handleNestedObject(val, [...path, key], depth + 1, maxDepth);
         chunks.push(...nestedChunks);
