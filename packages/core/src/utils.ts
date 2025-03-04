@@ -344,7 +344,6 @@ export function makeVercelTool(
           tool.exec,
           {
             ...options,
-            name: tool.function.name,
             description: tool.function.description,
           },
           logMessageOptions,
@@ -374,7 +373,7 @@ export function makeMastraTool(
                 runId: options.runId,
               },
               execOptions,
-            ),
+            ) ?? undefined,
           {
             ...options,
             description: tool.description,
@@ -383,4 +382,15 @@ export function makeMastraTool(
         )
       : undefined,
   };
+}
+
+export function makeCoreTool(
+  tool: ToolAction<any, any, any, any> | VercelTool,
+  options: MastraToolOptions,
+  logMessageOptions?: LogMessageOptions,
+): CoreTool {
+  if (isVercelTool(tool)) {
+    return makeVercelTool(tool, options, logMessageOptions);
+  }
+  return makeMastraTool(tool, options, logMessageOptions);
 }

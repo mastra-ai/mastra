@@ -1,3 +1,5 @@
+import { existsSync } from 'fs';
+import { join } from 'path';
 import type {
   AssistantContent,
   ToolResultPart,
@@ -6,14 +8,12 @@ import type {
   ToolInvocation,
   CoreMessage,
   EmbeddingModel,
-  CoreTool,
 } from 'ai';
-import { existsSync } from 'fs';
-import { join } from 'path';
 
 import { MastraBase } from '../base';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { DefaultStorage } from '../storage/libsql';
+import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
 import { defaultEmbedder } from '../vector/fastembed';

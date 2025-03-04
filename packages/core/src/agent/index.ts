@@ -15,7 +15,6 @@ import type {
   UserContent,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import { jsonSchemaToZod } from 'json-schema-to-zod';
 import type { ZodSchema } from 'zod';
 import { z } from 'zod';
 
@@ -31,7 +30,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
-import { isVercelTool, resolveSerializedZodOutput } from '../utils';
+import { isVercelTool, makeCoreTool } from '../utils';
 import type { CompositeVoice } from '../voice';
 
 import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput, ToolsInput } from './types';
@@ -491,76 +490,28 @@ export class Agent<
         const tool = this.tools[k];
 
         if (tool) {
-          if (isVercelTool(tool)) {
-            memo[tool.function.name] = {
-              description: tool.function.description,
-              parameters: resolveSerializedZodOutput(jsonSchemaToZod(tool.function.parameters)),
-              execute: tool.exec
-                ? async args => {
-                    try {
-                      this.logger.debug(`[Agent:${this.name}] - Executing Vercel tool ${tool.function.name}`, {
-                        name: tool.function.name,
-                        description: tool.function.description,
-                        args,
-                        runId,
-                        threadId,
-                        resourceId,
-                      });
-                      return await tool.exec!(args);
-                    } catch (err) {
-                      this.logger.error(`[Agent:${this.name}] - Failed Vercel tool execution`, {
-                        error: err,
-                        runId,
-                        threadId,
-                        resourceId,
-                      });
-                      throw err;
-                    }
-                  }
-                : undefined,
-            };
-          } else {
-            memo[k] = {
-              description: tool.description,
-              parameters: tool.inputSchema,
-              execute:
-                typeof tool?.execute === 'function'
-                  ? async (args, options) => {
-                      try {
-                        this.logger.debug(`[Agent:${this.name}] - Executing tool ${k}`, {
-                          name: k,
-                          description: tool.description,
-                          args,
-                          runId,
-                          threadId,
-                          resourceId,
-                        });
-                        return (
-                          tool?.execute?.(
-                            {
-                              context: args,
-                              mastra: this.#mastra,
-                              memory,
-                              runId,
-                              threadId,
-                              resourceId,
-                            },
-                            options,
-                          ) ?? undefined
-                        );
-                      } catch (err) {
-                        this.logger.error(`[Agent:${this.name}] - Failed execution`, {
-                          error: err,
-                          runId,
-                          threadId,
-                          resourceId,
-                        });
-                        throw err;
-                      }
-                    }
-                  : undefined,
-            };
-          }
+          const logMessageOptions = isVercelTool(tool)
+            ? {
+                start: `[Agent:${this.name}] - Executing Vercel tool ${tool.function.name}`,
+                error: `[Agent:${this.name}] - Failed Vercel tool execution`,
+              }
+            : {
+                start: `[Agent:${this.name}] - Executing tool ${k}`,
+                error: `[Agent:${this.name}] - Failed tool execution`,
+              };
+          memo[k] = makeCoreTool(
+            tool,
+            {
+              name: k,
+              runId,
+              threadId,
+              resourceId,
+              logger: this.logger,
+              mastra: this.#mastra,
+              memory,
+            },
+            logMessageOptions,
+          );
         }
         return memo;
       },
@@ -631,74 +582,28 @@ export class Agent<
       toolsFromToolsets.forEach(toolset => {
         Object.entries(toolset).forEach(([toolName, tool]) => {
           const toolObj = tool;
-          if (isVercelTool(toolObj)) {
-            toolsFromToolsetsConverted[toolName] = {
-              description: toolObj.function.description,
-              parameters: resolveSerializedZodOutput(jsonSchemaToZod(toolObj.function.parameters)),
-              execute: toolObj.exec
-                ? async args => {
-                    try {
-                      this.logger.debug(`[Agent:${this.name}] - Executing Vercel tool ${toolName}`, {
-                        name: toolName,
-                        description: toolObj.function.description,
-                        args,
-                        runId,
-                        threadId,
-                        resourceId,
-                      });
-                      return await toolObj.exec!(args);
-                    } catch (err) {
-                      this.logger.error(`[Agent:${this.name}] - Failed Vercel tool execution`, {
-                        error: err,
-                        runId,
-                        threadId,
-                        resourceId,
-                      });
-                      throw err;
-                    }
-                  }
-                : undefined,
-            };
-          } else {
-            toolsFromToolsetsConverted[toolName] = {
-              description: toolObj.description || '',
-              parameters: toolObj.inputSchema,
-              execute:
-                typeof toolObj?.execute === 'function'
-                  ? async (args, options) => {
-                      try {
-                        this.logger.debug(`[Agent:${this.name}] - Executing tool ${toolName}`, {
-                          name: toolName,
-                          description: toolObj.description,
-                          args,
-                          runId,
-                          threadId,
-                          resourceId,
-                        });
-                        return (
-                          toolObj?.execute?.(
-                            {
-                              context: args,
-                              runId,
-                              threadId,
-                              resourceId,
-                            },
-                            options,
-                          ) ?? undefined
-                        );
-                      } catch (error) {
-                        this.logger.error(`[Agent:${this.name}] - Failed toolset execution`, {
-                          error,
-                          runId,
-                          threadId,
-                          resourceId,
-                        });
-                        throw error;
-                      }
-                    }
-                  : undefined,
-            };
-          }
+
+          const logMessageOptions = isVercelTool(toolObj)
+            ? {
+                start: `[Agent:${this.name}] - Executing Vercel toolset ${toolName}`,
+                error: `[Agent:${this.name}] - Failed Vercel toolset execution`,
+              }
+            : {
+                start: `[Agent:${this.name}] - Executing toolset ${toolName}`,
+                error: `[Agent:${this.name}] - Failed toolset execution`,
+              };
+
+          toolsFromToolsetsConverted[toolName] = makeCoreTool(
+            toolObj,
+            {
+              name: toolName,
+              runId,
+              threadId,
+              resourceId,
+              logger: this.logger,
+            },
+            logMessageOptions,
+          );
         });
       });
     }
