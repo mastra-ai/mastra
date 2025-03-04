@@ -1,5 +1,4 @@
 import { AgentChat as Chat } from '@mastra/playground-ui';
-// import {Chat}   from "@/components/Chat"
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
@@ -22,7 +21,7 @@ function Agent() {
     threadId: threadId!,
     memory: !!memory?.result,
   });
-  const [sidebar, setSidebar] = useState(true);
+  const [sidebar, _] = useState(true);
   const {
     threads,
     isLoading: isThreadsLoading,
