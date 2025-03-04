@@ -107,9 +107,146 @@ export class RecursiveJsonTransformer {
     return data;
   }
 
-  /**
-   * Split json into maximum size dictionaries while preserving structure
-   */
+  private handlePrimitiveValue(
+    value: any,
+    key: string,
+    currentChunk: Record<string, any>,
+    chunks: Record<string, any>[],
+    fullPath: string[],
+  ): { currentChunk: Record<string, any>; chunks: Record<string, any>[] } {
+    const testValue = { [key]: value };
+
+    if (RecursiveJsonTransformer.jsonSize(testValue) <= this.maxSize) {
+      if (RecursiveJsonTransformer.jsonSize({ ...currentChunk, ...testValue }) <= this.maxSize) {
+        return {
+          currentChunk: { ...currentChunk, ...testValue },
+          chunks,
+        };
+      } else {
+        return {
+          currentChunk: testValue,
+          chunks: [...chunks, currentChunk],
+        };
+      }
+    } else if (typeof value === 'string') {
+      const stringChunks = this.splitLongString(value);
+      const newChunks = stringChunks
+        .map(chunk => {
+          const newChunk = {};
+          RecursiveJsonTransformer.setNestedDict(newChunk, fullPath, chunk);
+          return newChunk;
+        })
+        .filter(chunk => RecursiveJsonTransformer.jsonSize(chunk) <= this.maxSize);
+
+      return {
+        currentChunk,
+        chunks: [...chunks, ...newChunks],
+      };
+    }
+
+    const newChunk = {};
+    RecursiveJsonTransformer.setNestedDict(newChunk, fullPath, value);
+    return {
+      currentChunk,
+      chunks: RecursiveJsonTransformer.jsonSize(newChunk) <= this.maxSize ? [...chunks, newChunk] : chunks,
+    };
+  }
+
+  private handleArray(
+    value: any[],
+    key: string,
+    currentPath: string[],
+    depth: number,
+    maxDepth: number,
+  ): Record<string, any>[] {
+    // Try to keep array intact first
+    const arrayChunk = { [key]: value };
+    const size = RecursiveJsonTransformer.jsonSize(arrayChunk);
+
+    if (size <= this.maxSize) {
+      return [arrayChunk];
+    }
+
+    // If array is too large, split into smaller arrays
+    const result: any[] = [];
+    let currentArray: any[] = [];
+
+    for (const item of value) {
+      const tempChunk = { [key]: [...currentArray, item] };
+
+      if (RecursiveJsonTransformer.jsonSize(tempChunk) > this.maxSize) {
+        if (currentArray.length > 0) {
+          result.push({ [key]: currentArray });
+          currentArray = [];
+        }
+        if (typeof item === 'object' && item !== null) {
+          const nestedChunks = this.jsonSplit({
+            data: item,
+            currentPath: [...currentPath, key],
+            depth: depth + 1,
+            maxDepth,
+          });
+          result.push(...nestedChunks);
+        } else {
+          result.push({ [key]: [item] });
+        }
+      } else {
+        currentArray.push(item);
+      }
+    }
+
+    if (currentArray.length > 0) {
+      result.push({ [key]: currentArray });
+    }
+
+    return result;
+  }
+
+  private handleNestedObject(
+    value: Record<string, any>,
+    fullPath: string[],
+    depth: number,
+    maxDepth: number,
+  ): Record<string, any>[] {
+    const subChunks = this.jsonSplit({
+      data: value,
+      currentPath: fullPath,
+      depth: depth + 1,
+      maxDepth,
+    });
+
+    return subChunks
+      .map(subChunk => {
+        const nestedChunk = {};
+        RecursiveJsonTransformer.setNestedDict(nestedChunk, fullPath, subChunk);
+        return nestedChunk;
+      })
+      .filter(chunk => RecursiveJsonTransformer.jsonSize(chunk) <= this.maxSize);
+  }
+
+  private splitLongString(value: string): string[] {
+    const chunks: string[] = [];
+    let remaining = value;
+
+    while (remaining.length > 0) {
+      const overhead = 20;
+      const chunkSize = Math.floor(this.maxSize - overhead);
+
+      if (remaining.length <= chunkSize) {
+        chunks.push(remaining);
+        break;
+      }
+
+      const lastSpace = remaining.slice(0, chunkSize).lastIndexOf(' ');
+      const splitAt = lastSpace > 0 ? lastSpace + 1 : chunkSize;
+
+      chunks.push(remaining.slice(0, splitAt));
+      remaining = remaining.slice(splitAt);
+    }
+
+    return chunks;
+  }
+
   private jsonSplit({
     data,
     currentPath = [],
@@ -133,121 +270,36 @@ export class RecursiveJsonTransformer {
       return chunks;
     }
 
+    let currentChunk = {};
+    let accumulatedChunks = chunks;
+
     for (const [key, value] of Object.entries(data)) {
-      const currentChunk = chunks[chunks.length - 1] || {};
+      const fullPath = [...currentPath, key];
 
-      if (typeof value === 'object') {
-        // Handle nested objects
-        let currentNestedChunk = {};
-
-        // Try to group fields together
-        for (const [nestedKey, nestedValue] of Object.entries(value)) {
-          if (typeof nestedValue === 'object') {
-            // Recursively handle deeper nested structures
-            const subChunks = this.jsonSplit({
-              data: { [nestedKey]: nestedValue },
-              currentPath: [...currentPath, key],
-              chunks: [{}],
-              depth: depth + 1,
-              maxDepth,
-            });
-            chunks.push(...subChunks);
-            continue;
-          }
-
-          // Try adding the field to current nested chunk
-          const testChunk = { ...currentNestedChunk, [nestedKey]: nestedValue };
-          const testSize = RecursiveJsonTransformer.jsonSize({ [key]: testChunk });
-
-          if (testSize <= this.maxSize) {
-            // Field fits, add it to current nested chunk
-            currentNestedChunk = testChunk;
-          } else {
-            // Field doesn't fit, save current chunk and start new one
-            if (Object.keys(currentNestedChunk).length > 0) {
-              const newChunk = {};
-              RecursiveJsonTransformer.setNestedDict(newChunk, [key], currentNestedChunk);
-              chunks.push(newChunk);
-              currentNestedChunk = {};
-            }
-
-            // Handle the current field
-            if (
-              typeof nestedValue === 'string' &&
-              RecursiveJsonTransformer.jsonSize({ [nestedKey]: nestedValue }) > this.maxSize
-            ) {
-              // Split long strings
-              const stringChunks = this.splitLongString(nestedKey, nestedValue);
-              stringChunks.forEach(chunk => {
-                const splitChunk = {};
-                RecursiveJsonTransformer.setNestedDict(splitChunk, [key], { [nestedKey]: chunk });
-                chunks.push(splitChunk);
-              });
-            } else {
-              currentNestedChunk = { [nestedKey]: nestedValue };
-            }
-          }
-        }
-
-        // Add any remaining nested data
-        if (Object.keys(currentNestedChunk).length > 0) {
-          const newChunk = {};
-          RecursiveJsonTransformer.setNestedDict(newChunk, [key], currentNestedChunk);
-          chunks.push(newChunk);
-        }
+      if (Array.isArray(value)) {
+        const arrayChunks = this.handleArray(value, key, currentPath, depth, maxDepth);
+        accumulatedChunks = [...accumulatedChunks, ...arrayChunks];
+      } else if (typeof value === 'object' && value !== null) {
+        const objectChunks = this.handleNestedObject(value, fullPath, depth, maxDepth);
+        accumulatedChunks = [...accumulatedChunks, ...objectChunks];
       } else {
-        // Handle primitive values
-        const valueSize = RecursiveJsonTransformer.jsonSize({ [key]: value });
-        if (valueSize > this.maxSize && typeof value === 'string') {
-          // Split long strings
-          const stringChunks = this.splitLongString(key, value);
-          stringChunks.forEach(chunk => {
-            const newChunk = {};
-            RecursiveJsonTransformer.setNestedDict(newChunk, currentPath, { [key]: chunk });
-            chunks.push(newChunk);
-          });
-        } else {
-          // Try to add to current chunk
-          const totalSize = RecursiveJsonTransformer.jsonSize({
-            ...currentChunk,
-            [key]: value,
-          });
-
-          if (totalSize <= this.maxSize) {
-            RecursiveJsonTransformer.setNestedDict(currentChunk, [key], value);
-          } else {
-            const newChunk = {};
-            RecursiveJsonTransformer.setNestedDict(newChunk, currentPath, { [key]: value });
-            chunks.push(newChunk);
-          }
-        }
+        const { currentChunk: newCurrentChunk, chunks: newChunks } = this.handlePrimitiveValue(
+          value,
+          key,
+          currentChunk,
+          accumulatedChunks,
+          fullPath,
+        );
+        currentChunk = newCurrentChunk;
+        accumulatedChunks = newChunks;
       }
     }
 
-    return chunks.filter(chunk => Object.keys(chunk).length > 0);
-  }
-
-  private splitLongString(key: string, value: string): string[] {
-    const chunks: string[] = [];
-    let remaining = value;
-
-    while (remaining.length > 0) {
-      const overhead = JSON.stringify({ [key]: '' }).length - 2;
-      let chunkSize = this.maxSize - overhead;
-
-      let chunk = remaining.slice(0, chunkSize);
-      if (remaining.length > chunkSize) {
-        const lastSpace = chunk.lastIndexOf(' ');
-        if (lastSpace > chunkSize * 0.7) {
-          chunk = chunk.slice(0, lastSpace);
-        }
-      }
-
-      chunks.push(chunk);
-      remaining = remaining.slice(chunk.length).trim();
+    if (Object.keys(currentChunk).length > 0) {
+      accumulatedChunks = [...accumulatedChunks, currentChunk];
     }
 
-    return chunks;
+    return accumulatedChunks.filter(chunk => Object.keys(chunk).length > 0);
   }
 
   /**
@@ -277,9 +329,28 @@ export class RecursiveJsonTransformer {
         return `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`;
       });
     }
+    if (Array.isArray(obj)) {
+      return obj.map(item => this.escapeNonAscii(item));
+    }
 
     if (typeof obj === 'object' && obj !== null) {
-      return Object.fromEntries(Object.entries(obj).map(([key, value]) => [key, this.escapeNonAscii(value)]));
+      const result: Record<string, any> = {};
+      for (const [key, value] of Object.entries(obj)) {
+        if (Array.isArray(value)) {
+          result[key] = value.map(item => this.escapeNonAscii(item));
+        } else if (typeof value === 'object' && value !== null) {
+          result[key] = this.escapeNonAscii(value);
+        } else if (typeof value === 'string') {
+          result[key] = this.escapeNonAscii(value);
+        } else {
+          result[key] = value;
+        }
+      }
+      return result;
+    }
+
+    if (typeof obj === 'string') {
+      return this.escapeNonAscii(obj);
     }
 
     return obj;
