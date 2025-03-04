@@ -932,7 +932,6 @@ describe('ChromaVector Integration Tests', () => {
         const results2 = await vectorDB.query({
           indexName: testIndexName2,
           queryVector: [1, 0, 0],
-          filter: undefined,
         });
         expect(results1).toEqual(results2);
         expect(results1.length).toBeGreaterThan(0);
@@ -947,7 +946,6 @@ describe('ChromaVector Integration Tests', () => {
         const results2 = await vectorDB.query({
           indexName: testIndexName2,
           queryVector: [1, 0, 0],
-          filter: undefined,
         });
         expect(results).toEqual(results2);
         expect(results.length).toBeGreaterThan(0);
@@ -1269,6 +1267,43 @@ describe('ChromaVector Integration Tests', () => {
             expect(result.document).not.toContain('quick');
           }
         });
+      });
+      it('should handle undefined document filter', async () => {
+        const results1 = await vectorDB.query({
+          indexName: testIndexName3,
+          queryVector: [1, 0, 0],
+          documentFilter: undefined,
+        });
+        const results2 = await vectorDB.query({
+          indexName: testIndexName3,
+          queryVector: [1, 0, 0],
+        });
+        expect(results1).toEqual(results2);
+        expect(results1.length).toBeGreaterThan(0);
+      });
+
+      it('should handle empty object document filter', async () => {
+        await expect(
+          vectorDB.query({
+            indexName: testIndexName3,
+            queryVector: [1, 0, 0],
+            documentFilter: {},
+          }),
+        ).rejects.toThrow();
+      });
+
+      it('should handle null filter', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName3,
+          queryVector: [1, 0, 0],
+          documentFilter: null,
+        });
+        const results2 = await vectorDB.query({
+          indexName: testIndexName3,
+          queryVector: [1, 0, 0],
+        });
+        expect(results).toEqual(results2);
+        expect(results.length).toBeGreaterThan(0);
       });
     });
   });

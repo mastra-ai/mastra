@@ -12,9 +12,10 @@ interface ArrayFieldProps {
   control: Control<any>;
   renderField: (props: { fieldName: string; index: number }) => React.ReactNode;
   handleFieldChange?: (props: { key: string; value: any[] }) => void;
+  isStringField?: boolean;
 }
 
-export function ArrayField({ name, control, renderField }: ArrayFieldProps) {
+export function ArrayField({ name, control, renderField, isStringField }: ArrayFieldProps) {
   const { fields, append, remove } = useFieldArray({
     control,
     name,
@@ -36,7 +37,13 @@ export function ArrayField({ name, control, renderField }: ArrayFieldProps) {
           </Button>
         </div>
       ))}
-      <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => append({})}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-full"
+        onClick={() => append(isStringField ? { root: '' } : {})}
+      >
         <Plus className="mr-2 h-4 w-4" />
         Add Item
       </Button>

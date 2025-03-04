@@ -25,14 +25,14 @@ export function Traces({ traces }: { traces: RefinedTrace[] }) {
     <div className="h-full w-[calc(100%_-_400px)]">
       <ScrollArea className="h-full">
         <Table>
-          <TableHeader className="bg-mastra-bg-2 sticky top-0 z-10">
+          <TableHeader className="sticky top-0 z-10 bg-[#0F0F0F]" style={{ outline: '1px solid 0_0%_20.4%' }}>
             <TableRow className="border-gray-6 border-b-[0.1px] text-[0.8125rem]">
-              <TableHead className="text-mastra-el-3">Trace</TableHead>
-              <TableHead className="text-mastra-el-3 flex items-center gap-1">
+              <TableHead className="text-mastra-el-3 h-10">Trace</TableHead>
+              <TableHead className="text-mastra-el-3 flex items-center gap-1 h-10">
                 <Braces className="h-3 w-3" /> Trace Id
               </TableHead>
-              <TableHead className="text-mastra-el-3">Started</TableHead>
-              <TableHead className="text-mastra-el-3">Total Duration</TableHead>
+              <TableHead className="text-mastra-el-3 h-10">Started</TableHead>
+              <TableHead className="text-mastra-el-3 h-10">Total Duration</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="border-b border-gray-6">

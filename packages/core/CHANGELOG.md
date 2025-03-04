@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.5.0-alpha.4
+
+### Patch Changes
+
+- d79aedf: Fix import/require paths in these package.json
+
 ## 0.5.0-alpha.3
 
 ### Patch Changes

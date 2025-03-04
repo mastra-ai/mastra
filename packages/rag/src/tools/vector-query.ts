@@ -37,10 +37,6 @@ export const createVectorQueryTool = ({
     }),
     description: toolDescription,
     execute: async ({ context: { queryText, topK, filter }, mastra }) => {
-      console.log({
-        topK,
-        filter,
-      });
       const vectorStore = mastra?.vectors?.[vectorStoreName];
 
       // Get relevant chunks from the vector database
