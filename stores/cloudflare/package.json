@@ -20,7 +20,8 @@
     "build:watch": "pnpm build --watch"
   },
   "dependencies": {
-    "@mastra/core": "workspace:^"
+    "@mastra/core": "workspace:^",
+    "cloudflare": "^4.0.0"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "^7.49.2",
