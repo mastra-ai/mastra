@@ -13,7 +13,7 @@ import { RegistryClient } from "@mcp/registry/dist/registry.js"
 import { McpConfiguration } from "@mastra/mcp-configuration/dist/index.js"
 
 const registry = new RegistryClient({
-	url: `https://opentools.com/.well-known/mcp`,
+	url: `https://opentools.com/.well-known/mcp.json`,
 })
 
 const server = await registry.getServerDefinition({

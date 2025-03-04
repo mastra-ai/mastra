@@ -11,7 +11,7 @@
 		"ex:config": "pnpm build && npx tsx ./examples/basic-usage/src/02-configuration.ts",
 		"ex:validate": "pnpm build && npx tsx ./examples/basic-usage/src/03-validation.ts",
 		"ex:tool-use": "pnpm build && npx tsx ./examples/basic-usage/src/04-tool-use.ts",
-		"ex:tui": "npx tsx ./examples/tui/src/cli.tsx"
+		"ex:tui": "pnpm build && npx tsx ./examples/tui/src/cli.tsx"
 	},
 	"keywords": [
 		"mcp",

@@ -9,7 +9,7 @@ import {
 import { Form } from "ink-form"
 
 const registry = new RegistryClient({
-	url: `https://opentools.com/.well-known/mcp`,
+	url: `https://opentools.com/.well-known/mcp.json`,
 })
 
 const configuration = new McpConfiguration({
@@ -127,7 +127,7 @@ export default function App() {
 						<Text>Which command do you want to configure?</Text>
 
 						<SelectInput
-							items={browsedServer?.config?.map((c) => ({
+							items={browsedServer?.schemas?.map((c) => ({
 								value: c.command,
 								label: c.command,
 							}))}
@@ -139,7 +139,7 @@ export default function App() {
 				)
 			}
 
-			const c = browsedServer?.config?.find(
+			const c = browsedServer?.schemas?.find(
 				(c) => c.command === chosenConfigurationType
 			)!
 			return (

@@ -1,6 +1,6 @@
 /**
  * Example of configuring MCP servers:
- * 
+ *
  * 1. Creates a configuration manager
  * 2. Adds a server configuration
  * 3. Lists configured servers
@@ -13,7 +13,7 @@ import { McpConfiguration } from "@mastra/mcp-configuration"
 
 // Create registry client
 const registry = new RegistryClient({
-	url: "https://opentools.com/.well-known/mcp",
+	url: "https://opentools.com/.well-known/mcp.json",
 })
 
 // Create configuration manager
@@ -57,4 +57,4 @@ console.log("\nUpdated configuration:", updatedConfig)
 
 // Remove configuration
 const removedConfig = await config.remove("stripe")
-console.log("\nRemoved configuration:", removedConfig) 
+console.log("\nRemoved configuration:", removedConfig)

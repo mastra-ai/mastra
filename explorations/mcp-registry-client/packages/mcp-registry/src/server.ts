@@ -6,13 +6,18 @@ export interface Publisher {
 	readonly url?: string
 }
 
-export interface RuntimeConfig {
+export interface ConfigSchema {
 	readonly command: string
 	readonly args?: readonly string[]
-	readonly env?: Readonly<Record<string, { 
-		readonly description: string
-		readonly required?: boolean 
-	}>>
+	readonly env?: Readonly<
+		Record<
+			string,
+			{
+				readonly description: string
+				readonly required?: boolean
+			}
+		>
+	>
 	readonly runtimeArgs?: {
 		readonly description?: string
 		readonly default?: readonly string[]
@@ -23,11 +28,15 @@ export interface RuntimeConfig {
 const runtimeConfigSchema = z.object({
 	command: z.string(),
 	args: z.array(z.string()).optional(),
-	env: z.record(z.object({ 
-		description: z.string(),
-		required: z.boolean().optional()
-	})).optional(),
-	runtimeArgs: z.array(z.string()).optional()
+	env: z
+		.record(
+			z.object({
+				description: z.string(),
+				required: z.boolean().optional(),
+			}),
+		)
+		.optional(),
+	runtimeArgs: z.array(z.string()).optional(),
 })
 
 export interface Distribution {
@@ -47,7 +56,7 @@ export type ServerData = {
 	readonly distribution?: Distribution
 	readonly license?: string
 	readonly runtime?: string
-	readonly config?: readonly RuntimeConfig[]
+	readonly schemas?: readonly ConfigSchema[]
 	readonly downloads?: number
 	readonly createdAt?: string
 	readonly updatedAt?: string
@@ -68,7 +77,11 @@ export type ServerData = {
 		readonly auth?: "none" | "token" | "oauth2"
 	}
 	readonly usage?: {
-		readonly type: "free" | "subscription" | "pay-per-query" | "attribution-required"
+		readonly type:
+			| "free"
+			| "subscription"
+			| "pay-per-query"
+			| "attribution-required"
 		readonly cost?: {
 			readonly amount: number
 			readonly currency: string
@@ -129,16 +142,22 @@ export class ServerDefinition implements ServerData {
 		runtimeArgs?: string[]
 	}) {
 		// Find the matching runtime config for the command
-		const runtimeConfig = this.config?.find(rc => rc.command === config.command)
+		const runtimeConfig = this.schemas?.find(
+			(rc) => rc.command === config.command,
+		)
 		if (!runtimeConfig) {
-			throw new Error(`Command "${config.command}" not found in server configuration`)
+			throw new Error(
+				`Command "${config.command}" not found in server configuration`,
+			)
 		}
 
 		// Validate that all provided env variables are defined in the schema first
 		if (config.env) {
 			for (const key of Object.keys(config.env)) {
 				if (!runtimeConfig.env?.[key]) {
-					throw new Error(`Environment variable "${key}" not defined in server configuration`)
+					throw new Error(
+						`Environment variable "${key}" not defined in server configuration`,
+					)
 				}
 			}
 		}
@@ -150,7 +169,9 @@ export class ServerDefinition implements ServerData {
 				.map(([key]) => key)
 
 			if (missingRequired.length > 0) {
-				throw new Error(`Missing required environment variables: ${missingRequired.join(", ")}`)
+				throw new Error(
+					`Missing required environment variables: ${missingRequired.join(", ")}`,
+				)
 			}
 		}
 
@@ -159,16 +180,23 @@ export class ServerDefinition implements ServerData {
 			runtimeConfigSchema.parse({
 				command: config.command,
 				runtimeArgs: config.runtimeArgs,
-				env: config.env && Object.entries(config.env).reduce((acc, [key, value]) => {
-					if (runtimeConfig.env?.[key]) {
-						acc[key] = { description: runtimeConfig.env[key].description }
-					}
-					return acc
-				}, {} as Record<string, { description: string }>)
+				env:
+					config.env &&
+					Object.entries(config.env).reduce(
+						(acc, [key, value]) => {
+							if (runtimeConfig.env?.[key]) {
+								acc[key] = { description: runtimeConfig.env[key].description }
+							}
+							return acc
+						},
+						{} as Record<string, { description: string }>,
+					),
 			})
 		} catch (error) {
 			if (error instanceof z.ZodError) {
-				throw new Error(`Invalid configuration structure: ${error.errors[0].message}`)
+				throw new Error(
+					`Invalid configuration structure: ${error.errors[0].message}`,
+				)
 			}
 			throw error
 		}
@@ -176,12 +204,19 @@ export class ServerDefinition implements ServerData {
 		// Validate runtime args if they exist
 		if (config.runtimeArgs?.length) {
 			if (!runtimeConfig.runtimeArgs) {
-				throw new Error("Runtime arguments provided but not supported by server configuration")
+				throw new Error(
+					"Runtime arguments provided but not supported by server configuration",
+				)
 			}
 
 			// Check if multiple runtime args are allowed
-			if (!runtimeConfig.runtimeArgs.multiple && config.runtimeArgs.length > 1) {
-				throw new Error("Multiple runtime arguments provided but not supported by server configuration")
+			if (
+				!runtimeConfig.runtimeArgs.multiple &&
+				config.runtimeArgs.length > 1
+			) {
+				throw new Error(
+					"Multiple runtime arguments provided but not supported by server configuration",
+				)
 			}
 		}
 
