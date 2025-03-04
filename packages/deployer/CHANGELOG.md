@@ -1,5 +1,14 @@
 # @mastra/deployer
 
+## 0.1.8-alpha.4
+
+### Patch Changes
+
+- 144b3d5: Update traces table UI, agent Chat UI
+  Fix get workflows breaking
+- Updated dependencies [d79aedf]
+  - @mastra/core@0.5.0-alpha.4
+
 ## 0.1.8-alpha.3
 
 ### Patch Changes
