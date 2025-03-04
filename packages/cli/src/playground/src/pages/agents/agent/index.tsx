@@ -37,13 +37,7 @@ function Agent() {
   }, [memory?.result, threadId]);
 
   if (isAgentLoading) {
-    return (
-      <section className="flex-1 relative grid grid-cols-[1fr_400px] divide-x">
-        <div className="flex flex-col">
-          <AgentInformation agentId={agentId!} />
-        </div>
-      </section>
-    );
+    return null;
   }
 
   return (
