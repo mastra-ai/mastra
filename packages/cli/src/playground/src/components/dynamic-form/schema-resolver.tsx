@@ -158,9 +158,14 @@ function resolveSchemaComponent({
         <ArrayField
           control={control}
           name={parentField}
+          isStringField={schema.element instanceof z.ZodString}
           renderField={props => {
             const fieldSchema = schema.element;
-            const currentField = `${parentField}[${props.index}]`;
+            let currentField = props.fieldName;
+            if (fieldSchema instanceof z.ZodString) {
+              currentField = `${currentField}.root`;
+            }
+
             return resolveSchemaComponent({
               schema: fieldSchema,
               parentField: currentField,

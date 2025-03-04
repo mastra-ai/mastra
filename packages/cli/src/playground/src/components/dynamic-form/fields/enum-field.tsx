@@ -30,7 +30,7 @@ export function EnumField({ name, control, options, handleFieldChange }: EnumFie
           </SelectTrigger>
           <SelectContent>
             {options.map(option => (
-              <SelectItem key={option.value} value={option.value}>
+              <SelectItem key={option.value} value={option.value} className="text-white">
                 {option.label}
               </SelectItem>
             ))}
