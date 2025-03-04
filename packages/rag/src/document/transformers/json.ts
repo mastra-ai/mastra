@@ -153,6 +153,18 @@ export class RecursiveJsonTransformer {
     };
   }
 
+  private createArrayChunk(array: any[], path: string[]): Record<string, any> {
+    const chunk: Record<string, any> = {};
+    RecursiveJsonTransformer.setNestedDict(chunk, path, array);
+    return chunk.root ? chunk.root : chunk;
+  }
+
+  private createObjectChunk(object: Record<string, any>, path: string[]): Record<string, any> {
+    const chunk: Record<string, any> = {};
+    RecursiveJsonTransformer.setNestedDict(chunk, path, object);
+    return chunk.root ? chunk.root : chunk;
+  }
+
   private handleArray(
     value: any[],
     key: string,
@@ -160,57 +172,56 @@ export class RecursiveJsonTransformer {
     depth: number,
     maxDepth: number,
   ): Record<string, any>[] {
-    // Try to keep array intact first
-    const arrayChunk = {};
     const fullPath = currentPath.length ? [...currentPath, key] : ['root', key];
-    RecursiveJsonTransformer.setNestedDict(arrayChunk, fullPath, value);
 
-    if (RecursiveJsonTransformer.jsonSize(arrayChunk) <= this.maxSize) {
-      return [arrayChunk.root ? arrayChunk.root : arrayChunk];
+    // Try keeping array intact
+    const chunk = this.createArrayChunk(value, fullPath);
+    if (RecursiveJsonTransformer.jsonSize(chunk) <= this.maxSize) {
+      return [chunk.root ? chunk.root : chunk];
     }
 
     const chunks: Record<string, any>[] = [];
     let currentGroup: any[] = [];
 
     for (const item of value) {
+      // Try adding item to current group
       const testGroup = [...currentGroup, item];
-      const testChunk = {};
-      RecursiveJsonTransformer.setNestedDict(testChunk, fullPath, testGroup);
+      const testChunk = this.createArrayChunk(testGroup, fullPath);
 
       if (RecursiveJsonTransformer.jsonSize(testChunk) <= this.maxSize) {
         currentGroup = testGroup;
-      } else {
-        // Save current group if not empty
-        if (currentGroup.length > 0) {
-          const chunk = {};
-          RecursiveJsonTransformer.setNestedDict(chunk, fullPath, currentGroup);
-          chunks.push(chunk.root ? chunk.root : chunk);
-        }
+        continue;
+      }
 
-        // Try to add current item as a new group
-        currentGroup = [item];
-        const singleItemChunk = {};
-        RecursiveJsonTransformer.setNestedDict(singleItemChunk, fullPath, currentGroup);
+      // Save current group if not empty
+      if (currentGroup.length > 0) {
+        chunks.push(this.createArrayChunk(currentGroup, fullPath));
+      }
 
-        if (RecursiveJsonTransformer.jsonSize(singleItemChunk) > this.maxSize) {
-          // If single item is too large, try to split it
-          if (typeof item === 'object' && item !== null) {
-            const itemPath = [...fullPath, String(chunks.length)];
-            const nestedChunks = this.handleNestedObject(item, itemPath, depth + 1, maxDepth);
-            chunks.push(...nestedChunks);
-          } else {
-            console.warn(`Skipping item that exceeds maxSize: ${item}`);
-          }
+      // Handle the new item
+      if (typeof item === 'object' && item !== null) {
+        // Try item as a single-element array first
+        const singleItemArray = [item];
+        const singleItemChunk = this.createArrayChunk(singleItemArray, fullPath);
+
+        if (RecursiveJsonTransformer.jsonSize(singleItemChunk) <= this.maxSize) {
+          currentGroup = singleItemArray;
+        } else {
+          // If too large, split the object
+          const itemPath = [...fullPath, String(chunks.length)];
+          const nestedChunks = this.handleNestedObject(item, itemPath, depth + 1, maxDepth);
+          chunks.push(...nestedChunks);
           currentGroup = [];
         }
+      } else {
+        // For primitive values, start a new group
+        currentGroup = [item];
       }
     }
 
-    // Don't forget remaining items
+    // Handle remaining group
     if (currentGroup.length > 0) {
-      const chunk = {};
-      RecursiveJsonTransformer.setNestedDict(chunk, fullPath, currentGroup);
-      chunks.push(chunk.root ? chunk.root : chunk);
+      chunks.push(this.createArrayChunk(currentGroup, fullPath));
     }
 
     return chunks;
@@ -222,18 +233,18 @@ export class RecursiveJsonTransformer {
     depth: number,
     maxDepth: number,
   ): Record<string, any>[] {
+    // Handle max depth
     if (depth > maxDepth) {
       console.warn(`Maximum depth of ${maxDepth} exceeded, flattening remaining structure`);
-      const chunk = {};
-      RecursiveJsonTransformer.setNestedDict(chunk, fullPath, value);
+      const chunk = this.createObjectChunk(value, fullPath);
       return [chunk];
     }
 
-    // Try to keep the entire object intact first
-    const wholeChunk = {};
-    RecursiveJsonTransformer.setNestedDict(wholeChunk, fullPath.length ? fullPath : ['root'], value);
+    // Normalize path and try keeping object intact
+    const path = fullPath.length ? fullPath : ['root'];
+    const wholeChunk = this.createObjectChunk(value, path);
     if (RecursiveJsonTransformer.jsonSize(wholeChunk) <= this.maxSize) {
-      return [wholeChunk.root ? [wholeChunk.root] : wholeChunk];
+      return [wholeChunk.root ? wholeChunk.root : wholeChunk];
     }
 
     const chunks: Record<string, any>[] = [];
@@ -242,46 +253,43 @@ export class RecursiveJsonTransformer {
     for (const [key, val] of Object.entries(value)) {
       if (val === undefined) continue;
 
-      // For arrays, handle them directly at the current level
+      // Handle arrays separately
       if (Array.isArray(val)) {
-        const arrayChunks = this.handleArray(val, key, fullPath, depth, maxDepth);
+        const arrayChunks = this.handleArray(val, key, path, depth, maxDepth);
         chunks.push(...arrayChunks);
         continue;
       }
 
-      const testValue = { [key]: val };
+      // Try adding to current chunk
       const testChunk = {};
-      RecursiveJsonTransformer.setNestedDict(testChunk, fullPath.length ? fullPath : ['root'], {
+      RecursiveJsonTransformer.setNestedDict(testChunk, path, {
         ...currentChunk,
-        ...testValue,
+        [key]: val,
       });
 
       if (RecursiveJsonTransformer.jsonSize(testChunk) <= this.maxSize) {
-        currentChunk = { ...currentChunk, ...testValue };
-      } else {
-        // Save current chunk if not empty
-        if (Object.keys(currentChunk).length > 0) {
-          const chunk = {};
-          RecursiveJsonTransformer.setNestedDict(chunk, fullPath.length ? fullPath : ['root'], currentChunk);
-          chunks.push(chunk.root ? chunk.root : chunk);
-        }
+        currentChunk[key] = val;
+        continue;
+      }
 
-        // Handle the new value
-        if (typeof val === 'object' && val !== null) {
-          const nestedChunks = this.handleNestedObject(val, [...fullPath, key], depth + 1, maxDepth);
-          chunks.push(...nestedChunks);
-          currentChunk = {};
-        } else {
-          currentChunk = testValue;
-        }
+      // Save current chunk if not empty
+      if (Object.keys(currentChunk).length > 0) {
+        chunks.push(this.createObjectChunk(currentChunk, path));
+        currentChunk = {};
+      }
+
+      // Handle value that didn't fit
+      if (typeof val === 'object' && val !== null) {
+        const nestedChunks = this.handleNestedObject(val, [...path, key], depth + 1, maxDepth);
+        chunks.push(...nestedChunks);
+      } else {
+        currentChunk = { [key]: val };
       }
     }
 
-    // Don't forget the last chunk
+    // Save final chunk if not empty
     if (Object.keys(currentChunk).length > 0) {
-      const chunk = {};
-      RecursiveJsonTransformer.setNestedDict(chunk, fullPath.length ? fullPath : ['root'], currentChunk);
-      chunks.push(chunk.root ? chunk.root : chunk);
+      chunks.push(this.createObjectChunk(currentChunk, path));
     }
 
     return chunks;
