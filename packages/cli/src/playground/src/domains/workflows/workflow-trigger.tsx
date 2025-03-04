@@ -1,6 +1,6 @@
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { Loader2 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
 
@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
 import { useExecuteWorkflow, useWatchWorkflow, useResumeWorkflow, useWorkflow } from '@/hooks/use-workflows';
+import { WorkflowRunContext } from './workflow-run-context';
 
 interface SuspendedStep {
   stepId: string;
@@ -25,11 +26,11 @@ interface WorkflowPath {
 }
 
 export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; setRunId: (runId: string) => void }) {
+  const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
   const { isLoading, workflow } = useWorkflow(workflowId);
   const { executeWorkflow, isExecutingWorkflow } = useExecuteWorkflow();
   const { watchWorkflow, watchResult } = useWatchWorkflow();
   const { resumeWorkflow, isResumingWorkflow } = useResumeWorkflow();
-  const [result, setResult] = useState<any>(null);
   const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
 
   const triggerSchema = workflow?.triggerSchema;
@@ -164,8 +165,10 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
           </div>
           <DynamicForm
             schema={zodInputSchema}
+            defaultValues={payload}
             isSubmitLoading={isExecutingWorkflow}
             onSubmit={data => {
+              setPayload(data);
               handleExecuteWorkflow(data);
             }}
           />
