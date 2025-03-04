@@ -14,6 +14,7 @@ import { resolveSchema } from './schema-resolver';
 interface DynamicFormProps<T extends z.ZodSchema> {
   schema: T;
   onSubmit: (values: z.infer<T>) => void | Promise<void>;
+  defaultValues?: z.infer<T>;
   isSubmitLoading?: boolean;
   submitButtonLabel?: string;
 }
@@ -21,6 +22,7 @@ interface DynamicFormProps<T extends z.ZodSchema> {
 export function DynamicForm<T extends z.ZodSchema>({
   schema,
   onSubmit,
+  defaultValues,
   isSubmitLoading,
   submitButtonLabel = 'Submit',
 }: DynamicFormProps<T>) {
@@ -36,6 +38,7 @@ export function DynamicForm<T extends z.ZodSchema>({
       schemaTypeName === 'ZodDiscriminatedUnion'
         ? customZodUnionResolver(wrappedSchema as any, discriminatedUnionSchemaDiscriminator)
         : zodResolver(wrappedSchema as any),
+    defaultValues,
   });
 
   const { control, handleSubmit, watch } = form;

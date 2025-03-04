@@ -83,7 +83,7 @@ const AgentTool = () => {
   ];
 
   return (
-    <div className="flex flex-col h-full w-full bg-mastra-bg-1">
+    <div className="flex flex-col h-full w-full bg-mastra-bg-1 overflow-y-hidden">
       <Header title={<Breadcrumb items={breadcrumbItems} />} />
       <ToolExecutor
         executionResult={result}

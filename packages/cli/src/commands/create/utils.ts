@@ -9,11 +9,11 @@ import { getPackageManager, getPackageManagerInstallCommand } from '../utils.js'
 
 const exec = util.promisify(child_process.exec);
 
-const execWithTimeout = async (command: string, timeoutMs = 180000, skipTimeout = false) => {
+const execWithTimeout = async (command: string, timeoutMs?: number) => {
   try {
     const promise = exec(command, { killSignal: 'SIGTERM' });
 
-    if (skipTimeout) {
+    if (!timeoutMs) {
       return await promise;
     }
 
@@ -41,10 +41,10 @@ const execWithTimeout = async (command: string, timeoutMs = 180000, skipTimeout 
 
 export const createMastraProject = async ({
   createVersionTag,
-  noTimeout,
+  timeout,
 }: {
   createVersionTag?: string;
-  noTimeout?: boolean;
+  timeout?: number;
 }) => {
   p.intro(color.inverse('Mastra Create'));
 
@@ -115,11 +115,11 @@ export const createMastraProject = async ({
   s.stop(`${pm} dependencies installed`);
   s.start('Installing mastra');
   const versionTag = createVersionTag ? `@${createVersionTag}` : '@latest';
-  await execWithTimeout(`${pm} ${installCommand} mastra${versionTag}`, 180000, noTimeout);
+  await execWithTimeout(`${pm} ${installCommand} mastra${versionTag}`, timeout);
   s.stop('mastra installed');
 
   s.start('Installing @mastra/core');
-  await execWithTimeout(`${pm} ${installCommand} @mastra/core${versionTag}`, 180000, noTimeout);
+  await execWithTimeout(`${pm} ${installCommand} @mastra/core${versionTag}`, timeout);
   s.stop('@mastra/core installed');
 
   s.start('Adding .gitignore');

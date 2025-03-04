@@ -1,6 +1,6 @@
 {
   "name": "@mastra/loggers",
-  "version": "0.1.7",
+  "version": "0.1.8-alpha.4",
   "description": "",
   "type": "module",
   "types": "./dist/index.d.ts",

@@ -28,6 +28,11 @@ export class LibSQLStore extends MastraStorage {
   constructor({ config }: { config: LibSQLConfig }) {
     super({ name: `LibSQLStore` });
 
+    // need to re-init every time for in memory dbs or the tables might not exist
+    if (config.url === ':memory:') {
+      this.shouldCacheInit = false;
+    }
+
     this.client = createClient({
       url: this.rewriteDbUrl(config.url),
       authToken: config.authToken,
@@ -43,8 +48,8 @@ export class LibSQLStore extends MastraStorage {
       const relativePath = url.slice('file:'.length);
 
       // If we're in a .mastra directory, use the parent directory
-      if (cwd.endsWith('.mastra') || cwd.endsWith('.mastra/')) {
-        const baseDir = join(cwd, `..`);
+      if (cwd.includes('.mastra') && (cwd.endsWith(`output`) || cwd.endsWith(`output/`) || cwd.endsWith(`output\\`))) {
+        const baseDir = join(cwd, `..`, `..`);
 
         // Rewrite to be relative to the base directory
         const fullPath = join(baseDir, relativePath);

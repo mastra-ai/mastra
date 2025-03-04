@@ -18,9 +18,9 @@ npm install @mastra/storage-libsql
 ```typescript copy showLineNumbers
 import { LibSQLStore } from "@mastra/core/storage/libsql";
 
-// In-memory database (development)
+// File database (development)
 const storage = new LibSQLStore({
-  url: ":memory:",
+  url: "file:storage.db",
 });
 
 // Persistent database (production)
@@ -37,7 +37,7 @@ const storage = new LibSQLStore({
       name: "url",
       type: "string",
       description:
-        "Database URL. Use ':memory:' for in-memory database or a LibSQL-compatible connection string for persistent storage.",
+        "Database URL. Use ':memory:' for in-memory database, 'file:filename.db' for a file database, or any LibSQL-compatible connection string for persistent storage.",
       isOptional: false,
     },
     {
@@ -53,16 +53,13 @@ const storage = new LibSQLStore({
 
 ### In-Memory vs Persistent Storage
 
-The in-memory configuration (`:memory:`) is useful for:
+The file configuration (`file:storage.db`) is useful for:
 
 - Development and testing
-- Temporary storage that doesn't need to persist
+- Temporary storage
 - Quick prototyping
 
-For production use cases, use a persistent database URL:
-
-- Local file: `file:local.db`
-- Remote LibSQL: `libsql://your-database.turso.io`
+For production use cases, use a persistent database URL: `libsql://your-database.turso.io`
 
 ### Schema Management
 

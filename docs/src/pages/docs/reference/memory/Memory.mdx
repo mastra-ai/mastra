@@ -23,12 +23,12 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
 import { Agent } from "@mastra/core/agent";
 
 const memory = new Memory({
-  // Custom storage configuration
+  // Optional storage configuration - libsql will be used by default
   storage: new LibSQLStore({
     url: "file:memory.db",
   }),
 
-  // Custom vector database for semantic search
+  // Optional vector database for semantic search - libsql will be used by default
   vector: new LibSQLVector({
     url: "file:vector.db",
   }),
@@ -70,7 +70,7 @@ const agent = new Agent({
       name: "storage",
       type: "MastraStorage",
       description: "Storage implementation for persisting memory data",
-      isOptional: false,
+      isOptional: true,
     },
     {
       name: "vector",
@@ -132,52 +132,45 @@ const agent = new Agent({
     },
     {
       name: "workingMemory",
-      type: "{ enabled: boolean; template: string }",
+      type: "{ enabled: boolean; template?: string; use?: 'text-stream' | 'tool-call' }",
       description:
-        "Configuration for working memory feature that allows persistent storage of user information across conversations",
+        "Configuration for working memory feature that allows persistent storage of user information across conversations. The 'use' setting determines how working memory updates are handled - either through text stream tags or tool calls.",
       isOptional: true,
       defaultValue:
-        "{ enabled: false, template: '<user><first_name></first_name><last_name></last_name>...</user>' }",
+        "{ enabled: false, template: '<user><first_name></first_name><last_name></last_name>...</user>', use: 'text-stream' }",
     },
   ]}
 />
 
 ### Working Memory
 
-The working memory feature allows agents to maintain persistent information across conversations. When enabled, the Memory class will automatically manage XML-based working memory updates through the conversation stream.
+The working memory feature allows agents to maintain persistent information across conversations. When enabled, the Memory class will automatically manage XML-based working memory updates through either text stream tags or tool calls.
+
+There are two modes for handling working memory updates:
+
+1. **text-stream** (default): The agent includes working memory updates directly in its responses using XML-like tags (`<working_memory>...</working_memory>`). These tags are automatically processed and stripped from the visible output.
+
+2. **tool-call**: The agent uses a dedicated tool to update working memory. This mode should be used when working with `toDataStream()` as text-stream mode is not compatible with data streaming. Additionally, this mode provides more explicit control over memory updates and may be preferred when working with agents that are better at using tools than managing text tags.
+
+Example configuration:
+
+```typescript copy showLineNumbers
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      template: "<user><first_name></first_name><last_name></last_name></user>",
+      use: "tool-call", // or 'text-stream'
+    },
+  },
+});
+```
 
 If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information. See the [Agent Memory Guide](/docs/agents/agent-memory#working-memory) for detailed usage examples and best practices.
 
 ### embedder
 
 By default, Memory uses FastEmbed with the `bge-small-en-v1.5` model, which provides a good balance of performance and model size (~130MB). You only need to specify an embedder if you want to use a different model or provider.
-
-## Additional Notes
-
-### Vector Search Configuration
-
-When using vector search capabilities with custom configuration, ensure you configure both the vector store and appropriate search options. Here's an example:
-
-```typescript copy showLineNumbers
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/core/storage/libsql";
-import { LibSQLVector } from "@mastra/core/vector/libsql";
-
-const memory = new Memory({
-  storage: new LibSQLStore({
-    url: ":memory:",
-  }),
-  vector: new LibSQLVector({
-    url: ":memory:",
-  }),
-  options: {
-    semanticRecall: {
-      topK: 5,
-      messageRange: 2,
-    },
-  },
-});
-```
 
 ### Related
 

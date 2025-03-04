@@ -15,6 +15,7 @@ import type {
 } from '../';
 import type { MastraPrimitives } from '../../action';
 import type { ToolsInput } from '../../agent/types';
+import type { MastraMemory } from '../../memory/memory';
 import type { CoreTool } from '../../tools';
 import { delay } from '../../utils';
 
@@ -66,7 +67,14 @@ export class MastraLLM extends MastraLLMBase {
     runId,
     threadId,
     resourceId,
-  }: { tools?: ToolsInput; runId?: string; threadId?: string; resourceId?: string } = {}): Record<string, CoreTool> {
+    memory,
+  }: {
+    tools?: ToolsInput;
+    runId?: string;
+    threadId?: string;
+    resourceId?: string;
+    memory?: MastraMemory;
+  } = {}): Record<string, CoreTool> {
     this.logger.debug('Starting tool conversion for LLM');
     const converted = Object.entries(tools || {}).reduce(
       (memo, value) => {
@@ -92,6 +100,7 @@ export class MastraLLM extends MastraLLMBase {
                             threadId,
                             resourceId,
                             mastra: this.#mastra,
+                            memory,
                             runId,
                           },
                           options,
@@ -135,8 +144,9 @@ export class MastraLLM extends MastraLLMBase {
     telemetry,
     threadId,
     resourceId,
+    memory,
     ...rest
-  }: LLMTextOptions<Z>) {
+  }: LLMTextOptions<Z> & { memory?: MastraMemory }) {
     const model = this.#model;
 
     this.logger.debug(`[LLM] - Generating text`, {
@@ -148,7 +158,7 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId });
+    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory });
 
     const argsForExecute = {
       model,
@@ -225,13 +235,14 @@ export class MastraLLM extends MastraLLMBase {
     telemetry,
     threadId,
     resourceId,
+    memory,
     ...rest
-  }: LLMTextObjectOptions<T>) {
+  }: LLMTextObjectOptions<T> & { memory?: MastraMemory }) {
     const model = this.#model;
 
     this.logger.debug(`[LLM] - Generating a text object`, { runId });
 
-    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId });
+    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory });
 
     const argsForExecute = {
       model,
@@ -303,8 +314,9 @@ export class MastraLLM extends MastraLLMBase {
     telemetry,
     threadId,
     resourceId,
+    memory,
     ...rest
-  }: LLMInnerStreamOptions<Z>) {
+  }: LLMInnerStreamOptions<Z> & { memory?: MastraMemory }) {
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {
       runId,
@@ -315,7 +327,7 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId });
+    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory });
 
     const argsForExecute = {
       model,
@@ -407,8 +419,9 @@ export class MastraLLM extends MastraLLMBase {
     telemetry,
     threadId,
     resourceId,
+    memory,
     ...rest
-  }: LLMStreamObjectOptions<T>) {
+  }: LLMStreamObjectOptions<T> & { memory?: MastraMemory }) {
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming structured output`, {
       runId,
@@ -417,7 +430,7 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId });
+    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory });
 
     const argsForExecute = {
       model,
@@ -502,8 +515,9 @@ export class MastraLLM extends MastraLLMBase {
       output,
       temperature,
       telemetry,
+      memory,
       ...rest
-    }: LLMStreamOptions<Z> = {},
+    }: LLMStreamOptions<Z> & { memory?: MastraMemory } = {},
   ): Promise<GenerateReturn<Z>> {
     const msgs = this.convertToMessages(messages);
 
@@ -516,6 +530,7 @@ export class MastraLLM extends MastraLLMBase {
         convertedTools,
         runId,
         temperature,
+        memory,
         ...rest,
       })) as unknown as GenerateReturn<Z>;
     }
@@ -529,6 +544,7 @@ export class MastraLLM extends MastraLLMBase {
       convertedTools,
       runId,
       telemetry,
+      memory,
       ...rest,
     })) as unknown as GenerateReturn<Z>;
   }

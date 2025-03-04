@@ -1,5 +1,53 @@
 # @mastra/playground-ui
 
+## 1.0.0-alpha.4
+
+### Patch Changes
+
+- d79aedf: Fix import/require paths in these package.json
+- 144b3d5: Update traces table UI, agent Chat UI
+  Fix get workflows breaking
+- Updated dependencies [d79aedf]
+  - @mastra/core@0.5.0-alpha.4
+  - @mastra/client-js@0.1.7-alpha.4
+
+## 1.0.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [3d0e290]
+  - @mastra/core@0.5.0-alpha.3
+  - @mastra/client-js@0.1.7-alpha.3
+
+## 1.0.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [02ffb7b]
+  - @mastra/core@0.5.0-alpha.2
+  - @mastra/client-js@0.1.7-alpha.2
+
+## 1.0.0-alpha.1
+
+### Patch Changes
+
+- e5149bb: Fix playground-ui agent-evals tab-content
+- Updated dependencies [dab255b]
+  - @mastra/core@0.5.0-alpha.1
+  - @mastra/client-js@0.1.7-alpha.1
+
+## 1.0.0-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [59df7b6]
+- Updated dependencies [29f3a82]
+- Updated dependencies [960690d]
+- Updated dependencies [59df7b6]
+- Updated dependencies [c139344]
+  - @mastra/core@0.5.0-alpha.0
+  - @mastra/client-js@0.1.7-alpha.0
+
 ## 0.0.2
 
 ### Patch Changes

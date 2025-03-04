@@ -13,11 +13,11 @@ export const create = async (args: {
   addExample?: boolean;
   llmApiKey?: string;
   createVersionTag?: string;
-  noTimeout?: boolean;
+  timeout?: number;
 }) => {
   const { projectName } = await createMastraProject({
     createVersionTag: args?.createVersionTag,
-    noTimeout: args?.noTimeout,
+    timeout: args?.timeout,
   });
   const directory = '/src';
 
