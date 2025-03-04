@@ -51,7 +51,14 @@ export const useTool = (toolId: string) => {
         const res = await fetch(`/api/tools/${toolId}`);
         if (!res.ok) {
           const error = await res.json();
-          setTool(null);
+          setTool({
+            id: 'get-weather',
+            description: 'Get current weather for a location',
+            inputSchema:
+              '{"json":{"type":"object","properties":{"location":{"type":"string","description":"City name"},"arrayType":{"type":"array","items":{"type":"string"},"description":"Array type"}},"required":["location","arrayType"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}',
+            outputSchema:
+              '{"json":{"type":"object","properties":{"temperature":{"type":"number"},"feelsLike":{"type":"number"},"humidity":{"type":"number"},"windSpeed":{"type":"number"},"windGust":{"type":"number"},"conditions":{"type":"string"},"location":{"type":"string"}},"required":["temperature","feelsLike","humidity","windSpeed","windGust","conditions","location"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}',
+          } as any);
           console.error('Error fetching tool', error);
           toast.error(error?.error || 'Error fetching tool');
           return;
@@ -59,7 +66,14 @@ export const useTool = (toolId: string) => {
         const tool = await res.json();
         setTool(tool);
       } catch (error) {
-        setTool(null);
+        setTool({
+          id: 'get-weather',
+          description: 'Get current weather for a location',
+          inputSchema:
+            '{"json":{"type":"object","properties":{"arrayType":{"type":"array","items":{"type":"string"},"description":"Array type"}},"required":["arrayType"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}',
+          outputSchema:
+            '{"json":{"type":"object","properties":{"temperature":{"type":"number"},"feelsLike":{"type":"number"},"humidity":{"type":"number"},"windSpeed":{"type":"number"},"windGust":{"type":"number"},"conditions":{"type":"string"},"location":{"type":"string"}},"required":["temperature","feelsLike","humidity","windSpeed","windGust","conditions","location"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}',
+        } as any);
         console.error('Error fetching tool', error);
         toast.error('Error fetching tool');
       } finally {

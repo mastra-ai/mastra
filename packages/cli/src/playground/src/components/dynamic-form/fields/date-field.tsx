@@ -8,7 +8,7 @@ import { DatePicker } from '../../ui/date-picker';
 interface DateFieldProps {
   name: string;
   control: Control<any>;
-  handleFieldChange?: (props: { key: string; value: Date | null | undefined }) => void;
+  handleFieldChange?: (props: { key: string; value: string | Date | null | undefined }) => void;
 }
 
 export function DateField({ name, control, handleFieldChange }: DateFieldProps) {
@@ -20,8 +20,9 @@ export function DateField({ name, control, handleFieldChange }: DateFieldProps) 
         <DatePicker
           value={field.value}
           setValue={date => {
-            field.onChange(date);
-            handleFieldChange?.({ key: name, value: date });
+            const newDate = date ? new Date(date).toISOString() : date;
+            field.onChange(newDate);
+            handleFieldChange?.({ key: name, value: newDate });
           }}
         />
       )}

@@ -20,6 +20,10 @@ export function ArrayField({ name, control, renderField }: ArrayFieldProps) {
     name,
   });
 
+  console.log('render array field');
+
+  console.log('fields===', fields);
+
   return (
     <div className="space-y-2 w-full">
       {fields.map((field, index) => (

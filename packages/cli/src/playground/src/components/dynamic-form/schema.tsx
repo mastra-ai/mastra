@@ -45,6 +45,7 @@ export function getFormConfigTypesFromSchemaDef({
   }
 
   if (schema instanceof z.ZodString) {
+    console.log('is a string');
     // if it's a datetime -- accounts for date weirdness during zod schema serialization to JSON
     if (schema instanceof z.ZodString && schema._def.checks.some((check: any) => check.kind === 'datetime')) {
       return { type: FormConfigType.DATE, isOptional };
@@ -69,6 +70,7 @@ export function getFormConfigTypesFromSchemaDef({
       options: schema.options.map((v: string) => ({ label: v, value: v })),
     };
   } else if (schema instanceof ZodArray) {
+    console.log('is an array');
     return {
       type: FormConfigType.ARRAY,
       isOptional,
@@ -135,7 +137,9 @@ export function schemaToFormFieldRenderer<T extends ZodSchema>({
   isOptional?: boolean;
   isNullable?: boolean;
 }): any {
+  console.log('schema===', schema);
   const fieldConfig = getFormConfigTypesFromSchemaDef({ schema, isOptional });
+  console.log('fieldConfig===', fieldConfig);
 
   const parentFieldValue = schemaOptions?.parentField ? getPath(values, schemaOptions?.parentField) : '';
 
