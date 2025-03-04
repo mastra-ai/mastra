@@ -435,7 +435,11 @@ export class Machine<
         }) => {
           const { parentStepId, context } = input;
           const result = await this.#workflowInstance.runMachine(parentStepId, context);
-          return Promise.resolve({ steps: result?.results });
+          return Promise.resolve({
+            steps: result.reduce((acc, r) => {
+              return { ...acc, ...r?.results };
+            }, {}),
+          });
         },
       ),
     };
