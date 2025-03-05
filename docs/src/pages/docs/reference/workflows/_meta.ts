@@ -6,6 +6,8 @@ const meta = {
   "step-function": ".step()",
   after: ".after()",
   then: ".then()",
+  until: ".until()",
+  while: ".while()",
   createRun: ".createRun()",
   start: ".start()",
   execute: ".execute()",

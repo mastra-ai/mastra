@@ -11,7 +11,7 @@ export class RagieToolset extends OpenAPIToolset {
   readonly name = 'RAGIE';
   readonly logoUrl = RagieLogo;
   config: RagieConfig;
-  readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
+  readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any>>;
   categories = ['ai'];
   description = 'Ragie is an AI assistant that helps you find information and answer questions.';
 
