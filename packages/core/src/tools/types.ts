@@ -1,8 +1,8 @@
 import type { ToolExecutionOptions } from 'ai';
 import type { ZodSchema, z } from 'zod';
 
-import type { IAction, IExecutionContext, MastraPrimitives } from '../action';
-import type { WorkflowContext } from '../workflows';
+import type { IAction, IExecutionContext } from '../action';
+import type { Mastra } from '../mastra';
 
 export type CoreTool = {
   description?: string;
@@ -23,5 +23,5 @@ export interface ToolAction<
     context: TContext,
     options?: TOptions,
   ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
-  mastra?: MastraPrimitives;
+  mastra?: Mastra;
 }
