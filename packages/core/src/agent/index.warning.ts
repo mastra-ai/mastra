@@ -5,7 +5,7 @@ import type { AgentConfig } from './types';
 import { Agent as BaseAgent } from './index';
 
 export class Agent<
-  TTools extends Record<string, ToolAction<any, any, any, any>> = Record<string, ToolAction<any, any, any, any>>,
+  TTools extends Record<string, ToolAction<any, any, any>> = Record<string, ToolAction<any, any, any>>,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > extends BaseAgent<TTools, TMetrics> {
   constructor(config: AgentConfig<TTools, TMetrics>) {

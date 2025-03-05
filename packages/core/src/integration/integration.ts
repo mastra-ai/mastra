@@ -37,11 +37,11 @@ export class Integration<ToolsParams = void, ApiClient = void> {
   /**
    * TOOLS
    */
-  getStaticTools(_params?: ToolsParams): Record<string, ToolAction<any, any, any, any>> {
+  getStaticTools(_params?: ToolsParams): Record<string, ToolAction<any, any, any>> {
     throw new Error('Method not implemented.');
   }
 
-  async getTools(_params?: ToolsParams): Promise<Record<string, ToolAction<any, any, any, any>>> {
+  async getTools(_params?: ToolsParams): Promise<Record<string, ToolAction<any, any, any>>> {
     throw new Error('Method not implemented.');
   }
 

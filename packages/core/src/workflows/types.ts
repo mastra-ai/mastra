@@ -14,7 +14,9 @@ export interface WorkflowOptions<TTriggerSchema extends z.ZodType<any> = any> {
 export interface StepExecutionContext<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TContext extends WorkflowContext = WorkflowContext,
-> extends IExecutionContext<TSchemaIn, TContext> {
+> extends IExecutionContext<TSchemaIn> {
+  context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> & TContext : TContext;
+  suspend: () => Promise<void>;
   runId: string;
 }
 
@@ -24,6 +26,8 @@ export interface StepAction<
   TSchemaOut extends z.ZodSchema | undefined,
   TContext extends StepExecutionContext<TSchemaIn>,
 > extends IAction<TId, TSchemaIn, TSchemaOut, TContext> {
+  mastra?: MastraPrimitives;
+  payload?: TSchemaIn extends z.ZodSchema ? Partial<z.infer<TSchemaIn>> : unknown;
   retryConfig?: RetryConfig;
 }
 
@@ -36,10 +40,10 @@ export type StepVariableType<
   TId extends string,
   TSchemaIn extends z.ZodSchema | undefined,
   TSchemaOut extends z.ZodSchema | undefined,
-  TContext extends IExecutionContext<TSchemaIn>,
-> = IAction<TId, TSchemaIn, TSchemaOut, TContext> | 'trigger' | { id: string };
+  TContext extends StepExecutionContext<TSchemaIn>,
+> = StepAction<TId, TSchemaIn, TSchemaOut, TContext> | 'trigger' | { id: string };
 
-export type StepNode = { step: IAction<any, any, any, any>; config: StepDef<any, any, any, any>[any] };
+export type StepNode = { step: StepAction<any, any, any, any>; config: StepDef<any, any, any, any>[any] };
 
 export type StepGraph = {
   initial: StepNode[];
@@ -52,7 +56,7 @@ export type VariableReference<
   TStep extends StepVariableType<any, any, any, any>,
   TTriggerSchema extends z.ZodType<any>,
 > =
-  TStep extends IAction<any, any, any, any>
+  TStep extends StepAction<any, any, any, any>
     ? {
         step: TStep;
         path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '' | '.';
@@ -71,7 +75,7 @@ export interface BaseCondition<
   TStep extends StepVariableType<any, any, any, any>,
   TTriggerSchema extends z.ZodType<any>,
 > {
-  ref: TStep extends IAction<any, any, any, any>
+  ref: TStep extends StepAction<any, any, any, any>
     ? {
         step: TStep;
         path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '' | '.' | 'status';
@@ -88,7 +92,7 @@ export interface BaseCondition<
   query: Query<any>;
 }
 
-export type ActionContext<TSchemaIn extends z.ZodType<any>> = IExecutionContext<z.infer<TSchemaIn>, WorkflowContext>;
+export type ActionContext<TSchemaIn extends z.ZodType<any>> = StepExecutionContext<z.infer<TSchemaIn>, WorkflowContext>;
 export enum WhenConditionReturnValue {
   CONTINUE = 'continue',
   CONTINUE_FAILED = 'continue_failed',
@@ -97,7 +101,7 @@ export enum WhenConditionReturnValue {
 
 export type StepDef<
   TStepId extends TSteps[number]['id'],
-  TSteps extends IAction<any, any, any, any>[],
+  TSteps extends StepAction<any, any, any, any>[],
   TSchemaIn extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
 > = Record<
@@ -130,7 +134,7 @@ type Condition<TStep extends StepVariableType<any, any, any, any>, TTriggerSchem
   | { not: Condition<TStep, TTriggerSchema> };
 
 export interface StepConfig<
-  TStep extends IAction<any, any, any, any>,
+  TStep extends StepAction<any, any, any, any>,
   CondStep extends StepVariableType<any, any, any, any>,
   VarStep extends StepVariableType<any, any, any, any>,
   TTriggerSchema extends z.ZodType<any>,
@@ -303,14 +307,14 @@ declare const StepIdBrand: unique symbol;
 export type StepId = string & { readonly [StepIdBrand]: typeof StepIdBrand };
 
 export type ExtractSchemaFromStep<
-  TStep extends IAction<any, any, any, any>,
+  TStep extends StepAction<any, any, any, any>,
   TKey extends 'inputSchema' | 'outputSchema',
 > = TStep[TKey];
 
 // Helper type to extract result type from a step handler
 export type ExtractStepResult<T> = T extends (data: any) => Promise<infer R> ? R : never;
 
-export type StepInputType<TStep extends IAction<any, any, any, any>, TKey extends 'inputSchema' | 'outputSchema'> =
+export type StepInputType<TStep extends StepAction<any, any, any, any>, TKey extends 'inputSchema' | 'outputSchema'> =
   ExtractSchemaFromStep<TStep, TKey> extends infer Schema
     ? Schema extends z.ZodType<any>
       ? z.infer<Schema>

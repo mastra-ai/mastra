@@ -71,7 +71,7 @@ export class MastraMCPClient {
       const s = jsonSchemaToModel(tool.inputSchema);
       const mastraTool = createTool({
         id: `${this.name}_${tool.name}`,
-        description: tool.description,
+        description: tool.description || '',
         inputSchema: s,
         execute: async ({ context }) => {
           try {
