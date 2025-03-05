@@ -45,6 +45,9 @@ export type MemoryConfig = {
     template?: string;
     use?: 'text-stream' | 'tool-call';
   };
+  threads?: {
+    generateTitle?: boolean;
+  };
 };
 
 export type SharedMemoryConfig = {
