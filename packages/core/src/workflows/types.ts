@@ -3,6 +3,7 @@ import type { z } from 'zod';
 
 import type { IAction, IExecutionContext, MastraPrimitives } from '../action';
 import type { BaseLogMessage, RegisteredLogger } from '../logger';
+import type { Mastra } from '../mastra';
 
 export interface WorkflowOptions<TTriggerSchema extends z.ZodType<any> = any> {
   name: string;
@@ -26,7 +27,7 @@ export interface StepAction<
   TSchemaOut extends z.ZodSchema | undefined,
   TContext extends StepExecutionContext<TSchemaIn>,
 > extends IAction<TId, TSchemaIn, TSchemaOut, TContext> {
-  mastra?: MastraPrimitives;
+  mastra?: Mastra;
   payload?: TSchemaIn extends z.ZodSchema ? Partial<z.infer<TSchemaIn>> : unknown;
   retryConfig?: RetryConfig;
 }
@@ -110,10 +111,7 @@ export type StepDef<
     snapshotOnTimeout?: boolean;
     when?:
       | Condition<any, any>
-      | ((args: {
-          context: WorkflowContext;
-          mastra?: MastraPrimitives;
-        }) => Promise<boolean | WhenConditionReturnValue>);
+      | ((args: { context: WorkflowContext; mastra?: Mastra }) => Promise<boolean | WhenConditionReturnValue>);
     data: TSchemaIn;
     handler: (args: ActionContext<TSchemaIn>) => Promise<z.infer<TSchemaOut>>;
   }
@@ -144,7 +142,7 @@ export interface StepConfig<
     | Condition<CondStep, TTriggerSchema>
     | ((args: {
         context: WorkflowContext<TTriggerSchema>;
-        mastra?: MastraPrimitives;
+        mastra?: Mastra;
       }) => Promise<boolean | WhenConditionReturnValue>);
   variables?: StepInputType<TStep, 'inputSchema'> extends never
     ? Record<string, VariableReference<VarStep, TTriggerSchema>>

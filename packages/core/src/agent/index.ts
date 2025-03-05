@@ -26,10 +26,12 @@ import type { GenerateReturn, StreamReturn } from '../llm';
 import type { MastraLLMBase } from '../llm/model';
 import { MastraLLM } from '../llm/model';
 import { RegisteredLogger } from '../logger';
+import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool, ToolAction } from '../tools/types';
+import { createMastraProxy } from '../utils';
 import type { CompositeVoice } from '../voice';
 
 import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
@@ -48,7 +50,7 @@ export class Agent<
   readonly llm: MastraLLMBase;
   instructions: string;
   readonly model?: LanguageModelV1;
-  #mastra?: MastraPrimitives;
+  #mastra?: Mastra;
   #memory?: MastraMemory;
   tools: TTools;
   /** @deprecated This property is deprecated. Use evals instead. */
@@ -78,7 +80,7 @@ export class Agent<
     }
 
     if (config.mastra) {
-      this.#mastra = config.mastra;
+      this.__registerPrimitives(config.mastra);
     }
 
     if (config.metrics) {
@@ -123,9 +125,11 @@ export class Agent<
 
     this.llm.__registerPrimitives(p);
 
-    this.#mastra = p;
-
     this.logger.debug(`[Agents:${this.name}] initialized.`, { model: this.model, name: this.name });
+  }
+
+  __registerMastra(mastra: Mastra) {
+    this.#mastra = mastra;
   }
 
   /**
@@ -138,7 +142,8 @@ export class Agent<
   }
 
   async generateTitleFromUserMessage({ message }: { message: CoreUserMessage }) {
-    const { object } = await this.llm.__textObject<{ title: string }>({
+    // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
+    const { text } = await this.llm.__text<{ title: string }>({
       messages: [
         {
           role: 'system',
@@ -146,19 +151,19 @@ export class Agent<
       - you will generate a short title based on the first message a user begins a conversation with
       - ensure it is not more than 80 characters long
       - the title should be a summary of the user's message
-      - do not use quotes or colons`,
+      - do not use quotes or colons
+      - the entire text you return will be used as the title`,
         },
         {
           role: 'user',
           content: JSON.stringify(message),
         },
       ],
-      structuredOutput: z.object({
-        title: z.string(),
-      }),
     });
 
-    return object.title;
+    // Strip out any r1 think tags if present
+    const cleanedText = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    return cleanedText;
   }
 
   getMostRecentUserMessage(messages: Array<CoreMessage>) {
@@ -167,7 +172,7 @@ export class Agent<
   }
 
   async genTitle(userMessage: CoreUserMessage | undefined) {
-    let title = 'New Thread';
+    let title = `New Thread ${new Date().toISOString()}`;
     try {
       if (userMessage) {
         title = await this.generateTitleFromUserMessage({
@@ -198,18 +203,20 @@ export class Agent<
     const userMessage = this.getMostRecentUserMessage(userMessages);
     const memory = this.getMemory();
     if (memory) {
+      const config = memory.getMergedThreadConfig(memoryConfig);
       let thread: StorageThreadType | null;
+
       if (!threadId) {
         this.logger.debug(`No threadId, creating new thread for agent ${this.name}`, {
           runId: runId || this.name,
         });
-        const title = await this.genTitle(userMessage);
+        const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
 
         thread = await memory.createThread({
           threadId,
           resourceId,
-          title,
           memoryConfig,
+          title,
         });
       } else {
         thread = await memory.getThreadById({ threadId });
@@ -217,7 +224,9 @@ export class Agent<
           this.logger.debug(`Thread with id ${threadId} not found, creating new thread for agent ${this.name}`, {
             runId: runId || this.name,
           });
-          const title = await this.genTitle(userMessage);
+
+          const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
+
           thread = await memory.createThread({
             threadId,
             resourceId,
@@ -483,6 +492,12 @@ export class Agent<
     const memory = this.getMemory();
     const memoryTools = memory?.getTools();
 
+    let mastraProxy = undefined;
+    const logger = this.logger;
+    if (this.#mastra) {
+      mastraProxy = createMastraProxy({ mastra: this.#mastra, logger });
+    }
+
     const converted = Object.entries(this.tools || {}).reduce(
       (memo, value) => {
         const k = value[0];
@@ -508,7 +523,7 @@ export class Agent<
                         tool?.execute?.(
                           {
                             context: args,
-                            mastra: this.#mastra,
+                            mastra: mastraProxy as (Mastra & MastraPrimitives) | undefined,
                             memory,
                             runId,
                             threadId,
@@ -558,7 +573,7 @@ export class Agent<
                           tool?.execute?.(
                             {
                               context: args,
-                              mastra: this.#mastra,
+                              mastra: mastraProxy as (Mastra & MastraPrimitives) | undefined,
                               memory,
                               runId,
                               threadId,

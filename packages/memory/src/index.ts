@@ -1,11 +1,11 @@
 import { deepMerge } from '@mastra/core';
-import type { CoreMessage, CoreTool } from '@mastra/core';
+import type { AiMessageType, CoreMessage, CoreTool } from '@mastra/core';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
-import { updateWorkingMemoryTool } from './tools/working-memory';
 import { embed } from 'ai';
 import type { Message as AiMessage } from 'ai';
+import { updateWorkingMemoryTool } from './tools/working-memory';
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -28,7 +28,7 @@ export class Memory extends MastraMemory {
     threadId,
     selectBy,
     threadConfig,
-  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessage[] }> {
+  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }> {
     let vectorResults:
       | null
       | {
@@ -114,14 +114,19 @@ export class Memory extends MastraMemory {
     threadId: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-  }) {
+  }): Promise<{
+    threadId: string;
+    messages: CoreMessage[];
+    uiMessages: AiMessageType[];
+  }> {
     const threadConfig = this.getMergedThreadConfig(config || {});
 
     if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
       return {
         messages: [],
         uiMessages: [],
-      } satisfies Awaited<ReturnType<typeof this.query>>;
+        threadId,
+      };
     }
 
     const messages = await this.query({
@@ -134,7 +139,11 @@ export class Memory extends MastraMemory {
     });
 
     this.logger.debug(`Remembered message history includes ${messages.messages.length} messages.`);
-    return messages;
+    return {
+      threadId,
+      messages: messages.messages,
+      uiMessages: messages.uiMessages,
+    };
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {

@@ -7,7 +7,7 @@ export const updateWorkingMemoryTool: CoreTool = {
   parameters: z.object({
     memory: z.string().describe('The XML-formatted working memory content to store'),
   }),
-  execute: async (params: any, _options: ToolExecutionOptions) => {
+  execute: async (params: any) => {
     const { context, threadId, memory } = params;
     if (!threadId || !memory) {
       throw new Error('Thread ID and Memory instance are required for working memory updates');
