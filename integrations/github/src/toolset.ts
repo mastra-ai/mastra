@@ -12,7 +12,7 @@ export class GithubToolset extends OpenAPIToolset {
   readonly name = 'GITHUB';
   readonly logoUrl = '';
   config: GithubConfig;
-  readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
+  readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any>>;
   categories = ['dev-tools'];
   description =
     'GitHub is a development platform inspired by the way you work. From open source to business, you can host and review code, manage projects, and build software alongside millions of other developers.';

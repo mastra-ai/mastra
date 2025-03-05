@@ -77,6 +77,13 @@ export class Logger {
       {
         name: options.name || 'app',
         level: options.level || LogLevel.INFO,
+        formatters: {
+          level: label => {
+            return {
+              level: label,
+            };
+          },
+        },
       },
       options.overrideDefaultTransports
         ? options?.transports?.default

@@ -19,16 +19,12 @@ export type MastraPrimitives = {
   vectors?: Record<string, MastraVector>;
   memory?: MastraMemory;
 };
-export interface IExecutionContext<
-  TSchemaIn extends z.ZodSchema | undefined = undefined,
-  TContext extends WorkflowContext = WorkflowContext,
-> {
-  context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> & TContext : TContext;
+export interface IExecutionContext<TSchemaIn extends z.ZodSchema | undefined = undefined> {
+  context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : {};
   runId?: string;
   mastra?: Mastra & MastraPrimitives;
   threadId?: string;
   resourceId?: string;
-  suspend: () => Promise<void>;
 }
 export interface IAction<
   TId extends string,
@@ -43,9 +39,8 @@ export interface IAction<
   outputSchema?: TSchemaOut;
   mastra?: Mastra;
   payload?: TSchemaIn extends z.ZodSchema ? Partial<z.infer<TSchemaIn>> : unknown;
-  execute?: (
+  execute: (
     context: TContext,
     options?: TOptions,
   ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
-  [key: string]: any;
 }

@@ -2,13 +2,12 @@ import type { Span } from '@opentelemetry/api';
 import type { Snapshot } from 'xstate';
 import type { z } from 'zod';
 
-import type { IAction } from '../action';
 import type { Logger } from '../logger';
 
 import type { Mastra } from '../mastra';
 import { Machine } from './machine';
 import type { Step } from './step';
-import type { RetryConfig, StepGraph, StepResult, WorkflowContext, WorkflowRunState } from './types';
+import type { RetryConfig, StepAction, StepGraph, StepResult, WorkflowContext, WorkflowRunState } from './types';
 import { getActivePathsAndStatus, mergeChildValue } from './utils';
 
 export interface WorkflowResultReturn<T extends z.ZodType<any>> {
@@ -30,7 +29,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
 
   logger: Logger;
 
-  #steps: Record<string, IAction<any, any, any, any>> = {};
+  #steps: Record<string, StepAction<any, any, any, any>> = {};
   #stepGraph: StepGraph;
   #stepSubscriberGraph: Record<string, StepGraph> = {};
 
@@ -45,6 +44,8 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
 
   // indexed by stepId
   #suspendedMachines: Record<string, Machine<TSteps, TTriggerSchema>> = {};
+  // {step1&&step2: {step1: true, step2: true}}
+  #compoundDependencies: Record<string, Record<string, boolean>> = {};
 
   constructor({
     name,
@@ -60,7 +61,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
   }: {
     name: string;
     logger: Logger;
-    steps: Record<string, IAction<any, any, any, any>>;
+    steps: Record<string, StepAction<any, any, any, any>>;
     mastra?: Mastra;
     retryConfig?: RetryConfig;
     runId?: string;
@@ -82,6 +83,8 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     this.#runId = runId ?? crypto.randomUUID();
     this.#onStepTransition = onStepTransition;
     this.#onFinish = onFinish;
+
+    this.#initializeCompoundDependencies();
   }
 
   setState(state: any) {
@@ -107,6 +110,15 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       ...results,
       runId: this.runId,
     };
+  }
+
+  private isCompoundDependencyMet(stepKey: string): boolean {
+    // If this is not a compound dependency, return true
+    if (!this.#isCompoundKey(stepKey)) return true;
+
+    const dependencies = this.#compoundDependencies[stepKey];
+    // Check if all required steps are completed successfully
+    return dependencies ? Object.values(dependencies).every(status => status === true) : true;
   }
 
   async execute({
@@ -195,9 +207,16 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
   }
 
   async runMachine(parentStepId: string, input: any) {
-    if (!this.#stepSubscriberGraph[parentStepId]) {
-      return;
-    }
+    const stepStatus = input.steps[parentStepId]?.status;
+
+    // get all keys from this.#stepSubscriberGraph that include the parentStepId after the &&
+    const subscriberKeys = Object.keys(this.#stepSubscriberGraph).filter(key => key.split('&&').includes(parentStepId));
+
+    subscriberKeys.forEach(key => {
+      if (['success', 'failure'].includes(stepStatus) && this.#isCompoundKey(key)) {
+        this.#compoundDependencies[key]![parentStepId] = true;
+      }
+    });
 
     const stateUpdateHandler = (startStepId: string, state: any, context: any) => {
       if (startStepId === 'trigger') {
@@ -220,22 +239,33 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       }
     };
 
-    const machine = new Machine({
-      logger: this.logger,
-      mastra: this.#mastra,
-      workflowInstance: this,
-      name: parentStepId === 'trigger' ? this.name : `${this.name}-${parentStepId}`,
-      runId: this.runId,
-      steps: this.#steps,
-      stepGraph: this.#stepSubscriberGraph[parentStepId],
-      executionSpan: this.#executionSpan,
-      startStepId: parentStepId,
-    });
+    const results = await Promise.all(
+      subscriberKeys.map(async key => {
+        if (!this.#stepSubscriberGraph[key] || !this.isCompoundDependencyMet(key)) {
+          return;
+        }
 
-    machine.on('state-update', stateUpdateHandler);
-    this.#machines[parentStepId] = machine;
+        delete this.#compoundDependencies[key];
 
-    return await machine.execute({ input });
+        const machine = new Machine({
+          logger: this.logger,
+          mastra: this.#mastra,
+          workflowInstance: this,
+          name: parentStepId === 'trigger' ? this.name : `${this.name}-${parentStepId}`,
+          runId: this.runId,
+          steps: this.#steps,
+          stepGraph: this.#stepSubscriberGraph[key],
+          executionSpan: this.#executionSpan,
+          startStepId: parentStepId,
+        });
+
+        machine.on('state-update', stateUpdateHandler);
+        this.#machines[parentStepId] = machine;
+        return machine.execute({ input });
+      }),
+    );
+
+    return results;
   }
 
   async suspend(stepId: string, machine: Machine<TSteps, TTriggerSchema>) {
@@ -364,5 +394,24 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       activePaths: m,
       timestamp: Date.now(),
     };
+  }
+
+  #initializeCompoundDependencies() {
+    Object.keys(this.#stepSubscriberGraph).forEach(stepKey => {
+      if (this.#isCompoundKey(stepKey)) {
+        const requiredSteps = stepKey.split('&&');
+        this.#compoundDependencies[stepKey] = requiredSteps.reduce(
+          (acc, step) => {
+            acc[step] = false;
+            return acc;
+          },
+          {} as Record<string, boolean>,
+        );
+      }
+    });
+  }
+
+  #isCompoundKey(key: string) {
+    return key.includes('&&');
   }
 }
