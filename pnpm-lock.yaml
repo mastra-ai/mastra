@@ -1169,11 +1169,11 @@ importers:
         specifier: ^20
         version: 20.17.19
       '@types/react':
-        specifier: ^18
-        version: 18.3.18
+        specifier: ^19.0.10
+        version: 19.0.10
       '@types/react-dom':
-        specifier: ^18
-        version: 18.3.5(@types/react@18.3.18)
+        specifier: ^19.0.4
+        version: 19.0.4(@types/react@19.0.10)
       eslint:
         specifier: ^8
         version: 8.57.1
