@@ -768,6 +768,63 @@ describe('Workflow', async () => {
       // @ts-ignore
       expect(results.increment.output).toEqual({ newValue: 10 });
     });
+
+    it('should run a while loop with a condition function', async () => {
+      const increment = vi.fn().mockImplementation(async ({ context }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue =
+          context.getStepResult('increment')?.newValue || context.getStepResult('trigger')?.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const incrementStep = new Step({
+        id: 'increment',
+        description: 'Increments the current value by 1',
+        outputSchema: z.object({
+          newValue: z.number(),
+        }),
+        execute: increment,
+      });
+
+      const final = vi.fn().mockImplementation(async ({ context }) => {
+        return { finalValue: context.getStepResult('increment')?.newValue };
+      });
+      const finalStep = new Step({
+        id: 'final',
+        description: 'Final step that prints the result',
+        execute: final,
+      });
+
+      const counterWorkflow = new Workflow({
+        name: 'counter-workflow',
+        triggerSchema: z.object({
+          target: z.number(),
+          startValue: z.number(),
+        }),
+      });
+
+      counterWorkflow
+        .step(incrementStep)
+        .while(async ({ context }) => {
+          const res = context.getStepResult<{ newValue: number }>('increment');
+          return (res?.newValue ?? 0) < 10;
+        }, incrementStep)
+        .then(finalStep)
+        .commit();
+
+      const run = counterWorkflow.createRun();
+      const { results } = await run.start({ triggerData: { target: 10, startValue: 0 } });
+
+      expect(increment).toHaveBeenCalledTimes(10);
+      expect(final).toHaveBeenCalledTimes(1);
+      // @ts-ignore
+      expect(results.final.output).toEqual({ finalValue: 10 });
+      // @ts-ignore
+      expect(results.increment.output).toEqual({ newValue: 10 });
+    });
   });
 
   describe('if-else branching', () => {

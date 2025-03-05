@@ -170,6 +170,7 @@ export class Workflow<
     applyOperator: (op: string, value: any, target: any) => { status: string },
     condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'],
     fallbackStep: FallbackStep,
+    loopType?: 'while' | 'until',
   ) {
     const lastStepKey = this.#lastStepStack[this.#lastStepStack.length - 1];
     // If no last step, we can't do anything
@@ -187,7 +188,11 @@ export class Workflow<
       execute: async ({ context }: any) => {
         if (typeof condition === 'function') {
           const result = await condition({ context });
-          return { status: result ? 'complete' : 'continue' };
+          if (loopType === 'while') {
+            return { status: result ? 'continue' : 'complete' };
+          } else {
+            return { status: result ? 'complete' : 'continue' };
+          }
         }
 
         // For query-based conditions, we need to:
@@ -287,7 +292,7 @@ export class Workflow<
       }
     };
 
-    return this.loop(applyOperator, condition, fallbackStep);
+    return this.loop(applyOperator, condition, fallbackStep, 'while');
   }
 
   until<
@@ -314,7 +319,7 @@ export class Workflow<
       }
     };
 
-    return this.loop(applyOperator, condition, fallbackStep);
+    return this.loop(applyOperator, condition, fallbackStep, 'until');
   }
 
   if<TStep extends IAction<any, any, any, any>>(condition: StepConfig<TStep, any, any, TTriggerSchema>['when']) {
