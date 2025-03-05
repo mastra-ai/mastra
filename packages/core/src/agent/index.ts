@@ -168,7 +168,7 @@ export class Agent<
   }
 
   async genTitle(userMessage: CoreUserMessage | undefined) {
-    let title = 'New Thread';
+    let title = `New Thread ${new Date().toISOString()}`;
     try {
       if (userMessage) {
         title = await this.generateTitleFromUserMessage({
@@ -199,18 +199,20 @@ export class Agent<
     const userMessage = this.getMostRecentUserMessage(userMessages);
     const memory = this.getMemory();
     if (memory) {
+      const config = memory.getMergedThreadConfig(memoryConfig);
       let thread: StorageThreadType | null;
+
       if (!threadId) {
         this.logger.debug(`No threadId, creating new thread for agent ${this.name}`, {
           runId: runId || this.name,
         });
-        const title = await this.genTitle(userMessage);
+        const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
 
         thread = await memory.createThread({
           threadId,
           resourceId,
-          title,
           memoryConfig,
+          title,
         });
       } else {
         thread = await memory.getThreadById({ threadId });
@@ -218,7 +220,9 @@ export class Agent<
           this.logger.debug(`Thread with id ${threadId} not found, creating new thread for agent ${this.name}`, {
             runId: runId || this.name,
           });
-          const title = await this.genTitle(userMessage);
+
+          const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
+
           thread = await memory.createThread({
             threadId,
             resourceId,
