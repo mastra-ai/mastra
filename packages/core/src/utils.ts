@@ -283,8 +283,6 @@ export function isVercelTool(tool: any): tool is VercelTool {
   );
 }
 
-type ToolExecuteFn = (args: any, options?: any) => Promise<any>;
-
 interface ToolOptions {
   name: string;
   runId?: string;
@@ -294,6 +292,16 @@ interface ToolOptions {
   description?: string;
   mastra?: MastraPrimitives;
   memory?: MastraMemory;
+  agentName?: string;
+}
+
+type ToolToConvert = VercelTool | ToolAction<any, any, any, any>;
+
+interface LogOptions {
+  agentName?: string;
+  toolName: string;
+  tool?: ToolToConvert;
+  type?: 'tool' | 'toolset';
 }
 
 interface LogMessageOptions {
@@ -301,25 +309,60 @@ interface LogMessageOptions {
   error: string;
 }
 
-type ToolToConvert = VercelTool | ToolAction<any, any, any, any>;
+function createLogMessageOptions({ agentName, toolName, tool, type }: LogOptions): LogMessageOptions {
+  // If no agent name, use default format
+  if (!agentName) {
+    return {
+      start: `Executing tool ${toolName}`,
+      error: `Failed tool execution`,
+    };
+  }
 
-export function wrapToolExecution(
-  execFunction: ToolExecuteFn,
-  options: ToolOptions,
-  logMessageOptions?: LogMessageOptions,
-) {
-  const { name, logger } = options;
-  const { start, error } = logMessageOptions || {
-    start: `Executing tool ${name}`,
-    error: `Failed tool execution`,
+  const prefix = `[Agent:${agentName}]`;
+  const vercelPrefix = isVercelTool(tool) ? 'Vercel ' : '';
+  const toolType = type === 'toolset' ? 'toolset' : 'tool';
+
+  return {
+    start: `${prefix} - Executing ${vercelPrefix}${toolType} ${toolName}`,
+    error: `${prefix} - Failed ${vercelPrefix}${toolType} execution`,
+  };
+}
+
+function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset') {
+  const { logger, ...rest } = options;
+
+  const { start, error } = createLogMessageOptions({
+    agentName: options.agentName,
+    toolName: options.name,
+    tool,
+    type: logType,
+  });
+
+  const execFunction = async (args: any, execOptions: any) => {
+    if (isVercelTool(tool)) {
+      return tool?.execute?.(args, execOptions) ?? undefined;
+    }
+    return (
+      tool?.execute?.(
+        {
+          context: args,
+          threadId: options.threadId,
+          resourceId: options.resourceId,
+          mastra: options.mastra,
+          memory: options.memory,
+          runId: options.runId,
+        },
+        execOptions,
+      ) ?? undefined
+    );
   };
 
   return async (args: any, execOptions?: any) => {
     try {
-      logger.debug(start, options);
+      logger.debug(start, { ...rest, args });
       return await execFunction(args, execOptions);
     } catch (err) {
-      logger.error(error, { ...options, error: err });
+      logger.error(error, { ...rest, error: err, args });
       throw err;
     }
   };
@@ -329,52 +372,23 @@ export function wrapToolExecution(
  * Converts a Vercel Tool or Mastra Tool into a CoreTool format
  * @param tool - The tool to convert (either VercelTool or ToolAction)
  * @param options - Tool options including Mastra-specific settings
- * @param logMessageOptions - Optional configuration for logging behavior
+ * @param logType - Type of tool to log (tool or toolset)
  * @returns A CoreTool that can be used by the system
  */
-export function makeCoreTool(
-  tool: ToolToConvert,
-  options: ToolOptions,
-  logMessageOptions?: LogMessageOptions,
-): CoreTool {
+export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset'): CoreTool {
   // Helper to get parameters based on tool type
-  const getParameters = (t: ToolToConvert) => {
-    if (isVercelTool(t)) {
-      return t.parameters instanceof z.ZodType
-        ? t.parameters
-        : resolveSerializedZodOutput(jsonSchemaToZod(t.parameters));
+  const getParameters = () => {
+    if (isVercelTool(tool)) {
+      return tool.parameters instanceof z.ZodType
+        ? tool.parameters
+        : resolveSerializedZodOutput(jsonSchemaToZod(tool.parameters));
     }
-    return t.inputSchema;
-  };
-  // Helper to create execute function based on tool type
-  const createExecute = (t: ToolToConvert) => {
-    if (!t.execute) return undefined;
-
-    const execFn = async (args: any, execOptions: any) => {
-      if (isVercelTool(t)) {
-        return t?.execute?.(args, execOptions) ?? undefined;
-      }
-      return (
-        t?.execute?.(
-          {
-            context: args,
-            threadId: options.threadId,
-            resourceId: options.resourceId,
-            mastra: options.mastra,
-            memory: options.memory,
-            runId: options.runId,
-          },
-          execOptions,
-        ) ?? undefined
-      );
-    };
-
-    return wrapToolExecution(execFn, { ...options, description: t.description }, logMessageOptions);
+    return tool.inputSchema;
   };
 
   return {
     description: tool.description!,
-    parameters: getParameters(tool),
-    execute: createExecute(tool),
+    parameters: getParameters(),
+    execute: tool.execute ? createExecute(tool, { ...options, description: tool.description }, logType) : undefined,
   };
 }

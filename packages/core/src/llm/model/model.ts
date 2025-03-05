@@ -82,7 +82,7 @@ export class MastraLLM extends MastraLLMBase {
         const tool = value[1];
 
         if (tool) {
-          memo[k] = makeCoreTool(tool, {
+          const options = {
             name: k,
             runId,
             threadId,
@@ -90,7 +90,8 @@ export class MastraLLM extends MastraLLMBase {
             logger: this.logger,
             memory,
             mastra: this.#mastra,
-          });
+          };
+          memo[k] = makeCoreTool(tool, options);
         }
         return memo;
       },

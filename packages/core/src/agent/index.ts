@@ -30,7 +30,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
-import { isVercelTool, makeCoreTool } from '../utils';
+import { makeCoreTool } from '../utils';
 import type { CompositeVoice } from '../voice';
 
 import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput, ToolsInput } from './types';
@@ -490,28 +490,17 @@ export class Agent<
         const tool = this.tools[k];
 
         if (tool) {
-          const logMessageOptions = isVercelTool(tool)
-            ? {
-                start: `[Agent:${this.name}] - Executing Vercel tool ${k}`,
-                error: `[Agent:${this.name}] - Failed Vercel tool execution`,
-              }
-            : {
-                start: `[Agent:${this.name}] - Executing tool ${k}`,
-                error: `[Agent:${this.name}] - Failed tool execution`,
-              };
-          memo[k] = makeCoreTool(
-            tool,
-            {
-              name: k,
-              runId,
-              threadId,
-              resourceId,
-              logger: this.logger,
-              mastra: this.#mastra,
-              memory,
-            },
-            logMessageOptions,
-          );
+          const options = {
+            name: k,
+            runId,
+            threadId,
+            resourceId,
+            logger: this.logger,
+            mastra: this.#mastra,
+            memory,
+            agentName: this.name,
+          };
+          memo[k] = makeCoreTool(tool, options);
         }
         return memo;
       },
@@ -582,28 +571,15 @@ export class Agent<
       toolsFromToolsets.forEach(toolset => {
         Object.entries(toolset).forEach(([toolName, tool]) => {
           const toolObj = tool;
-
-          const logMessageOptions = isVercelTool(toolObj)
-            ? {
-                start: `[Agent:${this.name}] - Executing Vercel toolset ${toolName}`,
-                error: `[Agent:${this.name}] - Failed Vercel toolset execution`,
-              }
-            : {
-                start: `[Agent:${this.name}] - Executing toolset ${toolName}`,
-                error: `[Agent:${this.name}] - Failed toolset execution`,
-              };
-
-          toolsFromToolsetsConverted[toolName] = makeCoreTool(
-            toolObj,
-            {
-              name: toolName,
-              runId,
-              threadId,
-              resourceId,
-              logger: this.logger,
-            },
-            logMessageOptions,
-          );
+          const options = {
+            name: toolName,
+            runId,
+            threadId,
+            resourceId,
+            logger: this.logger,
+            agentName: this.name,
+          };
+          toolsFromToolsetsConverted[toolName] = makeCoreTool(toolObj, options, 'toolset');
         });
       });
     }
