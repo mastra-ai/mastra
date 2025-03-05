@@ -119,13 +119,15 @@ export type StepCondition<TStep extends StepVariableType<any, any, any, any>, TT
   | BaseCondition<TStep, TTriggerSchema>
   | SimpleConditionalType
   | { and: StepCondition<TStep, TTriggerSchema>[] }
-  | { or: StepCondition<TStep, TTriggerSchema>[] };
+  | { or: StepCondition<TStep, TTriggerSchema>[] }
+  | { not: StepCondition<TStep, TTriggerSchema> };
 
 type Condition<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodType<any>> =
   | BaseCondition<TStep, TTriggerSchema>
   | SimpleConditionalType
   | { and: Condition<TStep, TTriggerSchema>[] }
-  | { or: Condition<TStep, TTriggerSchema>[] };
+  | { or: Condition<TStep, TTriggerSchema>[] }
+  | { not: Condition<TStep, TTriggerSchema> };
 
 export interface StepConfig<
   TStep extends IAction<any, any, any, any>,

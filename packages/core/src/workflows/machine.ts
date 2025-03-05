@@ -441,7 +441,11 @@ export class Machine<
         }) => {
           const { parentStepId, context } = input;
           const result = await this.#workflowInstance.runMachine(parentStepId, context);
-          return Promise.resolve({ steps: result?.results });
+          return Promise.resolve({
+            steps: result.reduce((acc, r) => {
+              return { ...acc, ...r?.results };
+            }, {}),
+          });
         },
       ),
     };
@@ -911,6 +915,14 @@ export class Machine<
       orBranchResult = condition.or.some(cond => this.#evaluateCondition(cond, context));
       this.logger.debug(`Evaluated OR condition`, {
         orBranchResult,
+        runId: this.#runId,
+      });
+    }
+
+    if ('not' in condition) {
+      baseResult = !this.#evaluateCondition(condition.not, context);
+      this.logger.debug(`Evaluated NOT condition`, {
+        baseResult,
         runId: this.#runId,
       });
     }

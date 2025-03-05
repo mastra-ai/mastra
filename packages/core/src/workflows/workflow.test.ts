@@ -768,6 +768,371 @@ describe('Workflow', async () => {
       // @ts-ignore
       expect(results.increment.output).toEqual({ newValue: 10 });
     });
+
+    it('should run a while loop with a condition function', async () => {
+      const increment = vi.fn().mockImplementation(async ({ context }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue =
+          context.getStepResult('increment')?.newValue || context.getStepResult('trigger')?.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const incrementStep = new Step({
+        id: 'increment',
+        description: 'Increments the current value by 1',
+        outputSchema: z.object({
+          newValue: z.number(),
+        }),
+        execute: increment,
+      });
+
+      const final = vi.fn().mockImplementation(async ({ context }) => {
+        return { finalValue: context.getStepResult('increment')?.newValue };
+      });
+      const finalStep = new Step({
+        id: 'final',
+        description: 'Final step that prints the result',
+        execute: final,
+      });
+
+      const counterWorkflow = new Workflow({
+        name: 'counter-workflow',
+        triggerSchema: z.object({
+          target: z.number(),
+          startValue: z.number(),
+        }),
+      });
+
+      counterWorkflow
+        .step(incrementStep)
+        .while(async ({ context }) => {
+          const res = context.getStepResult<{ newValue: number }>('increment');
+          return (res?.newValue ?? 0) < 10;
+        }, incrementStep)
+        .then(finalStep)
+        .commit();
+
+      const run = counterWorkflow.createRun();
+      const { results } = await run.start({ triggerData: { target: 10, startValue: 0 } });
+
+      expect(increment).toHaveBeenCalledTimes(10);
+      expect(final).toHaveBeenCalledTimes(1);
+      // @ts-ignore
+      expect(results.final.output).toEqual({ finalValue: 10 });
+      // @ts-ignore
+      expect(results.increment.output).toEqual({ newValue: 10 });
+    });
+  });
+
+  describe('if-else branching', () => {
+    it('should run the if-then branch', async () => {
+      const start = vi.fn().mockImplementation(async ({ context }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue =
+          context.getStepResult('start')?.newValue || context.getStepResult('trigger')?.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const startStep = new Step({
+        id: 'start',
+        description: 'Increments the current value by 1',
+        outputSchema: z.object({
+          newValue: z.number(),
+        }),
+        execute: start,
+      });
+
+      const other = vi.fn().mockImplementation(async ({ context }) => {
+        return { other: 26 };
+      });
+      const otherStep = new Step({
+        id: 'other',
+        description: 'Other step',
+        execute: other,
+      });
+
+      const final = vi.fn().mockImplementation(async ({ context }) => {
+        const startVal = context.getStepResult('start')?.newValue ?? 0;
+        const otherVal = context.getStepResult('other')?.other ?? 0;
+        return { finalValue: startVal + otherVal };
+      });
+      const finalStep = new Step({
+        id: 'final',
+        description: 'Final step that prints the result',
+        execute: final,
+      });
+
+      const counterWorkflow = new Workflow({
+        name: 'counter-workflow',
+        triggerSchema: z.object({
+          startValue: z.number(),
+        }),
+      });
+
+      counterWorkflow
+        .step(startStep)
+        .if(async ({ context }) => {
+          const current = context.getStepResult<{ newValue: number }>('start')?.newValue;
+          return !current || current < 5;
+        })
+        .then(finalStep)
+        .else()
+        .then(otherStep)
+        .then(finalStep)
+        .commit();
+
+      const run = counterWorkflow.createRun();
+      const { results } = await run.start({ triggerData: { startValue: 1 } });
+
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(other).toHaveBeenCalledTimes(0);
+      expect(final).toHaveBeenCalledTimes(1);
+      // @ts-ignore
+      expect(results.final.output).toEqual({ finalValue: 2 });
+      // @ts-ignore
+      expect(results.start.output).toEqual({ newValue: 2 });
+    });
+
+    it('should run the else branch', async () => {
+      const start = vi.fn().mockImplementation(async ({ context }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue =
+          context.getStepResult('start')?.newValue || context.getStepResult('trigger')?.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const startStep = new Step({
+        id: 'start',
+        description: 'Increments the current value by 1',
+        outputSchema: z.object({
+          newValue: z.number(),
+        }),
+        execute: start,
+      });
+
+      const other = vi.fn().mockImplementation(async ({ context }) => {
+        return { other: 26 };
+      });
+      const otherStep = new Step({
+        id: 'other',
+        description: 'Other step',
+        execute: other,
+      });
+
+      const final = vi.fn().mockImplementation(async ({ context }) => {
+        const startVal = context.getStepResult('start')?.newValue ?? 0;
+        const otherVal = context.getStepResult('other')?.other ?? 0;
+        return { finalValue: startVal + otherVal };
+      });
+      const finalStep = new Step({
+        id: 'final',
+        description: 'Final step that prints the result',
+        execute: final,
+      });
+
+      const counterWorkflow = new Workflow({
+        name: 'counter-workflow',
+        triggerSchema: z.object({
+          startValue: z.number(),
+        }),
+      });
+
+      counterWorkflow
+        .step(startStep)
+        .if(async ({ context }) => {
+          const current = context.getStepResult<{ newValue: number }>('start')?.newValue;
+          return !current || current < 5;
+        })
+        .then(finalStep)
+        .else()
+        .then(otherStep)
+        .then(finalStep)
+        .commit();
+
+      const run = counterWorkflow.createRun();
+      const { results } = await run.start({ triggerData: { startValue: 6 } });
+
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(other).toHaveBeenCalledTimes(1);
+      expect(final).toHaveBeenCalledTimes(1);
+      // @ts-ignore
+      expect(results.start.output).toEqual({ newValue: 7 });
+      // @ts-ignore
+      expect(results.other.output).toEqual({ other: 26 });
+
+      // @ts-ignore
+      expect(results.final.output).toEqual({ finalValue: 26 + 7 });
+    });
+
+    it('should run else-then and a nested if-then branch', async () => {
+      const start = vi.fn().mockImplementation(async ({ context }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue =
+          context.getStepResult('start')?.newValue || context.getStepResult('trigger')?.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const startStep = new Step({
+        id: 'start',
+        description: 'Increments the current value by 1',
+        outputSchema: z.object({
+          newValue: z.number(),
+        }),
+        execute: start,
+      });
+
+      const other = vi.fn().mockImplementation(async ({ context }) => {
+        return { other: 26 };
+      });
+      const otherStep = new Step({
+        id: 'other',
+        description: 'Other step',
+        execute: other,
+      });
+
+      const final = vi.fn().mockImplementation(async ({ context }) => {
+        const startVal = context.getStepResult('start')?.newValue ?? 0;
+        const otherVal = context.getStepResult('other')?.other ?? 0;
+        return { finalValue: startVal + otherVal };
+      });
+      const finalStep = new Step({
+        id: 'final',
+        description: 'Final step that prints the result',
+        execute: final,
+      });
+
+      const counterWorkflow = new Workflow({
+        name: 'counter-workflow',
+        triggerSchema: z.object({
+          startValue: z.number(),
+        }),
+      });
+
+      counterWorkflow
+        .step(startStep)
+        .if(async ({ context }) => {
+          const current = context.getStepResult<{ newValue: number }>('start')?.newValue;
+          return !current || current > 5;
+        })
+        .then(finalStep)
+        .else()
+        .if(async ({ context }) => {
+          const current = context.getStepResult<{ newValue: number }>('start')?.newValue;
+          return current === 2;
+        })
+        .then(otherStep)
+        .then(finalStep)
+        .else()
+        .then(finalStep)
+        .commit();
+
+      const run = counterWorkflow.createRun();
+      const { results } = await run.start({ triggerData: { startValue: 1 } });
+
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(other).toHaveBeenCalledTimes(1);
+      expect(final).toHaveBeenCalledTimes(1);
+      // @ts-ignore
+      expect(results.start.output).toEqual({ newValue: 2 });
+      // @ts-ignore
+      expect(results.other.output).toEqual({ other: 26 });
+
+      // @ts-ignore
+      expect(results.final.output).toEqual({ finalValue: 26 + 2 });
+    });
+
+    it('should run if-then and a nested else-then branch', async () => {
+      const start = vi.fn().mockImplementation(async ({ context }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue =
+          context.getStepResult('start')?.newValue || context.getStepResult('trigger')?.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const startStep = new Step({
+        id: 'start',
+        description: 'Increments the current value by 1',
+        outputSchema: z.object({
+          newValue: z.number(),
+        }),
+        execute: start,
+      });
+
+      const other = vi.fn().mockImplementation(async ({ context }) => {
+        return { other: 26 };
+      });
+      const otherStep = new Step({
+        id: 'other',
+        description: 'Other step',
+        execute: other,
+      });
+
+      const final = vi.fn().mockImplementation(async ({ context }) => {
+        const startVal = context.getStepResult('start')?.newValue ?? 0;
+        const otherVal = context.getStepResult('other')?.other ?? 0;
+        return { finalValue: startVal + otherVal };
+      });
+      const finalStep = new Step({
+        id: 'final',
+        description: 'Final step that prints the result',
+        execute: final,
+      });
+
+      const counterWorkflow = new Workflow({
+        name: 'counter-workflow',
+        triggerSchema: z.object({
+          startValue: z.number(),
+        }),
+      });
+
+      counterWorkflow
+        .step(startStep)
+        .if(async ({ context }) => {
+          const current = context.getStepResult<{ newValue: number }>('start')?.newValue;
+          return !current || current < 5;
+        })
+        .if(async ({ context }) => {
+          const current = context.getStepResult<{ newValue: number }>('start')?.newValue;
+          return current === 2;
+        })
+        .then(otherStep)
+        .then(finalStep)
+        .else()
+        .then(finalStep)
+
+        .else()
+        .then(finalStep)
+        .commit();
+
+      const run = counterWorkflow.createRun();
+      const { results } = await run.start({ triggerData: { startValue: 1 } });
+
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(other).toHaveBeenCalledTimes(1);
+      expect(final).toHaveBeenCalledTimes(1);
+      // @ts-ignore
+      expect(results.start.output).toEqual({ newValue: 2 });
+      // @ts-ignore
+      expect(results.other.output).toEqual({ other: 26 });
+
+      // @ts-ignore
+      expect(results.final.output).toEqual({ finalValue: 26 + 2 });
+    });
   });
 
   describe('Schema Validation', () => {
@@ -1026,6 +1391,88 @@ describe('Workflow', async () => {
       expect(step3Action).not.toHaveBeenCalled();
       expect(step4Action).not.toHaveBeenCalled();
       expect(step5Action).toHaveBeenCalledTimes(1);
+      expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success1' } });
+      expect(result.results.step2).toEqual({ status: 'success', output: { result: 'success2' } });
+      expect(result.results.step5).toEqual({ status: 'success', output: { result: 'success5' } });
+    });
+
+    it('should run compound subscribers', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step3Action = vi.fn<any>().mockResolvedValue({ result: 'success3' });
+      const step4Action = vi.fn<any>().mockResolvedValue({ result: 'success4' });
+      const step5Action = vi.fn<any>().mockResolvedValue({ result: 'success5' });
+
+      const step1 = new Step({ id: 'step1', execute: step1Action, outputSchema: z.object({ status: z.string() }) });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
+      const step3 = new Step({ id: 'step3', execute: step3Action });
+      const step4 = new Step({ id: 'step4', execute: step4Action });
+      const step5 = new Step({ id: 'step5', execute: step5Action });
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow.step(step1).then(step2).then(step5).after([step1, step5]).step(step3).then(step4).then(step5).commit();
+
+      const run = workflow.createRun();
+      const result = await run.start();
+
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).toHaveBeenCalled();
+      expect(step3Action).toHaveBeenCalled();
+      expect(step4Action).toHaveBeenCalled();
+      expect(step5Action).toHaveBeenCalledTimes(2);
+      expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success1' } });
+      expect(result.results.step2).toEqual({ status: 'success', output: { result: 'success2' } });
+      expect(result.results.step5).toEqual({ status: 'success', output: { result: 'success5' } });
+    });
+
+    it('should run complex compound subscribers', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step3Action = vi.fn<any>().mockResolvedValue({ result: 'success3' });
+      const step4Action = vi.fn<any>().mockResolvedValue({ result: 'success4' });
+      const step5Action = vi.fn<any>().mockResolvedValue({ result: 'success5' });
+      const step6Action = vi.fn<any>().mockResolvedValue({ result: 'success6' });
+      const step7Action = vi.fn<any>().mockResolvedValue({ result: 'success7' });
+      const step8Action = vi.fn<any>().mockResolvedValue({ result: 'success8' });
+
+      const step1 = new Step({ id: 'step1', execute: step1Action, outputSchema: z.object({ status: z.string() }) });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
+      const step3 = new Step({ id: 'step3', execute: step3Action });
+      const step4 = new Step({ id: 'step4', execute: step4Action });
+      const step5 = new Step({ id: 'step5', execute: step5Action });
+      const step6 = new Step({ id: 'step6', execute: step6Action });
+      const step7 = new Step({ id: 'step7', execute: step7Action });
+      const step8 = new Step({ id: 'step8', execute: step8Action });
+
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow
+        .step(step1)
+        .then(step2)
+        .then(step5)
+        .after([step1, step5])
+        .step(step3)
+        .then(step4)
+        .then(step5)
+        .after([step3, step4])
+        .step(step6)
+        .then(step8)
+        .then(step7)
+        .after(step5)
+        .step(step8)
+        .commit();
+
+      const run = workflow.createRun();
+      const result = await run.start();
+
+      console.log({ result });
+
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).toHaveBeenCalled();
+      expect(step3Action).toHaveBeenCalled();
+      expect(step4Action).toHaveBeenCalled();
+      expect(step5Action).toHaveBeenCalledTimes(2);
+      expect(step6Action).toHaveBeenCalled();
+      expect(step7Action).toHaveBeenCalled();
+      expect(step8Action).toHaveBeenCalledTimes(2);
       expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success1' } });
       expect(result.results.step2).toEqual({ status: 'success', output: { result: 'success2' } });
       expect(result.results.step5).toEqual({ status: 'success', output: { result: 'success5' } });

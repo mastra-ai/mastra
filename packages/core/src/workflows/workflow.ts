@@ -18,10 +18,10 @@ import type {
   WorkflowOptions,
   WorkflowRunState,
 } from './types';
+import { WhenConditionReturnValue } from './types';
 import { isVariableReference, updateStepInHierarchy } from './utils';
 import { WorkflowInstance } from './workflow-instance';
 import type { WorkflowResultReturn } from './workflow-instance';
-import { WhenConditionReturnValue } from './types';
 export class Workflow<
   TSteps extends Step<any, any, any>[] = any,
   TTriggerSchema extends z.ZodType<any> = any,
@@ -35,6 +35,7 @@ export class Workflow<
   // registers stepIds on `after` calls
   #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
+  #ifStack: { condition: StepConfig<any, any, any, TTriggerSchema>['when']; elseStepKey: string }[] = [];
   #stepGraph: StepGraph = { initial: [] };
   #stepSubscriberGraph: Record<string, StepGraph> = {};
   #steps: Record<string, IAction<any, any, any, any>> = {};
@@ -169,6 +170,7 @@ export class Workflow<
     applyOperator: (op: string, value: any, target: any) => { status: string },
     condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'],
     fallbackStep: FallbackStep,
+    loopType?: 'while' | 'until',
   ) {
     const lastStepKey = this.#lastStepStack[this.#lastStepStack.length - 1];
     // If no last step, we can't do anything
@@ -186,7 +188,11 @@ export class Workflow<
       execute: async ({ context }: any) => {
         if (typeof condition === 'function') {
           const result = await condition({ context });
-          return { status: result ? 'complete' : 'continue' };
+          if (loopType === 'while') {
+            return { status: result ? 'continue' : 'complete' };
+          } else {
+            return { status: result ? 'complete' : 'continue' };
+          }
         }
 
         // For query-based conditions, we need to:
@@ -286,7 +292,7 @@ export class Workflow<
       }
     };
 
-    return this.loop(applyOperator, condition, fallbackStep);
+    return this.loop(applyOperator, condition, fallbackStep, 'while');
   }
 
   until<
@@ -313,16 +319,75 @@ export class Workflow<
       }
     };
 
-    return this.loop(applyOperator, condition, fallbackStep);
+    return this.loop(applyOperator, condition, fallbackStep, 'until');
   }
 
-  after<TStep extends IAction<any, any, any, any>>(step: TStep) {
-    const stepKey = this.#makeStepKey(step);
-    this.#afterStepStack.push(stepKey);
+  if<TStep extends IAction<any, any, any, any>>(condition: StepConfig<TStep, any, any, TTriggerSchema>['when']) {
+    const lastStep = this.#steps[this.#lastStepStack[this.#lastStepStack.length - 1] ?? ''];
+    if (!lastStep) {
+      throw new Error('Condition requires a step to be executed after');
+    }
 
-    // Initialize subscriber array for this step if it doesn't exist
-    if (!this.#stepSubscriberGraph[stepKey]) {
-      this.#stepSubscriberGraph[stepKey] = { initial: [] };
+    this.after(lastStep);
+
+    const ifStepKey = `__${lastStep.id}_if`;
+    this.step(
+      {
+        id: ifStepKey,
+        execute: async ({ context }) => {
+          return { executed: true };
+        },
+      },
+      {
+        when: condition,
+      },
+    );
+
+    const elseStepKey = `__${lastStep.id}_else`;
+    this.#ifStack.push({ condition, elseStepKey });
+
+    return this;
+  }
+
+  else() {
+    const activeCondition = this.#ifStack.pop();
+    if (!activeCondition) {
+      throw new Error('No active condition found');
+    }
+
+    this.step(
+      {
+        id: activeCondition.elseStepKey,
+        execute: async ({ context }) => {
+          return { executed: true };
+        },
+      },
+      {
+        when:
+          typeof activeCondition.condition === 'function'
+            ? async payload => {
+                // @ts-ignore
+                const result = await activeCondition.condition(payload);
+                return !result;
+              }
+            : () => Promise.resolve(false),
+      },
+    );
+
+    return this;
+  }
+
+  after<TStep extends IAction<any, any, any, any>>(steps: TStep | TStep[]) {
+    const stepsArray = Array.isArray(steps) ? steps : [steps];
+    const stepKeys = stepsArray.map(step => this.#makeStepKey(step));
+
+    // Create a compound key for multiple steps
+    const compoundKey = stepKeys.join('&&');
+    this.#afterStepStack.push(compoundKey);
+
+    // Initialize subscriber array for this compound step if it doesn't exist
+    if (!this.#stepSubscriberGraph[compoundKey]) {
+      this.#stepSubscriberGraph[compoundKey] = { initial: [] };
     }
 
     return this as Omit<typeof this, 'then' | 'after'>;
@@ -367,7 +432,6 @@ export class Workflow<
    * @returns this instance for method chaining
    */
   commit() {
-    // this.#validateWorkflow();
     return this;
   }
 
