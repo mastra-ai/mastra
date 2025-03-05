@@ -57,6 +57,7 @@ export class LibSQLVector extends MastraVector {
   // so if we're in .mastra/output we need to rewrite the file url to be relative to the project root dir
   // or the experience will be inconsistent
   // this means `file:` urls are always relative to project root
+  // TODO: can we make this easier via bundling? https://github.com/mastra-ai/mastra/pull/2783#pullrequestreview-2662444241
   protected rewriteDbUrl(url: string): string {
     // If this is a relative file path (starts with file: but not file:/)
     if (url.startsWith('file:') && !url.startsWith('file:/')) {
