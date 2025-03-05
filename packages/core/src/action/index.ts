@@ -8,7 +8,6 @@ import type { MastraStorage } from '../storage';
 import type { Telemetry } from '../telemetry';
 import type { MastraTTS } from '../tts';
 import type { MastraVector } from '../vector';
-import type { WorkflowContext } from '../workflows';
 
 export type MastraPrimitives = {
   logger?: Logger;
@@ -19,10 +18,13 @@ export type MastraPrimitives = {
   vectors?: Record<string, MastraVector>;
   memory?: MastraMemory;
 };
+
+type MastraUnion = Mastra | MastraPrimitives;
+
 export interface IExecutionContext<TSchemaIn extends z.ZodSchema | undefined = undefined> {
   context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : {};
   runId?: string;
-  mastra?: Mastra & MastraPrimitives;
+  mastra?: MastraUnion;
   threadId?: string;
   resourceId?: string;
 }
