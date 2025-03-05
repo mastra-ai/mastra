@@ -88,7 +88,7 @@ const reportBrokenLinks = new Step({
       };
     }
 
-    const agent = mastra?.agents?.daneLinkChecker;
+    const agent = mastra?.getAgent('daneLinkChecker');
 
     if (!agent) {
       return {
