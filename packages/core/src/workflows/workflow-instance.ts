@@ -2,12 +2,12 @@ import type { Span } from '@opentelemetry/api';
 import type { Snapshot } from 'xstate';
 import type { z } from 'zod';
 
-import type { IAction, MastraPrimitives } from '../action';
+import type { MastraPrimitives } from '../action';
 import type { Logger } from '../logger';
 
 import { Machine } from './machine';
 import type { Step } from './step';
-import type { RetryConfig, StepGraph, StepResult, WorkflowContext, WorkflowRunState } from './types';
+import type { RetryConfig, StepAction, StepGraph, StepResult, WorkflowContext, WorkflowRunState } from './types';
 import { getActivePathsAndStatus, mergeChildValue } from './utils';
 
 export interface WorkflowResultReturn<T extends z.ZodType<any>> {
@@ -29,7 +29,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
 
   logger: Logger;
 
-  #steps: Record<string, IAction<any, any, any, any>> = {};
+  #steps: Record<string, StepAction<any, any, any, any>> = {};
   #stepGraph: StepGraph;
   #stepSubscriberGraph: Record<string, StepGraph> = {};
 
@@ -59,7 +59,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
   }: {
     name: string;
     logger: Logger;
-    steps: Record<string, IAction<any, any, any, any>>;
+    steps: Record<string, StepAction<any, any, any, any>>;
     mastra?: MastraPrimitives;
     retryConfig?: RetryConfig;
     runId?: string;

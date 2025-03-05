@@ -10,24 +10,25 @@ import type { IAction, MastraPrimitives } from '../action';
 import type { Logger } from '../logger';
 
 import type { Step } from './step';
-import {
-  WhenConditionReturnValue,
-  type DependencyCheckOutput,
-  type ResolverFunctionInput,
-  type ResolverFunctionOutput,
-  type RetryConfig,
-  type StepCondition,
-  type StepDef,
-  type StepGraph,
-  type StepNode,
-  type StepResult,
-  type StepVariableType,
-  type WorkflowActionParams,
-  type WorkflowActions,
-  type WorkflowActors,
-  type WorkflowContext,
-  type WorkflowEvent,
-  type WorkflowState,
+import { WhenConditionReturnValue } from './types';
+import type {
+  DependencyCheckOutput,
+  ResolverFunctionInput,
+  ResolverFunctionOutput,
+  RetryConfig,
+  StepAction,
+  StepCondition,
+  StepDef,
+  StepGraph,
+  StepNode,
+  StepResult,
+  StepVariableType,
+  WorkflowActionParams,
+  WorkflowActions,
+  WorkflowActors,
+  WorkflowContext,
+  WorkflowEvent,
+  WorkflowState,
 } from './types';
 import {
   getResultActivePaths,
@@ -55,7 +56,7 @@ export class Machine<
   name: string;
 
   #actor: ReturnType<typeof createActor<ReturnType<typeof this.initializeMachine>>> | null = null;
-  #steps: Record<string, IAction<any, any, any, any>> = {};
+  #steps: Record<string, StepAction<any, any, any, any>> = {};
   #retryConfig?: RetryConfig;
 
   constructor({
