@@ -108,6 +108,10 @@ export class RecursiveJsonTransformer {
     return data;
   }
 
+  /**
+   * Handles primitive values (strings, numbers, etc) by either adding them to the current chunk
+   * or creating new chunks if they don't fit
+   */
   private handlePrimitiveValue(
     value: any,
     key: string,
@@ -150,12 +154,19 @@ export class RecursiveJsonTransformer {
     };
   }
 
+  /**
+   * Creates a nested dictionary chunk from a value and path
+   * e.g., path ['a', 'b'], value 'c' becomes { a: { b: 'c' } }
+   */
   private createChunk(value: any, path: string[]): Record<string, any> {
     const chunk: Record<string, any> = {};
     RecursiveJsonTransformer.setNestedDict(chunk, path, value);
     return chunk.root ? chunk.root : chunk;
   }
 
+  /**
+   * Checks if value is within size limits
+   */
   private isWithinSizeLimit(value: any, currentSize: number = 0): boolean {
     const size = RecursiveJsonTransformer.jsonSize(value);
     // If this is a new chunk (currentSize = 0), allow items smaller than maxSize
@@ -163,6 +174,10 @@ export class RecursiveJsonTransformer {
     return currentSize === 0 ? size <= this.maxSize : size + currentSize <= this.maxSize || currentSize < this.minSize;
   }
 
+  /**
+   * Splits arrays into chunks based on size limits
+   * Handles nested objects by recursing into handleNestedObject
+   */
   private handleArray(
     value: any[],
     key: string,
@@ -225,6 +240,10 @@ export class RecursiveJsonTransformer {
     return chunks;
   }
 
+  /**
+   * Splits objects into chunks based on size limits
+   * Handles nested arrays and objects by recursing into handleArray and handleNestedObject
+   */
   private handleNestedObject(
     value: Record<string, any>,
     fullPath: string[],
@@ -292,6 +311,10 @@ export class RecursiveJsonTransformer {
     return chunks;
   }
 
+  /**
+   * Splits long strings into smaller chunks at word boundaries
+   * Ensures each chunk is within maxSize limit
+   */
   private splitLongString(value: string): string[] {
     const chunks: string[] = [];
     let remaining = value;
@@ -315,6 +338,10 @@ export class RecursiveJsonTransformer {
     return chunks;
   }
 
+  /**
+   * Core chunking logic that processes JSON data recursively
+   * Handles arrays, objects, and primitive values while maintaining structure
+   */
   private jsonSplit({
     data,
     currentPath = [],
@@ -391,23 +418,23 @@ export class RecursiveJsonTransformer {
     return chunks;
   }
 
+  /**
+   * Converts Unicode characters to their escaped ASCII representation
+   * e.g., 'café' becomes 'caf\u00e9'
+   */
   private escapeNonAscii(obj: any): any {
+    if (typeof obj === 'string') {
+      return obj.replace(/[\u0080-\uffff]/g, char => {
+        return `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`;
+      });
+    }
+
     if (Array.isArray(obj)) {
       return obj.map(item => this.escapeNonAscii(item));
     }
 
     if (typeof obj === 'object' && obj !== null) {
-      const result: Record<string, any> = {};
-      for (const [key, value] of Object.entries(obj)) {
-        result[key] = this.escapeNonAscii(value);
-      }
-      return result;
-    }
-
-    if (typeof obj === 'string') {
-      return obj.replace(/[\u0080-\uffff]/g, char => {
-        return `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`;
-      });
+      return Object.fromEntries(Object.entries(obj).map(([key, value]) => [key, this.escapeNonAscii(value)]));
     }
 
     return obj;
@@ -433,6 +460,8 @@ export class RecursiveJsonTransformer {
 
     return chunks.map(chunk =>
       JSON.stringify(chunk, (key, value) => {
+        // Convert escaped Unicode sequences back to actual characters
+        // e.g., '\u00e9' -> 'é'
         if (typeof value === 'string') {
           return value.replace(/\\u[\da-f]{4}/gi, match => String.fromCharCode(parseInt(match.slice(2), 16)));
         }
