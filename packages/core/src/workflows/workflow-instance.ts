@@ -20,7 +20,7 @@ export interface WorkflowResultReturn<T extends z.ZodType<any>> {
   }>;
 }
 
-export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTriggerSchema extends z.ZodType<any> = any>
+export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTriggerSchema extends z.ZodObject<any> = any>
   implements WorkflowResultReturn<TTriggerSchema>
 {
   name: string;

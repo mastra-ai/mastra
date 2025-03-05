@@ -41,7 +41,7 @@ import type { WorkflowInstance } from './workflow-instance';
 
 export class Machine<
   TSteps extends Step<any, any, any>[] = any,
-  TTriggerSchema extends z.ZodType<any> = any,
+  TTriggerSchema extends z.ZodObject<any> = any,
 > extends EventEmitter {
   logger: Logger;
   #mastra?: MastraPrimitives;
@@ -831,7 +831,7 @@ export class Machine<
     };
   }
 
-  #evaluateCondition<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodType<any>>(
+  #evaluateCondition<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodObject<any>>(
     condition: StepCondition<TStep, TTriggerSchema>,
     context: WorkflowContext,
   ): boolean {
