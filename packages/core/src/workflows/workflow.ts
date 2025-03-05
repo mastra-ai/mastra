@@ -317,7 +317,7 @@ export class Workflow<
     return this.loop(applyOperator, condition, fallbackStep);
   }
 
-  after<TStep extends StepAction<any, any, any, any>>(step: TStep) {
+  after<TStep extends StepAction<any, any, any, any>>(steps: TStep) {
     const stepsArray = Array.isArray(steps) ? steps : [steps];
     const stepKeys = stepsArray.map(step => this.#makeStepKey(step));
 
