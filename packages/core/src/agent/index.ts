@@ -138,7 +138,8 @@ export class Agent<
   }
 
   async generateTitleFromUserMessage({ message }: { message: CoreUserMessage }) {
-    const { object } = await this.llm.__textObject<{ title: string }>({
+    // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
+    const { text } = await this.llm.__text<{ title: string }>({
       messages: [
         {
           role: 'system',
@@ -146,19 +147,19 @@ export class Agent<
       - you will generate a short title based on the first message a user begins a conversation with
       - ensure it is not more than 80 characters long
       - the title should be a summary of the user's message
-      - do not use quotes or colons`,
+      - do not use quotes or colons
+      - the entire text you return will be used as the title`,
         },
         {
           role: 'user',
           content: JSON.stringify(message),
         },
       ],
-      structuredOutput: z.object({
-        title: z.string(),
-      }),
     });
 
-    return object.title;
+    // Strip out any r1 think tags if present
+    const cleanedText = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    return cleanedText;
   }
 
   getMostRecentUserMessage(messages: Array<CoreMessage>) {
@@ -167,7 +168,7 @@ export class Agent<
   }
 
   async genTitle(userMessage: CoreUserMessage | undefined) {
-    let title = 'New Thread';
+    let title = `New Thread ${new Date().toISOString()}`;
     try {
       if (userMessage) {
         title = await this.generateTitleFromUserMessage({
@@ -198,18 +199,20 @@ export class Agent<
     const userMessage = this.getMostRecentUserMessage(userMessages);
     const memory = this.getMemory();
     if (memory) {
+      const config = memory.getMergedThreadConfig(memoryConfig);
       let thread: StorageThreadType | null;
+
       if (!threadId) {
         this.logger.debug(`No threadId, creating new thread for agent ${this.name}`, {
           runId: runId || this.name,
         });
-        const title = await this.genTitle(userMessage);
+        const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
 
         thread = await memory.createThread({
           threadId,
           resourceId,
-          title,
           memoryConfig,
+          title,
         });
       } else {
         thread = await memory.getThreadById({ threadId });
@@ -217,7 +220,9 @@ export class Agent<
           this.logger.debug(`Thread with id ${threadId} not found, creating new thread for agent ${this.name}`, {
             runId: runId || this.name,
           });
-          const title = await this.genTitle(userMessage);
+
+          const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
+
           thread = await memory.createThread({
             threadId,
             resourceId,
