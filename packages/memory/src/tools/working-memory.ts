@@ -1,5 +1,4 @@
 import type { CoreTool } from '@mastra/core';
-import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
 
 export const updateWorkingMemoryTool: CoreTool = {
@@ -7,7 +6,7 @@ export const updateWorkingMemoryTool: CoreTool = {
   parameters: z.object({
     memory: z.string().describe('The XML-formatted working memory content to store'),
   }),
-  execute: async (params: any) => {
+  execute: async (params, _options) => {
     const { context, threadId, memory } = params;
     if (!threadId || !memory) {
       throw new Error('Thread ID and Memory instance are required for working memory updates');
