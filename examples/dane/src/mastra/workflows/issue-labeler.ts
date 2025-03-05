@@ -55,7 +55,7 @@ const labelIssue = new Step({
       return { labels: [] };
     }
 
-    const daneIssueLabeler = mastra?.agents?.daneIssueLabeler;
+    const daneIssueLabeler = mastra?.getAgent('daneIssueLabeler');
 
     const res = await daneIssueLabeler?.generate(
       `

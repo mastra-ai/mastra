@@ -65,7 +65,7 @@ const generateMessage = new Step({
       return { commitMessage: '', generated: false, guidelines: [] };
     }
 
-    const daneCommitGenerator = mastra?.agents?.daneCommitMessage;
+    const daneCommitGenerator = mastra?.getAgent('daneCommitMessage');
 
     const res = await daneCommitGenerator?.generate(
       `

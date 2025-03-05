@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ZodObject } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { Logger } from './logger';
+import type { Mastra } from './mastra';
 import type { MastraMemory } from './memory';
 import type { CoreTool, ToolAction, VercelTool } from './tools';
 
@@ -391,4 +392,57 @@ export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?
     parameters: getParameters(),
     execute: tool.execute ? createExecute(tool, { ...options, description: tool.description }, logType) : undefined,
   };
+}
+
+/**
+ * Creates a proxy for a Mastra instance to handle deprecated properties
+ * @param mastra - The Mastra instance to proxy
+ * @param logger - The logger to use for warnings
+ * @returns A proxy for the Mastra instance
+ */
+export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: Logger }) {
+  return new Proxy(mastra, {
+    get(target, prop) {
+      if (Reflect.has(target, prop)) {
+        return Reflect.get(target, prop);
+      }
+
+      if (prop === 'logger') {
+        logger.warn(`Please use 'getLogger' instead, logger is deprecated`);
+        return Reflect.apply(target.getLogger, target, []);
+      }
+
+      if (prop === 'telemetry') {
+        logger.warn(`Please use 'getTelemetry' instead, telemetry is deprecated`);
+        return Reflect.apply(target.getTelemetry, target, []);
+      }
+
+      if (prop === 'storage') {
+        logger.warn(`Please use 'getStorage' instead, storage is deprecated`);
+        return Reflect.get(target, 'storage');
+      }
+
+      if (prop === 'agents') {
+        logger.warn(`Please use 'getAgents' instead, agents is deprecated`);
+        return Reflect.apply(target.getAgents, target, []);
+      }
+
+      if (prop === 'tts') {
+        logger.warn(`Please use 'getTTS' instead, tts is deprecated`);
+        return Reflect.apply(target.getTTS, target, []);
+      }
+
+      if (prop === 'vectors') {
+        logger.warn(`Please use 'getVectors' instead, vectors is deprecated`);
+        return Reflect.apply(target.getVectors, target, []);
+      }
+
+      if (prop === 'memory') {
+        logger.warn(`Please use 'getMemory' instead, memory is deprecated`);
+        return Reflect.get(target, 'memory');
+      }
+
+      return Reflect.get(target, prop);
+    },
+  });
 }

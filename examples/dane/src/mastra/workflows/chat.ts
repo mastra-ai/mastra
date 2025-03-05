@@ -59,7 +59,7 @@ const messageOutputStep = new Step({
       //   messages = [];
       // }
 
-      const res = await mastra?.agents?.['dane']?.stream(message, {
+      const res = await mastra?.getAgent('dane')?.stream(message, {
         maxSteps: 5,
         resourceId,
         threadId,
