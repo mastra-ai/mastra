@@ -9,10 +9,8 @@ export type CoreTool = {
   parameters: ZodSchema;
   execute?: (params: any, options: ToolExecutionOptions) => Promise<any>;
 };
-export interface ToolExecutionContext<
-  TSchemaIn extends z.ZodSchema | undefined = undefined,
-  TContext extends WorkflowContext = WorkflowContext,
-> extends IExecutionContext<TSchemaIn, TContext> {}
+export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema | undefined = undefined>
+  extends IExecutionContext<TSchemaIn> {}
 
 export interface ToolAction<
   TSchemaIn extends z.ZodSchema | undefined = undefined,

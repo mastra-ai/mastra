@@ -18,11 +18,8 @@ export type MastraPrimitives = {
   vectors?: Record<string, MastraVector>;
   memory?: MastraMemory;
 };
-export interface IExecutionContext<
-  TSchemaIn extends z.ZodSchema | undefined = undefined,
-  TContext extends WorkflowContext = WorkflowContext,
-> {
-  context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> & TContext : TContext;
+export interface IExecutionContext<TSchemaIn extends z.ZodSchema | undefined = undefined> {
+  context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : {};
   runId?: string;
   mastra?: MastraPrimitives;
   threadId?: string;

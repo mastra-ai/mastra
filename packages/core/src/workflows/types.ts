@@ -14,7 +14,8 @@ export interface WorkflowOptions<TTriggerSchema extends z.ZodType<any> = any> {
 export interface StepExecutionContext<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TContext extends WorkflowContext = WorkflowContext,
-> extends IExecutionContext<TSchemaIn, TContext> {
+> extends IExecutionContext<TSchemaIn> {
+  context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> & TContext : TContext;
   suspend: () => Promise<void>;
   runId: string;
 }
