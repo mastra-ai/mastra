@@ -216,7 +216,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       if (['success', 'failure'].includes(stepStatus) && this.#isCompoundKey(key)) {
         this.#compoundDependencies[key]![parentStepId] = true;
       }
-    })
+    });
 
     const stateUpdateHandler = (startStepId: string, state: any, context: any) => {
       if (startStepId === 'trigger') {
