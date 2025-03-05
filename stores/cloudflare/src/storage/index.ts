@@ -127,7 +127,7 @@ export class CloudflareStore extends MastraStorage {
       }
     } catch (error: any) {
       console.error('Error getting KV:', error);
-      throw new Error(`Failed to get KV for table ${tableName}, key ${key}: ${error.message}`);
+      return null; // Return null instead of throwing to make the code more resilient
     }
   }
 
@@ -181,15 +181,30 @@ export class CloudflareStore extends MastraStorage {
     orderKey: string,
     newEntries: Array<{ id: string; score: number }>,
   ): Promise<void> {
-    const currentOrder = await this.getSortedOrder(tableName, orderKey);
-    // Merge new entries without duplicates.
-    for (const entry of newEntries) {
-      if (!currentOrder.find(e => e.id === entry.id)) {
-        currentOrder.push(entry);
+    try {
+      const currentOrder = await this.getSortedOrder(tableName, orderKey);
+
+      // Merge new entries without duplicates
+      for (const entry of newEntries) {
+        const existingIndex = currentOrder.findIndex(e => e.id === entry.id);
+        if (existingIndex >= 0) {
+          // Update existing entry's score if needed
+          if (currentOrder[existingIndex]) {
+            currentOrder[existingIndex].score = entry.score;
+          }
+        } else {
+          // Add new entry
+          currentOrder.push(entry);
+        }
       }
+
+      currentOrder.sort((a, b) => a.score - b.score);
+      await this.putKV(tableName, orderKey, JSON.stringify(currentOrder));
+    } catch (error) {
+      console.error(`Error updating sorted order for key ${orderKey}:`, error);
+      // Create a new sorted order if it doesn't exist
+      await this.putKV(tableName, orderKey, JSON.stringify(newEntries));
     }
-    currentOrder.sort((a, b) => a.score - b.score);
-    await this.putKV(tableName, orderKey, JSON.stringify(currentOrder));
   }
 
   private async getRank(tableName: TABLE_NAMES, orderKey: string, id: string): Promise<number | null> {
@@ -372,35 +387,48 @@ export class CloudflareStore extends MastraStorage {
   async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
     if (messages.length === 0) return [];
 
-    await Promise.all(
-      messages.map(async (message, index) => {
-        const typedMessage = message as MessageType & { _index?: number };
-        if (typedMessage._index === undefined) {
-          typedMessage._index = index;
-        }
-        const key = this.getMessageKey(message.threadId, message.id);
-        await this.putKV(TABLE_MESSAGES, key, JSON.stringify(typedMessage));
-      }),
-    );
+    try {
+      // Save each message individually
+      await Promise.all(
+        messages.map(async (message, index) => {
+          const typedMessage = { ...message } as MessageType & { _index?: number };
+          if (typedMessage._index === undefined) {
+            typedMessage._index = index;
+          }
+          const key = this.getMessageKey(message.threadId, message.id);
+          await this.putKV(TABLE_MESSAGES, key, typedMessage);
+        }),
+      );
 
-    // Update sorted order for each thread.
-    const threadsMap = new Map<string, Array<{ id: string; score: number }>>();
-    for (const message of messages) {
-      const typedMessage = message as MessageType & { _index?: number };
-      const score = typedMessage._index !== undefined ? typedMessage._index : new Date(message.createdAt).getTime();
-      if (!threadsMap.has(message.threadId)) {
-        threadsMap.set(message.threadId, []);
+      // Update sorted order for each thread
+      const threadsMap = new Map<string, Array<{ id: string; score: number }>>();
+      for (const message of messages) {
+        const typedMessage = message as MessageType & { _index?: number };
+        const score = typedMessage._index !== undefined ? typedMessage._index : new Date(message.createdAt).getTime();
+        if (!threadsMap.has(message.threadId)) {
+          threadsMap.set(message.threadId, []);
+        }
+        threadsMap.get(message.threadId)!.push({ id: message.id, score });
       }
-      threadsMap.get(message.threadId)!.push({ id: message.id, score });
+
+      await Promise.all(
+        Array.from(threadsMap.entries()).map(async ([threadId, entries]) => {
+          try {
+            const orderKey = this.getThreadMessagesKey(threadId);
+            await this.updateSortedOrder(TABLE_MESSAGES, orderKey, entries);
+          } catch (error) {
+            console.error(`Error updating message order for thread ${threadId}:`, error);
+          }
+        }),
+      );
+
+      return messages;
+    } catch (error) {
+      console.error('Error saving messages:', error);
+      throw error;
     }
-    await Promise.all(
-      Array.from(threadsMap.entries()).map(async ([threadId, entries]) => {
-        const orderKey = this.getThreadMessagesKey(threadId);
-        await this.updateSortedOrder(TABLE_MESSAGES, orderKey, entries);
-      }),
-    );
-    return messages;
   }
+
   async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
     const limit = typeof selectBy?.last === 'number' ? selectBy.last : 40;
     const messageIds = new Set<string>();
@@ -410,52 +438,81 @@ export class CloudflareStore extends MastraStorage {
       return [];
     }
 
-    // Get specifically included messages and their context
-    if (selectBy?.include?.length) {
-      for (const item of selectBy.include) {
-        messageIds.add(item.id);
-        if (item.withPreviousMessages || item.withNextMessages) {
-          const rank = await this.getRank(TABLE_MESSAGES, threadMessagesKey, item.id);
-          if (rank === null) continue;
-          if (item.withPreviousMessages) {
-            const start = Math.max(0, rank - item.withPreviousMessages);
-            const prevIds = await this.getRange(TABLE_MESSAGES, threadMessagesKey, start, rank - 1);
-            prevIds.forEach(id => messageIds.add(id));
-          }
-          if (item.withNextMessages) {
-            const nextIds = await this.getRange(
-              TABLE_MESSAGES,
-              threadMessagesKey,
-              rank + 1,
-              rank + item.withNextMessages,
-            );
-            nextIds.forEach(id => messageIds.add(id));
+    try {
+      // Get specifically included messages and their context
+      if (selectBy?.include?.length) {
+        for (const item of selectBy.include) {
+          messageIds.add(item.id);
+          if (item.withPreviousMessages || item.withNextMessages) {
+            const rank = await this.getRank(TABLE_MESSAGES, threadMessagesKey, item.id);
+            if (rank === null) continue;
+            if (item.withPreviousMessages) {
+              const start = Math.max(0, rank - item.withPreviousMessages);
+              const prevIds = await this.getRange(TABLE_MESSAGES, threadMessagesKey, start, rank - 1);
+              prevIds.forEach(id => messageIds.add(id));
+            }
+            if (item.withNextMessages) {
+              const nextIds = await this.getRange(
+                TABLE_MESSAGES,
+                threadMessagesKey,
+                rank + 1,
+                rank + item.withNextMessages,
+              );
+              nextIds.forEach(id => messageIds.add(id));
+            }
           }
         }
       }
+
+      // Then get the most recent messages
+      if (limit > 0) {
+        try {
+          const latestIds = await this.getLastN(TABLE_MESSAGES, threadMessagesKey, limit);
+          latestIds.forEach(id => messageIds.add(id));
+        } catch (error) {
+          console.log(`No message order found for thread ${threadId}, skipping latest messages`);
+        }
+      }
+
+      // Fetch all needed messages
+      const messages = (
+        await Promise.all(
+          Array.from(messageIds).map(async id => {
+            try {
+              const key = this.getMessageKey(threadId, id);
+              const data = await this.getKV(TABLE_MESSAGES, key);
+              if (!data) return null;
+              return JSON.parse(data) as MessageType & { _index?: number };
+            } catch (error) {
+              console.error(`Error retrieving message ${id}:`, error);
+              return null;
+            }
+          }),
+        )
+      ).filter(msg => msg !== null) as (MessageType & { _index?: number })[];
+
+      // Sort messages correctly
+      try {
+        const messageOrder = await this.getFullOrder(TABLE_MESSAGES, threadMessagesKey);
+        messages.sort((a, b) => {
+          const indexA = messageOrder.indexOf(a.id);
+          const indexB = messageOrder.indexOf(b.id);
+
+          if (indexA >= 0 && indexB >= 0) return indexA - indexB;
+          if (a._index !== undefined && b._index !== undefined) return a._index - b._index;
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        });
+      } catch (error) {
+        console.log('Error sorting messages, falling back to creation time:', error);
+        messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      }
+
+      // Return properly formatted messages
+      return messages.map(({ _index, ...message }) => message as unknown as T);
+    } catch (error) {
+      console.error(`Error retrieving messages for thread ${threadId}:`, error);
+      return [];
     }
-
-    // Then get the most recent messages
-    const latestIds = limit === 0 ? [] : await this.getLastN(TABLE_MESSAGES, threadMessagesKey, limit);
-    latestIds.forEach(id => messageIds.add(id));
-
-    // Fetch all needed messages
-    const messages = (
-      await Promise.all(
-        Array.from(messageIds).map(async id => {
-          const key = this.getMessageKey(threadId, id);
-          const data = await this.getKV(TABLE_MESSAGES, key);
-          return data ? (JSON.parse(data) as MessageType & { _index?: number }) : null;
-        }),
-      )
-    ).filter(msg => msg !== null) as (MessageType & { _index?: number })[];
-
-    // Sort messages by their stored order
-    const messageOrder = await this.getFullOrder(TABLE_MESSAGES, threadMessagesKey);
-    messages.sort((a, b) => messageOrder.indexOf(a.id) - messageOrder.indexOf(b.id));
-
-    // Remove _index before returning
-    return messages.map(({ _index, ...message }) => message as unknown as T);
   }
 
   async persistWorkflowSnapshot(params: {
