@@ -13,7 +13,6 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^1.1.14",
     "@ai-sdk/fireworks": "^0.1.12",
-    "@ai-sdk/openai": "^1.2.0",
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",

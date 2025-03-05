@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { maskStreamTags } from '@mastra/core/utils';
 import tinycolor from 'tinycolor2';
 import ora from 'ora';
@@ -47,13 +48,9 @@ function makeThinkStream(textStream: AsyncIterableStream<string>) {
 }
 
 const resourceId = 'SOME_USER_ID';
+const threadId = crypto.randomUUID();
 async function main() {
   console.clear(); // clear all previous output
-
-  const thread = await agent.getMemory()?.createThread({
-    title: 'New thread',
-    resourceId,
-  });
 
   while (true) {
     const rl = Readline.createInterface({
@@ -70,7 +67,7 @@ async function main() {
     console.log(); // print a line between prompt and response
 
     const { textStream } = await agent.stream(answer, {
-      threadId: thread!.id,
+      threadId,
       resourceId,
     });
 
