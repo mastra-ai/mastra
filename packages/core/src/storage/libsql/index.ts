@@ -39,6 +39,17 @@ export class LibSQLStore extends MastraStorage {
     });
   }
 
+  // If we're in the .mastra/output directory, use the dir outside .mastra dir
+  // reason we need to do this is libsql relative file paths are based on cwd, not current file path
+  // since mastra dev sets cwd to .mastra/output this means running an agent directly vs running with mastra dev
+  // will put db files in different locations, leading to an inconsistent experience between the two.
+  // Ex: with `file:ex.db`
+  // 1. `mastra dev`: ${cwd}/.mastra/output/ex.db
+  // 2. `tsx src/index.ts`: ${cwd}/ex.db
+  // so if we're in .mastra/output we need to rewrite the file url to be relative to the project root dir
+  // or the experience will be inconsistent
+  // this means `file:` urls are always relative to project root
+  // TODO: can we make this easier via bundling? https://github.com/mastra-ai/mastra/pull/2783#pullrequestreview-2662444241
   protected rewriteDbUrl(url: string): string {
     // If this is a relative file path (starts with file: but not file:/)
     if (url.startsWith('file:') && !url.startsWith('file:/')) {
@@ -47,15 +58,14 @@ export class LibSQLStore extends MastraStorage {
       // Get the relative path part after 'file:'
       const relativePath = url.slice('file:'.length);
 
-      // If we're in a .mastra directory, use the parent directory
       if (cwd.includes('.mastra') && (cwd.endsWith(`output`) || cwd.endsWith(`output/`) || cwd.endsWith(`output\\`))) {
-        const baseDir = join(cwd, `..`, `..`);
+        const baseDir = join(cwd, `..`, `..`); // <- .mastra/output/../../
 
         // Rewrite to be relative to the base directory
         const fullPath = join(baseDir, relativePath);
 
         this.logger.debug(
-          `Initializing LibSQL db with url ${url} with relative file path from inside .mastra directory. Rewriting relative file url to "file:${fullPath}". This ensures it's outside the .mastra directory. If the db is stored inside .mastra it will be deleted when Mastra re-bundles code.`,
+          `Initializing LibSQL db with url ${url} with relative file path from inside .mastra/output directory. Rewriting relative file url to "file:${fullPath}". This ensures it's outside the .mastra/output directory.`,
         );
 
         return `file:${fullPath}`;
