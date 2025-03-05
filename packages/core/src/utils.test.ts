@@ -164,7 +164,7 @@ describe('makeCoreTool', () => {
     description: 'Test tool description',
   };
 
-  it('should convert a Vercel tool correctly', () => {
+  it('should convert a Vercel tool correctly', async () => {
     const vercelTool = {
       name: 'test',
       description: 'Test description',
@@ -182,9 +182,11 @@ describe('makeCoreTool', () => {
     expect(coreTool.description).toBe('Test description');
     expect(coreTool.parameters).toBeDefined();
     expect(typeof coreTool.execute).toBe('function');
+    const result = await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
+    expect(result).toEqual({ result: 'success' });
   });
 
-  it('should convert a Mastra tool correctly', () => {
+  it('should convert a Mastra tool correctly', async () => {
     const mastraTool = createTool({
       id: 'test',
       description: 'Test description',
@@ -197,6 +199,8 @@ describe('makeCoreTool', () => {
     expect(coreTool.description).toBe('Test description');
     expect(coreTool.parameters).toBeDefined();
     expect(typeof coreTool.execute).toBe('function');
+    const result = await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
+    expect(result).toEqual({ result: 'success' });
   });
 
   it('should handle tool execution errors correctly', async () => {
