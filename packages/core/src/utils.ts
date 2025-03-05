@@ -271,17 +271,20 @@ export async function* maskStreamTags(
  * @returns resolved zod object
  */
 export function resolveSerializedZodOutput(obj: any) {
+  // Creates and immediately executes a new function that takes 'z' as a parameter
+  // The function body is a string that returns the serialized zod schema
+  // When executed with the 'z' parameter, it reconstructs the zod schema in the current context
   return Function('z', `"use strict";return (${obj});`)(z);
 }
 
+/**
+ * Checks if a tool is a Vercel Tool
+ * @param tool - The tool to check
+ * @returns True if the tool is a Vercel Tool, false otherwise
+ */
 export function isVercelTool(tool: any): tool is VercelTool {
-  return (
-    typeof tool === 'object' &&
-    tool !== null &&
-    'parameters' in tool &&
-    // Optional checks
-    (!('type' in tool) || tool.type === undefined || tool.type === 'function')
-  );
+  // Checks if the tool is an object and has a 'parameters' property
+  return typeof tool === 'object' && tool !== null && 'parameters' in tool;
 }
 
 interface ToolOptions {
@@ -380,10 +383,13 @@ export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?
   // Helper to get parameters based on tool type
   const getParameters = () => {
     if (isVercelTool(tool)) {
+      // If the tool is a Vercel Tool, check if the parameters are already a zod object
+      // If not, convert the parameters to a zod object using jsonSchemaToZod
       return tool.parameters instanceof z.ZodType
         ? tool.parameters
         : resolveSerializedZodOutput(jsonSchemaToZod(tool.parameters));
     }
+    // If the tool is a Mastra Tool, return the inputSchema
     return tool.inputSchema;
   };
 
