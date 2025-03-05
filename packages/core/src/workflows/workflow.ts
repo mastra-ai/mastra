@@ -3,7 +3,7 @@ import type { Span } from '@opentelemetry/api';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { z } from 'zod';
 
-import type { IAction } from '../action';
+import type { IAction, MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 
 import type { Mastra } from '../mastra';
@@ -53,8 +53,8 @@ export class Workflow<
     this.#retryConfig = retryConfig;
     this.triggerSchema = triggerSchema;
 
-    if (mastra?.logger) {
-      this.logger = mastra?.logger;
+    if (mastra) {
+      this.__registerPrimitives(mastra);
     }
   }
 
@@ -671,6 +671,16 @@ export class Workflow<
 
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
+  }
+
+  __registerPrimitives(p: MastraPrimitives) {
+    if (p.telemetry) {
+      this.__setTelemetry(p.telemetry);
+    }
+
+    if (p.logger) {
+      this.__setLogger(p.logger);
+    }
   }
 
   get stepGraph() {

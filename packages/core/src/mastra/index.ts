@@ -206,6 +206,8 @@ This is a warning for now, but will throw an error in the future
           vectors: this.vectors,
         });
 
+        agent.__registerMastra(this);
+
         agents[key] = agent;
       });
     }
@@ -220,7 +222,15 @@ This is a warning for now, but will throw an error in the future
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
         workflow.__registerMastra(this);
-
+        workflow.__registerPrimitives({
+          logger: this.getLogger(),
+          telemetry: this.telemetry,
+          storage: this.storage,
+          memory: this.memory,
+          agents: agents,
+          tts: this.tts,
+          vectors: this.vectors,
+        });
         // @ts-ignore
         this.workflows[key] = workflow;
       });

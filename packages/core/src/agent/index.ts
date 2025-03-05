@@ -128,6 +128,10 @@ export class Agent<
     this.logger.debug(`[Agents:${this.name}] initialized.`, { model: this.model, name: this.name });
   }
 
+  __registerMastra(mastra: Mastra) {
+    this.#mastra = mastra;
+  }
+
   /**
    * Set the concrete tools for the agent
    * @param tools
