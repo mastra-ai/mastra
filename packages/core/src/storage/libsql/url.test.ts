@@ -132,7 +132,7 @@ describe('LibSQLStore URL rewriting', () => {
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: { workflow_name: 'test-workflow', run_id: 'test-1' }
       });
-      expect(record1).not.toBeNull();
+      expect(record1).toBeTruthy();
       if (record1) {
         expect(record1.workflow_name).toBe('test-workflow');
         expect(record1.run_id).toBe('test-1');
@@ -143,7 +143,7 @@ describe('LibSQLStore URL rewriting', () => {
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: { workflow_name: 'test-workflow', run_id: 'test-2' }
       });
-      expect(record2).not.toBeNull();
+      expect(record2).toBeTruthy();
       if (record2) {
         expect(record2.workflow_name).toBe('test-workflow');
         expect(record2.run_id).toBe('test-2');
