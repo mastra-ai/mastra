@@ -5,7 +5,7 @@ import type { ToolAction } from '../tools';
 
 export abstract class OpenAPIToolset {
   abstract readonly name: string;
-  abstract readonly tools: Record<string, ToolAction<any, any, any, any>>;
+  abstract readonly tools: Record<string, ToolAction<any, any, any>>;
 
   authType: string = 'API_KEY';
 

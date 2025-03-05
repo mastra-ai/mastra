@@ -3,9 +3,9 @@ import type { CoreMessage, CoreTool } from '@mastra/core';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
-import { updateWorkingMemoryTool } from './tools/working-memory';
 import { embed } from 'ai';
 import type { Message as AiMessage } from 'ai';
+import { updateWorkingMemoryTool } from './tools/working-memory';
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
