@@ -381,6 +381,10 @@ This is a warning for now, but will throw an error in the future
     }
   }
 
+  public getTTS() {
+    return this.tts;
+  }
+
   public getLogger() {
     return this.logger;
   }
