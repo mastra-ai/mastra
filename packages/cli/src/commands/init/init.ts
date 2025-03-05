@@ -15,6 +15,7 @@ import {
   writeIndexFile,
 } from './utils';
 import type { Components, LLMProvider } from './utils';
+import { DepsService } from '../../services/service.deps';
 
 const s = p.spinner();
 
@@ -67,7 +68,8 @@ export const init = async ({
     const key = await getAPIKey(llmProvider || 'openai');
 
     const aiSdkPackage = getAISDKPackage(llmProvider);
-    const pm = getPackageManager();
+    const depsService = new DepsService();
+    const pm = depsService.packageManager;
     const installCommand = getPackageManagerInstallCommand(pm);
     await exec(`${pm} ${installCommand} ${aiSdkPackage}`);
 

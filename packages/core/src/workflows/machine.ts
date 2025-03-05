@@ -10,24 +10,25 @@ import type { IAction, MastraPrimitives } from '../action';
 import type { Logger } from '../logger';
 
 import type { Step } from './step';
-import {
-  WhenConditionReturnValue,
-  type DependencyCheckOutput,
-  type ResolverFunctionInput,
-  type ResolverFunctionOutput,
-  type RetryConfig,
-  type StepCondition,
-  type StepDef,
-  type StepGraph,
-  type StepNode,
-  type StepResult,
-  type StepVariableType,
-  type WorkflowActionParams,
-  type WorkflowActions,
-  type WorkflowActors,
-  type WorkflowContext,
-  type WorkflowEvent,
-  type WorkflowState,
+import { WhenConditionReturnValue } from './types';
+import type {
+  DependencyCheckOutput,
+  ResolverFunctionInput,
+  ResolverFunctionOutput,
+  RetryConfig,
+  StepAction,
+  StepCondition,
+  StepDef,
+  StepGraph,
+  StepNode,
+  StepResult,
+  StepVariableType,
+  WorkflowActionParams,
+  WorkflowActions,
+  WorkflowActors,
+  WorkflowContext,
+  WorkflowEvent,
+  WorkflowState,
 } from './types';
 import {
   getResultActivePaths,
@@ -55,7 +56,7 @@ export class Machine<
   name: string;
 
   #actor: ReturnType<typeof createActor<ReturnType<typeof this.initializeMachine>>> | null = null;
-  #steps: Record<string, IAction<any, any, any, any>> = {};
+  #steps: Record<string, StepAction<any, any, any, any>> = {};
   #retryConfig?: RetryConfig;
 
   constructor({
@@ -441,7 +442,11 @@ export class Machine<
         }) => {
           const { parentStepId, context } = input;
           const result = await this.#workflowInstance.runMachine(parentStepId, context);
-          return Promise.resolve({ steps: result?.results });
+          return Promise.resolve({
+            steps: result.reduce((acc, r) => {
+              return { ...acc, ...r?.results };
+            }, {}),
+          });
         },
       ),
     };
@@ -911,6 +916,14 @@ export class Machine<
       orBranchResult = condition.or.some(cond => this.#evaluateCondition(cond, context));
       this.logger.debug(`Evaluated OR condition`, {
         orBranchResult,
+        runId: this.#runId,
+      });
+    }
+
+    if ('not' in condition) {
+      baseResult = !this.#evaluateCondition(condition.not, context);
+      this.logger.debug(`Evaluated NOT condition`, {
+        baseResult,
         runId: this.#runId,
       });
     }
