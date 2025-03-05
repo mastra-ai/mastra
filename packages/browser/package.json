@@ -1,0 +1,50 @@
+{
+  "name": "browser",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "lint": "eslint .",
+    "build": "del-cli dist && pnpm build:browser && pnpm build:node",
+    "build:watch": "pnpm build:browser --watch && pnpm build:node --watch",
+    "build:browser": "tsup src/browser-tool.ts --target chrome130 --format iife --treeshake=smallest",
+    "build:browser:watch": "pnpm build:browser --watch",
+    "build:node": "tsup src/index.ts --target node20 --format esm,cjs --treeshake=smallest",
+    "build:node:watch": "pnpm build:node --watch"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.4.1",
+  "dependencies": {
+    "@mastra/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "playwright": "^1.49.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@microsoft/api-extractor": "^7.49.2",
+    "del-cli": "^6.0.0",
+    "eslint": "^9.21.0",
+    "get-xpath": "^3.3.0",
+    "playwright": "^1.49.1",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.3",
+    "zod": "^3.24.2"
+  }
+}
