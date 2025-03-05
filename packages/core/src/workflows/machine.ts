@@ -10,26 +10,28 @@ import type { IAction, MastraPrimitives } from '../action';
 import type { Logger } from '../logger';
 
 import type { Mastra } from '../mastra';
+import { createMastraProxy } from '../utils';
 import type { Step } from './step';
 import {
-  WhenConditionReturnValue,
-  type DependencyCheckOutput,
-  type ResolverFunctionInput,
-  type ResolverFunctionOutput,
-  type RetryConfig,
-  type StepCondition,
-  type StepDef,
-  type StepGraph,
-  type StepNode,
-  type StepResult,
-  type StepVariableType,
-  type WorkflowActionParams,
-  type WorkflowActions,
-  type WorkflowActors,
-  type WorkflowContext,
-  type WorkflowEvent,
-  type WorkflowState,
+  WhenConditionReturnValue
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
 } from './types';
+import type {DependencyCheckOutput, ResolverFunctionInput, ResolverFunctionOutput, RetryConfig, StepCondition, StepDef, StepGraph, StepNode, StepResult, StepVariableType, WorkflowActionParams, WorkflowActions, WorkflowActors, WorkflowContext, WorkflowEvent, WorkflowState} from './types';
 import {
   getResultActivePaths,
   getStepResult,
@@ -324,50 +326,7 @@ export class Machine<
         const logger = this.logger;
         let mastraProxy = undefined;
         if (this.#mastra) {
-          mastraProxy = new Proxy(this.#mastra, {
-            get(target, prop) {
-              if (Reflect.has(target, prop)) {
-                return Reflect.get(target, prop);
-              }
-
-              if (prop === 'logger') {
-                logger.warn(`Please use 'getLogger' instead, logger is deprecated`);
-                return Reflect.apply(target.getLogger, target, []);
-              }
-
-              if (prop === 'telemetry') {
-                logger.warn(`Please use 'getTelemetry' instead, telemetry is deprecated`);
-                return Reflect.apply(target.getTelemetry, target, []);
-              }
-
-              if (prop === 'storage') {
-                logger.warn(`Please use 'getStorage' instead, storage is deprecated`);
-                return Reflect.get(target, 'storage');
-              }
-
-              if (prop === 'agents') {
-                logger.warn(`Please use 'getAgents' instead, agents is deprecated`);
-                return Reflect.apply(target.getAgents, target, []);
-              }
-
-              if (prop === 'tts') {
-                logger.warn(`Please use 'getTTS' instead, tts is deprecated`);
-                return Reflect.apply(target.getTTS, target, []);
-              }
-
-              if (prop === 'vectors') {
-                logger.warn(`Please use 'getVectors' instead, vectors is deprecated`);
-                return Reflect.apply(target.getVectors, target, []);
-              }
-
-              if (prop === 'memory') {
-                logger.warn(`Please use 'getMemory' instead, memory is deprecated`);
-                return Reflect.get(target, 'memory');
-              }
-
-              return Reflect.get(target, prop);
-            },
-          });
+          mastraProxy = createMastraProxy({ mastra: this.#mastra, logger });
         }
         const result = await stepNode.config.handler({
           context: resolvedData,
