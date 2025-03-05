@@ -4,7 +4,12 @@ import defaultFont from 'tailwindcss/defaultTheme';
 
 export default {
   darkMode: ['class'],
-  content: ['./src/pages/**/*.{js,ts,jsx,tsx,mdx}', './src/components/**/*.{js,ts,jsx,tsx,mdx}'],
+  content: [
+    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/**/*.{js,ts,jsx,tsx,html}',
+    './node_modules/@mastra/playground/**/*.{js,ts,jsx,tsx}',
+  ],
   theme: {
     container: {
       center: true,
@@ -147,5 +152,4 @@ export default {
     },
   },
   plugins: [require('tailwindcss-animate')],
-  content: ['./src/**/*.{js,ts,jsx,tsx,html}', './node_modules/@mastra/playground/**/*.{js,ts,jsx,tsx}'],
 } satisfies Config;

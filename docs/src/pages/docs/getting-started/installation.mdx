@@ -77,11 +77,17 @@ OPENAI_API_KEY=<your-openai-key>
 ```
 
 </Steps>
-Note: If you prefer to run the command with flags (non-interactive mode) and include the example code, you can use:
+Extra Notes:
+
+ If you prefer to run the command with flags (non-interactive mode) and include the example code, you can use:
 ```bash copy
 npx create-mastra@latest --components agents,tools --llm openai --example
 ```
-This allows you to specify your preferences upfront without being prompted.
+
+To configure and specify a timeout if installation takes too long use the timeout flag:
+```bash copy
+npx create-mastra@latest --timeout
+```
 
 ## Manual Installation
 

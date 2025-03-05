@@ -7,7 +7,7 @@ import fsExtra from 'fs-extra/esm';
 import type { PackageJson } from 'type-fest';
 
 export class DepsService {
-  private packageManager: string;
+  readonly packageManager: string;
 
   constructor() {
     this.packageManager = this.getPackageManager();

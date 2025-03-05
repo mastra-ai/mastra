@@ -1,5 +1,42 @@
 # @mastra/core
 
+## 0.5.0-alpha.4
+
+### Patch Changes
+
+- d79aedf: Fix import/require paths in these package.json
+
+## 0.5.0-alpha.3
+
+### Patch Changes
+
+- 3d0e290: Fixed an issue where messages that were numbers weren't being stored as strings. Fixed incorrect array access when retrieving memory messages
+
+## 0.5.0-alpha.2
+
+### Minor Changes
+
+- 02ffb7b: Added updateIndexById and deleteIndexById methods in the MastraVector inteface
+
+## 0.5.0-alpha.1
+
+### Patch Changes
+
+- dab255b: Fixed bug where using an in memory libsql db (config.url = ":memory:) for memory would throw errors about missing tables
+
+## 0.5.0-alpha.0
+
+### Minor Changes
+
+- 59df7b6: Added a new option to use tool-calls for saving working memory: new Memory({ workingMemory: { enabled: true, use: "tool-call" } }). This is to support response methods like toDataStream where masking working memory chunks would be more resource intensive and complex.
+  To support this `memory` is now passed into tool execute args.
+
+### Patch Changes
+
+- 29f3a82: Improve agent generate,stream returnTypes
+- 59df7b6: Keep default memory db in .mastra/mastra.db, not .mastra/output/memory.db for consistency
+- c139344: When converting JSON schemas to Zod schemas, we were sometimes marking optional fields as nullable instead, making them required with a null value, even if the schema didn't mark them as required
+
 ## 0.4.4
 
 ### Patch Changes

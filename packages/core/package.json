@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.4.4",
+  "version": "0.5.0-alpha.4",
   "license": "ISC",
   "type": "module",
   "main": "dist/index.js",
@@ -53,6 +53,10 @@
       "import": {
         "types": "./dist/vector/filter/index.d.ts",
         "default": "./dist/vector/filter/index.js"
+      },
+      "require": {
+        "types": "./dist/vector/filter/index.d.cts",
+        "default": "./dist/vector/filter/index.cjs"
       }
     },
     "./utils": {

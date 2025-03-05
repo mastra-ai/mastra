@@ -2,6 +2,7 @@ import type { QueryResult, IndexStats } from '@mastra/core/vector';
 import { describe, expect, beforeEach, afterEach, it, beforeAll, afterAll, vi } from 'vitest';
 
 import { ChromaVector } from './';
+import { Collection } from 'chromadb';
 
 describe('ChromaVector Integration Tests', () => {
   let vectorDB = new ChromaVector({
@@ -116,6 +117,104 @@ describe('ChromaVector Integration Tests', () => {
       const results = await vectorDB.query({ indexName: testIndexName, queryVector: updatedVector?.[0]!, topK: 1 });
       expect(results?.[0]?.id).toBe(testIds[0]);
       expect(results?.[0]?.metadata).toEqual(updatedMetadata[0]);
+    });
+
+    it('should update the vector by id', async () => {
+      const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+      expect(ids).toHaveLength(3);
+
+      const idToBeUpdated = ids[0];
+      const newVector = [1, 2, 3];
+      const newMetaData = {
+        test: 'updates',
+      };
+
+      const update = {
+        vector: newVector,
+        metadata: newMetaData,
+      };
+
+      await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+
+      const results: QueryResult[] = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: newVector,
+        topK: 2,
+        includeVector: true,
+      });
+      expect(results[0]?.id).toBe(idToBeUpdated);
+      expect(results[0]?.vector).toEqual(newVector);
+      expect(results[0]?.metadata).toEqual(newMetaData);
+    });
+
+    it('should only update the metadata by id', async () => {
+      const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+      expect(ids).toHaveLength(3);
+
+      const idToBeUpdated = ids[0];
+      const newMetaData = {
+        test: 'updates',
+      };
+
+      const update = {
+        metadata: newMetaData,
+      };
+
+      await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+
+      const results: QueryResult[] = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: testVectors[0],
+        topK: 2,
+        includeVector: true,
+      });
+      expect(results[0]?.id).toBe(idToBeUpdated);
+      expect(results[0]?.vector).toEqual(testVectors[0]);
+      expect(results[0]?.metadata).toEqual(newMetaData);
+    });
+
+    it('should only update vector embeddings by id', async () => {
+      const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+      expect(ids).toHaveLength(3);
+
+      const idToBeUpdated = ids[0];
+      const newVector = [1, 2, 3];
+
+      const update = {
+        vector: newVector,
+      };
+
+      await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+
+      const results: QueryResult[] = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: newVector,
+        topK: 2,
+        includeVector: true,
+      });
+      expect(results[0]?.id).toBe(idToBeUpdated);
+      expect(results[0]?.vector).toEqual(newVector);
+    });
+
+    it('should throw exception when no updates are given', () => {
+      expect(vectorDB.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
+    });
+
+    it('should delete the vector by id', async () => {
+      const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+      expect(ids).toHaveLength(3);
+      const idToBeDeleted = ids[0];
+
+      await vectorDB.deleteIndexById(testIndexName, idToBeDeleted);
+
+      const results: QueryResult[] = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1.0, 0.0, 0.0],
+        topK: 2,
+      });
+
+      expect(results).toHaveLength(2);
+      expect(results.map(res => res.id)).not.toContain(idToBeDeleted);
     });
   });
 
@@ -932,7 +1031,6 @@ describe('ChromaVector Integration Tests', () => {
         const results2 = await vectorDB.query({
           indexName: testIndexName2,
           queryVector: [1, 0, 0],
-          filter: undefined,
         });
         expect(results1).toEqual(results2);
         expect(results1.length).toBeGreaterThan(0);
@@ -947,7 +1045,6 @@ describe('ChromaVector Integration Tests', () => {
         const results2 = await vectorDB.query({
           indexName: testIndexName2,
           queryVector: [1, 0, 0],
-          filter: undefined,
         });
         expect(results).toEqual(results2);
         expect(results.length).toBeGreaterThan(0);
@@ -1269,6 +1366,43 @@ describe('ChromaVector Integration Tests', () => {
             expect(result.document).not.toContain('quick');
           }
         });
+      });
+      it('should handle undefined document filter', async () => {
+        const results1 = await vectorDB.query({
+          indexName: testIndexName3,
+          queryVector: [1, 0, 0],
+          documentFilter: undefined,
+        });
+        const results2 = await vectorDB.query({
+          indexName: testIndexName3,
+          queryVector: [1, 0, 0],
+        });
+        expect(results1).toEqual(results2);
+        expect(results1.length).toBeGreaterThan(0);
+      });
+
+      it('should handle empty object document filter', async () => {
+        await expect(
+          vectorDB.query({
+            indexName: testIndexName3,
+            queryVector: [1, 0, 0],
+            documentFilter: {},
+          }),
+        ).rejects.toThrow();
+      });
+
+      it('should handle null filter', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName3,
+          queryVector: [1, 0, 0],
+          documentFilter: null,
+        });
+        const results2 = await vectorDB.query({
+          indexName: testIndexName3,
+          queryVector: [1, 0, 0],
+        });
+        expect(results).toEqual(results2);
+        expect(results.length).toBeGreaterThan(0);
       });
     });
   });

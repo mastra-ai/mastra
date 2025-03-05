@@ -19,6 +19,7 @@ export abstract class MastraStorage extends MastraBase {
   static readonly TABLE_TRACES = TABLE_TRACES;
 
   protected hasInitialized: null | Promise<boolean> = null;
+  protected shouldCacheInit = true;
 
   constructor({ name }: { name: string }) {
     super({
@@ -150,7 +151,7 @@ export abstract class MastraStorage extends MastraBase {
 
   async init(): Promise<void> {
     // to prevent race conditions, await any current init
-    if (await this.hasInitialized) {
+    if (this.shouldCacheInit && (await this.hasInitialized)) {
       return;
     }
 

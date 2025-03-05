@@ -1,0 +1,767 @@
+## packages/core
+Here's the structured changelog for packages/core v0.5.0-alpha.0:
+
+### New Features
+- Added tool-call based working memory option as an alternative to text stream masking (`new Memory({ workingMemory: { enabled: true, use: "tool-call" } })`) (#59df7b6)
+- Added voice capabilities to Agent class with speak(), listen() and getSpeakers() methods for text-to-speech and speech-to-text functionality (#2fc618f)
+- Added support for passing telemetry settings at generation time (#06aa827)
+
+### Improvements
+- Enhanced workflow suspend/resume functionality with better async/await interface and state management (#3f369a2)
+- Improved agent generate/stream return type inference (#29f3a82)
+- Updated vector store functions to use object parameters for better type safety (#0fd78ac)
+- Added support for passing threadId and resourceId into tool execute functions (#dabecf4)
+- Moved storage/vector libSQL to separate files for better bundle optimization (#e752340)
+- Added support for CommonJS alongside ESM (#bb4f447)
+
+### Notable Bug Fixes
+- Fixed JSON schema to Zod conversion to properly handle optional fields instead of marking them as nullable (#c139344)
+- Fixed early exits in workflows with nested branching (#8d13b14)
+- Fixed watch payload handling in workloads with nested branching (#ed55f1d)
+- Fixed proper message sort order for tool calls and results when using Memory semanticRecall (#0d185b1)
+- Fixed agent.generate() return type inference based on output schema (#3ee4831)
+
+### Build/Deployment
+- Standardized database location to .mastra/mastra.db for consistency (#59df7b6)
+- Updated vector filter location from @mastra/core/filter to @mastra/core/vector/filter (#fd14a3f)
+- Added support for dual ESM/CommonJS package exports (#bb4f447)
+
+### Performance
+- Optimized memory handling by making embeddings creation conditional on semanticRecall being enabled (#ce44b9b)
+- Improved stream tag masking to handle complex text patterns more efficiently (#fe0fd01)
+
+This release focuses on improving developer experience through better typing and API design, while adding significant new capabilities like voice support and enhanced memory management options. The build system improvements ensure better compatibility across different module systems.
+
+## packages/cli
+Here's the structured changelog for the CLI package updates:
+
+## CLI Package Changes (v0.2.9-alpha.0)
+
+### New Features
+- Added configurable timeout option for `npm create mastra` command (#5fae49e)
+- Added `--no-timeout` flag for `npm create mastra` command (#62565c1)
+
+### Improvements
+- Enhanced client-js workflow watch developer experience (#960690d)
+- Improved tracing UI with resizable columns and better layout (#71cedf8)
+- Added Mastra SVG favicon to playground (#b24970d)
+- Unified development and cloud UI through new playground-ui package (#7a64aff)
+- Improved error handling and display in tracing UI
+- Enhanced chat interface with better message handling and display
+
+### Notable Bug Fixes
+- Fixed polling on dev traces (#e5a0c67)
+- Fixed yarn create mastra dependency installation command (#bd98fb6)
+- Fixed mastra dev backslash issues (#9c1057d)
+- Fixed resizer visibility when scrolling span details column (#a931e9a)
+
+### Build/Deployment Improvements
+- Added support for CommonJS (#bb4f447)
+- Removed CLI postinstall script for simpler installation (#13ba53a)
+- Improved playground UI build process integration
+- Added proper version tag handling for create mastra dependencies (#dd3a52b)
+
+### Developer Experience
+- Added non-crypto UUID function to allow local URLs like local.lan:4111 during development (#7a0866e)
+- Improved error processing in mastra server (#2d68431)
+- Enhanced playground UI with better styling and component organization
+
+This release focuses on improving the development experience, fixing critical bugs, and enhancing the tracing and monitoring capabilities of the CLI tool.
+
+## packages/create-mastra
+Here's the structured changelog for create-mastra covering the period from February 24 to March 3, 2025:
+
+## create-mastra Updates
+
+### New Features
+- Added configurable timeout option for package installation with `--timeout` flag (#5fae49e)
+- Introduced `--no-timeout` flag for npm create mastra command (#62565c1)
+
+### Improvements
+- Enhanced client-js workflow watch developer experience (#960690d)
+- Added support for CommonJS modules (#bb4f447)
+- Improved development and cloud UI unification through new playground-ui library package (#7a64aff)
+
+### Bug Fixes
+- Fixed Mastra server error processing (#2d68431)
+- Resolved yarn create mastra dependency installation command issues (#bd98fb6)
+- Fixed version tag discovery for pnpm create mastra (#cd80117)
+
+### Build System
+- Improved version tag discovery mechanism for create-mastra (#5c7b8db)
+- Removed CLI postinstall script (#13ba53a)
+- Enhanced version tag handling for create-mastra dependencies (#dd3a52b)
+
+This release includes significant improvements to package installation workflows, better error handling, and enhanced build system reliability. The new timeout configuration options give users more control over the installation process.
+
+## packages/deployer
+Here's the structured changelog for the deployer module:
+
+## New Features
+- Added voice capabilities to agents with new endpoints:
+  - Get available speakers via `/api/agents/:agentId/speakers`
+  - Text-to-speech conversion via `/api/agents/:agentId/speak` 
+  - Speech-to-text transcription via `/api/agents/:agentId/listen` (#80cdd76)
+- Added endpoint to list available log transports at `/api/logs/transports`
+
+## Improvements
+- Enhanced workflow monitoring with additional data in watch responses including runId, timestamp and suspended steps (#960690d)
+- Expanded workflow API response to include full workflow details including schemas (#c2dde91)
+- Updated vector store operations to use object parameters for better type safety:
+  - `upsert()` now accepts a single config object
+  - `createIndex()` now accepts a single config object
+  - `query()` now accepts a single config object
+
+## Notable Bug Fixes
+- Fixed build errors related to esbuild not properly removing types (#30a4c29)
+- Fixed error handling in workflow watch streams with improved logging
+- Removed unnecessary logging in playground's log drains tab (#731dd8a)
+
+## Build/Deployment Improvements
+- Added CommonJS support alongside ESM modules (#bb4f447)
+- Added `--ignore-workspace` flag when installing dependencies with pnpm (#e1e2705)
+- Improved bundling configuration:
+  - Added CommonJS plugin for better compatibility
+  - Updated external dependency handling
+  - Enhanced error processing in build pipeline
+
+The most significant changes in this release are the addition of voice capabilities for agents and improvements to workflow monitoring. The update also includes important build system enhancements for better module compatibility.
+
+## packages/evals
+Based on the git diff, here's the structured changelog for the Mastra AI evals package covering February 24 - March 3, 2025:
+
+## Build/Deployment Improvements
+
+- Added CommonJS support alongside ESM, enabling broader compatibility across different module systems (bb4f447)
+- Updated build configuration to output both ESM and CJS formats with proper type definitions
+- Updated dependencies to latest @mastra/core version (0.5.0-alpha.0)
+
+The main significant change in this update is the addition of CommonJS support, which improves compatibility for projects using different module systems. The rest of the changes are primarily version bumps and dependency updates to maintain compatibility with the core package.
+
+Note: Most changes in the diff are version bumps and dependency updates which don't directly affect end users, so they've been omitted from the changelog narrative.
+
+## packages/rag
+Here's the structured changelog for the RAG package updates:
+
+## @mastra/rag v0.1.8-alpha.0
+
+### Improvements
+- Updated vector store query interface to use object parameters for better clarity and type safety (#0fd78ac)
+- Simplified error handling in token transformer by removing unused error variables (#87219934)
+
+### Build/Deployment
+- Added CommonJS support alongside ESM for broader compatibility (#bb4f447)
+- Updated build configuration to output both ESM and CJS formats (#72e7a0fb)
+
+### Dependencies
+- Updated @mastra/core dependency to v0.5.0-alpha.0
+
+The main focus of this release was improving the developer experience through better API design and broader module format support. The vector store query interface now uses a more structured object parameter approach, making it easier to understand and maintain. CommonJS support was added to improve compatibility with different Node.js environments.
+
+## packages/memory
+Here's the structured changelog for the memory package updates:
+
+## Memory Package 0.2.0-alpha.0
+
+### New Features
+- Added tool-call support for working memory management through `new Memory({ workingMemory: { enabled: true, use: "tool-call" } })` (#59df7b6)
+- Introduced `updateWorkingMemory` tool for managing working memory state (#59df7b6)
+
+### Improvements
+- Updated vector store operations to use object parameters for better type safety and readability (#0fd78ac)
+- Enhanced semantic recall configuration with more granular message range controls (#59df7b6)
+- Added CommonJS module support for better compatibility (#bb4f447)
+
+### Bug Fixes
+- Fixed unnecessary embedding creation when semantic recall was disabled (#ce44b9b)
+
+### Build/Deployment
+- Added CommonJS build output alongside ESM (#bb4f447)
+- Updated package dependencies and configuration for better module compatibility
+
+The main focus of this release is the introduction of tool-based working memory management, providing an alternative to text-stream based memory updates. This enables better support for response methods like toDataStream where masking working memory chunks would be resource intensive.
+
+## packages/mcp
+Based on the git diff, here's the structured changelog for the Mastra MCP package covering February 24 - March 3, 2025:
+
+## Mastra MCP Updates
+
+### Build Improvements
+- Added CommonJS module support alongside ESM, enabling broader compatibility across different Node.js environments (bb4f447)
+- Updated build configuration to output both ESM and CJS formats with proper type definitions
+
+### Documentation
+- Improved README formatting and clarity around server parameter configurations
+- Enhanced documentation for authentication setup in MCP client examples
+
+### Dependencies
+- Updated to @mastra/core@0.5.0-alpha.0 which includes several core improvements
+
+The main focus of this release was improving module compatibility by adding CommonJS support alongside the existing ESM format. This enables better integration with projects using different module systems while maintaining full TypeScript support through dedicated type definitions for both formats.
+
+Note: Most changes in this period were related to build system improvements and dependency updates, with no major feature additions or breaking changes to the core functionality.
+
+## deployers/cloudflare
+Here's the changelog for the Cloudflare deployer module covering February 24 - March 3, 2025:
+
+## Cloudflare Deployer Updates
+
+### Build Improvements
+- Added CommonJS module support alongside ESM, enabling broader compatibility across different Node.js environments (bb4f447)
+- Updated build configuration to generate both `.cjs` and `.js` output formats with corresponding type definitions
+
+### Development Tooling
+- Integrated ESLint configuration for improved code quality and consistency
+- Added new lint script to package.json for code quality checks
+
+### Dependencies
+- Updated core dependencies to latest versions:
+  - @mastra/core to v0.5.0-alpha.0
+  - @mastra/deployer to v0.1.8-alpha.0
+
+### Code Organization
+- Streamlined imports in main module to reduce bundle size
+- Improved code structure with better separation of concerns
+
+This release focuses on improving the build system and development workflow while maintaining compatibility with both ESM and CommonJS environments. The changes lay groundwork for better maintainability and broader usage across different Node.js projects.
+
+## deployers/netlify
+Based on the git diff, here's the changelog for the Netlify deployer module covering February 24 - March 3, 2025:
+
+## Netlify Deployer Updates
+
+### Build/Deployment Improvements
+- Added CommonJS module support alongside ESM for better compatibility (#bb4f447)
+- Updated build configuration to output both ESM and CJS formats (#bb4f447)
+- Improved package exports configuration to properly handle both ESM and CJS entry points (#bb4f447)
+
+### Code Quality
+- Added ESLint configuration and linting script for better code quality enforcement (#40ec604)
+- Improved code organization by reordering imports for better readability (#a45ec6f)
+- Simplified error handling in site creation logic (#b1d5ecb)
+
+### Dependencies
+- Updated core dependencies to version 0.5.0-alpha.0
+- Updated deployer dependency to version 0.1.8-alpha.0
+
+This release focuses on improving module compatibility and code quality while maintaining core functionality. The addition of CommonJS support enables broader usage across different Node.js environments.
+
+## deployers/vercel
+Here's the changelog for the Vercel deployer module covering February 24 - March 3, 2025:
+
+## Vercel Deployer Updates
+
+### Build/Deployment Improvements
+- Added CommonJS module support alongside ESM for better compatibility (#bb4f447)
+- Updated package exports configuration to properly handle both ESM and CommonJS formats
+
+### Code Quality
+- Improved error handling in project ID lookup logic
+- Added ESLint configuration for better code quality enforcement
+
+### Dependencies
+- Updated core dependencies to latest versions:
+  - @mastra/core to v0.5.0-alpha.0
+  - @mastra/deployer to v0.1.8-alpha.0
+
+This release focuses on improving module compatibility and code quality while keeping the core functionality stable. The addition of CommonJS support enables broader usage across different Node.js environments.
+
+## speech/azure
+Here's the structured changelog for the speech/azure module covering February 24 - March 3, 2025:
+
+## Speech Azure Module Updates
+
+### Build & Development Improvements
+- Added CommonJS module support for better compatibility with Node.js environments (bb4f447)
+- Improved build configuration to output both ESM and CJS formats
+- Added ESLint configuration and linting script for better code quality
+
+### Code Organization
+- Reorganized imports for better code structure and readability
+- Separated type imports from implementation imports in test files
+
+### Dependencies
+- Updated @mastra/core dependency to version 0.5.0-alpha.0
+- Added development dependencies for linting (@internal/lint, eslint)
+
+The main highlight of this update is the addition of CommonJS support, making the Azure speech module more versatile across different JavaScript environments. The codebase also received quality improvements through better organization and the introduction of proper linting tools.
+
+## speech/deepgram
+Here's the structured changelog for the speech/deepgram module covering February 24 - March 3, 2025:
+
+# @mastra/speech-deepgram Changelog
+
+## Important Notice
+🚨 This package is now deprecated in favor of `@mastra/voice-deepgram`. Users should migrate to the new package for continued support and additional features.
+
+## Migration Changes
+- Added deprecation notice and migration instructions to README (#abe4600)
+- Added runtime error message directing users to new package (#59df7b6)
+
+## Build System Improvements
+- Added CommonJS build support alongside ESM (#bb4f447)
+- Updated build configuration to output both .cjs and .js formats
+- Streamlined test setup by removing deprecated test files
+
+## Documentation
+- Updated package description to indicate deprecation status
+- Added comprehensive migration guide with code examples
+- Removed outdated voice documentation in favor of new package references
+
+## Dependencies
+- Updated core dependency to version 0.5.0-alpha.0
+- Added ESLint configuration and dependencies
+- Removed unused test dependencies (vitest)
+
+---
+
+**Migration Note**: Users should transition to `@mastra/voice-deepgram` which provides enhanced functionality including both Text-to-Speech and Speech-to-Text capabilities.
+
+## speech/elevenlabs
+Based on the git diff, here's the changelog for the speech/elevenlabs module covering February 24 - March 3, 2025:
+
+# @mastra/speech-elevenlabs Changelog
+
+## Important Notice: Package Deprecation
+
+This package has been deprecated in favor of `@mastra/voice-elevenlabs`. Users should migrate to the new package for continued support and updates.
+
+### Migration Changes
+- Added deprecation notice and migration guide in README
+- Added runtime error message directing users to new package
+- Removed test files as package transitions to deprecated status
+
+### Build Improvements
+- Added CommonJS support for better compatibility (#bb4f447)
+- Updated build configuration to output both ESM and CJS formats
+- Added ESLint configuration for consistent code style
+
+### Dependencies
+- Updated core dependency to version 0.5.0-alpha.0
+- Removed unused test dependencies (vitest)
+- Added internal lint package for code quality
+
+### Documentation
+- Updated package description to indicate deprecation status
+- Added comprehensive migration guide with code examples
+- Removed outdated API documentation in favor of new package references
+
+For users of this package, please follow the migration guide to transition to `@mastra/voice-elevenlabs`. The new package provides identical functionality with an improved API structure that's more consistent with other voice packages in the ecosystem.
+
+## speech/google
+Here's the structured changelog for the speech/google module covering February 24 - March 3, 2025:
+
+## @mastra/speech-google Changelog
+
+### Important Notice
+- Package deprecated in favor of @mastra/voice-google (#5e0f727)
+
+### Build & Infrastructure
+- Added CommonJS support alongside ESM (#bb4f447)
+- Updated build configuration to output both ESM and CJS formats
+- Added ESLint configuration and dependencies
+
+### Documentation
+- Updated README with deprecation notice and migration guide
+- Added clear instructions for migrating to @mastra/voice-google
+- Removed outdated usage examples and configuration details
+
+### Dependencies
+- Updated @mastra/core dependency to version 0.5.0-alpha.0
+- Added @internal/lint as development dependency
+- Updated ESLint to version 9.20.1
+
+### Removed
+- Removed test files and test outputs as package is now deprecated
+- Removed unnecessary build watch scripts
+
+The main focus of this update is to guide users toward migrating to the new @mastra/voice-google package while maintaining basic functionality for existing users during the transition period.
+
+## speech/ibm
+Based on the git diff, here's the changelog for the IBM Speech module covering February 24 - March 3, 2025:
+
+# IBM Speech Module Changelog
+
+## Build & Infrastructure Improvements
+
+- Added CommonJS module support for better compatibility with Node.js environments (#bb4f447)
+- Improved module exports configuration to support both ESM and CJS formats
+- Added ESLint configuration for consistent code quality
+
+## Code Quality
+
+- Reorganized import statements for better code organization
+- Improved async code handling in stream processing
+- Added type imports separation for better code clarity
+
+## Dependencies
+
+- Updated @mastra/core dependency to version 0.5.0-alpha.0
+- Added ESLint and internal lint dependencies for code quality enforcement
+
+The main focus of this update was improving the module's build system and compatibility, particularly by adding CommonJS support alongside the existing ESM format. This enables broader compatibility across different Node.js environments and build systems.
+
+## speech/murf
+Here's the structured changelog for the speech/murf module covering February 24 - March 3, 2025:
+
+## @mastra/speech-murf Changelog
+
+### Important Notice
+- Package deprecated in favor of `@mastra/voice-murf` - users should migrate to the new package for continued support and updates (PR #5b1af96)
+
+### Build & Infrastructure
+- Added CommonJS support alongside ESM for better compatibility (PR #bb4f447)
+- Updated build configuration to use dual ESM/CJS output formats
+- Streamlined test setup for deprecated package status
+
+### Documentation
+- Added comprehensive migration guide to README
+- Updated package description to reflect deprecated status
+- Added code examples showing how to migrate from `speech-murf` to `voice-murf`
+
+### Dependencies
+- Updated core dependency to version 0.5.0-alpha.0
+- Added ESLint configuration and dependencies
+- Removed unused test dependencies
+
+The focus for this period has been on providing a smooth deprecation path for users to migrate to the new `@mastra/voice-murf` package. All users should begin planning their migration as this package will no longer receive feature updates.
+
+## speech/openai
+Here's the structured changelog for @mastra/speech-openai for the period of Feb 24 - Mar 3, 2025:
+
+# @mastra/speech-openai Changelog
+
+## Important Notice
+🚨 This package is now deprecated in favor of [@mastra/voice-openai](https://github.com/mastra-ai/mastra/tree/main/voice/openai).
+
+## Major Changes
+- Deprecated @mastra/speech-openai package - users should migrate to @mastra/voice-openai for enhanced Text-to-Speech and Speech-to-Text capabilities (#0821d6b)
+
+## Build & Infrastructure
+- Added CommonJS support for better compatibility with different module systems (#bb4f447)
+- Added ESLint configuration for improved code quality
+- Updated build scripts to support both ESM and CJS formats
+- Removed test suite as package enters maintenance mode
+
+## Documentation
+- Updated README with deprecation notice and migration guide
+- Added clear instructions for transitioning to @mastra/voice-openai
+- Removed outdated API documentation
+
+## Dependencies
+- Updated core dependency to @mastra/core@0.5.0-alpha.0
+- Added @internal/lint as development dependency
+- Removed unnecessary test dependencies (vitest)
+
+Users are strongly encouraged to migrate to @mastra/voice-openai for continued support and new features. The new package provides an enhanced API with both Text-to-Speech and Speech-to-Text capabilities.
+
+## speech/playai
+Here's the structured changelog for the speech/playai module covering February 24 - March 3, 2025:
+
+# @mastra/speech-playai Changelog
+
+## Important Notice: Package Deprecation
+This package has been deprecated in favor of `@mastra/voice-playai`. Users should migrate to the new package for continued support and updates.
+
+### Migration Guide
+- Added comprehensive migration documentation to help users transition to `@mastra/voice-playai` (#41d0166)
+- New package provides equivalent functionality with improved API structure
+- Detailed code examples for updating imports and API usage are now available in the README
+
+### Build System Improvements
+- Added CommonJS support for better compatibility with different module systems (#bb4f447)
+- Updated build configuration to output both ESM and CJS formats
+- Streamlined build process by removing unused test configurations
+
+### Technical Updates
+- Improved error handling with better TypeScript types for API responses
+- Added deprecation warning that guides users to the new package
+- Updated package metadata and descriptions to reflect deprecated status
+
+### Dependencies
+- Updated core dependency to @mastra/core@0.5.0-alpha.0
+- Removed unused test dependencies
+- Added ESLint configuration for improved code quality
+
+For users of this package, please refer to the migration guide in the README for detailed instructions on upgrading to `@mastra/voice-playai`.
+
+## speech/replicate
+Here's the structured changelog for the speech/replicate module covering February 24 - March 3, 2025:
+
+## Speech Replicate Module Updates
+
+### Build & Infrastructure Improvements
+- Added CommonJS support alongside ESM for broader compatibility (bb4f447)
+- Integrated ESLint configuration for improved code quality
+- Updated build process to generate both ESM and CJS formats
+
+### Code Improvements
+- Optimized stream handling in TTS implementation by removing unnecessary async wrapper
+- Improved import organization and code structure
+- Enhanced error handling in audio stream generation
+
+### Dependencies
+- Updated @mastra/core dependency to version 0.5.0-alpha.0
+- Added ESLint and internal lint configuration dependencies
+
+This release focuses on improving build system compatibility and code quality. The addition of CommonJS support enables broader usage across different Node.js environments, while the new linting setup helps maintain consistent code standards.
+
+## speech/speechify
+Here's the changelog for the speech/speechify module covering February 24 - March 3, 2025:
+
+# @mastra/speech-speechify Changelog
+
+## Important Notice: Package Deprecation
+
+This package has been deprecated in favor of `@mastra/voice-speechify`. Users should migrate to the new package for continued support and updates.
+
+### Migration Guide
+- Added comprehensive migration documentation to help users transition to `@mastra/voice-speechify` (#f477df7)
+- Updated README with step-by-step migration instructions and code examples
+
+### Build Improvements
+- Added CommonJS support for better compatibility with different module systems (#bb4f447)
+- Updated build configuration to output both ESM and CJS formats
+- Streamlined test setup for deprecated package status
+
+### Dependencies
+- Updated `@mastra/core` dependency to version 0.5.0-alpha.0
+- Integrated ESLint configuration from internal tooling
+- Removed unused test dependencies
+
+The focus for this release has been on providing a smooth deprecation path and ensuring users can easily migrate to the new `@mastra/voice-speechify` package. No new features were added as the package is now in maintenance mode.
+
+## stores/pg
+Here's the structured changelog for the PG store module updates:
+
+## New Features
+- Added support for multiple index types including HNSW and flat indexing alongside existing IVFFlat (#82197f8)
+- Introduced configurable index parameters for HNSW (m, efConstruction) and IVFFlat (lists) (#82197f8)
+- Added performance testing framework with support for different vector distributions and index configurations (#dbecf4)
+
+## Improvements
+- Updated vector store functions to use object parameters for better type safety and readability (#0fd78ac)
+  ```typescript
+  // New style
+  await vectorDB.query({
+    indexName: 'my_index',
+    queryVector: [0.1, 0.2],
+    topK: 10
+  });
+  ```
+- Enhanced index creation with configurable parameters (#82197f8)
+  ```typescript
+  await vectorDB.createIndex({
+    indexName: 'my_index',
+    dimension: 1536,
+    metric: 'cosine',
+    indexConfig: { 
+      type: 'hnsw',
+      hnsw: { m: 16, efConstruction: 64 }
+    }
+  });
+  ```
+- Added support for CommonJS alongside ESM modules (#bb4f447)
+- Renamed `defineIndex` to `buildIndex` for clarity (#f6a1de3)
+
+## Notable Bug Fixes
+- Fixed message sort order for tool calls and results in Memory semanticRecall feature (#0d185b1)
+- Corrected next/prev settings for PG semantic recall that were previously swapped (#5325d6a)
+
+## Build/Deployment Improvements
+- Added performance testing configuration and Docker setup (#dbecf4)
+- Updated filter location from @mastra/core/filter to @mastra/core/vector/filter (#fd14a3f)
+- Added ESLint configuration for better code quality control (#3435bb3)
+
+## Performance Optimizations
+- Added support for batched bulk vector insertions (#dbecf4)
+- Implemented vector search parameter tuning for HNSW (ef) and IVFFlat (probes) (#dbecf4)
+- Added caching for index metadata to reduce database queries (#dbecf4)
+
+This release significantly enhances the PostgreSQL vector store capabilities with new indexing options, improved performance, and better developer experience through modernized APIs.
+
+## stores/astra
+Here's the structured changelog for the Astra module updates:
+
+## API Improvements
+- Updated vector store functions to use object parameters for better type safety and flexibility (#0fd78ac)
+- Improved filter handling with new `VectorFilter` type from `@mastra/core` (#fd14a3f)
+
+## Code Quality & Maintenance
+- Added comprehensive test coverage for vector operations and edge cases (#c4fdac3)
+- Updated filter location from `@mastra/core/filter` to `@mastra/core/vector/filter` (#fd14a3f)
+- Added deprecation warnings for legacy function signatures while maintaining backward compatibility
+
+## Build System
+- Added support for CommonJS module format (#bb4f447)
+- Added ESLint configuration for improved code quality checks
+- Updated build scripts to generate both ESM and CJS outputs
+
+## Documentation
+- Updated README with new object-based parameter examples for all vector operations
+- Improved API documentation with clearer parameter descriptions
+
+## Dependencies
+- Updated `@mastra/core` to version 0.5.0-alpha.0
+- Added `@internal/lint` for consistent code style enforcement
+
+This release focuses on improving the developer experience through better API design and type safety while maintaining backward compatibility. The move to object parameters makes the API more maintainable and easier to extend in the future.
+
+## stores/chroma
+Here's the structured changelog for the Chroma store module:
+
+## New Features
+- Added document storage and retrieval capabilities, allowing full text documents to be stored alongside vectors (#5f28f44)
+- Added document content filtering with `$contains` and `$not_contains` operators for text search
+- Added support for CommonJS module format (#bb4f447)
+
+## Improvements
+- Updated API to use object parameters for better type safety and flexibility:
+  - `createIndex()` now accepts `{ indexName, dimension, metric }` 
+  - `upsert()` now accepts `{ indexName, vectors, metadata, documents }` 
+  - `query()` now accepts `{ indexName, queryVector, topK, filter, documentFilter }`
+- Improved metric handling with mapping between HNSW space types and vector metrics (#0fd78ac)
+- Enhanced filter validation and translation for vector queries (#1da20e7)
+- Updated documentation to reflect new document storage capabilities and API changes
+
+## Notable Bug Fixes
+- Fixed type checking for positional arguments (#1da20e7)
+- Fixed filter location import path from core module (#fd14a3f)
+- Added validation for empty string in document content filters
+
+## Build/Deployment
+- Added Docker compose configuration for ChromaDB
+- Added ESLint configuration and lint script
+- Updated build process to support both ESM and CommonJS outputs
+
+## Documentation
+- Added examples for document storage and filtering
+- Updated API reference to reflect new object parameter style
+- Added documentation for document content filtering capabilities
+
+The major themes in this release are the addition of document storage capabilities and the modernization of the API to use object parameters. These changes make the module more flexible and type-safe while maintaining backward compatibility through deprecation warnings.
+
+## stores/pinecone
+Here's the changelog for the Pinecone store module covering the period from 2025-02-24 to 2025-03-03:
+
+## Pinecone Store Updates
+
+### Breaking Changes
+- Updated vector store function signatures to use object parameters instead of individual arguments for better type safety and flexibility (#0fd78ac)
+  - `createIndex()` now accepts a single object with `{indexName, dimension, metric}` 
+  - `upsert()` now accepts a single object with `{indexName, vectors, metadata, ids}`
+  - `query()` now accepts a single object with `{indexName, queryVector, topK, filter, includeVector}`
+
+### Improvements
+- Moved filter functionality from `@mastra/core/filter` to `@mastra/core/vector/filter` for better organization (#fd14a3f)
+- Enhanced filter translation logic for Pinecone queries (#4d4e1e1)
+- Added deprecation warnings when using old function signatures to help with migration (#bb4f447)
+
+### Build System
+- Added CommonJS support alongside ESM for better compatibility (#bb4f447)
+- Added ESLint configuration and linting command (#40ec604)
+- Updated build script to generate both ESM and CJS outputs (#cf11896)
+
+### Documentation
+- Updated README with new object parameter syntax for all vector operations (#e679d8b)
+- Added detailed examples for filter operations and query parameters
+
+### Dependencies
+- Updated @mastra/core to version 0.5.0-alpha.0
+- Added @internal/lint and eslint dev dependencies
+
+The main focus of this release was modernizing the API to use object parameters while maintaining backward compatibility through deprecation warnings. This change makes the API more maintainable and type-safe while providing a better developer experience.
+
+## stores/qdrant
+Here's the changelog for the Qdrant vector store module covering the period from Feb 24 - Mar 3, 2025:
+
+## Qdrant Vector Store Updates
+
+### Breaking Changes
+- Modernized API interface to use object parameters instead of positional arguments for key methods:
+  - `createIndex()` now accepts `{ indexName, dimension, metric }` object
+  - `upsert()` now accepts `{ indexName, vectors, metadata, ids }` object 
+  - `query()` now accepts `{ indexName, queryVector, topK, filter, includeVector }` object
+  - Legacy positional argument calls will show deprecation warnings but continue working for now
+
+### Improvements
+- Updated filter handling to use the new `VectorFilter` type from `@mastra/core` for better type safety
+- Added deprecation warnings to guide users toward the new object parameter API style
+- Improved error handling and validation in vector operations
+- Updated documentation with new parameter formats and examples
+
+### Build & Testing
+- Added CommonJS build output support alongside ESM
+- Added ESLint configuration and lint script
+- Expanded test coverage for new parameter formats
+- Added comprehensive tests for deprecation warnings
+
+### Dependencies
+- Updated to `@mastra/core@0.5.0-alpha.0`
+- Added `@internal/lint` for consistent code style
+- Added ESLint v9.20.1
+
+This release focuses on modernizing the API interface while maintaining backward compatibility. The new object parameter style provides better developer experience through improved type safety and self-documenting code.
+
+## stores/upstash
+Here's the changelog for the Upstash module updates:
+
+## @mastra/upstash 0.1.8-alpha.0
+
+### Breaking Changes
+- Updated vector store API to use object parameters instead of individual arguments for better type safety and consistency (#0fd78ac)
+
+### Improvements
+- Added support for CommonJS modules alongside ESM (#bb4f447)
+- Updated filter location from `@mastra/core/filter` to `@mastra/core/vector/filter` for better organization (#fd14a3f)
+- Enhanced vector store function signatures to use object params for better TypeScript support (#0fd78ac)
+- Added comprehensive test coverage for vector store operations (#c4fdac3)
+
+### Documentation
+- Updated README with detailed examples showing new object parameter syntax
+- Added code examples for vector operations including upsert and query operations
+
+### Internal Changes
+- Added ESLint configuration for improved code quality
+- Added deprecation warnings for old function signatures while maintaining backward compatibility
+- Updated dependencies to latest @mastra/core version
+- Enhanced test timeouts for better reliability in CI environments
+
+The main focus of this release is modernizing the API surface to use object parameters while maintaining backward compatibility through deprecation warnings. This change improves type safety and makes the API more maintainable going forward.
+
+## stores/vectorize
+Here's the structured changelog for the vectorize module updates:
+
+## Vectorize Store Updates
+
+### Improvements
+- Updated vector store functions to use object parameters for better type safety and cleaner APIs (#0fd78ac)
+- Added support for binary request handling in upsert operations to ensure proper NDJSON handling (#0f7bd01)
+- Enhanced filter handling with improved translation and validation (#fd14a3f)
+
+### API Changes
+- Introduced new object-based parameter style for core methods:
+  - `createIndex({ indexName, dimension, metric })`
+  - `upsert({ indexName, vectors, metadata, ids })`
+  - `query({ indexName, queryVector, topK, filter, includeVector })`
+- Added backward compatibility support with deprecation warnings for old parameter style (#multiple)
+
+### Documentation
+- Added comprehensive examples in README for common operations:
+  - Index creation
+  - Vector insertion
+  - Query operations with filters
+  - Metadata handling
+- Expanded method documentation with parameter descriptions (#multiple)
+
+### Build/Deployment
+- Added CommonJS module support for better compatibility (#bb4f447)
+- Integrated ESLint configuration for improved code quality (#40ec604)
+- Updated test timeouts for better reliability in CI environments (#multiple)
+
+### Testing
+- Enhanced test coverage for Upstash and Astra integrations (#c4fdac3)
+- Added comprehensive filter operation tests (#multiple)
+- Improved vector operation test cases (#4d4e1e1)
+
+This release focuses on improving the developer experience with better API design while maintaining backward compatibility. The new object-based parameter style makes the API more maintainable and type-safe.

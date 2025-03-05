@@ -22,18 +22,17 @@ export const Thread: FC<{ memory?: boolean }> = ({ memory }) => {
       <ThreadPrimitive.Viewport
         style={{
           paddingTop: '2rem',
-          paddingInline: '2rem',
           background: 'inherit',
           scrollBehavior: 'smooth',
           overflowY: 'scroll',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          height: 'calc(100vh - 65px)',
+          height: memory ? 'calc(100vh - 65px)' : 'calc(100vh - 90px)',
           paddingBottom: '108px',
         }}
       >
-        <div style={{ width: '100%', maxWidth: '48rem' }}>
+        <div style={{ width: '100%', maxWidth: '48rem', paddingInline: '1.5rem' }}>
           <ThreadWelcome />
           <ThreadPrimitive.Messages
             components={{
@@ -59,6 +58,7 @@ export const Thread: FC<{ memory?: boolean }> = ({ memory }) => {
           paddingBottom: '0.5em',
           left: '50%',
           transform: 'translate(-50%)',
+          background: '#0f0f0f',
         }}
         className="px-4"
       >

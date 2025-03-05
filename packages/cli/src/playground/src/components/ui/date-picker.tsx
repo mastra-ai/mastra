@@ -47,7 +47,11 @@ export const DatePicker: React.FC<DatePickerProps> = ({
           />
         )}
       </PopoverTrigger>
-      <PopoverContent className="backdrop-blur-4xl w-auto p-0" align="start" data-testid="datepicker-calendar">
+      <PopoverContent
+        className="backdrop-blur-4xl w-auto p-0 bg-[#171717]"
+        align="start"
+        data-testid="datepicker-calendar"
+      >
         <DatePickerOnly
           value={value}
           setValue={v => setValue(v ? new Date(`${v}z`) : null)} // TODO: Leave in the Z to prevent casting via timezone
@@ -123,7 +127,7 @@ export const DatePickerOnly = ({
     >
       <div className="w-full px-3">
         <Input
-          type="date"
+          type="text"
           value={inputValue}
           onChange={handleInputChange}
           placeholder={placeholder}

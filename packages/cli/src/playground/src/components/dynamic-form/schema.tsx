@@ -145,7 +145,7 @@ export function schemaToFormFieldRenderer<T extends ZodSchema>({
 
   if (!renderFieldMap) return;
 
-  const flattenedErrors = flattenObject(errors, ['message', 'type']);
+  const flattenedErrors = flattenObject(errors, ['message', 'type'], true);
 
   const fieldOptions = schemaOptions?.parentField
     ? schemaOptions?.options?.[parentFieldValue as string]

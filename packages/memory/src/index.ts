@@ -1,8 +1,9 @@
 import { deepMerge } from '@mastra/core';
-import type { CoreMessage } from '@mastra/core';
+import type { CoreMessage, CoreTool } from '@mastra/core';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
+import { updateWorkingMemoryTool } from './tools/working-memory';
 import { embed } from 'ai';
 import type { Message as AiMessage } from 'ai';
 
@@ -336,6 +337,10 @@ export class Memory extends MastraMemory {
       return null;
     }
 
+    if (config.workingMemory.use === 'tool-call') {
+      return this.getWorkingMemoryToolInstruction(workingMemory);
+    }
+
     return this.getWorkingMemoryWithInstruction(workingMemory);
   }
 
@@ -375,5 +380,37 @@ Notes:
 - Do not remove empty sections - you must output the empty sections along with the ones you're filling in
 - REMEMBER: the way you update your working memory is by outputting the entire "<working_memory>text</working_memory>" block in your response. The system will pick this up and store it for you. The user will not see it.
 - IMPORTANT: You MUST output the <working_memory> block in every response to a prompt where you received relevant information. `;
+  }
+
+  private getWorkingMemoryToolInstruction(workingMemoryBlock: string) {
+    return `WORKING_MEMORY_SYSTEM_INSTRUCTION:
+Store and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!
+
+Guidelines:
+1. Store anything that could be useful later in the conversation
+2. Update proactively when information changes, no matter how small
+3. Use nested XML tags for all data
+4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for "information about yourself"
+
+Memory Structure:
+${workingMemoryBlock}
+
+Notes:
+- Update memory whenever referenced information changes
+- If you're unsure whether to store something, store it (eg if the user tells you their name or the value of another empty section in your working memory, call updateWorkingMemory immediately to update it)
+- This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history
+- Do not remove empty sections - you must include the empty sections along with the ones you're filling in
+- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire XML block. The system will store it for you. The user will not see it.
+- IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.`;
+  }
+
+  public getTools(config?: MemoryConfig): Record<string, CoreTool> {
+    const mergedConfig = this.getMergedThreadConfig(config);
+    if (mergedConfig.workingMemory?.enabled && mergedConfig.workingMemory.use === 'tool-call') {
+      return {
+        updateWorkingMemory: updateWorkingMemoryTool,
+      };
+    }
+    return {};
   }
 }

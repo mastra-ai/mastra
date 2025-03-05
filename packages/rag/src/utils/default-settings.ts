@@ -1,33 +1,21 @@
-export const defaultTopK = `You MUST generate for each query:
-    topK: number of results to return (REQUIRED) (Default: 10)
-        - Generate topK based on exactly what user specifies
-        - must be a valid number
+export const defaultVectorQueryDescription = () =>
+  `Access the knowledge base to find information needed to answer user questions.`;
 
-    Notes: 
-    - If user provides a valid topK, use the topK provided
-    - If user does not specify topK or provides an invalid topK, use default topK: 10
-`;
+export const defaultGraphRagDescription = () =>
+  `Access and analyze relationships between information in the knowledge base to answer complex questions about connections and patterns.`;
 
-export const defaultFilter = `You MUST generate for each query:
-    filter: query filter (REQUIRED) (Default: {})
-        - Generate filter based on user's explicit query intent
-        - Must be valid JSON string
+export const topKDescription = `Controls how many matching documents to return.
+- Uses provided value if specified
+- Default: 10 results
+- Higher values provide more context
+- Lower values focus on best matches
+- Must be a valid number
+- Based on query requirements`;
 
-    Notes: 
-    - If user provides a valid filter, use the filter provided
-    - If user does not specify filter or provides an invalid filter, use default filter: {}
-`;
-
-export const defaultVectorQueryDescription = (vectorStoreName: string, indexName: string) =>
-  `Retrieves relevant information from ${vectorStoreName} using ${indexName} index.
-
-    ${defaultTopK}
-    ${defaultFilter}
-    `;
-
-export const defaultGraphRagDescription = (vectorStoreName: string, indexName: string) =>
-  `Fetches and reranks the most relevant chunks using GraphRAG from the ${vectorStoreName} vector store using the ${indexName} index.
-
-    ${defaultTopK}
-    ${defaultFilter}
-    `;
+export const filterDescription = `JSON-formatted criteria to refine search results.
+- Uses provided filter if specified
+- Default: {} (no filtering)
+- Example: {"category": "health"}
+- Must be valid JSON format
+- Based on query intent
+- Multiple filters can be combined`;

@@ -12,7 +12,8 @@ export async function getWorkflowsHandler(c: Context) {
     const workflows = mastra.getWorkflows({ serialized: false });
     const _workflows = Object.entries(workflows).reduce<any>((acc, [key, workflow]) => {
       acc[key] = {
-        ...workflow,
+        stepGraph: workflow.stepGraph,
+        stepSubscriberGraph: workflow.stepSubscriberGraph,
         name: workflow.name,
         triggerSchema: workflow.triggerSchema ? stringify(zodToJsonSchema(workflow.triggerSchema)) : undefined,
         steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
@@ -95,8 +96,8 @@ export async function watchWorkflowHandler(c: Context) {
         // NOTE: looks like the UI is closing the watch request, so as long as that is the case
         // this promise doesn't need to be resolved or rejected
         return new Promise((_resolve, _reject) => {
-          let unwatch: () => void = workflow.watch(({ activePaths, context }) => {
-            void stream.write(JSON.stringify({ activePaths, context }) + '\x1E');
+          let unwatch: () => void = workflow.watch(({ activePaths, context, runId, timestamp, suspendedSteps }) => {
+            void stream.write(JSON.stringify({ activePaths, context, runId, timestamp, suspendedSteps }) + '\x1E');
           });
 
           stream.onAbort(() => {
