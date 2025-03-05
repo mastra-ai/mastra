@@ -36,7 +36,6 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
 
     const syncStep = new Step({
       id: 'FIRECRAWL:CRAWL_AND_SYNC',
-      name: 'Crawl and Sync',
       description: 'Crawl and Sync',
       execute: async ({ context }) => {
         const triggerData = context?.triggerData;

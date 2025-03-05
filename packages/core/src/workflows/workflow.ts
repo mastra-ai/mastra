@@ -3,13 +3,14 @@ import { trace, context as otlpContext } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import type { z } from 'zod';
 
-import type { IAction, MastraPrimitives } from '../action';
+import type { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 
 import type { Step } from './step';
 import type {
   ActionContext,
   RetryConfig,
+  StepAction,
   StepConfig,
   StepDef,
   StepGraph,
@@ -38,7 +39,7 @@ export class Workflow<
   #ifStack: { condition: StepConfig<any, any, any, TTriggerSchema>['when']; elseStepKey: string }[] = [];
   #stepGraph: StepGraph = { initial: [] };
   #stepSubscriberGraph: Record<string, StepGraph> = {};
-  #steps: Record<string, IAction<any, any, any, any>> = {};
+  #steps: Record<string, StepAction<any, any, any, any>> = {};
   #onStepTransition: Set<(state: WorkflowRunState) => void | Promise<void>> = new Set();
 
   /**
@@ -60,7 +61,7 @@ export class Workflow<
   }
 
   step<
-    TStep extends IAction<any, any, any, any>,
+    TStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>) {
@@ -115,7 +116,7 @@ export class Workflow<
   }
 
   then<
-    TStep extends IAction<any, any, any, any>,
+    TStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>) {
@@ -163,7 +164,7 @@ export class Workflow<
   }
 
   private loop<
-    FallbackStep extends IAction<any, any, any, any>,
+    FallbackStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(
@@ -269,7 +270,7 @@ export class Workflow<
   }
 
   while<
-    FallbackStep extends IAction<any, any, any, any>,
+    FallbackStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'], fallbackStep: FallbackStep) {
@@ -296,7 +297,7 @@ export class Workflow<
   }
 
   until<
-    FallbackStep extends IAction<any, any, any, any>,
+    FallbackStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'], fallbackStep: FallbackStep) {
@@ -322,7 +323,7 @@ export class Workflow<
     return this.loop(applyOperator, condition, fallbackStep, 'until');
   }
 
-  if<TStep extends IAction<any, any, any, any>>(condition: StepConfig<TStep, any, any, TTriggerSchema>['when']) {
+  if<TStep extends StepAction<any, any, any, any>>(condition: StepConfig<TStep, any, any, TTriggerSchema>['when']) {
     const lastStep = this.#steps[this.#lastStepStack[this.#lastStepStack.length - 1] ?? ''];
     if (!lastStep) {
       throw new Error('Condition requires a step to be executed after');
@@ -377,7 +378,7 @@ export class Workflow<
     return this;
   }
 
-  after<TStep extends IAction<any, any, any, any>>(steps: TStep | TStep[]) {
+  after<TStep extends StepAction<any, any, any, any>>(steps: TStep | TStep[]) {
     const stepsArray = Array.isArray(steps) ? steps : [steps];
     const stepKeys = stepsArray.map(step => this.#makeStepKey(step));
 

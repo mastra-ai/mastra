@@ -19,12 +19,12 @@ import type { CompositeVoice } from '../voice';
 
 export type { Message as AiMessageType } from 'ai';
 
-export type ToolsetsInput = Record<string, Record<string, ToolAction<any, any, any, any>>>;
+export type ToolsetsInput = Record<string, Record<string, ToolAction<any, any, any>>>;
 
-export type ToolsInput = Record<string, ToolAction<any, any, any, any>>;
+export type ToolsInput = Record<string, ToolAction<any, any, any>>;
 
 export interface AgentConfig<
-  TTools extends Record<string, ToolAction<any, any, any, any>> = Record<string, ToolAction<any, any, any, any>>,
+  TTools extends Record<string, ToolAction<any, any, any>> = Record<string, ToolAction<any, any, any>>,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > {
   name: string;

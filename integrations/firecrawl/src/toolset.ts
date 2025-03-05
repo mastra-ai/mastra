@@ -11,7 +11,7 @@ export class FirecrawlToolset extends OpenAPIToolset {
   readonly logoUrl = '';
   config: FirecrawlConfig;
 
-  readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
+  readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any>>;
 
   categories = ['dev-tools', 'ai', 'automation'];
   description = 'Firecrawl is a web scraping platform';
