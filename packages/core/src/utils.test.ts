@@ -237,3 +237,29 @@ describe('makeCoreTool', () => {
     expect(coreTool.execute).toBeUndefined();
   });
 });
+
+it('should log correctly for Vercel tool execution', async () => {
+  const mockLogger = {
+    debug: vi.fn(),
+    error: vi.fn(),
+  } as unknown as Logger;
+
+  const vercelTool = {
+    description: 'test',
+    parameters: { type: 'object', properties: {} },
+    execute: async () => ({}),
+  };
+
+  const coreTool = makeCoreTool(vercelTool, {
+    name: 'testTool',
+    logger: mockLogger,
+    agentName: 'testAgent',
+  });
+
+  await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
+
+  expect(mockLogger.debug).toHaveBeenCalledWith(
+    '[Agent:testAgent] - Executing Vercel tool testTool',
+    expect.any(Object),
+  );
+});
