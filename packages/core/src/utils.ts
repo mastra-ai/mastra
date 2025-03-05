@@ -277,29 +277,21 @@ export function isVercelTool(tool: any): tool is VercelTool {
   return (
     typeof tool === 'object' &&
     tool !== null &&
-    'type' in tool &&
-    tool.type === 'function' &&
-    'function' in tool &&
-    typeof tool.function === 'object' &&
-    tool.function !== null &&
-    'name' in tool.function &&
-    'description' in tool.function &&
-    'parameters' in tool.function
+    'parameters' in tool &&
+    // Optional checks
+    (!('type' in tool) || tool.type === undefined || tool.type === 'function')
   );
 }
 
 type ToolExecuteFn = (args: any, options?: any) => Promise<any>;
 
-interface BaseToolOptions {
+interface ToolOptions {
   name: string;
   runId?: string;
   threadId?: string;
   resourceId?: string;
   logger: Logger;
   description?: string;
-}
-
-interface MastraToolOptions extends BaseToolOptions {
   mastra?: MastraPrimitives;
   memory?: MastraMemory;
 }
@@ -309,9 +301,11 @@ interface LogMessageOptions {
   error: string;
 }
 
+type ToolToConvert = VercelTool | ToolAction<any, any, any, any>;
+
 export function wrapToolExecution(
   execFunction: ToolExecuteFn,
-  options: BaseToolOptions,
+  options: ToolOptions,
   logMessageOptions?: LogMessageOptions,
 ) {
   const { name, logger } = options;
@@ -331,66 +325,56 @@ export function wrapToolExecution(
   };
 }
 
-export function makeVercelTool(
-  tool: VercelTool,
-  options: BaseToolOptions,
+/**
+ * Converts a Vercel Tool or Mastra Tool into a CoreTool format
+ * @param tool - The tool to convert (either VercelTool or ToolAction)
+ * @param options - Tool options including Mastra-specific settings
+ * @param logMessageOptions - Optional configuration for logging behavior
+ * @returns A CoreTool that can be used by the system
+ */
+export function makeCoreTool(
+  tool: ToolToConvert,
+  options: ToolOptions,
   logMessageOptions?: LogMessageOptions,
 ): CoreTool {
-  return {
-    description: tool.function.description,
-    parameters: resolveSerializedZodOutput(jsonSchemaToZod(tool.function.parameters)),
-    execute: tool.exec
-      ? wrapToolExecution(
-          tool.exec,
-          {
-            ...options,
-            description: tool.function.description,
-          },
-          logMessageOptions,
-        )
-      : undefined,
+  // Helper to get parameters based on tool type
+  const getParameters = (t: ToolToConvert) => {
+    if (isVercelTool(t)) {
+      return t.parameters instanceof z.ZodType
+        ? t.parameters
+        : resolveSerializedZodOutput(jsonSchemaToZod(t.parameters));
+    }
+    return t.inputSchema;
   };
-}
+  // Helper to create execute function based on tool type
+  const createExecute = (t: ToolToConvert) => {
+    if (!t.execute) return undefined;
 
-export function makeMastraTool(
-  tool: ToolAction<any, any, any, any>,
-  options: MastraToolOptions,
-  logMessageOptions?: LogMessageOptions,
-): CoreTool {
+    const execFn = async (args: any, execOptions: any) => {
+      if (isVercelTool(t)) {
+        return t?.execute?.(args, execOptions) ?? undefined;
+      }
+      return (
+        t?.execute?.(
+          {
+            context: args,
+            threadId: options.threadId,
+            resourceId: options.resourceId,
+            mastra: options.mastra,
+            memory: options.memory,
+            runId: options.runId,
+          },
+          execOptions,
+        ) ?? undefined
+      );
+    };
+
+    return wrapToolExecution(execFn, { ...options, description: t.description }, logMessageOptions);
+  };
+
   return {
     description: tool.description!,
-    parameters: tool.inputSchema,
-    execute: tool.execute
-      ? wrapToolExecution(
-          async (args: any, execOptions: any) =>
-            tool?.execute?.(
-              {
-                context: args,
-                threadId: options.threadId,
-                resourceId: options.resourceId,
-                mastra: options.mastra,
-                memory: options.memory,
-                runId: options.runId,
-              },
-              execOptions,
-            ) ?? undefined,
-          {
-            ...options,
-            description: tool.description,
-          },
-          logMessageOptions,
-        )
-      : undefined,
+    parameters: getParameters(tool),
+    execute: createExecute(tool),
   };
-}
-
-export function makeCoreTool(
-  tool: ToolAction<any, any, any, any> | VercelTool,
-  options: MastraToolOptions,
-  logMessageOptions?: LogMessageOptions,
-): CoreTool {
-  if (isVercelTool(tool)) {
-    return makeVercelTool(tool, options, logMessageOptions);
-  }
-  return makeMastraTool(tool, options, logMessageOptions);
 }

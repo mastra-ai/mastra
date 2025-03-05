@@ -492,7 +492,7 @@ export class Agent<
         if (tool) {
           const logMessageOptions = isVercelTool(tool)
             ? {
-                start: `[Agent:${this.name}] - Executing Vercel tool ${tool.function.name}`,
+                start: `[Agent:${this.name}] - Executing Vercel tool ${k}`,
                 error: `[Agent:${this.name}] - Failed Vercel tool execution`,
               }
             : {

@@ -1,19 +1,10 @@
-import type { ToolExecutionOptions } from 'ai';
-import type { JSONSchema7 } from 'json-schema';
+import type { ToolExecutionOptions, Tool } from 'ai';
 import type { ZodSchema, z } from 'zod';
 
 import type { IAction, IExecutionContext } from '../action';
 import type { WorkflowContext } from '../workflows';
 
-export type VercelTool = {
-  type: 'function';
-  function: {
-    name: string;
-    description: string;
-    parameters: JSONSchema7;
-  };
-  exec?: (args: any) => Promise<any>;
-};
+export type VercelTool = Tool;
 
 export type CoreTool = {
   description?: string;
