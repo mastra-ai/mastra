@@ -15,7 +15,7 @@ import type {
   UserContent,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema, z  } from 'zod';
+import type { ZodSchema, z } from 'zod';
 
 import type { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
@@ -29,7 +29,7 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
-import type { CoreTool, ToolAction } from '../tools/types';
+import type { CoreTool } from '../tools/types';
 import { makeCoreTool, createMastraProxy } from '../utils';
 import type { CompositeVoice } from '../voice';
 

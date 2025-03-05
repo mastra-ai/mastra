@@ -2,12 +2,9 @@ import type { ToolExecutionOptions, Tool } from 'ai';
 import type { ZodSchema, z } from 'zod';
 
 import type { IAction, IExecutionContext, MastraPrimitives } from '../action';
-<<<<<<< HEAD
+import type { Mastra } from '../mastra';
 
 export type VercelTool = Tool;
-=======
-import type { Mastra } from '../mastra';
->>>>>>> 550d9e77e26674ced6dba8b6655aee49bc42b593
 
 export type CoreTool = {
   description?: string;
