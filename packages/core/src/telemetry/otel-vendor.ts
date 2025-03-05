@@ -7,6 +7,7 @@ export { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentation
 export { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 export { Resource } from '@opentelemetry/resources';
 export { OTLPTraceExporter as OTLPHttpExporter } from '@opentelemetry/exporter-trace-otlp-http';
+export { OTLPTraceExporter as OTLPGrpcExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
 export {
   ParentBasedSampler,
   TraceIdRatioBasedSampler,
