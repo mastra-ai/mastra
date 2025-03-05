@@ -9,10 +9,12 @@ import type {
   QueryVectorArgs,
   UpsertVectorArgs,
 } from '@mastra/core/vector';
-import type { VectorFilter } from '@mastra/core/vector/filter';
-import { ChromaClient } from 'chromadb';
 
+import { ChromaClient, Collection } from 'chromadb';
 import { ChromaFilterTranslator } from './filter';
+
+import type { UpdateRecordsParams } from 'chromadb';
+import type { VectorFilter } from '@mastra/core/vector/filter';
 
 interface ChromaUpsertVectorParams extends UpsertVectorParams {
   documents?: string[];
@@ -183,5 +185,38 @@ export class ChromaVector extends MastraVector {
   async deleteIndex(indexName: string): Promise<void> {
     await this.client.deleteCollection({ name: indexName });
     this.collections.delete(indexName);
+  }
+
+  async updateIndexById(
+    indexName: string,
+    id: string,
+    update: { vector?: number[]; metadata?: Record<string, any> },
+  ): Promise<void> {
+    if (!update.vector && !update.metadata) {
+      throw new Error('No updates provided');
+    }
+
+    const collection: Collection = await this.getCollection(indexName, true);
+
+    const updateOptions: UpdateRecordsParams = { ids: [id] };
+
+    if (update?.vector) {
+      updateOptions.embeddings = [update.vector];
+    }
+
+    if (update?.metadata) {
+      updateOptions.metadatas = [update.metadata];
+    }
+
+    return await collection.update(updateOptions);
+  }
+
+  async deleteIndexById(indexName: string, id: string): Promise<void> {
+    try {
+      const collection: Collection = await this.getCollection(indexName, true);
+      await collection.delete({ ids: [id] });
+    } catch (error: any) {
+      throw new Error(`Failed to delete index by id: ${id} for index name: ${indexName}: ${error.message}`);
+    }
   }
 }
