@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { join } from 'path';
 import { existsSync, mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
+import { join } from 'path';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { LibSQLVector } from './index';
 
 describe('LibSQLVector URL rewriting', () => {
@@ -163,4 +163,5 @@ describe('LibSQLVector URL rewriting', () => {
     expect(existsSync(join(outputDir, 'test.db'))).toBe(false);
     expect(existsSync(join(parentDir, 'test.db'))).toBe(false);
   });
-}); 
+});
+

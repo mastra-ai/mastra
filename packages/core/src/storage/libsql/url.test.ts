@@ -1,10 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { join, dirname } from 'node:path';
-import { mkdtempSync, rmSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
+import { rmSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import { LibSQLStore } from './index';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+
 import { TABLE_WORKFLOW_SNAPSHOT } from '../constants';
+import { LibSQLStore } from './index';
 
 interface WorkflowSnapshot {
   workflow_name: string;
@@ -89,36 +90,40 @@ describe('LibSQLStore URL rewriting', () => {
       // First, create and write to the database from project root
       const store1 = new LibSQLStore({ config: { url: 'file:test.db' } });
       await store1.init();
-      
+
       // Write a test record
       await store1.batchInsert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
-        records: [{
-          workflow_name: 'test-workflow',
-          run_id: 'test-1',
-          snapshot: JSON.stringify({ test: 'data1' }),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }]
+        records: [
+          {
+            workflow_name: 'test-workflow',
+            run_id: 'test-1',
+            snapshot: JSON.stringify({ test: 'data1' }),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
       });
 
       // Switch to .mastra/output and write another record
       const mastraOutputDir = join(tmpDir, '.mastra', 'output');
       mkdirSync(mastraOutputDir, { recursive: true });
       process.chdir(mastraOutputDir);
-      
+
       const store2 = new LibSQLStore({ config: { url: 'file:test.db' } });
       await store2.init();
-      
+
       await store2.batchInsert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
-        records: [{
-          workflow_name: 'test-workflow',
-          run_id: 'test-2',
-          snapshot: JSON.stringify({ test: 'data2' }),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }]
+        records: [
+          {
+            workflow_name: 'test-workflow',
+            run_id: 'test-2',
+            snapshot: JSON.stringify({ test: 'data2' }),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
       });
 
       // Verify database file exists only in project root
@@ -130,7 +135,7 @@ describe('LibSQLStore URL rewriting', () => {
       // Query the database to verify both records exist
       const record1 = await store2.load<WorkflowSnapshot>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
-        keys: { workflow_name: 'test-workflow', run_id: 'test-1' }
+        keys: { workflow_name: 'test-workflow', run_id: 'test-1' },
       });
       expect(record1).toBeTruthy();
       if (record1) {
@@ -141,7 +146,7 @@ describe('LibSQLStore URL rewriting', () => {
 
       const record2 = await store2.load<WorkflowSnapshot>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
-        keys: { workflow_name: 'test-workflow', run_id: 'test-2' }
+        keys: { workflow_name: 'test-workflow', run_id: 'test-2' },
       });
       expect(record2).toBeTruthy();
       if (record2) {
@@ -151,4 +156,5 @@ describe('LibSQLStore URL rewriting', () => {
       }
     });
   });
-}); 
+});
+
