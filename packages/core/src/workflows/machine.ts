@@ -920,6 +920,14 @@ export class Machine<
       });
     }
 
+    if ('not' in condition) {
+      baseResult = !this.#evaluateCondition(condition.not, context);
+      this.logger.debug(`Evaluated NOT condition`, {
+        baseResult,
+        runId: this.#runId,
+      });
+    }
+
     const finalResult = baseResult && andBranchResult && orBranchResult;
 
     this.logger.debug(`Evaluated condition`, {
