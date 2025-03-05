@@ -89,6 +89,29 @@ describe('LibSQLVector URL rewriting', () => {
     expect(existsSync(join(parentDir, 'test.db'))).toBe(false);
   });
 
+  it('should create db file in .mastra directory when explicitly specified and running from .mastra/output', async () => {
+    const mastraDir = join(tmpDir, '.mastra');
+    const mastraOutputDir = join(mastraDir, 'output');
+    mkdirSync(mastraOutputDir, { recursive: true });
+    process.chdir(mastraOutputDir);
+
+    const vector = new LibSQLVector({
+      connectionUrl: 'file:.mastra/test.db',
+    });
+
+    // Create an index to ensure the database file is created
+    await vector.createIndex({
+      indexName: 'test_index',
+      dimension: 3,
+    });
+
+    // Check that the database file is created in the .mastra directory
+    expect(existsSync(join(tmpDir, 'test.db'))).toBe(false);
+    expect(existsSync(join(mastraDir, 'test.db'))).toBe(true);
+    expect(existsSync(join(mastraOutputDir, 'test.db'))).toBe(false);
+    expect(existsSync(join(parentDir, 'test.db'))).toBe(false);
+  });
+
   it('should maintain a single database file and data consistency when switching working directories', async () => {
     // Create a test vector
     const testVector = [1, 2, 3];
