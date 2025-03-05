@@ -1031,6 +1031,88 @@ describe('Workflow', async () => {
       expect(result.results.step5).toEqual({ status: 'success', output: { result: 'success5' } });
     });
 
+    it('should run compound subscribers', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step3Action = vi.fn<any>().mockResolvedValue({ result: 'success3' });
+      const step4Action = vi.fn<any>().mockResolvedValue({ result: 'success4' });
+      const step5Action = vi.fn<any>().mockResolvedValue({ result: 'success5' });
+
+      const step1 = new Step({ id: 'step1', execute: step1Action, outputSchema: z.object({ status: z.string() }) });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
+      const step3 = new Step({ id: 'step3', execute: step3Action });
+      const step4 = new Step({ id: 'step4', execute: step4Action });
+      const step5 = new Step({ id: 'step5', execute: step5Action });
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow.step(step1).then(step2).then(step5).after([step1, step5]).step(step3).then(step4).then(step5).commit();
+
+      const run = workflow.createRun();
+      const result = await run.start();
+
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).toHaveBeenCalled();
+      expect(step3Action).toHaveBeenCalled();
+      expect(step4Action).toHaveBeenCalled();
+      expect(step5Action).toHaveBeenCalledTimes(2);
+      expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success1' } });
+      expect(result.results.step2).toEqual({ status: 'success', output: { result: 'success2' } });
+      expect(result.results.step5).toEqual({ status: 'success', output: { result: 'success5' } });
+    });
+
+    it('should run complex compound subscribers', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step3Action = vi.fn<any>().mockResolvedValue({ result: 'success3' });
+      const step4Action = vi.fn<any>().mockResolvedValue({ result: 'success4' });
+      const step5Action = vi.fn<any>().mockResolvedValue({ result: 'success5' });
+      const step6Action = vi.fn<any>().mockResolvedValue({ result: 'success6' });
+      const step7Action = vi.fn<any>().mockResolvedValue({ result: 'success7' });
+      const step8Action = vi.fn<any>().mockResolvedValue({ result: 'success8' });
+
+      const step1 = new Step({ id: 'step1', execute: step1Action, outputSchema: z.object({ status: z.string() }) });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
+      const step3 = new Step({ id: 'step3', execute: step3Action });
+      const step4 = new Step({ id: 'step4', execute: step4Action });
+      const step5 = new Step({ id: 'step5', execute: step5Action });
+      const step6 = new Step({ id: 'step6', execute: step6Action });
+      const step7 = new Step({ id: 'step7', execute: step7Action });
+      const step8 = new Step({ id: 'step8', execute: step8Action });
+
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow
+        .step(step1)
+        .then(step2)
+        .then(step5)
+        .after([step1, step5])
+        .step(step3)
+        .then(step4)
+        .then(step5)
+        .after([step3, step4])
+        .step(step6)
+        .then(step8)
+        .then(step7)
+        .after(step5)
+        .step(step8)
+        .commit();
+
+      const run = workflow.createRun();
+      const result = await run.start();
+
+      console.log({ result });
+
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).toHaveBeenCalled();
+      expect(step3Action).toHaveBeenCalled();
+      expect(step4Action).toHaveBeenCalled();
+      expect(step5Action).toHaveBeenCalledTimes(2);
+      expect(step6Action).toHaveBeenCalled();
+      expect(step7Action).toHaveBeenCalled();
+      expect(step8Action).toHaveBeenCalledTimes(2);
+      expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success1' } });
+      expect(result.results.step2).toEqual({ status: 'success', output: { result: 'success2' } });
+      expect(result.results.step5).toEqual({ status: 'success', output: { result: 'success5' } });
+    });
+
     // don't unskip this please.. actually unskip it 😈
     it.skip('should spawn cyclic subscribers for each step', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });

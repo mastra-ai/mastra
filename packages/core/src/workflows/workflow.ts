@@ -18,10 +18,10 @@ import type {
   WorkflowOptions,
   WorkflowRunState,
 } from './types';
+import { WhenConditionReturnValue } from './types';
 import { isVariableReference, updateStepInHierarchy } from './utils';
 import { WorkflowInstance } from './workflow-instance';
 import type { WorkflowResultReturn } from './workflow-instance';
-import { WhenConditionReturnValue } from './types';
 export class Workflow<
   TSteps extends Step<any, any, any>[] = any,
   TTriggerSchema extends z.ZodType<any> = any,
@@ -316,13 +316,17 @@ export class Workflow<
     return this.loop(applyOperator, condition, fallbackStep);
   }
 
-  after<TStep extends IAction<any, any, any, any>>(step: TStep) {
-    const stepKey = this.#makeStepKey(step);
-    this.#afterStepStack.push(stepKey);
+  after<TStep extends IAction<any, any, any, any>>(steps: TStep | TStep[]) {
+    const stepsArray = Array.isArray(steps) ? steps : [steps];
+    const stepKeys = stepsArray.map(step => this.#makeStepKey(step));
 
-    // Initialize subscriber array for this step if it doesn't exist
-    if (!this.#stepSubscriberGraph[stepKey]) {
-      this.#stepSubscriberGraph[stepKey] = { initial: [] };
+    // Create a compound key for multiple steps
+    const compoundKey = stepKeys.join('&&');
+    this.#afterStepStack.push(compoundKey);
+
+    // Initialize subscriber array for this compound step if it doesn't exist
+    if (!this.#stepSubscriberGraph[compoundKey]) {
+      this.#stepSubscriberGraph[compoundKey] = { initial: [] };
     }
 
     return this as Omit<typeof this, 'then' | 'after'>;
@@ -367,7 +371,6 @@ export class Workflow<
    * @returns this instance for method chaining
    */
   commit() {
-    // this.#validateWorkflow();
     return this;
   }
 
