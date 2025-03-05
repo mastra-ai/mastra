@@ -318,12 +318,16 @@ export class Workflow<
   }
 
   after<TStep extends StepAction<any, any, any, any>>(step: TStep) {
-    const stepKey = this.#makeStepKey(step);
-    this.#afterStepStack.push(stepKey);
+    const stepsArray = Array.isArray(steps) ? steps : [steps];
+    const stepKeys = stepsArray.map(step => this.#makeStepKey(step));
 
-    // Initialize subscriber array for this step if it doesn't exist
-    if (!this.#stepSubscriberGraph[stepKey]) {
-      this.#stepSubscriberGraph[stepKey] = { initial: [] };
+    // Create a compound key for multiple steps
+    const compoundKey = stepKeys.join('&&');
+    this.#afterStepStack.push(compoundKey);
+
+    // Initialize subscriber array for this compound step if it doesn't exist
+    if (!this.#stepSubscriberGraph[compoundKey]) {
+      this.#stepSubscriberGraph[compoundKey] = { initial: [] };
     }
 
     return this as Omit<typeof this, 'then' | 'after'>;
@@ -368,7 +372,6 @@ export class Workflow<
    * @returns this instance for method chaining
    */
   commit() {
-    // this.#validateWorkflow();
     return this;
   }
 
