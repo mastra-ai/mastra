@@ -28,12 +28,21 @@ export class CloudflareStore extends MastraStorage {
   private async getNamespaceIdByName(namespaceName: string): Promise<string | null> {
     try {
       const response = await this.client.kv.namespaces.list({ account_id: this.accountId });
-      console.log(response);
       const namespace = response.result.find(ns => ns.title === namespaceName);
       return namespace ? namespace.id : null;
     } catch (error: any) {
       console.error('Error fetching namespace ID:', error);
-      throw new Error(`Failed to fetch namespace ID for ${namespaceName}: ${error.message}`);
+      try {
+        // List all namespaces and log them to help debug
+        const allNamespaces = await this.client.kv.namespaces.list({ account_id: this.accountId });
+        console.log(
+          'Available namespaces:',
+          allNamespaces.result.map(ns => ({ title: ns.title, id: ns.id })),
+        );
+        return null;
+      } catch {
+        return null;
+      }
     }
   }
 
@@ -45,6 +54,13 @@ export class CloudflareStore extends MastraStorage {
       });
       return response.id;
     } catch (error: any) {
+      // Check if the error is because it already exists
+      if (error.message && error.message.includes('already exists')) {
+        // Try to get it again since we know it exists
+        const namespaces = await this.client.kv.namespaces.list({ account_id: this.accountId });
+        const namespace = namespaces.result.find(ns => ns.title === namespaceName);
+        if (namespace) return namespace.id;
+      }
       console.error('Error creating namespace:', error);
       throw new Error(`Failed to create namespace ${namespaceName}: ${error.message}`);
     }
@@ -91,11 +107,24 @@ export class CloudflareStore extends MastraStorage {
 
   private async getKV(tableName: TABLE_NAMES, key: string): Promise<string | null> {
     try {
+      console.log('getKV', tableName, key);
       const namespaceId = await this.getNamespaceId(tableName);
-      const response = await this.client.kv.namespaces.values.get(namespaceId, key, {
-        account_id: this.accountId,
-      });
-      return await response.text();
+      console.log('namespaceId', namespaceId);
+
+      try {
+        const response = await this.client.kv.namespaces.values.get(namespaceId, key, {
+          account_id: this.accountId,
+        });
+        const text = await response.text();
+        return text === '' ? null : text;
+      } catch (error: any) {
+        // Handle "key not found" error gracefully
+        if (error.message && error.message.includes('key not found')) {
+          console.log(`Key not found: ${key}`);
+          return null;
+        }
+        throw error; // Rethrow other errors
+      }
     } catch (error: any) {
       console.error('Error getting KV:', error);
       throw new Error(`Failed to get KV for table ${tableName}, key ${key}: ${error.message}`);
@@ -241,18 +270,38 @@ export class CloudflareStore extends MastraStorage {
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
     const key = this.getKey(tableName, keys);
     const data = await this.getKV(tableName, key);
-    return data ? (JSON.parse(data) as R) : null;
+
+    if (!data) return null;
+
+    try {
+      return JSON.parse(data) as R;
+    } catch (error) {
+      console.error(`Failed to parse JSON data for key ${key}:`, error);
+      console.debug('Raw data:', data);
+      return null;
+    }
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     const thread = await this.load<StorageThreadType>({ tableName: TABLE_THREADS, keys: { id: threadId } });
     if (!thread) return null;
-    return {
-      ...thread,
-      createdAt: this.ensureDate(thread.createdAt)!,
-      updatedAt: this.ensureDate(thread.updatedAt)!,
-      metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-    };
+
+    try {
+      return {
+        ...thread,
+        createdAt: this.ensureDate(thread.createdAt)!,
+        updatedAt: this.ensureDate(thread.updatedAt)!,
+        metadata:
+          typeof thread.metadata === 'string'
+            ? thread.metadata
+              ? JSON.parse(thread.metadata)
+              : {}
+            : thread.metadata || {},
+      };
+    } catch (error) {
+      console.error(`Error processing thread ${threadId}:`, error);
+      return null;
+    }
   }
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
