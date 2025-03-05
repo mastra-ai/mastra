@@ -1,7 +1,7 @@
 {
   "name": "mastra",
-  "version": "0.2.7-alpha.2",
-  "license": "MIT",
+  "version": "0.2.9-alpha.4",
+  "license": "ISC",
   "description": "cli for mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -20,7 +20,7 @@
     "build:watch": "pnpm run build:lib --watch --onSuccess \"pnpm run copy-starter-files && pnpm run copy-templates\"",
     "copy-starter-files": "cpy \"src/starter-files/**/*\" \"dist/starter-files\"",
     "copy-templates": "cpy \"src/templates/**/*\" \"dist/templates/\"",
-    "build:playground": "cd src/playground && pnpm build",
+    "build:playground": "cd ../playground-ui && pnpm build && cd ../cli/src/playground && pnpm build",
     "dev:playground": "cd src/playground && pnpm dev",
     "test": "vitest run",
     "test:watch": "vitest watch",

@@ -6,8 +6,8 @@ import { Header } from '@/components/ui/header';
 
 export function AgentHeader({ agentName, agentId }: { agentName: string; agentId: string }) {
   const isEvalsPage = useMatch(`/agents/${agentId}/evals`);
-  const isChatPage = useMatch(`/agents/${agentId}/chat`);
   const isTracesPage = useMatch(`/agents/${agentId}/traces`);
+  const isChatPage = useMatch(`/agents/${agentId}/chat`) || (!isEvalsPage && !isTracesPage);
   const navigate = useNavigate();
 
   const breadcrumbItems = [
@@ -24,23 +24,26 @@ export function AgentHeader({ agentName, agentId }: { agentName: string; agentId
   return (
     <Header title={<Breadcrumb items={breadcrumbItems} />}>
       <Button
-        variant={isChatPage ? 'primary' : 'outline'}
+        variant={isChatPage ? 'secondary' : 'outline'}
         size="slim"
         onClick={() => navigate(`/agents/${agentId}/chat`)}
+        className="rounded-[0.125rem] px-2"
       >
         Chat
       </Button>
       <Button
-        variant={isTracesPage ? 'primary' : 'outline'}
+        variant={isTracesPage ? 'secondary' : 'outline'}
         size="slim"
         onClick={() => navigate(`/agents/${agentId}/traces`)}
+        className="rounded-[0.125rem] px-2"
       >
         Traces
       </Button>
       <Button
-        variant={isEvalsPage ? 'primary' : 'outline'}
+        variant={isEvalsPage ? 'secondary' : 'outline'}
         size="slim"
         onClick={() => navigate(`/agents/${agentId}/evals`)}
+        className="rounded-[0.125rem] px-2"
       >
         Evals
       </Button>

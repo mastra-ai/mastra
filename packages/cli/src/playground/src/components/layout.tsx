@@ -1,23 +1,25 @@
 import React from 'react';
 
-import { Sidebar } from './ui/sidebar';
+import { AppSidebar } from './ui/app-sidebar';
+import { SidebarProvider } from './ui/sidebar';
 import { Toaster } from './ui/sonner';
 import { ThemeProvider } from './ui/theme-provider';
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   return (
-    <ThemeProvider defaultTheme="dark" attribute="class">
-      <Toaster position="bottom-right" />
-      <main className="bg-mastra-bg-1 grid h-full w-full grid-cols-[15rem_minmax(0,_1fr)] overflow-clip">
-        <div className="z-20 h-full">
-          <div className="h-full">
-            <Sidebar />
-          </div>
-        </div>
-        <div className="bg-mastra-bg-2 grid h-[calc(100vh-1rem)] relative border-mastra-border-1 rounded-xs border-thin m-2 overflow-hidden border-solid">
-          {children}
-        </div>
-      </main>
-    </ThemeProvider>
+    <main className="bg-black overflow-hidden font-sans">
+      <ThemeProvider defaultTheme="dark" attribute="class">
+        <SidebarProvider>
+          <AppSidebar />
+          <section className="py-3 pr-3 w-full h-full">
+            <div className="w-full h-full overflow-hidden rounded-sm border-[0.5px] border-[#303030] bg-[#0F0F0F]">
+              {children}
+            </div>
+          </section>
+
+          <Toaster position="bottom-right" />
+        </SidebarProvider>
+      </ThemeProvider>
+    </main>
   );
 };

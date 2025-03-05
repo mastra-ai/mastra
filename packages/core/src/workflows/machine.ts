@@ -10,26 +10,27 @@ import type { IAction, MastraPrimitives } from '../action';
 import type { Logger } from '../logger';
 
 import type { Step } from './step';
-import type {
-  DependencyCheckOutput,
-  ResolverFunctionInput,
-  ResolverFunctionOutput,
-  RetryConfig,
-  StepCondition,
-  StepDef,
-  StepGraph,
-  StepNode,
-  StepResult,
-  StepVariableType,
-  WorkflowActionParams,
-  WorkflowActions,
-  WorkflowActors,
-  WorkflowContext,
-  WorkflowEvent,
-  WorkflowState,
+import {
+  WhenConditionReturnValue,
+  type DependencyCheckOutput,
+  type ResolverFunctionInput,
+  type ResolverFunctionOutput,
+  type RetryConfig,
+  type StepCondition,
+  type StepDef,
+  type StepGraph,
+  type StepNode,
+  type StepResult,
+  type StepVariableType,
+  type WorkflowActionParams,
+  type WorkflowActions,
+  type WorkflowActors,
+  type WorkflowContext,
+  type WorkflowEvent,
+  type WorkflowState,
 } from './types';
 import {
-  getActivePathsAndStatus,
+  getResultActivePaths,
   getStepResult,
   getSuspendedPaths,
   isErrorEvent,
@@ -111,7 +112,7 @@ export class Machine<
     snapshot?: Snapshot<any>;
   } = {}): Promise<{
     results: Record<string, StepResult<any>>;
-    activePaths: Map<string, { status: string }>;
+    activePaths: Map<string, { status: string; suspendPayload?: any }>;
   }> {
     if (snapshot) {
       // First, let's log the incoming snapshot for debugging
@@ -197,10 +198,9 @@ export class Machine<
           this.#executionSpan?.end();
           resolve({
             results: state.context.steps,
-            activePaths: getActivePathsAndStatus(state.value as Record<string, string>).reduce((acc, curr) => {
-              acc.set(curr.stepId, { status: curr.status });
-              return acc;
-            }, new Map<string, { status: string }>()),
+            activePaths: getResultActivePaths(
+              state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
+            ),
           });
         } catch (error) {
           // If snapshot persistence fails, we should still resolve
@@ -211,10 +211,9 @@ export class Machine<
           this.#executionSpan?.end();
           resolve({
             results: state.context.steps,
-            activePaths: getActivePathsAndStatus(state.value as Record<string, string>).reduce((acc, curr) => {
-              acc.set(curr.stepId, { status: curr.status });
-              return acc;
-            }, new Map<string, { status: string }>()),
+            activePaths: getResultActivePaths(
+              state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
+            ),
           });
         }
       });
@@ -323,15 +322,16 @@ export class Machine<
 
         const result = await stepNode.config.handler({
           context: resolvedData,
-          suspend: async () => {
+          suspend: async (payload?: any) => {
             await this.#workflowInstance.suspend(stepNode.step.id, this);
             if (this.#actor) {
               // Update context with current result
               context.steps[stepNode.step.id] = {
                 status: 'suspended',
+                suspendPayload: payload,
               };
               this.logger.debug(`Sending SUSPENDED event for step ${stepNode.step.id}`);
-              this.#actor?.send({ type: 'SUSPENDED', stepId: stepNode.step.id });
+              this.#actor?.send({ type: 'SUSPENDED', suspendPayload: payload, stepId: stepNode.step.id });
             } else {
               this.logger.debug(`Actor not available for step ${stepNode.step.id}`);
             }
@@ -387,7 +387,7 @@ export class Machine<
         });
 
         if (typeof stepConfig?.when === 'function') {
-          const conditionMet = await stepConfig.when({
+          let conditionMet = await stepConfig.when({
             context: {
               ...context,
               getStepResult: ((stepId: string) => {
@@ -403,7 +403,12 @@ export class Machine<
             },
             mastra: this.#mastra,
           });
-          if (conditionMet) {
+          if (conditionMet === WhenConditionReturnValue.ABORT) {
+            conditionMet = false;
+          } else if (conditionMet === WhenConditionReturnValue.CONTINUE_FAILED) {
+            // TODO: send another kind of event instead
+            return { type: 'CONDITIONS_SKIPPED' as const };
+          } else if (conditionMet) {
             this.logger.debug(`Condition met for step ${stepNode.step.id}`, {
               stepId: stepNode.step.id,
               runId: this.#runId,
@@ -633,6 +638,12 @@ export class Machine<
               },
               {
                 guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
+                  return event.output.type === 'CONDITIONS_SKIPPED';
+                },
+                target: 'completed',
+              },
+              {
+                guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
                   return event.output.type === 'CONDITION_FAILED';
                 },
                 target: 'failed',
@@ -689,13 +700,16 @@ export class Machine<
               });
             },
             assign({
-              steps: ({ context }: { context: WorkflowContext }) => ({
-                ...context.steps,
-                [stepNode.step.id]: {
-                  ...(context?.steps?.[stepNode.step.id] || {}),
-                  status: 'suspended',
-                },
-              }),
+              steps: ({ context, event }: { context: WorkflowContext; event: WorkflowEvent }) => {
+                return {
+                  ...context.steps,
+                  [stepNode.step.id]: {
+                    ...(context?.steps?.[stepNode.step.id] || {}),
+                    status: 'suspended',
+                    suspendPayload: event.type === 'SUSPENDED' ? event.suspendPayload : undefined,
+                  },
+                };
+              },
             }),
           ],
         },
@@ -711,12 +725,15 @@ export class Machine<
               target: 'suspended',
               actions: [
                 assign({
-                  steps: ({ context }: { context: WorkflowContext }) => ({
-                    ...context.steps,
-                    [stepNode.step.id]: {
-                      status: 'suspended',
-                    },
-                  }),
+                  steps: ({ context, event }: { context: WorkflowContext; event: WorkflowEvent }) => {
+                    return {
+                      ...context.steps,
+                      [stepNode.step.id]: {
+                        status: 'suspended',
+                        suspendPayload: event.type === 'SUSPENDED' ? event.suspendPayload : undefined,
+                      },
+                    };
+                  },
                 }),
               ],
             },

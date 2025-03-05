@@ -21,10 +21,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Install dane cli
-        run: pnpm install -g @mastra/dane@alpha
+        run: pnpm install -g @mastra/dane
 
       - name: Label Issue
         run: dane issue-labeler

@@ -5,8 +5,8 @@ import type {
   QueryResult,
   QueryVectorParams,
   UpsertVectorParams,
-  VectorFilter,
 } from '@mastra/core/vector';
+import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Index } from '@upstash/vector';
 
 import { UpstashFilterTranslator } from './filter';

@@ -1,5 +1,132 @@
 # mastra
 
+## 0.2.9-alpha.4
+
+### Patch Changes
+
+- 144b3d5: Update traces table UI, agent Chat UI
+  Fix get workflows breaking
+- Updated dependencies [d79aedf]
+- Updated dependencies [144b3d5]
+  - @mastra/core@0.5.0-alpha.4
+  - @mastra/deployer@0.1.8-alpha.4
+
+## 0.2.9-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [3d0e290]
+  - @mastra/core@0.5.0-alpha.3
+  - @mastra/deployer@0.1.8-alpha.3
+
+## 0.2.9-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [02ffb7b]
+  - @mastra/core@0.5.0-alpha.2
+  - @mastra/deployer@0.1.8-alpha.2
+
+## 0.2.9-alpha.1
+
+### Patch Changes
+
+- e5149bb: Fix playground-ui agent-evals tab-content
+- Updated dependencies [dab255b]
+  - @mastra/core@0.5.0-alpha.1
+  - @mastra/deployer@0.1.8-alpha.1
+
+## 0.2.9-alpha.0
+
+### Patch Changes
+
+- 5fae49e: Configurable timeout on npm create mastra
+- 960690d: Improve client-js workflow watch dx
+- 62565c1: --no-timeout npm create mastra flag
+- Updated dependencies [59df7b6]
+- Updated dependencies [29f3a82]
+- Updated dependencies [59df7b6]
+- Updated dependencies [c2dde91]
+- Updated dependencies [731dd8a]
+- Updated dependencies [960690d]
+- Updated dependencies [c139344]
+  - @mastra/core@0.5.0-alpha.0
+  - @mastra/deployer@0.1.8-alpha.0
+
+## 0.2.8
+
+### Patch Changes
+
+- Updated dependencies [1da20e7]
+- Updated dependencies [30a4c29]
+- Updated dependencies [e1e2705]
+  - @mastra/core@0.4.4
+  - @mastra/deployer@0.1.7
+
+## 0.2.8-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [1da20e7]
+- Updated dependencies [30a4c29]
+- Updated dependencies [e1e2705]
+  - @mastra/core@0.4.4-alpha.0
+  - @mastra/deployer@0.1.7-alpha.0
+
+## 0.2.7
+
+### Patch Changes
+
+- 8d4e0d0: build playground-ui with cli
+- 7a64aff: playground-ui lib package to enhance dev/cloud ui unification
+- b24970d: Added Mastra svg favicon to playground
+- e5a0c67: Fix polling on dev traces
+- 7a0866e: Use non-crypto uuid function in playground, to allow for local urls like local.lan:4111 during development
+- bb4f447: Add support for commonjs
+- Updated dependencies [0d185b1]
+- Updated dependencies [ed55f1d]
+- Updated dependencies [06aa827]
+- Updated dependencies [80cdd76]
+- Updated dependencies [0fd78ac]
+- Updated dependencies [2512a93]
+- Updated dependencies [e62de74]
+- Updated dependencies [0d25b75]
+- Updated dependencies [fd14a3f]
+- Updated dependencies [8d13b14]
+- Updated dependencies [3f369a2]
+- Updated dependencies [3ee4831]
+- Updated dependencies [4d4e1e1]
+- Updated dependencies [bb4f447]
+- Updated dependencies [108793c]
+- Updated dependencies [5f28f44]
+- Updated dependencies [dabecf4]
+  - @mastra/core@0.4.3
+  - @mastra/deployer@0.1.6
+
+## 0.2.7-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [dabecf4]
+  - @mastra/core@0.4.3-alpha.4
+  - @mastra/deployer@0.1.6-alpha.4
+
+## 0.2.7-alpha.3
+
+### Patch Changes
+
+- 8d4e0d0: build playground-ui with cli
+- 7a64aff: playground-ui lib package to enhance dev/cloud ui unification
+- bb4f447: Add support for commonjs
+- Updated dependencies [0fd78ac]
+- Updated dependencies [0d25b75]
+- Updated dependencies [fd14a3f]
+- Updated dependencies [3f369a2]
+- Updated dependencies [4d4e1e1]
+- Updated dependencies [bb4f447]
+  - @mastra/deployer@0.1.6-alpha.3
+  - @mastra/core@0.4.3-alpha.3
+
 ## 0.2.7-alpha.2
 
 ### Patch Changes

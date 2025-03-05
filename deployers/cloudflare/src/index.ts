@@ -59,7 +59,7 @@ export class CloudflareDeployer extends Deployer {
 
     const wranglerConfig: Record<string, any> = {
       name: cfWorkerName,
-      main: 'index.mjs',
+      main: './output/index.mjs',
       compatibility_date: '2024-12-02',
       compatibility_flags: ['nodejs_compat'],
       observability: {

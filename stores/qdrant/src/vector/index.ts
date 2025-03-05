@@ -5,9 +5,9 @@ import type {
   CreateIndexParams,
   UpsertVectorParams,
   QueryVectorParams,
-  VectorFilter,
   ParamsToArgs,
 } from '@mastra/core/vector';
+import type { VectorFilter } from '@mastra/core/vector/filter';
 import { QdrantClient } from '@qdrant/js-client-rest';
 import type { Schemas } from '@qdrant/js-client-rest';
 

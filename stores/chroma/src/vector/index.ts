@@ -5,20 +5,28 @@ import type {
   CreateIndexParams,
   UpsertVectorParams,
   QueryVectorParams,
-  VectorFilter,
   ParamsToArgs,
+  QueryVectorArgs,
+  UpsertVectorArgs,
 } from '@mastra/core/vector';
-import { ChromaClient } from 'chromadb';
 
+import { ChromaClient, Collection } from 'chromadb';
 import { ChromaFilterTranslator } from './filter';
+
+import type { UpdateRecordsParams } from 'chromadb';
+import type { VectorFilter } from '@mastra/core/vector/filter';
 
 interface ChromaUpsertVectorParams extends UpsertVectorParams {
   documents?: string[];
 }
 
+type ChromaUpsertArgs = [...UpsertVectorArgs, string[]?];
+
 interface ChromaQueryVectorParams extends QueryVectorParams {
   documentFilter?: VectorFilter;
 }
+
+type ChromaQueryArgs = [...QueryVectorArgs, VectorFilter?];
 
 export class ChromaVector extends MastraVector {
   private client: ChromaClient;
@@ -65,8 +73,8 @@ export class ChromaVector extends MastraVector {
     }
   }
 
-  async upsert(...args: ParamsToArgs<ChromaUpsertVectorParams>): Promise<string[]> {
-    const params = this.normalizeArgs<ChromaUpsertVectorParams>('upsert', args, ['documents']);
+  async upsert(...args: ParamsToArgs<ChromaUpsertVectorParams> | ChromaUpsertArgs): Promise<string[]> {
+    const params = this.normalizeArgs<ChromaUpsertVectorParams, ChromaUpsertArgs>('upsert', args, ['documents']);
 
     const { indexName, vectors, metadata, ids, documents } = params;
 
@@ -127,8 +135,8 @@ export class ChromaVector extends MastraVector {
     const translator = new ChromaFilterTranslator();
     return translator.translate(filter);
   }
-  async query(...args: ParamsToArgs<ChromaQueryVectorParams>): Promise<QueryResult[]> {
-    const params = this.normalizeArgs<ChromaQueryVectorParams>('query', args, ['documentFilter']);
+  async query(...args: ParamsToArgs<ChromaQueryVectorParams> | ChromaQueryArgs): Promise<QueryResult[]> {
+    const params = this.normalizeArgs<ChromaQueryVectorParams, ChromaQueryArgs>('query', args, ['documentFilter']);
 
     const { indexName, queryVector, topK = 10, filter, includeVector = false, documentFilter } = params;
 
@@ -177,5 +185,38 @@ export class ChromaVector extends MastraVector {
   async deleteIndex(indexName: string): Promise<void> {
     await this.client.deleteCollection({ name: indexName });
     this.collections.delete(indexName);
+  }
+
+  async updateIndexById(
+    indexName: string,
+    id: string,
+    update: { vector?: number[]; metadata?: Record<string, any> },
+  ): Promise<void> {
+    if (!update.vector && !update.metadata) {
+      throw new Error('No updates provided');
+    }
+
+    const collection: Collection = await this.getCollection(indexName, true);
+
+    const updateOptions: UpdateRecordsParams = { ids: [id] };
+
+    if (update?.vector) {
+      updateOptions.embeddings = [update.vector];
+    }
+
+    if (update?.metadata) {
+      updateOptions.metadatas = [update.metadata];
+    }
+
+    return await collection.update(updateOptions);
+  }
+
+  async deleteIndexById(indexName: string, id: string): Promise<void> {
+    try {
+      const collection: Collection = await this.getCollection(indexName, true);
+      await collection.delete({ ids: [id] });
+    } catch (error: any) {
+      throw new Error(`Failed to delete index by id: ${id} for index name: ${indexName}: ${error.message}`);
+    }
   }
 }

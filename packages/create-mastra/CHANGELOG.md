@@ -1,5 +1,40 @@
 # create-mastra
 
+## 0.1.8-alpha.2
+
+### Patch Changes
+
+- 144b3d5: Update traces table UI, agent Chat UI
+  Fix get workflows breaking
+
+## 0.1.8-alpha.1
+
+### Patch Changes
+
+- e5149bb: Fix playground-ui agent-evals tab-content
+
+## 0.1.8-alpha.0
+
+### Patch Changes
+
+- 5fae49e: Configurable timeout on npm create mastra
+- 960690d: Improve client-js workflow watch dx
+- 62565c1: --no-timeout npm create mastra flag
+
+## 0.1.7
+
+### Patch Changes
+
+- 7a64aff: playground-ui lib package to enhance dev/cloud ui unification
+- bb4f447: Add support for commonjs
+
+## 0.1.7-alpha.0
+
+### Patch Changes
+
+- 7a64aff: playground-ui lib package to enhance dev/cloud ui unification
+- bb4f447: Add support for commonjs
+
 ## 0.1.6
 
 ### Patch Changes

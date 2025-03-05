@@ -118,7 +118,7 @@ export const ragAgent = new Agent({
   instructions: `
   You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
 
-  Use the vectorQueryTool to filter the context by searching the metadata.
+  Filter the context by searching the metadata.
   
   The metadata is structured as follows:
 
@@ -196,7 +196,7 @@ async function generateResponse(query: string) {
       Please answer the following question:
       ${query}
 
-    Please base your answer only on the context provided in the tool.
+    Please base your answer only on the context provided.
     If the context doesn't contain enough information to fully answer the question, please state that explicitly.
       `;
 

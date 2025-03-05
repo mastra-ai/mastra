@@ -69,12 +69,12 @@ export type StructuredOutput = {
 };
 
 export type GenerateReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends undefined
-  ? GenerateTextResult<any, any>
-  : GenerateObjectResult<any>;
+  ? GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
+  : GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>;
 
 export type StreamReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends undefined
-  ? StreamTextResult<any, any>
-  : StreamObjectResult<any, any, any>;
+  ? StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
+  : StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>;
 
 export type OutputType = StructuredOutput | ZodSchema | JSONSchema7 | undefined;
 
@@ -105,6 +105,8 @@ type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = unde
   onStepFinish?: (step: string) => void;
   experimental_output?: Z;
   telemetry?: TelemetrySettings;
+  threadId?: string;
+  resourceId?: string;
 } & Run;
 
 export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {

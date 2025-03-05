@@ -1,5 +1,114 @@
 # @mastra/deployer
 
+## 0.1.8-alpha.4
+
+### Patch Changes
+
+- 144b3d5: Update traces table UI, agent Chat UI
+  Fix get workflows breaking
+- Updated dependencies [d79aedf]
+  - @mastra/core@0.5.0-alpha.4
+
+## 0.1.8-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [3d0e290]
+  - @mastra/core@0.5.0-alpha.3
+
+## 0.1.8-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [02ffb7b]
+  - @mastra/core@0.5.0-alpha.2
+
+## 0.1.8-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [dab255b]
+  - @mastra/core@0.5.0-alpha.1
+
+## 0.1.8-alpha.0
+
+### Patch Changes
+
+- c2dde91: Return full workflow details in api/workflows endpoint
+- 731dd8a: Removed useless logging that showed up when user selected log drains tab on the playground
+- 960690d: return runId from server on workflow watch
+- Updated dependencies [59df7b6]
+- Updated dependencies [29f3a82]
+- Updated dependencies [59df7b6]
+- Updated dependencies [c139344]
+  - @mastra/core@0.5.0-alpha.0
+
+## 0.1.7
+
+### Patch Changes
+
+- 30a4c29: fix mastra build errors related to esbuild not removing types
+- e1e2705: Added --ignore-workspace when installing dependencies in mastra build with pnpm package manager
+- Updated dependencies [1da20e7]
+  - @mastra/core@0.4.4
+
+## 0.1.7-alpha.0
+
+### Patch Changes
+
+- 30a4c29: fix mastra build errors related to esbuild not removing types
+- e1e2705: Added --ignore-workspace when installing dependencies in mastra build with pnpm package manager
+- Updated dependencies [1da20e7]
+  - @mastra/core@0.4.4-alpha.0
+
+## 0.1.6
+
+### Patch Changes
+
+- 80cdd76: Add hono routes for agent voice methods speakers, speak and listen
+- 0fd78ac: Update vector store functions to use object params
+- 0d25b75: Add all agent stream,generate option to cliend-js sdk
+- bb4f447: Add support for commonjs
+- Updated dependencies [0d185b1]
+- Updated dependencies [ed55f1d]
+- Updated dependencies [06aa827]
+- Updated dependencies [0fd78ac]
+- Updated dependencies [2512a93]
+- Updated dependencies [e62de74]
+- Updated dependencies [0d25b75]
+- Updated dependencies [fd14a3f]
+- Updated dependencies [8d13b14]
+- Updated dependencies [3f369a2]
+- Updated dependencies [3ee4831]
+- Updated dependencies [4d4e1e1]
+- Updated dependencies [bb4f447]
+- Updated dependencies [108793c]
+- Updated dependencies [5f28f44]
+- Updated dependencies [dabecf4]
+  - @mastra/core@0.4.3
+
+## 0.1.6-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [dabecf4]
+  - @mastra/core@0.4.3-alpha.4
+
+## 0.1.6-alpha.3
+
+### Patch Changes
+
+- 0fd78ac: Update vector store functions to use object params
+- 0d25b75: Add all agent stream,generate option to cliend-js sdk
+- bb4f447: Add support for commonjs
+- Updated dependencies [0fd78ac]
+- Updated dependencies [0d25b75]
+- Updated dependencies [fd14a3f]
+- Updated dependencies [3f369a2]
+- Updated dependencies [4d4e1e1]
+- Updated dependencies [bb4f447]
+  - @mastra/core@0.4.3-alpha.3
+
 ## 0.1.6-alpha.2
 
 ### Patch Changes

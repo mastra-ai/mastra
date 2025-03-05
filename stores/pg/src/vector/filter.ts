@@ -1,6 +1,5 @@
-import { BaseFilterTranslator } from '@mastra/core/filter';
-import type { FieldCondition, Filter, OperatorSupport } from '@mastra/core/filter';
-import type { VectorFilter } from '@mastra/core/vector';
+import { BaseFilterTranslator } from '@mastra/core/vector/filter';
+import type { FieldCondition, VectorFilter, OperatorSupport } from '@mastra/core/vector/filter';
 
 /**
  * Translates MongoDB-style filters to PG compatible filters.
@@ -20,15 +19,15 @@ export class PGFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter: VectorFilter): VectorFilter {
+  translate(filter?: VectorFilter): VectorFilter {
     if (this.isEmpty(filter)) {
       return filter;
     }
-    this.validateFilter(filter as Filter);
+    this.validateFilter(filter);
     return this.translateNode(filter);
   }
 
-  private translateNode(node: Filter | FieldCondition, currentPath: string = ''): any {
+  private translateNode(node: VectorFilter | FieldCondition, currentPath: string = ''): any {
     // Helper to wrap result with path if needed
     const withPath = (result: any) => (currentPath ? { [currentPath]: result } : result);
 
@@ -69,7 +68,7 @@ export class PGFilterTranslator extends BaseFilterTranslator {
 
       if (this.isLogicalOperator(key)) {
         result[key] = Array.isArray(value)
-          ? value.map((filter: Filter) => this.translateNode(filter))
+          ? value.map((filter: VectorFilter) => this.translateNode(filter))
           : this.translateNode(value);
       } else if (this.isOperator(key)) {
         if (this.isArrayOperator(key) && !Array.isArray(value) && key !== '$elemMatch') {

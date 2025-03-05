@@ -41,7 +41,7 @@ export function usePromptEnhancer({
 
     setIsEnhancing(true);
     try {
-      const response = await fetch(`http://localhost:4111/api/agents/${agentId}/instructions/enhance`, {
+      const response = await fetch(`/api/agents/${agentId}/instructions/enhance`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

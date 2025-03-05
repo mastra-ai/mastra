@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { Header } from '@/components/ui/header';
@@ -166,8 +166,8 @@ const Tools = () => {
                   key={index}
                   className=" hover:bg-mastra-bg-4/80 transition-colors flex flex-col  gap-[0.62rem] bg-mastra-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] cursor-pointer border-[0.5px] border-mastra-border-1"
                 >
-                  <h3 className="text-small text-mastra-el-6">{name}</h3>
-                  <p className="text-small text-mastra-el-2">{tool.description}</p>
+                  <h3 className="text-sm text-mastra-el-6">{name}</h3>
+                  <p className="text-sm text-mastra-el-2">{tool.description}</p>
                 </div>
               ))
             ) : (
@@ -179,8 +179,8 @@ const Tools = () => {
                   key={index}
                   className=" hover:bg-mastra-bg-4/80 transition-colors flex flex-col  gap-[0.62rem] bg-mastra-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] cursor-pointer border-[0.5px] border-mastra-border-1"
                 >
-                  <h3 className="text-small text-mastra-el-6">{name}</h3>
-                  <p className="text-small text-mastra-el-2">{tool.description}</p>
+                  <h3 className="text-sm text-mastra-el-6">{name}</h3>
+                  <p className="text-sm text-mastra-el-2">{tool.description}</p>
                 </div>
               ))
             )}

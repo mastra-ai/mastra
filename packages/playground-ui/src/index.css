@@ -1,0 +1,7 @@
+.thread-viewport > [data-radix-scroll-area-content] {
+  @apply flex flex-col items-center self-stretch bg-inherit;
+}
+
+[hidden]:where(:not([hidden=until-found])) {
+  display: none !important;
+}

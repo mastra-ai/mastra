@@ -1,4 +1,3 @@
-import type { VectorFilter } from '@mastra/core';
 import type {
   BasicOperator,
   NumericOperator,
@@ -6,8 +5,8 @@ import type {
   ElementOperator,
   LogicalOperator,
   RegexOperator,
-  Filter,
-} from '@mastra/core/filter';
+  VectorFilter,
+} from '@mastra/core/vector/filter';
 
 export type OperatorType =
   | BasicOperator
@@ -233,7 +232,11 @@ export function buildFilterQuery(filter: VectorFilter, minScore: number): Filter
     return operatorResult.sql;
   }
 
-  function handleLogicalOperator(key: '$and' | '$or' | '$not' | '$nor', value: Filter[], parentPath: string): string {
+  function handleLogicalOperator(
+    key: '$and' | '$or' | '$not' | '$nor',
+    value: VectorFilter[],
+    parentPath: string,
+  ): string {
     if (key === '$not') {
       // For top-level $not
       const entries = Object.entries(value);
@@ -257,8 +260,8 @@ export function buildFilterQuery(filter: VectorFilter, minScore: number): Filter
     }
 
     const joinOperator = key === '$or' || key === '$nor' ? 'OR' : 'AND';
-    const conditions = value.map((f: Filter) => {
-      const entries = Object.entries(f);
+    const conditions = value.map((f: VectorFilter) => {
+      const entries = Object.entries(f || {});
       if (entries.length === 0) return '';
 
       const [firstKey, firstValue] = entries[0] || [];

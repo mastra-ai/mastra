@@ -25,6 +25,8 @@ export interface IExecutionContext<
   context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> & TContext : TContext;
   runId?: string;
   mastra?: MastraPrimitives;
+  threadId?: string;
+  resourceId?: string;
   suspend: () => Promise<void>;
 }
 export interface IAction<
