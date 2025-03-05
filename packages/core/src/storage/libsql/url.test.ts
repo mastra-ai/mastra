@@ -69,6 +69,19 @@ describe('LibSQLStore URL rewriting', () => {
       expect(existsSync(join(tmpDir, '.mastra', 'output', 'test.db'))).toBe(false);
       expect(existsSync(join(parentDir, 'test.db'))).toBe(false);
     });
+
+    it('should create db file in .mastra directory when explicitly specified and running from .mastra/output', async () => {
+      const mastraDir = join(tmpDir, '.mastra');
+      const mastraOutputDir = join(mastraDir, 'output');
+      mkdirSync(mastraOutputDir, { recursive: true });
+      process.chdir(mastraOutputDir);
+      const store = new LibSQLStore({ config: { url: 'file:.mastra/test.db' } });
+      await store.init();
+      expect(existsSync(join(tmpDir, 'test.db'))).toBe(false);
+      expect(existsSync(join(mastraDir, 'test.db'))).toBe(true);
+      expect(existsSync(join(mastraOutputDir, 'test.db'))).toBe(false);
+      expect(existsSync(join(parentDir, 'test.db'))).toBe(false);
+    });
   });
 
   describe('Database consistency across working directories', () => {
