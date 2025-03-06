@@ -111,10 +111,7 @@ export type StepDef<
     snapshotOnTimeout?: boolean;
     when?:
       | Condition<any, any>
-      | ((args: {
-          context: WorkflowContext;
-          mastra?: Mastra;
-        }) => Promise<boolean | WhenConditionReturnValue>);
+      | ((args: { context: WorkflowContext; mastra?: Mastra }) => Promise<boolean | WhenConditionReturnValue>);
     data: TSchemaIn;
     handler: (args: ActionContext<TSchemaIn>) => Promise<z.infer<TSchemaOut>>;
   }

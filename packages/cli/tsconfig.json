@@ -3,7 +3,7 @@
   "exclude": [
     "node_modules",
     "**/*.test.ts",
-    "src/starter-files/**",
+    "src/starter-files/**/*.ts",
     "src/playground/**",
     "dist/**",
     "eslint.config.js"

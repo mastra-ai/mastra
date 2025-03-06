@@ -8,6 +8,10 @@ const meta = {
     title: "Guides",
     collapsed: false,
   },
+  frameworks: {
+    title: "Frameworks",
+    collapsed: true,
+  },
   agents: {
     title: "Agents",
     collapsed: false,
