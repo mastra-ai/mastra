@@ -1,5 +1,14 @@
 # create-mastra
 
+## 0.1.8-alpha.3
+
+### Patch Changes
+
+- 91d2e30: Fix init in non npm project
+- a80bdaf: persist data in run tab in dev
+- 9035565: Update tools dev playground inputs for different fieldtypes
+- af7466e: fix playground issues
+
 ## 0.1.8-alpha.2
 
 ### Patch Changes
