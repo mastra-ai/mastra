@@ -17,7 +17,7 @@ export interface StepExecutionContext<
   TContext extends WorkflowContext = WorkflowContext,
 > extends IExecutionContext<TSchemaIn> {
   context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> & TContext : TContext;
-  suspend: () => Promise<void>;
+  suspend: (payload?: unknown) => Promise<void>;
   runId: string;
 }
 
