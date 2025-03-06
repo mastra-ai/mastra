@@ -21,7 +21,10 @@ export interface ToolExecutionContext<
 export interface ToolAction<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
-  TContext extends ToolExecutionContext<TSchemaIn, MastraPrimitives | undefined> = ToolExecutionContext<TSchemaIn, MastraPrimitives | undefined>,
+  TContext extends ToolExecutionContext<TSchemaIn, MastraPrimitives | undefined> = ToolExecutionContext<
+    TSchemaIn,
+    MastraPrimitives | undefined
+  >,
   TOptions extends unknown = unknown,
 > extends IAction<string, TSchemaIn, TSchemaOut, TContext, TOptions> {
   description: string;

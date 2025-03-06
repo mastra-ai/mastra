@@ -52,7 +52,8 @@ It provides vector search capabilities with enterprise-grade scalability and hig
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
       defaultValue: "cosine",
-      description: "Distance metric for similarity search (maps to dot_product for dotproduct)",
+      description:
+        "Distance metric for similarity search (maps to dot_product for dotproduct)",
     },
   ]}
 />
@@ -161,6 +162,59 @@ interface IndexStats {
   ]}
 />
 
+### updateIndexById()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector to update",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "Update object containing vector and/or metadata changes",
+      properties: [
+        {
+          name: "vector",
+          type: "number[]",
+          isOptional: true,
+          description: "New vector values",
+        },
+        {
+          name: "metadata",
+          type: "Record<string, any>",
+          isOptional: true,
+          description: "New metadata values",
+        },
+      ],
+    },
+  ]}
+/>
+
+### deleteIndexById()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector to delete",
+    },
+  ]}
+/>
+
 ## Response Types
 
 Query results are returned in this format:
@@ -200,4 +254,5 @@ Required environment variables:
 - `ASTRA_DB_ENDPOINT`: Your Astra DB API endpoint
 
 ### Related
-- [Metadata Filters](./metadata-filters) 
+
+- [Metadata Filters](./metadata-filters)

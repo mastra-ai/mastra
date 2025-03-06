@@ -144,6 +144,7 @@ export abstract class MastraMemory extends MastraBase {
     vectorMessageSearch?: string;
     config?: MemoryConfig;
   }): Promise<{
+    threadId: string;
     messages: CoreMessage[];
     uiMessages: AiMessageType[];
   }>;

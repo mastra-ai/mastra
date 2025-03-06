@@ -1,0 +1,88 @@
+---
+title: "Netlify Deployer"
+description: "Documentation for the NetlifyDeployer class, which deploys Mastra applications to Netlify Functions."
+---
+
+# NetlifyDeployer
+
+The NetlifyDeployer deploys Mastra applications to Netlify Functions, handling site creation, configuration, and deployment processes. It extends the abstract Deployer class to provide Netlify-specific deployment functionality.
+
+## Usage Example
+
+```typescript
+import { Mastra } from '@mastra/core';
+import { NetlifyDeployer } from '@mastra/deployer-netlify';
+
+const mastra = new Mastra({
+  deployer: new NetlifyDeployer({
+    scope: 'your-team-slug',
+    projectName: 'your-project-name',
+    token: 'your-netlify-token'
+  }),
+  // ... other Mastra configuration options
+});
+```
+
+## Parameters
+
+### Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "scope",
+      type: "string",
+      description: "Your Netlify team slug or ID.",
+      isOptional: false,
+    },
+    {
+      name: "projectName",
+      type: "string",
+      description: "Name of your Netlify site (will be created if it doesn't exist).",
+      isOptional: false,
+    },
+    {
+      name: "token",
+      type: "string",
+      description: "Your Netlify authentication token.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Netlify Configuration
+
+The NetlifyDeployer automatically generates a `netlify.toml` configuration file with the following settings:
+
+```toml
+[functions]
+node_bundler = "esbuild"            
+directory = "netlify/functions"
+
+[[redirects]]
+force = true
+from = "/*"
+status = 200
+to = "/.netlify/functions/api/:splat"
+```
+
+### Environment Variables
+
+The NetlifyDeployer handles environment variables from multiple sources:
+
+1. **Environment Files**: Variables from `.env.production` and `.env` files.
+2. **Configuration**: Variables passed through the Mastra configuration.
+3. **Netlify Dashboard**: Variables can also be managed through Netlify's web interface.
+
+### Project Structure
+
+The deployer creates the following structure in your output directory:
+
+```
+output-directory/
+├── netlify/
+│   └── functions/
+│       └── api/
+│           └── index.mjs    # Application entry point with Hono server integration
+└── netlify.toml             # Deployment configuration
+```
