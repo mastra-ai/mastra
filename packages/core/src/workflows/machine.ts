@@ -6,7 +6,7 @@ import type { MachineContext, Snapshot } from 'xstate';
 import { assign, createActor, fromPromise, setup } from 'xstate';
 import type { z } from 'zod';
 
-import type { IAction, MastraPrimitives } from '../action';
+import type { IAction, MastraUnion } from '../action';
 import type { Logger } from '../logger';
 
 import type { Mastra } from '../mastra';
@@ -345,7 +345,7 @@ export class Machine<
             }
           },
           runId: this.#runId,
-          mastra: mastraProxy as (Mastra & MastraPrimitives) | undefined,
+          mastra: mastraProxy as MastraUnion | undefined,
         });
 
         this.logger.debug(`Step ${stepNode.step.id} result`, {
