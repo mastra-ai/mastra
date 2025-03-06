@@ -371,7 +371,7 @@ export class Workflow<
                 const result = await activeCondition.condition(payload);
                 return !result;
               }
-            : () => Promise.resolve(false),
+            : { not: activeCondition.condition },
       },
     );
 
