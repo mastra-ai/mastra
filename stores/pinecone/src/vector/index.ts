@@ -136,4 +136,30 @@ export class PineconeVector extends MastraVector {
       throw new Error(`Failed to delete Pinecone index: ${error.message}`);
     }
   }
+
+  async updateIndexById(
+    indexName: string,
+    id: string,
+    update: {
+      vector?: number[];
+      metadata?: Record<string, any>;
+    },
+  ): Promise<void> {
+    if (!update.vector && !update.metadata) {
+      throw new Error('No updates provided');
+    }
+
+    const index = this.client.Index(indexName);
+
+    await index.update({
+      id,
+      values: update.vector,
+      metadata: update.metadata,
+    });
+  }
+
+  async deleteIndexById(indexName: string, id: string): Promise<void> {
+    const index = this.client.Index(indexName);
+    await index.deleteOne(id);
+  }
 }
