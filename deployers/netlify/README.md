@@ -26,6 +26,7 @@ import { NetlifyDeployer } from '@mastra/deployer-netlify';
 const deployer = new NetlifyDeployer({
   scope: 'your-team-id',
   projectName: 'your-project-name',
+  token: 'your-netlify-token',
 });
 
 const mastra = new Mastra({
@@ -38,8 +39,9 @@ const mastra = new Mastra({
 
 ### Constructor Options
 
-- `scope` (required): Your Netlify team ID
+- `scope` (required): Your Netlify team slug or ID
 - `projectName`: Name of your Netlify site (will be created if it doesn't exist)
+- `token`: Your Netlify authentication token
 
 ## Project Structure
 
