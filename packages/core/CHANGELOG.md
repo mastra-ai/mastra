@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.5.0-alpha.6
+
+### Patch Changes
+
+- f6678e4: Fixed an issue where we were using a non-windows-friendly absolute path check for libsql file urls
+
 ## 0.5.0-alpha.5
 
 ### Minor Changes
