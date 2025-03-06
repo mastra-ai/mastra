@@ -122,6 +122,7 @@
     "dotenv": "^16.4.7",
     "fastembed": "^1.14.1",
     "json-schema": "^0.4.0",
+    "json-schema-to-zod": "^2.5.0",
     "node_modules-path": "^2.0.8",
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",

@@ -29,11 +29,11 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
-import type { CoreTool, ToolAction } from '../tools/types';
-import { createMastraProxy } from '../utils';
+import type { CoreTool } from '../tools/types';
+import { makeCoreTool, createMastraProxy } from '../utils';
 import type { CompositeVoice } from '../voice';
 
-import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
+import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput, ToolsInput } from './types';
 
 export * from './types';
 
@@ -42,7 +42,7 @@ export * from './types';
   excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', 'log'],
 })
 export class Agent<
-  TTools extends Record<string, ToolAction<any, any, any>> = Record<string, ToolAction<any, any, any>>,
+  TTools extends ToolsInput = ToolsInput,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > extends MastraBase {
   public name: string;
@@ -506,46 +506,17 @@ export class Agent<
         const tool = this.tools[k];
 
         if (tool) {
-          memo[k] = {
-            description: tool.description,
-            parameters: tool.inputSchema,
-            execute:
-              typeof tool?.execute === 'function'
-                ? async (args, options) => {
-                    try {
-                      this.logger.debug(`[Agent:${this.name}] - Executing tool ${k}`, {
-                        name: k,
-                        description: tool.description,
-                        args,
-                        runId,
-                        threadId,
-                        resourceId,
-                      });
-                      return (
-                        tool?.execute?.(
-                          {
-                            context: args,
-                            mastra: mastraProxy as MastraUnion | undefined,
-                            memory,
-                            runId,
-                            threadId,
-                            resourceId,
-                          },
-                          options,
-                        ) ?? undefined
-                      );
-                    } catch (err) {
-                      this.logger.error(`[Agent:${this.name}] - Failed execution`, {
-                        error: err,
-                        runId,
-                        threadId,
-                        resourceId,
-                      });
-                      throw err;
-                    }
-                  }
-                : undefined,
+          const options = {
+            name: k,
+            runId,
+            threadId,
+            resourceId,
+            logger: this.logger,
+            mastra: mastraProxy as MastraUnion | undefined,
+            memory,
+            agentName: this.name,
           };
+          memo[k] = makeCoreTool(tool, options);
         }
         return memo;
       },
@@ -616,44 +587,15 @@ export class Agent<
       toolsFromToolsets.forEach(toolset => {
         Object.entries(toolset).forEach(([toolName, tool]) => {
           const toolObj = tool;
-          toolsFromToolsetsConverted[toolName] = {
-            description: toolObj.description || '',
-            parameters: toolObj.inputSchema,
-            execute:
-              typeof toolObj?.execute === 'function'
-                ? async (args, options) => {
-                    try {
-                      this.logger.debug(`[Agent:${this.name}] - Executing tool ${toolName}`, {
-                        name: toolName,
-                        description: toolObj.description,
-                        args,
-                        runId,
-                        threadId,
-                        resourceId,
-                      });
-                      return (
-                        toolObj?.execute?.(
-                          {
-                            context: args,
-                            runId,
-                            threadId,
-                            resourceId,
-                          },
-                          options,
-                        ) ?? undefined
-                      );
-                    } catch (error) {
-                      this.logger.error(`[Agent:${this.name}] - Failed toolset execution`, {
-                        error,
-                        runId,
-                        threadId,
-                        resourceId,
-                      });
-                      throw error;
-                    }
-                  }
-                : undefined,
+          const options = {
+            name: toolName,
+            runId,
+            threadId,
+            resourceId,
+            logger: this.logger,
+            agentName: this.name,
           };
+          toolsFromToolsetsConverted[toolName] = makeCoreTool(toolObj, options, 'toolset');
         });
       });
     }
