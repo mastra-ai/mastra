@@ -26,10 +26,12 @@ import type { GenerateReturn, StreamReturn } from '../llm';
 import type { MastraLLMBase } from '../llm/model';
 import { MastraLLM } from '../llm/model';
 import { RegisteredLogger } from '../logger';
+import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool, ToolAction } from '../tools/types';
+import { createMastraProxy } from '../utils';
 import type { CompositeVoice } from '../voice';
 
 import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
@@ -48,7 +50,7 @@ export class Agent<
   readonly llm: MastraLLMBase;
   instructions: string;
   readonly model?: LanguageModelV1;
-  #mastra?: MastraPrimitives;
+  #mastra?: Mastra;
   #memory?: MastraMemory;
   tools: TTools;
   /** @deprecated This property is deprecated. Use evals instead. */
@@ -78,7 +80,7 @@ export class Agent<
     }
 
     if (config.mastra) {
-      this.#mastra = config.mastra;
+      this.__registerPrimitives(config.mastra);
     }
 
     if (config.metrics) {
@@ -123,9 +125,11 @@ export class Agent<
 
     this.llm.__registerPrimitives(p);
 
-    this.#mastra = p;
-
     this.logger.debug(`[Agents:${this.name}] initialized.`, { model: this.model, name: this.name });
+  }
+
+  __registerMastra(mastra: Mastra) {
+    this.#mastra = mastra;
   }
 
   /**
@@ -486,7 +490,13 @@ export class Agent<
 
     // Get memory tools if available
     const memory = this.getMemory();
-    const memoryTools = memory?.getTools();
+    const memoryTools = memory?.getTools?.();
+
+    let mastraProxy = undefined;
+    const logger = this.logger;
+    if (this.#mastra) {
+      mastraProxy = createMastraProxy({ mastra: this.#mastra, logger });
+    }
 
     const converted = Object.entries(this.tools || {}).reduce(
       (memo, value) => {
@@ -513,7 +523,7 @@ export class Agent<
                         tool?.execute?.(
                           {
                             context: args,
-                            mastra: this.#mastra,
+                            mastra: mastraProxy as (Mastra & MastraPrimitives) | undefined,
                             memory,
                             runId,
                             threadId,
@@ -563,7 +573,7 @@ export class Agent<
                           tool?.execute?.(
                             {
                               context: args,
-                              mastra: this.#mastra,
+                              mastra: mastraProxy as (Mastra & MastraPrimitives) | undefined,
                               memory,
                               runId,
                               threadId,

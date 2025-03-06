@@ -29,7 +29,6 @@ describe('createTool', () => {
   it('should call mockFindUser', async () => {
     await testTool.execute({
       context: { name: 'Dero Israel' },
-      suspend: async () => {},
     });
 
     expect(mockFindUser).toHaveBeenCalledTimes(1);
@@ -39,7 +38,6 @@ describe('createTool', () => {
   it("should return an object containing 'Dero Israel' as name and 'dero@mail.com' as email", async () => {
     const user = await testTool.execute({
       context: { name: 'Dero Israel' },
-      suspend: async () => {},
     });
 
     expect(user).toStrictEqual({ name: 'Dero Israel', email: 'dero@mail.com' });
@@ -48,7 +46,6 @@ describe('createTool', () => {
   it("should return an object containing 'User not found' message", async () => {
     const user = await testTool.execute({
       context: { name: 'Taofeeq Oluderu' },
-      suspend: async () => {},
     });
     expect(user).toStrictEqual({ message: 'User not found' });
   });

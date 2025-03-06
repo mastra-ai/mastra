@@ -206,6 +206,8 @@ This is a warning for now, but will throw an error in the future
           vectors: this.vectors,
         });
 
+        agent.__registerMastra(this);
+
         agents[key] = agent;
       });
     }
@@ -219,16 +221,16 @@ This is a warning for now, but will throw an error in the future
 
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
+        workflow.__registerMastra(this);
         workflow.__registerPrimitives({
           logger: this.getLogger(),
           telemetry: this.telemetry,
           storage: this.storage,
           memory: this.memory,
-          agents: this.agents,
+          agents: agents,
           tts: this.tts,
           vectors: this.vectors,
         });
-
         // @ts-ignore
         this.workflows[key] = workflow;
       });
@@ -305,12 +307,6 @@ This is a warning for now, but will throw an error in the future
       });
     }
 
-    if (this.workflows) {
-      Object.keys(this.workflows).forEach(key => {
-        this.workflows?.[key]?.__setLogger(this.logger);
-      });
-    }
-
     if (this.memory) {
       this.memory.__setLogger(this.logger);
     }
@@ -343,14 +339,6 @@ This is a warning for now, but will throw an error in the future
       Object.keys(this.agents).forEach(key => {
         if (this.telemetry) {
           this.agents?.[key]?.__setTelemetry(this.telemetry);
-        }
-      });
-    }
-
-    if (this.workflows) {
-      Object.keys(this.workflows).forEach(key => {
-        if (this.telemetry) {
-          this.workflows?.[key]?.__setTelemetry(this.telemetry);
         }
       });
     }
@@ -401,6 +389,10 @@ This is a warning for now, but will throw an error in the future
       });
       this.vectors = vectors as TVectors;
     }
+  }
+
+  public getTTS() {
+    return this.tts;
   }
 
   public getLogger() {

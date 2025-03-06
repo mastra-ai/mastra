@@ -3,7 +3,8 @@ import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
 
-import { getPackageManager, getPackageManagerInstallCommand } from '../utils';
+import { DepsService } from '../../services/service.deps';
+import { getPackageManagerInstallCommand } from '../utils';
 
 import {
   createComponentsDir,
@@ -15,7 +16,6 @@ import {
   writeIndexFile,
 } from './utils';
 import type { Components, LLMProvider } from './utils';
-import { DepsService } from '../../services/service.deps';
 
 const s = p.spinner();
 
