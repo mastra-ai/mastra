@@ -11,6 +11,7 @@ import {
   AlwaysOnSampler,
   AlwaysOffSampler,
   OTLPHttpExporter,
+  OTLPGrpcExporter,
 } from '@mastra/core/telemetry/otel-vendor';
 import { telemetry } from './telemetry-config.mjs';
 
@@ -40,6 +41,12 @@ function getSampler(config) {
 
 async function getExporter(config) {
   if (config.export?.type === 'otlp') {
+    if(config.export?.protocol === "grpc") {
+      return new OTLPGrpcExporter({
+        url: config.export.endpoint,
+        headers: config.export.headers,
+      })
+    }
     return new OTLPHttpExporter({
       url: config.export.endpoint,
       headers: config.export.headers,
