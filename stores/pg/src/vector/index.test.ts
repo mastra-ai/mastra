@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 
 import { PgVector } from '.';
-import { QueryResult } from '@mastra/core';
+import { type QueryResult } from '@mastra/core';
 
 describe('PgVector', () => {
   let vectorDB: PgVector;
