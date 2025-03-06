@@ -3,7 +3,6 @@ import { Meta } from "nextra";
 const meta: Meta = {
   index: {
     title: "Overview",
-    
   },
   core: "Core",
   cli: "CLI",
@@ -17,6 +16,7 @@ const meta: Meta = {
   evals: "Evals",
   "client-js": "Client SDK - JS",
   voice: "Voice",
-  };
+  deployer: "Deployer",
+};
 
 export default meta;
