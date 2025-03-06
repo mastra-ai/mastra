@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@libsql/client": "^0.14.0",
+    "@ai-sdk/react": "^1.1.17",
     "@mastra/core": "workspace:^",
     "@mastra/memory": "workspace:^",
     "@mastra/pg": "workspace:^",
