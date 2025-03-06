@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { join, resolve, isAbsolute } from 'node:path';
 import { createClient } from '@libsql/client';
 import type { Client, InValue } from '@libsql/client';
 
@@ -51,18 +51,19 @@ export class LibSQLStore extends MastraStorage {
   // this means `file:` urls are always relative to project root
   // TODO: can we make this easier via bundling? https://github.com/mastra-ai/mastra/pull/2783#pullrequestreview-2662444241
   protected rewriteDbUrl(url: string): string {
-    // If this is a relative file path (starts with file: but not file:/)
-    if (url.startsWith('file:') && !url.startsWith('file:/')) {
-      const cwd = process.cwd();
+    if (url.startsWith('file:')) {
+      const pathPart = url.slice('file:'.length);
 
-      // Get the relative path part after 'file:'
-      const relativePath = url.slice('file:'.length);
+      if (isAbsolute(pathPart)) {
+        return url;
+      }
+
+      const cwd = process.cwd();
 
       if (cwd.includes('.mastra') && (cwd.endsWith(`output`) || cwd.endsWith(`output/`) || cwd.endsWith(`output\\`))) {
         const baseDir = join(cwd, `..`, `..`); // <- .mastra/output/../../
 
-        // Rewrite to be relative to the base directory
-        const fullPath = join(baseDir, relativePath);
+        const fullPath = resolve(baseDir, pathPart);
 
         this.logger.debug(
           `Initializing LibSQL db with url ${url} with relative file path from inside .mastra/output directory. Rewriting relative file url to "file:${fullPath}". This ensures it's outside the .mastra/output directory.`,
