@@ -490,7 +490,7 @@ export class Agent<
 
     // Get memory tools if available
     const memory = this.getMemory();
-    const memoryTools = memory?.getTools();
+    const memoryTools = memory?.getTools?.();
 
     let mastraProxy = undefined;
     const logger = this.logger;
