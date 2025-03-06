@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.5.0-alpha.7
+
+### Patch Changes
+
+- ee667a2: Fixed a serialization bug for thread IDs and dates in memory
+
 ## 0.5.0-alpha.6
 
 ### Patch Changes

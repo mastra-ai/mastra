@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.2.9-alpha.6",
+  "version": "0.2.9-alpha.7",
   "license": "ISC",
   "description": "cli for mastra",
   "type": "module",
