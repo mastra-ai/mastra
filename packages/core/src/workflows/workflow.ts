@@ -495,8 +495,9 @@ export class Workflow<
                 spanName,
                 attributes,
               })(data);
+            } else {
+              return handler(data);
             }
-            return handler(data);
           },
         );
       };
