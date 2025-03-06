@@ -16,6 +16,7 @@ const meta: Meta = {
   voice: "Voice",
   observability: "Observability",
   "client-js": "Client SDK - JS",
+  deployer: "Deployer",
 };
 
 export default meta;

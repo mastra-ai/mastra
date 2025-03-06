@@ -26,7 +26,7 @@ import type { WorkflowResultReturn } from './workflow-instance';
 import { WorkflowInstance } from './workflow-instance';
 export class Workflow<
   TSteps extends Step<any, any, any>[] = any,
-  TTriggerSchema extends z.ZodType<any> = any,
+  TTriggerSchema extends z.ZodObject<any> = any,
 > extends MastraBase {
   name: string;
   triggerSchema?: TTriggerSchema;

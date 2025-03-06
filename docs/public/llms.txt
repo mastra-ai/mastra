@@ -52,7 +52,11 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [tools](https://mastra.ai/docs/reference/client-js/tools)
 - [vectors](https://mastra.ai/docs/reference/client-js/vectors)
 - [workflows](https://mastra.ai/docs/reference/client-js/workflows)
-- [Mastra Class Reference | Project Creation | Mastra Core](https://mastra.ai/docs/reference/core/mastra-class): Documentation for the Mastra Class, the core entry point for managing agents, workflows, and server endpoints.
+- [Mastra Core](https://mastra.ai/docs/reference/core/mastra-class): Documentation for the Mastra Class, the core entry point for managing agents, workflows, and server endpoints.
+- [Cloudflare Deployer](https://mastra.ai/docs/reference/deployer/cloudflare): Documentation for the CloudflareDeployer class, which deploys Mastra applications to Cloudflare Workers.
+- [Mastra Deployer](https://mastra.ai/docs/reference/deployer/deployer): Documentation for the Deployer abstract class, which handles packaging and deployment of Mastra applications.
+- [Netlify Deployer](https://mastra.ai/docs/reference/deployer/netlify): Documentation for the NetlifyDeployer class, which deploys Mastra applications to Netlify Functions.
+- [Vercel Deployer](https://mastra.ai/docs/reference/deployer/vercel): Documentation for the VercelDeployer class, which deploys Mastra applications to Vercel.
 - [Reference: Answer Relevancy | Metrics | Evals | Mastra Docs](https://mastra.ai/docs/reference/evals/answer-relevancy): Documentation for the Answer Relevancy Metric in Mastra, which evaluates how well LLM outputs address the input query.
 - [Reference: Bias | Output Metrics | Evals | Mastra Docs](https://mastra.ai/docs/reference/evals/bias): Documentation for the Bias Metric in Mastra, which evaluates LLM outputs for various forms of bias, including gender, political, racial/ethnic, or geographical bias.
 - [Reference: Completeness | Metrics | Evals | Mastra Docs](https://mastra.ai/docs/reference/evals/completeness): Documentation for the Completeness Metric in Mastra, which evaluates how thoroughly LLM outputs cover key elements present in the input.
@@ -69,6 +73,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Textual Difference | Evals | Mastra Docs](https://mastra.ai/docs/reference/evals/textual-difference): Documentation for the Textual Difference Metric in Mastra, which measures textual differences between strings using sequence matching.
 - [Reference: Tone Consistency | Metrics | Evals | Mastra Docs](https://mastra.ai/docs/reference/evals/tone-consistency): Documentation for the Tone Consistency Metric in Mastra, which evaluates emotional tone and sentiment consistency in text.
 - [Reference: Toxicity | Metrics | Evals | Mastra Docs](https://mastra.ai/docs/reference/evals/toxicity): Documentation for the Toxicity Metric in Mastra, which evaluates LLM outputs for racist, biased, or toxic elements.
+- [API Reference](https://mastra.ai/docs/reference): Mastra API Reference
 - [Memory](https://mastra.ai/docs/reference/memory/Memory)
 - [createThread](https://mastra.ai/docs/reference/memory/createThread)
 - [getThreadById](https://mastra.ai/docs/reference/memory/getThreadById)
@@ -129,12 +134,15 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: StepOptions | Building Workflows | Mastra Docs](https://mastra.ai/docs/reference/workflows/step-options): Documentation for the step options in workflows, which control variable mapping, execution conditions, and other runtime behavior.
 - [Reference: suspend() | Control Flow | Mastra Docs](https://mastra.ai/docs/reference/workflows/suspend): Documentation for the suspend function in Mastra workflows, which pauses execution until resumed.
 - [Reference: Workflow.then() | Building Workflows | Mastra Docs](https://mastra.ai/docs/reference/workflows/then): Documentation for the `.then()` method in workflows, which creates sequential dependencies between steps.
+- [Reference: Workflow.until() | Looping in Workflows | Mastra Docs](https://mastra.ai/docs/reference/workflows/until): Documentation for the `.until()` method in Mastra workflows, which repeats a step until a specified condition becomes true.
 - [Reference: Workflow.watch() | Workflows | Mastra Docs](https://mastra.ai/docs/reference/workflows/watch): Documentation for the `.watch()` method in workflows, which monitors the status of a workflow run.
+- [Reference: Workflow.while() | Looping in Workflows | Mastra Docs](https://mastra.ai/docs/reference/workflows/while): Documentation for the `.while()` method in Mastra workflows, which repeats a step as long as a specified condition remains true.
 - [Reference: Workflow Class | Building Workflows | Mastra Docs](https://mastra.ai/docs/reference/workflows/workflow): Documentation for the Workflow class in Mastra, which enables you to create state machines for complex sequences of operations with conditional branching and data validation.
 - [Handling Complex LLM Operations | Workflows | Mastra](https://mastra.ai/docs/workflows/00-overview): Workflows in Mastra help you orchestrate complex sequences of operations with features like branching, parallel execution, resource suspension, and more.
 - [Branching, Merging, Conditions | Workflows | Mastra Docs](https://mastra.ai/docs/workflows/control-flow): Control flow in Mastra workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements.
 - [Creating Steps and Adding to Workflows | Mastra Docs](https://mastra.ai/docs/workflows/steps): Steps in Mastra workflows provide a structured way to manage operations by defining inputs, outputs, and execution logic.
 - [Suspend & Resume Workflows | Human-in-the-Loop | Mastra Docs](https://mastra.ai/docs/workflows/suspend-and-resume): Suspend and resume in Mastra workflows allows you to pause execution while waiting for external input or resources.
+- [Data Mapping with Workflow Variables | Mastra Docs](https://mastra.ai/docs/workflows/variables): Learn how to use workflow variables to map data between steps and create dynamic data flows in your Mastra workflows.
 
 ## examples
 - [Example: Adding Voice Capabilities | Agents | Mastra](https://mastra.ai/examples/agents/adding-voice-capabilities): Example of adding voice capabilities to Mastra agents, enabling them to speak and listen using different voice providers.
@@ -204,6 +212,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Example: Sequential Steps | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/sequential-steps): Example of using Mastra to chain workflow steps in a specific sequence, passing data between them.
 - [Example: Suspend and Resume | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/suspend-and-resume): Example of using Mastra to suspend and resume workflow steps during execution.
 - [Example: Using a Tool as a Step | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/using-a-tool-as-a-step): Example of using Mastra to integrate a custom tool as a step in a workflow.
+- [Data Mapping with Workflow Variables | Mastra Examples](https://mastra.ai/examples/workflows/workflow-variables): Learn how to use workflow variables to map data between steps in Mastra workflows.
 
 ## showcase
 - [Showcase](https://mastra.ai/showcase): Check out these applications built with Mastra

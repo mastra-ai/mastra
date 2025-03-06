@@ -45,6 +45,8 @@ export type OtelConfig = {
     | {
         /** Export to an OTLP (OpenTelemetry Protocol) endpoint */
         type: 'otlp';
+        /** Whether to use gRPC or HTTP for OTLP */
+        protocol?: 'grpc' | 'http';
         /** OTLP endpoint URL */
         endpoint?: string;
         /** Optional headers for OTLP requests */
