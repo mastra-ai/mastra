@@ -375,7 +375,7 @@ describe('Workflow', async () => {
       const results = await run.start({ triggerData: { inputData: 'test-input' } });
 
       const baseContext = {
-        attempts: { step1: 3 },
+        attempts: { step1: 1 },
         steps: {},
         triggerData: { inputData: 'test-input' },
         getStepResult: expect.any(Function),
@@ -415,7 +415,7 @@ describe('Workflow', async () => {
         .commit();
 
       const baseContext = {
-        attempts: { step1: 3 },
+        attempts: { step1: 1 },
         steps: {},
         triggerData: { inputData: { nested: { value: 'test' } } },
         getStepResult: expect.any(Function),
@@ -470,7 +470,7 @@ describe('Workflow', async () => {
       const results = await run.start();
 
       const baseContext = {
-        attempts: { step1: 3, step2: 3 },
+        attempts: { step1: 1, step2: 1 },
         steps: {},
         triggerData: {},
         getStepResult: expect.any(Function),
@@ -1193,7 +1193,7 @@ describe('Workflow', async () => {
       const step5 = new Step({ id: 'step5', execute: action5 });
 
       const baseContext = {
-        attempts: { step1: 3, step2: 3, step3: 3, step4: 3, step5: 3 },
+        attempts: { step1: 1, step2: 1, step3: 1, step4: 1, step5: 1 },
         steps: {},
         triggerData: {},
         getStepResult: expect.any(Function),
@@ -1554,7 +1554,7 @@ describe('Workflow', async () => {
           context: expect.objectContaining({
             steps: { step1: expect.any(Object) },
             triggerData: {},
-            attempts: { step1: 3, step2: 3 },
+            attempts: { step1: 1, step2: 1 },
           }),
           activePaths: [
             {
