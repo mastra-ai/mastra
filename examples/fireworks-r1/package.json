@@ -26,7 +26,7 @@
   "devDependencies": {
     "@types/node": "^22.13.1",
     "dotenv": "^16.4.7",
-    "mastra": "^0.2.9-alpha.5",
+    "mastra": "workspace:*",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   }
