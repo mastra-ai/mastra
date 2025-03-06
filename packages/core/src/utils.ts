@@ -5,6 +5,7 @@ import type { MastraPrimitives } from './action';
 import type { Logger } from './logger';
 import type { Mastra } from './mastra';
 import type { MastraMemory } from './memory';
+import { Tool } from './tools';
 import type { CoreTool, ToolAction, VercelTool } from './tools';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -282,9 +283,9 @@ export function resolveSerializedZodOutput(schema: string): z.ZodType {
  * @param tool - The tool to check
  * @returns True if the tool is a Vercel Tool, false otherwise
  */
-export function isVercelTool(tool: any): tool is VercelTool {
-  // Checks if the tool is an object and has a 'parameters' property
-  return typeof tool === 'object' && tool !== null && 'parameters' in tool;
+export function isVercelTool(tool?: ToolToConvert): tool is VercelTool {
+  // Checks if this tool is not an instance of Tool
+  return !(tool instanceof Tool);
 }
 
 interface ToolOptions {
@@ -294,7 +295,7 @@ interface ToolOptions {
   resourceId?: string;
   logger: Logger;
   description?: string;
-  mastra?: MastraPrimitives;
+  mastra?: (Mastra & MastraPrimitives) | MastraPrimitives | undefined;
   memory?: MastraMemory;
   agentName?: string;
 }
