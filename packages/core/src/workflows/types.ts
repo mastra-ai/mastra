@@ -5,7 +5,7 @@ import type { IAction, IExecutionContext, MastraPrimitives } from '../action';
 import type { BaseLogMessage, RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 
-export interface WorkflowOptions<TTriggerSchema extends z.ZodType<any> = any> {
+export interface WorkflowOptions<TTriggerSchema extends z.ZodObject<any> = any> {
   name: string;
   triggerSchema?: TTriggerSchema;
   retryConfig?: RetryConfig;
@@ -55,7 +55,7 @@ export type RetryConfig = { attempts?: number; delay?: number };
 
 export type VariableReference<
   TStep extends StepVariableType<any, any, any, any>,
-  TTriggerSchema extends z.ZodType<any>,
+  TTriggerSchema extends z.ZodObject<any>,
 > =
   TStep extends StepAction<any, any, any, any>
     ? {
@@ -74,7 +74,7 @@ export type VariableReference<
 
 export interface BaseCondition<
   TStep extends StepVariableType<any, any, any, any>,
-  TTriggerSchema extends z.ZodType<any>,
+  TTriggerSchema extends z.ZodObject<any>,
 > {
   ref: TStep extends StepAction<any, any, any, any>
     ? {
@@ -120,14 +120,17 @@ export type StepDef<
   }
 >;
 
-export type StepCondition<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodType<any>> =
+export type StepCondition<
+  TStep extends StepVariableType<any, any, any, any>,
+  TTriggerSchema extends z.ZodObject<any>,
+> =
   | BaseCondition<TStep, TTriggerSchema>
   | SimpleConditionalType
   | { and: StepCondition<TStep, TTriggerSchema>[] }
   | { or: StepCondition<TStep, TTriggerSchema>[] }
   | { not: StepCondition<TStep, TTriggerSchema> };
 
-type Condition<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodType<any>> =
+type Condition<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodObject<any>> =
   | BaseCondition<TStep, TTriggerSchema>
   | SimpleConditionalType
   | { and: Condition<TStep, TTriggerSchema>[] }
@@ -138,7 +141,7 @@ export interface StepConfig<
   TStep extends StepAction<any, any, any, any>,
   CondStep extends StepVariableType<any, any, any, any>,
   VarStep extends StepVariableType<any, any, any, any>,
-  TTriggerSchema extends z.ZodType<any>,
+  TTriggerSchema extends z.ZodObject<any>,
 > {
   snapshotOnTimeout?: boolean;
   when?:
@@ -175,7 +178,7 @@ type StepFailure = {
 export type StepResult<T> = StepSuccess<T> | StepFailure | StepSuspended | StepWaiting;
 
 // Update WorkflowContext
-export interface WorkflowContext<TTrigger extends z.ZodType<any> = any> {
+export interface WorkflowContext<TTrigger extends z.ZodObject<any> = any> {
   steps: Record<string, StepResult<any>>;
   triggerData: z.infer<TTrigger>;
   attempts: Record<string, number>;
@@ -368,7 +371,7 @@ export interface WorkflowRunState {
   suspendedSteps?: Record<string, string>;
 }
 
-export type WorkflowResumeResult<TTriggerSchema extends z.ZodType<any>> = {
+export type WorkflowResumeResult<TTriggerSchema extends z.ZodObject<any>> = {
   triggerData?: z.infer<TTriggerSchema>;
   results: Record<string, StepResult<any>>;
 };
