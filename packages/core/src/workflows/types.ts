@@ -1,7 +1,7 @@
 import type { Query } from 'sift';
 import type { z } from 'zod';
 
-import type { IAction, IExecutionContext, MastraPrimitives } from '../action';
+import type { IAction, IExecutionContext, MastraUnion } from '../action';
 import type { BaseLogMessage, RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 
@@ -9,7 +9,7 @@ export interface WorkflowOptions<TTriggerSchema extends z.ZodObject<any> = any> 
   name: string;
   triggerSchema?: TTriggerSchema;
   retryConfig?: RetryConfig;
-  mastra?: MastraPrimitives;
+  mastra?: Mastra;
 }
 
 export interface StepExecutionContext<
@@ -19,6 +19,7 @@ export interface StepExecutionContext<
   context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> & TContext : TContext;
   suspend: () => Promise<void>;
   runId: string;
+  mastra?: MastraUnion;
 }
 
 export interface StepAction<
@@ -176,6 +177,7 @@ export type StepResult<T> = StepSuccess<T> | StepFailure | StepSuspended | StepW
 
 // Update WorkflowContext
 export interface WorkflowContext<TTrigger extends z.ZodObject<any> = any> {
+  mastra?: MastraUnion;
   steps: Record<string, StepResult<any>>;
   triggerData: z.infer<TTrigger>;
   attempts: Record<string, number>;

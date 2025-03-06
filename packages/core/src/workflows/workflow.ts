@@ -56,7 +56,10 @@ export class Workflow<
     this.triggerSchema = triggerSchema;
 
     if (mastra) {
-      this.__registerPrimitives(mastra);
+      this.__registerPrimitives({
+        telemetry: mastra.getTelemetry(),
+        logger: mastra.getLogger(),
+      });
     }
   }
 
