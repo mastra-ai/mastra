@@ -1,5 +1,28 @@
 # @mastra/core
 
+## 0.5.0-alpha.5
+
+### Minor Changes
+
+- dfbe4e9: Added new looping constructs with while/until and optional enum-based cyclical condition execution
+- 3764e71: Workflow trigger data should only accept object types
+- 358f069: Experimental if-else branching in between steps
+
+### Patch Changes
+
+- 22643eb: Replace MastraPrimitives with direct Mastra instance
+- 6feb23f: Fix for else condition with ref/query syntax
+- f2d6727: Support for compound `.after` syntax
+- 301e4ee: Fix log level showing number in core logger
+- 9e81f35: Fix query filter for vector search and rerank
+- caefaa2: Added optional chaining to a memory function call that may not exist
+- c151ae6: Fixed an issue where models that don't support structured output would error when generating a thread title. Added an option to disable thread title llm generation `new Memory({ threads: { generateTitle: false }})`
+- 52e0418: Split up action types between tools and workflows
+- 03236ec: Added GRPC Exporter for Laminar and updated dodcs for Observability Providers
+- df982db: Updated Agent tool input to accept vercel tool format
+- 0461849: Fixed a bug where mastra.db file location was inconsistently created when running mastra dev vs running a file directly (tsx src/index.ts for ex)
+- 2259379: Add documentation for workflow looping APIs
+
 ## 0.5.0-alpha.4
 
 ### Patch Changes
