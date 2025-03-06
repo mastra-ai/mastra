@@ -698,7 +698,7 @@ export class Workflow<
     // Reset attempt count
     if (parsedSnapshot.context?.attempts) {
       parsedSnapshot.context.attempts[stepId] =
-        this.#steps[stepId]?.retryConfig?.attempts || this.#retryConfig?.attempts || 3;
+        this.#steps[stepId]?.retryConfig?.attempts || this.#retryConfig?.attempts || 1;
     }
 
     this.logger.debug('Resuming workflow with updated snapshot', {
