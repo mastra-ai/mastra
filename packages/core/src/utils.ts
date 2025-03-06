@@ -295,7 +295,7 @@ interface ToolOptions {
   resourceId?: string;
   logger: Logger;
   description?: string;
-  mastra?: (Mastra & MastraPrimitives) | MastraPrimitives | undefined;
+  mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
   memory?: MastraMemory;
   agentName?: string;
 }
