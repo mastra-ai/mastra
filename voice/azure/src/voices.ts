@@ -212,4 +212,4 @@ export const AZURE_VOICES = [
   'en-ZA-LukeNeural',
 ] as const;
 
-export type VoiceId = (typeof voices)[number];
+export type VoiceId = (typeof AZURE_VOICES)[number];
