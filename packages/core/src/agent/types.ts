@@ -23,22 +23,7 @@ export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool>;
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
-type WithComplexReasoning = {
-  reasoning?: string | Array<{ type: 'text'; text: string; signature?: string } | { type: 'redacted'; data: string }>;
-};
-
-type UnwrapPromise<T> = T extends PromiseLike<infer U> ? U : T;
-
-export type MastraLanguageModel = Omit<LanguageModelV1, 'doGenerate' | 'doStream'> & {
-  doGenerate(
-    options: Parameters<LanguageModelV1['doGenerate']>[0],
-  ): PromiseLike<Omit<UnwrapPromise<ReturnType<LanguageModelV1['doGenerate']>>, 'reasoning'> & WithComplexReasoning>;
-  doStream(options: Parameters<LanguageModelV1['doStream']>[0]): PromiseLike<
-    Omit<UnwrapPromise<ReturnType<LanguageModelV1['doStream']>>, 'stream'> & {
-      stream: ReadableStream<any>;
-    }
-  >;
-};
+export type MastraLanguageModel = LanguageModelV1;
 
 export interface AgentConfig<
   TTools extends ToolsInput = ToolsInput,

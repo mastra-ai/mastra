@@ -74,7 +74,7 @@ export class Agent<
       throw new Error(`LanguageModel is required to create an Agent. Please provide the 'model'.`);
     }
 
-    this.llm = new MastraLLM({ model: config.model as LanguageModelV1 });
+    this.llm = new MastraLLM({ model: config.model });
 
     this.tools = {} as TTools;
 
