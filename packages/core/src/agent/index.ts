@@ -17,7 +17,7 @@ import type {
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema, z } from 'zod';
 
-import type { MastraPrimitives } from '../action';
+import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
@@ -79,7 +79,10 @@ export class Agent<
     }
 
     if (config.mastra) {
-      this.__registerPrimitives(config.mastra);
+      this.__registerPrimitives({
+        telemetry: config.mastra.getTelemetry(),
+        logger: config.mastra.getLogger(),
+      });
     }
 
     if (config.metrics) {
@@ -509,7 +512,7 @@ export class Agent<
             threadId,
             resourceId,
             logger: this.logger,
-            mastra: mastraProxy as (Mastra & MastraPrimitives) | undefined,
+            mastra: mastraProxy as MastraUnion | undefined,
             memory,
             agentName: this.name,
           };
@@ -543,7 +546,7 @@ export class Agent<
                           tool?.execute?.(
                             {
                               context: args,
-                              mastra: mastraProxy as (Mastra & MastraPrimitives) | undefined,
+                              mastra: mastraProxy as MastraUnion | undefined,
                               memory,
                               runId,
                               threadId,

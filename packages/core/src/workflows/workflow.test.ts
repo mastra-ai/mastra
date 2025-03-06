@@ -1365,15 +1365,17 @@ describe('Workflow', async () => {
       const step1 = new Step({ id: 'step1', execute: vi.fn<any>().mockResolvedValue({ result: 'success' }) });
       const step2 = new Step({ id: 'step2', execute: vi.fn<any>().mockResolvedValue({ result: 'success 2' }) });
 
+      const mastra = new Mastra({
+        logger: createLogger({
+          name: 'Workflow',
+        }),
+      });
+
       const workflow = new Workflow({
         name: 'test-workflow',
 
         retryConfig: { attempts: 3, delay: 10 },
-        mastra: {
-          logger: createLogger({
-            name: 'Workflow',
-          }),
-        },
+        mastra,
       });
 
       workflow
