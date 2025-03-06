@@ -1,6 +1,6 @@
 'use client';
 
-import { Message } from 'ai';
+import { Message } from '@ai-sdk/react';
 import cx from 'classnames';
 import { motion } from 'framer-motion';
 import { Dispatch, SetStateAction } from 'react';
@@ -30,23 +30,6 @@ export const PreviewMessage = ({
   vote: Vote | undefined;
   isLoading: boolean;
 }) => {
-  // Don't display some tools if they are finished and we don't have a display for them.
-  if (
-    message.toolInvocations &&
-    message.toolInvocations.some(
-      (toolInvocation) =>
-        toolInvocation.state === 'result' &&
-        [
-          'searchCryptoCoins',
-          'getCryptoPrice',
-          'getHistoricalCryptoPrices',
-          'todayTool',
-        ].includes(toolInvocation.toolName)
-    )
-  ) {
-    return null;
-  }
-
   return (
     <motion.div
       className="w-full mx-auto max-w-3xl px-4 group/message"
@@ -72,7 +55,7 @@ export const PreviewMessage = ({
             </div>
           )}
 
-          {message.toolInvocations && message.toolInvocations.length > 0 && (
+          {/* {message.toolInvocations && message.toolInvocations.length > 0 && (
             <div className="flex flex-col gap-4">
               {message.toolInvocations.map((toolInvocation) => {
                 const {
@@ -151,7 +134,7 @@ export const PreviewMessage = ({
                 }
               })}
             </div>
-          )}
+          )} */}
 
           {message.experimental_attachments && (
             <div className="flex flex-row gap-2">

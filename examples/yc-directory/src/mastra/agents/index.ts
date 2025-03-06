@@ -1,11 +1,9 @@
 import { Agent } from '@mastra/core/agent';
-import { Anthropic } from '@mastra/core/llm/anthropic';
+import { anthropic } from '@ai-sdk/anthropic';
 
 import { ycDirectoryTool } from '../tools';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const model = anthropic('claude-3-5-sonnet-20241022');
 
 export const ycAgent = new Agent({
   name: 'YC Directory Agent',
@@ -17,6 +15,6 @@ export const ycAgent = new Agent({
       If you don't know the answer, say "I don't know" and don't make up an answer.
       You only know information about the YC Company name, long description, tags, industries, and batch.
 `,
-  llm: anthropic,
+  model,
   tools: { ycDirectoryTool },
 });

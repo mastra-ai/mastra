@@ -3,6 +3,7 @@
 import { Car, Coffee, MapPin, Star, Wifi } from "lucide-react";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { JSX } from "react";
 
 /* eslint-disable @next/next/no-img-element */
 

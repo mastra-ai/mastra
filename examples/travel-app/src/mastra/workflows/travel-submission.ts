@@ -125,7 +125,9 @@ function createArrangementStep({
         });
 
         const typeSelection = items?.filter((item: Record<string, unknown>) => {
-          return result?.object?.ids?.includes(item?.id || item?.flightNumber);
+          return result?.object?.ids?.includes(
+            (item?.id as string) || (item?.flightNumber as string),
+          );
         });
         console.log(type, typeSelection);
         return {

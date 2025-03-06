@@ -5,7 +5,6 @@ export const searchCryptoCoins = createTool({
   id: 'Search crypto coins',
   inputSchema: z.object({ keyword: z.string() }),
   description: 'Search all available crypto coins by a keyword',
-  enableCache: true,
   execute: async ({ context }) => {
     const coinListUrl = `https://api.coingecko.com/api/v3/coins/list`;
 
@@ -48,7 +47,6 @@ export const getCryptoPrice = createTool({
   id: 'Get crypto price by id',
   inputSchema: z.object({ id: z.string() }),
   description: 'Get crypto price by id',
-  enableCache: true,
   execute: async ({ context: { id } }) => {
     console.log('getCryptoPrice for', id);
     const coinListUrl = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${id}`;
@@ -76,7 +74,6 @@ export const getHistoricalCryptoPrices = createTool({
   id: 'Get historical crypto prices for use in a chart',
   inputSchema: z.object({ id: z.string(), days: z.number() }),
   description: 'Get historical crypto prices for use in a chart',
-  enableCache: true,
   execute: async ({ context: { id, days } }) => {
     console.log('getHistoricalCryptoPrices for', id);
     const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}`;

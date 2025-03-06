@@ -26,7 +26,7 @@ import type { WorkflowResultReturn } from './workflow-instance';
 import { WorkflowInstance } from './workflow-instance';
 export class Workflow<
   TSteps extends Step<any, any, any>[] = any,
-  TTriggerSchema extends z.ZodType<any> = any,
+  TTriggerSchema extends z.ZodObject<any> = any,
 > extends MastraBase {
   name: string;
   triggerSchema?: TTriggerSchema;
@@ -56,7 +56,10 @@ export class Workflow<
     this.triggerSchema = triggerSchema;
 
     if (mastra) {
-      this.__registerPrimitives(mastra);
+      this.__registerPrimitives({
+        telemetry: mastra.getTelemetry(),
+        logger: mastra.getLogger(),
+      });
     }
   }
 
@@ -371,7 +374,7 @@ export class Workflow<
                 const result = await activeCondition.condition(payload);
                 return !result;
               }
-            : () => Promise.resolve(false),
+            : { not: activeCondition.condition },
       },
     );
 
