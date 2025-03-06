@@ -22,16 +22,8 @@ jobs:
                    contains(github.event.pull_request.files.*.path, '.changeset/') || 
                    contains(github.event.pull_request.files.*.path, 'generated-changesets/') }} == 'true' ]]; then
             echo "Skip workflow as changes are only in excluded directories"
-            echo "should_skip=true" >> $GITHUB_OUTPUT
             exit 0
           fi
-          echo "should_skip=false" >> $GITHUB_OUTPUT
-
-      - name: Early success
-        if: steps.check.outputs.should_skip == 'true'
-        run: |
-          echo "Skipping workflow as changes are only in excluded directories"
-          exit 0
 
       - name: Checkout repo
         uses: actions/checkout@v4
