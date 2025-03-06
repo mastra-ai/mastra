@@ -23,13 +23,30 @@ export type ToolsetsInput = Record<string, Record<string, ToolAction<any, any, a
 
 export type ToolsInput = Record<string, ToolAction<any, any, any>>;
 
+type WithComplexReasoning = {
+  reasoning?: string | Array<{ type: 'text'; text: string; signature?: string } | { type: 'redacted'; data: string }>;
+};
+
+type UnwrapPromise<T> = T extends PromiseLike<infer U> ? U : T;
+
+export type MastraLanguageModel = Omit<LanguageModelV1, 'doGenerate' | 'doStream'> & {
+  doGenerate(
+    options: Parameters<LanguageModelV1['doGenerate']>[0],
+  ): PromiseLike<Omit<UnwrapPromise<ReturnType<LanguageModelV1['doGenerate']>>, 'reasoning'> & WithComplexReasoning>;
+  doStream(options: Parameters<LanguageModelV1['doStream']>[0]): PromiseLike<
+    Omit<UnwrapPromise<ReturnType<LanguageModelV1['doStream']>>, 'stream'> & {
+      stream: ReadableStream<any>;
+    }
+  >;
+};
+
 export interface AgentConfig<
   TTools extends Record<string, ToolAction<any, any, any>> = Record<string, ToolAction<any, any, any>>,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > {
   name: string;
   instructions: string;
-  model: LanguageModelV1;
+  model: MastraLanguageModel;
   tools?: TTools;
   mastra?: MastraPrimitives;
   /** @deprecated This property is deprecated. Use evals instead to add evaluation metrics. */

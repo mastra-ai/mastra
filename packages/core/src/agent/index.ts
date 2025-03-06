@@ -15,8 +15,7 @@ import type {
   UserContent,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
-import { z } from 'zod';
+import type { ZodSchema, z } from 'zod';
 
 import type { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
@@ -34,7 +33,13 @@ import type { CoreTool, ToolAction } from '../tools/types';
 import { createMastraProxy } from '../utils';
 import type { CompositeVoice } from '../voice';
 
-import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
+import type {
+  AgentConfig,
+  AgentGenerateOptions,
+  AgentStreamOptions,
+  MastraLanguageModel,
+  ToolsetsInput,
+} from './types';
 
 export * from './types';
 
@@ -49,7 +54,7 @@ export class Agent<
   public name: string;
   readonly llm: MastraLLMBase;
   instructions: string;
-  readonly model?: LanguageModelV1;
+  readonly model?: MastraLanguageModel;
   #mastra?: Mastra;
   #memory?: MastraMemory;
   tools: TTools;
@@ -68,7 +73,7 @@ export class Agent<
       throw new Error(`LanguageModel is required to create an Agent. Please provide the 'model'.`);
     }
 
-    this.llm = new MastraLLM({ model: config.model });
+    this.llm = new MastraLLM({ model: config.model as LanguageModelV1 });
 
     this.tools = {} as TTools;
 
