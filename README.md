@@ -1,6 +1,6 @@
 # Mastra <img align="cener" alt="Project Status: Beta" src="https://img.shields.io/badge/beta-status-blue"> <img align="cener" alt="Project Status: Alpha" src="https://img.shields.io/badge/Y%20Combinator-W25-orange?style=flat-square">
 
-Mastra is an opinionated Typescript framework that helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations and evals. You can run Mastra on your local machine, or deploy to a serverless cloud.
+Mastra is an opinionated TypeScript framework that helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations and evals. You can run Mastra on your local machine, or deploy to a serverless cloud.
 
 The main Mastra features are:
 

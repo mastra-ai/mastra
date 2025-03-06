@@ -1,15 +1,17 @@
 import { setTimeout } from 'node:timers/promises';
-import { trace, context as otlpContext } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
+import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { z } from 'zod';
 
-import type { IAction, MastraPrimitives } from '../action';
+import type { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 
+import type { Mastra } from '../mastra';
 import type { Step } from './step';
 import type {
   ActionContext,
   RetryConfig,
+  StepAction,
   StepConfig,
   StepDef,
   StepGraph,
@@ -18,10 +20,10 @@ import type {
   WorkflowOptions,
   WorkflowRunState,
 } from './types';
-import { isVariableReference, updateStepInHierarchy } from './utils';
-import { WorkflowInstance } from './workflow-instance';
-import type { WorkflowResultReturn } from './workflow-instance';
 import { WhenConditionReturnValue } from './types';
+import { isVariableReference, updateStepInHierarchy } from './utils';
+import type { WorkflowResultReturn } from './workflow-instance';
+import { WorkflowInstance } from './workflow-instance';
 export class Workflow<
   TSteps extends Step<any, any, any>[] = any,
   TTriggerSchema extends z.ZodType<any> = any,
@@ -29,15 +31,16 @@ export class Workflow<
   name: string;
   triggerSchema?: TTriggerSchema;
   #retryConfig?: RetryConfig;
-  #mastra?: MastraPrimitives;
+  #mastra?: Mastra;
   #runs: Map<string, WorkflowInstance<TSteps, TTriggerSchema>> = new Map();
 
   // registers stepIds on `after` calls
   #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
+  #ifStack: { condition: StepConfig<any, any, any, TTriggerSchema>['when']; elseStepKey: string }[] = [];
   #stepGraph: StepGraph = { initial: [] };
   #stepSubscriberGraph: Record<string, StepGraph> = {};
-  #steps: Record<string, IAction<any, any, any, any>> = {};
+  #steps: Record<string, StepAction<any, any, any, any>> = {};
   #onStepTransition: Set<(state: WorkflowRunState) => void | Promise<void>> = new Set();
 
   /**
@@ -51,15 +54,14 @@ export class Workflow<
     this.name = name;
     this.#retryConfig = retryConfig;
     this.triggerSchema = triggerSchema;
-    this.#mastra = mastra;
 
-    if (mastra?.logger) {
-      this.logger = mastra?.logger;
+    if (mastra) {
+      this.__registerPrimitives(mastra);
     }
   }
 
   step<
-    TStep extends IAction<any, any, any, any>,
+    TStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>) {
@@ -114,7 +116,7 @@ export class Workflow<
   }
 
   then<
-    TStep extends IAction<any, any, any, any>,
+    TStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>) {
@@ -162,13 +164,14 @@ export class Workflow<
   }
 
   private loop<
-    FallbackStep extends IAction<any, any, any, any>,
+    FallbackStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(
     applyOperator: (op: string, value: any, target: any) => { status: string },
     condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'],
     fallbackStep: FallbackStep,
+    loopType?: 'while' | 'until',
   ) {
     const lastStepKey = this.#lastStepStack[this.#lastStepStack.length - 1];
     // If no last step, we can't do anything
@@ -186,7 +189,11 @@ export class Workflow<
       execute: async ({ context }: any) => {
         if (typeof condition === 'function') {
           const result = await condition({ context });
-          return { status: result ? 'complete' : 'continue' };
+          if (loopType === 'while') {
+            return { status: result ? 'continue' : 'complete' };
+          } else {
+            return { status: result ? 'complete' : 'continue' };
+          }
         }
 
         // For query-based conditions, we need to:
@@ -263,7 +270,7 @@ export class Workflow<
   }
 
   while<
-    FallbackStep extends IAction<any, any, any, any>,
+    FallbackStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'], fallbackStep: FallbackStep) {
@@ -286,11 +293,11 @@ export class Workflow<
       }
     };
 
-    return this.loop(applyOperator, condition, fallbackStep);
+    return this.loop(applyOperator, condition, fallbackStep, 'while');
   }
 
   until<
-    FallbackStep extends IAction<any, any, any, any>,
+    FallbackStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'], fallbackStep: FallbackStep) {
@@ -313,16 +320,75 @@ export class Workflow<
       }
     };
 
-    return this.loop(applyOperator, condition, fallbackStep);
+    return this.loop(applyOperator, condition, fallbackStep, 'until');
   }
 
-  after<TStep extends IAction<any, any, any, any>>(step: TStep) {
-    const stepKey = this.#makeStepKey(step);
-    this.#afterStepStack.push(stepKey);
+  if<TStep extends StepAction<any, any, any, any>>(condition: StepConfig<TStep, any, any, TTriggerSchema>['when']) {
+    const lastStep = this.#steps[this.#lastStepStack[this.#lastStepStack.length - 1] ?? ''];
+    if (!lastStep) {
+      throw new Error('Condition requires a step to be executed after');
+    }
 
-    // Initialize subscriber array for this step if it doesn't exist
-    if (!this.#stepSubscriberGraph[stepKey]) {
-      this.#stepSubscriberGraph[stepKey] = { initial: [] };
+    this.after(lastStep);
+
+    const ifStepKey = `__${lastStep.id}_if`;
+    this.step(
+      {
+        id: ifStepKey,
+        execute: async ({ context }) => {
+          return { executed: true };
+        },
+      },
+      {
+        when: condition,
+      },
+    );
+
+    const elseStepKey = `__${lastStep.id}_else`;
+    this.#ifStack.push({ condition, elseStepKey });
+
+    return this;
+  }
+
+  else() {
+    const activeCondition = this.#ifStack.pop();
+    if (!activeCondition) {
+      throw new Error('No active condition found');
+    }
+
+    this.step(
+      {
+        id: activeCondition.elseStepKey,
+        execute: async ({ context }) => {
+          return { executed: true };
+        },
+      },
+      {
+        when:
+          typeof activeCondition.condition === 'function'
+            ? async payload => {
+                // @ts-ignore
+                const result = await activeCondition.condition(payload);
+                return !result;
+              }
+            : () => Promise.resolve(false),
+      },
+    );
+
+    return this;
+  }
+
+  after<TStep extends StepAction<any, any, any, any>>(steps: TStep | TStep[]) {
+    const stepsArray = Array.isArray(steps) ? steps : [steps];
+    const stepKeys = stepsArray.map(step => this.#makeStepKey(step));
+
+    // Create a compound key for multiple steps
+    const compoundKey = stepKeys.join('&&');
+    this.#afterStepStack.push(compoundKey);
+
+    // Initialize subscriber array for this compound step if it doesn't exist
+    if (!this.#stepSubscriberGraph[compoundKey]) {
+      this.#stepSubscriberGraph[compoundKey] = { initial: [] };
     }
 
     return this as Omit<typeof this, 'then' | 'after'>;
@@ -367,7 +433,6 @@ export class Workflow<
    * @returns this instance for method chaining
    */
   commit() {
-    // this.#validateWorkflow();
     return this;
   }
 
@@ -447,7 +512,7 @@ export class Workflow<
       };
 
       // Only trace if telemetry is available and action exists
-      const finalAction = this.#mastra?.telemetry
+      const finalAction = this.#mastra?.getTelemetry()
         ? executeStep(execute, `workflow.${this.name}.action.${stepId}`, {
             componentName: this.name,
             runId: rest.runId as string,
@@ -668,6 +733,11 @@ export class Workflow<
       stepId,
     });
   }
+
+  __registerMastra(mastra: Mastra) {
+    this.#mastra = mastra;
+  }
+
   __registerPrimitives(p: MastraPrimitives) {
     if (p.telemetry) {
       this.__setTelemetry(p.telemetry);
@@ -676,8 +746,6 @@ export class Workflow<
     if (p.logger) {
       this.__setLogger(p.logger);
     }
-
-    this.#mastra = p;
   }
 
   get stepGraph() {

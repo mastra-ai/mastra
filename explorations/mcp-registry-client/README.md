@@ -1,7 +1,7 @@
 # MCP Configuration Client
 
-This POC exploration is based around asking the question: "As an agentic framework, how can we programatically interact with MCP tool servers in a way that will simplify using MCP for our users".
-This project provides tools for discovering, configuring, and managing MCP servers as an MCP client.
+This POC exploration is based around asking the question: "As an agent framework, how can we programatically interact with MCP tool servers in a way that will simplify using MCP for our users".
+This project provides tools for discovering, configuring, and managing MCP servers as an MCP client. [We wrote a blog post as part of this exploration as well](https://mastra.ai/blog/mastra-mcp)
 
 ## Proposal 1: RegistryClient
 
