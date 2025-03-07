@@ -129,27 +129,27 @@ const promptAgent = new Step({
     // Simulate AI generating content
     const initialDraft = generateInitialDraft(userInput);
 
-    // If confidence is low, suspend for human guidance
-    if (initialDraft.confidenceScore < 0.7) {
-      console.log('Low confidence in generated content, suspending for human guidance');
-
-      if (!guidance) {
-        // Suspend with payload containing the draft and reason
-        await suspend();
-        return undefined;
-      }
-
-      // This code runs after resume with human guidance
-      console.log('Resumed with human guidance');
-
-      // Use the human guidance to improve the output
-      return {
-        modelOutput: enhanceWithGuidance(initialDraft.content, guidance),
-      };
+    // If confidence is high, return the generated content directly
+    if (initialDraft.confidenceScore > 0.7) {
+      return { modelOutput: initialDraft.content };
     }
 
-    // If confidence is high, return the generated content directly
-    return { modelOutput: initialDraft.content };
+    console.log('Low confidence in generated content, suspending for human guidance');
+
+    // If confidence is low, suspend for human guidance
+    if (!guidance) {
+      // only suspend if no guidance is provided
+      await suspend();
+      return undefined;
+    }
+
+    // This code runs after resume with human guidance
+    console.log('Resumed with human guidance');
+
+    // Use the human guidance to improve the output
+    return {
+      modelOutput: enhanceWithGuidance(initialDraft.content, guidance),
+    };
   },
   outputSchema: z.object({ modelOutput: z.string() }).optional(),
 });
@@ -189,29 +189,26 @@ const improveResponse = new Step({
     const improvedContent = context.getStepResult<{ improvedContent: string }>('improveResponse')?.improvedContent;
     const resumeAttempts = context.getStepResult<{ resumeAttempts: number }>('improveResponse')?.resumeAttempts ?? 0;
 
-    // If scores are below threshold, suspend for human intervention
-    if (toneScore < 0.8 || completenessScore < 0.8) {
-      console.log('Content quality below threshold, suspending for human intervention');
-
-      if (!improvedContent) {
-        // Suspend with payload containing the draft and reason
-        await suspend({
-          content,
-          scores: { tone: toneScore, completeness: completenessScore },
-          needsImprovement: toneScore < 0.8 ? 'tone' : 'completeness',
-          resumeAttempts: resumeAttempts + 1,
-        });
-        return { improvedOutput: content ?? '' };
-      }
-
-      // This code runs after resume with human improvements
-      console.log('Resumed with human improvements', improvedContent);
-
-      return { improvedOutput: improvedContent ?? content ?? '' };
+    // If scores are above threshold, make minor improvements
+    if (toneScore > 0.8 && completenessScore > 0.8) {
+      return { improvedOutput: makeMinorImprovements(content) };
     }
 
-    // If scores are good, make minor automated improvements
-    return { improvedOutput: makeMinorImprovements(content) };
+    console.log('Content quality below threshold, suspending for human intervention');
+
+    if (!improvedContent) {
+      // Suspend with payload containing content and resume attempts
+      await suspend({
+        content,
+        scores: { tone: toneScore, completeness: completenessScore },
+        needsImprovement: toneScore < 0.8 ? 'tone' : 'completeness',
+        resumeAttempts: resumeAttempts + 1,
+      });
+      return { improvedOutput: content ?? '' };
+    }
+
+    console.log('Resumed with human improvements', improvedContent);
+    return { improvedOutput: improvedContent ?? content ?? '' };
   },
   outputSchema: z.object({ improvedOutput: z.string() }).optional(),
 });
@@ -270,11 +267,11 @@ function makeMinorImprovements(content: string = '') {
   return `${content} (with minor improvements)`;
 }
 
-function calculateToneScore(content: string = '') {
+function calculateToneScore(_: string = '') {
   return 0.7; // Simulate a score that will trigger suspension
 }
 
-function calculateCompletenessScore(content: string = '') {
+function calculateCompletenessScore(_: string = '') {
   return 0.9;
 }
 
@@ -292,10 +289,12 @@ async function runWorkflow() {
 
   console.log('Initial workflow state:', initialResult.results);
 
+  const promptAgentStepResult = initialResult.activePaths.get('promptAgent');
+
   // Check if promptAgent step is suspended
-  if (initialResult.results.promptAgent?.status === 'suspended') {
+  if (promptAgentStepResult?.status === 'suspended') {
     console.log('Workflow suspended at promptAgent step');
-    console.log('Suspension payload:', initialResult?.results.promptAgent?.suspendPayload);
+    console.log('Suspension payload:', promptAgentStepResult?.suspendPayload);
 
     // Resume with human guidance
     const resumeResult1 = await workflow.resume({
@@ -309,33 +308,32 @@ async function runWorkflow() {
     console.log('Workflow resumed and continued to next steps');
 
     let improveResponseResumeAttempts = 0;
-    let improveResponseStatus = undefined;
+    let improveResponseStatus = resumeResult1?.activePaths.get('improveResponse')?.status;
+
     // Check if improveResponse step is suspended
-    if (resumeResult1?.results.improveResponse?.status === 'suspended') {
-      do {
-        console.log('Workflow suspended at improveResponse step');
-        console.log('Suspension payload:', resumeResult1?.results.improveResponse?.suspendPayload);
+    while (improveResponseStatus === 'suspended') {
+      console.log('Workflow suspended at improveResponse step');
+      console.log('Suspension payload:', resumeResult1?.activePaths.get('improveResponse')?.suspendPayload);
 
-        const improvedContent =
-          improveResponseResumeAttempts < 3
-            ? undefined
-            : 'Completely revised content about sustainable energy focusing on solar and wind technologies';
+      const improvedContent =
+        improveResponseResumeAttempts < 3
+          ? undefined
+          : 'Completely revised content about sustainable energy focusing on solar and wind technologies';
 
-        // Resume with human improvements
-        finalResult = await workflow.resume({
-          runId,
-          stepId: 'improveResponse',
-          context: {
-            improvedContent,
-            resumeAttempts: improveResponseResumeAttempts,
-          },
-        });
-        // @ts-ignore
-        improveResponseResumeAttempts = finalResult?.results.improveResponse?.suspendPayload?.resumeAttempts ?? 0;
-        improveResponseStatus = finalResult?.results.improveResponse?.status;
+      // Resume with human improvements
+      finalResult = await workflow.resume({
+        runId,
+        stepId: 'improveResponse',
+        context: {
+          improvedContent,
+          resumeAttempts: improveResponseResumeAttempts,
+        },
+      });
 
-        console.log('Improved response result:', finalResult?.results);
-      } while (improveResponseStatus === 'suspended');
+      improveResponseResumeAttempts = finalResult?.activePaths.get('improveResponse')?.suspendPayload?.resumeAttempts ?? 0;
+      improveResponseStatus = finalResult?.activePaths.get('improveResponse')?.status;
+
+      console.log('Improved response result:', finalResult?.results);
     }
   }
   return finalResult;
