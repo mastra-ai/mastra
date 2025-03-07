@@ -418,10 +418,14 @@ export function ensureToolProperties(tool: ToolToConvert): ToolToConvert {
     };
   }
 
-  return {
-    ...tool,
-    ...extraToolProperties,
-  };
+  if (Object.keys(extraToolProperties).length > 0) {
+    return {
+      ...tool,
+      ...extraToolProperties,
+    };
+  }
+
+  return tool;
 }
 
 function convertVercelToolParameters(tool: VercelTool): z.ZodType {
