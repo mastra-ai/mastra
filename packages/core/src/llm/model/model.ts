@@ -17,7 +17,7 @@ import type { MastraPrimitives } from '../../action';
 import type { ToolsInput } from '../../agent/types';
 import type { MastraMemory } from '../../memory/memory';
 import type { CoreTool } from '../../tools';
-import { delay } from '../../utils';
+import { delay, makeCoreTool } from '../../utils';
 
 import { MastraLLMBase } from './base';
 
@@ -82,44 +82,16 @@ export class MastraLLM extends MastraLLMBase {
         const tool = value[1];
 
         if (tool) {
-          memo[k] = {
-            description: tool.description!,
-            parameters: tool.inputSchema,
-            execute:
-              typeof tool?.execute === 'function'
-                ? async (props, options) => {
-                    try {
-                      this.logger.debug('Executing tool', {
-                        tool: k,
-                        props,
-                      });
-                      return (
-                        tool?.execute?.(
-                          {
-                            context: props,
-                            threadId,
-                            resourceId,
-                            mastra: this.#mastra,
-                            memory,
-                            runId,
-                          },
-                          options,
-                        ) ?? undefined
-                      );
-                    } catch (error) {
-                      this.logger.error('Error executing tool', {
-                        tool: k,
-                        props,
-                        error,
-                        runId,
-                        threadId,
-                        resourceId,
-                      });
-                      throw error;
-                    }
-                  }
-                : undefined,
+          const options = {
+            name: k,
+            runId,
+            threadId,
+            resourceId,
+            logger: this.logger,
+            memory,
+            mastra: this.#mastra,
           };
+          memo[k] = makeCoreTool(tool, options);
         }
         return memo;
       },

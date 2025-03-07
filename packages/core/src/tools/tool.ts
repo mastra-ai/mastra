@@ -1,7 +1,6 @@
 import type { z } from 'zod';
 
-import type { MastraPrimitives } from '../action';
-
+import type { Mastra } from '../mastra';
 import type { ToolAction, ToolExecutionContext } from './types';
 
 export class Tool<
@@ -19,7 +18,7 @@ export class Tool<
     context: TContext,
     options?: TOptions,
   ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
-  mastra?: MastraPrimitives;
+  mastra?: Mastra;
 
   constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TContext>) {
     this.id = opts.id;

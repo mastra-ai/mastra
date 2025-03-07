@@ -168,4 +168,36 @@ export class AstraVector extends MastraVector {
     const collection = this.#db.collection(indexName);
     await collection.drop();
   }
+
+  async updateIndexById(
+    indexName: string,
+    id: string,
+    update: { vector?: number[]; metadata?: Record<string, any> },
+  ): Promise<void> {
+    if (!update.vector && !update.metadata) {
+      throw new Error('No updates provided');
+    }
+
+    const collection = this.#db.collection(indexName);
+    const updateDoc: Record<string, any> = {};
+
+    if (update.vector) {
+      updateDoc.$vector = update.vector;
+    }
+
+    if (update.metadata) {
+      updateDoc.metadata = update.metadata;
+    }
+
+    await collection.findOneAndUpdate({ _id: id }, { $set: updateDoc });
+  }
+
+  async deleteIndexById(indexName: string, id: string): Promise<void> {
+    try {
+      const collection = this.#db.collection(indexName);
+      await collection.deleteOne({ _id: id });
+    } catch (error: any) {
+      throw new Error(`Failed to delete index by id: ${id} for index name: ${indexName}: ${error.message}`);
+    }
+  }
 }

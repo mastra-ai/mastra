@@ -1,11 +1,12 @@
 import { setTimeout } from 'node:timers/promises';
-import { trace, context as otlpContext } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
+import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { z } from 'zod';
 
 import type { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 
+import type { Mastra } from '../mastra';
 import type { Step } from './step';
 import type {
   ActionContext,
@@ -21,16 +22,16 @@ import type {
 } from './types';
 import { WhenConditionReturnValue } from './types';
 import { isVariableReference, updateStepInHierarchy } from './utils';
-import { WorkflowInstance } from './workflow-instance';
 import type { WorkflowResultReturn } from './workflow-instance';
+import { WorkflowInstance } from './workflow-instance';
 export class Workflow<
   TSteps extends Step<any, any, any>[] = any,
-  TTriggerSchema extends z.ZodType<any> = any,
+  TTriggerSchema extends z.ZodObject<any> = any,
 > extends MastraBase {
   name: string;
   triggerSchema?: TTriggerSchema;
   #retryConfig?: RetryConfig;
-  #mastra?: MastraPrimitives;
+  #mastra?: Mastra;
   #runs: Map<string, WorkflowInstance<TSteps, TTriggerSchema>> = new Map();
 
   // registers stepIds on `after` calls
@@ -53,10 +54,13 @@ export class Workflow<
     this.name = name;
     this.#retryConfig = retryConfig;
     this.triggerSchema = triggerSchema;
-    this.#mastra = mastra;
 
-    if (mastra?.logger) {
-      this.logger = mastra?.logger;
+    if (mastra) {
+      this.__registerPrimitives({
+        telemetry: mastra.getTelemetry(),
+        logger: mastra.getLogger(),
+      });
+      this.#mastra = mastra;
     }
   }
 
@@ -371,7 +375,7 @@ export class Workflow<
                 const result = await activeCondition.condition(payload);
                 return !result;
               }
-            : () => Promise.resolve(false),
+            : { not: activeCondition.condition },
       },
     );
 
@@ -486,11 +490,14 @@ export class Workflow<
         return await otlpContext.with(
           trace.setSpan(otlpContext.active(), this.getExecutionSpan(attributes?.runId ?? data?.runId) as Span),
           async () => {
-            // @ts-ignore
-            return this.#mastra.telemetry.traceMethod(handler, {
-              spanName,
-              attributes,
-            })(data);
+            if (this?.telemetry) {
+              return this.telemetry.traceMethod(handler, {
+                spanName,
+                attributes,
+              })(data);
+            } else {
+              return handler(data);
+            }
           },
         );
       };
@@ -512,7 +519,7 @@ export class Workflow<
       };
 
       // Only trace if telemetry is available and action exists
-      const finalAction = this.#mastra?.telemetry
+      const finalAction = this.telemetry
         ? executeStep(execute, `workflow.${this.name}.action.${stepId}`, {
             componentName: this.name,
             runId: rest.runId as string,
@@ -733,6 +740,11 @@ export class Workflow<
       stepId,
     });
   }
+
+  __registerMastra(mastra: Mastra) {
+    this.#mastra = mastra;
+  }
+
   __registerPrimitives(p: MastraPrimitives) {
     if (p.telemetry) {
       this.__setTelemetry(p.telemetry);
@@ -741,8 +753,6 @@ export class Workflow<
     if (p.logger) {
       this.__setLogger(p.logger);
     }
-
-    this.#mastra = p;
   }
 
   get stepGraph() {

@@ -2,15 +2,16 @@ import EventEmitter from 'node:events';
 import type { Span } from '@opentelemetry/api';
 import { get } from 'radash';
 import sift from 'sift';
-import { assign, createActor, fromPromise, setup } from 'xstate';
 import type { MachineContext, Snapshot } from 'xstate';
+import { assign, createActor, fromPromise, setup } from 'xstate';
 import type { z } from 'zod';
 
-import type { IAction, MastraPrimitives } from '../action';
+import type { IAction, MastraUnion } from '../action';
 import type { Logger } from '../logger';
 
+import type { Mastra } from '../mastra';
+import { createMastraProxy } from '../utils';
 import type { Step } from './step';
-import { WhenConditionReturnValue } from './types';
 import type {
   DependencyCheckOutput,
   ResolverFunctionInput,
@@ -30,6 +31,7 @@ import type {
   WorkflowEvent,
   WorkflowState,
 } from './types';
+import { WhenConditionReturnValue } from './types';
 import {
   getResultActivePaths,
   getStepResult,
@@ -42,10 +44,10 @@ import type { WorkflowInstance } from './workflow-instance';
 
 export class Machine<
   TSteps extends Step<any, any, any>[] = any,
-  TTriggerSchema extends z.ZodType<any> = any,
+  TTriggerSchema extends z.ZodObject<any> = any,
 > extends EventEmitter {
   logger: Logger;
-  #mastra?: MastraPrimitives;
+  #mastra?: Mastra;
   #workflowInstance: WorkflowInstance;
   #executionSpan?: Span | undefined;
 
@@ -72,7 +74,7 @@ export class Machine<
     startStepId,
   }: {
     logger: Logger;
-    mastra?: MastraPrimitives;
+    mastra?: Mastra;
     workflowInstance: WorkflowInstance;
     executionSpan?: Span;
     name: string;
@@ -321,6 +323,11 @@ export class Machine<
           runId: this.#runId,
         });
 
+        const logger = this.logger;
+        let mastraProxy = undefined;
+        if (this.#mastra) {
+          mastraProxy = createMastraProxy({ mastra: this.#mastra, logger });
+        }
         const result = await stepNode.config.handler({
           context: resolvedData,
           suspend: async (payload?: any) => {
@@ -338,7 +345,7 @@ export class Machine<
             }
           },
           runId: this.#runId,
-          mastra: this.#mastra,
+          mastra: mastraProxy as MastraUnion | undefined,
         });
 
         this.logger.debug(`Step ${stepNode.step.id} result`, {
@@ -832,7 +839,7 @@ export class Machine<
     };
   }
 
-  #evaluateCondition<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodType<any>>(
+  #evaluateCondition<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodObject<any>>(
     condition: StepCondition<TStep, TTriggerSchema>,
     context: WorkflowContext,
   ): boolean {

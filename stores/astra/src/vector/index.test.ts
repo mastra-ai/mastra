@@ -1153,4 +1153,115 @@ describe('AstraVector Integration Tests', () => {
       expect(upsertResults).toHaveLength(1);
     });
   });
+
+  describe('Basic vector operations', () => {
+    const testVectors = [
+      [1, 0, 0, 0],
+      [0, 1, 0, 0],
+      [0, 0, 1, 0],
+      [0, 0, 0, 1],
+    ];
+
+    it('should update the vector by id', async () => {
+      const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+      expect(ids).toHaveLength(4);
+
+      const idToBeUpdated = ids[0];
+      const newVector = [1, 2, 3, 4];
+      const newMetaData = {
+        test: 'updates',
+      };
+
+      const update = {
+        vector: newVector,
+        metadata: newMetaData,
+      };
+
+      await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: newVector,
+        topK: 2,
+        includeVector: true,
+      });
+
+      expect(results[0]?.vector).toEqual(newVector);
+      expect(results[0]?.metadata).toEqual(newMetaData);
+    });
+
+    it('should only update the metadata by id', async () => {
+      const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+      expect(ids).toHaveLength(4);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const idToBeUpdated = ids[0];
+      const newMetaData = {
+        test: 'updates',
+      };
+
+      const update = {
+        metadata: newMetaData,
+      };
+
+      await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: testVectors[0],
+        topK: 2,
+        includeVector: true,
+      });
+
+      expect(results[0]?.vector).toEqual(testVectors[0]);
+      expect(results[0]?.metadata).toEqual(newMetaData);
+    });
+
+    it('should only update vector embeddings by id', async () => {
+      const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+      expect(ids).toHaveLength(4);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const idToBeUpdated = ids[0];
+      const newVector = [1, 2, 3, 4];
+
+      const update = {
+        vector: newVector,
+      };
+
+      await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: newVector,
+        topK: 2,
+        includeVector: true,
+      });
+
+      expect(results[0]?.vector).toEqual(newVector);
+    });
+
+    it('should throw exception when no updates are given', () => {
+      expect(vectorDB.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
+    });
+
+    it('should delete the vector by id', async () => {
+      const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+      expect(ids).toHaveLength(4);
+
+      const idToBeDeleted = ids[0];
+      await vectorDB.deleteIndexById(testIndexName, idToBeDeleted);
+
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0, 0],
+        topK: 2,
+      });
+
+      expect(results).toHaveLength(2);
+      expect(results.map(res => res.id)).not.toContain(idToBeDeleted);
+    });
+  });
 });

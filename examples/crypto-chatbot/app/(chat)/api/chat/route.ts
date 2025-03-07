@@ -47,23 +47,15 @@ export async function POST(request: Request) {
 
   const userMessages = messages.map((message) => message.content);
 
-  const streamingData = new StreamData();
-
   try {
     const streamResult = await cryptoAgent.stream(userMessages, {
       resourceId: session.user.id,
       threadId: id,
-      onFinish: () => {
-        streamingData.close();
-      },
     });
 
-    return streamResult.toDataStreamResponse({
-      data: streamingData as any,
-    });
+    return streamResult.toDataStreamResponse();
   } catch (err) {
     console.error(err);
-    streamingData.close();
     return new Response('An error occurred while processing your request', {
       status: 500,
     });

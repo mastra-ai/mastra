@@ -2,9 +2,9 @@ import type { Span } from '@opentelemetry/api';
 import type { Snapshot } from 'xstate';
 import type { z } from 'zod';
 
-import type { MastraPrimitives } from '../action';
 import type { Logger } from '../logger';
 
+import type { Mastra } from '../mastra';
 import { Machine } from './machine';
 import type { Step } from './step';
 import type { RetryConfig, StepAction, StepGraph, StepResult, WorkflowContext, WorkflowRunState } from './types';
@@ -20,11 +20,11 @@ export interface WorkflowResultReturn<T extends z.ZodType<any>> {
   }>;
 }
 
-export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTriggerSchema extends z.ZodType<any> = any>
+export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTriggerSchema extends z.ZodObject<any> = any>
   implements WorkflowResultReturn<TTriggerSchema>
 {
   name: string;
-  #mastra?: MastraPrimitives;
+  #mastra?: Mastra;
   #machines: Record<string, Machine<TSteps, TTriggerSchema>> = {};
 
   logger: Logger;
@@ -62,7 +62,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     name: string;
     logger: Logger;
     steps: Record<string, StepAction<any, any, any, any>>;
-    mastra?: MastraPrimitives;
+    mastra?: Mastra;
     retryConfig?: RetryConfig;
     runId?: string;
     stepGraph: StepGraph;
@@ -134,7 +134,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     results: Record<string, StepResult<any>>;
     activePaths: Map<string, { status: string; suspendPayload?: any }>;
   }> {
-    this.#executionSpan = this.#mastra?.telemetry?.tracer.startSpan(`workflow.${this.name}.execute`, {
+    this.#executionSpan = this.#mastra?.getTelemetry()?.tracer.startSpan(`workflow.${this.name}.execute`, {
       attributes: { componentName: this.name, runId: this.runId },
     });
 

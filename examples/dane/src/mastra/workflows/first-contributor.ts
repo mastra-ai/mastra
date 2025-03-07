@@ -61,7 +61,7 @@ const generateMessage = new Step({
     const mastraDocsRes = await fetch('https://mastra.ai/llms.txt');
     const mastraDocs = await mastraDocsRes.text();
 
-    const daneNewContributor = mastra?.agents?.daneNewContributor;
+    const daneNewContributor = mastra?.getAgent('daneNewContributor');
 
     const res = await daneNewContributor?.generate(
       `

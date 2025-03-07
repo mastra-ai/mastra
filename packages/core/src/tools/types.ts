@@ -1,8 +1,10 @@
-import type { ToolExecutionOptions } from 'ai';
+import type { ToolExecutionOptions, Tool } from 'ai';
 import type { ZodSchema, z } from 'zod';
 
-import type { IAction, IExecutionContext, MastraPrimitives } from '../action';
-import type { WorkflowContext } from '../workflows';
+import type { IAction, IExecutionContext, MastraUnion } from '../action';
+import type { Mastra } from '../mastra';
+
+export type VercelTool = Tool;
 
 export type CoreTool = {
   description?: string;
@@ -10,7 +12,9 @@ export type CoreTool = {
   execute?: (params: any, options: ToolExecutionOptions) => Promise<any>;
 };
 export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema | undefined = undefined>
-  extends IExecutionContext<TSchemaIn> {}
+  extends IExecutionContext<TSchemaIn> {
+  mastra?: MastraUnion;
+}
 
 export interface ToolAction<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
@@ -23,5 +27,5 @@ export interface ToolAction<
     context: TContext,
     options?: TOptions,
   ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
-  mastra?: MastraPrimitives;
+  mastra?: Mastra;
 }
