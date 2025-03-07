@@ -138,6 +138,9 @@ export class LibSQLStore extends MastraStorage {
         // returning an undefined value will cause libsql to throw
         return null;
       }
+      if (v instanceof Date) {
+        return v.toISOString();
+      }
       return typeof v === 'object' ? JSON.stringify(v) : v;
     });
     const placeholders = values.map(() => '?').join(', ');
@@ -153,11 +156,7 @@ export class LibSQLStore extends MastraStorage {
       await this.client.execute(
         this.prepareStatement({
           tableName,
-          record: {
-            ...record,
-            createdAt: record.createdAt instanceof Date ? record.createdAt.toISOString() : record.createdAt,
-            updatedAt: record.updatedAt instanceof Date ? record.updatedAt.toISOString() : record.updatedAt,
-          },
+          record,
         }),
       );
     } catch (error) {

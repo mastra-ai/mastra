@@ -52,6 +52,53 @@ In this example:
 
 See the [Branching Paths](../../examples/workflows/branching-paths.mdx) example for more details.
 
+## Merging Multiple Branches
+
+Sometimes you need a step to execute only after multiple other steps have completed. Mastra provides a compound `.after([])` syntax that allows you to specify multiple dependencies for a step.
+
+```typescript
+myWorkflow
+  .step(fetchUserData)
+  .then(validateUserData)
+  .step(fetchProductData)
+  .then(validateProductData)
+  // This step will only run after BOTH validateUserData AND validateProductData have completed
+  .after([validateUserData, validateProductData])
+  .step(processOrder)
+```
+
+In this example:
+- `fetchUserData` and `fetchProductData` run in parallel branches
+- Each branch has its own validation step
+- The `processOrder` step only executes after both validation steps have completed successfully
+
+This pattern is particularly useful for:
+- Joining parallel execution paths
+- Implementing synchronization points in your workflow
+- Ensuring all required data is available before proceeding
+
+You can also create complex dependency patterns by combining multiple `.after([])` calls:
+
+```typescript
+myWorkflow
+  // First branch
+  .step(stepA)
+  .then(stepB)
+  .then(stepC)
+
+  // Second branch
+  .step(stepD)
+  .then(stepE)
+
+  // Third branch
+  .step(stepF)
+  .then(stepG)
+
+  // This step depends on the completion of multiple branches
+  .after([stepC, stepE, stepG])
+  .step(finalStep)
+```
+
 ## Cyclical Dependencies
 
 You can loop back to earlier steps based on conditions, allowing you to repeat tasks until certain results are achieved. The code below shows a workflow that repeats fetchData when a status is "retry":

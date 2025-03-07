@@ -410,8 +410,15 @@ export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?
 export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: Logger }) {
   return new Proxy(mastra, {
     get(target, prop) {
-      if (Reflect.has(target, prop)) {
-        return Reflect.get(target, prop);
+      const hasProp = Reflect.has(target, prop);
+
+      if (hasProp) {
+        const value = Reflect.get(target, prop);
+        const isFunction = typeof value === 'function';
+        if (isFunction) {
+          return value.bind(target);
+        }
+        return value;
       }
 
       if (prop === 'logger') {

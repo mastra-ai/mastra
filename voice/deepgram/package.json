@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-deepgram",
-  "version": "0.1.3-alpha.6",
+  "version": "0.1.3-alpha.8",
   "description": "Mastra Deepgram voice integration",
   "type": "module",
   "main": "dist/index.js",
