@@ -1,5 +1,31 @@
 # @mastra/dane
 
+## 0.0.5-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [506f1d5]
+  - @mastra/core@0.5.0-alpha.8
+  - @mastra/github@1.1.8-alpha.8
+  - @mastra/stabilityai@1.1.8-alpha.8
+  - @mastra/mcp@0.2.7-alpha.8
+  - @mastra/memory@0.2.0-alpha.8
+  - @mastra/rag@0.1.8-alpha.8
+  - @mastra/upstash@0.1.8-alpha.8
+
+## 0.0.5-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [ee667a2]
+  - @mastra/core@0.5.0-alpha.7
+  - @mastra/github@1.1.8-alpha.7
+  - @mastra/stabilityai@1.1.8-alpha.7
+  - @mastra/mcp@0.2.7-alpha.7
+  - @mastra/memory@0.2.0-alpha.7
+  - @mastra/rag@0.1.8-alpha.7
+  - @mastra/upstash@0.1.8-alpha.7
+
 ## 0.0.5-alpha.6
 
 ### Patch Changes

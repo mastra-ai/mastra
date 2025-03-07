@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-elevenlabs",
-  "version": "0.1.7-alpha.6",
+  "version": "0.1.7-alpha.8",
   "description": "Mastra ElevenLabs speech integration (DEPRECATED - use @mastra/voice-elevenlabs instead)",
   "type": "module",
   "main": "dist/index.js",

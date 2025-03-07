@@ -9,6 +9,8 @@ The `.after()` method defines explicit dependencies between workflow steps, enab
 
 ## Usage
 
+### Basic Branching
+
 ```typescript
 workflow
   .step(stepA)
@@ -17,14 +19,26 @@ workflow
     .step(stepC);
 ```
 
+### Merging Multiple Branches
+
+```typescript
+workflow
+  .step(stepA)
+    .then(stepB)
+  .step(stepC)
+    .then(stepD)
+  .after([stepB, stepD])  // Create a step that depends on multiple steps
+    .step(stepE);
+```
+
 ## Parameters
 
 <PropertiesTable
   content={[
     {
-      name: "stepId",
-      type: "string",
-      description: "ID(s) of step(s) that must complete before continuing",
+      name: "steps",
+      type: "Step | Step[]",
+      description: "A single step or array of steps that must complete before continuing",
       isOptional: false
     }
   ]}
@@ -42,9 +56,33 @@ workflow
   ]}
 />
 
+## Examples
+
+### Single Dependency
+
+```typescript
+workflow
+  .step(fetchData)
+  .then(processData)
+  .after(fetchData)  // Branch after fetchData
+  .step(logData);
+```
+
+### Multiple Dependencies (Merging Branches)
+
+```typescript
+workflow
+  .step(fetchUserData)
+  .then(validateUserData)
+  .step(fetchProductData)
+  .then(validateProductData)
+  .after([validateUserData, validateProductData])  // Wait for both validations to complete
+  .step(processOrder);
+```
+
 ## Related
 
 - [Branching Paths example](../../../examples/workflows/branching-paths.mdx)
 - [Workflow Class Reference](./workflow.mdx)
 - [Step Reference](./step-class.mdx)
-- [Control Flow Guide](../../workflows/control-flow.mdx)
+- [Control Flow Guide](../../workflows/control-flow.mdx#merging-multiple-branches)

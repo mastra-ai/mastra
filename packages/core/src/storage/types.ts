@@ -22,6 +22,7 @@ export interface WorkflowRow {
 
 export type StorageGetMessagesArg = {
   threadId: string;
+  resourceId?: string;
   selectBy?: {
     vectorSearchString?: string;
     last?: number | false;
