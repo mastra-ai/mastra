@@ -30,7 +30,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
-import { makeCoreTool, createMastraProxy, ensureToolId } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
 import type { CompositeVoice } from '../voice';
 
 import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput, ToolsInput } from './types';
@@ -79,7 +79,7 @@ export class Agent<
       const tools = Object.keys(config.tools).reduce<ToolsInput>((acc, key) => {
         const tool = config?.tools?.[key];
         if (tool) {
-          acc[key] = ensureToolId(tool);
+          acc[key] = ensureToolProperties(tool);
         }
         return acc;
       }, {} as ToolsInput);
