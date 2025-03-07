@@ -1,3 +1,5 @@
+import { existsSync } from 'fs';
+import { join } from 'path';
 import type {
   AssistantContent,
   ToolResultPart,
@@ -6,14 +8,12 @@ import type {
   ToolInvocation,
   CoreMessage,
   EmbeddingModel,
-  CoreTool,
 } from 'ai';
-import { existsSync } from 'fs';
-import { join } from 'path';
 
 import { MastraBase } from '../base';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { DefaultStorage } from '../storage/libsql';
+import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
 import { defaultEmbedder } from '../vector/fastembed';
@@ -137,13 +137,16 @@ export abstract class MastraMemory extends MastraBase {
 
   abstract rememberMessages({
     threadId,
+    resourceId,
     vectorMessageSearch,
     config,
   }: {
     threadId: string;
+    resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
   }): Promise<{
+    threadId: string;
     messages: CoreMessage[];
     uiMessages: AiMessageType[];
   }>;
@@ -296,6 +299,7 @@ export abstract class MastraMemory extends MastraBase {
    */
   abstract query({
     threadId,
+    resourceId,
     selectBy,
   }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }>;
 

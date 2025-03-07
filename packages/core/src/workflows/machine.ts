@@ -6,7 +6,7 @@ import type { MachineContext, Snapshot } from 'xstate';
 import { assign, createActor, fromPromise, setup } from 'xstate';
 import type { z } from 'zod';
 
-import type { IAction, MastraPrimitives } from '../action';
+import type { IAction, MastraUnion } from '../action';
 import type { Logger } from '../logger';
 
 import type { Mastra } from '../mastra';
@@ -44,7 +44,7 @@ import type { WorkflowInstance } from './workflow-instance';
 
 export class Machine<
   TSteps extends Step<any, any, any>[] = any,
-  TTriggerSchema extends z.ZodType<any> = any,
+  TTriggerSchema extends z.ZodObject<any> = any,
 > extends EventEmitter {
   logger: Logger;
   #mastra?: Mastra;
@@ -345,7 +345,7 @@ export class Machine<
             }
           },
           runId: this.#runId,
-          mastra: mastraProxy as (Mastra & MastraPrimitives) | undefined,
+          mastra: mastraProxy as MastraUnion | undefined,
         });
 
         this.logger.debug(`Step ${stepNode.step.id} result`, {
@@ -839,7 +839,7 @@ export class Machine<
     };
   }
 
-  #evaluateCondition<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodType<any>>(
+  #evaluateCondition<TStep extends StepVariableType<any, any, any, any>, TTriggerSchema extends z.ZodObject<any>>(
     condition: StepCondition<TStep, TTriggerSchema>,
     context: WorkflowContext,
   ): boolean {

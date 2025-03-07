@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { join, resolve, isAbsolute } from 'node:path';
 import { createClient } from '@libsql/client';
 import type { Client, InValue } from '@libsql/client';
 
@@ -39,23 +39,34 @@ export class LibSQLStore extends MastraStorage {
     });
   }
 
+  // If we're in the .mastra/output directory, use the dir outside .mastra dir
+  // reason we need to do this is libsql relative file paths are based on cwd, not current file path
+  // since mastra dev sets cwd to .mastra/output this means running an agent directly vs running with mastra dev
+  // will put db files in different locations, leading to an inconsistent experience between the two.
+  // Ex: with `file:ex.db`
+  // 1. `mastra dev`: ${cwd}/.mastra/output/ex.db
+  // 2. `tsx src/index.ts`: ${cwd}/ex.db
+  // so if we're in .mastra/output we need to rewrite the file url to be relative to the project root dir
+  // or the experience will be inconsistent
+  // this means `file:` urls are always relative to project root
+  // TODO: can we make this easier via bundling? https://github.com/mastra-ai/mastra/pull/2783#pullrequestreview-2662444241
   protected rewriteDbUrl(url: string): string {
-    // If this is a relative file path (starts with file: but not file:/)
-    if (url.startsWith('file:') && !url.startsWith('file:/')) {
+    if (url.startsWith('file:')) {
+      const pathPart = url.slice('file:'.length);
+
+      if (isAbsolute(pathPart)) {
+        return url;
+      }
+
       const cwd = process.cwd();
 
-      // Get the relative path part after 'file:'
-      const relativePath = url.slice('file:'.length);
-
-      // If we're in a .mastra directory, use the parent directory
       if (cwd.includes('.mastra') && (cwd.endsWith(`output`) || cwd.endsWith(`output/`) || cwd.endsWith(`output\\`))) {
-        const baseDir = join(cwd, `..`, `..`);
+        const baseDir = join(cwd, `..`, `..`); // <- .mastra/output/../../
 
-        // Rewrite to be relative to the base directory
-        const fullPath = join(baseDir, relativePath);
+        const fullPath = resolve(baseDir, pathPart);
 
         this.logger.debug(
-          `Initializing LibSQL db with url ${url} with relative file path from inside .mastra directory. Rewriting relative file url to "file:${fullPath}". This ensures it's outside the .mastra directory. If the db is stored inside .mastra it will be deleted when Mastra re-bundles code.`,
+          `Initializing LibSQL db with url ${url} with relative file path from inside .mastra/output directory. Rewriting relative file url to "file:${fullPath}". This ensures it's outside the .mastra/output directory.`,
         );
 
         return `file:${fullPath}`;
@@ -127,6 +138,9 @@ export class LibSQLStore extends MastraStorage {
         // returning an undefined value will cause libsql to throw
         return null;
       }
+      if (v instanceof Date) {
+        return v.toISOString();
+      }
       return typeof v === 'object' ? JSON.stringify(v) : v;
     });
     const placeholders = values.map(() => '?').join(', ');
@@ -139,7 +153,12 @@ export class LibSQLStore extends MastraStorage {
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
-      await this.client.execute(this.prepareStatement({ tableName, record }));
+      await this.client.execute(
+        this.prepareStatement({
+          tableName,
+          record,
+        }),
+      );
     } catch (error) {
       this.logger.error(`Error upserting into table ${tableName}: ${error}`);
       throw error;
@@ -174,11 +193,13 @@ export class LibSQLStore extends MastraStorage {
     }
 
     const row = result.rows[0];
-    // Parse any JSON strings in the result
+    // Checks whether the string looks like a JSON object ({}) or array ([])
+    // If the string starts with { or [, it assumes it's JSON and parses it
+    // Otherwise, it just returns, preventing unintended number conversions
     const parsed = Object.fromEntries(
       Object.entries(row || {}).map(([k, v]) => {
         try {
-          return [k, typeof v === 'string' ? JSON.parse(v) : v];
+          return [k, typeof v === 'string' ? (v.startsWith('{') || v.startsWith('[') ? JSON.parse(v) : v) : v];
         } catch {
           return [k, v];
         }

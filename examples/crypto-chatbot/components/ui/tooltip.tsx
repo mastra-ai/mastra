@@ -35,7 +35,7 @@ export const BetterTooltip = ({
   align = 'center',
   ...props
 }: React.ComponentPropsWithoutRef<typeof Tooltip> & {
-  content: JSX.Element | string;
+  content: React.JSX.Element | string;
   align?: 'center' | 'end' | 'start';
 }) => {
   return (
