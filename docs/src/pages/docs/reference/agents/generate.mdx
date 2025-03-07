@@ -37,92 +37,85 @@ An optional object that can include:
 <PropertiesTable
   content={[
     {
-      name: "options",
-      type: "object",
-      required: false,
-      description: "Additional options for the `generate` method.",
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "output",
-              type: "Zod schema | JsonSchema7",
-              isOptional: true,
-              description: "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
-            },
-            {
-              name: "experimental_output",
-              type: "Zod schema | JsonSchema7",
-              isOptional: true,
-              description: "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
-            },
-            {
-              name: "onStepFinish",
-              type: "(step: string) => void",
-              isOptional: true,
-              description: "Callback function called after each execution step. Receives step details as a JSON string.",
-            },
-            {
-              name: "maxSteps",
-              type: "number",
-              isOptional: true,
-              defaultValue: "5",
-              description: "Maximum number of execution steps allowed.",
-            },
-            {
-              name: "threadId",
-              type: "string",
-              isOptional: true,
-              description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
-            },
-            {
-              name: "resourceId",
-              type: "string",
-              isOptional: true,
-              description: "Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
-            },
-            {
-              name: "temperature",
-              type: "number",
-              isOptional: true,
-              description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
-            },
-            {
-              name: "context",
-              type: "Array<Message>",
-              isOptional: true,
-              description: "Additional context messages to provide to the agent.",
-            },
-            {
-              name: "memoryOptions",
-              type: "MemoryConfig",
-              isOptional: true,
-              description: "Configuration options for memory management.",
-            },
-            {
-              name: "toolChoice",
-              type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
-              isOptional: true,
-              defaultValue: "'auto'",
-              description: "Controls how the agent uses tools during generation.",
-            },
-            {
-              name: "telemetry",
-              type: "TelemetrySettings",
-              isOptional: true,
-              description: "Settings for telemetry collection during generation.",
-            }
-          ]
-        }
-      ]
+      name: "output",
+      type: "Zod schema | JsonSchema7",
+      isOptional: true,
+      description: "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
+    },
+    {
+      name: "experimental_output",
+      type: "Zod schema | JsonSchema7",
+      isOptional: true,
+      description: "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
+    },
+    {
+      name: "onStepFinish",
+      type: "(step: string) => void",
+      isOptional: true,
+      description: "Callback function called after each execution step. Receives step details as a JSON string.",
+    },
+    {
+      name: "maxSteps",
+      type: "number",
+      isOptional: true,
+      defaultValue: "5",
+      description: "Maximum number of execution steps allowed.",
+    },
+    {
+      name: "threadId",
+      type: "string",
+      isOptional: true,
+      description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      isOptional: true,
+      description: "Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
+    },
+    {
+      name: "temperature",
+      type: "number",
+      isOptional: true,
+      description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
+    },
+    {
+      name: "context",
+      type: "CoreMessage[]",
+      isOptional: true,
+      description: "Additional context messages to provide to the agent.",
+    },
+    {
+      name: "memoryOptions",
+      type: "MemoryConfig",
+      isOptional: true,
+      description: "Configuration options for memory management.",
+    },
+    {
+      name: "toolChoice",
+      type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
+      isOptional: true,
+      defaultValue: "'auto'",
+      description: "Controls how the agent uses tools during generation.",
+    },
+    {
+      name: "telemetry",
+      type: "TelemetrySettings",
+      isOptional: true,
+      description: "Settings for telemetry collection during generation.",
+    },
+    {
+      name: "toolsets",
+      type: "ToolsetsInput",
+      isOptional: true,
+      description: "Additional toolsets to make available to the agent during generation.",
     }
   ]}
 />
 
 ## Returns
 
-The return value of the `generate()` method depends on the options provided, specifically the `structuredOutput` option.
+The return value of the `generate()` method depends on the options provided, specifically the `output` option.
 
 ### PropertiesTable for Return Values
 
@@ -131,26 +124,20 @@ The return value of the `generate()` method depends on the options provided, spe
     {
       name: "text",
       type: "string",
-      required: false,
-      description: "The generated text response. Present if `structuredOutput` is not provided.",
+      isOptional: true,
+      description: "The generated text response. Present when output is 'text' (no schema provided).",
     },
     {
       name: "object",
       type: "object",
-      required: false,
-      description: "The generated structured response based on the provided schema. Present if `structuredOutput` is provided.",
+      isOptional: true,
+      description: "The generated structured response. Present when a schema is provided via `output` or `experimental_output`.",
     },
     {
       name: "toolCalls",
       type: "Array<ToolCall>",
-      required: false,
-      description: "The tool calls made during the generation process.",
-    },
-    {
-      name: "error",
-      type: "string",
-      required: false,
-      description: "Error message if the generation fails.",
+      isOptional: true,
+      description: "The tool calls made during the generation process. Present in both text and object modes.",
     }
   ]}
 />

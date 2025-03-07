@@ -17,7 +17,7 @@ The `messages` parameter can be:
 - An array of strings
 - An array of message objects with `role` and `content` properties
 
-#### Message Object Structure
+The message object structure:
 
 ```typescript
 interface Message {
@@ -37,97 +37,84 @@ An optional object that can include:
 <PropertiesTable
   content={[
     {
-      name: "options",
-      type: "object",
-      required: false,
-      description: "Additional options for the `stream` method.",
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "output",
-              type: "Zod schema | JsonSchema7",
-              isOptional: true,
-              description: "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
-            },
-            {
-              name: "experimental_output",
-              type: "Zod schema | JsonSchema7",
-              isOptional: true,
-              description: "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
-            },
-            {
-              name: "context",
-              type: "CoreMessage[]",
-              isOptional: true,
-              description: "Additional context messages to provide to the agent.",
-            },
-            {
-              name: "memoryOptions",
-              type: "MemoryConfig",
-              isOptional: true,
-              description: "Configuration options for memory management.",
-            },
-            {
-              name: "toolChoice",
-              type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
-              isOptional: true,
-              defaultValue: "'auto'",
-              description: "Controls how the agent uses tools during streaming.",
-            },
-            {
-              name: "telemetry",
-              type: "TelemetrySettings",
-              isOptional: true,
-              description: "Settings for telemetry collection during streaming.",
-            },
-            {
-              name: "threadId",
-              type: "string",
-              isOptional: true,
-              description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
-            },
-            {
-              name: "resourceId",
-              type: "string",
-              isOptional: true,
-              description: "Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
-            },
-            {
-              name: "onFinish",
-              type: "(result: string) => Promise<void> | void",
-              isOptional: true,
-              description: "Callback function called when streaming is complete.",
-            },
-            {
-              name: "onStepFinish",
-              type: "(step: string) => void",
-              isOptional: true,
-              description: "Callback function called after each step during streaming.",
-            },
-            {
-              name: "maxSteps",
-              type: "number",
-              isOptional: true,
-              defaultValue: "5",
-              description: "Maximum number of steps allowed during streaming.",
-            },
-            {
-              name: "toolsets",
-              type: "ToolsetsInput",
-              isOptional: true,
-              description: "Additional toolsets to make available to the agent during this stream.",
-            },
-            {
-              name: "temperature",
-              type: "number",
-              isOptional: true,
-              description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
-            }
-          ]
-        }
-      ]
+      name: "output",
+      type: "Zod schema | JsonSchema7",
+      isOptional: true,
+      description: "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
+    },
+    {
+      name: "experimental_output",
+      type: "Zod schema | JsonSchema7",
+      isOptional: true,
+      description: "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
+    },
+    {
+      name: "context",
+      type: "CoreMessage[]",
+      isOptional: true,
+      description: "Additional context messages to provide to the agent.",
+    },
+    {
+      name: "memoryOptions",
+      type: "MemoryConfig",
+      isOptional: true,
+      description: "Configuration options for memory management.",
+    },
+    {
+      name: "toolChoice",
+      type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
+      isOptional: true,
+      defaultValue: "'auto'",
+      description: "Controls how the agent uses tools during streaming.",
+    },
+    {
+      name: "telemetry",
+      type: "TelemetrySettings",
+      isOptional: true,
+      description: "Settings for telemetry collection during streaming.",
+    },
+    {
+      name: "threadId",
+      type: "string",
+      isOptional: true,
+      description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      isOptional: true,
+      description: "Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
+    },
+    {
+      name: "onFinish",
+      type: "(result: string) => Promise<void> | void",
+      isOptional: true,
+      description: "Callback function called when streaming is complete.",
+    },
+    {
+      name: "onStepFinish",
+      type: "(step: string) => void",
+      isOptional: true,
+      description: "Callback function called after each step during streaming.",
+    },
+    {
+      name: "maxSteps",
+      type: "number",
+      isOptional: true,
+      defaultValue: "5",
+      description: "Maximum number of steps allowed during streaming.",
+    },
+    {
+      name: "toolsets",
+      type: "ToolsetsInput",
+      isOptional: true,
+      description: "Additional toolsets to make available to the agent during this stream.",
+    },
+    {
+      name: "temperature",
+      type: "number",
+      isOptional: true,
+      description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
     }
   ]}
 />
@@ -143,20 +130,26 @@ The return value of the `stream()` method depends on the options provided, speci
     {
       name: "textStream",
       type: "AsyncIterable<string>",
-      required: false,
-      description: "An async iterable stream of text chunks. Present when output is 'text'.",
+      isOptional: true,
+      description: "Stream of text chunks. Present when no schema is provided (default mode) or when using `experimental_output`.",
     },
     {
       name: "objectStream",
       type: "AsyncIterable<object>",
-      required: false,
-      description: "An async iterable stream of structured data. Present when a schema is provided.",
+      isOptional: true,
+      description: "Stream of structured data. Present only when using `output` option with a schema.",
+    },
+    {
+      name: "partialObjectStream",
+      type: "AsyncIterable<object>",
+      isOptional: true,
+      description: "Stream of structured data. Present only when using `experimental_output` option.",
     },
     {
       name: "object",
       type: "Promise<object>",
-      required: false,
-      description: "A promise that resolves to the final structured output when using a schema.",
+      isOptional: true,
+      description: "Promise that resolves to the final structured output. Present when using either `output` or `experimental_output` options.",
     }
   ]}
 />
