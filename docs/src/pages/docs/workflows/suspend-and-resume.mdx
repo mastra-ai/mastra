@@ -115,8 +115,11 @@ const run = wf.createRun();
 // Start the workflow
 const initialResult = await run.start({ triggerData: { input: 'initial input' } });
 
+let promptAgentStepResult = initialResult.activePaths.get('promptAgent');
+let promptAgentResumeResult = undefined;
+
 // Check if a step is suspended
-if (initialResult.results.promptAgent.status === 'suspended') {
+if (promptAgentStepResult?.status === 'suspended') {
   console.log('Workflow suspended at promptAgent step');
 
   // Resume the workflow with new context
@@ -126,19 +129,22 @@ if (initialResult.results.promptAgent.status === 'suspended') {
     context: { userInput: 'Human provided input' }
   });
 
-  // Check if another step is suspended
-  if (resumeResult.results.improveResponse.status === 'suspended') {
-    console.log('Workflow suspended at improveResponse step');
+  promptAgentResumeResult = resumeResult;
+}
 
-    // Resume again with different context
-    const finalResult = await wf.resume({
-      runId: run.runId,
-      stepId: 'improveResponse',
-      context: { refinedOutput: 'Human refined output' }
-    });
+const improveResponseStepResult = promptAgentResumeResult?.activePaths.get('improveResponse');
 
-    console.log('Workflow completed:', finalResult.results);
-  }
+if (improveResponseStepResult?.status === 'suspended') {
+  console.log('Workflow suspended at improveResponse step');
+
+  // Resume again with different context
+  const finalResult = await wf.resume({
+    runId: run.runId,
+    stepId: 'improveResponse',
+    context: { refinedOutput: 'Human refined output' }
+  });
+
+  console.log('Workflow completed:', finalResult?.results);
 }
 ```
 
