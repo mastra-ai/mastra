@@ -402,24 +402,18 @@ export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?
   // Helper to get parameters based on tool type
   const getParameters = () => {
     if (isVercelTool(tool)) {
+      const schema = tool.parameters;
+
       // Check if the tool has parameters
-      if (!tool.parameters) {
+      if (!schema) {
         return z.object({});
       }
       // If the tool is a Vercel Tool, check if the parameters are already a zod object
       // If not, convert the parameters to a zod object using jsonSchemaToZod
-      if (isZodType(tool.parameters)) {
-        return tool.parameters;
-      } else {
-        return resolveSerializedZodOutput(jsonSchemaToZod(tool.parameters));
-      }
-    }
-    // Check if the tool has inputSchema
-    if (!tool.inputSchema) {
-      return z.object({});
+      return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
     }
     // If the tool is a Mastra Tool, return the inputSchema
-    return tool.inputSchema;
+    return tool.inputSchema ?? z.object({});
   };
 
   return {
