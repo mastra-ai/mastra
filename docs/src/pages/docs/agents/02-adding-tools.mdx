@@ -105,19 +105,13 @@ Mastra supports tools created using the Vercel AI SDK format. You can import and
 
 ```typescript filename="src/mastra/tools/vercelTool.ts" copy
 import { tool } from 'ai';
+import { z } from 'zod';
 
 export const weatherInfo = tool({
   description: "Fetches the current weather information for a given city",
-  parameters: {
-    type: "object",
-    properties: {
-      city: {
-        type: "string",
-        description: "The city to get weather for"
-      }
-    },
-    required: ["city"]
-  },
+  parameters: z.object({
+    city: z.string().describe("The city to get weather for")
+  }),
   execute: async ({ city }) => {
     // Replace with actual API call
     const data = await fetch(`https://api.example.com/weather?city=${city}`);

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-playai",
-  "version": "0.1.3-alpha.8",
+  "version": "0.1.3-alpha.9",
   "description": "Mastra PlayAI voice integration",
   "type": "module",
   "main": "dist/index.js",
