@@ -30,7 +30,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
-import { makeCoreTool, createMastraProxy } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolId } from '../utils';
 import type { CompositeVoice } from '../voice';
 
 import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput, ToolsInput } from './types';
@@ -75,7 +75,15 @@ export class Agent<
     this.evals = {} as TMetrics;
 
     if (config.tools) {
-      this.tools = config.tools;
+      // Look through the tools and ensure each has an ID
+      const tools = Object.keys(config.tools).reduce<ToolsInput>((acc, key) => {
+        const tool = config?.tools?.[key];
+        if (tool) {
+          acc[key] = ensureToolId(tool);
+        }
+        return acc;
+      }, {} as ToolsInput);
+      this.tools = tools as TTools;
     }
 
     if (config.mastra) {

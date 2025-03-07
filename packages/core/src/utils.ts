@@ -390,6 +390,27 @@ function isZodType(value: unknown): value is z.ZodType {
     typeof (value as any).safeParse === 'function'
   );
 }
+/**
+ * Ensures a tool has an ID by generating one if not present
+ * @param tool - The tool to ensure has an ID
+ * @returns The tool with an ID
+ */
+export function ensureToolId(tool: ToolToConvert): ToolToConvert {
+  if (isVercelTool(tool) && !('id' in tool)) {
+    // Generate an ID based on the tool description or a random string if no description
+    const id = tool.description
+      ? tool.description.toLowerCase().replace(/\s+/g, '-')
+      : `tool-${Math.random().toString(36).substring(2, 9)}`;
+
+    return {
+      ...tool,
+      inputSchema: tool.parameters,
+      id,
+    };
+  }
+
+  return tool;
+}
 
 /**
  * Converts a Vercel Tool or Mastra Tool into a CoreTool format
