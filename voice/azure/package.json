@@ -9,6 +9,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@mastra/core": "^0.4.4"
+    "@mastra/core": "^0.4.4",
+    "microsoft-cognitiveservices-speech-sdk": "^1.42.0"
   }
 }
