@@ -9,6 +9,7 @@ import type {
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Pinecone } from '@pinecone-database/pinecone';
+import type { UpdateOptions } from '@pinecone-database/pinecone';
 
 import { PineconeFilterTranslator } from './filter';
 
@@ -151,11 +152,17 @@ export class PineconeVector extends MastraVector {
 
     const index = this.client.Index(indexName);
 
-    await index.update({
-      id,
-      values: update.vector,
-      metadata: update.metadata,
-    });
+    const updateObj: UpdateOptions = { id };
+
+    if (update.vector) {
+      updateObj.values = update.vector;
+    }
+
+    if (update.metadata) {
+      updateObj.metadata = update.metadata;
+    }
+
+    await index.update(updateObj);
   }
 
   async deleteIndexById(indexName: string, id: string): Promise<void> {

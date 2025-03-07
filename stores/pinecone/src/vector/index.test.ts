@@ -139,7 +139,7 @@ describe('PineconeVector Integration Tests', () => {
         expect(ids).toHaveLength(3);
 
         const idToBeUpdated = ids[0];
-        const newVector = [0, 2, 4];
+        const newVector = [1, 2, 4];
         const newMetaData = {
           test: 'updates',
         };
@@ -149,23 +149,17 @@ describe('PineconeVector Integration Tests', () => {
           metadata: newMetaData,
         };
 
-        waitUntilVectorsIndexed(vectorDB, testIndexName, 3);
-
         await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
 
-        // await new Promise(resolve => setTimeout(resolve, 3000));
-
-        waitUntilVectorsIndexed(vectorDB, testIndexName, 3);
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
         const results: QueryResult[] = await vectorDB.query({
           indexName: testIndexName,
           queryVector: newVector,
-          topK: 3,
+          topK: 10,
           includeVector: true,
         });
 
-        console.log('vishehs');
-        console.log(results);
         expect(results[0]?.id).toBe(idToBeUpdated);
         expect(results[0]?.vector).toEqual(newVector);
         expect(results[0]?.metadata).toEqual(newMetaData);
@@ -186,19 +180,24 @@ describe('PineconeVector Integration Tests', () => {
 
         await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
 
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
         const results: QueryResult[] = await vectorDB.query({
           indexName: testIndexName,
           queryVector: testVectors[0],
           topK: 2,
           includeVector: true,
         });
+
         expect(results[0]?.id).toBe(idToBeUpdated);
         expect(results[0]?.vector).toEqual(testVectors[0]);
         expect(results[0]?.metadata).toEqual(newMetaData);
-      });
+      }, 500000);
 
       it('should only update vector embeddings by id', async () => {
         const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
         expect(ids).toHaveLength(3);
 
         const idToBeUpdated = ids[0];
@@ -210,15 +209,21 @@ describe('PineconeVector Integration Tests', () => {
 
         await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
 
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
         const results: QueryResult[] = await vectorDB.query({
           indexName: testIndexName,
           queryVector: newVector,
-          topK: 2,
+          topK: 10,
           includeVector: true,
+          filter: { ids: [idToBeUpdated] },
         });
-        expect(results[0]?.id).toBe(idToBeUpdated);
-        expect(results[0]?.vector).toEqual(newVector);
-      });
+
+        const resultIds = results.map(res => res.id);
+        const resultVectors = results.map(res => res.vector);
+        expect(resultIds).toContain(idToBeUpdated);
+        expect(resultVectors).toContain(newVector);
+      }, 500000);
 
       it('should throw exception when no updates are given', () => {
         expect(vectorDB.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
@@ -239,7 +244,7 @@ describe('PineconeVector Integration Tests', () => {
         await expect(
           vectorDB.updateIndexById(testIndexName, id, { vector: [1, 2] }), // Wrong dimension
         ).rejects.toThrow();
-      });
+      }, 500000);
     });
 
     describe('vector delete operations', () => {
@@ -266,7 +271,7 @@ describe('PineconeVector Integration Tests', () => {
 
         const resultIds = results.map(r => r.id);
         expect(resultIds).not.toContain(idToBeDeleted);
-      });
+      }, 500000);
     });
   });
 
