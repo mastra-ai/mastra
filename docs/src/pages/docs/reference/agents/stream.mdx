@@ -30,6 +30,10 @@ interface Message {
 
 An optional object that can include:
 
+- `output`: An object defining the expected structure of the output (JSON Schema or Zod schema)
+- `experimental_output`: For structured output alongside text generation
+- Additional options like `onStepFinish`, `maxSteps`, `threadId`, `resourceId`, `toolChoice`, etc.
+
 <PropertiesTable
   content={[
     {
@@ -60,16 +64,35 @@ An optional object that can include:
               description: "Additional context messages to provide to the agent.",
             },
             {
+              name: "memoryOptions",
+              type: "MemoryConfig",
+              isOptional: true,
+              description: "Configuration options for memory management.",
+            },
+            {
+              name: "toolChoice",
+              type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
+              isOptional: true,
+              defaultValue: "'auto'",
+              description: "Controls how the agent uses tools during streaming.",
+            },
+            {
+              name: "telemetry",
+              type: "TelemetrySettings",
+              isOptional: true,
+              description: "Settings for telemetry collection during streaming.",
+            },
+            {
               name: "threadId",
               type: "string",
               isOptional: true,
-              description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions.",
+              description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
             },
             {
               name: "resourceId",
               type: "string",
               isOptional: true,
-              description: "Identifier for the user or resource interacting with the agent.",
+              description: "Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
             },
             {
               name: "onFinish",
