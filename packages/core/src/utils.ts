@@ -374,6 +374,24 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
 }
 
 /**
+ * Checks if a value is a Zod type
+ * @param value - The value to check
+ * @returns True if the value is a Zod type, false otherwise
+ */
+function isZodType(value: unknown): value is z.ZodType {
+  // Check if it's a Zod schema by looking for common Zod properties and methods
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    '_def' in value &&
+    'parse' in value &&
+    typeof (value as any).parse === 'function' &&
+    'safeParse' in value &&
+    typeof (value as any).safeParse === 'function'
+  );
+}
+
+/**
  * Converts a Vercel Tool or Mastra Tool into a CoreTool format
  * @param tool - The tool to convert (either VercelTool or ToolAction)
  * @param options - Tool options including Mastra-specific settings
@@ -384,11 +402,21 @@ export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?
   // Helper to get parameters based on tool type
   const getParameters = () => {
     if (isVercelTool(tool)) {
+      // Check if the tool has parameters
+      if (!tool.parameters) {
+        return z.object({});
+      }
       // If the tool is a Vercel Tool, check if the parameters are already a zod object
       // If not, convert the parameters to a zod object using jsonSchemaToZod
-      return tool.parameters instanceof z.ZodType
-        ? tool.parameters
-        : resolveSerializedZodOutput(jsonSchemaToZod(tool.parameters));
+      if (isZodType(tool.parameters)) {
+        return tool.parameters;
+      } else {
+        return resolveSerializedZodOutput(jsonSchemaToZod(tool.parameters));
+      }
+    }
+    // Check if the tool has inputSchema
+    if (!tool.inputSchema) {
+      return z.object({});
     }
     // If the tool is a Mastra Tool, return the inputSchema
     return tool.inputSchema;
