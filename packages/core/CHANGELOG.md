@@ -1,5 +1,23 @@
 # @mastra/core
 
+## 0.5.0-alpha.8
+
+### Patch Changes
+
+- 506f1d5: Properly serialize any date object when inserting into libsql
+
+## 0.5.0-alpha.7
+
+### Patch Changes
+
+- ee667a2: Fixed a serialization bug for thread IDs and dates in memory
+
+## 0.5.0-alpha.6
+
+### Patch Changes
+
+- f6678e4: Fixed an issue where we were using a non-windows-friendly absolute path check for libsql file urls
+
 ## 0.5.0-alpha.5
 
 ### Minor Changes
