@@ -3,6 +3,7 @@ import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { ZodObject } from 'zod';
 import type { MastraPrimitives } from './action';
+import type { ToolsInput } from './agent';
 import type { Logger } from './logger';
 import type { Mastra } from './mastra';
 import type { MastraMemory } from './memory';
@@ -398,34 +399,43 @@ function createDeterministicId(input: string): string {
 }
 
 /**
+ * Sets the properties for a Vercel Tool, including an ID and inputSchema
+ * @param tool - The tool to set the properties for
+ * @returns The tool with the properties set
+ */
+function setVercelToolProperties(tool: VercelTool) {
+  const inputSchema = convertVercelToolParameters(tool);
+  const toolId = !('id' in tool)
+    ? tool.description
+      ? `tool-${createDeterministicId(tool.description)}`
+      : `tool-${Math.random().toString(36).substring(2, 9)}`
+    : tool.id;
+  return {
+    ...tool,
+    id: toolId,
+    inputSchema,
+  };
+}
+
+/**
  * Ensures a tool has an ID and inputSchema by generating one if not present
  * @param tool - The tool to ensure has an ID and inputSchema
  * @returns The tool with an ID and inputSchema
  */
-export function ensureToolProperties(tool: ToolToConvert): ToolToConvert {
-  let extraToolProperties = {};
-  if (isVercelTool(tool)) {
-    const inputSchema = convertVercelToolParameters(tool);
-    const toolId = !('id' in tool)
-      ? tool.description
-        ? `tool-${createDeterministicId(tool.description)}`
-        : `tool-${Math.random().toString(36).substring(2, 9)}`
-      : tool.id;
+export function ensureToolProperties(tools: ToolsInput): ToolsInput {
+  const toolsWithProperties = Object.keys(tools).reduce<ToolsInput>((acc, key) => {
+    const tool = tools?.[key];
+    if (tool) {
+      if (isVercelTool(tool)) {
+        acc[key] = setVercelToolProperties(tool) as VercelTool;
+      } else {
+        acc[key] = tool;
+      }
+    }
+    return acc;
+  }, {});
 
-    extraToolProperties = {
-      id: toolId,
-      inputSchema,
-    };
-  }
-
-  if (Object.keys(extraToolProperties).length > 0) {
-    return {
-      ...tool,
-      ...extraToolProperties,
-    };
-  }
-
-  return tool;
+  return toolsWithProperties;
 }
 
 function convertVercelToolParameters(tool: VercelTool): z.ZodType {

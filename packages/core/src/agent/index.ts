@@ -75,15 +75,7 @@ export class Agent<
     this.evals = {} as TMetrics;
 
     if (config.tools) {
-      // Look through the tools and ensure each has an ID
-      const tools = Object.keys(config.tools).reduce<ToolsInput>((acc, key) => {
-        const tool = config?.tools?.[key];
-        if (tool) {
-          acc[key] = ensureToolProperties(tool);
-        }
-        return acc;
-      }, {} as ToolsInput);
-      this.tools = tools as TTools;
+      this.tools = ensureToolProperties(config.tools) as TTools;
     }
 
     if (config.mastra) {
