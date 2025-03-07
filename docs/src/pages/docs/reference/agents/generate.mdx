@@ -28,11 +28,7 @@ interface Message {
 
 ### `options` (Optional)
 
-An optional object that can include:
-
-- `output`: An object defining the expected structure of the output (JSON Schema or Zod schema)
-- `experimental_output`: For structured output alongside text generation
-- Additional options like `onStepFinish`, `maxSteps`, `threadId`, `resourceId`, `toolChoice`, etc.
+An optional object that can include configuration for output structure, memory management, tool usage, telemetry, and more. 
 
 <PropertiesTable
   content={[
@@ -49,17 +45,29 @@ An optional object that can include:
       description: "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
     },
     {
-      name: "onStepFinish",
-      type: "(step: string) => void",
+      name: "context",
+      type: "CoreMessage[]",
       isOptional: true,
-      description: "Callback function called after each execution step. Receives step details as a JSON string.",
+      description: "Additional context messages to provide to the agent.",
     },
     {
-      name: "maxSteps",
-      type: "number",
+      name: "memoryOptions",
+      type: "MemoryConfig",
       isOptional: true,
-      defaultValue: "5",
-      description: "Maximum number of execution steps allowed.",
+      description: "Configuration options for memory management. See MemoryConfig section below for details.",
+    },
+    {
+      name: "toolChoice",
+      type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
+      isOptional: true,
+      defaultValue: "'auto'",
+      description: "Controls how the agent uses tools during generation.",
+    },
+    {
+      name: "telemetry",
+      type: "TelemetrySettings",
+      isOptional: true,
+      description: "Settings for telemetry collection during generation. See TelemetrySettings section below for details.",
     },
     {
       name: "threadId",
@@ -74,41 +82,182 @@ An optional object that can include:
       description: "Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
     },
     {
-      name: "temperature",
+      name: "onStepFinish",
+      type: "(step: string) => void",
+      isOptional: true,
+      description: "Callback function called after each execution step. Receives step details as a JSON string.",
+    },
+    {
+      name: "maxSteps",
       type: "number",
       isOptional: true,
-      description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
-    },
-    {
-      name: "context",
-      type: "CoreMessage[]",
-      isOptional: true,
-      description: "Additional context messages to provide to the agent.",
-    },
-    {
-      name: "memoryOptions",
-      type: "MemoryConfig",
-      isOptional: true,
-      description: "Configuration options for memory management.",
-    },
-    {
-      name: "toolChoice",
-      type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
-      isOptional: true,
-      defaultValue: "'auto'",
-      description: "Controls how the agent uses tools during generation.",
-    },
-    {
-      name: "telemetry",
-      type: "TelemetrySettings",
-      isOptional: true,
-      description: "Settings for telemetry collection during generation.",
+      defaultValue: "5",
+      description: "Maximum number of execution steps allowed.",
     },
     {
       name: "toolsets",
       type: "ToolsetsInput",
       isOptional: true,
       description: "Additional toolsets to make available to the agent during generation.",
+    },
+    {
+      name: "temperature",
+      type: "number",
+      isOptional: true,
+      description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
+    }
+  ]}
+/>
+
+#### MemoryConfig
+
+Configuration options for memory management:
+
+<PropertiesTable
+  content={[
+    {
+      name: "lastMessages",
+      type: "number | false",
+      isOptional: true,
+      description: "Number of most recent messages to include in context. Set to false to disable.",
+    },
+    {
+      name: "semanticRecall",
+      type: "boolean | object",
+      isOptional: true,
+      description: "Configuration for semantic memory recall. Can be boolean or detailed config.",
+      properties: [
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "topK",
+              type: "number",
+              isOptional: true,
+              description: "Number of most semantically similar messages to retrieve.",
+            }
+          ]
+        },
+        {
+          type: "number | object",
+          parameters: [
+            {
+              name: "messageRange",
+              type: "number | { before: number; after: number }",
+              isOptional: true,
+              description: "Range of messages to consider for semantic search. Can be a single number or before/after configuration.",
+            }
+          ]
+        }
+      ]
+    },
+    {
+      name: "workingMemory",
+      type: "object",
+      isOptional: true,
+      description: "Configuration for working memory.",
+      properties: [
+        {
+          type: "boolean",
+          parameters: [
+            {
+              name: "enabled", 
+              type: "boolean", 
+              isOptional: true, 
+              description: "Whether to enable working memory."
+            }
+          ]
+        },
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "template",
+              type: "string",
+              isOptional: true,
+              description: "Template to use for working memory.",
+            }
+          ]
+        },
+        {
+          type: "'text-stream' | 'tool-call'",
+          parameters: [
+            {
+              name: "type",
+              type: "'text-stream' | 'tool-call'",
+              isOptional: true,
+              description: "Type of content to use for working memory.",
+            }
+          ]
+        }
+      ]
+    },
+    {
+      name: "threads",
+      type: "object",
+      isOptional: true,
+      description: "Thread-specific memory configuration.",
+      properties: [
+        {
+          type: "boolean",
+          parameters: [
+            {
+              name: "generateTitle",
+              type: "boolean",
+              isOptional: true,
+              description: "Whether to automatically generate titles for new threads.",
+            }
+          ]
+        }
+      ]
+    }
+  ]}
+/>
+
+#### TelemetrySettings
+
+Settings for telemetry collection during generation:
+
+<PropertiesTable
+  content={[
+    {
+      name: "isEnabled",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Enable or disable telemetry. Disabled by default while experimental.",
+    },
+    {
+      name: "recordInputs",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "Enable or disable input recording. You might want to disable this to avoid recording sensitive information, reduce data transfers, or increase performance.",
+    },
+    {
+      name: "recordOutputs",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "Enable or disable output recording. You might want to disable this to avoid recording sensitive information, reduce data transfers, or increase performance.",
+    },
+    {
+      name: "functionId",
+      type: "string",
+      isOptional: true,
+      description: "Identifier for this function. Used to group telemetry data by function.",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, AttributeValue>",
+      isOptional: true,
+      description: "Additional information to include in the telemetry data. AttributeValue can be string, number, boolean, array of these types, or null.",
+    },
+    {
+      name: "tracer",
+      type: "Tracer",
+      isOptional: true,
+      description: "A custom OpenTelemetry tracer instance to use for the telemetry data. See OpenTelemetry documentation for details.",
     }
   ]}
 />
