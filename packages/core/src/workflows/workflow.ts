@@ -56,7 +56,11 @@ export class Workflow<
     this.triggerSchema = triggerSchema;
 
     if (mastra) {
-      this.__registerPrimitives(mastra);
+      this.__registerPrimitives({
+        telemetry: mastra.getTelemetry(),
+        logger: mastra.getLogger(),
+      });
+      this.#mastra = mastra;
     }
   }
 
@@ -486,11 +490,14 @@ export class Workflow<
         return await otlpContext.with(
           trace.setSpan(otlpContext.active(), this.getExecutionSpan(attributes?.runId ?? data?.runId) as Span),
           async () => {
-            // @ts-ignore
-            return this.#mastra.telemetry.traceMethod(handler, {
-              spanName,
-              attributes,
-            })(data);
+            if (this?.telemetry) {
+              return this.telemetry.traceMethod(handler, {
+                spanName,
+                attributes,
+              })(data);
+            } else {
+              return handler(data);
+            }
           },
         );
       };
@@ -512,7 +519,7 @@ export class Workflow<
       };
 
       // Only trace if telemetry is available and action exists
-      const finalAction = this.#mastra?.getTelemetry()
+      const finalAction = this.telemetry
         ? executeStep(execute, `workflow.${this.name}.action.${stepId}`, {
             componentName: this.name,
             runId: rest.runId as string,

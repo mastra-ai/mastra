@@ -19,12 +19,13 @@ export type MastraPrimitives = {
   memory?: MastraMemory;
 };
 
-type MastraUnion = Mastra | MastraPrimitives;
+export type MastraUnion = {
+  [K in keyof Mastra]: Mastra[K];
+} & MastraPrimitives;
 
 export interface IExecutionContext<TSchemaIn extends z.ZodSchema | undefined = undefined> {
   context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : {};
   runId?: string;
-  mastra?: MastraUnion;
   threadId?: string;
   resourceId?: string;
 }
@@ -39,8 +40,6 @@ export interface IAction<
   description?: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
-  mastra?: Mastra;
-  payload?: TSchemaIn extends z.ZodSchema ? Partial<z.infer<TSchemaIn>> : unknown;
   execute: (
     context: TContext,
     options?: TOptions,
