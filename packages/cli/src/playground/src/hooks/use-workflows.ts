@@ -1,4 +1,3 @@
-import { MastraClient } from '@mastra/client-js';
 import type { Workflow } from '@mastra/core/workflows';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
