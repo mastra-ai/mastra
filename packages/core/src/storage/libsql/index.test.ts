@@ -23,6 +23,15 @@ describe('DefaultStorage', () => {
     metadata: { key: 'value' },
   });
 
+  const createSampleThreadWithParams = (threadId: string, resourceId: string, createdAt: Date, updatedAt: Date) => ({
+    id: threadId,
+    resourceId,
+    title: 'Test Thread with given ThreadId and ResourceId',
+    createdAt,
+    updatedAt,
+    metadata: { key: 'value' },
+  });
+
   const createSampleMessage = (threadId: string) =>
     ({
       id: `msg-${randomUUID()}`,
@@ -64,6 +73,26 @@ describe('DefaultStorage', () => {
       // Retrieve thread
       const retrievedThread = await storage.__getThreadById({ threadId: thread.id });
       expect(retrievedThread?.title).toEqual(thread.title);
+    });
+
+    it('should create and retrieve a thread with the same given threadId and resourceId', async () => {
+      const exampleThreadId = '1346362547862769664';
+      const exampleResourceId = '532374164040974346';
+      const createdAt = new Date();
+      const updatedAt = new Date();
+      const thread = createSampleThreadWithParams(exampleThreadId, exampleResourceId, createdAt, updatedAt);
+
+      // Save thread
+      const savedThread = await storage.__saveThread({ thread });
+      expect(savedThread).toEqual(thread);
+
+      // Retrieve thread
+      const retrievedThread = await storage.__getThreadById({ threadId: thread.id });
+      expect(retrievedThread?.id).toEqual(exampleThreadId);
+      expect(retrievedThread?.resourceId).toEqual(exampleResourceId);
+      expect(retrievedThread?.title).toEqual(thread.title);
+      expect(retrievedThread?.createdAt).toEqual(createdAt.toISOString());
+      expect(retrievedThread?.updatedAt).toEqual(updatedAt.toISOString());
     });
 
     it('should return null for non-existent thread', async () => {

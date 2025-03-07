@@ -265,6 +265,7 @@ export class Agent<
             ? (
                 await memory.rememberMessages({
                   threadId,
+                  resourceId,
                   config: memoryConfig,
                   vectorMessageSearch: messages
                     .slice(-1)

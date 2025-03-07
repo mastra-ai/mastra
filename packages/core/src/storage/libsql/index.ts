@@ -138,6 +138,9 @@ export class LibSQLStore extends MastraStorage {
         // returning an undefined value will cause libsql to throw
         return null;
       }
+      if (v instanceof Date) {
+        return v.toISOString();
+      }
       return typeof v === 'object' ? JSON.stringify(v) : v;
     });
     const placeholders = values.map(() => '?').join(', ');
@@ -150,7 +153,12 @@ export class LibSQLStore extends MastraStorage {
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
-      await this.client.execute(this.prepareStatement({ tableName, record }));
+      await this.client.execute(
+        this.prepareStatement({
+          tableName,
+          record,
+        }),
+      );
     } catch (error) {
       this.logger.error(`Error upserting into table ${tableName}: ${error}`);
       throw error;
@@ -185,11 +193,13 @@ export class LibSQLStore extends MastraStorage {
     }
 
     const row = result.rows[0];
-    // Parse any JSON strings in the result
+    // Checks whether the string looks like a JSON object ({}) or array ([])
+    // If the string starts with { or [, it assumes it's JSON and parses it
+    // Otherwise, it just returns, preventing unintended number conversions
     const parsed = Object.fromEntries(
       Object.entries(row || {}).map(([k, v]) => {
         try {
-          return [k, typeof v === 'string' ? JSON.parse(v) : v];
+          return [k, typeof v === 'string' ? (v.startsWith('{') || v.startsWith('[') ? JSON.parse(v) : v) : v];
         } catch {
           return [k, v];
         }
