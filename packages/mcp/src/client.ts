@@ -1,3 +1,4 @@
+import { MastraBase } from '@mastra/core/base';
 import { createTool } from '@mastra/core/tools';
 import { jsonSchemaToModel } from '@mastra/core/utils';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -15,7 +16,9 @@ type SSEClientParameters = {
   url: URL;
 } & ConstructorParameters<typeof SSEClientTransport>[1];
 
-export class MastraMCPClient {
+export type MastraMCPServerDefinition = StdioServerParameters | SSEClientParameters;
+
+export class MastraMCPClient extends MastraBase {
   name: string;
   private transport: Transport;
   private client: Client;
@@ -26,10 +29,11 @@ export class MastraMCPClient {
     capabilities = {},
   }: {
     name: string;
-    server: StdioServerParameters | SSEClientParameters;
+    server: MastraMCPServerDefinition;
     capabilities?: ClientCapabilities;
     version?: string;
   }) {
+    super({ name: 'MastraMCPClient' });
     this.name = name;
 
     if (`url` in server) {
