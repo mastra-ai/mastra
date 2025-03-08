@@ -1,3 +1,4 @@
+import { isVercelTool } from '@mastra/core';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { stringify } from 'superjson';
@@ -71,12 +72,15 @@ export function executeToolHandler(tools: Record<string, any>) {
 
       const { data } = await c.req.json();
       const mastra = c.get('mastra');
+      if (isVercelTool(tool)) {
+        const result = await (tool as any).execute(data);
+        return c.json(result);
+      }
       const result = await tool.execute({
         context: data,
         mastra,
         runId: mastra.runId,
       });
-
       return c.json(result);
     } catch (error) {
       return handleError(error, 'Error executing tool');
@@ -101,6 +105,10 @@ export async function executeAgentToolHandler(c: Context) {
     }
 
     const { data } = await c.req.json();
+    if (isVercelTool(tool)) {
+      const result = await (tool as any).execute(data);
+      return c.json(result);
+    }
     const result = await tool.execute({
       context: data,
       mastra,

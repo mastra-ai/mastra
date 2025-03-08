@@ -102,9 +102,7 @@ import { PgVector } from "@mastra/pg";
 
 const memory = new Memory({
   // Use a different vector database (libsql is default)
-  vector: new PgVector({
-    connectionString: "postgresql://user:pass@localhost:5432/db",
-  }),
+  vector: new PgVector("postgresql://user:pass@localhost:5432/db"),
   // Or a different embedder (fastembed is default)
   embedder: openai.embedding("text-embedding-3-small"),
 });
@@ -140,9 +138,7 @@ const memory = new Memory({
     database: "postgres",
     password: "postgres",
   }),
-  vector: new PgVector({
-    connectionString: "postgresql://user:pass@localhost:5432/db",
-  }),
+  vector: new PgVector("postgresql://user:pass@localhost:5432/db"),
   options: {
     // Number of recent messages to include (false to disable)
     lastMessages: 10,

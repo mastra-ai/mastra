@@ -30,7 +30,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
-import { makeCoreTool, createMastraProxy } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
 import type { CompositeVoice } from '../voice';
 
 import type {
@@ -82,7 +82,7 @@ export class Agent<
     this.evals = {} as TMetrics;
 
     if (config.tools) {
-      this.tools = config.tools;
+      this.tools = ensureToolProperties(config.tools) as TTools;
     }
 
     if (config.mastra) {
