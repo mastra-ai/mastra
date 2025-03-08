@@ -41,7 +41,7 @@ server.addTool({
 });
 
 // Start the server with SSE support
-server.start({
+void server.start({
   transportType: 'sse',
   sse: {
     endpoint: '/sse',
@@ -49,4 +49,5 @@ server.start({
   },
 });
 
-export { server }; 
+export { server };
+

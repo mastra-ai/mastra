@@ -36,8 +36,9 @@ server.addTool({
 });
 
 // Start the server with stdio transport
-server.start({
+void server.start({
   transportType: 'stdio',
 });
 
-export { server }; 
+export { server };
+

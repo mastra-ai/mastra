@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawn } from 'child_process';
-import { MCPConfiguration } from './configuration';
 import path from 'path';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { MCPConfiguration } from './configuration';
 
 describe('MCPConfiguration', () => {
   let mcp: MCPConfiguration;
@@ -10,11 +10,11 @@ describe('MCPConfiguration', () => {
   beforeEach(async () => {
     // Start the weather SSE server
     weatherProcess = spawn('npx', ['-y', 'tsx', path.join(__dirname, '__fixtures__/weather.ts')]);
-    
+
     // Wait for SSE server to be ready
-    await new Promise<void>((resolve) => {
+    await new Promise<void>(resolve => {
       if (weatherProcess.stdout) {
-        weatherProcess.stdout.on('data', (chunk) => {
+        weatherProcess.stdout.on('data', chunk => {
           if (chunk.toString().includes('server is running on SSE')) {
             resolve();
           }
@@ -69,7 +69,7 @@ describe('MCPConfiguration', () => {
 
   it('should get connected tools with namespaced tool names', async () => {
     const connectedTools = await mcp.getConnectedTools();
-    
+
     // Each tool should be namespaced with its server name
     expect(connectedTools).toHaveProperty('stockPrice_getStockPrice');
     expect(connectedTools).toHaveProperty('weather_getWeather');
@@ -77,7 +77,7 @@ describe('MCPConfiguration', () => {
 
   it('should get connected toolsets grouped by server', async () => {
     const connectedToolsets = await mcp.getConnectedToolsets();
-    
+
     expect(connectedToolsets).toHaveProperty('stockPrice');
     expect(connectedToolsets).toHaveProperty('weather');
     expect(connectedToolsets.stockPrice).toHaveProperty('getStockPrice');
@@ -96,4 +96,5 @@ describe('MCPConfiguration', () => {
 
     await expect(badConfig.getConnectedTools()).rejects.toThrow();
   });
-}); 
+});
+
