@@ -278,6 +278,18 @@ export { weatherWorkflow };`;
   await fs.writeFile(destPath, formattedContent);
 }
 
+export async function writeWorkflowIndexSample(destPath: string) {
+  const content = `export * from './weather-workflow';`;
+  
+  const formattedContent = await prettier.format(content, {
+    parser: 'typescript',
+    semi: true,
+    singleQuote: true,
+  });
+  
+  await fs.writeFile(destPath, formattedContent);
+}
+
 export async function writeToolSample(destPath: string) {
   const fileService = new FileService();
   await fileService.copyStarterFile('tools.ts', destPath);
@@ -458,6 +470,12 @@ export const writeCodeSample = async (
 
   try {
     await writeCodeSampleForComponents(llmProvider, component, destPath, importComponents);
+    
+    // If this is the workflows component, also create the index.ts file
+    if (component === 'workflows') {
+      const indexPath = dirPath + `/${component}/index.ts`;
+      await writeWorkflowIndexSample(indexPath);
+    }
   } catch (err) {
     throw err;
   }
