@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { jsonSchemaToModel } from '@mastra/core/utils';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { StdioServerParameters } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { Protocol } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
@@ -10,6 +10,7 @@ import type { ClientCapabilities } from '@modelcontextprotocol/sdk/types.js';
 import { ListResourcesResultSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
+
 type SSEClientParameters = {
   url: URL;
 } & ConstructorParameters<typeof SSEClientTransport>[1];
@@ -37,7 +38,11 @@ export class MastraMCPClient {
         eventSourceInit: server.eventSourceInit,
       });
     } else {
-      this.transport = new StdioClientTransport(server);
+      this.transport = new StdioClientTransport({
+        ...server,
+        // without ...getDefaultEnvironment() commands like npx will fail because there will be no PATH env var
+        env: { ...getDefaultEnvironment(), ...(server.env || {}) },
+      });
     }
 
     this.client = new Client(
