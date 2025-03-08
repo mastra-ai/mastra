@@ -1,5 +1,14 @@
 # @mastra/core
 
+## 0.5.0-alpha.9
+
+### Patch Changes
+
+- e9fbac5: Update Vercel tools to have id and update deployer
+- 1e8bcbc: Fix suspend types
+- aeb5e36: Adds default schema for tool when not provided
+- f2301de: Added the ability to ensure the accessed thread in memory.query() is for the right resource id. ex memory.query({ threadId, resourceId }). If the resourceId doesn't own the thread it will throw an error.
+
 ## 0.5.0-alpha.8
 
 ### Patch Changes
