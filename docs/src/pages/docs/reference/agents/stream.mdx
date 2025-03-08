@@ -17,7 +17,7 @@ The `messages` parameter can be:
 - An array of strings
 - An array of message objects with `role` and `content` properties
 
-#### Message Object Structure
+The message object structure:
 
 ```typescript
 interface Message {
@@ -28,83 +28,242 @@ interface Message {
 
 ### `options` (Optional)
 
-An optional object that can include:
+An optional object that can include configuration for output structure, memory management, tool usage, telemetry, and more. 
 
 <PropertiesTable
   content={[
     {
-      name: "options",
-      type: "object",
-      required: false,
-      description: "Additional options for the `stream` method.",
+      name: "output",
+      type: "Zod schema | JsonSchema7",
+      isOptional: true,
+      description: "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
+    },
+    {
+      name: "experimental_output",
+      type: "Zod schema | JsonSchema7",
+      isOptional: true,
+      description: "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
+    },
+    {
+      name: "context",
+      type: "CoreMessage[]",
+      isOptional: true,
+      description: "Additional context messages to provide to the agent.",
+    },
+    {
+      name: "memoryOptions",
+      type: "MemoryConfig",
+      isOptional: true,
+      description: "Configuration options for memory management. See MemoryConfig section below for details.",
+    },
+    {
+      name: "toolChoice",
+      type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
+      isOptional: true,
+      defaultValue: "'auto'",
+      description: "Controls how the agent uses tools during streaming.",
+    },
+    {
+      name: "telemetry",
+      type: "TelemetrySettings",
+      isOptional: true,
+      description: "Settings for telemetry collection during streaming. See TelemetrySettings section below for details.",
+    },
+    {
+      name: "threadId",
+      type: "string",
+      isOptional: true,
+      description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      isOptional: true,
+      description: "Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
+    },
+    {
+      name: "onFinish",
+      type: "(result: string) => Promise<void> | void",
+      isOptional: true,
+      description: "Callback function called when streaming is complete.",
+    },
+    {
+      name: "onStepFinish",
+      type: "(step: string) => void",
+      isOptional: true,
+      description: "Callback function called after each step during streaming.",
+    },
+    {
+      name: "maxSteps",
+      type: "number",
+      isOptional: true,
+      defaultValue: "5",
+      description: "Maximum number of steps allowed during streaming.",
+    },
+    {
+      name: "toolsets",
+      type: "ToolsetsInput",
+      isOptional: true,
+      description: "Additional toolsets to make available to the agent during this stream.",
+    },
+    {
+      name: "temperature",
+      type: "number",
+      isOptional: true,
+      description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
+    }
+  ]}
+/>
+
+#### MemoryConfig
+
+Configuration options for memory management:
+
+<PropertiesTable
+  content={[
+    {
+      name: "lastMessages",
+      type: "number | false",
+      isOptional: true,
+      description: "Number of most recent messages to include in context. Set to false to disable.",
+    },
+    {
+      name: "semanticRecall",
+      type: "boolean | object",
+      isOptional: true,
+      description: "Configuration for semantic memory recall. Can be boolean or detailed config.",
       properties: [
         {
-          type: "object",
+          type: "number",
           parameters: [
             {
-              name: "output",
-              type: "Zod schema | JsonSchema7",
-              isOptional: true,
-              description: "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
-            },
-            {
-              name: "experimental_output",
-              type: "Zod schema | JsonSchema7",
-              isOptional: true,
-              description: "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
-            },
-            {
-              name: "context",
-              type: "CoreMessage[]",
-              isOptional: true,
-              description: "Additional context messages to provide to the agent.",
-            },
-            {
-              name: "threadId",
-              type: "string",
-              isOptional: true,
-              description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions.",
-            },
-            {
-              name: "resourceId",
-              type: "string",
-              isOptional: true,
-              description: "Identifier for the user or resource interacting with the agent.",
-            },
-            {
-              name: "onFinish",
-              type: "(result: string) => Promise<void> | void",
-              isOptional: true,
-              description: "Callback function called when streaming is complete.",
-            },
-            {
-              name: "onStepFinish",
-              type: "(step: string) => void",
-              isOptional: true,
-              description: "Callback function called after each step during streaming.",
-            },
-            {
-              name: "maxSteps",
+              name: "topK",
               type: "number",
               isOptional: true,
-              defaultValue: "5",
-              description: "Maximum number of steps allowed during streaming.",
-            },
+              description: "Number of most semantically similar messages to retrieve.",
+            }
+          ]
+        },
+        {
+          type: "number | object",
+          parameters: [
             {
-              name: "toolsets",
-              type: "ToolsetsInput",
+              name: "messageRange",
+              type: "number | { before: number; after: number }",
               isOptional: true,
-              description: "Additional toolsets to make available to the agent during this stream.",
-            },
-            {
-              name: "temperature",
-              type: "number",
-              isOptional: true,
-              description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
+              description: "Range of messages to consider for semantic search. Can be a single number or before/after configuration.",
             }
           ]
         }
       ]
+    },
+    {
+      name: "workingMemory",
+      type: "object",
+      isOptional: true,
+      description: "Configuration for working memory.",
+      properties: [
+        {
+          type: "boolean",
+          parameters: [
+            {
+              name: "enabled", 
+              type: "boolean", 
+              isOptional: true, 
+              description: "Whether to enable working memory."
+            }
+          ]
+        },
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "template",
+              type: "string",
+              isOptional: true,
+              description: "Template to use for working memory.",
+            }
+          ]
+        },
+        {
+          type: "'text-stream' | 'tool-call'",
+          parameters: [
+            {
+              name: "type",
+              type: "'text-stream' | 'tool-call'",
+              isOptional: true,
+              description: "Type of content to use for working memory.",
+            }
+          ]
+        }
+      ]
+    },
+    {
+      name: "threads",
+      type: "object",
+      isOptional: true,
+      description: "Thread-specific memory configuration.",
+      properties: [
+        {
+          type: "boolean",
+          parameters: [
+            {
+              name: "generateTitle",
+              type: "boolean",
+              isOptional: true,
+              description: "Whether to automatically generate titles for new threads.",
+            }
+          ]
+        }
+      ]
+    }
+  ]}
+/>
+
+#### TelemetrySettings
+
+Settings for telemetry collection during streaming:
+
+<PropertiesTable
+  content={[
+    {
+      name: "isEnabled",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Enable or disable telemetry. Disabled by default while experimental.",
+    },
+    {
+      name: "recordInputs",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "Enable or disable input recording. You might want to disable this to avoid recording sensitive information, reduce data transfers, or increase performance.",
+    },
+    {
+      name: "recordOutputs",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "Enable or disable output recording. You might want to disable this to avoid recording sensitive information, reduce data transfers, or increase performance.",
+    },
+    {
+      name: "functionId",
+      type: "string",
+      isOptional: true,
+      description: "Identifier for this function. Used to group telemetry data by function.",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, AttributeValue>",
+      isOptional: true,
+      description: "Additional information to include in the telemetry data. AttributeValue can be string, number, boolean, array of these types, or null.",
+    },
+    {
+      name: "tracer",
+      type: "Tracer",
+      isOptional: true,
+      description: "A custom OpenTelemetry tracer instance to use for the telemetry data. See OpenTelemetry documentation for details.",
     }
   ]}
 />
@@ -120,20 +279,26 @@ The return value of the `stream()` method depends on the options provided, speci
     {
       name: "textStream",
       type: "AsyncIterable<string>",
-      required: false,
-      description: "An async iterable stream of text chunks. Present when output is 'text'.",
+      isOptional: true,
+      description: "Stream of text chunks. Present when output is 'text' (no schema provided) or when using `experimental_output`.",
     },
     {
       name: "objectStream",
       type: "AsyncIterable<object>",
-      required: false,
-      description: "An async iterable stream of structured data. Present when a schema is provided.",
+      isOptional: true,
+      description: "Stream of structured data. Present only when using `output` option with a schema.",
+    },
+    {
+      name: "partialObjectStream",
+      type: "AsyncIterable<object>",
+      isOptional: true,
+      description: "Stream of structured data. Present only when using `experimental_output` option.",
     },
     {
       name: "object",
       type: "Promise<object>",
-      required: false,
-      description: "A promise that resolves to the final structured output when using a schema.",
+      isOptional: true,
+      description: "Promise that resolves to the final structured output. Present when using either `output` or `experimental_output` options.",
     }
   ]}
 />
@@ -182,3 +347,4 @@ console.log("Final structured result:", result);
 ```
 
 The key difference between Agent's `stream()` and LLM's `stream()` is that Agents maintain conversation context through `threadId`, can access tools, and integrate with the agent's memory system.
+
