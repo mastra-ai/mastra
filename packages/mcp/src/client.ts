@@ -9,6 +9,7 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { ClientCapabilities } from '@modelcontextprotocol/sdk/types.js';
 import { ListResourcesResultSchema } from '@modelcontextprotocol/sdk/types.js';
 
+import { asyncExitHook, gracefulExit } from 'exit-hook';
 type SSEClientParameters = {
   url: URL;
 } & ConstructorParameters<typeof SSEClientTransport>[1];
@@ -50,8 +51,33 @@ export class MastraMCPClient {
     );
   }
 
+  private isConnected = false;
+
   async connect() {
-    return await this.client.connect(this.transport);
+    if (this.isConnected) return;
+    try {
+      await this.client.connect(this.transport);
+      this.isConnected = true;
+      this.client.onclose = () => {
+        this.isConnected = false;
+      };
+      await this.client.setLoggingLevel(`critical`);
+      asyncExitHook(
+        async () => {
+          this.logger.debug(`Disconnecting ${this.name} MCP server`);
+          await this.disconnect();
+        },
+        { wait: 5000 },
+      );
+
+      process.on('SIGTERM', () => gracefulExit());
+    } catch (e) {
+      this.logger.error(
+        `Failed connecting to MCPClient with name ${this.name}.\n${e instanceof Error ? e.stack : JSON.stringify(e, null, 2)}`,
+      );
+      this.isConnected = false;
+      throw e;
+    }
   }
 
   async disconnect() {
