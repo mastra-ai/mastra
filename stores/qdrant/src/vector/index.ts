@@ -148,4 +148,105 @@ export class QdrantVector extends MastraVector {
   async deleteIndex(indexName: string): Promise<void> {
     await this.client.deleteCollection(indexName);
   }
+
+  async updateIndexById(
+    indexName: string,
+    id: string,
+    update: {
+      vector?: number[];
+      metadata?: Record<string, any>;
+    },
+  ): Promise<void> {
+    if (!update.vector && !update.metadata) {
+      throw new Error('No updates provided');
+    }
+
+    const pointId = this.parsePointId(id);
+
+    try {
+      // Handle metadata-only update
+      if (update.metadata && !update.vector) {
+        // For metadata-only updates, use the setPayload method
+        await this.client.setPayload(indexName, { payload: update.metadata, points: [pointId] });
+        return;
+      }
+
+      // Handle vector-only update
+      if (update.vector && !update.metadata) {
+        await this.client.updateVectors(indexName, {
+          points: [
+            {
+              id: pointId,
+              vector: update.vector,
+            },
+          ],
+        });
+        return;
+      }
+
+      // Handle both vector and metadata update
+      if (update.vector && update.metadata) {
+        const point = {
+          id: pointId,
+          vector: update.vector,
+          payload: update.metadata,
+        };
+
+        await this.client.upsert(indexName, {
+          points: [point],
+        });
+        return;
+      }
+    } catch (error) {
+      console.error('Error updating point in Qdrant:', error);
+      throw error;
+    }
+  }
+
+  async deleteIndexById(indexName: string, id: string): Promise<void> {
+    // Parse the ID - Qdrant supports both string and numeric IDs
+    const pointId = this.parsePointId(id);
+
+    // Use the Qdrant client to delete the point from the collection
+    await this.client.delete(indexName, {
+      points: [pointId],
+    });
+  }
+
+  /**
+   * Parses and converts a string ID to the appropriate type (string or number) for Qdrant point operations.
+   *
+   * Qdrant supports both numeric and string IDs. This helper method ensures IDs are in the correct format
+   * before sending them to the Qdrant client API.
+   *
+   * @param id - The ID string to parse
+   * @returns The parsed ID as either a number (if string contains only digits) or the original string
+   *
+   * @example
+   * // Numeric ID strings are converted to numbers
+   * parsePointId("123") => 123
+   * parsePointId("42") => 42
+   * parsePointId("0") => 0
+   *
+   * // String IDs containing any non-digit characters remain as strings
+   * parsePointId("doc-123") => "doc-123"
+   * parsePointId("user_42") => "user_42"
+   * parsePointId("abc123") => "abc123"
+   * parsePointId("123abc") => "123abc"
+   * parsePointId("") => ""
+   * parsePointId("uuid-5678-xyz") => "uuid-5678-xyz"
+   *
+   * @remarks
+   * - This conversion is important because Qdrant treats numeric and string IDs differently
+   * - Only positive integers are converted to numbers (negative numbers with minus signs remain strings)
+   * - The method uses base-10 parsing, so leading zeros will be dropped in numeric conversions
+   * - reference: https://qdrant.tech/documentation/concepts/points/?q=qdrant+point+id#point-ids
+   */
+  private parsePointId(id: string): string | number {
+    // Try to parse as number if it looks like one
+    if (/^\d+$/.test(id)) {
+      return parseInt(id, 10);
+    }
+    return id;
+  }
 }
