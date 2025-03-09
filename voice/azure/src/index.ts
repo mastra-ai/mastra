@@ -153,5 +153,55 @@ export class AzureVoice extends MastraVoice {
    * @param {string} [options.filetype] - 'mp3', 'wav', etc. (not crucial here).
    * @returns {Promise<string>} - The recognized text.
    */
-  async listen() {}
+  async listen(
+    audioStream: NodeJS.ReadableStream,
+    options?: {
+      filetype?: 'mp3' | 'mp4' | 'mpeg' | 'mpga' | 'm4a' | 'wav' | 'webm';
+      [key: string]: any;
+    },
+  ): Promise<string> {
+    if (!this.listeningConfig) {
+      throw new Error('Listening model (Azure) not configured');
+    }
+
+    const pushStream = Azure.AudioInputStream.createPushStream();
+
+    (async () => {
+      for await (const chunk of audioStream) {
+        pushStream.write(chunk as Buffer);
+      }
+      pushStream.close();
+    })().catch((err) => {
+      console.error('Error piping audio to Azure STT pushStream:', err);
+      pushStream.close();
+    });
+
+    const audioConfig = Azure.AudioConfig.fromStreamInput(pushStream);
+    const recognizer = new Azure.SpeechRecognizer(this.listeningConfig, audioConfig);
+
+    const text = await this.traced(
+      () =>
+        new Promise<string>((resolve, reject) => {
+          recognizer.recognizeOnceAsync(
+            (result) => {
+              recognizer.close();
+              if (result.reason === Azure.ResultReason.RecognizedSpeech) {
+                resolve(result.text);
+              } else {
+                reject(
+                  new Error(`Azure STT failed. Reason: ${result.reason} - ${result.errorDetails || ''}`)
+                );
+              }
+            },
+            (error) => {
+              recognizer.close();
+              reject(error);
+            },
+          );
+        }),
+      'voice.azure.listen'
+    )();
+
+    return text;
+  }
 }
