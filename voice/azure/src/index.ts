@@ -84,11 +84,74 @@ export class AzureVoice extends MastraVoice {
     }, 'voice.azure.voices')();
   }
   
-  async speak() {
-    
+  async speak(
+    input: string | NodeJS.ReadableStream,
+    options?: {
+      speaker?: string;
+      [key: string]: any;
+    },
+  ): Promise<NodeJS.ReadableStream> {
+    if (!this.speechConfig) {
+      throw new Error('Speech model (Azure) not configured');
+    }
+
+    if (typeof input !== 'string') {
+      const chunks: Buffer[] = [];
+      for await (const chunk of input) {
+        chunks.push(chunk as Buffer);
+      }
+      input = Buffer.concat(chunks).toString('utf-8');
+    }
+
+    if (!input.trim()) {
+      throw new Error('Input text is empty');
+    }
+
+    const pushStream = Azure.AudioOutputStream.createPushStream();
+    const passThrough = new PassThrough();
+
+    pushStream.write = (buffer: ArrayBuffer) => {
+      passThrough.write(Buffer.from(buffer));
+      return true;
+    };
+    pushStream.onDetached = () => passThrough.end();
+
+    const audioConfig = Azure.AudioConfig.fromStreamOutput(pushStream);
+    if (options?.speaker) {
+      this.speechConfig.speechSynthesisVoiceName = options.speaker;
+    }
+
+    const synthesizer = new Azure.SpeechSynthesizer(this.speechConfig, audioConfig);
+
+    await this.traced(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          synthesizer.speakTextAsync(
+            input,
+            (result) => {
+              synthesizer.close();
+              result.reason === Azure.ResultReason.SynthesizingAudioCompleted
+                ? resolve()
+                : reject(new Error(`Speech synthesis failed. Reason: ${result.reason}`));
+            },
+            (error) => {
+              synthesizer.close();
+              reject(error);
+            },
+          );
+        }),
+      'voice.azure.speak'
+    )();
+    return passThrough;
   }
-  
-  async listen() {
-  
-  }
+
+  /**
+   * Transcribes audio (STT) from a Node.js stream using Azure.
+   *
+   * @param {NodeJS.ReadableStream} audioStream - The audio to be transcribed.
+   * @param {Object} [options] - Optional params (filetype, etc.).
+   * @param {string} [options.filetype] - 'mp3', 'wav', etc. (not crucial here).
+   * @returns {Promise<string>} - The recognized text.
+   */
+  async listen() {}
 }
