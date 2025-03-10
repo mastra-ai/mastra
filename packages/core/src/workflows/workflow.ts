@@ -7,7 +7,7 @@ import type { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 
 import type { Mastra } from '../mastra';
-import type { Step } from './step';
+import { Step } from './step';
 import type {
   ActionContext,
   RetryConfig,
@@ -30,6 +30,7 @@ export class Workflow<
 > extends MastraBase {
   name: string;
   triggerSchema?: TTriggerSchema;
+  events?: Record<string, { schema: z.ZodObject<any> }>;
   #retryConfig?: RetryConfig;
   #mastra?: Mastra;
   #runs: Map<string, WorkflowInstance<TSteps, TTriggerSchema>> = new Map();
@@ -48,12 +49,13 @@ export class Workflow<
    * @param name - Identifier for the workflow (not necessarily unique)
    * @param logger - Optional logger instance
    */
-  constructor({ name, triggerSchema, retryConfig, mastra }: WorkflowOptions<TTriggerSchema>) {
+  constructor({ name, triggerSchema, retryConfig, mastra, events }: WorkflowOptions<TTriggerSchema>) {
     super({ component: 'WORKFLOW', name });
 
     this.name = name;
     this.#retryConfig = retryConfig;
     this.triggerSchema = triggerSchema;
+    this.events = events;
 
     if (mastra) {
       this.__registerPrimitives({
@@ -397,6 +399,39 @@ export class Workflow<
     return this as Omit<typeof this, 'then' | 'after'>;
   }
 
+  afterEvent(eventName: string) {
+    const event = this.events?.[eventName];
+    if (!event) {
+      throw new Error(`Event ${eventName} not found`);
+    }
+
+    const lastStep = this.#steps[this.#lastStepStack[this.#lastStepStack.length - 1] ?? ''];
+    if (!lastStep) {
+      throw new Error('Condition requires a step to be executed after');
+    }
+
+    const eventStepKey = `__${eventName}_event`;
+    const eventStep = new Step({
+      id: eventStepKey,
+      execute: async ({ context, suspend }) => {
+        console.log('event step', eventStepKey, context);
+        const resumeData: any = context.getStepResult(eventStepKey);
+        if (resumeData?.resumedEvent) {
+          console.log('got event data', resumeData?.resumedEvent);
+          return { executed: true, resumedEvent: resumeData?.resumedEvent };
+        }
+
+        console.log('suspending');
+        await suspend();
+        return { executed: false };
+      },
+    });
+
+    this.after(lastStep).step(eventStep).after(eventStep);
+
+    return this;
+  }
+
   /**
    * Executes the workflow with the given trigger data
    * @param triggerData - Initial data to start the workflow with
@@ -731,10 +766,23 @@ export class Workflow<
 
     run.setState(origSnapshot?.value);
     this.#runs.set(run.runId, run);
+    console.log('resuming', { runId: run.runId, stepId, parsedSnapshot, startStepId });
     return run?.execute({
       snapshot: parsedSnapshot,
       stepId,
     });
+  }
+
+  async resumeWithEvent(runId: string, eventName: string, data: any) {
+    const event = this.events?.[eventName];
+    if (!event) {
+      throw new Error(`Event ${eventName} not found`);
+    }
+
+    console.log('resuming', runId, `__${eventName}_event`, data);
+    const results = await this.resume({ runId, stepId: `__${eventName}_event`, context: { resumedEvent: data } });
+    console.log('rs', results);
+    return results;
   }
 
   __registerMastra(mastra: Mastra) {

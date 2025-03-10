@@ -8,6 +8,7 @@ import type { Mastra } from '../mastra';
 export interface WorkflowOptions<TTriggerSchema extends z.ZodObject<any> = any> {
   name: string;
   triggerSchema?: TTriggerSchema;
+  events?: Record<string, { schema: z.ZodObject<any> }>;
   retryConfig?: RetryConfig;
   mastra?: Mastra;
 }

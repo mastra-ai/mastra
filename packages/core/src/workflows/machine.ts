@@ -151,6 +151,7 @@ export class Machine<
     });
 
     this.#actor.start();
+    console.log('actor started');
 
     if (stepId) {
       this.#actor.send({ type: 'RESET_TO_PENDING', stepId });
@@ -159,7 +160,10 @@ export class Machine<
     this.logger.debug('Actor started', { runId: this.#runId });
 
     return new Promise((resolve, reject) => {
+      console.log('actor started promise');
       if (!this.#actor) {
+        console.log('actor not initialized');
+        this.logger.error('Actor not initialized', { runId: this.#runId });
         const e = new Error('Actor not initialized');
         this.#executionSpan?.recordException(e);
         this.#executionSpan?.end();
@@ -168,14 +172,18 @@ export class Machine<
       }
 
       const suspendedPaths: Set<string> = new Set();
+      console.log('subscribing', suspendedPaths);
       this.#actor.subscribe(async state => {
+        console.log('subscribe handler');
         this.emit('state-update', this.#startStepId, state.value, state.context);
+        console.log('state update emitted');
 
         getSuspendedPaths({
           value: state.value as Record<string, string>,
           path: '',
           suspendedPaths,
         });
+        console.log('suspended paths', suspendedPaths);
 
         const allStatesValue = state.value as Record<string, string>;
 
@@ -184,6 +192,7 @@ export class Machine<
           suspendedPaths,
           path: '',
         });
+        console.log('all states complete', allStatesComplete);
 
         this.logger.debug('State completion check', {
           allStatesComplete,
@@ -192,10 +201,19 @@ export class Machine<
         });
 
         // Check if all parallel states are in a final state
-        if (!allStatesComplete) return;
+        if (!allStatesComplete) {
+          this.logger.debug('Not all states complete', {
+            allStatesComplete,
+            suspendedPaths: Array.from(suspendedPaths),
+            runId: this.#runId,
+          });
+          return;
+        }
 
         try {
+          console.log('try');
           // Then cleanup and resolve
+          this.logger.debug('All states complete', { runId: this.#runId });
           await this.#workflowInstance.persistWorkflowSnapshot();
           this.#cleanup();
           this.#executionSpan?.end();
@@ -206,6 +224,7 @@ export class Machine<
             ),
           });
         } catch (error) {
+          console.log('catch', error);
           // If snapshot persistence fails, we should still resolve
           // but maybe log the error
           this.logger.debug('Failed to persist final snapshot', { error });

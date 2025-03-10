@@ -155,10 +155,16 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
 
     if (snapshot) {
       const runState = snapshot as unknown as WorkflowRunState;
-      machineInput = runState.context;
+
       if (stepId && runState?.suspendedSteps?.[stepId]) {
         startStepId = runState.suspendedSteps[stepId];
         stepGraph = this.#stepSubscriberGraph[startStepId] ?? this.#stepGraph;
+        if (stepGraph?.initial[0]?.step?.id === stepId) {
+          // we should not supply a snapshot if we are resuming the first step of a stepGraph, as that will halt execution
+          snapshot = undefined;
+        } else {
+          machineInput = runState.context;
+        }
       }
     }
 
@@ -199,7 +205,9 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
 
     defaultMachine.on('state-update', stateUpdateHandler);
 
+    console.log('machine execute', { snapshot, stepId, input: machineInput });
     const { results, activePaths } = await defaultMachine.execute({ snapshot, stepId, input: machineInput });
+    console.log('machine executed', results);
 
     await this.persistWorkflowSnapshot();
 
@@ -207,6 +215,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
   }
 
   async runMachine(parentStepId: string, input: any) {
+    console.log('runMachine', { parentStepId, input });
     const stepStatus = input.steps[parentStepId]?.status;
 
     // get all keys from this.#stepSubscriberGraph that include the parentStepId after the &&
