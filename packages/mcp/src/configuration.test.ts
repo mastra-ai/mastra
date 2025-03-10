@@ -32,7 +32,7 @@ describe('MCPConfiguration', () => {
           },
         },
         weather: {
-          url: new URL('http://localhost:8080/sse'),
+          url: new URL('http://localhost:60808/sse'),
         },
       },
     });
@@ -62,7 +62,7 @@ describe('MCPConfiguration', () => {
         },
       },
       weather: {
-        url: new URL('http://localhost:8080/sse'),
+        url: new URL('http://localhost:60808/sse'),
       },
     });
   });

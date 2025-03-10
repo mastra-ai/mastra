@@ -45,9 +45,8 @@ void server.start({
   transportType: 'sse',
   sse: {
     endpoint: '/sse',
-    port: 8080,
+    port: 60808,
   },
 });
 
 export { server };
-
