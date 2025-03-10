@@ -23,7 +23,7 @@
     "test": "vitest run",
     "posttest": "docker compose down",
     "lint": "eslint .",
-    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake",
+    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "build:watch": "pnpm build --watch"
   },
   "dependencies": {

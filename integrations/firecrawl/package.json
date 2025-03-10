@@ -22,7 +22,7 @@
   },
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "tsup src/index.ts --format esm,cjs --dts --clean --treeshake",
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean --treeshake=smallest --splitting",
     "build:watch": "pnpm build --watch",
     "lint": "dts lint",
     "size": "size-limit",

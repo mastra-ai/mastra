@@ -336,7 +336,8 @@ function createLogMessageOptions({ agentName, toolName, tool, type }: LogOptions
 }
 
 function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset') {
-  const { logger, ...rest } = options;
+  // dont't add memory or mastra to logging
+  const { logger, mastra: _mastra, memory: _memory, ...rest } = options;
 
   const { start, error } = createLogMessageOptions({
     agentName: options.agentName,
