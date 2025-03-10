@@ -1545,8 +1545,6 @@ describe('Workflow', async () => {
       const run = workflow.createRun();
       const result = await run.start();
 
-      console.log({ result });
-
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
       expect(step3Action).toHaveBeenCalled();
@@ -2352,7 +2350,6 @@ describe('Workflow', async () => {
       const run = wf.createRun();
 
       const initialResult = await run.start({ triggerData: { input: 'test' } });
-      console.log('initialResult', initialResult);
       expect(initialResult.activePaths.size).toBe(1);
       expect(initialResult.results).toEqual({
         getUserInput: { status: 'success', output: { userInput: 'test input' } },
@@ -2368,7 +2365,6 @@ describe('Workflow', async () => {
         throw new Error('Resume failed to return a result');
       }
 
-      console.log('firstResumeResult', firstResumeResult);
       expect(firstResumeResult.activePaths.size).toBe(1);
       expect(firstResumeResult.results).toEqual({
         getUserInput: { status: 'success', output: { userInput: 'test input' } },
@@ -2392,7 +2388,6 @@ describe('Workflow', async () => {
       const step1 = new Step({
         id: 'step1',
         execute: async ({ mastra }) => {
-          console.log({ mastra });
           telemetry = mastra?.telemetry;
         },
       });
