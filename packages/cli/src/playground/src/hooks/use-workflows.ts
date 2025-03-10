@@ -1,26 +1,22 @@
-import { MastraClient } from '@mastra/client-js';
 import type { Workflow } from '@mastra/core/workflows';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { MastraClient, GetWorkflowResponse, GetWorkflowWatchResponse } from '@mastra/client-js';
+
+const mastra = new MastraClient({
+  baseUrl: 'http://localhost:4111',
+});
 
 export const useWorkflows = () => {
-  const [workflows, setWorkflows] = useState<Record<string, Workflow>>({});
+  const [workflows, setWorkflows] = useState<Record<string, GetWorkflowResponse>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchWorkflows = async () => {
       setIsLoading(true);
       try {
-        const res = await fetch('/api/workflows');
-        if (!res.ok) {
-          const error = await res.json();
-          setWorkflows({});
-          console.error('Error fetching workflows', error);
-          toast.error(error?.error || 'Error fetching workflows');
-          return;
-        }
-        const data = await res.json();
-        setWorkflows(data);
+        const res = await mastra.getWorkflows();
+        setWorkflows(res);
       } catch (error) {
         setWorkflows({});
         console.error('Error fetching workflows', error);
@@ -80,21 +76,8 @@ export const useExecuteWorkflow = () => {
   const executeWorkflow = async ({ workflowId, input }: { workflowId: string; input: any }) => {
     try {
       setIsExecutingWorkflow(true);
-      const response = await fetch(`/api/workflows/${workflowId}/execute`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(input || {}),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        toast.error(error?.error || 'Error executing workflow');
-        return;
-      }
-
-      return await response.json();
+      const response = await mastra.getWorkflow(workflowId).execute(input || {});
+      return response;
     } catch (error) {
       console.error('Error executing workflow:', error);
       throw error;
@@ -108,7 +91,7 @@ export const useExecuteWorkflow = () => {
 
 export const useWatchWorkflow = () => {
   const [isWatchingWorkflow, setIsWatchingWorkflow] = useState(false);
-  const [watchResult, setWatchResult] = useState<any>(null);
+  const [watchResult, setWatchResult] = useState<GetWorkflowWatchResponse | null>(null);
 
   const watchWorkflow = async ({ workflowId }: { workflowId: string }) => {
     try {
@@ -128,6 +111,7 @@ export const useWatchWorkflow = () => {
       }
     } catch (error) {
       console.error('Error watching workflow:', error);
+
       throw error;
     } finally {
       setIsWatchingWorkflow(false);
