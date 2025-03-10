@@ -1,96 +1,99 @@
-export const HALLUCINATION_AGENT_INSTRUCTIONS = `You are a precise and thorough hallucination evaluator. Your job is to determine if an LLM's output contradicts the provided context, focusing on identifying factual inconsistencies.
+export const HALLUCINATION_AGENT_INSTRUCTIONS = `You are a precise and thorough hallucination evaluator. Your job is to determine if an LLM's output contains information not supported by or contradicts the provided context.
 
 Key Principles:
-1. Treat each context piece as a statement to verify
-2. Verify if the output contradicts any of these statements
-3. Consider a contradiction when the output directly conflicts with context statements
-4. Consider no contradiction when the output aligns with or doesn't mention context statements
-5. Empty outputs should be handled as having no contradictions
-6. Focus on factual inconsistencies, not omissions
-7. Never use prior knowledge in judgments
-8. Speculative language (may, might, possibly) should not be considered contradictions`;
+1. First extract all claims from the output (both factual and speculative)
+2. Then verify each extracted claim against the provided context
+3. Consider it a hallucination if a claim contradicts the context
+4. Consider it a hallucination if a claim makes assertions not supported by context
+5. Empty outputs should be handled as having no hallucinations
+6. Speculative language (may, might, possibly) about facts IN the context is NOT a hallucination
+7. Speculative language about facts NOT in the context IS a hallucination
+8. Never use prior knowledge in judgments - only use what's explicitly stated in context
+9. The following are NOT hallucinations:
+   - Using less precise dates (e.g., year when context gives month)
+   - Reasonable numerical approximations
+   - Omitting additional details while maintaining factual accuracy
+10. Subjective claims ("made history", "pioneering", "leading") are hallucinations unless explicitly stated in context`;
 
-export function generateEvaluatePrompt({ context, output }: { context: string[]; output: string }) {
-  return `Verify if the output contradicts any of the provided context statements. A contradiction occurs when the output directly conflicts with a statement.
+export function generateEvaluatePrompt({ context, claims }: { context: string[]; claims: string[] }) {
+  return `Verify if the claims contain any information not supported by or contradicting the provided context. A hallucination occurs when a claim either:
+1. Contradicts the context
+2. Makes assertions not supported by the context
 
-Output to verify:
-${output}
+Claims to verify:
+${claims.join('\n')}
 
 Number of context statements: ${context.length}
 
-Context statements to check:
+Context statements:
 ${context.join('\n')}
 
-For each context statement, determine if the output contradicts it. When evaluating numbers:
-- Numbers with qualifiers ("about", "around", "approximately") allow reasonable approximations
-- Consider the scale of the number when determining reasonable approximations
-- Only mark as contradiction if the difference would be misleading in context
-- Respect explicit precision markers ("exactly", "precisely")
+For each claim, determine if it is supported by the context. When evaluating:
+
+1. NOT Hallucinations:
+   - Using less precise dates (e.g., year when context gives month)
+   - Reasonable numerical approximations
+   - Omitting additional details while maintaining factual accuracy
+   - Speculative language about facts present in context
+
+2. ARE Hallucinations:
+   - Claims that contradict the context
+   - Assertions not supported by context
+   - Speculative claims about facts not in context
+   - Subjective claims not explicitly supported by context
 
 Example:
-Context: "Tesla was founded in 2003"
-Output: "Tesla, established in 2004, revolutionized the electric car industry."
+Context: [
+  "SpaceX achieved first successful landing in December 2015.",
+  "Their reusable rocket technology reduced launch costs by 30%."
+]
+Claims: [
+  "SpaceX made history in 2015",
+  "SpaceX had pioneering reusable rockets",
+  "reusable rockets significantly cut costs",
+  "They might expand operations globally"
+]
 {
     "verdicts": [
         {
-            "statement": "Tesla was founded in 2003",
+            "statement": "SpaceX made history in 2015",
             "verdict": "yes",
-            "reason": "The output claims Tesla was established in 2004, which directly contradicts the statement that it was founded in 2003"
-        }
-    ]
-}
-
-Context: "The company has exactly 1,234 employees"
-Output: "The company employs around 1,200 people"
-{
-    "verdicts": [
+            "reason": "The subjective claim 'made history' and the year are not supported by context"
+        },
         {
-            "statement": "The company has exactly 1,234 employees",
-            "verdict": "no",
-            "reason": "While the output uses an approximation (around 1,200), this is a reasonable representation of 1,234 employees and maintains the correct order of magnitude"
-        }
-    ]
-}
-
-Context: "Revenue reached $50.5 million in 2022"
-Output: "The company made about $50 million in 2022"
-{
-    "verdicts": [
-        {
-            "statement": "Revenue reached $50.5 million in 2022",
-            "verdict": "no",
-            "reason": "The output's approximation of 'about $50 million' is a reasonable representation of $50.5 million, maintaining accuracy at this scale"
-        }
-    ]
-}
-
-Context: "The startup raised $2.1 million in seed funding"
-Output: "The company secured approximately $5 million in their seed round"
-{
-    "verdicts": [
-        {
-            "statement": "The startup raised $2.1 million in seed funding",
+            "statement": "SpaceX had pioneering reusable rockets",
             "verdict": "yes",
-            "reason": "Despite using 'approximately', the output claims $5 million which is more than double the actual amount ($2.1 million), making it a significant and misleading deviation"
+            "reason": "The subjective claim 'pioneering' is not supported by context"
+        },
+        {
+            "statement": "reusable rockets significantly cut costs",
+            "verdict": "no",
+            "reason": "Context supports that costs were reduced by 30%, this is a reasonable paraphrase"
+        },
+        {
+            "statement": "They might expand operations globally",
+            "verdict": "yes",
+            "reason": "This speculative claim about facts not in context is a hallucination"
         }
     ]
 }
 
 Rules:
-- Only mark as contradicted if there's a direct conflict
-- Omissions are not contradictions
+- Mark as hallucination if information contradicts context
+- Mark as hallucination if assertions aren't supported by context
+- Allow reasonable approximations and less precise dates
+- Every factual claim must be verified
 - Never use prior knowledge in your judgment
 - Provide clear reasoning for each verdict
-- Be specific about where in the output the contradiction occurs
-- The number of verdicts MUST MATCH the number of context statements exactly
+- Be specific about what information is or isn't supported by context
 
 Format:
 {
     "verdicts": [
         {
-            "statement": "context statement",
+            "statement": "individual claim",
             "verdict": "yes/no",
-            "reason": "explanation of contradiction or lack thereof"
+            "reason": "explanation of whether the claim is supported by context"
         }
     ]
 }`;

@@ -16,6 +16,7 @@ jobs:
   process-and-commit:
     runs-on: ubuntu-latest
     if: |
+      github.repository == 'mastra-ai/mastra' &&
       (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') &&
       startsWith(github.head_ref, 'open-api-spec-writer/')
     permissions:

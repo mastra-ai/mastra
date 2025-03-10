@@ -22,13 +22,13 @@ import type {
   StepDef,
   StepGraph,
   StepNode,
-  StepResult,
   StepVariableType,
   WorkflowActionParams,
   WorkflowActions,
   WorkflowActors,
   WorkflowContext,
   WorkflowEvent,
+  WorkflowRunResult,
   WorkflowState,
 } from './types';
 import { WhenConditionReturnValue } from './types';
@@ -113,10 +113,7 @@ export class Machine<
     stepId?: string;
     input?: any;
     snapshot?: Snapshot<any>;
-  } = {}): Promise<{
-    results: Record<string, StepResult<any>>;
-    activePaths: Map<string, { status: string; suspendPayload?: any }>;
-  }> {
+  } = {}): Promise<Pick<WorkflowRunResult<TTriggerSchema, TSteps>, 'results' | 'activePaths'>> {
     if (snapshot) {
       // First, let's log the incoming snapshot for debugging
       this.logger.debug(`Workflow snapshot received`, { runId: this.#runId, snapshot });
@@ -398,16 +395,18 @@ export class Machine<
           let conditionMet = await stepConfig.when({
             context: {
               ...context,
-              getStepResult: ((stepId: string) => {
-                if (stepId === 'trigger') {
+              getStepResult: ((stepId: string | Step<any, any, any, any>) => {
+                const resolvedStepId = typeof stepId === 'string' ? stepId : stepId.id;
+
+                if (resolvedStepId === 'trigger') {
                   return context.triggerData;
                 }
-                const result = context.steps[stepId];
+                const result = context.steps[resolvedStepId];
                 if (result && result.status === 'success') {
                   return result.output;
                 }
                 return undefined;
-              }) as WorkflowContext<TTriggerSchema>['getStepResult'],
+              }) satisfies WorkflowContext<TTriggerSchema>['getStepResult'],
             },
             mastra: this.#mastra,
           });
@@ -479,16 +478,18 @@ export class Machine<
 
     const resolvedData: Record<string, any> = {
       ...context,
-      getStepResult: ((stepId: string) => {
-        if (stepId === 'trigger') {
+      getStepResult: ((stepId: string | Step<any, any, any, any>) => {
+        const resolvedStepId = typeof stepId === 'string' ? stepId : stepId.id;
+
+        if (resolvedStepId === 'trigger') {
           return context.triggerData;
         }
-        const result = context.steps[stepId];
+        const result = context.steps[resolvedStepId];
         if (result && result.status === 'success') {
           return result.output;
         }
         return undefined;
-      }) as WorkflowContext<TTriggerSchema>['getStepResult'],
+      }) satisfies WorkflowContext<TTriggerSchema>['getStepResult'],
     };
 
     for (const [key, variable] of Object.entries(stepConfig.data)) {

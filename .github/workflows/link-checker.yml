@@ -4,7 +4,7 @@ on: [deployment_status]
 jobs:
   link-checker-docs:
     name: Run link checker
-    if: github.event.deployment_status.state == 'success' && github.event.deployment_status.environment == 'Preview – mastra-docs'
+    if: ${{ github.repository == 'mastra-ai/mastra' && github.event.deployment_status.state == 'success' && github.event.deployment_status.environment == 'Preview – mastra-docs' }}
     runs-on: ubuntu-latest
 
     steps:

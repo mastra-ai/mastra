@@ -255,7 +255,8 @@ describe('Workflow', async () => {
         .step(step1)
         .then(step2, {
           when: async ({ context }) => {
-            const step1Result = context.getStepResult<{ count: number }>('step1');
+            const step1Result = context.getStepResult(step1);
+
             return step1Result ? step1Result.count > 3 : false;
           },
         })
@@ -673,16 +674,20 @@ describe('Workflow', async () => {
         execute: increment,
       });
 
-      const final = vi.fn().mockImplementation(async ({ context }) => {
-        return { finalValue: context.getStepResult('increment')?.newValue };
-      });
+      const final = vi
+        .fn()
+        .mockImplementation(
+          async ({ context }: { context: WorkflowContext<any, [typeof incrementStep, typeof finalStep]> }) => {
+            return { finalValue: context.getStepResult(incrementStep).newValue };
+          },
+        );
       const finalStep = new Step({
         id: 'final',
         description: 'Final step that prints the result',
         execute: final,
       });
 
-      const counterWorkflow = new Workflow({
+      const counterWorkflow = new Workflow<[typeof incrementStep, typeof finalStep]>({
         name: 'counter-workflow',
         triggerSchema: z.object({
           target: z.number(),
@@ -693,7 +698,7 @@ describe('Workflow', async () => {
       counterWorkflow
         .step(incrementStep)
         .until(async ({ context }) => {
-          const res = context.getStepResult<{ newValue: number }>('increment');
+          const res = context.getStepResult('increment');
           return (res?.newValue ?? 0) >= 12;
         }, incrementStep)
         .then(finalStep)
@@ -731,7 +736,7 @@ describe('Workflow', async () => {
       });
 
       const final = vi.fn().mockImplementation(async ({ context }) => {
-        return { finalValue: context.getStepResult('increment')?.newValue };
+        return { finalValue: context.getStepResult(incrementStep).newValue };
       });
       const finalStep = new Step({
         id: 'final',

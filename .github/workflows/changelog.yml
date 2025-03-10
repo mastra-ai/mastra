@@ -24,7 +24,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-    if: contains(github.head_ref || github.ref_name, 'changeset-release') || github.event_name == 'workflow_dispatch'
+    if: ${{ github.repository == 'mastra-ai/mastra' && (contains(github.head_ref || github.ref_name, 'changeset-release') || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository

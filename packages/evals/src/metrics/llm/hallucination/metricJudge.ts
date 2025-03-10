@@ -2,7 +2,7 @@ import type { LanguageModel } from '@mastra/core/llm';
 import { z } from 'zod';
 
 import { MastraAgentJudge } from '../../judge';
-
+import { generateClaimExtractionPrompt } from '../faithfulness/prompts';
 import { generateEvaluatePrompt, HALLUCINATION_AGENT_INSTRUCTIONS, generateReasonPrompt } from './prompts';
 
 export class HallucinationJudge extends MastraAgentJudge {
@@ -11,7 +11,18 @@ export class HallucinationJudge extends MastraAgentJudge {
   }
 
   async evaluate(output: string, context: string[]): Promise<{ statement: string; verdict: string; reason: string }[]> {
-    const evaluatePrompt = generateEvaluatePrompt({ context, output });
+    const claimsPrompt = generateClaimExtractionPrompt({ output });
+    const claims = await this.agent.generate(claimsPrompt, {
+      output: z.object({
+        claims: z.array(z.string()),
+      }),
+    });
+
+    if (claims.object.claims.length === 0) {
+      return [];
+    }
+
+    const evaluatePrompt = generateEvaluatePrompt({ claims: claims.object.claims, context });
     const result = await this.agent.generate(evaluatePrompt, {
       output: z.object({
         verdicts: z.array(

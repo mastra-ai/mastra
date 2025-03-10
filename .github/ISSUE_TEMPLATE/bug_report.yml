@@ -1,0 +1,110 @@
+name: Bug Report
+description: Report a bug to help us improve Mastra
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report! Please provide as much detail as possible to help us address the issue quickly.
+
+  - type: textarea
+    attributes:
+      label: Describe the Bug
+      description: A clear and concise description of what the bug is.
+      placeholder: "When trying to use the workflow feature with an agent, the execution fails with an error message..."
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Steps To Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Create a new project with `npx create-mastra@latest`
+        2. Add the following code to `src/workflows/example.ts`
+        3. Run `npm run dev`
+        4. Try to execute the workflow
+        5. See error
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Expected Behavior
+      description: A clear and concise description of what you expected to happen.
+      placeholder: "The workflow should execute successfully and return the expected result."
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Environment Information
+      description: Please provide details about your environment.
+      placeholder: |
+        - Mastra Version: (e.g., 0.1.11)
+        - Node.js Version: (e.g., v20.0.0)
+        - OS: (e.g., Windows 11, macOS, Ubuntu 22.04)
+        - LLM Provider: (e.g., OpenAI, Anthropic, Google Gemini)
+        - Browser (if applicable): (e.g., Chrome 120)
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Component
+      description: Which component of Mastra is affected?
+      multiple: true
+      options:
+        - Agents
+        - Tools
+        - Workflows
+        - RAG
+        - Integrations
+        - Evals
+        - CLI
+        - Playground UI
+        - Deployment
+        - Memory
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Code Snippet
+      description: If applicable, provide a minimal code snippet that demonstrates the issue.
+      render: typescript
+      placeholder: |
+        import { createWorkflow } from "@mastra/core";
+        
+        // Your code example here
+    validations:
+      required: false
+
+  - type: textarea
+    attributes:
+      label: Error Logs
+      description: If applicable, include any error messages or logs.
+      render: shell
+      placeholder: "Error: Failed to execute workflow..."
+    validations:
+      required: false
+
+  - type: textarea
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem here.
+      placeholder: "Any other information that might be relevant to the issue."
+    validations:
+      required: false
+
+  - type: checkboxes
+    attributes:
+      label: Verification
+      description: Before submitting, please make sure you've completed the following
+      options:
+        - label: I have searched the existing issues to make sure this is not a duplicate
+          required: true
+        - label: I have included sufficient information for the team to reproduce and understand the issue
+          required: true

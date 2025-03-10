@@ -1,0 +1,564 @@
+## packages/core
+Here's the structured changelog for the core module updates:
+
+## New Features
+- Added experimental if-else branching between workflow steps (#358f069)
+- Introduced new workflow looping constructs with while/until conditions (#dfbe4e9)
+- Added GRPC Exporter support for Laminar and updated Observability Providers docs (#03236ec)
+- Added ability to update and delete vector index entries by ID (#02ffb7b)
+
+## Improvements
+- Enhanced memory thread management with resourceId validation (#f2301de)
+- Added support for compound `.after` syntax in workflows (#f2d6727)
+- Updated Agent tool input to accept Vercel tool format (#df982db)
+- Added default schema generation for tools when not provided (#aeb5e36)
+- Improved agent generate/stream return types for better type safety (#29f3a82)
+- Added option to disable thread title LLM generation with `new Memory({ threads: { generateTitle: false }})` (#c151ae6)
+
+## Notable Bug Fixes
+- Fixed serialization issues for thread IDs and dates in memory (#ee667a2)
+- Fixed incorrect array access when retrieving memory messages (#3d0e290)
+- Fixed suspend types in core functionality (#1e8bcbc)
+- Fixed query filter for vector search and rerank operations (#9e81f35)
+- Fixed an issue with non-windows-friendly absolute path checks for libsql file URLs (#f6678e4)
+- Fixed bug where messages that were numbers weren't being stored as strings (#3d0e290)
+
+## Build/Deployment Improvements
+- Properly serialize date objects when inserting into libsql (#506f1d5)
+- Keep default memory db in .mastra/mastra.db for consistency (#59df7b6)
+- Updated Vercel tools to include ID and update deployer (#e9fbac5)
+
+## Architecture Changes
+- Added new option to use tool-calls for saving working memory (#59df7b6)
+- Split up action types between tools and workflows for better separation of concerns (#52e0418)
+- Improved JSON schema to Zod schema conversion to properly handle optional fields (#c139344)
+- Workflow trigger data now only accepts object types (#3764e71)
+
+The changelog represents significant updates focusing on workflow improvements, memory management enhancements, and better type safety across the codebase.
+
+## packages/cli
+Here's the structured changelog for the CLI package updates:
+
+## CLI Package Changes
+
+### New Features
+- Added configurable timeout option for package installation during project creation (`--timeout` flag) (#5fae49e)
+- Added `--no-timeout` flag for `npm create mastra` command to disable installation timeouts (#62565c1)
+
+### Improvements
+- Enhanced playground UI with better date picker and form field handling:
+  - Improved date field input and calendar display
+  - Added support for array field types
+  - Enhanced enum field display with better text contrast
+  - Updated breadcrumb styling and layout (#af7466e)
+
+- Improved workflow execution monitoring:
+  - Added real-time status tracking for workflow steps
+  - Implemented persistent data storage in run tab
+  - Enhanced workflow path visualization (#a80bdaf)
+
+- Modernized API integration:
+  - Migrated to MastraClient for workflow operations
+  - Streamlined workflow execution and monitoring
+  - Added better error handling for API responses (#960690d)
+
+### Notable Bug Fixes
+- Fixed initialization in non-npm projects (#91d2e30)
+- Fixed playground UI agent-evals tab content display (#e5149bb)
+- Fixed get workflows breaking issue (#144b3d5)
+
+### Build/Deployment Improvements
+- Updated dependencies for @mastra/deployer and @mastra/core
+- Improved ESLint configuration with additional ignores for starter files
+- Enhanced TypeScript configuration with more specific excludes
+
+The focus of this release has been on improving the developer experience through better workflow monitoring, enhanced UI components, and more robust project initialization features. The addition of configurable timeouts provides more flexibility during project setup, while UI improvements make the playground more user-friendly and functional.
+
+## packages/create-mastra
+Here's the structured changelog for create-mastra v0.1.8-alpha.3:
+
+## New Features
+- Added configurable timeout option for package installation with `--timeout` flag (#5fae49e)
+- Introduced `--no-timeout` flag for npm create mastra command (#62565c1)
+
+## Improvements
+- Enhanced client-js workflow watch developer experience (#960690d)
+- Updated tools dev playground inputs to support different field types (#9035565)
+- Improved traces table UI and agent Chat interface (#144b3d5)
+
+## Notable Bug Fixes
+- Fixed initialization issues in non-npm projects (#91d2e30)
+- Resolved data persistence in development run tab (#a80bdaf)
+- Fixed playground UI issues and agent evaluations tab content (#af7466e, #e5149bb)
+- Addressed workflow retrieval issues (#144b3d5)
+
+The main focus of this release was improving developer experience through better timeout controls and fixing several UI and initialization-related issues. The playground and workflow functionality received significant attention with multiple bug fixes and improvements.
+
+## packages/deployer
+Here's the changelog for the deployer package covering March 3-10, 2025:
+
+## Deployer v0.1.8-alpha.9
+
+### New Features
+- Added support for gRPC exporters in telemetry instrumentation (#e9fbac5)
+- Implemented custom server middleware support from Mastra instances (#bd98a8aad)
+
+### Improvements
+- Enhanced workflow API responses to include complete workflow details including step graphs, schemas, and configurations (#a0db784e3)
+- Updated workflow watch handler to include additional context data (runId, timestamp, suspendedSteps) (#98,#960690d)
+- Enhanced Vercel tools integration with dedicated execution path (#03cc7bbb6)
+
+### Bug Fixes
+- Fixed inconsistent mastra.db file location creation between dev and direct file execution modes (#0461849)
+- Removed unnecessary logging in log drains tab (#731dd8a)
+
+### Build/Deployment
+- Updated dependencies to @mastra/core@0.5.0-alpha.9
+- Standardized file path handling for .mastra/mastra.db storage
+
+This release focuses on improving telemetry capabilities, enhancing workflow management, and fixing critical file handling issues. The addition of gRPC support and custom server middleware provides more flexibility for enterprise deployments.
+
+## packages/evals
+Based on the git diff provided, I'll create a changelog for the Mastra AI evals package. However, I notice that most changes are dependency updates to @mastra/core rather than direct changes to the evals package itself.
+
+# Changelog for Mastra AI Evals (v0.1.8-alpha.9)
+
+## Build/Deployment Improvements
+- Updated @mastra/core dependency to version 0.5.0-alpha.9 through multiple alpha releases
+
+Note: This release primarily consists of internal dependency updates. No direct feature changes, improvements, or bug fixes were made to the evals package itself during this period. All changes were related to keeping the package in sync with the latest @mastra/core updates.
+
+For details about the underlying core changes, please refer to the @mastra/core changelog.
+
+## packages/rag
+Here's the structured changelog for the RAG module updates:
+
+## New Features
+- Added comprehensive JSON chunking capabilities with support for:
+  - Nested object structures
+  - Array handling
+  - Mixed data type processing
+  - Unicode character handling (#9e0f2c9)
+
+## Improvements
+- Enhanced vector and graph RAG tools with better input descriptions:
+  - Added clear descriptions for query text, topK, and filter parameters
+  - Improved documentation for filter usage and examples
+  - Simplified tool descriptions for better clarity (#f2e8e5f)
+
+## Notable Bug Fixes
+- Fixed query filter handling for vector search and rerank operations (#9e81f35)
+- Resolved recursive issues in JSON chunking implementation (#9e0f2c9)
+- Fixed potential undefined text handling in rerank scoring (#baee2cd)
+
+## Technical Improvements
+- Improved type safety for vector filters
+- Enhanced error handling for deep JSON structures
+- Added size limit enforcement for JSON chunks
+- Implemented smarter string splitting at word boundaries
+- Added depth limiting for recursive JSON processing to prevent stack overflow
+
+The most significant changes in this release focus on improving the JSON handling capabilities and making the RAG tools more user-friendly with better documentation and error handling. The JSON chunking system now handles complex nested structures more reliably while maintaining data integrity.
+
+## packages/memory
+Here's the changelog for the memory package updates:
+
+## Memory Package Changelog (March 3-10, 2025)
+
+### New Features
+- Added resource validation to ensure threads are accessed by their correct owners (#f2301de)
+- Introduced tool-call mode for working memory management as an alternative to text-stream mode (#59df7b6)
+
+### Improvements
+- Enhanced memory query interface to support resource ID validation during thread access
+- Added flexible working memory configuration options:
+  - `use: "tool-call"` for tool-based memory updates
+  - `use: "text-stream"` for traditional stream-based updates
+- Added `updateWorkingMemory` tool for managing working memory state (#59df7b6)
+
+### Notable Bug Fixes
+- Fixed thread title generation errors for models that don't support structured output (#c151ae6)
+- Added option to disable thread title LLM generation with `new Memory({ threads: { generateTitle: false }})` (#c151ae6)
+
+### Developer Experience
+- Added comprehensive integration tests for resource validation and working memory modes
+- Improved error messaging for resource ownership validation
+- Enhanced type safety with Zod schema validation for working memory tools
+
+This release focuses on improving thread security through resource validation and providing more flexible ways to manage working memory state. The new tool-call mode offers better compatibility with streaming responses while maintaining working memory functionality.
+
+## packages/mcp
+Based on the git diff provided, here's the changelog for the MCP module covering March 3-10, 2025:
+
+## Mastra MCP Changelog
+
+### Improvements
+- Split action types between tools and workflows for better organization and clarity (#52e0418)
+- Added fallback for missing tool descriptions in MastraMCPClient (#7f61527)
+
+### Dependencies
+- Updated @mastra/core dependency to version 0.5.0-alpha.9
+
+Note: This update primarily focused on internal improvements and dependency updates. The main functional change was the separation of action types between tools and workflows, which improves code organization and maintainability. The version has been incremented to 0.2.7-alpha.9.
+
+Most changes in this period were dependency updates and internal restructuring, with minimal impact on end-user functionality.
+
+## deployers/cloudflare
+Here's the changelog for the Cloudflare deployer module covering March 3-10, 2025:
+
+## Cloudflare Deployer Updates
+
+### Build/Deployment Improvements
+- Updated Cloudflare Wrangler configuration to correctly reference the entry point file at `./output/index.mjs` (#fe11c20)
+
+### Architecture Changes
+- Separated action types between tools and workflows for better code organization (#52e0418)
+
+### Dependencies
+- Updated to @mastra/core v0.5.0-alpha.9
+- Updated to @mastra/deployer v0.1.8-alpha.9
+
+This release primarily focuses on deployment configuration improvements and internal architecture refinements. The main change ensures Cloudflare Workers properly locate and use the correct entry point file, preventing potential deployment issues.
+
+## deployers/netlify
+Based on the git diff provided, here's the changelog for the Netlify deployer module covering March 3-10, 2025:
+
+# Netlify Deployer Changelog
+
+## Improvements
+
+- Added support for Netlify authentication tokens in deployer configuration (#c139344)
+- Updated scope parameter to accept both team slugs and IDs for better flexibility (#960690d)
+
+## Documentation
+
+- Enhanced configuration documentation with clearer examples and token requirements
+- Updated README with improved parameter descriptions for scope, projectName, and token fields
+
+## Dependencies
+
+- Updated @mastra/core to version 0.5.0-alpha.9
+- Updated @mastra/deployer to version 0.1.8-alpha.9
+
+Note: This release includes several alpha versions (0.1.8-alpha.0 through 0.1.8-alpha.9) that have been consolidated into a single stable release with the key changes noted above.
+
+## deployers/vercel
+Based on the provided diff, here's the changelog for the Vercel deployer module (March 3-10, 2025):
+
+# Vercel Deployer Updates
+
+## Breaking Changes
+- Renamed configuration parameter `scope` to `teamId` for better clarity when specifying Vercel team ID or username (#e9fbac5)
+
+## Improvements
+- Added required `token` parameter to configuration for Vercel API authentication (#f2301de)
+
+## Documentation
+- Updated README with clearer configuration parameters and requirements
+- Added documentation for new `token` authentication parameter
+
+Note: This release includes several dependency updates to @mastra/core (v0.5.0-alpha.9) and @mastra/deployer (v0.1.8-alpha.9) but no other significant changes to the Vercel deployer functionality itself.
+
+The changes in this release focus on improving configuration clarity and security by properly documenting authentication requirements.
+
+## speech/azure
+Based on the git diff provided, this appears to be primarily a series of version bumps and dependency updates for the Azure speech module of Mastra AI. Here's the structured changelog:
+
+# Mastra AI Azure Speech Module - v0.1.8-alpha.9
+
+## Build/Deployment Improvements
+- Updated dependency on @mastra/core to version 0.5.0-alpha.9 and its subsequent alpha releases
+
+Note: This release consists mainly of internal dependency updates and version synchronization. No direct feature changes, bug fixes, or performance improvements were made to the Azure speech module itself during this period.
+
+The changes appear to be part of a larger coordinated release cycle across Mastra's modules, with the core package receiving multiple updates that the Azure speech module now incorporates.
+
+For details about specific changes in the core module that may affect Azure speech functionality, please refer to the @mastra/core v0.5.0 changelog.
+
+## speech/deepgram
+Based on the git diff provided, here's the changelog for the Deepgram speech module covering March 3-10, 2025:
+
+# Mastra AI Changelog - Speech/Deepgram Module
+
+## Version 0.1.7-alpha.9
+
+This release primarily consists of dependency updates and internal improvements. No major functional changes were introduced.
+
+### Build/Deployment
+- Updated to latest @mastra/core dependency (v0.5.0-alpha.9)
+
+### Important Notes
+- This module is now deprecated - users should migrate to `@mastra/voice-deepgram` for future development
+
+The changes in this release are primarily maintenance-focused, ensuring compatibility with the latest core framework updates. No breaking changes were introduced.
+
+Note: Most changes in this period were internal dependency updates through alpha releases (alpha.0 through alpha.9). Since these were primarily technical updates without user-facing changes, they have been consolidated into this single changelog entry.
+
+## speech/elevenlabs
+Based on the git diff provided, here's the changelog for the speech/elevenlabs module for March 3-10, 2025:
+
+# Speech/ElevenLabs Module Changelog
+
+## Version 0.1.7-alpha.9
+
+This release primarily consists of dependency updates and internal maintenance changes. The most notable update is:
+
+### Important Notice
+- This module is now deprecated - please use `@mastra/voice-elevenlabs` instead for future development
+
+### Build/Deployment
+- Updated core dependency to version 0.5.0-alpha.9 for improved stability and compatibility
+
+Note: This module is in maintenance mode as it transitions to the new voice-elevenlabs package. No new features are being added, but critical updates and security patches will continue to be applied during the deprecation period.
+
+For users of this module, we recommend planning migration to `@mastra/voice-elevenlabs` for continued feature development and support.
+
+## speech/google
+Based on the git diff provided, here's the changelog for the speech/google module for March 3-10, 2025:
+
+# Mastra Speech Google Module Changelog
+
+## Version 0.1.8-alpha.9
+
+This release primarily consists of dependency updates and internal improvements. No significant functional changes were made to the speech/google module itself.
+
+### Build/Deployment
+- Updated core dependency to version 0.5.0-alpha.9
+
+### Note
+This module is now deprecated. Please migrate to `@mastra/voice-google` for future development.
+
+---
+
+The changes shown in the diff are mostly version bumps and dependency updates through various alpha releases (alpha.0 through alpha.9). There are no direct feature changes, bug fixes, or improvements to the speech/google module itself - all changes are related to updating the @mastra/core dependency.
+
+For users of this module, the most important note is that this module is deprecated and they should plan to migrate to @mastra/voice-google.
+
+## speech/ibm
+Based on the provided git diff, this appears to be primarily a series of version bumps and dependency updates for the IBM speech integration module. Here's the structured changelog:
+
+# Mastra IBM Speech Integration Changelog (March 3-10, 2025)
+
+## Build & Dependencies
+
+- Updated @mastra/core dependency to version 0.5.0-alpha.9 through multiple incremental releases
+- Bumped package version from 0.1.7 to 0.1.8-alpha.9
+
+Note: This update cycle appears to be focused on maintaining compatibility with the core Mastra package updates. No direct feature changes, improvements, or bug fixes were made to the IBM speech integration module itself during this period.
+
+For details about the underlying core changes that this update enables, please refer to the [@mastra/core changelog](https://github.com/mastra/core/blob/main/CHANGELOG.md).
+
+## speech/murf
+Based on the git diff provided, here's the changelog for the speech/murf module for March 3-10, 2025:
+
+# Mastra AI Speech/Murf Changelog (March 3-10, 2025)
+
+## Build/Deployment Updates
+- Released version 0.1.8-alpha.9 with updated core dependencies (#e9fbac5, #1e8bcbc, #aeb5e36, #f2301de)
+
+## Important Notes
+- This module is now deprecated - users should migrate to `@mastra/voice-murf` for future updates and improvements
+
+The changes during this period were primarily dependency updates and version bumps as the module transitions toward deprecation. No significant feature changes or bug fixes were implemented, which aligns with the module's deprecated status.
+
+For users currently using `@mastra/speech-murf`, we recommend planning migration to `@mastra/voice-murf` to ensure continued support and access to new features.
+
+## speech/openai
+Based on the git diff provided, here's the changelog for the speech/openai module for March 3-10, 2025:
+
+# Mastra AI Speech/OpenAI Changelog
+
+## Version 0.1.8-alpha.9
+
+This release primarily consists of dependency updates and internal improvements. No major functional changes were introduced in this version.
+
+### Build/Deployment
+- Updated to latest @mastra/core dependency (v0.5.0-alpha.9)
+
+### Important Notes
+- This module is now deprecated. Please migrate to `@mastra/voice-openai` for future development.
+
+The changes in this release are focused on maintaining compatibility with the core Mastra AI framework while the module transitions to its new home at `@mastra/voice-openai`. No breaking changes were introduced in this update.
+
+For users of this module, we recommend:
+1. Planning migration to `@mastra/voice-openai`
+2. Reviewing the new module's documentation for migration steps
+3. Testing your implementation with the latest alpha release
+
+## speech/playai
+Based on the provided git diff, this appears to be primarily a series of version bumps and dependency updates for the @mastra/speech-playai module. Here's the structured changelog:
+
+# Mastra Speech PlayAI Changelog (March 3-10, 2025)
+
+## Build & Dependencies
+
+- Updated @mastra/core dependency to version 0.5.0-alpha.9 (#e9fbac5, #1e8bcbc, #aeb5e36, #f2301de)
+- Released version 0.1.7-alpha.9 with latest core updates
+
+## Important Notes
+
+⚠️ This module is now deprecated. Users should migrate to `@mastra/voice-playai` for future development.
+
+---
+
+Note: The changes during this period were primarily internal dependency updates. No significant feature changes, bug fixes, or improvements were made to the module itself. This aligns with the module's deprecated status as development focus has shifted to the new voice-playai package.
+
+## speech/replicate
+Based on the git diff provided, I'll create a changelog for the speech/replicate module. However, I notice that most changes are dependency updates to @mastra/core without direct changes to the speech/replicate module itself. Here's an appropriate changelog:
+
+# Mastra Speech Replicate Changelog (March 3-10, 2025)
+
+## Build & Dependencies
+
+- Updated @mastra/core dependency to version 0.5.0-alpha.9 through multiple incremental releases
+- Bumped package version from 0.1.7 to 0.1.8-alpha.9
+
+Note: This release primarily consists of dependency updates to the core Mastra package. No direct functional changes were made to the speech/replicate module during this period.
+
+For details about the core changes affecting this module, please refer to the [@mastra/core changelog](link-to-core-changelog).
+
+## speech/speechify
+Based on the git diff provided, I'll create a changelog for the Speechify module. However, I notice that this appears to be primarily version bumps and dependency updates, with the main changes being to the core package version dependencies.
+
+# Speechify Module Changelog (March 3-10, 2025)
+
+## Build Updates
+- Updated @mastra/core dependency to version 0.5.0-alpha.9 through multiple alpha releases
+- Bumped package version to 0.1.8-alpha.9
+
+## Important Note
+This module is marked as DEPRECATED - users should migrate to @mastra/voice-speechify instead.
+
+---
+
+Note: This changelog period primarily consisted of internal dependency updates. No direct feature changes, bug fixes, or performance improvements were made to the Speechify module itself. Users should begin planning migration to the new @mastra/voice-speechify package as this module is deprecated.
+
+## stores/pg
+Based on the provided git diff, this appears to be primarily a version bump and dependency update changelog for the @mastra/pg package. Here's the structured changelog:
+
+# @mastra/pg v0.1.8-alpha.9 Changelog (March 3-10, 2025)
+
+## Build/Deployment Improvements
+
+- Updated package version from 0.1.7 to 0.1.8-alpha.9
+- Updated dependency on @mastra/core to version 0.5.0-alpha.9
+
+Note: This release consists mainly of internal dependency updates and version alignment. No direct feature changes, bug fixes, or performance improvements were made to the PostgreSQL provider itself during this period.
+
+The changes appear to be part of a larger alpha release cycle, with multiple alpha versions (0-9) being published to track updates in the core dependency. For specific feature changes, users should refer to the @mastra/core v0.5.0-alpha changelog.
+
+## stores/astra
+Here's the changelog for the Astra module covering March 3-10, 2025:
+
+# Astra Store Changelog (v0.2.0-alpha.9)
+
+## New Features
+- Added vector manipulation operations for individual records:
+  - Update vector embeddings and metadata by ID
+  - Delete vectors by ID
+  - Partial updates support for either vector data or metadata (#5bfb4b6)
+
+## Improvements
+- Implemented new MastraVector interface methods in Astra store (#5bfb4b6)
+- Enhanced error handling for vector operations with descriptive messages
+- Added validation to prevent empty updates
+
+## Technical Details
+- The updateIndexById method now supports:
+  - Updating vector embeddings
+  - Updating metadata
+  - Partial updates (vector or metadata only)
+- Vector deletion is now supported through deleteIndexById method
+- All operations maintain consistency with Astra DB's document model
+
+## Dependencies
+- Updated @mastra/core to version 0.5.0-alpha.9
+
+This release focuses on expanding the vector manipulation capabilities of the Astra store, providing more granular control over vector data management.
+
+## stores/chroma
+Here's the changelog for the Chroma store module covering March 3-10, 2025:
+
+# Chroma Store Changelog
+
+## New Features
+- Added vector record management operations:
+  - Update vectors and metadata by ID (#8bee68a)
+  - Delete individual vectors by ID (#8bee68a)
+
+## Improvements
+- Enhanced query filter handling for vector search and rerank operations (#9e81f35)
+- Added support for null and undefined document filters in queries (#1369)
+- Expanded test coverage for vector operations and edge cases
+
+## Notable Bug Fixes
+- Fixed query filter behavior in vector search and rerank operations (#9e81f35)
+
+## Technical Updates
+- Updated ChromaVector interface implementation to align with latest MastraVector specifications
+- Upgraded to @mastra/core@0.5.0-alpha.9
+- Version bumped to 0.2.0-alpha.9
+
+The main focus of this release was expanding the vector management capabilities with new CRUD operations and improving the robustness of query filtering. These changes provide more flexibility in managing vector records and ensure more reliable search results.
+
+## stores/pinecone
+Based on the git diff provided, I'll create a changelog for the Pinecone store module. However, I notice that most changes are dependency updates to @mastra/core without direct changes to the Pinecone module itself. Here's the appropriate changelog:
+
+# Pinecone Store Changelog (March 3-10, 2025)
+
+## Version Updates
+- Bumped version from 0.1.7 to 0.1.8-alpha.9
+
+## Dependencies
+- Updated @mastra/core dependency to version 0.5.0-alpha.9
+
+Note: This release primarily contains internal dependency updates without direct functional changes to the Pinecone store module. For details about the core module changes, please refer to the @mastra/core changelog.
+
+---
+
+This appears to be a maintenance release focused on keeping dependencies in sync with the core module. There are no direct feature additions, improvements, or bug fixes to the Pinecone store implementation itself during this period.
+
+## stores/qdrant
+Based on the provided git diff, this appears to be primarily a version bump and dependency update changelog for the Qdrant store module. Here's the structured changelog:
+
+# Qdrant Store v0.1.8-alpha.9
+
+## Build/Deployment Improvements
+- Updated dependency on @mastra/core to version 0.5.0-alpha.9
+
+Note: This release consists mainly of internal dependency updates through multiple alpha versions (alpha.0 through alpha.9). No direct feature changes, bug fixes, or performance improvements were made to the Qdrant store module itself during this period.
+
+The changes appear to be part of a larger coordinated release cycle with the core Mastra package, ensuring compatibility with the latest core functionality.
+
+## stores/upstash
+Based on the git diff provided, here's the changelog for the Upstash module covering March 3-10, 2025:
+
+# Upstash Store Updates (v0.1.8-alpha.9)
+
+This release primarily includes dependency updates and internal improvements through multiple alpha releases.
+
+### Build/Deployment Improvements
+- Updated to latest @mastra/core dependency (v0.5.0-alpha.9) for enhanced stability and features
+- Released multiple alpha versions (alpha.0 through alpha.9) to incrementally test and validate changes
+
+Note: This update cycle focused mainly on infrastructure and dependency maintenance. No major feature changes or bug fixes were implemented directly in the Upstash module during this period.
+
+---
+
+The changes shown are primarily version bumps and dependency updates to @mastra/core. Since the actual code changes are not visible in the diff, I've kept the changelog focused on the version progression and core dependency updates. If you have additional specific changes that should be highlighted, please let me know.
+
+## stores/vectorize
+Based on the provided git diff, I'll create a changelog for the Mastra AI Vectorize module. However, I notice that most changes are dependency updates to @mastra/core rather than direct changes to the Vectorize module itself.
+
+# Mastra AI Vectorize Changelog (March 3-10, 2025)
+
+## Build Updates
+- Updated @mastra/core dependency to version 0.5.0-alpha.9 (#e9fbac5, #1e8bcbc, #aeb5e36, #f2301de)
+
+Note: This release primarily contains internal dependency updates to maintain compatibility with the latest Mastra Core package. No direct feature changes or improvements were made to the Vectorize module itself during this period.
+
+Version: 0.1.8-alpha.9
+
+---
+
+Since the changes shown are mostly dependency version bumps, there aren't any meaningful functional changes to report in the usual categories (features, improvements, bug fixes, etc.). If you'd like me to analyze specific changes from the Core dependency that might impact Vectorize, please provide the Core module's changelog as well.
