@@ -1,5 +1,16 @@
 # @mastra/pg
 
+## 0.2.0-alpha.10
+
+### Minor Changes
+
+- 3de7e06: Added new operations implementations for MastraVector interface methods in pg vector store
+
+### Patch Changes
+
+- Updated dependencies [a910463]
+  - @mastra/core@0.5.0-alpha.10
+
 ## 0.1.8-alpha.9
 
 ### Patch Changes
