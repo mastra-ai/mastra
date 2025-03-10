@@ -1,3 +1,4 @@
+import type { ToolsInput } from '../agent';
 import { MastraBase } from '../base';
 import { InstrumentClass } from '../telemetry';
 
@@ -42,7 +43,7 @@ export abstract class MastraVoice<
   TListenOptions = unknown,
   TTuneConfig = unknown,
   THuddleConfig = unknown,
-  TTools = unknown,
+  TTools extends ToolsInput = ToolsInput,
   TEventArgs extends VoiceEventMap = VoiceEventMap,
   TSpeakerMetadata = unknown,
 > extends MastraBase {
@@ -152,7 +153,7 @@ export abstract class MastraVoice<
    * Equip the voice provider with tools
    * @param tools Array of tools to equip
    */
-  equip(tools: Array<TTools>): void {
+  equip(_tools: TTools): void {
     // Default implementation - voice providers can override if they support this feature
     this.logger.warn('equip not implemented by this voice provider');
   }
