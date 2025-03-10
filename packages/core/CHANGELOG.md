@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.5.0-alpha.10
+
+### Patch Changes
+
+- a910463: Improve typinges for getStepResult and workflow results
+
 ## 0.5.0-alpha.9
 
 ### Patch Changes
