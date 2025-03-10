@@ -11,6 +11,8 @@ This example demonstrates how to create an agent that maintains a working memory
 
 First, set up the memory system with working memory enabled. Memory uses LibSQL storage by default, but you can use any other [storage provider](/docs/agents/01-agent-memory#storage-options) if needed:
 
+### Text Stream Mode (Default)
+
 ```typescript
 import { Memory } from "@mastra/memory";
 
@@ -18,21 +20,37 @@ const memory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
+      use: 'text-stream', // this is the default mode
     },
   },
 });
 ```
 
-Add the memory instance to an agent
+### Tool Call Mode
+
+Alternatively, you can use tool calls for working memory updates. This mode is required when using `toDataStream()` as text-stream mode is not compatible with data streaming:
+
+```typescript
+const toolCallMemory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      use: 'tool-call', // Required for toDataStream() compatibility
+    },
+  },
+});
+```
+
+Add the memory instance to an agent:
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
 
-const todoAgent = new Agent({
+const agent = new Agent({
   name: "Memory agent",
   instructions: "You are a helpful AI assistant.",
   model: openai("gpt-4o-mini"),
-  memory,
+  memory, // or toolCallMemory
 });
 ```
 
@@ -40,50 +58,61 @@ const todoAgent = new Agent({
 
 Now that working memory is set up you can interact with the agent and it will remember key details about interactions.
 
-First start a conversation and give the agent relevant information like your name.
+### Text Stream Mode
+
+In text stream mode, the agent includes working memory updates directly in its responses:
 
 ```typescript
 import { randomUUID } from "crypto";
+import { maskStreamTags } from "@mastra/core/utils";
 
 const threadId = randomUUID();
 const resourceId = "SOME_USER_ID";
 
-const response = await todoAgent.stream("Hello, my name is Jane", {
+const response = await agent.stream("Hello, my name is Jane", {
   threadId,
   resourceId,
 });
 
-// process response stream
-for await (const chunk of response.textStream) {
+// Process response stream, hiding working memory tags
+for await (const chunk of maskStreamTags(response.textStream, "working_memory")) {
+  process.stdout.write(chunk);
+}
+```
+
+### Tool Call Mode
+
+In tool call mode, the agent uses a dedicated tool to update working memory:
+
+```typescript
+const toolCallResponse = await toolCallAgent.stream("Hello, my name is Jane", {
+  threadId,
+  resourceId,
+});
+
+// No need to mask working memory tags since updates happen through tool calls
+for await (const chunk of toolCallResponse.textStream) {
   process.stdout.write(chunk);
 }
 ```
 
 ### Handling response data
 
-The response stream will contain xml-like `<working_memory>$data</working_memory>` tagged data.
+In text stream mode, the response stream will contain xml-like `<working_memory>$data</working_memory>` tagged data.
 Mastra picks up these tags and automatically updates working memory with the data returned by the LLM.
 
-To prevent showing this data to users you can import the `maskStreamTags` util and pass the stream response through it.
+To prevent showing this data to users you can use the `maskStreamTags` util as shown above.
 
-```typescript
-import { maskStreamTags } from "@mastra/core/utils";
-
-for await (const chunk of maskStreamTags(
-  response.textStream, // pass the text stream
-  "working_memory", // and the name of the working memory tag
-)) {
-  process.stdout.write(chunk);
-}
-```
+In tool call mode, working memory updates happen through tool calls, so there's no need to mask any tags.
 
 ## Summary
 
 This example demonstrates:
 
-1. Setting up a memory system with working memory enabled
-2. Using `maskStreamTags` to hide memory updates from users
-3. The agent will maintain relevant user info between interactions, even when the original messages containing that info are no longer in context.
+1. Setting up memory with working memory enabled in either text-stream or tool-call mode
+2. Using `maskStreamTags` to hide memory updates in text-stream mode
+3. The agent maintaining relevant user info between interactions in both modes
+4. Different approaches to handling working memory updates
 
 ## Advanced use cases
 

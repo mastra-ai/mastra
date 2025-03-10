@@ -3,7 +3,8 @@ import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
 
-import { getPackageManager, getPackageManagerInstallCommand } from '../utils';
+import { DepsService } from '../../services/service.deps';
+import { getPackageManagerInstallCommand } from '../utils';
 
 import {
   createComponentsDir,
@@ -67,7 +68,8 @@ export const init = async ({
     const key = await getAPIKey(llmProvider || 'openai');
 
     const aiSdkPackage = getAISDKPackage(llmProvider);
-    const pm = getPackageManager();
+    const depsService = new DepsService();
+    const pm = depsService.packageManager;
     const installCommand = getPackageManagerInstallCommand(pm);
     await exec(`${pm} ${installCommand} ${aiSdkPackage}`);
 

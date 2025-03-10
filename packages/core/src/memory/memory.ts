@@ -1,3 +1,5 @@
+import { existsSync } from 'fs';
+import { join } from 'path';
 import type {
   AssistantContent,
   ToolResultPart,
@@ -11,6 +13,7 @@ import type {
 import { MastraBase } from '../base';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { DefaultStorage } from '../storage/libsql';
+import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
 import { defaultEmbedder } from '../vector/fastembed';
@@ -32,6 +35,9 @@ export abstract class MastraMemory extends MastraBase {
   protected threadConfig: MemoryConfig = {
     lastMessages: 40,
     semanticRecall: true,
+    threads: {
+      generateTitle: true, // TODO: should we disable this by default to reduce latency?
+    },
   };
 
   constructor(config: { name: string } & SharedMemoryConfig) {
@@ -48,8 +54,22 @@ export abstract class MastraMemory extends MastraBase {
     if (config.vector) {
       this.vector = config.vector;
     } else {
+      // for backwards compat reasons, check if there's a memory-vector.db in cwd or in cwd/.mastra
+      // if it's there we need to use it, otherwise use the same file:memory.db
+      // We used to need two separate DBs because we would get schema errors
+      // Creating a new index for each vector dimension size fixed that, so we no longer need a separate sqlite db
+      const oldDb = 'memory-vector.db';
+      const hasOldDb = existsSync(join(process.cwd(), oldDb)) || existsSync(join(process.cwd(), '.mastra', oldDb));
+      const newDb = 'memory.db';
+
+      if (hasOldDb) {
+        this.logger.warn(
+          `Found deprecated Memory vector db file ${oldDb} this db is now merged with the default ${newDb} file. Delete the old one to use the new one. You will need to migrate any data if that's important to you. For now the deprecated path will be used but in a future breaking change we will only use the new db file path.`,
+        );
+      }
+
       this.vector = new DefaultVectorDB({
-        connectionUrl: 'file:memory-vector.db', // file name needs to be different than default storage or it wont work properly
+        connectionUrl: hasOldDb ? `file:${oldDb}` : `file:${newDb}`,
       });
     }
 
@@ -85,6 +105,15 @@ export abstract class MastraMemory extends MastraBase {
     return null;
   }
 
+  /**
+   * Get tools that should be available to the agent.
+   * This will be called when converting tools for the agent.
+   * Implementations can override this to provide additional tools.
+   */
+  public getTools(_config?: MemoryConfig): Record<string, CoreTool> {
+    return {};
+  }
+
   protected async createEmbeddingIndex(): Promise<{ indexName: string }> {
     const defaultDimensions = 1536;
 
@@ -102,19 +131,22 @@ export abstract class MastraMemory extends MastraBase {
     return { indexName };
   }
 
-  protected getMergedThreadConfig(config?: MemoryConfig): MemoryConfig {
+  public getMergedThreadConfig(config?: MemoryConfig): MemoryConfig {
     return deepMerge(this.threadConfig, config || {});
   }
 
   abstract rememberMessages({
     threadId,
+    resourceId,
     vectorMessageSearch,
     config,
   }: {
     threadId: string;
+    resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
   }): Promise<{
+    threadId: string;
     messages: CoreMessage[];
     uiMessages: AiMessageType[];
   }>;
@@ -129,7 +161,9 @@ export abstract class MastraMemory extends MastraBase {
       content:
         typeof msg.content === 'string' && (msg.content.startsWith('[') || msg.content.startsWith('{'))
           ? JSON.parse((msg as MessageType).content as string)
-          : msg.content,
+          : typeof msg.content === 'number'
+            ? String(msg.content)
+            : msg.content,
     }));
   }
 
@@ -186,6 +220,8 @@ export abstract class MastraMemory extends MastraBase {
 
         if (typeof message.content === 'string') {
           textContent = message.content;
+        } else if (typeof message.content === 'number') {
+          textContent = String(message.content);
         } else if (Array.isArray(message.content)) {
           for (const content of message.content) {
             if (content.type === 'text') {
@@ -263,6 +299,7 @@ export abstract class MastraMemory extends MastraBase {
    */
   abstract query({
     threadId,
+    resourceId,
     selectBy,
   }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }>;
 
@@ -287,7 +324,7 @@ export abstract class MastraMemory extends MastraBase {
   }): Promise<StorageThreadType> {
     const thread: StorageThreadType = {
       id: threadId || this.generateId(),
-      title: title || 'New Thread',
+      title: title || `New Thread ${new Date().toISOString()}`,
       resourceId,
       createdAt: new Date(),
       updatedAt: new Date(),

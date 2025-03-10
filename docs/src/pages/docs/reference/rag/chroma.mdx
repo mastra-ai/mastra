@@ -5,7 +5,7 @@ description: Documentation for the ChromaVector class in Mastra, which provides 
 
 # Chroma Vector Store
 
-The ChromaVector class provides vector search using [ChromaDB](https://www.trychroma.com/), an open-source embedding database. 
+The ChromaVector class provides vector search using [ChromaDB](https://www.trychroma.com/), an open-source embedding database.
 It offers efficient vector search with metadata filtering and hybrid search capabilities.
 
 ## Constructor Options
@@ -99,7 +99,8 @@ It offers efficient vector search with metadata filtering and hybrid search capa
       name: "documents",
       type: "string[]",
       isOptional: true,
-      description: "Chroma-specific: Original text documents associated with the vectors",
+      description:
+        "Chroma-specific: Original text documents associated with the vectors",
     },
   ]}
 />
@@ -185,6 +186,64 @@ interface IndexStats {
   ]}
 />
 
+### updateIndexById()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector to update",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector to update",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "Update parameters",
+    },
+  ]}
+/>
+
+The `update` object can contain:
+
+<PropertiesTable
+  content={[
+    {
+      name: "vector",
+      type: "number[]",
+      isOptional: true,
+      description: "New vector to replace the existing one",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "New metadata to replace the existing metadata",
+    },
+  ]}
+/>
+
+### deleteIndexById()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector to delete",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector to delete",
+    },
+  ]}
+/>
+
 ## Response Types
 
 Query results are returned in this format:
@@ -218,4 +277,5 @@ try {
 ```
 
 ### Related
-- [Metadata Filters](./metadata-filters) 
+
+- [Metadata Filters](./metadata-filters)

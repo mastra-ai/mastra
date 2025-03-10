@@ -1,5 +1,103 @@
 # @mastra/deployer
 
+## 0.1.8-alpha.9
+
+### Patch Changes
+
+- e9fbac5: Update Vercel tools to have id and update deployer
+- Updated dependencies [e9fbac5]
+- Updated dependencies [1e8bcbc]
+- Updated dependencies [aeb5e36]
+- Updated dependencies [f2301de]
+  - @mastra/core@0.5.0-alpha.9
+
+## 0.1.8-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [506f1d5]
+  - @mastra/core@0.5.0-alpha.8
+
+## 0.1.8-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [ee667a2]
+  - @mastra/core@0.5.0-alpha.7
+
+## 0.1.8-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [f6678e4]
+  - @mastra/core@0.5.0-alpha.6
+
+## 0.1.8-alpha.5
+
+### Patch Changes
+
+- 03236ec: Added GRPC Exporter for Laminar and updated dodcs for Observability Providers
+- 0461849: Fixed a bug where mastra.db file location was inconsistently created when running mastra dev vs running a file directly (tsx src/index.ts for ex)
+- Updated dependencies [22643eb]
+- Updated dependencies [6feb23f]
+- Updated dependencies [f2d6727]
+- Updated dependencies [301e4ee]
+- Updated dependencies [dfbe4e9]
+- Updated dependencies [9e81f35]
+- Updated dependencies [caefaa2]
+- Updated dependencies [c151ae6]
+- Updated dependencies [52e0418]
+- Updated dependencies [03236ec]
+- Updated dependencies [3764e71]
+- Updated dependencies [df982db]
+- Updated dependencies [0461849]
+- Updated dependencies [2259379]
+- Updated dependencies [358f069]
+  - @mastra/core@0.5.0-alpha.5
+
+## 0.1.8-alpha.4
+
+### Patch Changes
+
+- 144b3d5: Update traces table UI, agent Chat UI
+  Fix get workflows breaking
+- Updated dependencies [d79aedf]
+  - @mastra/core@0.5.0-alpha.4
+
+## 0.1.8-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [3d0e290]
+  - @mastra/core@0.5.0-alpha.3
+
+## 0.1.8-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [02ffb7b]
+  - @mastra/core@0.5.0-alpha.2
+
+## 0.1.8-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [dab255b]
+  - @mastra/core@0.5.0-alpha.1
+
+## 0.1.8-alpha.0
+
+### Patch Changes
+
+- c2dde91: Return full workflow details in api/workflows endpoint
+- 731dd8a: Removed useless logging that showed up when user selected log drains tab on the playground
+- 960690d: return runId from server on workflow watch
+- Updated dependencies [59df7b6]
+- Updated dependencies [29f3a82]
+- Updated dependencies [59df7b6]
+- Updated dependencies [c139344]
+  - @mastra/core@0.5.0-alpha.0
+
 ## 0.1.7
 
 ### Patch Changes

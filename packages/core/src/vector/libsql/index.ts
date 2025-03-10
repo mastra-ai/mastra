@@ -1,4 +1,4 @@
-import { join } from 'path';
+import { join, resolve, isAbsolute } from 'path';
 import { createClient } from '@libsql/client';
 import type { Client as TursoClient, InValue } from '@libsql/client';
 
@@ -47,23 +47,34 @@ export class LibSQLVector extends MastraVector {
     });
   }
 
+  // If we're in the .mastra/output directory, use the dir outside .mastra dir
+  // reason we need to do this is libsql relative file paths are based on cwd, not current file path
+  // since mastra dev sets cwd to .mastra/output this means running an agent directly vs running with mastra dev
+  // will put db files in different locations, leading to an inconsistent experience between the two.
+  // Ex: with `file:ex.db`
+  // 1. `mastra dev`: ${cwd}/.mastra/output/ex.db
+  // 2. `tsx src/index.ts`: ${cwd}/ex.db
+  // so if we're in .mastra/output we need to rewrite the file url to be relative to the project root dir
+  // or the experience will be inconsistent
+  // this means `file:` urls are always relative to project root
+  // TODO: can we make this easier via bundling? https://github.com/mastra-ai/mastra/pull/2783#pullrequestreview-2662444241
   protected rewriteDbUrl(url: string): string {
-    // If this is a relative file path (starts with file: but not file:/)
-    if (url.startsWith('file:') && !url.startsWith('file:/')) {
+    if (url.startsWith('file:')) {
+      const pathPart = url.slice('file:'.length);
+
+      if (isAbsolute(pathPart)) {
+        return url;
+      }
+
       const cwd = process.cwd();
 
-      // Get the relative path part after 'file:'
-      const relativePath = url.slice('file:'.length);
+      if (cwd.includes('.mastra') && (cwd.endsWith(`output`) || cwd.endsWith(`output/`) || cwd.endsWith(`output\\`))) {
+        const baseDir = join(cwd, `..`, `..`); // <- .mastra/output/../../
 
-      // If we're in a .mastra directory, use the parent directory
-      if (cwd.endsWith('.mastra') || cwd.endsWith('.mastra/')) {
-        const baseDir = join(cwd, `..`);
-
-        // Rewrite to be relative to the base directory
-        const fullPath = join(baseDir, relativePath);
+        const fullPath = resolve(baseDir, pathPart);
 
         this.logger.debug(
-          `Initializing LibSQL db with url ${url} with relative file path from inside .mastra directory. Rewriting relative file url to "file:${fullPath}". This ensures it's outside the .mastra directory. If the db is stored inside .mastra it will be deleted when Mastra re-bundles code.`,
+          `Initializing LibSQL db with url ${url} with relative file path from inside .mastra/output directory. Rewriting relative file url to "file:${fullPath}". This ensures it's outside the .mastra/output directory.`,
         );
 
         return `file:${fullPath}`;
@@ -282,6 +293,68 @@ export class LibSQLVector extends MastraVector {
       };
     } catch (e: any) {
       throw new Error(`Failed to describe vector table: ${e.message}`);
+    }
+  }
+
+  /**
+   * Updates an index entry by its ID with the provided vector and/or metadata.
+   *
+   * @param indexName - The name of the index to update.
+   * @param id - The ID of the index entry to update.
+   * @param update - An object containing the vector and/or metadata to update.
+   * @param update.vector - An optional array of numbers representing the new vector.
+   * @param update.metadata - An optional record containing the new metadata.
+   * @returns A promise that resolves when the update is complete.
+   * @throws Will throw an error if no updates are provided or if the update operation fails.
+   */
+  async updateIndexById(
+    indexName: string,
+    id: string,
+    update: { vector?: number[]; metadata?: Record<string, any> },
+  ): Promise<void> {
+    try {
+      const updates = [];
+      const args: InValue[] = [];
+
+      if (update.vector) {
+        updates.push('embedding = vector32(?)');
+        args.push(JSON.stringify(update.vector));
+      }
+
+      if (update.metadata) {
+        updates.push('metadata = ?');
+        args.push(JSON.stringify(update.metadata));
+      }
+
+      if (updates.length === 0) {
+        throw new Error('No updates provided');
+      }
+
+      args.push(id);
+
+      const query = `
+        UPDATE ${indexName}
+        SET ${updates.join(', ')}
+        WHERE vector_id = ?;
+      `;
+
+      await this.turso.execute({
+        sql: query,
+        args,
+      });
+    } catch (error: any) {
+      throw new Error(`Failed to update index by id: ${id} for index: ${indexName}: ${error.message}`);
+    }
+  }
+
+  async deleteIndexById(indexName: string, id: string): Promise<void> {
+    try {
+      await this.turso.execute({
+        sql: `DELETE FROM ${indexName} WHERE vector_id = ?`,
+        args: [id],
+      });
+    } catch (error: any) {
+      throw new Error(`Failed to delete index by id: ${id} for index: ${indexName}: ${error.message}`);
     }
   }
 

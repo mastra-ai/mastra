@@ -105,7 +105,7 @@ export default function Breadcrumb({ items, pageClassName, icon }: BreadcrumbPro
                     <BreadcrumbPage className={pageClassName}>{item.label}</BreadcrumbPage>
                   ) : (
                     <BreadcrumbLink asChild>
-                      <Link to={item.href} className="text-mastra-el-3">
+                      <Link to={item.href} className="text-mastra-el-3 text-sm">
                         {item.label}
                       </Link>
                     </BreadcrumbLink>

@@ -8,15 +8,16 @@ import type {
   GenerateObjectResult,
   GenerateTextResult,
   LanguageModelV1,
+  StreamObjectResult,
+  StreamTextResult,
   TextPart,
   ToolCallPart,
   UserContent,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
-import { z } from 'zod';
+import type { ZodSchema, z } from 'zod';
 
-import type { MastraPrimitives } from '../action';
+import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
@@ -24,13 +25,15 @@ import type { GenerateReturn, StreamReturn } from '../llm';
 import type { MastraLLMBase } from '../llm/model';
 import { MastraLLM } from '../llm/model';
 import { RegisteredLogger } from '../logger';
+import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
-import type { CoreTool, ToolAction } from '../tools/types';
+import type { CoreTool } from '../tools/types';
+import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
 import type { CompositeVoice } from '../voice';
 
-import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
+import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput, ToolsInput } from './types';
 
 export * from './types';
 
@@ -39,14 +42,14 @@ export * from './types';
   excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', 'log'],
 })
 export class Agent<
-  TTools extends Record<string, ToolAction<any, any, any, any>> = Record<string, ToolAction<any, any, any, any>>,
+  TTools extends ToolsInput = ToolsInput,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > extends MastraBase {
   public name: string;
   readonly llm: MastraLLMBase;
   instructions: string;
   readonly model?: LanguageModelV1;
-  #mastra?: MastraPrimitives;
+  #mastra?: Mastra;
   #memory?: MastraMemory;
   tools: TTools;
   /** @deprecated This property is deprecated. Use evals instead. */
@@ -72,11 +75,14 @@ export class Agent<
     this.evals = {} as TMetrics;
 
     if (config.tools) {
-      this.tools = config.tools;
+      this.tools = ensureToolProperties(config.tools) as TTools;
     }
 
     if (config.mastra) {
-      this.#mastra = config.mastra;
+      this.__registerPrimitives({
+        telemetry: config.mastra.getTelemetry(),
+        logger: config.mastra.getLogger(),
+      });
     }
 
     if (config.metrics) {
@@ -121,9 +127,11 @@ export class Agent<
 
     this.llm.__registerPrimitives(p);
 
-    this.#mastra = p;
-
     this.logger.debug(`[Agents:${this.name}] initialized.`, { model: this.model, name: this.name });
+  }
+
+  __registerMastra(mastra: Mastra) {
+    this.#mastra = mastra;
   }
 
   /**
@@ -136,7 +144,8 @@ export class Agent<
   }
 
   async generateTitleFromUserMessage({ message }: { message: CoreUserMessage }) {
-    const { object } = await this.llm.__textObject<{ title: string }>({
+    // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
+    const { text } = await this.llm.__text<{ title: string }>({
       messages: [
         {
           role: 'system',
@@ -144,19 +153,19 @@ export class Agent<
       - you will generate a short title based on the first message a user begins a conversation with
       - ensure it is not more than 80 characters long
       - the title should be a summary of the user's message
-      - do not use quotes or colons`,
+      - do not use quotes or colons
+      - the entire text you return will be used as the title`,
         },
         {
           role: 'user',
           content: JSON.stringify(message),
         },
       ],
-      structuredOutput: z.object({
-        title: z.string(),
-      }),
     });
 
-    return object.title;
+    // Strip out any r1 think tags if present
+    const cleanedText = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    return cleanedText;
   }
 
   getMostRecentUserMessage(messages: Array<CoreMessage>) {
@@ -165,7 +174,7 @@ export class Agent<
   }
 
   async genTitle(userMessage: CoreUserMessage | undefined) {
-    let title = 'New Thread';
+    let title = `New Thread ${new Date().toISOString()}`;
     try {
       if (userMessage) {
         title = await this.generateTitleFromUserMessage({
@@ -196,18 +205,20 @@ export class Agent<
     const userMessage = this.getMostRecentUserMessage(userMessages);
     const memory = this.getMemory();
     if (memory) {
+      const config = memory.getMergedThreadConfig(memoryConfig);
       let thread: StorageThreadType | null;
+
       if (!threadId) {
         this.logger.debug(`No threadId, creating new thread for agent ${this.name}`, {
           runId: runId || this.name,
         });
-        const title = await this.genTitle(userMessage);
+        const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
 
         thread = await memory.createThread({
           threadId,
           resourceId,
-          title,
           memoryConfig,
+          title,
         });
       } else {
         thread = await memory.getThreadById({ threadId });
@@ -215,7 +226,9 @@ export class Agent<
           this.logger.debug(`Thread with id ${threadId} not found, creating new thread for agent ${this.name}`, {
             runId: runId || this.name,
           });
-          const title = await this.genTitle(userMessage);
+
+          const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
+
           thread = await memory.createThread({
             threadId,
             resourceId,
@@ -245,6 +258,7 @@ export class Agent<
             ? (
                 await memory.rememberMessages({
                   threadId,
+                  resourceId,
                   config: memoryConfig,
                   vectorMessageSearch: messages
                     .slice(-1)
@@ -398,6 +412,8 @@ export class Agent<
     let toolCallIds: Array<string> = [];
 
     for (const message of messages) {
+      if (!Array.isArray(message.content)) continue;
+
       if (message.role === 'tool') {
         for (const content of message.content) {
           if (content.type === 'tool-result') {
@@ -418,7 +434,9 @@ export class Agent<
     const messagesBySanitizedContent = messages.map(message => {
       if (message.role !== 'assistant' && message.role !== `tool` && message.role !== `user`) return message;
 
-      if (typeof message.content === 'string') return message;
+      if (!message.content || typeof message.content === 'string' || typeof message.content === 'number') {
+        return message;
+      }
 
       const sanitizedContent = message.content.filter(content => {
         if (content.type === `tool-call`) {
@@ -472,59 +490,93 @@ export class Agent<
     runId?: string;
   }): Record<string, CoreTool> {
     this.logger.debug(`[Agents:${this.name}] - Assigning tools`, { runId, threadId, resourceId });
+
+    // Get memory tools if available
+    const memory = this.getMemory();
+    const memoryTools = memory?.getTools?.();
+
+    let mastraProxy = undefined;
+    const logger = this.logger;
+    if (this.#mastra) {
+      mastraProxy = createMastraProxy({ mastra: this.#mastra, logger });
+    }
+
     const converted = Object.entries(this.tools || {}).reduce(
       (memo, value) => {
         const k = value[0];
         const tool = this.tools[k];
 
         if (tool) {
-          memo[k] = {
-            description: tool.description,
-            parameters: tool.inputSchema,
-            execute:
-              typeof tool?.execute === 'function'
-                ? async (args, options) => {
-                    try {
-                      this.logger.debug(`[Agent:${this.name}] - Executing tool ${k}`, {
-                        name: k,
-                        description: tool.description,
-                        args,
-                        runId,
-                        threadId,
-                        resourceId,
-                      });
-                      return (
-                        tool?.execute?.(
-                          {
-                            context: args,
-                            mastra: this.#mastra,
-                            runId,
-                            threadId,
-                            resourceId,
-                          },
-                          options,
-                        ) ?? undefined
-                      );
-                    } catch (err) {
-                      this.logger.error(`[Agent:${this.name}] - Failed execution`, {
-                        error: err,
-                        runId,
-                        threadId,
-                        resourceId,
-                      });
-                      throw err;
-                    }
-                  }
-                : undefined,
+          const options = {
+            name: k,
+            runId,
+            threadId,
+            resourceId,
+            logger: this.logger,
+            mastra: mastraProxy as MastraUnion | undefined,
+            memory,
+            agentName: this.name,
           };
+          memo[k] = makeCoreTool(tool, options);
         }
         return memo;
       },
       {} as Record<string, CoreTool>,
     );
 
+    // Convert memory tools with proper context
+    const convertedMemoryTools = memoryTools
+      ? Object.entries(memoryTools).reduce(
+          (memo, [k, tool]) => {
+            memo[k] = {
+              description: tool.description,
+              parameters: tool.parameters,
+              execute:
+                typeof tool?.execute === 'function'
+                  ? async (args, options) => {
+                      try {
+                        this.logger.debug(`[Agent:${this.name}] - Executing memory tool ${k}`, {
+                          name: k,
+                          description: tool.description,
+                          args,
+                          runId,
+                          threadId,
+                          resourceId,
+                        });
+                        return (
+                          tool?.execute?.(
+                            {
+                              context: args,
+                              mastra: mastraProxy as MastraUnion | undefined,
+                              memory,
+                              runId,
+                              threadId,
+                              resourceId,
+                            },
+                            options,
+                          ) ?? undefined
+                        );
+                      } catch (err) {
+                        this.logger.error(`[Agent:${this.name}] - Failed memory tool execution`, {
+                          error: err,
+                          runId,
+                          threadId,
+                          resourceId,
+                        });
+                        throw err;
+                      }
+                    }
+                  : undefined,
+            };
+            return memo;
+          },
+          {} as Record<string, CoreTool>,
+        )
+      : {};
+
     const toolsFromToolsetsConverted: Record<string, CoreTool> = {
       ...converted,
+      ...convertedMemoryTools,
     };
 
     const toolsFromToolsets = Object.values(toolsets || {});
@@ -536,44 +588,15 @@ export class Agent<
       toolsFromToolsets.forEach(toolset => {
         Object.entries(toolset).forEach(([toolName, tool]) => {
           const toolObj = tool;
-          toolsFromToolsetsConverted[toolName] = {
-            description: toolObj.description || '',
-            parameters: toolObj.inputSchema,
-            execute:
-              typeof toolObj?.execute === 'function'
-                ? async (args, options) => {
-                    try {
-                      this.logger.debug(`[Agent:${this.name}] - Executing tool ${toolName}`, {
-                        name: toolName,
-                        description: toolObj.description,
-                        args,
-                        runId,
-                        threadId,
-                        resourceId,
-                      });
-                      return (
-                        toolObj?.execute?.(
-                          {
-                            context: args,
-                            runId,
-                            threadId,
-                            resourceId,
-                          },
-                          options,
-                        ) ?? undefined
-                      );
-                    } catch (error) {
-                      this.logger.error(`[Agent:${this.name}] - Failed toolset execution`, {
-                        error,
-                        runId,
-                        threadId,
-                        resourceId,
-                      });
-                      throw error;
-                    }
-                  }
-                : undefined,
+          const options = {
+            name: toolName,
+            runId,
+            threadId,
+            resourceId,
+            logger: this.logger,
+            agentName: this.name,
           };
+          toolsFromToolsetsConverted[toolName] = makeCoreTool(toolObj, options, 'toolset');
         });
       });
     }
@@ -775,7 +798,7 @@ export class Agent<
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     args?: AgentGenerateOptions<Z> & { output?: never; experimental_output?: never },
-  ): Promise<GenerateTextResult<any, any>>;
+  ): Promise<GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     args?: AgentGenerateOptions<Z> &
@@ -799,7 +822,10 @@ export class Agent<
       telemetry,
       ...rest
     }: AgentGenerateOptions<Z> = {},
-  ): Promise<GenerateTextResult<any, any> | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>> {
+  ): Promise<
+    | GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
+    | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>
+  > {
     let messagesToUse: CoreMessage[] = [];
 
     if (typeof messages === `string`) {
@@ -848,6 +874,7 @@ export class Agent<
         experimental_output,
         threadId,
         resourceId,
+        memory: this.getMemory(),
         ...rest,
       });
 
@@ -875,6 +902,7 @@ export class Agent<
         telemetry,
         threadId,
         resourceId,
+        memory: this.getMemory(),
         ...rest,
       });
 
@@ -896,6 +924,7 @@ export class Agent<
       temperature,
       toolChoice,
       telemetry,
+      memory: this.getMemory(),
       ...rest,
     });
 
@@ -909,12 +938,12 @@ export class Agent<
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     args?: AgentStreamOptions<Z> & { output?: never; experimental_output?: never },
-  ): Promise<StreamReturn<any>>;
+  ): Promise<StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     args?: AgentStreamOptions<Z> &
       ({ output: Z; experimental_output?: never } | { experimental_output: Z; output?: never }),
-  ): Promise<StreamReturn<Z extends ZodSchema ? z.infer<Z> : unknown>>;
+  ): Promise<StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>>;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     {
@@ -934,7 +963,10 @@ export class Agent<
       telemetry,
       ...rest
     }: AgentStreamOptions<Z> = {},
-  ): Promise<StreamReturn<Z>> {
+  ): Promise<
+    | StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
+    | StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>
+  > {
     const runIdToUse = runId || randomUUID();
 
     let messagesToUse: CoreMessage[] = [];
@@ -998,6 +1030,7 @@ export class Agent<
         runId: runIdToUse,
         toolChoice,
         experimental_output,
+        memory: this.getMemory(),
         ...rest,
       });
 
@@ -1031,6 +1064,7 @@ export class Agent<
         runId: runIdToUse,
         toolChoice,
         telemetry,
+        memory: this.getMemory(),
         ...rest,
       }) as unknown as StreamReturn<Z>;
     }
@@ -1062,6 +1096,7 @@ export class Agent<
       runId: runIdToUse,
       toolChoice,
       telemetry,
+      memory: this.getMemory(),
       ...rest,
     }) as unknown as StreamReturn<Z>;
   }

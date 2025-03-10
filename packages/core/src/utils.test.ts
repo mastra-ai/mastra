@@ -1,6 +1,9 @@
+import { jsonSchemaToZod } from 'json-schema-to-zod';
 import { describe, expect, it, vi } from 'vitest';
-
-import { maskStreamTags } from './utils';
+import { z } from 'zod';
+import type { Logger } from './logger';
+import { createTool } from './tools';
+import { isVercelTool, makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
 
 describe('maskStreamTags', () => {
   async function* makeStream(chunks: string[]) {
@@ -102,4 +105,213 @@ describe('maskStreamTags', () => {
     const masked = maskStreamTags(makeStream(input), 'secret');
     expect(await collectStream(masked)).toBe('Before    after');
   });
+});
+
+describe('isVercelTool', () => {
+  it('should return true for a Vercel Tool', () => {
+    const tool = {
+      name: 'test',
+      parameters: z.object({
+        name: z.string(),
+      }),
+    };
+    expect(isVercelTool(tool)).toBe(true);
+  });
+
+  it('should return false for a Mastra Tool', () => {
+    const tool = createTool({
+      id: 'test',
+      description: 'test',
+      inputSchema: z.object({
+        name: z.string(),
+      }),
+      execute: async () => ({}),
+    });
+    expect(isVercelTool(tool)).toBe(false);
+  });
+});
+
+describe('resolveSerializedZodOutput', () => {
+  it('should return a zod object from a serialized zod object', () => {
+    const jsonSchema = {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+      },
+      required: ['name'], // Now name is required
+    };
+
+    const result = resolveSerializedZodOutput(jsonSchemaToZod(jsonSchema));
+
+    // Test that the schema works as expected
+    expect(() => result.parse({ name: 'test' })).not.toThrow();
+    expect(() => result.parse({ name: 123 })).toThrow();
+    expect(() => result.parse({})).toThrow();
+  });
+});
+
+describe('makeCoreTool', () => {
+  const mockLogger = {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  } as unknown as Logger;
+
+  const mockOptions = {
+    name: 'testTool',
+    logger: mockLogger,
+    description: 'Test tool description',
+  };
+
+  it('should convert a Vercel tool correctly', async () => {
+    const vercelTool = {
+      name: 'test',
+      description: 'Test description',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+        },
+      },
+      execute: async () => ({ result: 'success' }),
+    };
+
+    const coreTool = makeCoreTool(vercelTool, mockOptions);
+
+    expect(coreTool.description).toBe('Test description');
+    expect(coreTool.parameters).toBeDefined();
+    expect(typeof coreTool.execute).toBe('function');
+    const result = await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
+    expect(result).toEqual({ result: 'success' });
+  });
+
+  it('should convert a Vercel tool with zod parameters correctly', async () => {
+    const vercelTool = {
+      name: 'test',
+      description: 'Test description',
+      parameters: z.object({ name: z.string() }),
+      execute: async () => ({ result: 'success' }),
+    };
+
+    const coreTool = makeCoreTool(vercelTool, mockOptions);
+
+    expect(coreTool.description).toBe('Test description');
+    expect(coreTool.parameters).toBeDefined();
+    expect(typeof coreTool.execute).toBe('function');
+    const result = await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
+    expect(result).toEqual({ result: 'success' });
+  });
+
+  it('should convert a Mastra tool correctly', async () => {
+    const mastraTool = createTool({
+      id: 'test',
+      description: 'Test description',
+      inputSchema: z.object({ name: z.string() }),
+      execute: async () => ({ result: 'success' }),
+    });
+
+    const coreTool = makeCoreTool(mastraTool, mockOptions);
+
+    expect(coreTool.description).toBe('Test description');
+    expect(coreTool.parameters).toBeDefined();
+    expect(typeof coreTool.execute).toBe('function');
+    const result = await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
+    expect(result).toEqual({ result: 'success' });
+  });
+
+  it('should handle tool execution errors correctly', async () => {
+    const error = new Error('Test error');
+    const mastraTool = createTool({
+      id: 'test',
+      description: 'Test description',
+      inputSchema: z.object({ name: z.string() }),
+      execute: async () => {
+        throw error;
+      },
+    });
+
+    const coreTool = makeCoreTool(mastraTool, mockOptions);
+    expect(coreTool.execute).toBeDefined();
+
+    if (coreTool.execute) {
+      await expect(coreTool.execute({ name: 'test' }, { toolCallId: 'test-id', messages: [] })).rejects.toThrow(
+        'Test error',
+      );
+      expect(mockLogger.error).toHaveBeenCalled();
+    }
+  });
+
+  it('should handle undefined execute function', () => {
+    const vercelTool = {
+      name: 'test',
+      description: 'Test description',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+        },
+      },
+    };
+
+    const coreTool = makeCoreTool(vercelTool, mockOptions);
+    expect(coreTool.execute).toBeUndefined();
+  });
+
+  it('should have default parameters if no parameters are provided for Vercel tool', () => {
+    const coreTool = makeCoreTool(
+      {
+        description: 'test',
+        parameters: undefined,
+        execute: async () => ({}),
+      },
+      mockOptions,
+    );
+
+    // Test the schema behavior instead of structure
+    expect(() => coreTool.parameters.parse({})).not.toThrow();
+    expect(() => coreTool.parameters.parse({ extra: 'field' })).not.toThrow();
+  });
+
+  it('should have default parameters if no parameters are provided for Mastra tool', () => {
+    const coreTool = makeCoreTool(
+      {
+        id: 'test',
+        description: 'test',
+        inputSchema: undefined,
+        execute: async () => ({}),
+      },
+      mockOptions,
+    );
+
+    // Test the schema behavior instead of structure
+    expect(() => coreTool.parameters.parse({})).not.toThrow();
+    expect(() => coreTool.parameters.parse({ extra: 'field' })).not.toThrow();
+  });
+});
+
+it('should log correctly for Vercel tool execution', async () => {
+  const mockLogger = {
+    debug: vi.fn(),
+    error: vi.fn(),
+  } as unknown as Logger;
+
+  const vercelTool = {
+    description: 'test',
+    parameters: { type: 'object', properties: {} },
+    execute: async () => ({}),
+  };
+
+  const coreTool = makeCoreTool(vercelTool, {
+    name: 'testTool',
+    logger: mockLogger,
+    agentName: 'testAgent',
+  });
+
+  await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
+
+  expect(mockLogger.debug).toHaveBeenCalledWith(
+    '[Agent:testAgent] - Executing Vercel tool testTool',
+    expect.any(Object),
+  );
 });

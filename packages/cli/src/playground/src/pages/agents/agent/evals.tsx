@@ -5,7 +5,7 @@ function AgentEvalsPage() {
   const { agentId } = useParams();
 
   return (
-    <main className="min-h-0">
+    <main className="h-full overflow-hidden">
       <AgentEvals agentId={agentId!} baseUrl="" />
     </main>
   );

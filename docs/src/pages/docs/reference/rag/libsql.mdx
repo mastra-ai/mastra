@@ -5,7 +5,7 @@ description: Documentation for the LibSQLVector class in Mastra, which provides 
 
 # LibSQLVector Store
 
-The LibSQL storage implementation provides a SQLite-compatible vector search  [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
+The LibSQL storage implementation provides a SQLite-compatible vector search [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
 It's part of the `@mastra/core` package and offers efficient vector similarity search with metadata filtering.
 
 ## Installation
@@ -64,7 +64,7 @@ const results = await store.query({
       name: "connectionUrl",
       type: "string",
       description:
-        "LibSQL database URL. Use ':memory:' for in-memory database, 'file:local.db' for local file, or a LibSQL-compatible connection string like 'libsql://your-database.turso.io'.",
+        "LibSQL database URL. Use ':memory:' for in-memory database, 'file:dbname.db' for local file, or a LibSQL-compatible connection string like 'libsql://your-database.turso.io'.",
     },
     {
       name: "authToken",
@@ -248,6 +248,61 @@ Removes all vectors from an index while keeping the index structure.
       name: "indexName",
       type: "string",
       description: "Name of the index to truncate",
+    },
+  ]}
+/>
+
+### updateIndexById()
+
+Updates a specific vector entry by its ID with new vector data and/or metadata.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector entry to update",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "Update data containing vector and/or metadata",
+    },
+    {
+      name: "update.vector",
+      type: "number[]",
+      isOptional: true,
+      description: "New vector data to update",
+    },
+    {
+      name: "update.metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "New metadata to update",
+    },
+  ]}
+/>
+
+### deleteIndexById()
+
+Deletes a specific vector entry from an index by its ID.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector entry to delete",
     },
   ]}
 />

@@ -62,4 +62,15 @@ export abstract class MastraVector extends MastraBase {
   abstract describeIndex(indexName: string): Promise<IndexStats>;
 
   abstract deleteIndex(indexName: string): Promise<void>;
+
+  async updateIndexById(
+    _indexName: string,
+    _id: string,
+    _update: { vector?: number[]; metadata?: Record<string, any> },
+  ): Promise<void> {
+    throw new Error('updateIndexById is not implemented yet');
+  }
+  async deleteIndexById(_indexName: string, _id: string): Promise<void> {
+    throw new Error('deleteById is not implemented yet');
+  }
 }

@@ -39,7 +39,6 @@ export async function getLogsByRunIdHandler(c: Context) {
 }
 
 export async function getLogTransports(c: Context) {
-  console.log('here');
   try {
     const mastra: Mastra = c.get('mastra');
     const logger = mastra.getLogger();

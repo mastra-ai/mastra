@@ -210,7 +210,8 @@ import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   name: "Project Manager",
-  instructions: "You are a project manager. You are responsible for managing the project and the team.",
+  instructions:
+    "You are a project manager. You are responsible for managing the project and the team.",
   model: openai("gpt-4o-mini"),
 });
 
@@ -224,7 +225,7 @@ await agent.stream("When will the project be completed?", {
 
 The key to getting good responses from LLMs is feeding them the right context.
 
-Mastra has a Memory API that stores and manages conversation history and contextual information. The Memory API uses a storage backend to persist conversation history and contextual information (more on this later). 
+Mastra has a Memory API that stores and manages conversation history and contextual information. The Memory API uses a storage backend to persist conversation history and contextual information (more on this later).
 
 The Memory API uses two main mechanisms to maintain context in conversations, recent message history and semantic search.
 
@@ -276,6 +277,7 @@ await agent.stream("What did we decide about the search feature last week?", {
 ```
 
 When semantic search is used:
+
 1. The message is converted to a vector embedding
 2. Similar messages are found using vector similarity search
 3. Surrounding context is included based on `messageRange`
@@ -284,8 +286,8 @@ When semantic search is used:
 You can also customize the vector database and embedder:
 
 ```typescript copy showLineNumbers
-import { openai } from '@ai-sdk/openai';
-import { PgVector } from '@mastra/pg';
+import { openai } from "@ai-sdk/openai";
+import { PgVector } from "@mastra/pg";
 
 const memory = new Memory({
   // Use a different vector database (libsql is default)
@@ -293,7 +295,7 @@ const memory = new Memory({
     connectionString: "postgresql://user:pass@localhost:5432/db",
   }),
   // Or a different embedder (fastembed is default)
-  embedder: openai.embedding('text-embedding-3-small'),
+  embedder: openai.embedding("text-embedding-3-small"),
 });
 ```
 
@@ -592,7 +594,7 @@ await memory.deleteThread(thread.id);
 
 Note that in most cases, you won't need to manage threads manually since the agent's `generate()` and `stream()` methods handle thread management automatically. Manual thread management is primarily useful for advanced use cases or when you need more fine-grained control over the conversation history.
 
-### Working Memory
+## Working Memory
 
 Working memory is a powerful feature that allows agents to maintain persistent information across conversations, even with minimal context. This is particularly useful for remembering user preferences, personal details, or any other contextual information that should persist throughout interactions.
 
@@ -634,7 +636,6 @@ const agent = new Agent({
   model: openai("gpt-4o-mini"),
 
   memory: new Memory({
-    storage: new LibSQLStore({ url: ":memory:" }),
     options: {
       workingMemory: {
         enabled: true, // enables working memory
@@ -654,7 +655,6 @@ const todoAgent = new Agent({
     "You are a TODO list manager. Update the todo list in working memory whenever tasks are added, completed, or modified.",
   model: openai("gpt-4o-mini"),
   memory: new Memory({
-    storage: new LibSQLStore({ url: ":memory:" }),
     options: {
       workingMemory: {
         enabled: true,
@@ -714,6 +714,49 @@ The `maskStreamTags` utility:
 - Removes content between specified XML tags in a streaming response
 - Optionally provides lifecycle callbacks for memory updates
 - Handles tags that might be split across stream chunks
+
+### Accessing Thread and Resource IDs in Tools
+
+When creating custom tools, you can access the `threadId` and `resourceId` directly in the tool's execute function. These parameters are automatically provided by the Mastra runtime:
+
+```typescript copy showLineNumbers
+import { Memory } from "@mastra/memory";
+const memory = new Memory();
+
+const myTool = createTool({
+  id: "Thread Info Tool",
+  inputSchema: z.object({
+    fetchMessages: z.boolean().optional(),
+  }),
+  description: "A tool that demonstrates accessing thread and resource IDs",
+  execute: async ({ threadId, resourceId, context }) => {
+    // threadId and resourceId are directly available in the execute parameters
+    console.log(`Executing in thread ${threadId}`);
+
+    if (!context.fetchMessages) {
+      return { threadId, resourceId };
+    }
+
+    const recentMessages = await memory.query({
+      threadId,
+      selectBy: { last: 5 },
+    });
+
+    return {
+      threadId,
+      resourceId,
+      messageCount: recentMessages.length,
+    };
+  },
+});
+```
+
+This allows tools to:
+
+- Access the current conversation context
+- Store or retrieve thread-specific data
+- Associate tool actions with specific users/resources
+- Maintain state across multiple tool invocations
 
 
 ---
@@ -816,6 +859,58 @@ main();
 ```
 
 The agent will use the `weatherInfo` tool to get the current weather in New York City and respond accordingly.
+
+## Tool Design Best Practices
+
+When creating tools for your agents, following these guidelines will help ensure reliable and intuitive tool usage:
+
+### Tool Descriptions
+Your tool's main description should focus on its purpose and value:
+- Keep descriptions simple and focused on __what__ the tool does
+- Emphasize the tool's primary use case
+- Avoid implementation details in the main description
+- Focus on helping the agent understand __when__ to use the tool
+
+```typescript
+createTool({
+  id: "documentSearch",
+  description: "Access the knowledge base to find information needed to answer user questions",
+  // ... rest of tool configuration
+});
+```
+
+### Parameter Schemas
+Technical details belong in the parameter schemas, where they help the agent use the tool correctly:
+- Make parameters self-documenting with clear descriptions
+- Include default values and their implications
+- Provide examples where helpful
+- Describe the impact of different parameter choices
+
+```typescript
+inputSchema: z.object({
+  query: z.string().describe("The search query to find relevant information"),
+  limit: z.number().describe(
+    "Number of results to return. Higher values provide more context, lower values focus on best matches"
+  ),
+  options: z.string().describe(
+    "Optional configuration. Example: '{'filter': 'category=news'}'"
+  ),
+}),
+```
+
+### Agent Interaction Patterns
+Tools are more likely to be used effectively when:
+- Queries or tasks are complex enough to clearly require tool assistance
+- Agent instructions provide clear guidance on tool usage
+- Parameter requirements are well-documented in the schema
+- The tool's purpose aligns with the query's needs
+
+### Common Pitfalls
+- Overloading the main description with technical details
+- Mixing implementation details with usage guidance
+- Unclear parameter descriptions or missing examples
+
+Following these practices helps ensure your tools are discoverable and usable by agents while maintaining clean separation between purpose (main description) and implementation details (parameter schemas).
 
 
 # Adding Voice to Agents
@@ -938,9 +1033,9 @@ Before you begin, ensure you have:
 ## Direct Platform Deployment
 
 Platform-specific deployers handle configuration and deployment for:
-- **Cloudflare Workers**
-- **Vercel**
-- **Netlify**
+- **[Cloudflare Workers](/docs/reference/deployer/cloudflare)**
+- **[Vercel](/docs/reference/deployer/vercel)**
+- **[Netlify](/docs/reference/deployer/netlify)**
 
 ### Installing Deployers
 
@@ -969,38 +1064,51 @@ export const mastra = new Mastra({
   deployer: new CloudflareDeployer({
     scope: 'your-cloudflare-scope',
     projectName: 'your-project-name',
+    // See complete configuration options in the reference docs
   }),
 });
 ```
 
 ### Deployer Configuration
 
+Each deployer has specific configuration options. Below are basic examples, but refer to the reference documentation for complete details.
+
 #### Cloudflare Deployer
 
 ```typescript copy showLineNumbers
 new CloudflareDeployer({
-  scope: 'your-cloudflare-scope',
+  scope: 'your-cloudflare-account-id',
   projectName: 'your-project-name',
+  // For complete configuration options, see the reference documentation
 })
 ```
+
+[View Cloudflare Deployer Reference →](/docs/reference/deployer/cloudflare)
 
 #### Vercel Deployer
 
 ```typescript copy showLineNumbers
 new VercelDeployer({
-  scope: 'your-vercel-scope',
+  teamId: 'your-vercel-team-id',
   projectName: 'your-project-name',
+  token: 'your-vercel-token'
+  // For complete configuration options, see the reference documentation
 })
 ```
+
+[View Vercel Deployer Reference →](/docs/reference/deployer/vercel)
 
 #### Netlify Deployer
 
 ```typescript copy showLineNumbers
 new NetlifyDeployer({
-  scope: 'your-netlify-scope',
+  scope: 'your-netlify-team-slug',
   projectName: 'your-project-name',
+  token: 'your-netlify-token'
 })
 ```
+
+[View Netlify Deployer Reference →](/docs/reference/deployer/netlify)
 
 ## Universal Deployment
 
@@ -1643,11 +1751,17 @@ OPENAI_API_KEY=<your-openai-key>
 ```
 
 </Steps>
-Note: If you prefer to run the command with flags (non-interactive mode) and include the example code, you can use:
+Extra Notes:
+
+ If you prefer to run the command with flags (non-interactive mode) and include the example code, you can use:
 ```bash copy
 npx create-mastra@latest --components agents,tools --llm openai --example
 ```
-This allows you to specify your preferences upfront without being prompted.
+
+To configure and specify a timeout if installation takes too long use the timeout flag:
+```bash copy
+npx create-mastra@latest --timeout
+```
 
 ## Manual Installation
 
@@ -3103,7 +3217,10 @@ const { embeddings: cohereEmbeddings } = await embedMany({
 });
 
 // Store embeddings in your vector database
-await vectorStore.upsert("embeddings", embeddings);
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+});
 ```
 
 This example demonstrates how to process a document, split it into chunks, generate embeddings with both OpenAI and Cohere, and store the results in a vector database.
@@ -3161,10 +3278,17 @@ const { embeddings } = await embedMany({
 
 // 4. Store in vector database
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING);
-await pgVector.upsert("embeddings", embeddings); // using an index name of 'embeddings'
+await pgVector.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+}); // using an index name of 'embeddings'
 
 // 5. Query similar chunks
-const results = await pgVector.query("embeddings", queryVector, 3); // queryVector is the embedding of the query
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: queryVector,
+  topK: 3,
+}); // queryVector is the embedding of the query
 
 console.log("Similar chunks:", results);
 ```
@@ -3236,7 +3360,11 @@ const { embedding } = await embed({
 
 // Query vector store
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING);
-const results = await pgVector.query("embeddings", embedding, 10);
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+});
 ```
 
 Results include both the text content and a similarity score:
@@ -3271,37 +3399,62 @@ Basic filtering examples:
 
 ```ts showLineNumbers copy
 // Simple equality filter
-const results = await pgVector.query("embeddings", embedding, 10, {
-  source: "article1.txt"
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    source: "article1.txt"
+  }
 });
 
 // Numeric comparison
-const results = await pgVector.query("embeddings", embedding, 10, {
-  price: { $gt: 100 }
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    price: { $gt: 100 }
+  }
 });
 
 // Multiple conditions
-const results = await pgVector.query("embeddings", embedding, 10, {
-  category: "electronics",
-  price: { $lt: 1000 },
-  inStock: true
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    category: "electronics",
+    price: { $lt: 1000 },
+    inStock: true
+  }
 });
 
 // Array operations
-const results = await pgVector.query("embeddings", embedding, 10, {
-  tags: { $in: ["sale", "new"] }
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    tags: { $in: ["sale", "new"] }
+  }
 });
 
 // Logical operators
-const results = await pgVector.query("embeddings", embedding, 10, {
-  $or: [
-    { category: "electronics" },
-    { category: "accessories" }
-  ],
-  $and: [
-    { price: { $gt: 50 } },
-    { price: { $lt: 200 } }
-  ]
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    $or: [
+      { category: "electronics" },
+      { category: "accessories" }
+    ],
+    $and: [
+      { price: { $gt: 50 } },
+      { price: { $lt: 200 } }
+    ]
+  }
 });
 ``` 
 
@@ -3488,11 +3641,17 @@ import { openai } from "@ai-sdk/openai";
 import { rerank } from "@mastra/rag";
 
 // Get initial results from vector search
-const initialResults = await pgVector.query("embeddings", queryEmbedding, 10);
+const initialResults = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: queryEmbedding,
+  topK: 10,
+});
 
 // Re-rank the results
 const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'));
 ```
+
+> **Note:** For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
 
 The re-ranked results combine vector similarity with semantic understanding to improve retrieval quality.
 
@@ -3549,15 +3708,18 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { PgVector } from '@mastra/pg';
 
-const store = new PgVector(process.env.POSTGRES_CONNECTION_STRING)
-await store.createIndex("my-collection", 1536);
-await store.upsert(
-"my-collection",
-embeddings,
-chunks.map(chunk => ({ text: chunk.text }))
-)
+  const store = new PgVector(process.env.POSTGRES_CONNECTION_STRING)
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
 
-````
+  ```
 
 </Tabs.Tab>
 <Tabs.Tab>
@@ -3565,12 +3727,15 @@ chunks.map(chunk => ({ text: chunk.text }))
   import { PineconeVector } from '@mastra/pinecone'
 
   const store = new PineconeVector(process.env.PINECONE_API_KEY)
-  await store.createIndex("my-collection", 1536);
-  await store.upsert(
-    "my-collection",
-    embeddings,
-    chunks.map(chunk => ({ text: chunk.text }))
-  )
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
   ```
 </Tabs.Tab>
 <Tabs.Tab>
@@ -3581,12 +3746,15 @@ chunks.map(chunk => ({ text: chunk.text }))
     url: process.env.QDRANT_URL,
     apiKey: process.env.QDRANT_API_KEY
   })
-  await store.createIndex("my-collection", 1536);
-  await store.upsert(
-    "my-collection",
-    embeddings,
-    chunks.map(chunk => ({ text: chunk.text }))
-  )
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
   ```
 </Tabs.Tab>
 <Tabs.Tab>
@@ -3594,12 +3762,15 @@ chunks.map(chunk => ({ text: chunk.text }))
   import { ChromaVector } from '@mastra/chroma'
 
   const store = new ChromaVector()
-  await store.createIndex("my-collection", 1536);
-  await store.upsert(
-    "my-collection",
-    embeddings,
-    chunks.map(chunk => ({ text: chunk.text }))
-  )
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
   ```
 </Tabs.Tab>
 <Tabs.Tab>
@@ -3611,12 +3782,15 @@ chunks.map(chunk => ({ text: chunk.text }))
     endpoint: process.env.ASTRA_DB_ENDPOINT,
     keyspace: process.env.ASTRA_DB_KEYSPACE
   })
-  await store.createIndex("my-collection", 1536);
-  await store.upsert(
-    "my-collection",
-    embeddings,
-    chunks.map(chunk => ({ text: chunk.text }))
-  )
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
   ```
 </Tabs.Tab>
 <Tabs.Tab>
@@ -3627,12 +3801,15 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
     connectionUrl: process.env.DATABASE_URL,
     authToken: process.env.DATABASE_AUTH_TOKEN // Optional: for Turso cloud databases
   })
-  await store.createIndex("my-collection", 1536);
-  await store.upsert(
-    "my-collection",
-    embeddings,
-    chunks.map(chunk => ({ text: chunk.text }))
-  )
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
   ```
 </Tabs.Tab>
 <Tabs.Tab>
@@ -3643,12 +3820,15 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
     url: process.env.UPSTASH_URL,
     token: process.env.UPSTASH_TOKEN
   })
-  await store.createIndex("my-collection", 1536);
-  await store.upsert(
-    "my-collection",
-    embeddings,
-    chunks.map(chunk => ({ text: chunk.text }))
-  )
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
   ```
 </Tabs.Tab>
 <Tabs.Tab>
@@ -3659,12 +3839,15 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
     accountId: process.env.CF_ACCOUNT_ID,
     apiToken: process.env.CF_API_TOKEN
   })
-  await store.createIndex("my-collection", 1536);
-  await store.upsert(
-    "my-collection",
-    embeddings,
-    chunks.map(chunk => ({ text: chunk.text }))
-  )
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
   ```
 </Tabs.Tab>
 </Tabs>
@@ -3679,7 +3862,10 @@ Before storing embeddings, you need to create an index with the appropriate dime
 
 ```ts filename="store-embeddings.ts" showLineNumbers copy
 // Create an index with dimension 1536 (for text-embedding-3-small)
-await store.createIndex('my-collection', 1536);
+await store.createIndex({
+  indexName: 'my-collection',
+  dimension: 1536,
+});
 
 // For other models, use their corresponding dimensions:
 // - text-embedding-3-large: 3072
@@ -3698,14 +3884,14 @@ After creating an index, you can store embeddings along with their basic metadat
 
 ```ts filename="store-embeddings.ts" showLineNumbers copy
 // Store embeddings with their corresponding metadata
-await store.upsert(
-  'my-collection',  // index name
-  embeddings,       // array of embedding vectors
-  chunks.map(chunk => ({
+await store.upsert({
+  indexName: 'my-collection',  // index name
+  vectors: embeddings,       // array of embedding vectors
+  metadata: chunks.map(chunk => ({
     text: chunk.text,  // The original text content
     id: chunk.id       // Optional unique identifier
   }))
-);
+});
 ```
 
 The upsert operation:
@@ -3722,10 +3908,10 @@ Vector stores support rich metadata for advanced filtering and organization. You
 
 ```ts showLineNumbers copy
 // Store embeddings with rich metadata for better organization and filtering
-await vectorStore.upsert(
-  "embeddings",
-  embeddings,
-  chunks.map((chunk) => ({
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+  metadata: chunks.map((chunk) => ({
     // Basic content
     text: chunk.text,
     id: chunk.id,
@@ -3743,7 +3929,7 @@ await vectorStore.upsert(
     author: chunk.author,
     confidenceScore: chunk.score,
   })),
-);
+});
 ```
 
 Key metadata considerations:
@@ -3808,6 +3994,23 @@ export const stockPrices = createTool({
     };
   },
 });
+
+export const threadInfo = createTool({
+  id: "Get Thread Info",
+  inputSchema: z.object({
+    includeResource: z.boolean().optional(),
+  }),
+  description: `Gets information about the current conversation thread`,
+  execute: async ({ context, threadId, resourceId }) => {
+    console.log("Current thread:", threadId);
+    console.log("Current resource:", resourceId);
+
+    return {
+      threadId,
+      resourceId: context.includeResource ? resourceId : undefined,
+    };
+  },
+});
 ```
 
 ## API Signature
@@ -3858,6 +4061,20 @@ export const stockPrices = createTool({
               type: "string",
               isOptional: true,
               description: "The runId of the current run",
+            },
+            {
+              name: "threadId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Identifier for the conversation thread. Allows for maintaining context across multiple interactions.",
+            },
+            {
+              name: "resourceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Identifier for the user or resource interacting with the tool.",
             },
             {
               name: "agents",
@@ -5174,40 +5391,42 @@ const result = await workflow.resume({
 
 ### Watch Workflow
 
-Watch workflow transitions in real-time:
+Watch workflow transitions in real-time using an async iterator:
 
 ```typescript
-const response = await workflow.watch();
+// Get workflow instance
+const workflow = client.getWorkflow("workflow-id");
 
-// Read Transition Data from response body
-const reader = response.body.getReader();
-let buffer = "";
-while (true) {
-  const { done, value } = await reader.read();
-  if (done) break;
-  buffer += new TextDecoder().decode(value);
+const workflowWatch = workflow.watch()
 
-  // Split the buffer into records
-  const records = buffer.split("\x1E");
+// Execute workflow
+workflow.execute()
 
-  buffer = records.pop() || "";
-
-  // Process each record
-  for (const record of records) {
-    // Handle each record
-    const { activePaths, context, timestamp } = record;
-    console.log({
-      activePaths,
-      context,
-      timestamp,
-    });
-  }
+// Watch for workflow transitions
+for await (const record of workflowWatch) {
+  // Each record contains workflow transition data
+  console.log({
+    activePaths: record.activePaths,
+    context: record.context,
+    timestamp: record.timestamp
+    runId: record.runId
+  });
 }
+
+
 ```
+
+The `watch()` method returns an AsyncGenerator that yields workflow transition records. Each record contains:
+- `activePaths`: Currently active paths in the workflow
+- `context`: Current workflow context data
+- `timestamp`: Timestamp of the transition
+- `runId`: Uniqe Identifier for workflow run
+
+This makes it easy to process workflow transitions in real-time using a simple for-await loop.
 
 
 ---
-title: "Mastra Class Reference | Project Creation | Mastra Core"
+title: "Mastra Core"
 description: Documentation for the Mastra Class, the core entry point for managing agents, workflows, and server endpoints.
 ---
 
@@ -5341,6 +5560,538 @@ try {
     console.log(error.message); // "Tool with name nonexistentTool not found"
   }
 }
+```
+
+
+---
+title: "Cloudflare Deployer"
+description: "Documentation for the CloudflareDeployer class, which deploys Mastra applications to Cloudflare Workers."
+---
+
+# CloudflareDeployer
+Source: https://mastra.ai/docs/reference/deployer/cloudflare
+
+The CloudflareDeployer deploys Mastra applications to Cloudflare Workers, handling configuration, environment variables, and route management. It extends the abstract Deployer class to provide Cloudflare-specific deployment functionality.
+
+## Usage Example
+
+```typescript
+import { Mastra } from '@mastra/core';
+import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
+
+const mastra = new Mastra({
+  deployer: new CloudflareDeployer({
+    scope: 'your-account-id',
+    projectName: 'your-project-name',
+    routes: [
+      {
+        pattern: 'example.com/*',
+        zone_name: 'example.com',
+        custom_domain: true,
+      },
+    ],
+    workerNamespace: 'your-namespace',
+    auth: {
+      apiToken: 'your-api-token',
+      apiEmail: 'your-email',
+    },
+  }),
+  // ... other Mastra configuration options
+});
+```
+
+## Parameters
+
+### Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "scope",
+      type: "string",
+      description: "Your Cloudflare account ID.",
+      isOptional: false,
+    },
+    {
+      name: "projectName",
+      type: "string",
+      description: "Name of your worker project.",
+      isOptional: true,
+      defaultValue: "'mastra'",
+    },
+    {
+      name: "routes",
+      type: "CFRoute[]",
+      description: "Array of route configurations for your worker.",
+      isOptional: true,
+    },
+    {
+      name: "workerNamespace",
+      type: "string",
+      description: "Namespace for your worker.",
+      isOptional: true,
+    },
+    {
+      name: "env",
+      type: "Record<string, any>",
+      description: "Environment variables to be included in the worker configuration.",
+      isOptional: true,
+    },
+    {
+      name: "auth",
+      type: "object",
+      description: "Cloudflare authentication details.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### auth Object
+
+<PropertiesTable
+  content={[
+    {
+      name: "apiToken",
+      type: "string",
+      description: "Your Cloudflare API token.",
+      isOptional: false,
+    },
+    {
+      name: "apiEmail",
+      type: "string",
+      description: "Your Cloudflare account email.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### CFRoute Object
+
+<PropertiesTable
+  content={[
+    {
+      name: "pattern",
+      type: "string",
+      description: "URL pattern to match (e.g., 'example.com/*').",
+      isOptional: false,
+    },
+    {
+      name: "zone_name",
+      type: "string",
+      description: "Domain zone name.",
+      isOptional: false,
+    },
+    {
+      name: "custom_domain",
+      type: "boolean",
+      description: "Whether to use a custom domain.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+### Wrangler Configuration
+
+The CloudflareDeployer automatically generates a `wrangler.json` configuration file with the following settings:
+
+```json
+{
+  "name": "your-project-name",
+  "main": "./output/index.mjs",
+  "compatibility_date": "2024-12-02",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "logs": {
+      "enabled": true
+    }
+  },
+  "vars": {
+    // Environment variables from .env files and configuration
+  },
+  "routes": [
+    // Route configurations if specified
+  ]
+}
+```
+
+### Route Configuration
+
+Routes can be configured to direct traffic to your worker based on URL patterns and domains:
+
+```typescript
+const routes = [
+  {
+    pattern: 'api.example.com/*',
+    zone_name: 'example.com',
+    custom_domain: true,
+  },
+  {
+    pattern: 'example.com/api/*',
+    zone_name: 'example.com',
+  },
+];
+```
+
+### Environment Variables
+
+The CloudflareDeployer handles environment variables from multiple sources:
+
+1. **Environment Files**: Variables from `.env.production` and `.env` files.
+2. **Configuration**: Variables passed through the `env` parameter.
+
+
+
+---
+title: "Mastra Deployer"
+description: Documentation for the Deployer abstract class, which handles packaging and deployment of Mastra applications.
+---
+
+# Deployer
+Source: https://mastra.ai/docs/reference/deployer/deployer
+
+The Deployer handles the deployment of Mastra applications by packaging code, managing environment files, and serving applications using the Hono framework. Concrete implementations must define the deploy method for specific deployment targets.
+
+## Usage Example
+
+```typescript
+import { Deployer } from "@mastra/deployer";
+
+// Create a custom deployer by extending the abstract Deployer class
+class CustomDeployer extends Deployer {
+  constructor() {
+    super({ name: 'custom-deployer' });
+  }
+
+  // Implement the abstract deploy method
+  async deploy(outputDirectory: string): Promise<void> {
+    // Prepare the output directory
+    await this.prepare(outputDirectory);
+    
+    // Bundle the application
+    await this._bundle('server.ts', 'mastra.ts', outputDirectory);
+    
+    // Custom deployment logic
+    // ...
+  }
+}
+```
+
+## Parameters
+
+### Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "args",
+      type: "object",
+      description: "Configuration options for the Deployer.",
+      isOptional: false,
+    },
+    {
+      name: "args.name",
+      type: "string",
+      description: "A unique name for the deployer instance.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### deploy Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "outputDirectory",
+      type: "string",
+      description: "The directory where the bundled and deployment-ready application will be output.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Methods
+
+<PropertiesTable
+  content={[
+    {
+      name: "getEnvFiles",
+      type: "() => Promise<string[]>",
+      description: "Returns a list of environment files to be used during deployment. By default, it looks for '.env.production' and '.env' files.",
+    },
+    {
+      name: "deploy",
+      type: "(outputDirectory: string) => Promise<void>",
+      description: "Abstract method that must be implemented by subclasses. Handles the deployment process to the specified output directory.",
+    },
+  ]}
+/>
+
+## Inherited Methods from Bundler
+
+The Deployer class inherits the following key methods from the Bundler class:
+
+<PropertiesTable
+  content={[
+    {
+      name: "prepare",
+      type: "(outputDirectory: string) => Promise<void>",
+      description: "Prepares the output directory by cleaning it and creating necessary subdirectories.",
+    },
+    {
+      name: "writeInstrumentationFile",
+      type: "(outputDirectory: string) => Promise<void>",
+      description: "Writes an instrumentation file to the output directory for telemetry purposes.",
+    },
+    {
+      name: "writePackageJson",
+      type: "(outputDirectory: string, dependencies: Map<string, string>) => Promise<void>",
+      description: "Generates a package.json file in the output directory with the specified dependencies.",
+    },
+    {
+      name: "_bundle",
+      type: "(serverFile: string, mastraEntryFile: string, outputDirectory: string, bundleLocation?: string) => Promise<void>",
+      description: "Bundles the application using the specified server and Mastra entry files.",
+    },
+  ]}
+/>
+
+## Core Concepts
+
+### Deployment Lifecycle
+
+The Deployer abstract class implements a structured deployment lifecycle:
+
+1. **Initialization**: The deployer is initialized with a name and creates a Deps instance for dependency management.
+2. **Environment Setup**: The `getEnvFiles` method identifies environment files (.env.production, .env) to be used during deployment.
+3. **Preparation**: The `prepare` method (inherited from Bundler) cleans the output directory and creates necessary subdirectories.
+4. **Bundling**: The `_bundle` method (inherited from Bundler) packages the application code and its dependencies.
+5. **Deployment**: The abstract `deploy` method is implemented by subclasses to handle the actual deployment process.
+
+### Environment File Management
+
+The Deployer class includes built-in support for environment file management through the `getEnvFiles` method. This method:
+
+- Looks for environment files in a predefined order (.env.production, .env)
+- Uses the FileService to find the first existing file
+- Returns an array of found environment files
+- Returns an empty array if no environment files are found
+
+```typescript
+getEnvFiles(): Promise<string[]> {
+  const possibleFiles = ['.env.production', '.env'];
+
+  try {
+    const fileService = new FileService();
+    const envFile = fileService.getFirstExistingFile(possibleFiles);
+
+    return Promise.resolve([envFile]);
+  } catch {}
+
+  return Promise.resolve([]);
+}
+```
+
+### Bundling and Deployment Relationship
+
+The Deployer class extends the Bundler class, establishing a clear relationship between bundling and deployment:
+
+1. **Bundling as a Prerequisite**: Bundling is a prerequisite step for deployment, where the application code is packaged into a deployable format.
+2. **Shared Infrastructure**: Both bundling and deployment share common infrastructure like dependency management and file system operations.
+3. **Specialized Deployment Logic**: While bundling focuses on code packaging, deployment adds environment-specific logic for deploying the bundled code.
+4. **Extensibility**: The abstract `deploy` method allows for creating specialized deployers for different target environments.
+
+
+
+---
+title: "Netlify Deployer"
+description: "Documentation for the NetlifyDeployer class, which deploys Mastra applications to Netlify Functions."
+---
+
+# NetlifyDeployer
+Source: https://mastra.ai/docs/reference/deployer/netlify
+
+The NetlifyDeployer deploys Mastra applications to Netlify Functions, handling site creation, configuration, and deployment processes. It extends the abstract Deployer class to provide Netlify-specific deployment functionality.
+
+## Usage Example
+
+```typescript
+import { Mastra } from '@mastra/core';
+import { NetlifyDeployer } from '@mastra/deployer-netlify';
+
+const mastra = new Mastra({
+  deployer: new NetlifyDeployer({
+    scope: 'your-team-slug',
+    projectName: 'your-project-name',
+    token: 'your-netlify-token'
+  }),
+  // ... other Mastra configuration options
+});
+```
+
+## Parameters
+
+### Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "scope",
+      type: "string",
+      description: "Your Netlify team slug or ID.",
+      isOptional: false,
+    },
+    {
+      name: "projectName",
+      type: "string",
+      description: "Name of your Netlify site (will be created if it doesn't exist).",
+      isOptional: false,
+    },
+    {
+      name: "token",
+      type: "string",
+      description: "Your Netlify authentication token.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Netlify Configuration
+
+The NetlifyDeployer automatically generates a `netlify.toml` configuration file with the following settings:
+
+```toml
+[functions]
+node_bundler = "esbuild"            
+directory = "netlify/functions"
+
+[[redirects]]
+force = true
+from = "/*"
+status = 200
+to = "/.netlify/functions/api/:splat"
+```
+
+### Environment Variables
+
+The NetlifyDeployer handles environment variables from multiple sources:
+
+1. **Environment Files**: Variables from `.env.production` and `.env` files.
+2. **Configuration**: Variables passed through the Mastra configuration.
+3. **Netlify Dashboard**: Variables can also be managed through Netlify's web interface.
+
+### Project Structure
+
+The deployer creates the following structure in your output directory:
+
+```
+output-directory/
+├── netlify/
+│   └── functions/
+│       └── api/
+│           └── index.mjs    # Application entry point with Hono server integration
+└── netlify.toml             # Deployment configuration
+```
+
+
+---
+title: "Vercel Deployer"
+description: "Documentation for the VercelDeployer class, which deploys Mastra applications to Vercel."
+---
+
+# VercelDeployer
+Source: https://mastra.ai/docs/reference/deployer/vercel
+
+The VercelDeployer deploys Mastra applications to Vercel, handling configuration, environment variable synchronization, and deployment processes. It extends the abstract Deployer class to provide Vercel-specific deployment functionality.
+
+## Usage Example
+
+```typescript
+import { Mastra } from '@mastra/core';
+import { VercelDeployer } from '@mastra/deployer-vercel';
+
+const mastra = new Mastra({
+  deployer: new VercelDeployer({
+    teamId: 'your-team-id',
+    projectName: 'your-project-name',
+    token: 'your-vercel-token'
+  }),
+  // ... other Mastra configuration options
+});
+```
+
+## Parameters
+
+### Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "teamId",
+      type: "string",
+      description: "Your Vercel team ID.",
+      isOptional: false,
+    },
+    {
+      name: "projectName",
+      type: "string",
+      description: "Name of your Vercel project (will be created if it doesn't exist).",
+      isOptional: false,
+    },
+    {
+      name: "token",
+      type: "string",
+      description: "Your Vercel authentication token.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Vercel Configuration
+
+The VercelDeployer automatically generates a `vercel.json` configuration file with the following settings:
+
+```json
+{
+  "version": 2,
+  "installCommand": "npm install --omit=dev",
+  "builds": [
+    {
+      "src": "index.mjs",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": ["**"]
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "index.mjs"
+    }
+  ]
+}
+```
+
+### Environment Variables
+
+The VercelDeployer handles environment variables from multiple sources:
+
+1. **Environment Files**: Variables from `.env.production` and `.env` files.
+2. **Configuration**: Variables passed through the Mastra configuration.
+3. **Vercel Dashboard**: Variables can also be managed through Vercel's web interface.
+
+The deployer automatically synchronizes environment variables between your local development environment and Vercel's environment variable system, ensuring consistency across all deployment environments (production, preview, and development).
+
+### Project Structure
+
+The deployer creates the following structure in your output directory:
+
+```
+output-directory/
+├── vercel.json     # Deployment configuration
+└── index.mjs       # Application entry point with Hono server integration
 ```
 
 
@@ -8402,6 +9153,16 @@ const result = await metric.measure(
 - [Bias Metric](./bias)
 
 
+---
+title: "API Reference"
+description: "Mastra API Reference"
+---
+
+# Reference
+Source: https://mastra.ai/docs/reference
+
+The Reference section provides documentation of Mastra's API, including parameters, types and usage examples.
+
 # Memory Class Reference
 Source: https://mastra.ai/docs/reference/memory/Memory
 
@@ -8428,12 +9189,12 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
 import { Agent } from "@mastra/core/agent";
 
 const memory = new Memory({
-  // Custom storage configuration
+  // Optional storage configuration - libsql will be used by default
   storage: new LibSQLStore({
     url: "file:memory.db",
   }),
 
-  // Custom vector database for semantic search
+  // Optional vector database for semantic search - libsql will be used by default
   vector: new LibSQLVector({
     url: "file:vector.db",
   }),
@@ -8475,7 +9236,7 @@ const agent = new Agent({
       name: "storage",
       type: "MastraStorage",
       description: "Storage implementation for persisting memory data",
-      isOptional: false,
+      isOptional: true,
     },
     {
       name: "vector",
@@ -8537,52 +9298,53 @@ const agent = new Agent({
     },
     {
       name: "workingMemory",
-      type: "{ enabled: boolean; template: string }",
+      type: "{ enabled: boolean; template?: string; use?: 'text-stream' | 'tool-call' }",
       description:
-        "Configuration for working memory feature that allows persistent storage of user information across conversations",
+        "Configuration for working memory feature that allows persistent storage of user information across conversations. The 'use' setting determines how working memory updates are handled - either through text stream tags or tool calls.",
       isOptional: true,
       defaultValue:
-        "{ enabled: false, template: '<user><first_name></first_name><last_name></last_name>...</user>' }",
+        "{ enabled: false, template: '<user><first_name></first_name><last_name></last_name>...</user>', use: 'text-stream' }",
+    },
+    {
+      name: "threads",
+      type: "{ generateTitle?: boolean }",
+      description:
+        "Settings related to memory thread creation. `generateTitle` will cause the thread.title to be generated from an llm summary of the users first message.",
+      isOptional: true,
+      defaultValue: "{ generateTitle: true }",
     },
   ]}
 />
 
 ### Working Memory
 
-The working memory feature allows agents to maintain persistent information across conversations. When enabled, the Memory class will automatically manage XML-based working memory updates through the conversation stream.
+The working memory feature allows agents to maintain persistent information across conversations. When enabled, the Memory class will automatically manage XML-based working memory updates through either text stream tags or tool calls.
+
+There are two modes for handling working memory updates:
+
+1. **text-stream** (default): The agent includes working memory updates directly in its responses using XML-like tags (`<working_memory>...</working_memory>`). These tags are automatically processed and stripped from the visible output.
+
+2. **tool-call**: The agent uses a dedicated tool to update working memory. This mode should be used when working with `toDataStream()` as text-stream mode is not compatible with data streaming. Additionally, this mode provides more explicit control over memory updates and may be preferred when working with agents that are better at using tools than managing text tags.
+
+Example configuration:
+
+```typescript copy showLineNumbers
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      template: "<user><first_name></first_name><last_name></last_name></user>",
+      use: "tool-call", // or 'text-stream'
+    },
+  },
+});
+```
 
 If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information. See the [Agent Memory Guide](/docs/agents/agent-memory#working-memory) for detailed usage examples and best practices.
 
 ### embedder
 
 By default, Memory uses FastEmbed with the `bge-small-en-v1.5` model, which provides a good balance of performance and model size (~130MB). You only need to specify an embedder if you want to use a different model or provider.
-
-## Additional Notes
-
-### Vector Search Configuration
-
-When using vector search capabilities with custom configuration, ensure you configure both the vector store and appropriate search options. Here's an example:
-
-```typescript copy showLineNumbers
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/core/storage/libsql";
-import { LibSQLVector } from "@mastra/core/vector/libsql";
-
-const memory = new Memory({
-  storage: new LibSQLStore({
-    url: ":memory:",
-  }),
-  vector: new LibSQLVector({
-    url: ":memory:",
-  }),
-  options: {
-    semanticRecall: {
-      topK: 5,
-      messageRange: 2,
-    },
-  },
-});
-```
 
 ### Related
 
@@ -9399,8 +10161,10 @@ LangSmith is LangChain's platform for debugging, testing, evaluating, and monito
 To use LangSmith with Mastra, you'll need to configure the following environment variables:
 
 ```env
-OTEL_EXPORTER_OTLP_ENDPOINT=https://api.smith.langchain.com/v1/traces
-OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer your_api_key, x-langsmith-project-id=your_project_id"
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_API_KEY=your-api-key
+LANGSMITH_PROJECT=your-project-name
 ```
 
 ## Implementation
@@ -9409,6 +10173,7 @@ Here's how to configure Mastra to use LangSmith:
 
 ```typescript
 import { Mastra } from "@mastra/core";
+import { AISDKExporter } from "langsmith/vercel";
 
 export const mastra = new Mastra({
   // ... other config
@@ -9416,7 +10181,8 @@ export const mastra = new Mastra({
     serviceName: "your-service-name",
     enabled: true,
     export: {
-      type: "otlp",
+      type: "custom",
+      exporter: new AISDKExporter(),
     },
   },
 });
@@ -9787,7 +10553,10 @@ The store throws typed errors that can be caught:
 
 ```typescript copy
 try {
-  await store.query("index_name", queryVector);
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
 } catch (error) {
   if (error instanceof VectorStoreError) {
     console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
@@ -9814,7 +10583,7 @@ description: Documentation for the ChromaVector class in Mastra, which provides 
 # Chroma Vector Store
 Source: https://mastra.ai/docs/reference/rag/chroma
 
-The ChromaVector class provides vector search using [ChromaDB](https://www.trychroma.com/), an open-source embedding database. 
+The ChromaVector class provides vector search using [ChromaDB](https://www.trychroma.com/), an open-source embedding database.
 It offers efficient vector search with metadata filtering and hybrid search capabilities.
 
 ## Constructor Options
@@ -9908,7 +10677,8 @@ It offers efficient vector search with metadata filtering and hybrid search capa
       name: "documents",
       type: "string[]",
       isOptional: true,
-      description: "Chroma-specific: Original text documents associated with the vectors",
+      description:
+        "Chroma-specific: Original text documents associated with the vectors",
     },
   ]}
 />
@@ -9994,6 +10764,64 @@ interface IndexStats {
   ]}
 />
 
+### updateIndexById()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector to update",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector to update",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "Update parameters",
+    },
+  ]}
+/>
+
+The `update` object can contain:
+
+<PropertiesTable
+  content={[
+    {
+      name: "vector",
+      type: "number[]",
+      isOptional: true,
+      description: "New vector to replace the existing one",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "New metadata to replace the existing metadata",
+    },
+  ]}
+/>
+
+### deleteIndexById()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector to delete",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector to delete",
+    },
+  ]}
+/>
+
 ## Response Types
 
 Query results are returned in this format:
@@ -10014,7 +10842,10 @@ The store throws typed errors that can be caught:
 
 ```typescript copy
 try {
-  await store.query("index_name", queryVector);
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
 } catch (error) {
   if (error instanceof VectorStoreError) {
     console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
@@ -10024,7 +10855,9 @@ try {
 ```
 
 ### Related
-- [Metadata Filters](./metadata-filters) 
+
+- [Metadata Filters](./metadata-filters)
+
 
 ---
 title: "Reference: .chunk() | Document Processing | RAG | Mastra Docs"
@@ -10827,7 +11660,7 @@ description: Documentation for the LibSQLVector class in Mastra, which provides 
 # LibSQLVector Store
 Source: https://mastra.ai/docs/reference/rag/libsql
 
-The LibSQL storage implementation provides a SQLite-compatible vector search  [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
+The LibSQL storage implementation provides a SQLite-compatible vector search [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
 It's part of the `@mastra/core` package and offers efficient vector similarity search with metadata filtering.
 
 ## Installation
@@ -10851,7 +11684,10 @@ const store = new LibSQLVector({
 });
 
 // Create an index
-await store.createIndex("my-collection", 1536);
+await store.createIndex({
+  indexName: "my-collection",
+  dimension: 1536,
+});
 
 // Add vectors with metadata
 const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
@@ -10859,16 +11695,20 @@ const metadata = [
   { text: "first document", category: "A" },
   { text: "second document", category: "B" }
 ];
-await store.upsert("my-collection", vectors, metadata);
+await store.upsert({
+  indexName: "my-collection",
+  vectors,
+  metadata,
+});
 
 // Query similar vectors
 const queryVector = [0.1, 0.2, ...];
-const results = await store.query(
-  "my-collection",
+const results = await store.query({
+  indexName: "my-collection",
   queryVector,
-  10, // top K results
-  { category: "A" } // optional metadata filter
-);
+  topK: 10, // top K results
+  filter: { category: "A" } // optional metadata filter
+});
 ```
 
 ## Constructor Options
@@ -10879,7 +11719,7 @@ const results = await store.query(
       name: "connectionUrl",
       type: "string",
       description:
-        "LibSQL database URL. Use ':memory:' for in-memory database, 'file:local.db' for local file, or a LibSQL-compatible connection string like 'libsql://your-database.turso.io'.",
+        "LibSQL database URL. Use ':memory:' for in-memory database, 'file:dbname.db' for local file, or a LibSQL-compatible connection string like 'libsql://your-database.turso.io'.",
     },
     {
       name: "authToken",
@@ -11067,6 +11907,61 @@ Removes all vectors from an index while keeping the index structure.
   ]}
 />
 
+### updateIndexById()
+
+Updates a specific vector entry by its ID with new vector data and/or metadata.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector entry to update",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "Update data containing vector and/or metadata",
+    },
+    {
+      name: "update.vector",
+      type: "number[]",
+      isOptional: true,
+      description: "New vector data to update",
+    },
+    {
+      name: "update.metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "New metadata to update",
+    },
+  ]}
+/>
+
+### deleteIndexById()
+
+Deletes a specific vector entry from an index by its ID.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector entry to delete",
+    },
+  ]}
+/>
+
 ## Response Types
 
 Query results are returned in this format:
@@ -11086,7 +11981,10 @@ The store throws specific errors for different failure cases:
 
 ```typescript copy
 try {
-  await store.query("my-collection", queryVector);
+  await store.query({
+    indexName: "my-collection",
+    queryVector: queryVector,
+  });
 } catch (error) {
   // Handle specific error cases
   if (error.message.includes("Invalid index name format")) {
@@ -11131,16 +12029,16 @@ import { PgVector } from '@mastra/pg';
 
 const store = new PgVector(connectionString);
 
-const results = await store.query(
-  "my_index",
-  queryVector,
-  10,
-  {
+const results = await store.query({
+  indexName: "my_index",
+  queryVector: queryVector,
+  topK: 10,
+  filter: {
     category: "electronics",  // Simple equality
     price: { $gt: 100 },     // Numeric comparison
     tags: { $in: ["sale", "new"] }  // Array membership
   }
-);
+});
 ```
 
 ## Supported Operators
@@ -11782,7 +12680,10 @@ The store throws typed errors that can be caught:
 
 ```typescript copy
 try {
-  await store.query("index_name", queryVector);
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
 } catch (error) {
   if (error instanceof VectorStoreError) {
     console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
@@ -11977,7 +12878,10 @@ The store throws typed errors that can be caught:
 
 ```typescript copy
 try {
-  await store.query("index_name", queryVector);
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
 } catch (error) {
   if (error instanceof VectorStoreError) {
     console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
@@ -12175,7 +13079,10 @@ The store throws typed errors that can be caught:
 
 ```typescript copy
 try {
-  await store.query("index_name", queryVector);
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
 } catch (error) {
   if (error instanceof VectorStoreError) {
     console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
@@ -12260,6 +13167,8 @@ const rerankedResults = await rerank(
 />
 
 The rerank function accepts any LanguageModel from the Vercel AI SDK. When using the Cohere model `rerank-v3.5`, it will automatically use Cohere's reranking capabilities.
+
+> **Note:** For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
 
 ### RerankerFunctionOptions
 
@@ -12577,7 +13486,10 @@ The store throws typed errors that can be caught:
 
 ```typescript copy
 try {
-  await store.query("index_name", queryVector);
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
 } catch (error) {
   if (error instanceof VectorStoreError) {
     console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
@@ -12829,7 +13741,10 @@ The store throws typed errors that can be caught:
 
 ```typescript copy
 try {
-  await store.query("index_name", queryVector);
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
 } catch (error) {
   if (error instanceof VectorStoreError) {
     console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
@@ -12869,9 +13784,9 @@ npm install @mastra/storage-libsql
 ```typescript copy showLineNumbers
 import { LibSQLStore } from "@mastra/core/storage/libsql";
 
-// In-memory database (development)
+// File database (development)
 const storage = new LibSQLStore({
-  url: ":memory:",
+  url: "file:storage.db",
 });
 
 // Persistent database (production)
@@ -12888,7 +13803,7 @@ const storage = new LibSQLStore({
       name: "url",
       type: "string",
       description:
-        "Database URL. Use ':memory:' for in-memory database or a LibSQL-compatible connection string for persistent storage.",
+        "Database URL. Use ':memory:' for in-memory database, 'file:filename.db' for a file database, or any LibSQL-compatible connection string for persistent storage.",
       isOptional: false,
     },
     {
@@ -12904,16 +13819,13 @@ const storage = new LibSQLStore({
 
 ### In-Memory vs Persistent Storage
 
-The in-memory configuration (`:memory:`) is useful for:
+The file configuration (`file:storage.db`) is useful for:
 
 - Development and testing
-- Temporary storage that doesn't need to persist
+- Temporary storage
 - Quick prototyping
 
-For production use cases, use a persistent database URL:
-
-- Local file: `file:local.db`
-- Remote LibSQL: `libsql://your-database.turso.io`
+For production use cases, use a persistent database URL: `libsql://your-database.turso.io`
 
 ### Schema Management
 
@@ -13444,6 +14356,12 @@ const graphTool = createGraphRAGTool({
       description: "Configuration for the graph-based retrieval",
       isOptional: true,
       defaultValue: "Default graph options",
+    },
+    {
+      name: "description",
+      type: "string",
+      description: "Custom description for the tool. By default: 'Access and analyze relationships between information in the knowledge base to answer complex questions about connections and patterns'",
+      isOptional: true,
     }
   ]}
 />
@@ -13496,6 +14414,13 @@ The tool returns an object with:
   ]}
 />
 
+## Default Tool Description
+
+The default description focuses on:
+- Analyzing relationships between documents
+- Finding patterns and connections
+- Answering complex queries
+
 ## Advanced Example
 
 ```typescript
@@ -13512,10 +14437,23 @@ const graphTool = createGraphRAGTool({
 });
 ```
 
+## Example with Custom Description
+
+```typescript
+const graphTool = createGraphRAGTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding('text-embedding-3-small'),
+  description: "Analyze document relationships to find complex patterns and connections in our company's historical data"
+});
+```
+
+This example shows how to customize the tool description for a specific use case while maintaining its core purpose of relationship analysis.
+
 ## Related
 
 - [createVectorQueryTool](./vector-query-tool)
-- [GraphRAG](../rag/graph-rag) 
+- [GraphRAG](../rag/graph-rag)
 
 ---
 title: "Reference: createVectorQueryTool() | RAG | Mastra Tools Docs"
@@ -13577,7 +14515,7 @@ const queryTool = createVectorQueryTool({
     {
       name: "description",
       type: "string",
-      description: "Custom description for the tool (by default, provides instructions for querying the vector store with examples of filtering and reranking if enabled)",
+      description: "Custom description for the tool. By default: 'Access the knowledge base to find information needed to answer user questions'",
       isOptional: true,
     }
   ]}
@@ -13638,9 +14576,10 @@ The tool returns an object with:
 
 ## Default Tool Description
 
-The default tool description provides:
-- Instructions for querying the specified vector store
-- Examples of filter syntax when filtering is enabled
+The default description focuses on:
+- Finding relevant information in stored knowledge
+- Answering user questions
+- Retrieving factual content
 
 ## Result Handling
 
@@ -13704,6 +14643,19 @@ Reranking improves result quality by combining:
 - Query analysis: Adjustments based on query characteristics
 
 The reranker processes the initial vector search results and returns a reordered list optimized for relevance.
+
+## Example with Custom Description
+
+```typescript
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding('text-embedding-3-small'),
+  description: "Search through document archives to find relevant information for answering questions about company policies and procedures"
+});
+```
+
+This example shows how to customize the tool description for a specific use case while maintaining its core purpose of information retrieval.
 
 ## Tool Details
 
@@ -15880,7 +16832,7 @@ const processOrder = new Step({
       required: false
     },
     {
-      name: "outputSchema", 
+      name: "outputSchema",
       type: "z.ZodSchema",
       description: "Zod schema to validate step output data",
       required: false
@@ -15918,6 +16870,11 @@ const processOrder = new Step({
       name: "suspend",
       type: "() => Promise<void>",
       description: "Function to suspend step execution"
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "Access to Mastra instance"
     }
   ]}
 />
@@ -16394,6 +17351,174 @@ try {
 
 
 ---
+title: "Reference: Workflow.until() | Looping in Workflows | Mastra Docs"
+description: "Documentation for the `.until()` method in Mastra workflows, which repeats a step until a specified condition becomes true."
+---
+
+# Workflow.until()
+Source: https://mastra.ai/docs/reference/workflows/until
+
+The `.until()` method repeats a step until a specified condition becomes true. This creates a loop that continues executing the specified step until the condition is satisfied.
+
+## Usage
+
+```typescript
+workflow
+  .step(incrementStep)
+  .until(condition, incrementStep)
+  .then(finalStep);
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "condition",
+      type: "Function | ReferenceCondition",
+      description: "A function or reference condition that determines when to stop looping",
+      isOptional: false
+    },
+    {
+      name: "step",
+      type: "Step",
+      description: "The step to repeat until the condition is met",
+      isOptional: false
+    }
+  ]}
+/>
+
+## Condition Types
+
+### Function Condition
+
+You can use a function that returns a boolean:
+
+```typescript
+workflow
+  .step(incrementStep)
+  .until(async ({ context }) => {
+    const result = context.getStepResult<{ value: number }>('increment');
+    return (result?.value ?? 0) >= 10; // Stop when value reaches or exceeds 10
+  }, incrementStep)
+  .then(finalStep);
+```
+
+### Reference Condition
+
+You can use a reference-based condition with comparison operators:
+
+```typescript
+workflow
+  .step(incrementStep)
+  .until(
+    {
+      ref: { step: incrementStep, path: 'value' },
+      query: { $gte: 10 }, // Stop when value is greater than or equal to 10
+    },
+    incrementStep
+  )
+  .then(finalStep);
+```
+
+## Comparison Operators
+
+When using reference-based conditions, you can use these comparison operators:
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `$eq`    | Equal to    | `{ $eq: 10 }` |
+| `$ne`    | Not equal to | `{ $ne: 0 }` |
+| `$gt`    | Greater than | `{ $gt: 5 }` |
+| `$gte`   | Greater than or equal to | `{ $gte: 10 }` |
+| `$lt`    | Less than | `{ $lt: 20 }` |
+| `$lte`   | Less than or equal to | `{ $lte: 15 }` |
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "The workflow instance for chaining"
+    }
+  ]}
+/>
+
+## Example
+
+```typescript
+import { Workflow, Step } from '@mastra/core';
+import { z } from 'zod';
+
+// Create a step that increments a counter
+const incrementStep = new Step({
+  id: 'increment',
+  description: 'Increments the counter by 1',
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ context }) => {
+    // Get current value from previous execution or start at 0
+    const currentValue =
+      context.getStepResult<{ value: number }>('increment')?.value ||
+      context.getStepResult<{ startValue: number }>('trigger')?.startValue ||
+      0;
+
+    // Increment the value
+    const value = currentValue + 1;
+    console.log(`Incrementing to ${value}`);
+
+    return { value };
+  },
+});
+
+// Create a final step
+const finalStep = new Step({
+  id: 'final',
+  description: 'Final step after loop completes',
+  execute: async ({ context }) => {
+    const finalValue = context.getStepResult<{ value: number }>('increment')?.value;
+    console.log(`Loop completed with final value: ${finalValue}`);
+    return { finalValue };
+  },
+});
+
+// Create the workflow
+const counterWorkflow = new Workflow({
+  name: 'counter-workflow',
+  triggerSchema: z.object({
+    startValue: z.number(),
+    targetValue: z.number(),
+  }),
+});
+
+// Configure the workflow with an until loop
+counterWorkflow
+  .step(incrementStep)
+  .until(async ({ context }) => {
+    const targetValue = context.triggerData.targetValue;
+    const currentValue = context.getStepResult<{ value: number }>('increment')?.value ?? 0;
+    return currentValue >= targetValue;
+  }, incrementStep)
+  .then(finalStep)
+  .commit();
+
+// Execute the workflow
+const run = counterWorkflow.createRun();
+const result = await run.start({ triggerData: { startValue: 0, targetValue: 5 } });
+// Will increment from 0 to 5, then stop and execute finalStep
+```
+
+## Related
+
+- [.while()](./while.mdx) - Loop while a condition is true
+- [Control Flow Guide](../../workflows/control-flow.mdx#loop-control-with-until-and-while)
+- [Workflow Class Reference](./workflow.mdx)
+
+
+---
 title: "Reference: Workflow.watch() | Workflows | Mastra Docs"
 description: Documentation for the `.watch()` method in workflows, which monitors the status of a workflow run.
 ---
@@ -16510,6 +17635,177 @@ workflow.watch((state) => {
 
 - [Workflow Creation](/docs/reference/workflows/createRun)
 - [Step Configuration](/docs/reference/workflows/step-class)
+
+
+---
+title: "Reference: Workflow.while() | Looping in Workflows | Mastra Docs"
+description: "Documentation for the `.while()` method in Mastra workflows, which repeats a step as long as a specified condition remains true."
+---
+
+# Workflow.while()
+Source: https://mastra.ai/docs/reference/workflows/while
+
+The `.while()` method repeats a step as long as a specified condition remains true. This creates a loop that continues executing the specified step until the condition becomes false.
+
+## Usage
+
+```typescript
+workflow
+  .step(incrementStep)
+  .while(condition, incrementStep)
+  .then(finalStep);
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "condition",
+      type: "Function | ReferenceCondition",
+      description: "A function or reference condition that determines when to continue looping",
+      isOptional: false
+    },
+    {
+      name: "step",
+      type: "Step",
+      description: "The step to repeat while the condition is true",
+      isOptional: false
+    }
+  ]}
+/>
+
+## Condition Types
+
+### Function Condition
+
+You can use a function that returns a boolean:
+
+```typescript
+workflow
+  .step(incrementStep)
+  .while(async ({ context }) => {
+    const result = context.getStepResult<{ value: number }>('increment');
+    return (result?.value ?? 0) < 10; // Continue as long as value is less than 10
+  }, incrementStep)
+  .then(finalStep);
+```
+
+### Reference Condition
+
+You can use a reference-based condition with comparison operators:
+
+```typescript
+workflow
+  .step(incrementStep)
+  .while(
+    {
+      ref: { step: incrementStep, path: 'value' },
+      query: { $lt: 10 }, // Continue as long as value is less than 10
+    },
+    incrementStep
+  )
+  .then(finalStep);
+```
+
+## Comparison Operators
+
+When using reference-based conditions, you can use these comparison operators:
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `$eq`    | Equal to    | `{ $eq: 10 }` |
+| `$ne`    | Not equal to | `{ $ne: 0 }` |
+| `$gt`    | Greater than | `{ $gt: 5 }` |
+| `$gte`   | Greater than or equal to | `{ $gte: 10 }` |
+| `$lt`    | Less than | `{ $lt: 20 }` |
+| `$lte`   | Less than or equal to | `{ $lte: 15 }` |
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "The workflow instance for chaining"
+    }
+  ]}
+/>
+
+## Example
+
+```typescript
+import { Workflow, Step } from '@mastra/core';
+import { z } from 'zod';
+
+// Create a step that increments a counter
+const incrementStep = new Step({
+  id: 'increment',
+  description: 'Increments the counter by 1',
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ context }) => {
+    // Get current value from previous execution or start at 0
+    const currentValue =
+      context.getStepResult<{ value: number }>('increment')?.value ||
+      context.getStepResult<{ startValue: number }>('trigger')?.startValue ||
+      0;
+
+    // Increment the value
+    const value = currentValue + 1;
+    console.log(`Incrementing to ${value}`);
+
+    return { value };
+  },
+});
+
+// Create a final step
+const finalStep = new Step({
+  id: 'final',
+  description: 'Final step after loop completes',
+  execute: async ({ context }) => {
+    const finalValue = context.getStepResult<{ value: number }>('increment')?.value;
+    console.log(`Loop completed with final value: ${finalValue}`);
+    return { finalValue };
+  },
+});
+
+// Create the workflow
+const counterWorkflow = new Workflow({
+  name: 'counter-workflow',
+  triggerSchema: z.object({
+    startValue: z.number(),
+    targetValue: z.number(),
+  }),
+});
+
+// Configure the workflow with a while loop
+counterWorkflow
+  .step(incrementStep)
+  .while(
+    async ({ context }) => {
+      const targetValue = context.triggerData.targetValue;
+      const currentValue = context.getStepResult<{ value: number }>('increment')?.value ?? 0;
+      return currentValue < targetValue;
+    },
+    incrementStep
+  )
+  .then(finalStep)
+  .commit();
+
+// Execute the workflow
+const run = counterWorkflow.createRun();
+const result = await run.start({ triggerData: { startValue: 0, targetValue: 5 } });
+// Will increment from 0 to 4, then stop and execute finalStep
+```
+
+## Related
+
+- [.until()](./until.mdx) - Loop until a condition becomes true
+- [Control Flow Guide](../../workflows/control-flow.mdx#loop-control-with-until-and-while)
+- [Workflow Class Reference](./workflow.mdx)
 
 
 ---
@@ -16762,7 +18058,7 @@ Workflows in Mastra help you orchestrate complex sequences of operations with fe
 
 Most AI applications need more than a single call to a language model. You may want to run multiple steps, conditionally skip certain paths, or even pause execution altogether until you receive user input. Sometimes your agent tool calling is not accurate enough.
 
-Mastra’s workflow system provides:
+Mastra's workflow system provides:
 
 - A standardized way to define steps and link them together.
 - Support for both simple (linear) and advanced (branching, parallel) paths.
@@ -16876,6 +18172,10 @@ The basic building block of a workflow [is a step](./steps.mdx). Steps are defin
 
 Workflows let you define a [control flow](./control-flow.mdx) to chain steps together in with parallel steps, branching paths, and more.
 
+## Workflow Variables
+
+When you need to map data between steps or create dynamic data flows, [workflow variables](./variables.mdx) provide a powerful mechanism for passing information from one step to another and accessing nested properties within step outputs.
+
 ## Suspend and Resume
 
 When you need to pause execution for external data, user input, or asynchronous events, Mastra [supports suspension at any step](./suspend-and-resume.mdx), persisting the state of the workflow so you can resume it later.
@@ -16896,6 +18196,7 @@ You can:
 - [Sequential Steps workflow example](../../examples/workflows/sequential-steps.mdx)
 - [Parallel Steps workflow example](../../examples/workflows/parallel-steps.mdx)
 - [Branching Paths workflow example](../../examples/workflows/branching-paths.mdx)
+- [Workflow Variables example](../../examples/workflows/workflow-variables.mdx)
 - [Cyclical Dependencies workflow example](../../examples/workflows/cyclical-dependencies.mdx)
 - [Suspend and Resume workflow example](../../examples/workflows/suspend-and-resume.mdx)
 
@@ -16912,7 +18213,7 @@ When you create a multi-step process, you may need to run steps in parallel, cha
 
 ## Parallel Execution
 
-You can run multiple steps at the same time if they don’t depend on each other. This approach can speed up your workflow when steps perform independent tasks. The code below shows how to add two steps in parallel:
+You can run multiple steps at the same time if they don't depend on each other. This approach can speed up your workflow when steps perform independent tasks. The code below shows how to add two steps in parallel:
 
 ```typescript
 myWorkflow.step(fetchUserData).step(fetchOrderData);
@@ -16957,7 +18258,7 @@ See the [Branching Paths](../../examples/workflows/branching-paths.mdx) example 
 
 ## Cyclical Dependencies
 
-You can loop back to earlier steps based on conditions, allowing you to repeat tasks until certain results are achieved. The code below shows a workflow that repeats fetchData when a status is “retry”:
+You can loop back to earlier steps based on conditions, allowing you to repeat tasks until certain results are achieved. The code below shows a workflow that repeats fetchData when a status is "retry":
 
 ```typescript
 myWorkflow
@@ -16972,9 +18273,90 @@ myWorkflow
   });
 ```
 
-If processData returns “success,” finalizeData runs. If it returns “retry,” the workflow loops back to fetchData.
+If processData returns "success," finalizeData runs. If it returns "retry," the workflow loops back to fetchData.
 
 See the [Cyclical Dependencies](../../examples/workflows/cyclical-dependencies.mdx) example for more details.
+
+## Loop Control with `until` and `while`
+
+Mastra provides dedicated methods for creating loops in workflows: `until` and `while`. These methods offer a more intuitive way to implement repetitive tasks compared to manual cyclical dependencies.
+
+### Using `until`
+
+The `until` method repeats a step until a specified condition becomes true. It takes two arguments:
+1. A condition that determines when to stop looping
+2. The step to repeat
+
+```typescript
+workflow
+  .step(incrementStep)
+  .until(async ({ context }) => {
+    // Stop when the value reaches or exceeds 10
+    const result = context.getStepResult<{ value: number }>('increment');
+    return (result?.value ?? 0) >= 10;
+  }, incrementStep)
+  .then(finalStep);
+```
+
+You can also use a reference-based condition:
+
+```typescript
+workflow
+  .step(incrementStep)
+  .until(
+    {
+      ref: { step: incrementStep, path: 'value' },
+      query: { $gte: 10 },
+    },
+    incrementStep
+  )
+  .then(finalStep);
+```
+
+### Using `while`
+
+The `while` method repeats a step as long as a specified condition remains true. It takes the same arguments as `until`:
+1. A condition that determines when to continue looping
+2. The step to repeat
+
+```typescript
+workflow
+  .step(incrementStep)
+  .while(async ({ context }) => {
+    // Continue as long as the value is less than 10
+    const result = context.getStepResult<{ value: number }>('increment');
+    return (result?.value ?? 0) < 10;
+  }, incrementStep)
+  .then(finalStep);
+```
+
+You can also use a reference-based condition:
+
+```typescript
+workflow
+  .step(incrementStep)
+  .while(
+    {
+      ref: { step: incrementStep, path: 'value' },
+      query: { $lt: 10 },
+    },
+    incrementStep
+  )
+  .then(finalStep);
+```
+
+### Comparison Operators
+
+When using reference-based conditions, you can use these comparison operators:
+
+| Operator | Description |
+|----------|-------------|
+| `$eq`    | Equal to    |
+| `$ne`    | Not equal to |
+| `$gt`    | Greater than |
+| `$gte`   | Greater than or equal to |
+| `$lt`    | Less than |
+| `$lte`   | Less than or equal to |
 
 ## Conditions
 
@@ -17271,6 +18653,257 @@ await start({ triggerData: { inputValue: 45 } });
 
 
 ---
+title: "Data Mapping with Workflow Variables | Mastra Docs"
+description: "Learn how to use workflow variables to map data between steps and create dynamic data flows in your Mastra workflows."
+---
+
+# Data Mapping with Workflow Variables
+Source: https://mastra.ai/docs/workflows/variables
+
+Workflow variables in Mastra provide a powerful mechanism for mapping data between steps, allowing you to create dynamic data flows and pass information from one step to another.
+
+## Understanding Workflow Variables
+
+In Mastra workflows, variables serve as a way to:
+
+- Map data from trigger inputs to step inputs
+- Pass outputs from one step to inputs of another step
+- Access nested properties within step outputs
+- Create more flexible and reusable workflow steps
+
+## Using Variables for Data Mapping
+
+### Basic Variable Mapping
+
+You can map data between steps using the `variables` property when adding a step to your workflow:
+
+```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
+const workflow = new Workflow({
+  name: 'data-mapping-workflow',
+  triggerSchema: z.object({
+    inputData: z.string(),
+  }),
+});
+
+workflow
+  .step(step1, {
+    variables: {
+      // Map trigger data to step input
+      inputData: { step: 'trigger', path: 'inputData' }
+    }
+  })
+  .then(step2, {
+    variables: {
+      // Map output from step1 to input for step2
+      previousValue: { step: step1, path: 'outputField' }
+    }
+  })
+  .commit();
+```
+
+### Accessing Nested Properties
+
+You can access nested properties using dot notation in the `path` field:
+
+```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
+workflow
+  .step(step1)
+  .then(step2, {
+    variables: {
+      // Access a nested property from step1's output
+      nestedValue: { step: step1, path: 'nested.deeply.value' }
+    }
+  })
+  .commit();
+```
+
+### Mapping Entire Objects
+
+You can map an entire object by using `.` as the path:
+
+```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
+workflow
+  .step(step1, {
+    variables: {
+      // Map the entire trigger data object
+      triggerData: { step: 'trigger', path: '.' }
+    }
+  })
+  .commit();
+```
+
+## Variable Resolution
+
+When a workflow executes, Mastra resolves variables at runtime by:
+
+1. Identifying the source step specified in the `step` property
+2. Retrieving the output from that step
+3. Navigating to the specified property using the `path`
+4. Injecting the resolved value into the target step's context
+
+## Examples
+
+### Mapping from Trigger Data
+
+This example shows how to map data from the workflow trigger to a step:
+
+```typescript showLineNumbers filename="src/mastra/workflows/trigger-mapping.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+// Define a step that needs user input
+const processUserInput = new Step({
+  id: "processUserInput",
+  execute: async ({ context }) => {
+    // The inputData will be available in context because of the variable mapping
+    const { inputData } = context;
+
+    return {
+      processedData: `Processed: ${inputData}`
+    };
+  },
+});
+
+// Create the workflow
+const workflow = new Workflow({
+  name: "trigger-mapping",
+  triggerSchema: z.object({
+    inputData: z.string(),
+  }),
+});
+
+// Map the trigger data to the step
+workflow
+  .step(processUserInput, {
+    variables: {
+      inputData: { step: 'trigger', path: 'inputData' },
+    }
+  })
+  .commit();
+```
+
+### Mapping Between Steps
+
+This example demonstrates mapping data from one step to another:
+
+```typescript showLineNumbers filename="src/mastra/workflows/step-mapping.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+// Step 1: Generate data
+const generateData = new Step({
+  id: "generateData",
+  outputSchema: z.object({
+    nested: z.object({
+      value: z.string(),
+    }),
+  }),
+  execute: async () => {
+    return {
+      nested: {
+        value: "step1-data"
+      }
+    };
+  },
+});
+
+// Step 2: Process the data from step 1
+const processData = new Step({
+  id: "processData",
+  inputSchema: z.object({
+    previousValue: z.string(),
+  }),
+  execute: async ({ context }) => {
+    // previousValue will be available because of the variable mapping
+    const { previousValue } = context;
+
+    return {
+      result: `Processed: ${previousValue}`
+    };
+  },
+});
+
+// Create the workflow
+const workflow = new Workflow({
+  name: "step-mapping",
+});
+
+// Map data from step1 to step2
+workflow
+  .step(generateData)
+  .then(processData, {
+    variables: {
+      // Map the nested.value property from generateData's output
+      previousValue: { step: generateData, path: 'nested.value' },
+    }
+  })
+  .commit();
+```
+
+## Type Safety
+
+Mastra provides type safety for variable mappings when using TypeScript:
+
+```typescript showLineNumbers filename="src/mastra/workflows/type-safe.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+// Define schemas for better type safety
+const triggerSchema = z.object({
+  inputValue: z.string(),
+});
+
+type TriggerType = z.infer<typeof triggerSchema>;
+
+// Step with typed context
+const step1 = new Step({
+  id: "step1",
+  outputSchema: z.object({
+    nested: z.object({
+      value: z.string(),
+    }),
+  }),
+  execute: async ({ context }) => {
+    // TypeScript knows the shape of triggerData
+    const triggerData = context.getStepResult<TriggerType>('trigger');
+
+    return {
+      nested: {
+        value: `processed-${triggerData?.inputValue}`
+      }
+    };
+  },
+});
+
+// Create the workflow with the schema
+const workflow = new Workflow({
+  name: "type-safe-workflow",
+  triggerSchema,
+});
+
+workflow.step(step1).commit();
+```
+
+## Best Practices
+
+1. **Validate Inputs and Outputs**: Use `inputSchema` and `outputSchema` to ensure data consistency.
+
+2. **Keep Mappings Simple**: Avoid overly complex nested paths when possible.
+
+3. **Consider Default Values**: Handle cases where mapped data might be undefined.
+
+## Comparison with Direct Context Access
+
+While you can access previous step results directly via `context.steps`, using variable mappings offers several advantages:
+
+| Feature | Variable Mapping | Direct Context Access |
+| ------- | --------------- | --------------------- |
+| Clarity | Explicit data dependencies | Implicit dependencies |
+| Reusability | Steps can be reused with different mappings | Steps are tightly coupled |
+| Type Safety | Better TypeScript integration | Requires manual type assertions |
+
+
+---
 title: "Example: Adding Voice Capabilities | Agents | Mastra"
 description: "Example of adding voice capabilities to Mastra agents, enabling them to speak and listen using different voice providers."
 ---
@@ -17536,12 +19169,15 @@ const planActivities = new Step({
       },
     ]);
 
+    let activitiesText = '';
+    
     for await (const chunk of response.textStream) {
       process.stdout.write(chunk);
+      activitiesText += chunk;
     }
 
     return {
-      activities: response.text,
+      activities: activitiesText,
     };
   },
 });
@@ -21817,6 +23453,8 @@ This example demonstrates how to create an agent that maintains a working memory
 
 First, set up the memory system with working memory enabled. Memory uses LibSQL storage by default, but you can use any other [storage provider](/docs/agents/01-agent-memory#storage-options) if needed:
 
+### Text Stream Mode (Default)
+
 ```typescript
 import { Memory } from "@mastra/memory";
 
@@ -21824,21 +23462,37 @@ const memory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
+      use: 'text-stream', // this is the default mode
     },
   },
 });
 ```
 
-Add the memory instance to an agent
+### Tool Call Mode
+
+Alternatively, you can use tool calls for working memory updates. This mode is required when using `toDataStream()` as text-stream mode is not compatible with data streaming:
+
+```typescript
+const toolCallMemory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      use: 'tool-call', // Required for toDataStream() compatibility
+    },
+  },
+});
+```
+
+Add the memory instance to an agent:
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
 
-const todoAgent = new Agent({
+const agent = new Agent({
   name: "Memory agent",
   instructions: "You are a helpful AI assistant.",
   model: openai("gpt-4o-mini"),
-  memory,
+  memory, // or toolCallMemory
 });
 ```
 
@@ -21846,50 +23500,61 @@ const todoAgent = new Agent({
 
 Now that working memory is set up you can interact with the agent and it will remember key details about interactions.
 
-First start a conversation and give the agent relevant information like your name.
+### Text Stream Mode
+
+In text stream mode, the agent includes working memory updates directly in its responses:
 
 ```typescript
 import { randomUUID } from "crypto";
+import { maskStreamTags } from "@mastra/core/utils";
 
 const threadId = randomUUID();
 const resourceId = "SOME_USER_ID";
 
-const response = await todoAgent.stream("Hello, my name is Jane", {
+const response = await agent.stream("Hello, my name is Jane", {
   threadId,
   resourceId,
 });
 
-// process response stream
-for await (const chunk of response.textStream) {
+// Process response stream, hiding working memory tags
+for await (const chunk of maskStreamTags(response.textStream, "working_memory")) {
+  process.stdout.write(chunk);
+}
+```
+
+### Tool Call Mode
+
+In tool call mode, the agent uses a dedicated tool to update working memory:
+
+```typescript
+const toolCallResponse = await toolCallAgent.stream("Hello, my name is Jane", {
+  threadId,
+  resourceId,
+});
+
+// No need to mask working memory tags since updates happen through tool calls
+for await (const chunk of toolCallResponse.textStream) {
   process.stdout.write(chunk);
 }
 ```
 
 ### Handling response data
 
-The response stream will contain xml-like `<working_memory>$data</working_memory>` tagged data.
+In text stream mode, the response stream will contain xml-like `<working_memory>$data</working_memory>` tagged data.
 Mastra picks up these tags and automatically updates working memory with the data returned by the LLM.
 
-To prevent showing this data to users you can import the `maskStreamTags` util and pass the stream response through it.
+To prevent showing this data to users you can use the `maskStreamTags` util as shown above.
 
-```typescript
-import { maskStreamTags } from "@mastra/core/utils";
-
-for await (const chunk of maskStreamTags(
-  response.textStream, // pass the text stream
-  "working_memory", // and the name of the working memory tag
-)) {
-  process.stdout.write(chunk);
-}
-```
+In tool call mode, working memory updates happen through tool calls, so there's no need to mask any tags.
 
 ## Summary
 
 This example demonstrates:
 
-1. Setting up a memory system with working memory enabled
-2. Using `maskStreamTags` to hide memory updates from users
-3. The agent will maintain relevant user info between interactions, even when the original messages containing that info are no longer in context.
+1. Setting up memory with working memory enabled in either text-stream or tool-call mode
+2. Using `maskStreamTags` to hide memory updates in text-stream mode
+3. The agent maintaining relevant user info between interactions in both modes
+4. Different approaches to handling working memory updates
 
 ## Advanced use cases
 
@@ -22417,20 +24082,26 @@ const { embeddings: cleanedEmbeddings } = await embedMany({
 });
 
 const vectorStore = mastra.getVector("pgVector");
-await vectorStore.createIndex("embeddings", 1536);
-await vectorStore.createIndex("cleanedEmbeddings", 1536);
+await vectorStore.createIndex({
+  indexName: "embeddings",
+  dimension: 1536,
+});
+await vectorStore.createIndex({
+  indexName: "cleanedEmbeddings",
+  dimension: 1536,
+});
 
-await vectorStore.upsert(
-  "embeddings",
-  embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text })),
-);
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
 
-await vectorStore.upsert(
-  "cleanedEmbeddings",
-  cleanedEmbeddings,
-  updatedChunks?.map((chunk: any) => ({ text: chunk.text })),
-);
+await vectorStore.upsert({
+  indexName: "cleanedEmbeddings",
+  vectors: cleanedEmbeddings,
+  metadata: updatedChunks?.map((chunk: any) => ({ text: chunk.text })),
+});
 ```
 
 ## Response Generation
@@ -22624,12 +24295,15 @@ const { embeddings } = await embedMany({
 });
 
 const vectorStore = mastra.getVector("pgVector");
-await vectorStore.createIndex("embeddings", 1536);
-await vectorStore.upsert(
-  "embeddings",
-  embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text })),
-);
+await vectorStore.createIndex({
+  indexName: "embeddings",
+  dimension: 1536,
+});
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
 ```
 
 ## Response Generation with Chain-of-Thought
@@ -22988,12 +24662,15 @@ const { embeddings } = await embedMany({
 });
 
 const vectorStore = mastra.getVector("pgVector");
-await vectorStore.createIndex("embeddings", 1536);
-await vectorStore.upsert(
-  "embeddings",
-  embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text })),
-);
+await vectorStore.createIndex({
+  indexName: "embeddings",
+  dimension: 1536,
+});
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
 ```
 
 ## Response Generation
@@ -23281,7 +24958,7 @@ export const ragAgent = new Agent({
   instructions: `
   You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
 
-  Use the vectorQueryTool to filter the context by searching the metadata.
+  Filter the context by searching the metadata.
   
   The metadata is structured as follows:
 
@@ -23334,10 +25011,17 @@ const { embeddings } = await embedMany({
 });
 
 const vectorStore = mastra.getVector('pgVector');
-await vectorStore.createIndex('embeddings', 1536);
+await vectorStore.createIndex({
+  indexName: 'embeddings',
+  dimension: 1536,
+});
 
 // Store both embeddings and metadata together
-await vectorStore.upsert('embeddings', embeddings, chunkMetadata);
+await vectorStore.upsert({
+  indexName: 'embeddings',
+  vectors: embeddings,
+  metadata: chunkMetadata,
+});
 ```
 
 The `upsert` operation stores both the vector embeddings and their associated metadata, enabling combined semantic search and metadata filtering capabilities.
@@ -23352,7 +25036,7 @@ async function generateResponse(query: string) {
       Please answer the following question:
       ${query}
 
-    Please base your answer only on the context provided in the tool.
+    Please base your answer only on the context provided.
     If the context doesn't contain enough information to fully answer the question, please state that explicitly.
       `;
 
@@ -23533,12 +25217,15 @@ const { embeddings } = await embedMany({
 });
 
 const vectorStore = mastra.getVector("pgVector");
-await vectorStore.createIndex("embeddings", 1536);
-await vectorStore.upsert(
-  "embeddings",
-  embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text })),
-);
+await vectorStore.createIndex({
+  indexName: "embeddings",
+  dimension: 1536,
+});
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
 ```
 
 ## Response Generation
@@ -23670,9 +25357,14 @@ const { embedding } = await embed({
 });
 
 // Query with metadata filter
-const result = await pgVector.query('embeddings', embedding, 3, {
-  'path.to.metadata': {
-    $eq: 'value',
+const result = await pgVector.query({
+  indexName: 'embeddings',
+  queryVector: embedding,
+  topK: 3,
+  filter: {
+    'path.to.metadata': {
+      $eq: 'value',
+    },
   },
 });
 
@@ -23724,13 +25416,16 @@ const astra = new AstraVector({
   keyspace: process.env.ASTRA_DB_KEYSPACE,
 });
 
-await astra.createIndex('test_collection', 1536);
+await astra.createIndex({
+  indexName: 'test_collection',
+  dimension: 1536,
+});
 
-await astra.upsert(
-  'test_collection',
-  embeddings,
-  chunks?.map(chunk => ({ text: chunk.text })),
-);
+await astra.upsert({
+  indexName: 'test_collection',
+  vectors: embeddings,
+  metadata: chunks?.map(chunk => ({ text: chunk.text })),
+});
 ```
 
 {/* <br />
@@ -23772,16 +25467,18 @@ const chroma = new ChromaVector({
   path: "path/to/chroma/db",
 });
 
-await chroma.createIndex('test_collection', 1536);
+await chroma.createIndex({
+  indexName: 'test_collection',
+  dimension: 1536,
+});
 
 // Store both metadata and original documents in Chroma
-await chroma.upsert(
-  'test_collection',
-  embeddings,
-  chunks.map(chunk => ({ text: chunk.text })), // metadata
-  undefined, // let Chroma auto-generate IDs
-  chunks.map(chunk => chunk.text), // store original documents
-);
+await chroma.upsert({
+  indexName: 'test_collection',
+  vectors: embeddings,
+  metadata: chunks.map(chunk => ({ text: chunk.text })), // metadata
+  documents: chunks.map(chunk => chunk.text), // store original documents
+});
 ```
 
 <br />
@@ -23824,13 +25521,16 @@ const libsql = new LibSQLVector({
   authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
 });
 
-await libsql.createIndex("test_collection", 1536);
+await libsql.createIndex({
+  indexName: "test_collection",
+  dimension: 1536,
+});
 
-await libsql.upsert(
-  "test_collection",
-  embeddings,
-  chunks?.map((chunk) => ({ text: chunk.text })),
-);
+await libsql.upsert({
+  indexName: "test_collection",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk) => ({ text: chunk.text })),
+});
 ```
 
 <br />
@@ -23875,13 +25575,16 @@ const { embeddings } = await embedMany({
 
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
-await pgVector.createIndex("test_index", 1536);
+await pgVector.createIndex({
+  indexName: "test_index",
+  dimension: 1536,
+});
 
-await pgVector.upsert(
-  "test_index",
-  embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text })),
-);
+await pgVector.upsert({
+  indexName: "test_index",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
 ```
 
 <br />
@@ -23925,13 +25628,16 @@ const { embeddings } = await embedMany({
 
 const pinecone = new PineconeVector(process.env.PINECONE_API_KEY!);
 
-await pinecone.createIndex('testindex', 1536);
+await pinecone.createIndex({
+  indexName: 'testindex',
+  dimension: 1536,
+});
 
-await pinecone.upsert(
-  'testindex',
-  embeddings,
-  chunks?.map(chunk => ({ text: chunk.text })),
-);
+await pinecone.upsert({
+  indexName: 'testindex',
+  vectors: embeddings,
+  metadata: chunks?.map(chunk => ({ text: chunk.text })),
+});
 ```
 
 <br />
@@ -23973,15 +25679,18 @@ const { embeddings } = await embedMany({
 const qdrant = new QdrantVector(
   process.env.QDRANT_URL,
   process.env.QDRANT_API_KEY,
+);
+
+await qdrant.createIndex({
+  indexName: 'test_collection',
+  dimension: 1536,
 });
 
-await qdrant.createIndex('test_collection', 1536);
-
-await qdrant.upsert(
-  'test_collection',
-  embeddings,
-  chunks?.map(chunk => ({ text: chunk.text })),
-);
+await qdrant.upsert({
+  indexName: 'test_collection',
+  vectors: embeddings,
+  metadata: chunks?.map(chunk => ({ text: chunk.text })),
+});
 ```
 
 {/* <br />
@@ -24024,13 +25733,16 @@ const upstash = new UpstashVector({
   token: process.env.UPSTASH_TOKEN,
 });
 
-await upstash.createIndex('test_collection', 1536);
+await upstash.createIndex({
+  indexName: 'test_collection',
+  dimension: 1536,
+});
 
-await upstash.upsert(
-  'test_collection',
-  embeddings,
-  chunks?.map(chunk => ({ text: chunk.text })),
-);
+await upstash.upsert({
+  indexName: 'test_collection',
+  vectors: embeddings,
+  metadata: chunks?.map(chunk => ({ text: chunk.text })),
+});
 ```
 
 {/* <br />
@@ -24073,13 +25785,16 @@ const vectorize = new CloudflareVector({
   apiToken: process.env.CF_API_TOKEN,
 });
 
-await vectorize.createIndex('test_collection', 1536);
+await vectorize.createIndex({
+  indexName: 'test_collection',
+  dimension: 1536,
+});
 
-await vectorize.upsert(
-  'test_collection',
-  embeddings,
-  chunks?.map(chunk => ({ text: chunk.text })),
-);
+await vectorize.upsert({
+  indexName: 'test_collection',
+  vectors: embeddings,
+  metadata: chunks?.map(chunk => ({ text: chunk.text })),
+});
 ```
 {/* 
 <br />
@@ -24354,13 +26069,16 @@ const { embeddings } = await embedMany({
 
 const vectorStore = mastra.getVector("pgVector");
 
-await vectorStore.createIndex("embeddings", 1536);
+await vectorStore.createIndex({
+  indexName: "embeddings",
+  dimension: 1536,
+});
 
-await vectorStore.upsert(
-  "embeddings",
-  embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text })),
-);
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
 ```
 
 ## Response Generation
@@ -24492,12 +26210,15 @@ const { embeddings } = await embedMany({
 });
 
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
-await pgVector.createIndex('embeddings', 1536);
-await pgVector.upsert(
-  'embeddings',
-  embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text })),
-);
+await pgVector.createIndex({
+  indexName: 'embeddings',
+  dimension: 1536,
+});
+await pgVector.upsert({
+  indexName: 'embeddings',
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
 ```
 
 ## Vector Search and Re-ranking
@@ -24514,7 +26235,11 @@ const { embedding: queryEmbedding } = await embed({
 });
 
 // Get initial results
-const initialResults = await pgVector.query('embeddings', queryEmbedding, 3);
+const initialResults = await pgVector.query({
+  indexName: 'embeddings',
+  queryVector: queryEmbedding,
+  topK: 3,
+});
 
 // Re-rank results
 const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'), {
@@ -24643,17 +26368,24 @@ const { embeddings } = await embedMany({
 
 const pinecone = new PineconeVector("your-api-key");
 
-await pinecone.createIndex("test_index", 1536);
+await pinecone.createIndex({
+  indexName: "test_index",
+  dimension: 1536,
+});
 
-await pinecone.upsert(
-  "test_index",
-  embeddings,
-  chunks?.map((chunk: any) => ({ text: chunk.text })),
-);
+await pinecone.upsert({
+  indexName: "test_index",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
 
 const topK = 10;
 
-const results = await pinecone.query("test_index", embeddings[0], topK);
+const results = await pinecone.query({
+  indexName: "test_index",
+  queryVector: embeddings[0],
+  topK,
+});
 
 console.log(results);
 ```
@@ -24820,7 +26552,7 @@ const replyAsSkipper = new Step({
     reply: z.string(),
   }),
   execute: async ({ context, mastra }) => {
-    const skipper = mastra?.agents?.penguin;
+    const skipper = mastra?.getAgent('penguin');
 
     const res = await skipper?.generate(
       context?.triggerData?.message,
@@ -25374,6 +27106,216 @@ console.log(res.results);
 <br />
 <br />
 <GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/tool-as-workflow-step'} />
+
+
+---
+title: "Data Mapping with Workflow Variables | Mastra Examples"
+description: "Learn how to use workflow variables to map data between steps in Mastra workflows."
+---
+
+# Data Mapping with Workflow Variables
+Source: https://mastra.ai/examples/workflows/workflow-variables
+
+This example demonstrates how to use workflow variables to map data between steps in a Mastra workflow.
+
+## Use Case: User Registration Process
+
+In this example, we'll build a simple user registration workflow that:
+
+1. Validates user input
+1. Formats the user data
+1. Creates a user profile
+
+## Implementation
+
+```typescript showLineNumbers filename="src/mastra/workflows/user-registration.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+// Define our schemas for better type safety
+const userInputSchema = z.object({
+  email: z.string().email(),
+  name: z.string(),
+  age: z.number().min(18),
+});
+
+const validatedDataSchema = z.object({
+  isValid: z.boolean(),
+  validatedData: z.object({
+    email: z.string(),
+    name: z.string(),
+    age: z.number(),
+  }),
+});
+
+const formattedDataSchema = z.object({
+  userId: z.string(),
+  formattedData: z.object({
+    email: z.string(),
+    displayName: z.string(),
+    ageGroup: z.string(),
+  }),
+});
+
+const profileSchema = z.object({
+  profile: z.object({
+    id: z.string(),
+    email: z.string(),
+    displayName: z.string(),
+    ageGroup: z.string(),
+    createdAt: z.string(),
+  }),
+});
+
+// Define the workflow
+const registrationWorkflow = new Workflow({
+  name: "user-registration",
+  triggerSchema: userInputSchema,
+});
+
+// Step 1: Validate user input
+const validateInput = new Step({
+  id: "validateInput",
+  inputSchema: userInputSchema,
+  outputSchema: validatedDataSchema,
+  execute: async ({ context }) => {
+    const { email, name, age } = context;
+
+    // Simple validation logic
+    const isValid = email.includes('@') && name.length > 0 && age >= 18;
+
+    return {
+      isValid,
+      validatedData: {
+        email: email.toLowerCase().trim(),
+        name,
+        age,
+      },
+    };
+  },
+});
+
+// Step 2: Format user data
+const formatUserData = new Step({
+  id: "formatUserData",
+  inputSchema: z.object({
+    validatedData: z.object({
+      email: z.string(),
+      name: z.string(),
+      age: z.number(),
+    }),
+  }),
+  outputSchema: formattedDataSchema,
+  execute: async ({ context }) => {
+    const { validatedData } = context;
+
+    // Generate a simple user ID
+    const userId = `user_${Math.floor(Math.random() * 10000)}`;
+
+    // Format the data
+    const ageGroup = validatedData.age < 30 ? "young-adult" : "adult";
+
+    return {
+      userId,
+      formattedData: {
+        email: validatedData.email,
+        displayName: validatedData.name,
+        ageGroup,
+      },
+    };
+  },
+});
+
+// Step 3: Create user profile
+const createUserProfile = new Step({
+  id: "createUserProfile",
+  inputSchema: z.object({
+    userId: z.string(),
+    formattedData: z.object({
+      email: z.string(),
+      displayName: z.string(),
+      ageGroup: z.string(),
+    }),
+  }),
+  outputSchema: profileSchema,
+  execute: async ({ context }) => {
+    const { userId, formattedData } = context;
+
+    // In a real app, you would save to a database here
+
+    return {
+      profile: {
+        id: userId,
+        ...formattedData,
+        createdAt: new Date().toISOString(),
+      },
+    };
+  },
+});
+
+// Build the workflow with variable mappings
+registrationWorkflow
+  // First step gets data from the trigger
+  .step(validateInput, {
+    variables: {
+      email: { step: 'trigger', path: 'email' },
+      name: { step: 'trigger', path: 'name' },
+      age: { step: 'trigger', path: 'age' },
+    }
+  })
+  // Format user data with validated data from previous step
+  .then(formatUserData, {
+    variables: {
+      validatedData: { step: validateInput, path: 'validatedData' },
+    },
+    when: {
+      ref: { step: validateInput, path: 'isValid' },
+      query: { $eq: true },
+    },
+  })
+  // Create profile with data from the format step
+  .then(createUserProfile, {
+    variables: {
+      userId: { step: formatUserData, path: 'userId' },
+      formattedData: { step: formatUserData, path: 'formattedData' },
+    },
+  })
+  .commit();
+
+export default registrationWorkflow;
+```
+
+## How to Use This Example
+
+1. Create the file as shown above
+2. Register the workflow in your Mastra instance
+3. Execute the workflow:
+
+```bash
+curl --location 'http://localhost:4111/api/workflows/user-registration/execute' \
+     --header 'Content-Type: application/json' \
+     --data '{
+       "email": "user@example.com",
+       "name": "John Doe",
+       "age": 25
+     }'
+```
+
+## Key Takeaways
+
+This example demonstrates several important concepts about workflow variables:
+
+1. **Data Mapping**: Variables map data from one step to another, creating a clear data flow.
+
+2. **Path Access**: The `path` property specifies which part of a step's output to use.
+
+3. **Conditional Execution**: The `when` property allows steps to execute conditionally based on previous step outputs.
+
+4. **Type Safety**: Each step defines input and output schemas for type safety, ensuring that the data passed between steps is properly typed.
+
+5. **Explicit Data Dependencies**: By defining input schemas and using variable mappings, the data dependencies between steps are made explicit and clear.
+
+For more information on workflow variables, see the [Workflow Variables documentation](../../docs/workflows/variables.mdx).
 
 
 ---
