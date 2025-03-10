@@ -3,7 +3,7 @@ import { v5 as uuidv5 } from 'uuid';
 import { MastraMCPClient } from './client';
 import type { MastraMCPServerDefinition } from './client';
 
-const mastraMCPInstances = new Map<string, InstanceType<typeof MCPConfiguration>>();
+const mastraMCPConfigurationInstances = new Map<string, InstanceType<typeof MCPConfiguration>>();
 
 export class MCPConfiguration extends MastraBase {
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
@@ -15,7 +15,7 @@ export class MCPConfiguration extends MastraBase {
     this.id = args.id ?? this.makeId();
 
     // to prevent memory leaks return the same MCP server instance when configured the same way multiple times
-    const existingInstance = mastraMCPInstances.get(this.id);
+    const existingInstance = mastraMCPConfigurationInstances.get(this.id);
     if (existingInstance) {
       if (!args.id) {
         throw new Error(`MCPConfiguration was initialized multiple times with the same configuration options.
@@ -24,14 +24,20 @@ This error is intended to prevent memory leaks.
 
 To fix this you have three different options:
 1. If you need multiple MCPConfiguration class instances with identical server configurations, set an id when configuring: new MCPConfiguration({ id: "my-unique-id" })
-2. Call "await configuration.close()" after you're done using the configuration and before you recreate another instance with the same options. If the identical MCPConfiguration instance is already closed at the time of re-creating it, you will not see this error.
+2. Call "await configuration.disconnect()" after you're done using the configuration and before you recreate another instance with the same options. If the identical MCPConfiguration instance is already closed at the time of re-creating it, you will not see this error.
 3. If you only need one instance of MCPConfiguration in your app, refactor your code so it's only created one time (ex. move it out of a loop into a higher scope code block)
 `);
       }
       return existingInstance;
     }
-    mastraMCPInstances.set(this.id, this);
+    this.addToInstanceCache();
     return this;
+  }
+
+  private addToInstanceCache() {
+    if (!mastraMCPConfigurationInstances.has(this.id)) {
+      mastraMCPConfigurationInstances.set(this.id, this);
+    }
   }
 
   private makeId() {
@@ -41,14 +47,19 @@ To fix this you have three different options:
     return uuidv5(text, idNamespace);
   }
 
-  public async close() {
-    this.mcpClientsById.delete(this.id);
-    await this.eachClientTools(async ({ client }) => {
-      await client.disconnect();
-    });
+  public async disconnect() {
+    mastraMCPConfigurationInstances.delete(this.id);
+
+    for (const serverName of Object.keys(this.serverConfigs)) {
+      const client = this.mcpClientsById.get(serverName);
+      if (client) {
+        await client.disconnect();
+      }
+    }
   }
 
   public async getConnectedTools() {
+    this.addToInstanceCache();
     const connectedTools: Record<string, any> = {}; // <- any because we don't have proper tool schemas
 
     await this.eachClientTools(async ({ serverName, tools }) => {
@@ -61,6 +72,7 @@ To fix this you have three different options:
   }
 
   public async getConnectedToolsets() {
+    this.addToInstanceCache();
     const connectedToolsets: Record<string, Record<string, any>> = {}; // <- any because we don't have proper tool schemas
 
     await this.eachClientTools(async ({ serverName, tools }) => {
