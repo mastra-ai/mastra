@@ -6,7 +6,7 @@ import type { MachineContext, Snapshot } from 'xstate';
 import { assign, createActor, fromPromise, setup } from 'xstate';
 import type { z } from 'zod';
 
-import type { IAction, MastraUnion } from '../action';
+import type { MastraUnion } from '../action';
 import type { Logger } from '../logger';
 
 import type { Mastra } from '../mastra';
