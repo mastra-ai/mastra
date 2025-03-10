@@ -35,7 +35,7 @@ export const createVectorQueryTool = ({
         ...baseSchema,
         filter: z.coerce.string().describe(filterDescription),
       })
-    : z.object(baseSchema);
+    : z.object(baseSchema).strict();
   return createTool({
     id: toolId,
     inputSchema,

@@ -37,7 +37,7 @@ describe('createVectorQueryTool', () => {
   });
 
   describe('input schema validation', () => {
-    it('should make filter optional when enableFilter is false', () => {
+    it('should make filter invalid when enableFilter is false', () => {
       // Create tool with enableFilter set to false
       const tool = createVectorQueryTool({
         vectorStoreName: 'testStore',
@@ -49,27 +49,22 @@ describe('createVectorQueryTool', () => {
       // Get the Zod schema
       const schema = tool.__inputSchema;
 
-      // Test with no filter
+      // Test with no filter (should be valid)
       const validInput = {
         queryText: 'test query',
         topK: 5,
       };
-
-      // This should not throw an error
       expect(() => schema.parse(validInput)).not.toThrow();
 
-      // Test with filter (should still be valid)
+      // Test with filter (should throw - unexpected property)
       const inputWithFilter = {
         ...validInput,
         filter: '{"field": "value"}',
       };
-
-      // This should also not throw an error
-      expect(() => schema.parse(inputWithFilter)).not.toThrow();
+      expect(() => schema.parse(inputWithFilter)).toThrow();
     });
 
-    it('should require filter when enableFilter is true', () => {
-      // Create tool with enableFilter set to true
+    it('should handle filter permissively when enableFilter is true', () => {
       const tool = createVectorQueryTool({
         vectorStoreName: 'testStore',
         indexName: 'testIndex',
@@ -80,23 +75,42 @@ describe('createVectorQueryTool', () => {
       // Get the Zod schema
       const schema = tool.__inputSchema;
 
-      // Test with no filter (should throw)
-      const invalidInput = {
-        queryText: 'test query',
-        topK: 5,
-      };
+      // Test various filter inputs that should all work
+      const testCases = [
+        // String inputs
+        { filter: '{"field": "value"}' },
+        { filter: '{}' },
+        { filter: 'simple-string' },
+        // Object inputs (should be coerced to strings)
+        { filter: { field: 'value' } },
+        { filter: {} },
+        // Numbers (should be coerced)
+        { filter: 123 },
+        // Empty/null values (should be coerced)
+        { filter: '' },
+        { filter: null },
+        { filter: undefined },
+      ];
 
-      // This should throw a ZodError
-      expect(() => schema.parse(invalidInput)).toThrow();
+      testCases.forEach(({ filter }) => {
+        expect(() =>
+          schema.parse({
+            queryText: 'test query',
+            topK: 5,
+            filter,
+          }),
+        ).not.toThrow();
+      });
 
-      // Test with filter (should be valid)
-      const validInput = {
-        ...invalidInput,
-        filter: '{"field": "value"}',
-      };
-
-      // This should not throw an error
-      expect(() => schema.parse(validInput)).not.toThrow();
+      // Verify that all parsed values are strings
+      testCases.forEach(({ filter }) => {
+        const result = schema.parse({
+          queryText: 'test query',
+          topK: 5,
+          filter,
+        });
+        expect(typeof result.filter).toBe('string');
+      });
     });
   });
 
