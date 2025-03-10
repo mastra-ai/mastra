@@ -12,7 +12,7 @@ on:
 jobs:
   link-checker-docs-agent:
     name: Check Links with Dane
-    if: github.event.deployment_status.state == 'success' && github.event.deployment_status.environment == 'Preview – mastra-docs'
+    if: ${{ github.repository == 'mastra-ai/mastra' && github.event.deployment_status.state == 'success' && github.event.deployment_status.environment == 'Preview – mastra-docs' }}
     runs-on: ubuntu-latest
     services:
       postgres:

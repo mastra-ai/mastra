@@ -1,0 +1,90 @@
+name: Documentation Improvement
+description: Suggest improvements to Mastra documentation
+title: "[DOCS] "
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping us improve our documentation! Please provide as much detail as possible about what needs to be improved.
+
+  - type: textarea
+    attributes:
+      label: Documentation Issue
+      description: Is this issue related to an existing part of the documentation? If so, please provide a link or describe where it is located.
+      placeholder: |
+        For example, the RAG documentation at https://mastra.ai/docs/rag/overview is missing information about...
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Documentation Type
+      description: What type of documentation improvement are you suggesting?
+      multiple: true
+      options:
+        - Missing Information
+        - Incorrect Information
+        - Unclear Explanation
+        - Code Example Issue
+        - Typo/Grammar
+        - Formatting/Structure
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Component
+      description: Which component's documentation needs improvement?
+      multiple: true
+      options:
+        - Getting Started
+        - Agents
+        - Tools
+        - Workflows
+        - RAG
+        - Integrations
+        - Evals
+        - CLI
+        - Playground UI
+        - Deployment
+        - Memory
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Describe the Improvement Needed
+      description: A clear and concise description of what needs to be improved.
+      placeholder: |
+        For example, the documentation should include more examples of how to use the RAG feature with custom data sources.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Suggested Solution
+      description: If you have a specific suggestion for how to improve the documentation, please share it here.
+      placeholder: |
+        For example, add a new section titled 'Custom Data Sources' with examples of how to integrate with MongoDB, Postgres, etc.
+    validations:
+      required: false
+
+  - type: textarea
+    attributes:
+      label: Additional Context
+      description: Add any other context about the documentation improvement here.
+      placeholder: |
+        Any additional information that might help us understand the request better.
+    validations:
+      required: false
+
+  - type: checkboxes
+    attributes:
+      label: Verification
+      description: Before submitting, please make sure you've completed the following
+      options:
+        - label: I have searched the existing issues to make sure this is not a duplicate
+          required: true

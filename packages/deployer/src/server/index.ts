@@ -110,6 +110,15 @@ export async function createHonoServer(
 
   app.onError(errorHandler);
 
+  // Apply custom server middleware from Mastra instance
+  const serverMiddleware = mastra.getServerMiddleware?.();
+
+  if (serverMiddleware && serverMiddleware.length > 0) {
+    for (const m of serverMiddleware) {
+      app.use(m.path, m.handler);
+    }
+  }
+
   // Add Mastra to context
   app.use('*', async (c, next) => {
     c.set('mastra', mastra);
