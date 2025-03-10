@@ -1,4 +1,4 @@
-import type { GetWorkflowResponse, ClientOptions, GetWorkflowWatchResponse } from '../types';
+import type { GetWorkflowResponse, ClientOptions, WorkflowRunResult } from '../types';
 
 import { BaseResource } from './base';
 
@@ -23,7 +23,7 @@ export class Workflow extends BaseResource {
    * @param params - Parameters required for workflow execution
    * @returns Promise containing the workflow execution results
    */
-  execute(params: Record<string, any>): Promise<Record<string, any>> {
+  execute(params: Record<string, any>): Promise<WorkflowRunResult> {
     return this.request(`/api/workflows/${this.workflowId}/execute`, {
       method: 'POST',
       body: params,
@@ -74,7 +74,7 @@ export class Workflow extends BaseResource {
    * @param stream - The readable stream to process
    * @returns An async generator that yields parsed records
    */
-  private async *streamProcessor(stream: ReadableStream): AsyncGenerator<GetWorkflowWatchResponse, void, unknown> {
+  private async *streamProcessor(stream: ReadableStream): AsyncGenerator<WorkflowRunResult, void, unknown> {
     const reader = stream.getReader();
     let buffer = '';
 

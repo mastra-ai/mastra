@@ -1,7 +1,7 @@
 import type { Workflow } from '@mastra/core/workflows';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { MastraClient, GetWorkflowResponse, GetWorkflowWatchResponse } from '@mastra/client-js';
+import { MastraClient, GetWorkflowResponse, WorkflowRunResult } from '@mastra/client-js';
 
 const mastra = new MastraClient({
   baseUrl: 'http://localhost:4111',
@@ -101,7 +101,7 @@ export const useExecuteWorkflow = () => {
 
 export const useWatchWorkflow = () => {
   const [isWatchingWorkflow, setIsWatchingWorkflow] = useState(false);
-  const [watchResult, setWatchResult] = useState<GetWorkflowWatchResponse | null>(null);
+  const [watchResult, setWatchResult] = useState<WorkflowRunResult | null>(null);
 
   const watchWorkflow = async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
     try {
