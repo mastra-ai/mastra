@@ -24,8 +24,9 @@ import { WhenConditionReturnValue } from './types';
 import { isVariableReference, updateStepInHierarchy } from './utils';
 import type { WorkflowResultReturn } from './workflow-instance';
 import { WorkflowInstance } from './workflow-instance';
+
 export class Workflow<
-  TSteps extends Step<any, any, any>[] = any,
+  TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
   TTriggerSchema extends z.ZodObject<any> = any,
 > extends MastraBase {
   name: string;
@@ -405,8 +406,8 @@ export class Workflow<
    * @throws Error if trigger schema validation fails
    */
 
-  createRun(): WorkflowResultReturn<TTriggerSchema> {
-    const run = new WorkflowInstance({
+  createRun(): WorkflowResultReturn<TTriggerSchema, TSteps> {
+    const run = new WorkflowInstance<TSteps, TTriggerSchema>({
       logger: this.logger,
       name: this.name,
       mastra: this.#mastra,

@@ -176,6 +176,25 @@ type StepFailure = {
 
 export type StepResult<T> = StepSuccess<T> | StepFailure | StepSuspended | StepWaiting;
 
+// Define a type for mapping step IDs to their respective steps[]
+export type StepsRecord<T extends readonly Step<any, any, z.ZodType<any> | undefined>[]> = {
+  [K in T[number]['id']]: Extract<T[number], { id: K }>;
+};
+
+export interface WorkflowRunResult<
+  T extends z.ZodType<any>,
+  TSteps extends Step<string, any, z.ZodType<any> | undefined>[],
+> {
+  triggerData?: z.infer<T>;
+  results: {
+    [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+      ? StepResult<unknown>
+      : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+  };
+  runId: string;
+  activePaths: Map<string, { status: string; suspendPayload?: any }>;
+}
+
 // Update WorkflowContext
 export interface WorkflowContext<TTrigger extends z.ZodObject<any> = any> {
   mastra?: MastraUnion;

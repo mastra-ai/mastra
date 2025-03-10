@@ -22,13 +22,13 @@ import type {
   StepDef,
   StepGraph,
   StepNode,
-  StepResult,
   StepVariableType,
   WorkflowActionParams,
   WorkflowActions,
   WorkflowActors,
   WorkflowContext,
   WorkflowEvent,
+  WorkflowRunResult,
   WorkflowState,
 } from './types';
 import { WhenConditionReturnValue } from './types';
@@ -113,10 +113,7 @@ export class Machine<
     stepId?: string;
     input?: any;
     snapshot?: Snapshot<any>;
-  } = {}): Promise<{
-    results: Record<string, StepResult<any>>;
-    activePaths: Map<string, { status: string; suspendPayload?: any }>;
-  }> {
+  } = {}): Promise<Pick<WorkflowRunResult<TTriggerSchema, TSteps>, 'results' | 'activePaths'>> {
     if (snapshot) {
       // First, let's log the incoming snapshot for debugging
       this.logger.debug(`Workflow snapshot received`, { runId: this.#runId, snapshot });
