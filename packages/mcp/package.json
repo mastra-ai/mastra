@@ -31,7 +31,8 @@
     "@mastra/core": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.1.1",
     "date-fns": "^4.1.0",
-    "exit-hook": "^4.0.0"
+    "exit-hook": "^4.0.0",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "^1.1.6",
