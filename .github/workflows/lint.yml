@@ -15,9 +15,6 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_REMOTE_ONLY: true
 
-    # Skip this job if changes are only in examples, docs, .changeset, or generated-changesets folders
-    if: ${{ !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
