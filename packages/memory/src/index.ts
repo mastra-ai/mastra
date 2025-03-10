@@ -4,7 +4,6 @@ import { MastraMemory } from '@mastra/core/memory';
 import type { MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
 import { embed } from 'ai';
-import type { Message as AiMessage } from 'ai';
 import { updateWorkingMemoryTool } from './tools/working-memory';
 
 /**
@@ -24,11 +23,26 @@ export class Memory extends MastraMemory {
     this.threadConfig = mergedConfig;
   }
 
+  private async validateThreadIsOwnedByResource(threadId: string, resourceId: string) {
+    const thread = await this.storage.getThreadById({ threadId });
+    if (!thread) {
+      throw new Error(`No thread found with id ${threadId}`);
+    }
+    if (thread.resourceId !== resourceId) {
+      throw new Error(
+        `Thread with id ${threadId} is for resource with id ${thread.resourceId} but resource ${resourceId} was queried.`,
+      );
+    }
+  }
+
   async query({
     threadId,
+    resourceId,
     selectBy,
     threadConfig,
   }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }> {
+    if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
+
     let vectorResults:
       | null
       | {
@@ -108,10 +122,12 @@ export class Memory extends MastraMemory {
 
   async rememberMessages({
     threadId,
+    resourceId,
     vectorMessageSearch,
     config,
   }: {
     threadId: string;
+    resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
   }): Promise<{
@@ -119,6 +135,8 @@ export class Memory extends MastraMemory {
     messages: CoreMessage[];
     uiMessages: AiMessageType[];
   }> {
+    if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
+
     const threadConfig = this.getMergedThreadConfig(config || {});
 
     if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {

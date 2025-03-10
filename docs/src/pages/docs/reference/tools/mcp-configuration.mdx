@@ -1,0 +1,225 @@
+---
+title: "Reference: MCPConfiguration | Tool Management | Mastra Docs"
+description: API Reference for MCPConfiguration - A class for managing multiple Model Context Protocol servers and their tools.
+---
+
+# MCPConfiguration
+
+The `MCPConfiguration` class provides a way to manage multiple MCP server connections and their tools in a Mastra application. It handles connection lifecycle, tool namespacing, and provides convenient access to tools across all configured servers.
+
+## Constructor
+
+Creates a new instance of the MCPConfiguration class.
+
+```typescript
+constructor({
+    id?: string;
+    servers: Record<string, MastraMCPServerDefinition>
+}: {
+    servers: {
+        [serverName: string]: {
+            // For stdio-based servers
+            command?: string;
+            args?: string[];
+            env?: Record<string, string>;
+            // For SSE-based servers
+            url?: URL;
+            requestInit?: RequestInit;
+        }
+    }
+})
+```
+
+### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description:
+        "Optional unique identifier for the configuration instance. Use this to prevent memory leaks when creating multiple instances with identical configurations.",
+    },
+    {
+      name: "servers",
+      type: "Record<string, MastraMCPServerDefinition>",
+      description:
+        "A map of server configurations, where each key is a unique server identifier and the value is the server configuration.",
+    },
+  ]}
+/>
+
+## Methods
+
+### getTools()
+
+Retrieves all tools from all configured servers, with tool names namespaced by their server name (in the format `serverName_toolName`) to prevent conflicts.
+Intended to be passed onto an Agent definition.
+
+```ts
+new Agent({ tools: await mcp.getTools() });
+```
+
+### getToolsets()
+
+Returns an object mapping namespaced tool names (in the format `serverName.toolName`) to their tool implementations.
+Intended to be passed dynamically into the generate or stream method.
+
+```typescript
+const res = await agent.stream(prompt, {
+  toolsets: await mcp.getToolsets(),
+});
+```
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { MCPConfiguration } from "@mastra/mcp";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+const mcp = new MCPConfiguration({
+  servers: {
+    stockPrice: {
+      command: "npx",
+      args: ["tsx", "stock-price.ts"],
+      env: {
+        API_KEY: "your-api-key",
+      },
+    },
+    weather: {
+      url: new URL("http://localhost:8080/sse"),
+    },
+  },
+});
+
+// Create an agent with access to all tools
+const agent = new Agent({
+  name: "Multi-tool Agent",
+  instructions: "You have access to multiple tool servers.",
+  model: openai("gpt-4"),
+  tools: await mcp.getTools(),
+});
+```
+
+### Using Server-Specific Tools
+
+```typescript
+// Get tools grouped by server
+const toolsets = await mcp.getToolsets();
+
+// Access tools for a specific server
+const weatherTools = toolsets.weather;
+const stockTools = toolsets.stockPrice;
+
+// Create an agent with weather tools only
+const weatherAgent = new Agent({
+  name: "Weather Agent",
+  instructions: "You are a weather specialist.",
+  model: openai("gpt-4"),
+  tools: weatherTools,
+});
+```
+
+### Using Toolsets in generate() or stream()
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { MCPConfiguration } from "@mastra/mcp";
+import { openai } from "@ai-sdk/openai";
+
+// Create the agent first, without any tools
+const agent = new Agent({
+  name: "Multi-tool Agent",
+  instructions: "You help users check stocks and weather.",
+  model: openai("gpt-4"),
+});
+
+// Later, configure MCP with user-specific settings
+const mcp = new MCPConfiguration({
+  servers: {
+    stockPrice: {
+      command: "npx",
+      args: ["tsx", "stock-price.ts"],
+      env: {
+        API_KEY: "user-123-api-key",
+      },
+    },
+    weather: {
+      url: new URL("http://localhost:8080/sse"),
+      requestInit: {
+        headers: {
+          Authorization: `Bearer user-123-token`,
+        },
+      },
+    },
+  },
+});
+
+// Pass all toolsets to stream() or generate()
+const response = await agent.stream(
+  "How is AAPL doing and what is the weather?",
+  {
+    toolsets: await mcp.getToolsets(),
+  },
+);
+```
+
+## Resource Management
+
+The `MCPConfiguration` class includes built-in memory leak prevention for managing multiple instances:
+
+1. Creating multiple instances with identical configurations without an `id` will throw an error to prevent memory leaks
+2. If you need multiple instances with identical configurations, provide a unique `id` for each instance
+3. Call `await configuration.disconnect()` before recreating an instance with the same configuration
+4. If you only need one instance, consider moving the configuration to a higher scope to avoid recreation
+
+For example, if you try to create multiple instances with the same configuration without an `id`:
+
+```typescript
+// First instance - OK
+const mcp1 = new MCPConfiguration({
+  servers: {
+    /* ... */
+  },
+});
+
+// Second instance with same config - Will throw an error
+const mcp2 = new MCPConfiguration({
+  servers: {
+    /* ... */
+  },
+});
+
+// To fix, either:
+// 1. Add unique IDs
+const mcp3 = new MCPConfiguration({
+  id: "instance-1",
+  servers: {
+    /* ... */
+  },
+});
+
+// 2. Or disconnect before recreating
+await mcp1.disconnect();
+const mcp4 = new MCPConfiguration({
+  servers: {
+    /* ... */
+  },
+});
+```
+
+## Server Lifecycle
+
+MCPConfiguration handles server connections gracefully:
+
+1. Automatic connection management for multiple servers
+2. Graceful server shutdown to prevent error messages during development
+3. Proper cleanup of resources when disconnecting
+
+## Related Information
+
+- For details about individual MCP client configuration, see the [MastraMCPClient documentation](./client)
+- For more about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/typescript-sdk)
