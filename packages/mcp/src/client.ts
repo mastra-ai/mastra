@@ -67,8 +67,12 @@ export class MastraMCPClient extends MastraBase {
     try {
       await this.client.connect(this.transport);
       this.isConnected = true;
+      const originalOnClose = this.client.onclose;
       this.client.onclose = () => {
         this.isConnected = false;
+        if (typeof originalOnClose === `function`) {
+          originalOnClose();
+        }
       };
       await this.client.setLoggingLevel(`critical`);
       asyncExitHook(
