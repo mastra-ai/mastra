@@ -1,13 +1,13 @@
 import { spawn } from 'child_process';
 import path from 'path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest';
 import { MCPConfiguration } from './configuration';
 
 describe('MCPConfiguration', () => {
   let mcp: MCPConfiguration;
   let weatherProcess: ReturnType<typeof spawn>;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     // Start the weather SSE server
     weatherProcess = spawn('npx', ['-y', 'tsx', path.join(__dirname, '__fixtures__/weather.ts')]);
 
@@ -31,7 +31,9 @@ describe('MCPConfiguration', () => {
         });
       }
     });
+  });
 
+  beforeEach(async () => {
     mcp = new MCPConfiguration({
       servers: {
         stockPrice: {
@@ -50,14 +52,10 @@ describe('MCPConfiguration', () => {
 
   afterEach(async () => {
     // Clean up any connected clients
-    const toolsets = await mcp.getConnectedToolsets();
-    for (const serverName of Object.keys(toolsets)) {
-      const client = mcp['mcpClientsById'].get(serverName);
-      if (client) {
-        await client.disconnect();
-      }
-    }
+    await mcp.disconnect();
+  });
 
+  afterAll(async () => {
     // Kill the weather SSE server
     weatherProcess.kill('SIGINT');
   });
@@ -105,6 +103,6 @@ describe('MCPConfiguration', () => {
     });
 
     await expect(badConfig.getConnectedTools()).rejects.toThrow();
+    await badConfig.disconnect();
   });
-});
 
