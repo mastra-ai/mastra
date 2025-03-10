@@ -9,7 +9,7 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     # Only run on the main repository, not on forks. Skip this job if changes are only in examples, docs, .changeset, or generated-changesets folders
-    if: ${{ github.repository == 'mastra-ai/mastra' && !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -62,7 +62,7 @@ jobs:
     name: Validate build outputs
     runs-on: ubuntu-latest
     # Only run on the main repository, not on forks. Skip this job if changes are only in examples, docs, .changeset, or generated-changesets folders
-    if: ${{ github.repository == 'mastra-ai/mastra' && !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
