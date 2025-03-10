@@ -1,6 +1,11 @@
+import dotenv from 'dotenv';
+
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } from 'vitest';
 
 import { UpstashVector } from './';
+import type { QueryResult } from '@mastra/core';
+
+dotenv.config();
 
 function waitUntilVectorsIndexed(vector: UpstashVector, indexName: string, expectedCount: number) {
   return new Promise((resolve, reject) => {
@@ -106,6 +111,138 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       expect(results?.[1]?.vector).toHaveLength(VECTOR_DIMENSION);
       expect(results?.[2]?.vector).toBeDefined();
       expect(results?.[2]?.vector).toHaveLength(VECTOR_DIMENSION);
+    });
+
+    describe('updates', () => {
+      const testVectors = [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9],
+      ];
+
+      const testIndexName = 'test-index';
+
+      beforeEach(async () => {
+        await vectorStore.createIndex({ indexName: testIndexName, dimension: 3 });
+      });
+
+      afterEach(async () => {
+        await vectorStore.deleteIndex(testIndexName);
+      });
+
+      it('should update the vector by id', async () => {
+        const ids = await vectorStore.upsert({ indexName: testIndexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newVector = [1, 2, 3];
+        const newMetaData = {
+          test: 'updates',
+        };
+
+        const update = {
+          vector: newVector,
+          metadata: newMetaData,
+        };
+
+        await vectorStore.updateIndexById(testIndexName, idToBeUpdated, update);
+
+        const results: QueryResult[] = await vectorStore.query({
+          indexName: testIndexName,
+          queryVector: newVector,
+          topK: 2,
+          includeVector: true,
+        });
+        expect(results[0]?.id).toBe(idToBeUpdated);
+        expect(results[0]?.vector).toEqual(newVector);
+        expect(results[0]?.metadata).toEqual(newMetaData);
+      });
+
+      it('should only update the metadata by id', async () => {
+        const ids = await vectorStore.upsert({ indexName: testIndexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newMetaData = {
+          test: 'updates',
+        };
+
+        const update = {
+          metadata: newMetaData,
+        };
+
+        await vectorStore.updateIndexById(testIndexName, idToBeUpdated, update);
+
+        const results: QueryResult[] = await vectorStore.query({
+          indexName: testIndexName,
+          queryVector: testVectors[0],
+          topK: 2,
+          includeVector: true,
+        });
+        expect(results[0]?.id).toBe(idToBeUpdated);
+        expect(results[0]?.vector).toEqual(testVectors[0]);
+        expect(results[0]?.metadata).toEqual(newMetaData);
+      });
+
+      it('should only update vector embeddings by id', async () => {
+        const ids = await vectorStore.upsert({ indexName: testIndexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newVector = [1, 2, 3];
+
+        const update = {
+          vector: newVector,
+        };
+
+        await vectorStore.updateIndexById(testIndexName, idToBeUpdated, update);
+
+        const results: QueryResult[] = await vectorStore.query({
+          indexName: testIndexName,
+          queryVector: newVector,
+          topK: 2,
+          includeVector: true,
+        });
+        expect(results[0]?.id).toBe(idToBeUpdated);
+        expect(results[0]?.vector).toEqual(newVector);
+      });
+
+      it('should throw exception when no updates are given', async () => {
+        await expect(vectorStore.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No update data provided');
+      });
+    });
+
+    describe('deletes', () => {
+      const testVectors = [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9],
+      ];
+
+      beforeEach(async () => {
+        await vectorStore.createIndex({ indexName: testIndexName, dimension: 3 });
+      });
+
+      afterEach(async () => {
+        await vectorStore.deleteIndex(testIndexName);
+      });
+
+      it('should delete the vector by id', async () => {
+        const ids = await vectorStore.upsert({ indexName: testIndexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+        const idToBeDeleted = ids[0];
+
+        await vectorStore.deleteIndexById(testIndexName, idToBeDeleted);
+
+        const results: QueryResult[] = await vectorStore.query({
+          indexName: testIndexName,
+          queryVector: [1.0, 0.0, 0.0],
+          topK: 2,
+        });
+
+        expect(results).toHaveLength(2);
+        expect(results.map(res => res.id)).not.toContain(idToBeDeleted);
+      });
     });
   });
   describe('Index Operations', () => {
