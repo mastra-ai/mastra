@@ -8,8 +8,8 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    # Only run on the main repository, not on forks. Skip this job if changes are only in examples, docs, .changeset, or generated-changesets folders
-    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    # Run on main repository or for trusted bot PRs
+    if: ${{ github.repository == 'mastra-ai/mastra' || github.actor == 'github-actions[bot]' }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -61,8 +61,8 @@ jobs:
   check-bundle:
     name: Validate build outputs
     runs-on: ubuntu-latest
-    # Only run on the main repository, not on forks. Skip this job if changes are only in examples, docs, .changeset, or generated-changesets folders
-    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    # Run on main repository or for trusted bot PRs
+    if: ${{ github.repository == 'mastra-ai/mastra' || github.actor == 'github-actions[bot]' }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
