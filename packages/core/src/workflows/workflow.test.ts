@@ -674,9 +674,13 @@ describe('Workflow', async () => {
         execute: increment,
       });
 
-      const final = vi.fn().mockImplementation(async ({ context }) => {
-        return { finalValue: context.getStepResult('increment')?.newValue };
-      });
+      const final = vi
+        .fn()
+        .mockImplementation(
+          async ({ context }: { context: WorkflowContext<any, [typeof incrementStep, typeof finalStep]> }) => {
+            return { finalValue: context.getStepResult(incrementStep).newValue };
+          },
+        );
       const finalStep = new Step({
         id: 'final',
         description: 'Final step that prints the result',
@@ -702,8 +706,6 @@ describe('Workflow', async () => {
 
       const run = counterWorkflow.createRun();
       const { results } = await run.start({ triggerData: { target: 10, startValue: 0 } });
-
-      results;
 
       expect(increment).toHaveBeenCalledTimes(12);
       expect(final).toHaveBeenCalledTimes(1);
@@ -734,7 +736,7 @@ describe('Workflow', async () => {
       });
 
       const final = vi.fn().mockImplementation(async ({ context }) => {
-        return { finalValue: context.getStepResult('increment')?.newValue };
+        return { finalValue: context.getStepResult(incrementStep).newValue };
       });
       const finalStep = new Step({
         id: 'final',
