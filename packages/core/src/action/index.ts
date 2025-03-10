@@ -40,7 +40,7 @@ export interface IAction<
   description?: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
-  execute: (
+  execute?: (
     context: TContext,
     options?: TOptions,
   ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
