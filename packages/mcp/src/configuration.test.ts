@@ -12,11 +12,21 @@ describe('MCPConfiguration', () => {
     weatherProcess = spawn('npx', ['-y', 'tsx', path.join(__dirname, '__fixtures__/weather.ts')]);
 
     // Wait for SSE server to be ready
-    await new Promise<void>(resolve => {
+    let resolved = false;
+    await new Promise<void>((resolve, reject) => {
+      weatherProcess.on(`exit`, () => {
+        if (!resolved) reject();
+      });
+      if (weatherProcess.stderr) {
+        weatherProcess.stderr.on(`data`, chunk => {
+          console.error(chunk.toString());
+        });
+      }
       if (weatherProcess.stdout) {
         weatherProcess.stdout.on('data', chunk => {
           if (chunk.toString().includes('server is running on SSE')) {
             resolve();
+            resolved = true;
           }
         });
       }
