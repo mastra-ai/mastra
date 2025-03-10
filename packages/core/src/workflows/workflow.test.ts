@@ -329,6 +329,7 @@ describe('Workflow', async () => {
           expect(step1Result).toEqual({ value: 'step1-result' });
 
           // Verify that failed steps return undefined
+          // @ts-ignore
           const failedStep = context?.getStepResult<never>('non-existent-step');
           expect(failedStep).toBeUndefined();
 
