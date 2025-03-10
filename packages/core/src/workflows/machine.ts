@@ -129,6 +129,16 @@ export class Machine<
       this.logger.debug(`Workflow snapshot received`, { runId: this.#runId, snapshot });
     }
 
+    const origSteps = input.steps;
+    const isResumedInitialStep = this.#stepGraph?.initial[0]?.step?.id === stepId;
+
+    if (isResumedInitialStep) {
+      console.log('hmm wat', this.#stepGraph.initial, stepId, this.#startStepId);
+      // we should not supply a snapshot if we are resuming the first step of a stepGraph, as that will halt execution
+      snapshot = undefined;
+      input.steps = {};
+    }
+
     this.logger.debug(`Machine input prepared`, { runId: this.#runId, input });
 
     const actorSnapshot = snapshot
@@ -225,7 +235,7 @@ export class Machine<
           this.#cleanup();
           this.#executionSpan?.end();
           resolve({
-            results: state.context.steps,
+            results: isResumedInitialStep ? { ...origSteps, ...state.context.steps } : state.context.steps,
             activePaths: getResultActivePaths(
               state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
             ),
@@ -239,7 +249,7 @@ export class Machine<
           this.#cleanup();
           this.#executionSpan?.end();
           resolve({
-            results: state.context.steps,
+            results: isResumedInitialStep ? { ...origSteps, ...state.context.steps } : state.context.steps,
             activePaths: getResultActivePaths(
               state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
             ),

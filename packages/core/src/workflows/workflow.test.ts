@@ -2315,7 +2315,7 @@ describe('Workflow', async () => {
       const promptAgentAction = vi
         .fn()
         .mockImplementationOnce(async ({ suspend }) => {
-          return undefined;
+          return { test: 'yes' };
         })
         .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
       const getUserInput = new Step({
@@ -2372,7 +2372,7 @@ describe('Workflow', async () => {
       expect(firstResumeResult.activePaths.size).toBe(1);
       expect(firstResumeResult.results).toEqual({
         getUserInput: { status: 'success', output: { userInput: 'test input' } },
-        promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
+        promptAgent: { status: 'success', output: { test: 'yes' } },
         __testev_event: {
           status: 'success',
           output: {
