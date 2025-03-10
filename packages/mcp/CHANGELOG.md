@@ -1,5 +1,11 @@
 # @mastra/mcp
 
+## 0.3.0-alpha.11
+
+### Patch Changes
+
+- 7848663: Fixed an error in the @mastra/mcp alpha release where client.setLoggingLevel led to errors in clients that don't support it
+
 ## 0.3.0-alpha.10
 
 ### Minor Changes
