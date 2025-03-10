@@ -72,4 +72,16 @@ describe('AzureVoice', () => {
     // e.g. "Hello from Azure"
     expect(transcript.toLowerCase()).toContain('hello');
   });
+
+  describe('AzureVoice Error Handling', () => {
+    it('should throw an error if no API key is provided', async () => {
+      expect(() => {
+        // Intentionally omit API keys
+        new AzureVoice({
+          speechModel: { region: 'eastus' },
+          listeningModel: { region: 'eastus' },
+        });
+      }).toThrowError('No Azure API key provided');
+    });
+  });
 });
