@@ -49,6 +49,7 @@ import {
 } from './handlers/vector.js';
 import { getSpeakersHandler, speakHandler, listenHandler } from './handlers/voice.js';
 import {
+  createWorkflowRun,
   executeWorkflowHandler,
   getWorkflowByIdHandler,
   getWorkflowsHandler,
@@ -1026,6 +1027,12 @@ export async function createHonoServer(
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
       ],
       requestBody: {
         required: true,
@@ -1035,7 +1042,6 @@ export async function createHonoServer(
               type: 'object',
               properties: {
                 stepId: { type: 'string' },
-                runId: { type: 'string' },
                 context: { type: 'object' },
               },
             },
@@ -1044,6 +1050,31 @@ export async function createHonoServer(
       },
     }),
     resumeWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/createRun',
+    describeRoute({
+      description: 'Create a new workflow run',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'New workflow run created',
+        },
+        404: {
+          description: 'Workflow not found',
+        },
+      },
+    }),
+    createWorkflowRun,
   );
 
   app.get(
@@ -1055,6 +1086,12 @@ export async function createHonoServer(
           name: 'workflowId',
           in: 'path',
           required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
           schema: { type: 'string' },
         },
       ],

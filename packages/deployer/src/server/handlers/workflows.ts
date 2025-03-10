@@ -5,6 +5,7 @@ import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 
 import { handleError } from './error';
+import { HTTPException } from 'hono/http-exception';
 
 export async function getWorkflowsHandler(c: Context) {
   try {
@@ -65,6 +66,21 @@ export async function getWorkflowByIdHandler(c: Context) {
   }
 }
 
+export async function createWorkflowRun(c: Context) {
+  const mastra: Mastra = c.get('mastra');
+  const workflowId = c.req.param('workflowId');
+  const workflow = mastra.getWorkflow(workflowId);
+  const body = await c.req.json();
+
+  const { start, runId } = workflow.createRun();
+
+  start({
+    triggerData: body,
+  });
+
+  return c.json({ runId });
+}
+
 export async function executeWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
@@ -89,15 +105,16 @@ export async function watchWorkflowHandler(c: Context) {
     const logger = mastra.getLogger();
     const workflowId = c.req.param('workflowId');
     const workflow = mastra.getWorkflow(workflowId);
+    const queryRunId = c.req.query('runId');
 
     return streamText(
       c,
       async stream => {
-        // NOTE: looks like the UI is closing the watch request, so as long as that is the case
-        // this promise doesn't need to be resolved or rejected
         return new Promise((_resolve, _reject) => {
           let unwatch: () => void = workflow.watch(({ activePaths, context, runId, timestamp, suspendedSteps }) => {
-            void stream.write(JSON.stringify({ activePaths, context, runId, timestamp, suspendedSteps }) + '\x1E');
+            if (!queryRunId || runId === queryRunId) {
+              void stream.write(JSON.stringify({ activePaths, context, runId, timestamp, suspendedSteps }) + '\x1E');
+            }
           });
 
           stream.onAbort(() => {
@@ -121,7 +138,12 @@ export async function resumeWorkflowHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
     const workflow = mastra.getWorkflow(workflowId);
-    const { stepId, runId, context } = await c.req.json();
+    const runId = c.req.query('runId');
+    const { stepId, context } = await c.req.json();
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to resume workflow' });
+    }
 
     const result = await workflow.resume({
       stepId,

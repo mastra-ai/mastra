@@ -86,21 +86,31 @@ export const useExecuteWorkflow = () => {
     }
   };
 
-  return { executeWorkflow, isExecutingWorkflow };
+  const createWorkflowRun = async ({ workflowId, input }: { workflowId: string; input: any }) => {
+    try {
+      const response = await mastra.getWorkflow(workflowId).createRun(input || {});
+      return response;
+    } catch (error) {
+      console.error('Error creating workflow run:', error);
+      throw error;
+    }
+  };
+
+  return { executeWorkflow, createWorkflowRun, isExecutingWorkflow };
 };
 
 export const useWatchWorkflow = () => {
   const [isWatchingWorkflow, setIsWatchingWorkflow] = useState(false);
   const [watchResult, setWatchResult] = useState<GetWorkflowWatchResponse | null>(null);
 
-  const watchWorkflow = async ({ workflowId }: { workflowId: string }) => {
+  const watchWorkflow = async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
     try {
       setIsWatchingWorkflow(true);
       const client = new MastraClient({
         baseUrl: 'http://localhost:4111',
       });
 
-      const watchSubscription = client.getWorkflow(workflowId).watch();
+      const watchSubscription = client.getWorkflow(workflowId).watch({ runId });
 
       if (!watchSubscription) {
         throw new Error('Error watching workflow');
