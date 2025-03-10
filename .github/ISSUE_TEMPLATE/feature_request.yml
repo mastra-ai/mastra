@@ -12,7 +12,7 @@ body:
     attributes:
       label: Problem Statement
       description: Is your feature request related to a problem? Please describe.
-      placeholder: "I'm always frustrated when trying to [...]"
+      placeholder: "I'd like to improve the experience when working with [feature/task] by adding..."
     validations:
       required: true
 
